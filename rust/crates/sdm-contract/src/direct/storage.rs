@@ -52,17 +52,29 @@ pub enum DirectStorage {
     },
     String,
     Categorical,
-    Timestamp { unit: TimestampUnit, zone: Option<String> },
-    Decimal { precision: u8, scale: i8 },
+    Timestamp {
+        unit: TimestampUnit,
+        zone: Option<String>,
+    },
+    Decimal {
+        precision: u8,
+        scale: i8,
+    },
     /// Values already encoded by the direct cell policy at their native
     /// consumption points. Each UTF-8 cell carries one contract Scalar.
-    Encoded { dtype: crate::ops::Dtype },
+    Encoded {
+        dtype: crate::ops::Dtype,
+    },
 }
 
 /// Decode and validate once at the attachment boundary. Absence is the legacy
 /// primitive contract; present but malformed observations never use that default.
 pub fn read(field: &Field) -> Result<Option<DirectStorage>, CoreError> {
-    if field.metadata().keys().any(|key| key.starts_with("sdm.direct.storage.") && key != DIRECT_STORAGE_KEY) {
+    if field
+        .metadata()
+        .keys()
+        .any(|key| key.starts_with("sdm.direct.storage.") && key != DIRECT_STORAGE_KEY)
+    {
         return Err(CoreError::protocol(
             Sentence::InvalidMessage,
             "direct native storage metadata has an unsupported version",
@@ -71,23 +83,41 @@ pub fn read(field: &Field) -> Result<Option<DirectStorage>, CoreError> {
     let Some(encoded) = field.metadata().get(DIRECT_STORAGE_KEY) else {
         return Ok(None);
     };
-    let invalid = || CoreError::protocol(
-        Sentence::InvalidMessage,
-        "direct native storage metadata is malformed or disagrees with its column",
-    );
+    let invalid = || {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "direct native storage metadata is malformed or disagrees with its column",
+        )
+    };
     let storage: DirectStorage = serde_json::from_str(encoded).map_err(|_| invalid())?;
-    let primitive = matches!(field.data_type(),
-        DataType::Boolean | DataType::Int8 | DataType::Int16 | DataType::Int32 |
-        DataType::Int64 | DataType::UInt8 | DataType::UInt16 | DataType::UInt32 |
-        DataType::UInt64 | DataType::Float32 | DataType::Float64);
+    let primitive = matches!(
+        field.data_type(),
+        DataType::Boolean
+            | DataType::Int8
+            | DataType::Int16
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::UInt8
+            | DataType::UInt16
+            | DataType::UInt32
+            | DataType::UInt64
+            | DataType::Float32
+            | DataType::Float64
+    );
     let floating = matches!(field.data_type(), DataType::Float32 | DataType::Float64);
     let valid = match &storage {
-        DirectStorage::Primitive { owner, floats } => primitive
-            && floating == floats.is_some()
-            && (!floating || *floats == Some(match owner {
-                StorageOwner::Array => FloatStorage::NanMissing,
-                StorageOwner::Nullable | StorageOwner::Arrow => FloatStorage::ValidityMasked,
-            })),
+        DirectStorage::Primitive { owner, floats } => {
+            primitive
+                && floating == floats.is_some()
+                && (!floating
+                    || *floats
+                        == Some(match owner {
+                            StorageOwner::Array => FloatStorage::NanMissing,
+                            StorageOwner::Nullable | StorageOwner::Arrow => {
+                                FloatStorage::ValidityMasked
+                            }
+                        }))
+        }
         DirectStorage::String => matches!(field.data_type(), DataType::Utf8),
         DirectStorage::Categorical => primitive || matches!(field.data_type(), DataType::Utf8),
         DirectStorage::Timestamp { .. } => matches!(field.data_type(), DataType::Int64),
@@ -117,7 +147,9 @@ mod tests {
 
     fn field(dtype: DataType, metadata: &str) -> Field {
         Field::new("value", dtype, true).with_metadata(
-            [(DIRECT_STORAGE_KEY.to_owned(), metadata.to_owned())].into_iter().collect(),
+            [(DIRECT_STORAGE_KEY.to_owned(), metadata.to_owned())]
+                .into_iter()
+                .collect(),
         )
     }
 
@@ -143,20 +175,28 @@ mod tests {
         let encoded = serde_json::to_string(&observed).expect("storage serializes");
         let field = field(DataType::Float64, &encoded);
         assert_eq!(read(&field).expect("valid storage"), Some(observed));
-        assert_eq!(floats(&field).expect("valid storage"), Some(FloatStorage::ValidityMasked));
+        assert_eq!(
+            floats(&field).expect("valid storage"),
+            Some(FloatStorage::ValidityMasked)
+        );
     }
 
     #[test]
     fn categorical_numbers_keep_their_native_family() {
         let field = field(DataType::Int64, r#"{"family":"categorical"}"#);
-        assert_eq!(read(&field).expect("valid storage"), Some(DirectStorage::Categorical));
+        assert_eq!(
+            read(&field).expect("valid storage"),
+            Some(DirectStorage::Categorical)
+        );
         assert_eq!(floats(&field).expect("valid storage"), None);
     }
 
     #[test]
     fn unsupported_metadata_versions_are_not_legacy_inputs() {
         let field = Field::new("value", DataType::Int64, true).with_metadata(
-            [("sdm.direct.storage.v2".to_owned(), "{}".to_owned())].into_iter().collect(),
+            [("sdm.direct.storage.v2".to_owned(), "{}".to_owned())]
+                .into_iter()
+                .collect(),
         );
         assert!(read(&field).is_err());
     }
@@ -165,7 +205,10 @@ mod tests {
     fn timestamp_units_keep_pre_epoch_fractions_and_wide_dates() {
         assert_eq!(TimestampUnit::Nanoseconds.microseconds(-1), -1);
         assert_eq!(TimestampUnit::Milliseconds.microseconds(-1), -1_000);
-        assert_eq!(TimestampUnit::Seconds.microseconds(i64::MAX), i128::from(i64::MAX) * 1_000_000);
+        assert_eq!(
+            TimestampUnit::Seconds.microseconds(i64::MAX),
+            i128::from(i64::MAX) * 1_000_000
+        );
     }
 
     #[test]

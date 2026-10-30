@@ -32,30 +32,51 @@ pub(crate) fn value<T: serde::Serialize>(
     }))
 }
 
-pub(crate) fn encode_column(asker: &Asker, request: DirectColumnInput, mut attached: Attachments) -> Result<OperationResult, CoreError> {
+pub(crate) fn encode_column(
+    asker: &Asker,
+    request: DirectColumnInput,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
     let input: DirectColumnEncoding = take_json(&mut attached, request.input)?;
     let column = rows(&mut attached, request.values, &input.column)?;
     let values = tabular::encode_column(&column.batches, input.dtype, crate::pql::float_text)?;
     value(asker, &EncodedDirectColumn { values })
 }
 
-pub(crate) fn infer_column(asker: &Asker, request: DirectColumnInput, mut attached: Attachments) -> Result<OperationResult, CoreError> {
+pub(crate) fn infer_column(
+    asker: &Asker,
+    request: DirectColumnInput,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
     let input: DirectHeader = take_json(&mut attached, request.input)?;
     if input.columns.len() != 1 {
-        return Err(CoreError::protocol(Sentence::InvalidMessage, "direct dtype observation requires exactly one column"));
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "direct dtype observation requires exactly one column",
+        ));
     }
     let column = rows(&mut attached, request.values, &input)?;
     let dtype = sdm_schema::direct::storage_dtypes(&column.schema, &column.batches)?[0];
     value(asker, &sdm_schema::direct::dtype::declared(dtype, false))
 }
 
-pub(crate) fn infer_time_start(asker: &Asker, request: DirectColumnInput, mut attached: Attachments) -> Result<OperationResult, CoreError> {
+pub(crate) fn infer_time_start(
+    asker: &Asker,
+    request: DirectColumnInput,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
     let input: DirectHeader = take_json(&mut attached, request.input)?;
     if input.columns.len() != 1 {
-        return Err(CoreError::protocol(Sentence::InvalidMessage, "direct time observation requires exactly one column"));
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "direct time observation requires exactly one column",
+        ));
     }
     let column = rows(&mut attached, request.values, &input)?;
-    value(asker, &sdm_schema::direct::time_start(&column.schema, &column.batches)?)
+    value(
+        asker,
+        &sdm_schema::direct::time_start(&column.schema, &column.batches)?,
+    )
 }
 
 fn rows(
@@ -84,7 +105,11 @@ fn rows(
     for field in data.schema.fields() {
         storage::read(field)?;
     }
-    if data.batches.iter().any(|batch| batch.schema() != data.schema) {
+    if data
+        .batches
+        .iter()
+        .any(|batch| batch.schema() != data.schema)
+    {
         return Err(CoreError::protocol(
             Sentence::InvalidMessage,
             "direct batch schemas disagree with their attachment storage facts",
@@ -273,44 +298,105 @@ fn stype(value: sdm_contract::ops::Stype) -> String {
 }
 
 pub(crate) fn check_preparation(
-    asker: &Asker, input: sdm_contract::direct::schema::PreparationObservation,
+    asker: &Asker,
+    input: sdm_contract::direct::schema::PreparationObservation,
 ) -> Result<OperationResult, CoreError> {
     use sdm_contract::direct::schema::PreparationObservation as P;
     match input {
-        P::Arguments { shape } => { sdm_request::direct::arguments(&shape)?; }
-        P::Consistent { schema } => { consistent(&schema)?; }
+        P::Arguments { shape } => {
+            sdm_request::direct::arguments(&shape)?;
+        }
+        P::Consistent { schema } => {
+            consistent(&schema)?;
+        }
         P::Declarations { columns } => {
-            let dtypes = columns.into_iter().map(|(name, dtype, untyped)| {
-                let parsed = serde_json::from_value(serde_json::Value::String(dtype.clone()))
-                    .unwrap_or_else(|_| sdm_schema::held::wire_dtype(&dtype));
-                (name, (!untyped).then_some(parsed))
-            }).collect();
+            let dtypes = columns
+                .into_iter()
+                .map(|(name, dtype, untyped)| {
+                    let parsed = serde_json::from_value(serde_json::Value::String(dtype.clone()))
+                        .unwrap_or_else(|_| sdm_schema::held::wire_dtype(&dtype));
+                    (name, (!untyped).then_some(parsed))
+                })
+                .collect();
             return value(asker, &DirectDtypeDeclarations { dtypes });
         }
         P::Population { shape, known } => sdm_request::direct::population(&shape, known)?,
-        P::MissingKey { table, column, count } => {
-            if count > 0 { asker.warn(CoreWarning::new(Sentence::DirectNativeMissingKey, "an inferred key has missing values")
-                .with_field("table", Detail::text(table)).with_field("column", Detail::text(column))
-                .with_field("count", Detail::Scalar(sdm_contract::Scalar::UInt64(count as u64)))); }
-        }
-        P::Names { table, columns } => sdm_request::direct::column_names(&columns, &table)?,
-        P::ScoredColumn { table, schema: held, flags, name, finding } => {
-            let read = schema(&held)?;
-            if let Some(table) = read.description.tables.iter().find(|t| t.name == table) {
-                sdm_request::direct::scored_column(table, &flags, &name,
-                    (!finding.untyped).then_some(finding.dtype), crate::edit::supports)?;
+        P::MissingKey {
+            table,
+            column,
+            count,
+        } => {
+            if count > 0 {
+                asker.warn(
+                    CoreWarning::new(
+                        Sentence::DirectNativeMissingKey,
+                        "an inferred key has missing values",
+                    )
+                    .with_field("table", Detail::text(table))
+                    .with_field("column", Detail::text(column))
+                    .with_field(
+                        "count",
+                        Detail::Scalar(sdm_contract::Scalar::UInt64(count as u64)),
+                    ),
+                );
             }
         }
-        P::ScoredComplete { shape, schema: held } => {
+        P::Names { table, columns } => sdm_request::direct::column_names(&columns, &table)?,
+        P::ScoredColumn {
+            table,
+            schema: held,
+            flags,
+            name,
+            finding,
+        } => {
             let read = schema(&held)?;
-            let table = read.description.tables.iter().find(|t| t.name == shape.entity_table)
-                .ok_or_else(|| invalid(Sentence::NoTable).with_field("table", Detail::text(&shape.entity_table)))?;
+            if let Some(table) = read.description.tables.iter().find(|t| t.name == table) {
+                sdm_request::direct::scored_column(
+                    table,
+                    &flags,
+                    &name,
+                    (!finding.untyped).then_some(finding.dtype),
+                    crate::edit::supports,
+                )?;
+            }
+        }
+        P::ScoredComplete {
+            shape,
+            schema: held,
+        } => {
+            let read = schema(&held)?;
+            let table = read
+                .description
+                .tables
+                .iter()
+                .find(|t| t.name == shape.entity_table)
+                .ok_or_else(|| {
+                    invalid(Sentence::NoTable)
+                        .with_field("table", Detail::text(&shape.entity_table))
+                })?;
             sdm_request::direct::scored_complete(&shape, table)?;
         }
-        P::Constancy { target, task, known, distinct } => {
-            if known > 0 && distinct == 1 && (task.contains("classification") || task == "regression") {
-                asker.warn(CoreWarning::new(if task == "regression" { Sentence::DirectConstantRegression } else { Sentence::DirectConstantClass },
-                    "every context row has the same target").with_field("target", Detail::text(target)));
+        P::Constancy {
+            target,
+            task,
+            known,
+            distinct,
+        } => {
+            if known > 0
+                && distinct == 1
+                && (task.contains("classification") || task == "regression")
+            {
+                asker.warn(
+                    CoreWarning::new(
+                        if task == "regression" {
+                            Sentence::DirectConstantRegression
+                        } else {
+                            Sentence::DirectConstantClass
+                        },
+                        "every context row has the same target",
+                    )
+                    .with_field("target", Detail::text(target)),
+                );
             }
         }
     }
@@ -376,29 +462,67 @@ fn consistent(held: &HeldSchema) -> Result<sdm_schema::held::Read, CoreError> {
     Ok(read)
 }
 
-pub(crate) fn resolve_observed(asker: &Asker, observed: ObservedTabularInput) -> Result<OperationResult, CoreError> {
+pub(crate) fn resolve_observed(
+    asker: &Asker,
+    observed: ObservedTabularInput,
+) -> Result<OperationResult, CoreError> {
     let input = observed.input;
     sdm_request::direct::bound(&input.bound)?;
     if input.bound.model != predict::TABULAR {
-        return Err(invalid(Sentence::DirectRelationalFrames).with_field("model", Detail::text(&input.bound.model)));
+        return Err(invalid(Sentence::DirectRelationalFrames)
+            .with_field("model", Detail::text(&input.bound.model)));
     }
     let read = schema(&input.schema)?;
-    let table = read.description.tables.iter().find(|t| t.name == input.entity_table)
-        .ok_or_else(|| invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&input.entity_table)))?;
-    let (columns, warnings) = tabular::schema_columns(table, &input.flags, &input.context.columns,
-        observed.dtypes.into_iter().collect(), &input.target, &input.kind, crate::edit::supports)?;
-    for warning in warnings { asker.warn(warning); }
-    value(asker, &ResolvedTabular { bound: input.bound, columns })
+    let table = read
+        .description
+        .tables
+        .iter()
+        .find(|t| t.name == input.entity_table)
+        .ok_or_else(|| {
+            invalid(Sentence::DirectSchemaMissing)
+                .with_field("name", Detail::text(&input.entity_table))
+        })?;
+    let (columns, warnings) = tabular::schema_columns(
+        table,
+        &input.flags,
+        &input.context.columns,
+        observed.dtypes.into_iter().collect(),
+        &input.target,
+        &input.kind,
+        crate::edit::supports,
+    )?;
+    for warning in warnings {
+        asker.warn(warning);
+    }
+    value(
+        asker,
+        &ResolvedTabular {
+            bound: input.bound,
+            columns,
+        },
+    )
 }
 
-pub(crate) fn inspect_observed_keys(asker: &Asker, request: DirectFrames, mut attached: Attachments) -> Result<OperationResult, CoreError> {
+pub(crate) fn inspect_observed_keys(
+    asker: &Asker,
+    request: DirectFrames,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
     let input: ObservedKeyPair = take_json(&mut attached, request.input)?;
     let context = rows(&mut attached, request.context, &input.context)?;
     let scoring = rows(&mut attached, request.predict, &input.predict)?;
     if input.context.columns != input.predict.columns {
-        return Err(CoreError::protocol(Sentence::InvalidMessage, "observed key components differ between the two frames"));
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "observed key components differ between the two frames",
+        ));
     }
-    if let Some(warning) = tabular::observed_overlap(&context.batches, &scoring.batches, &input.target, input.scoring_rows)? {
+    if let Some(warning) = tabular::observed_overlap(
+        &context.batches,
+        &scoring.batches,
+        &input.target,
+        input.scoring_rows,
+    )? {
         asker.warn(warning);
     }
     value(asker, &true)

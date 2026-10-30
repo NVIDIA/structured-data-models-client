@@ -10,10 +10,10 @@ use crate::ops::{Dtype, HeldSchema, Stype};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-pub mod storage;
 pub mod cell;
 pub mod dtype;
 pub mod schema;
+pub mod storage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -253,15 +253,23 @@ pub struct DirectFrames {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct DirectColumnInput { pub input: AttachmentId, pub values: AttachmentId }
+pub struct DirectColumnInput {
+    pub input: AttachmentId,
+    pub values: AttachmentId,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct DirectColumnEncoding { pub column: DirectHeader, pub dtype: Dtype }
+pub struct DirectColumnEncoding {
+    pub column: DirectHeader,
+    pub dtype: Dtype,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct EncodedDirectColumn { pub values: Vec<Scalar> }
+pub struct EncodedDirectColumn {
+    pub values: Vec<Scalar>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -396,7 +404,6 @@ pub enum DirectPrediction {
         body: EncodedDirectBody,
         inference: DirectInference,
     },
-
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -464,7 +471,9 @@ pub struct ObservedTabularInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct DirectDtypeDeclarations { pub dtypes: Vec<(String, Option<Dtype>)> }
+pub struct DirectDtypeDeclarations {
+    pub dtypes: Vec<(String, Option<Dtype>)>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

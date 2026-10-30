@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ast
 import json
-import math
 import struct
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -19,8 +18,8 @@ import pandas as pd
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, results, spec
 from sdm_client._rust import predict as prediction
-from sdm_client._rust.run import Finished, run
 from sdm_client._rust.direct_io import DirectOperations
+from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
 
 
@@ -80,9 +79,17 @@ def _table(frame: pd.DataFrame) -> Any:
             and not (dtype.kind == 'f' and dtype.itemsize < 4)
         )
         nullable = type(dtype) in (
-            pd.Int8Dtype, pd.Int16Dtype, pd.Int32Dtype, pd.Int64Dtype,
-            pd.UInt8Dtype, pd.UInt16Dtype, pd.UInt32Dtype, pd.UInt64Dtype,
-            pd.Float32Dtype, pd.Float64Dtype, pd.BooleanDtype,
+            pd.Int8Dtype,
+            pd.Int16Dtype,
+            pd.Int32Dtype,
+            pd.Int64Dtype,
+            pd.UInt8Dtype,
+            pd.UInt16Dtype,
+            pd.UInt32Dtype,
+            pd.UInt64Dtype,
+            pd.Float32Dtype,
+            pd.Float64Dtype,
+            pd.BooleanDtype,
         )
         arrow = type(dtype) is pd.ArrowDtype and (
             pa.types.is_integer(dtype.pyarrow_dtype)
@@ -91,11 +98,16 @@ def _table(frame: pd.DataFrame) -> Any:
         )
         string = type(dtype) is pd.StringDtype
         timestamp = (
-            isinstance(dtype, np.dtype) and dtype.kind == 'M'
-        ) or type(dtype) is pd.DatetimeTZDtype or (
-            type(dtype) is pd.ArrowDtype and pa.types.is_timestamp(dtype.pyarrow_dtype)
+            (isinstance(dtype, np.dtype) and dtype.kind == 'M')
+            or type(dtype) is pd.DatetimeTZDtype
+            or (
+                type(dtype) is pd.ArrowDtype
+                and pa.types.is_timestamp(dtype.pyarrow_dtype)
+            )
         )
-        decimal = type(dtype) is pd.ArrowDtype and pa.types.is_decimal(dtype.pyarrow_dtype)
+        decimal = type(dtype) is pd.ArrowDtype and pa.types.is_decimal(
+            dtype.pyarrow_dtype
+        )
         categorical = type(dtype) is pd.CategoricalDtype and (
             type(dtype.categories.dtype) is pd.StringDtype
             or (
@@ -104,7 +116,15 @@ def _table(frame: pd.DataFrame) -> Any:
                 and dtype.categories.dtype.itemsize <= 8
             )
         )
-        if not (numeric or nullable or arrow or string or categorical or timestamp or decimal):
+        if not (
+            numeric
+            or nullable
+            or arrow
+            or string
+            or categorical
+            or timestamp
+            or decimal
+        ):
             raise RouteError(
                 'this direct column needs native storage observations'
             )
@@ -122,15 +142,18 @@ def _table(frame: pd.DataFrame) -> Any:
             storage = {
                 'family': 'timestamp',
                 'unit': {
-                    's': 'seconds', 'ms': 'milliseconds',
-                    'us': 'microseconds', 'ns': 'nanoseconds',
+                    's': 'seconds',
+                    'ms': 'milliseconds',
+                    'us': 'microseconds',
+                    'ns': 'nanoseconds',
                 }[array.type.unit],
                 'zone': array.type.tz,
             }
             array = array.cast(pa.int64())
         elif decimal:
             storage = {
-                'family': 'decimal', 'precision': array.type.precision,
+                'family': 'decimal',
+                'precision': array.type.precision,
                 'scale': array.type.scale,
             }
         elif categorical:
@@ -140,16 +163,23 @@ def _table(frame: pd.DataFrame) -> Any:
         else:
             storage = {
                 'family': 'primitive',
-                'owner': 'array' if numeric else 'nullable' if nullable else 'arrow',
-                'floats': (
-                    'nan_missing' if numeric else 'validity_masked'
-                ) if pa.types.is_floating(array.type) else None,
+                'owner': 'array'
+                if numeric
+                else 'nullable'
+                if nullable
+                else 'arrow',
+                'floats': ('nan_missing' if numeric else 'validity_masked')
+                if pa.types.is_floating(array.type)
+                else None,
             }
         arrays.append(array)
-        fields.append(pa.field(
-            frame.columns[at], array.type,
-            metadata={'sdm.direct.storage.v1': json.dumps(storage)},
-        ))
+        fields.append(
+            pa.field(
+                frame.columns[at],
+                array.type,
+                metadata={'sdm.direct.storage.v1': json.dumps(storage)},
+            )
+        )
     # The explicit DirectHeader carries zero-column row counts separately.
     # The core reconstructs such a RecordBatch using RecordBatchOptions.
     return pa.Table.from_arrays(arrays, schema=pa.schema(fields))
@@ -184,8 +214,10 @@ def _native_encoding(frame: pd.DataFrame) -> bool:
                 return True
             continue
         if (
-            isinstance(dtype, np.dtype) and dtype.isnative
-            and dtype.kind in 'biuf' and dtype.itemsize <= 8
+            isinstance(dtype, np.dtype)
+            and dtype.isnative
+            and dtype.kind in 'biuf'
+            and dtype.itemsize <= 8
             and not (dtype.kind == 'f' and dtype.itemsize < 4)
         ):
             continue
@@ -193,7 +225,11 @@ def _native_encoding(frame: pd.DataFrame) -> bool:
     return False
 
 
-def _schema(held: dict[str, Any], context: pd.DataFrame, flags: Sequence[Mapping[str, Any]] = ()) -> Any:
+def _schema(
+    held: dict[str, Any],
+    context: pd.DataFrame,
+    flags: Sequence[Mapping[str, Any]] = (),
+) -> Any:
     from sdm_client.schema import Column, Schema, Table
 
     made = Schema.__new__(Schema)
@@ -207,7 +243,14 @@ def _schema(held: dict[str, Any], context: pd.DataFrame, flags: Sequence[Mapping
                 ('name', definition_column['name']),
                 ('dtype', definition_column['dtype']),
                 ('stype', definition_column['stype']),
-                ('untyped', any(flag['name'] == definition_column['name'] and flag['untyped'] for flag in flags)),
+                (
+                    'untyped',
+                    any(
+                        flag['name'] == definition_column['name']
+                        and flag['untyped']
+                        for flag in flags
+                    ),
+                ),
                 ('stype_declared', False),
                 ('_stype_before_key', definition_column['stype_before_key']),
                 (
@@ -269,7 +312,7 @@ def construct(
     from sdm_client.request import Split, Target, Task, _has_container_cells
 
     related = dict(related_tables or {})
-    shape = {
+    shape: dict[str, Any] = {
         'target_containers': False,
         'context_kind': _kind(context),
         'predict_kind': _kind(predict),
@@ -285,12 +328,18 @@ def construct(
         direct_frame=lambda fields: 'pandas DataFrame',
     ):
         _call('check_direct_preparation', {'kind': 'arguments', 'shape': shape})
-        shape['target_containers'] = target in context.columns and _has_container_cells(context[target])
+        shape['target_containers'] = (
+            target in context.columns and _has_container_cells(context[target])
+        )
         _call('check_direct_shape', shape)
     from sdm_client._rust import direct_schema
 
-    if direct_schema.preparation_requires(context) or direct_schema.preparation_requires(predict):
-        schema = direct_schema.prepare(context, predict, shape, schema, _native_calls, _schema, _flags)
+    if direct_schema.preparation_requires(
+        context
+    ) or direct_schema.preparation_requires(predict):
+        schema = direct_schema.prepare(
+            context, predict, shape, schema, _native_calls, _schema, _flags
+        )
         value = {'task': shape['task'], 'target': target}
     else:
         converted_context = _table(context)
@@ -364,7 +413,9 @@ def predict(
     else:
         from sdm_client._rust import direct_prediction, direct_schema
 
-        if direct_schema.requires(request.context.instance_table) or direct_schema.requires(request.predict.instance_table):
+        if direct_schema.requires(
+            request.context.instance_table
+        ) or direct_schema.requires(request.predict.instance_table):
             direct_prediction.inspect(request, _native_calls, _run)
         else:
             _run(
@@ -387,9 +438,15 @@ def predict(
                 predict=3,
             )
 
-        if direct_schema.requires(request.context.instance_table) or direct_schema.requires(request.predict.instance_table):
+        if direct_schema.requires(
+            request.context.instance_table
+        ) or direct_schema.requires(request.predict.instance_table):
             table, context, scoring, resolved = direct_prediction.resolve(
-                request, bound, _native_calls, _flags, _header,
+                request,
+                bound,
+                _native_calls,
+                _flags,
+                _header,
             )
         else:
             # Capture the actual live owners and their dtypes at the adapter boundary.
@@ -420,7 +477,9 @@ def predict(
         # Advice has reached Python. Read the held native owners again, while
         # retaining the wire dtype decisions made before that advice.
         key = table.primary_key
-        primary_key = [] if not key else [key] if isinstance(key, str) else list(key)
+        primary_key = (
+            [] if not key else [key] if isinstance(key, str) else list(key)
+        )
         kind = request.task.kind
         context_header = _header(context)
         native_encoding = _native_encoding(context) or _native_encoding(scoring)
@@ -430,9 +489,13 @@ def predict(
             dtypes = dict(resolved['columns']['dtypes'])
             # Finish context before observing scoring values. In particular,
             # a failing context conversion prevents later native side effects.
-            context_values = native_table(context, 'context', dtypes, _native_calls)
+            context_values = native_table(
+                context, 'context', dtypes, _native_calls
+            )
             scoring_header = _header(scoring)
-            scoring_values = native_table(scoring, 'predict', dtypes, _native_calls)
+            scoring_values = native_table(
+                scoring, 'predict', dtypes, _native_calls
+            )
         else:
             context_values = _table(context)
             scoring_header = _header(scoring)
@@ -458,10 +521,20 @@ def predict(
         # No native inference conversion occurs until column encoding succeeded.
         from sdm_client._rust import direct_options
 
-        observed_options = direct_options.observe(request.inference, _call) if request.inference else {}
+        observed_options = (
+            direct_options.observe(request.inference, _call)
+            if request.inference
+            else {}
+        )
         if not direct_options.can_encode(observed_options):
-            raise RouteError('native inference transport is not enabled in this input-family increment')
-        data = {'kind': 'encoded', 'body': body, 'inference': direct_options.encode(observed_options)}
+            raise RouteError(
+                'native inference transport is not enabled in this input-family increment'
+            )
+        data = {
+            'kind': 'encoded',
+            'body': body,
+            'inference': direct_options.encode(observed_options),
+        }
         direct = {'input': 1, 'payload': 2}
     operation = {
         'op': 'predict',

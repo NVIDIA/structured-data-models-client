@@ -123,7 +123,9 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
-            Operation::EncodeDirectColumn(v) | Operation::InferDirectColumn(v) | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
+            Operation::EncodeDirectColumn(v)
+            | Operation::InferDirectColumn(v)
+            | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
             Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
             | Operation::CheckDirectOption(v)

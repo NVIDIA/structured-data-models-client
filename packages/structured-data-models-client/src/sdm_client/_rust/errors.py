@@ -759,8 +759,19 @@ def warn_from_core(
                 + words['between'].join(said(w) for w in together)
                 + words['closing']
             )
+        # Native frame-schema advice is presented without a diagnostic code
+        # in the public constructor. Keep this local to its direct sentences;
+        # warehouse and other core warnings retain their existing presentation.
+        native_schema = first['sentence'] in {
+            'direct_native_missing_key',
+            'direct_dates_as_text',
+            'direct_key_repeated',
+            'direct_key_composite',
+            'direct_key_no_composite',
+            'direct_categorical_population',
+        }
         warnings.warn(
-            f'[{first["code"]}] {text}',
+            text if native_schema else f'[{first["code"]}] {text}',
             category=WARNINGS.get(first['code'], SDMWarning),
             stacklevel=caller_stacklevel(),
         )

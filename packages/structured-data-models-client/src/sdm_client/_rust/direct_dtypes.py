@@ -12,8 +12,8 @@ from typing import Any
 
 import pandas as pd
 
-from sdm_client.wire.dtypes import _is_missing, arrow_decimal_type
 from sdm_client._rust.direct_io import DirectOperations
+from sdm_client.wire.dtypes import _is_missing, arrow_decimal_type
 
 
 def observe(
@@ -33,7 +33,8 @@ def observe(
     elif pd.api.types.is_integer_dtype(dtype):
         storage = {
             'kind': 'integer',
-            'may_exceed_i64': pd.api.types.is_object_dtype(dtype) or 'uint64' in str(dtype).lower(),
+            'may_exceed_i64': pd.api.types.is_object_dtype(dtype)
+            or 'uint64' in str(dtype).lower(),
         }
     elif pd.api.types.is_float_dtype(dtype):
         storage = {'kind': 'floating', 'bytes': dtype.itemsize}
@@ -42,14 +43,20 @@ def observe(
         if declared is not None:
             scale = declared.scale
             storage = {
-                'kind': 'decimal', 'scale': scale,
+                'kind': 'decimal',
+                'scale': scale,
                 'precision': None if scale > 0 else declared.precision,
             }
         elif pd.api.types.is_object_dtype(dtype):
-            storage = {'kind': 'object', 'content': pd.api.types.infer_dtype(series, skipna=True)}
+            storage = {
+                'kind': 'object',
+                'content': pd.api.types.infer_dtype(series, skipna=True),
+            }
         else:
             storage = {'kind': 'other'}
-    finding = call('observe_direct_dtype', {'kind': 'storage', 'storage': storage})
+    finding = call(
+        'observe_direct_dtype', {'kind': 'storage', 'storage': storage}
+    )
     if finding['population'] == 'declared':
         return finding
     # These values are native outcomes, not Python-selected wire types. A
@@ -60,12 +67,21 @@ def observe(
         if finding['population'] == 'whole_numbers':
             try:
                 integer = int(value)
-                within = int(finding['integer_min']) <= integer <= int(finding['integer_max'])
+                within = (
+                    int(finding['integer_min'])
+                    <= integer
+                    <= int(finding['integer_max'])
+                )
             except (TypeError, ValueError, OverflowError):
                 within = None
-            finding = call('observe_direct_dtype', {
-                'kind': 'whole_number', 'previous': finding, 'within_range': within,
-            })
+            finding = call(
+                'observe_direct_dtype',
+                {
+                    'kind': 'whole_number',
+                    'previous': finding,
+                    'within_range': within,
+                },
+            )
         else:
             is_decimal = isinstance(value, Decimal)
             finite = bool(value.is_finite()) if is_decimal else False
@@ -73,16 +89,31 @@ def observe(
             outside = False
             if finite:
                 exponent = value.as_tuple().exponent
-                fractional = exponent < 0 and bool(value != value.to_integral_value())
-                if not fractional and value.adjusted() >= finding['decimal_safe_precision']:
+                fractional = exponent < 0 and bool(
+                    value != value.to_integral_value()
+                )
+                if (
+                    not fractional
+                    and value.adjusted() >= finding['decimal_safe_precision']
+                ):
                     outside = not (
-                        int(finding['integer_min']) <= value <= int(finding['integer_max'])
+                        int(finding['integer_min'])
+                        <= value
+                        <= int(finding['integer_max'])
                     )
-            finding = call('observe_direct_dtype', {
-                'kind': 'decimal', 'previous': finding,
-                'is_decimal': is_decimal, 'finite': finite,
-                'fractional': fractional, 'outside_integer_range': outside,
-            })
+            finding = call(
+                'observe_direct_dtype',
+                {
+                    'kind': 'decimal',
+                    'previous': finding,
+                    'is_decimal': is_decimal,
+                    'finite': finite,
+                    'fractional': fractional,
+                    'outside_integer_range': outside,
+                },
+            )
         if finding['population'] == 'declared':
             return finding
-    return call('observe_direct_dtype', {'kind': 'exhausted', 'finding': finding})
+    return call(
+        'observe_direct_dtype', {'kind': 'exhausted', 'finding': finding}
+    )

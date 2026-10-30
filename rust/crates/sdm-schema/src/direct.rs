@@ -25,12 +25,21 @@ use crate::keys::KEY_UNIQUENESS;
 use crate::values::{self, Floats, Value};
 
 /// Earliest real native instant, retaining precision before wire encoding.
-pub fn time_start(schema: &Schema, batches: &[RecordBatch]) -> Result<sdm_contract::direct::schema::TimeStart, CoreError> {
+pub fn time_start(
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<sdm_contract::direct::schema::TimeStart, CoreError> {
     if schema.fields().len() != 1 {
-        return Err(CoreError::protocol(Sentence::InvalidMessage, "native time observation requires one column"));
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native time observation requires one column",
+        ));
     }
     let Some(DirectStorage::Timestamp { unit, .. }) = storage::read(schema.field(0))? else {
-        return Err(CoreError::protocol(Sentence::InvalidMessage, "native time observation requires timestamp storage"));
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native time observation requires timestamp storage",
+        ));
     };
     let factor = match unit {
         storage::TimestampUnit::Seconds => 1_000_000_000,
@@ -39,10 +48,15 @@ pub fn time_start(schema: &Schema, batches: &[RecordBatch]) -> Result<sdm_contra
         storage::TimestampUnit::Nanoseconds => 1,
     };
     let values = values::column(batches, 0, Floats::NanValue)?;
-    let nanos = crate::infer::earliest_direct_instant(values.into_iter().flatten().filter_map(|v| match v {
-        Value::Int(count) => Some(count * factor), _ => None,
-    }));
-    Ok(sdm_contract::direct::schema::TimeStart { nanos: nanos.map(|v| v.to_string()) })
+    let nanos = crate::infer::earliest_direct_instant(values.into_iter().flatten().filter_map(
+        |v| match v {
+            Value::Int(count) => Some(count * factor),
+            _ => None,
+        },
+    ));
+    Ok(sdm_contract::direct::schema::TimeStart {
+        nanos: nanos.map(|v| v.to_string()),
+    })
 }
 
 /// Wire storage meaning, distinct from Arrow's physical width.
@@ -60,12 +74,18 @@ pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dt
                 return Ok(Dtype::Time);
             }
             if let Some(DirectStorage::Decimal { precision, scale }) = native {
-                if scale > 0 { return Ok(Dtype::Float64); }
-                if precision <= 18 { return Ok(Dtype::Int64); }
+                if scale > 0 {
+                    return Ok(Dtype::Float64);
+                }
+                if precision <= 18 {
+                    return Ok(Dtype::Int64);
+                }
                 let values = decimal_values(batches, at)?;
                 let suffix = "0".repeat(usize::from(scale.unsigned_abs()));
                 let fits = values.iter().flatten().all(|value| {
-                    let Value::Text(coefficient) = value else { return false; };
+                    let Value::Text(coefficient) = value else {
+                        return false;
+                    };
                     coefficient == "0" || format!("{coefficient}{suffix}").parse::<i64>().is_ok()
                 });
                 return Ok(if fits { Dtype::Int64 } else { Dtype::String });
@@ -116,7 +136,10 @@ pub fn infer(
     }
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     let dtypes = storage_dtypes(schema, batches)?;
-    let values = schema.fields().iter().enumerate()
+    let values = schema
+        .fields()
+        .iter()
+        .enumerate()
         .map(|(at, field)| native_values(batches, at, field))
         .collect::<Result<Vec<_>, _>>()?;
     let columns: Vec<_> = schema
@@ -160,7 +183,9 @@ pub fn infer(
             .count()
             .saturating_sub(values::distinct(&values[at]))
     });
-    let primary_key = primary.map(|at| vec![schema.field(at).name().clone()]).unwrap_or_default();
+    let primary_key = primary
+        .map(|at| vec![schema.field(at).name().clone()])
+        .unwrap_or_default();
     let mut instants = Vec::with_capacity(columns.len());
     let mut firsts = Vec::with_capacity(columns.len());
     for (at, field) in schema.fields().iter().enumerate() {
@@ -171,19 +196,26 @@ pub fn infer(
                 storage::TimestampUnit::Microseconds => count * 1_000,
                 storage::TimestampUnit::Nanoseconds => count,
             };
-            instants.push(Ok(values[at].iter().map(|v| match v {
-                Some(Value::Int(count)) => Some(nanos(*count)),
-                _ => None,
-            }).collect()));
+            instants.push(Ok(values[at]
+                .iter()
+                .map(|v| match v {
+                    Some(Value::Int(count)) => Some(nanos(*count)),
+                    _ => None,
+                })
+                .collect()));
             firsts.push(values[at].iter().flatten().find_map(|value| {
-                let Value::Int(count) = value else { return None; };
+                let Value::Int(count) = value else {
+                    return None;
+                };
                 let (native_unit, count) = if unit == storage::TimestampUnit::Nanoseconds {
                     (sdm_contract::Unit::Ns, *count)
                 } else {
                     (sdm_contract::Unit::Us, nanos(*count).div_euclid(1_000))
                 };
                 i64::try_from(count).ok().map(|value| Scalar::Timestamp {
-                    unit: native_unit, zone: zone.clone(), value,
+                    unit: native_unit,
+                    zone: zone.clone(),
+                    value,
                 })
             }));
         } else {
@@ -191,7 +223,8 @@ pub fn infer(
             firsts.push(None);
         }
     }
-    let time = crate::infer::choose_direct(&columns, rows, &primary_key, &instants, &values, &firsts)?;
+    let time =
+        crate::infer::choose_direct(&columns, rows, &primary_key, &instants, &values, &firsts)?;
     let table = InferredTable {
         name: name.into(),
         source: Relation::named(name),
@@ -221,26 +254,48 @@ pub fn infer(
 
 /// Present target values, using the same equality as ordinary NumPy inference.
 pub fn distinct(batches: &[RecordBatch], column: usize) -> Result<usize, CoreError> {
-    let Some(batch) = batches.first() else { return Ok(0); };
-    Ok(values::distinct(&native_values(batches, column, batch.schema().field(column))?))
+    let Some(batch) = batches.first() else {
+        return Ok(0);
+    };
+    Ok(values::distinct(&native_values(
+        batches,
+        column,
+        batch.schema().field(column),
+    )?))
 }
 
 fn native_values(
-    batches: &[RecordBatch], column: usize, field: &arrow_schema::Field,
+    batches: &[RecordBatch],
+    column: usize,
+    field: &arrow_schema::Field,
 ) -> Result<Vec<Option<Value>>, CoreError> {
     let native = storage::read(field)?;
     if matches!(native, Some(DirectStorage::Decimal { .. })) {
         return decimal_values(batches, column);
     }
-    let masked = matches!(native, Some(DirectStorage::Primitive {
-        owner: StorageOwner::Nullable | StorageOwner::Arrow, ..
-    }));
-    let mut values = values::column(batches, column, if masked {
-        Floats::NanValue
-    } else {
-        Floats::NanMissing
-    })?;
-    if matches!(native, Some(DirectStorage::Primitive { owner: StorageOwner::Nullable, .. })) {
+    let masked = matches!(
+        native,
+        Some(DirectStorage::Primitive {
+            owner: StorageOwner::Nullable | StorageOwner::Arrow,
+            ..
+        })
+    );
+    let mut values = values::column(
+        batches,
+        column,
+        if masked {
+            Floats::NanValue
+        } else {
+            Floats::NanMissing
+        },
+    )?;
+    if matches!(
+        native,
+        Some(DirectStorage::Primitive {
+            owner: StorageOwner::Nullable,
+            ..
+        })
+    ) {
         // Masked native arrays retain present NaNs, but their uniqueness
         // operation identifies signed zeros and all NaN payloads alike.
         // This direct-only rule does not change warehouse comparison policy.
@@ -249,13 +304,19 @@ fn native_values(
                 match field.data_type() {
                     DataType::Float32 => {
                         let number = f32::from_bits(*bits as u32);
-                        if number == 0.0 { *bits = 0; }
-                        else if number.is_nan() { *bits = u64::from(f32::NAN.to_bits()); }
+                        if number == 0.0 {
+                            *bits = 0;
+                        } else if number.is_nan() {
+                            *bits = u64::from(f32::NAN.to_bits());
+                        }
                     }
                     DataType::Float64 => {
                         let number = f64::from_bits(*bits);
-                        if number == 0.0 { *bits = 0; }
-                        else if number.is_nan() { *bits = f64::NAN.to_bits(); }
+                        if number == 0.0 {
+                            *bits = 0;
+                        } else if number.is_nan() {
+                            *bits = f64::NAN.to_bits();
+                        }
                     }
                     _ => {}
                 }
@@ -270,11 +331,24 @@ fn decimal_values(batches: &[RecordBatch], column: usize) -> Result<Vec<Option<V
     for batch in batches {
         let array = batch.column(column);
         match array.data_type() {
-            DataType::Decimal128(_, _) => values.extend(array.as_primitive::<Decimal128Type>()
-                .iter().map(|v| v.map(|v| Value::Text(v.to_string())))),
-            DataType::Decimal256(_, _) => values.extend(array.as_primitive::<Decimal256Type>()
-                .iter().map(|v| v.map(|v| Value::Text(v.to_string())))),
-            _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "decimal observation has nondecimal storage")),
+            DataType::Decimal128(_, _) => values.extend(
+                array
+                    .as_primitive::<Decimal128Type>()
+                    .iter()
+                    .map(|v| v.map(|v| Value::Text(v.to_string()))),
+            ),
+            DataType::Decimal256(_, _) => values.extend(
+                array
+                    .as_primitive::<Decimal256Type>()
+                    .iter()
+                    .map(|v| v.map(|v| Value::Text(v.to_string()))),
+            ),
+            _ => {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "decimal observation has nondecimal storage",
+                ));
+            }
         }
     }
     Ok(values)

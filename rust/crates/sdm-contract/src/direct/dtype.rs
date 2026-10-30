@@ -4,9 +4,9 @@
 
 //! Native dtype facts and exact range observations for a direct column.
 
+use crate::ops::Dtype;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::ops::Dtype;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -22,7 +22,11 @@ pub enum DtypeStorage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum DtypePopulation { Declared, WholeNumbers, Decimals }
+pub enum DtypePopulation {
+    Declared,
+    WholeNumbers,
+    Decimals,
+}
 
 /// An inferred type and the population whose remaining values can change it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -39,8 +43,13 @@ pub struct DtypeFinding {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DtypeObservation {
-    Storage { storage: DtypeStorage },
-    WholeNumber { previous: DtypeFinding, within_range: Option<bool> },
+    Storage {
+        storage: DtypeStorage,
+    },
+    WholeNumber {
+        previous: DtypeFinding,
+        within_range: Option<bool>,
+    },
     Decimal {
         previous: DtypeFinding,
         is_decimal: bool,
@@ -48,16 +57,27 @@ pub enum DtypeObservation {
         fractional: bool,
         outside_integer_range: bool,
     },
-    Exhausted { finding: DtypeFinding },
+    Exhausted {
+        finding: DtypeFinding,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DtypeResolutionObservation {
-    NullableInteger { declared: Dtype, equal: bool },
-    Widen { before: Option<Dtype>, arriving: Dtype, untyped: bool },
+    NullableInteger {
+        declared: Dtype,
+        equal: bool,
+    },
+    Widen {
+        before: Option<Dtype>,
+        arriving: Dtype,
+        untyped: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct DtypeResolution { pub dtype: Option<Dtype> }
+pub struct DtypeResolution {
+    pub dtype: Option<Dtype>,
+}

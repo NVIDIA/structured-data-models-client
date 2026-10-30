@@ -9,19 +9,19 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::*;
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::DataType;
+use sdm_contract::direct::storage;
 use sdm_contract::direct::{
     ColumnFlags, DirectInference, EncodedDirectBody, EncodedTableShape, FloatStorage,
     PrimitiveOption, TabularColumn, TabularColumns,
 };
-use sdm_contract::direct::storage;
 use sdm_contract::ops::{DescribedTable, Dtype, SourceDescription, Stype};
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_wire::json::Value;
 use std::collections::BTreeMap;
 
-pub mod response;
 pub mod cell;
 mod decimal;
+pub mod response;
 
 fn text(value: impl Into<String>) -> Value {
     Value::Text(value.into())
@@ -67,17 +67,30 @@ fn widened(a: Dtype, b: Dtype) -> Dtype {
     }
 }
 
-pub fn resolve_dtype(input: sdm_contract::direct::dtype::DtypeResolutionObservation) -> Result<sdm_contract::direct::dtype::DtypeResolution, CoreError> {
+pub fn resolve_dtype(
+    input: sdm_contract::direct::dtype::DtypeResolutionObservation,
+) -> Result<sdm_contract::direct::dtype::DtypeResolution, CoreError> {
     use sdm_contract::direct::dtype::{DtypeResolution, DtypeResolutionObservation as O};
     let dtype = match input {
         O::NullableInteger { declared, equal } => {
             if !matches!(declared, Dtype::Int32 | Dtype::Int64) {
-                return Err(CoreError::protocol(Sentence::InvalidMessage, "nullable integer retention has a noninteger declaration"));
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "nullable integer retention has a noninteger declaration",
+                ));
             }
             equal.then_some(declared)
         }
-        O::Widen { before, arriving, untyped } => {
-            if untyped { before } else { Some(before.map_or(arriving, |before| widened(before, arriving))) }
+        O::Widen {
+            before,
+            arriving,
+            untyped,
+        } => {
+            if untyped {
+                before
+            } else {
+                Some(before.map_or(arriving, |before| widened(before, arriving)))
+            }
         }
     };
     Ok(DtypeResolution { dtype })
@@ -114,11 +127,13 @@ fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
         DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
         DataType::LargeUtf8 => Scalar::Utf8(array.as_string::<i64>().value(row).to_owned()),
         DataType::Decimal128(precision, scale) => Scalar::Decimal128 {
-            precision: *precision, scale: *scale,
+            precision: *precision,
+            scale: *scale,
             value: array.as_primitive::<Decimal128Type>().value(row),
         },
         DataType::Decimal256(precision, scale) => Scalar::Decimal256 {
-            precision: *precision, scale: *scale,
+            precision: *precision,
+            scale: *scale,
             value: array.as_primitive::<Decimal256Type>().value(row),
         },
         _ => return Err(crate::predict::not_yet("direct_numeric_storage")),
@@ -135,8 +150,12 @@ fn cell(
         return Ok(Value::Null);
     }
     match value {
-        Scalar::Decimal128 { value, scale, .. } => return decimal::encode(&value.to_string(), scale, dtype, column),
-        Scalar::Decimal256 { value, scale, .. } => return decimal::encode(&value.to_string(), scale, dtype, column),
+        Scalar::Decimal128 { value, scale, .. } => {
+            return decimal::encode(&value.to_string(), scale, dtype, column);
+        }
+        Scalar::Decimal256 { value, scale, .. } => {
+            return decimal::encode(&value.to_string(), scale, dtype, column);
+        }
         _ => {}
     }
     if dtype == Dtype::String {
@@ -216,33 +235,57 @@ fn encoded_cell(
     column: &str,
     float_text: fn(f64) -> String,
 ) -> Result<Value, CoreError> {
-    if let Some(storage::DirectStorage::Encoded { dtype: encoded_dtype }) = native {
+    if let Some(storage::DirectStorage::Encoded {
+        dtype: encoded_dtype,
+    }) = native
+    {
         if *encoded_dtype != dtype {
-            return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded cell dtype disagrees with resolved wire dtype"));
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "encoded cell dtype disagrees with resolved wire dtype",
+            ));
         }
         let Scalar::Utf8(encoded) = raw(batch.column(at), row)? else {
-            return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded cell lacks its scalar representation"));
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "encoded cell lacks its scalar representation",
+            ));
         };
-        return Ok(match sdm_contract::direct::cell::encoded_scalar(&encoded)? {
-            Scalar::Null => Value::Null,
-            Scalar::Bool(v) => Value::Bool(v),
-            Scalar::Utf8(v) => text(v),
-            Scalar::Int64(v) => Value::Number(v.to_string()),
-            Scalar::Float64(v) if v.is_finite() => crate::payload::float_cell(v, column)?,
-            _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded cell is not a model JSON scalar")),
-        });
+        return Ok(
+            match sdm_contract::direct::cell::encoded_scalar(&encoded)? {
+                Scalar::Null => Value::Null,
+                Scalar::Bool(v) => Value::Bool(v),
+                Scalar::Utf8(v) => text(v),
+                Scalar::Int64(v) => Value::Number(v.to_string()),
+                Scalar::Float64(v) if v.is_finite() => crate::payload::float_cell(v, column)?,
+                _ => {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "encoded cell is not a model JSON scalar",
+                    ));
+                }
+            },
+        );
     }
-    if let Some(storage::DirectStorage::Timestamp { unit, .. }) = native
-    {
+    if let Some(storage::DirectStorage::Timestamp { unit, .. }) = native {
         let value = raw(batch.column(at), row)?;
-        if matches!(value, Scalar::Null) { return Ok(Value::Null); }
+        if matches!(value, Scalar::Null) {
+            return Ok(Value::Null);
+        }
         if !matches!(dtype, Dtype::Date | Dtype::Time) {
-            return Err(crate::predict::not_yet("direct_native_timestamp_conversion"));
+            return Err(crate::predict::not_yet(
+                "direct_native_timestamp_conversion",
+            ));
         }
         let Scalar::Int64(count) = value else {
-            return Err(CoreError::protocol(Sentence::InvalidMessage, "timestamp count is not int64"));
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "timestamp count is not int64",
+            ));
         };
-        return Ok(text(crate::payload::iso_microsecond_count(unit.microseconds(count))));
+        return Ok(text(crate::payload::iso_microsecond_count(
+            unit.microseconds(count),
+        )));
     }
     cell(raw(batch.column(at), row)?, dtype, column, float_text)
 }
@@ -283,23 +326,52 @@ fn nullable_whole(
 }
 
 /// Finish a proven-passive column before the host observes the next column.
-pub fn encode_column(batches: &[RecordBatch], dtype: Dtype, float_text: fn(f64) -> String) -> Result<Vec<Scalar>, CoreError> {
+pub fn encode_column(
+    batches: &[RecordBatch],
+    dtype: Dtype,
+    float_text: fn(f64) -> String,
+) -> Result<Vec<Scalar>, CoreError> {
     let mut values = Vec::new();
     for batch in batches {
         if batch.num_columns() != 1 {
-            return Err(CoreError::protocol(Sentence::InvalidMessage, "direct column encoding requires exactly one column"));
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "direct column encoding requires exactly one column",
+            ));
         }
         let schema = batch.schema();
         let native = storage::read(schema.field(0))?;
         for row in 0..batch.num_rows() {
-            let cell = encoded_cell(batch, 0, row, native.as_ref(), dtype, schema.field(0).name(), float_text)?;
+            let cell = encoded_cell(
+                batch,
+                0,
+                row,
+                native.as_ref(),
+                dtype,
+                schema.field(0).name(),
+                float_text,
+            )?;
             values.push(match cell {
                 Value::Null => Scalar::Null,
                 Value::Bool(value) => Scalar::Bool(value),
                 Value::Text(value) => Scalar::Utf8(value),
-                Value::Number(value) if matches!(dtype, Dtype::Int32 | Dtype::Int64) => Scalar::Int64(value.parse().map_err(|_| CoreError::protocol(Sentence::InvalidMessage, "encoded integer is not int64"))?),
-                Value::Number(value) => Scalar::Float64(value.parse().map_err(|_| CoreError::protocol(Sentence::InvalidMessage, "encoded number is not a float"))?),
-                _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded column contains a nonscalar value")),
+                Value::Number(value) if matches!(dtype, Dtype::Int32 | Dtype::Int64) => {
+                    Scalar::Int64(value.parse().map_err(|_| {
+                        CoreError::protocol(
+                            Sentence::InvalidMessage,
+                            "encoded integer is not int64",
+                        )
+                    })?)
+                }
+                Value::Number(value) => Scalar::Float64(value.parse().map_err(|_| {
+                    CoreError::protocol(Sentence::InvalidMessage, "encoded number is not a float")
+                })?),
+                _ => {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "encoded column contains a nonscalar value",
+                    ));
+                }
             });
         }
     }
@@ -350,39 +422,46 @@ fn widths(
 }
 
 fn json_integer(digits: String) -> Result<Value, CoreError> {
-        let body = digits.strip_prefix('-').unwrap_or(&digits);
-        if body.is_empty()
-            || !body.bytes().all(|b| b.is_ascii_digit())
-            || (body.len() > 1 && body.starts_with('0'))
-        {
-            return Err(CoreError::protocol(
-                Sentence::InvalidMessage,
-                "a direct inference integer has noncanonical digits",
-            ));
-        }
-        Ok(Value::Number(digits))
+    let body = digits.strip_prefix('-').unwrap_or(&digits);
+    if body.is_empty()
+        || !body.bytes().all(|b| b.is_ascii_digit())
+        || (body.len() > 1 && body.starts_with('0'))
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "a direct inference integer has noncanonical digits",
+        ));
+    }
+    Ok(Value::Number(digits))
 }
 
 fn option_integer(digits: String) -> Result<Value, CoreError> {
-        json_integer(digits.clone())?;
-        let exact = digits
-            .parse::<f64>()
-            .ok()
-            .filter(|v| v.is_finite())
-            .is_some_and(|v| format!("{v:.0}") == digits);
-        if !exact {
-            return Err(
-                invalid(Sentence::DirectOptionInteger).with_field("digits", Detail::text(&digits))
-            );
-        }
-        Ok(Value::Number(digits))
+    json_integer(digits.clone())?;
+    let exact = digits
+        .parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .is_some_and(|v| format!("{v:.0}") == digits);
+    if !exact {
+        return Err(
+            invalid(Sentence::DirectOptionInteger).with_field("digits", Detail::text(&digits))
+        );
+    }
+    Ok(Value::Number(digits))
 }
 
-pub fn check_option(input: &sdm_contract::direct::DirectOptionObservation) -> Result<(), CoreError> {
-    if let Some(integer) = &input.integer { option_integer(integer.clone())?; }
-    if input.repeated { return Err(invalid(Sentence::DirectOptionCycle)); }
+pub fn check_option(
+    input: &sdm_contract::direct::DirectOptionObservation,
+) -> Result<(), CoreError> {
+    if let Some(integer) = &input.integer {
+        option_integer(integer.clone())?;
+    }
+    if input.repeated {
+        return Err(invalid(Sentence::DirectOptionCycle));
+    }
     if input.depth > 100 {
-        return Err(invalid(Sentence::DirectOptionDepth).with_field("limit", Detail::Scalar(Scalar::UInt64(100))));
+        return Err(invalid(Sentence::DirectOptionDepth)
+            .with_field("limit", Detail::Scalar(Scalar::UInt64(100))));
     }
     Ok(())
 }
@@ -399,13 +478,29 @@ fn option_value(value: PrimitiveOption) -> Result<Value, CoreError> {
         PrimitiveOption::Value(Scalar::Bool(v)) => Value::Bool(v),
         PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v),
         PrimitiveOption::Value(Scalar::Float64(v)) => Value::float(v).ok_or_else(|| {
-            CoreError::protocol(Sentence::InvalidMessage, "direct inference floats must be finite")
+            CoreError::protocol(
+                Sentence::InvalidMessage,
+                "direct inference floats must be finite",
+            )
         })?,
-        PrimitiveOption::Array(values) => Value::Array(values.into_iter().map(option_value).collect::<Result<_, _>>()?),
-        PrimitiveOption::Object(fields) => Value::Object(fields.into_iter().map(|(name, value)| {
-            Ok((name, option_value(value)?))
-        }).collect::<Result<_, CoreError>>()?),
-        _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "direct inference holds a value outside the JSON family")),
+        PrimitiveOption::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(option_value)
+                .collect::<Result<_, _>>()?,
+        ),
+        PrimitiveOption::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(name, value)| Ok((name, option_value(value)?)))
+                .collect::<Result<_, CoreError>>()?,
+        ),
+        _ => {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "direct inference holds a value outside the JSON family",
+            ));
+        }
     })
 }
 
@@ -439,7 +534,15 @@ pub fn envelope(
             invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(entity))
         })?;
     let dtypes = widths(table, Some(native_schema), scoring, arriving, storage)?;
-    schema_columns(table, native_schema, context_names, dtypes, target, kind, supports)
+    schema_columns(
+        table,
+        native_schema,
+        context_names,
+        dtypes,
+        target,
+        kind,
+        supports,
+    )
 }
 
 /// Adapter meaning with wire dtypes already resolved at their native boundaries.
@@ -536,10 +639,7 @@ fn instance_schema(plan: &TabularColumns, primary_key: &[String]) -> Value {
                 column.name.clone(),
                 object([
                     ("dtype", text(column.dtype.wire_name())),
-                    (
-                        "stype",
-                        text(crate::direct::stype_name(column.stype)),
-                    ),
+                    ("stype", text(crate::direct::stype_name(column.stype))),
                 ]),
             )
         })
@@ -594,7 +694,10 @@ pub fn body(
                 let native = storage::read(batch.schema().field(at))?;
                 for row in 0..batch.num_rows() {
                     rows[position].push(encoded_cell(
-                        batch, at, row, native.as_ref(),
+                        batch,
+                        at,
+                        row,
+                        native.as_ref(),
                         dtype,
                         name,
                         float_text,
@@ -738,7 +841,8 @@ pub fn check_body(
                 let dtype = dtypes.get(name.as_str()).ok_or_else(protocol)?;
                 let valid = matches!(cell, Value::Null)
                     || match (dtype, cell) {
-                        (Dtype::Bool, Value::Bool(_)) | (Dtype::String | Dtype::Date | Dtype::Time, Value::Text(_)) => true,
+                        (Dtype::Bool, Value::Bool(_))
+                        | (Dtype::String | Dtype::Date | Dtype::Time, Value::Text(_)) => true,
                         (
                             Dtype::Int32 | Dtype::Int64,
                             Value::Number(token) | Value::Text(token),
@@ -822,10 +926,16 @@ pub fn overlap(
         .iter()
         .map(|name| scoring_schema.index_of(name).ok())
         .collect::<Option<_>>()?;
-    let context_native = context_at.iter().map(|at| storage::read(context_schema.field(*at)))
-        .collect::<Result<Vec<_>, _>>().ok()?;
-    let scoring_native = scoring_at.iter().map(|at| storage::read(scoring_schema.field(*at)))
-        .collect::<Result<Vec<_>, _>>().ok()?;
+    let context_native = context_at
+        .iter()
+        .map(|at| storage::read(context_schema.field(*at)))
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let scoring_native = scoring_at
+        .iter()
+        .map(|at| storage::read(scoring_schema.field(*at)))
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
     let mut key_table = table.clone();
     key_table
         .columns
@@ -839,7 +949,8 @@ pub fn overlap(
         .fields()
         .iter()
         .map(|field| storage::floats(field))
-        .collect::<Result<Vec<_>, _>>().ok()?;
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
     let dtypes = widths(&key_table, Some(flags), scoring, &key_arriving, &storage).ok()?;
     let encode_key = |batch: &RecordBatch,
                       row: usize,
@@ -848,7 +959,15 @@ pub fn overlap(
      -> Result<Option<Vec<u8>>, CoreError> {
         let mut values = Vec::new();
         for ((name, at), native) in key.iter().zip(positions).zip(native) {
-            let value = encoded_cell(batch, *at, row, native.as_ref(), dtypes[name], name, float_text)?;
+            let value = encoded_cell(
+                batch,
+                *at,
+                row,
+                native.as_ref(),
+                dtypes[name],
+                name,
+                float_text,
+            )?;
             if matches!(value, Value::Null) {
                 return Ok(None);
             }
@@ -909,17 +1028,39 @@ pub fn overlap(
 
 /// Compare keys whose native conversions have already been reached in order.
 pub fn observed_overlap(
-    context: &[RecordBatch], scoring: &[RecordBatch], target: &str, scoring_rows: usize,
+    context: &[RecordBatch],
+    scoring: &[RecordBatch],
+    target: &str,
+    scoring_rows: usize,
 ) -> Result<Option<CoreWarning>, CoreError> {
-    let protocol = || CoreError::protocol(Sentence::InvalidMessage, "observed keys do not share one encoded column layout");
-    let (Some(left), Some(right)) = (context.first(), scoring.first()) else { return Ok(None); };
-    if left.schema() != right.schema() { return Err(protocol()); }
-    if left.num_columns() == 0 { return Ok(None); }
-    let native = left.schema().fields().iter().map(|field| storage::read(field)).collect::<Result<Vec<_>, _>>()?;
-    let dtypes = native.iter().map(|value| match value {
-        Some(storage::DirectStorage::Encoded { dtype }) => Ok(*dtype),
-        _ => Err(protocol()),
-    }).collect::<Result<Vec<_>, _>>()?;
+    let protocol = || {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "observed keys do not share one encoded column layout",
+        )
+    };
+    let (Some(left), Some(right)) = (context.first(), scoring.first()) else {
+        return Ok(None);
+    };
+    if left.schema() != right.schema() {
+        return Err(protocol());
+    }
+    if left.num_columns() == 0 {
+        return Ok(None);
+    }
+    let native = left
+        .schema()
+        .fields()
+        .iter()
+        .map(|field| storage::read(field))
+        .collect::<Result<Vec<_>, _>>()?;
+    let dtypes = native
+        .iter()
+        .map(|value| match value {
+            Some(storage::DirectStorage::Encoded { dtype }) => Ok(*dtype),
+            _ => Err(protocol()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let keys = |batches: &[RecordBatch]| -> Result<Vec<Option<Vec<u8>>>, CoreError> {
         let mut keys = Vec::new();
         for batch in batches {
@@ -927,11 +1068,22 @@ pub fn observed_overlap(
                 let mut values = Vec::new();
                 let mut missing = false;
                 for (at, dtype) in dtypes.iter().enumerate() {
-                    let value = encoded_cell(batch, at, row, native[at].as_ref(), *dtype,
-                        batch.schema().field(at).name(), |v| v.to_string())?;
-                    if matches!(value, Value::Null) { missing = true; }
+                    let value = encoded_cell(
+                        batch,
+                        at,
+                        row,
+                        native[at].as_ref(),
+                        *dtype,
+                        batch.schema().field(at).name(),
+                        |v| v.to_string(),
+                    )?;
+                    if matches!(value, Value::Null) {
+                        missing = true;
+                    }
                     let value = match value {
-                        Value::Number(ref number) if number.parse::<f64>().ok() == Some(0.0) => Value::Number("0".into()),
+                        Value::Number(ref number) if number.parse::<f64>().ok() == Some(0.0) => {
+                            Value::Number("0".into())
+                        }
                         other => other,
                     };
                     values.push(value);
@@ -942,9 +1094,18 @@ pub fn observed_overlap(
         Ok(keys)
     };
     let answers: std::collections::BTreeSet<_> = keys(context)?.into_iter().flatten().collect();
-    let shown = keys(scoring)?.into_iter().flatten().filter(|key| answers.contains(key)).count();
-    Ok((shown > 0).then(|| CoreWarning::new(Sentence::DirectOverlap, "scoring rows carry their answers in context")
+    let shown = keys(scoring)?
+        .into_iter()
+        .flatten()
+        .filter(|key| answers.contains(key))
+        .count();
+    Ok((shown > 0).then(|| {
+        CoreWarning::new(
+            Sentence::DirectOverlap,
+            "scoring rows carry their answers in context",
+        )
         .with_field("shown", Detail::Scalar(Scalar::UInt64(shown as u64)))
         .with_field("rows", Detail::Scalar(Scalar::UInt64(scoring_rows as u64)))
-        .with_field("target", Detail::text(target))))
+        .with_field("target", Detail::text(target))
+    }))
 }

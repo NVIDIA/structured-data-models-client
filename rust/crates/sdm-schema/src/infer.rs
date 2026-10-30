@@ -1361,19 +1361,44 @@ pub(crate) fn choose_direct(
     presence: &[Vec<Option<Value>>],
     firsts: &[Option<Scalar>],
 ) -> Result<TimeChoice, CoreError> {
-    choose_time_column(columns, &Read { instants, presence, firsts }, rows, key, None, false)
+    choose_time_column(
+        columns,
+        &Read {
+            instants,
+            presence,
+            firsts,
+        },
+        rows,
+        key,
+        None,
+        false,
+    )
 }
 
 /// Reuse time selection for reached native population and start observations.
 /// `whole` holds facts about the caller's complete frame, not a source query.
 pub(crate) fn choose_direct_populations(
-    columns: &[InferredColumn], key: &[String], whole: &WholeTable,
+    columns: &[InferredColumn],
+    key: &[String],
+    whole: &WholeTable,
     row_counts: &[(String, usize)],
 ) -> Result<TimeChoice, CoreError> {
     let instants = vec![Ok(vec![]); columns.len()];
     let presence = vec![vec![]; columns.len()];
     let firsts = vec![None; columns.len()];
-    choose_time_column_with_rows(columns, &Read { instants: &instants, presence: &presence, firsts: &firsts }, whole.rows, key, Some(whole), false, Some(row_counts))
+    choose_time_column_with_rows(
+        columns,
+        &Read {
+            instants: &instants,
+            presence: &presence,
+            firsts: &firsts,
+        },
+        whole.rows,
+        key,
+        Some(whole),
+        false,
+        Some(row_counts),
+    )
 }
 
 pub(crate) fn earliest_direct_instant(values: impl Iterator<Item = i128>) -> Option<i128> {
@@ -1623,8 +1648,13 @@ fn choose_time_column(
 }
 
 fn choose_time_column_with_rows(
-    columns: &[InferredColumn], read: &Read<'_>, rows: usize, key: &[String],
-    whole: Option<&WholeTable>, failed: bool, row_counts: Option<&[(String, usize)]>,
+    columns: &[InferredColumn],
+    read: &Read<'_>,
+    rows: usize,
+    key: &[String],
+    whole: Option<&WholeTable>,
+    failed: bool,
+    row_counts: Option<&[(String, usize)]>,
 ) -> Result<TimeChoice, CoreError> {
     let candidates = candidates(columns, key);
     if candidates.is_empty() {
@@ -1645,10 +1675,14 @@ fn choose_time_column_with_rows(
             refused.push((name.clone(), PassedOver::BirthDate));
             continue;
         }
-        let over = whole.and_then(|w| w.range(name).map(|r| {
-            let observed_rows = row_counts.and_then(|counts| counts.iter().find(|(column, _)| column == name)).map_or(w.rows, |(_, count)| *count);
-            (observed_rows, r)
-        }));
+        let over = whole.and_then(|w| {
+            w.range(name).map(|r| {
+                let observed_rows = row_counts
+                    .and_then(|counts| counts.iter().find(|(column, _)| column == name))
+                    .map_or(w.rows, |(_, count)| *count);
+                (observed_rows, r)
+            })
+        });
         let why = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over);
         if let Some(why) = &why {
             if !failed {

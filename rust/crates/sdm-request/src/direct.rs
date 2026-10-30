@@ -154,8 +154,11 @@ pub fn scored(
 }
 
 pub fn scored_column(
-    table: &DescribedTable, flags: &[ColumnFlags], name: &str,
-    arriving: Option<Dtype>, supports: fn(Stype, Dtype) -> bool,
+    table: &DescribedTable,
+    flags: &[ColumnFlags],
+    name: &str,
+    arriving: Option<Dtype>,
+    supports: fn(Stype, Dtype) -> bool,
 ) -> Result<(), CoreError> {
     if let Some(dtype) = arriving {
         if let Some(column) = table.columns.iter().find(|column| &column.name == name) {

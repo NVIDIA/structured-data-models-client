@@ -71,43 +71,54 @@ pub fn start(
             crate::direct::infer_time_start(&asker, request, attachments)
         }),
         Operation::ResolveDirectDtype(request) => {
-            let input: sdm_contract::direct::dtype::DtypeResolutionObservation = take_json(&mut attachments, request.input)?;
-            Run::new(move |asker| async move { crate::direct::value(&asker, &sdm_request::tabular::resolve_dtype(input)?) })
+            let input: sdm_contract::direct::dtype::DtypeResolutionObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::resolve_dtype(input)?)
+            })
         }
         Operation::ResolveObservedTabular(request) => {
-            let input: sdm_contract::direct::ObservedTabularInput = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::ObservedTabularInput =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move { crate::direct::resolve_observed(&asker, input) })
         }
         Operation::InspectObservedKeys(request) => Run::new(move |asker| async move {
             crate::direct::inspect_observed_keys(&asker, request, attachments)
         }),
         Operation::ObserveDirectSchema(request) => {
-            let input: sdm_contract::direct::schema::SchemaObservation = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::schema::SchemaObservation =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
                 let (result, warnings) = sdm_schema::direct::observed::observe(input)?;
-                for warning in warnings { asker.warn(warning); }
+                for warning in warnings {
+                    asker.warn(warning);
+                }
                 crate::direct::value(&asker, &result)
             })
         }
         Operation::CheckDirectPreparation(request) => {
-            let input: sdm_contract::direct::schema::PreparationObservation = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::schema::PreparationObservation =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move { crate::direct::check_preparation(&asker, input) })
         }
         Operation::ObserveDirectDtype(request) => {
-            let input: sdm_contract::direct::dtype::DtypeObservation = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::dtype::DtypeObservation =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
                 crate::direct::value(&asker, &sdm_schema::direct::dtype::observe(input)?)
             })
         }
         Operation::CheckDirectOption(request) => {
-            let input: sdm_contract::direct::DirectOptionObservation = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::DirectOptionObservation =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
                 sdm_request::tabular::check_option(&input)?;
                 crate::direct::value(&asker, &true)
             })
         }
         Operation::CheckDirectCell(request) => {
-            let input: sdm_contract::direct::cell::DirectCellInput = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::cell::DirectCellInput =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
                 crate::direct::value(&asker, &sdm_request::tabular::cell::check(input)?)
             })

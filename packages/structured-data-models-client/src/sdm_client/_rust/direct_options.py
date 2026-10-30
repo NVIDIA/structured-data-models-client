@@ -14,17 +14,30 @@ from typing import Any
 
 import numpy as np
 
+
 def observe(value: Any, call: Callable[[str, dict[str, Any]], Any]) -> Any:
     def visit(item: Any, depth: int, seen: frozenset[int]) -> Any:
         if isinstance(item, np.generic):
             item = item.item()
-        integer = str(int(item)) if isinstance(item, Integral) and not isinstance(item, bool) else None
-        call('check_direct_option', {
-            'integer': integer, 'repeated': id(item) in seen, 'depth': depth,
-        })
+        integer = (
+            str(int(item))
+            if isinstance(item, Integral) and not isinstance(item, bool)
+            else None
+        )
+        call(
+            'check_direct_option',
+            {
+                'integer': integer,
+                'repeated': id(item) in seen,
+                'depth': depth,
+            },
+        )
         if isinstance(item, Mapping):
             nested = seen | {id(item)}
-            return {key: visit(member, depth + 1, nested) for key, member in item.items()}
+            return {
+                key: visit(member, depth + 1, nested)
+                for key, member in item.items()
+            }
         if isinstance(item, (list, tuple)):
             nested = seen | {id(item)}
             return [visit(member, depth + 1, nested) for member in item]
@@ -55,10 +68,22 @@ def encode(observed: Mapping[Any, Any]) -> dict[str, Any]:
         if isinstance(item, list):
             return {'array': [encode_value(member) for member in item]}
         if isinstance(item, dict):
-            return {'object': [(key_text(key), encode_value(member)) for key, member in item.items()]}
-        raise RuntimeError('native inference options reached the primitive encoder')
+            return {
+                'object': [
+                    (key_text(key), encode_value(member))
+                    for key, member in item.items()
+                ]
+            }
+        raise RuntimeError(
+            'native inference options reached the primitive encoder'
+        )
 
-    return {'entries': [(key_text(key), encode_value(item)) for key, item in observed.items()]}
+    return {
+        'entries': [
+            (key_text(key), encode_value(item))
+            for key, item in observed.items()
+        ]
+    }
 
 
 def can_encode(value: Any) -> bool:
@@ -79,4 +104,3 @@ def can_encode(value: Any) -> bool:
             for key, item in value.items()
         )
     return False
-
