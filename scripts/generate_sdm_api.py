@@ -609,7 +609,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
             "_int_or_none(data.get('row_index'), 'row_index', 'prediction')"
         ),
         'forecast_step': (
-            "_int_or_none(\n"
+            '_int_or_none(\n'
             "                data.get('forecast_step'), 'forecast_step', "
             "'prediction'\n            )"
         ),
@@ -666,7 +666,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         (
             'metadata',
             'dict[str, Any]',
-            "dict(\n"
+            'dict(\n'
             "                _require_mapping(data, 'metadata', "
             "'PredictionResponse')\n            )",
         ),
