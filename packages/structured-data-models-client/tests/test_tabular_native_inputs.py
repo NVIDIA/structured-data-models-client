@@ -207,7 +207,7 @@ def test_native_class_restoration_and_requested_absence(
         )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always', SDMWarning)
-            result = client(endpoint).predict(request, model=KumoTabular(), outputs=['prediction', 'probabilities', 'embeddings'])
+            result = client(endpoint).predict(request, model=KumoTabular(), outputs=['prediction', 'probabilities', 'quantiles'])
         outcomes.append((result.items, [str(w.message) for w in caught if issubclass(w.category, SDMWarning)]))
     assert outcomes[0] == outcomes[1]
 
