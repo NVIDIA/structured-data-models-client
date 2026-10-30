@@ -1,7 +1,7 @@
 {
   "commit": {
     "clean": true,
-    "sha": "469520ccf9219f095178d60836abd39cdfd96011"
+    "sha": "259a60af18535fc2a5e3351c093d05880dda1239"
   },
   "database": "duckdb",
   "departs": [
@@ -101,7 +101,8 @@
             "kind",
             "operation",
             "retryable",
-            "rule"
+            "rule",
+            "source"
           ],
           "error": "StructuredDataError",
           "field": null,
@@ -710,7 +711,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1"
+      "site": "rust/crates/sdm-request/src/predict.rs::check_shapes::predict::unsupported#1"
     },
     {
       "departs": false,
@@ -724,7 +725,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2"
+      "site": "rust/crates/sdm-request/src/predict.rs::check_task_outputs::predict::unsupported#1"
     },
     {
       "departs": false,
@@ -738,7 +739,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3"
+      "site": "rust/crates/sdm-request/src/predict.rs::check_task_outputs::predict::unsupported#2"
     },
     {
       "departs": false,
@@ -747,6 +748,7 @@
           "code": "UNSUPPORTED_REQUEST",
           "detail_keys": [
             "field",
+            "given",
             "kind",
             "limit",
             "retryable"
@@ -769,7 +771,7 @@
           "stage": "materialize"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4"
+      "site": "rust/crates/sdm-request/src/predict.rs::check_capacity::predict::unsupported#1"
     },
     {
       "departs": false,
@@ -917,7 +919,13 @@
         "python-core": {
           "code": "INVALID_REQUEST",
           "detail_keys": [
-            "field"
+            "field",
+            "given",
+            "key",
+            "kind",
+            "reason",
+            "retryable",
+            "task"
           ],
           "error": "StructuredDataError",
           "field": "inference_config",
@@ -1056,29 +1064,279 @@
       "departs": false,
       "outcomes": {
         "python-core": {
-          "result": "success",
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "kind",
+            "model",
+            "retryable",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
           "stage": "predict"
         },
         "reference": {
-          "result": "success",
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
           "stage": "predict"
         }
       },
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#1"
+      "site": "rule:direct_native_decimal_conversion"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "kind",
+            "model",
+            "retryable",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "rule:direct_native_timestamp_conversion"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "kind",
+            "model",
+            "retryable",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "rule:direct_numeric_storage"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "kind",
+            "model",
+            "retryable",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/direct_response.py::response#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [
+            "field",
+            "keys",
+            "kind",
+            "reason",
+            "retryable",
+            "table"
+          ],
+          "error": "StructuredDataError",
+          "field": "indices",
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_expand#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [
+            "field",
+            "keys",
+            "kind",
+            "reason",
+            "retryable",
+            "table"
+          ],
+          "error": "StructuredDataError",
+          "field": "indices",
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_missing#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "field",
+            "given",
+            "kind",
+            "limit",
+            "retryable"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": "num_context_samples",
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_context#1"
     },
     {
       "departs": false,
       "outcomes": {
         "python-core": {
           "result": "success",
-          "stage": "predict"
+          "stage": "materialize"
         },
         "reference": {
           "result": "success",
-          "stage": "predict"
+          "stage": "materialize"
         }
       },
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#2"
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_task#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [
+            "task"
+          ],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [
+            "task"
+          ],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_task#2"
     }
   ],
   "reachability": "unmeasured: a probe names the site it was written for, and an outcome does not show which site produced it",
@@ -1087,7 +1345,7 @@
     "clean": true,
     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
   },
-  "sites": 43,
+  "sites": 50,
   "unmeasured": [
     "postgres",
     "sqlite"
