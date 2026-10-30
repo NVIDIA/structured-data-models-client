@@ -20,17 +20,20 @@ import pandas as pd
 
 from sdm_client._routing import RouteError
 
-# Official CPython 3.12 Linux wheels with identical sort sources and compiler.
-# Acquisition receipts are recorded in the Phase 4 producer audit.
+# Official Linux wheel binaries, mapped to their source-backed dispatch family.
+# Scalar argsort predates the numeric SIMD dispatch; AVX2 alone does not select
+# it in NumPy 1.26. Acquisition and source receipts are in the producer audit.
 _PRODUCERS = {
-    'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0',
-    'b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf',
+    'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0': 'x86_v3_v4',
+    'b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf': 'x86_v3_v4',
+    'c535a00761735b19153a71e1702f66482838421c78f96ecc3fe2c8d060662fd9': 'scalar',
+    '6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb': 'avx512_skx_or_scalar',
 }
 
 
 @lru_cache(maxsize=4)
-def _producer(path: str) -> bool:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest() in _PRODUCERS
+def _producer(path: str) -> str | None:
+    return _PRODUCERS.get(hashlib.sha256(Path(path).read_bytes()).hexdigest())
 
 
 def _profile() -> str:
@@ -39,13 +42,23 @@ def _profile() -> str:
     )
     native = importlib.import_module(f'{namespace}._multiarray_umath')
 
-    if not _producer(native.__file__):
+    family = _producer(native.__file__)
+    if family is None:
         raise RouteError(
             'this native index sort producer has not been bound to a core profile'
         )
     # These are this producer's actual dispatched groups, not CPU-name guesses.
     # Disabling AVX2 alone does not necessarily disable its X86_V3 dispatcher.
     features = native.__cpu_features__
+    if family == 'scalar':
+        return 'scalar'
+    if family == 'avx512_skx_or_scalar':
+        if features.get('AVX512_SKX', False):
+            raise RouteError(
+                'this NumPy AVX512 argsort producer has not yet been bound '
+                'to a core profile'
+            )
+        return 'scalar'
     if features.get('X86_V4', False):
         return 'avx512_gnu14'
     if features.get('X86_V3', False):
