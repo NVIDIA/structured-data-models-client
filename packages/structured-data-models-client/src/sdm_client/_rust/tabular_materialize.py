@@ -206,7 +206,7 @@ def _context(
     remedy: str,
     decision: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
-    from sdm_client._rust.tabular_index import observe
+    from sdm_client._rust.tabular_index import bind_profile, observe
     from sdm_client.models import TABULAR_LIMITS
 
     limit = TABULAR_LIMITS['context_rows_max']
@@ -258,7 +258,12 @@ def _context(
     subset = candidates.take(
         np.asarray(sampled['offsets'], dtype=np.intp), axis=sampling_axis
     )
-    ordering = _call('order_sampled_tabular_rows', observe(subset.index))
+    observation = observe(subset.index)
+    ordering = _call('order_sampled_tabular_rows', observation)
+    if ordering['kind'] == 'needs_profile':
+        ordering = _call(
+            'order_sampled_tabular_rows', bind_profile(observation)
+        )
     if ordering['kind'] == 'refused':
         if ordering['reason'] == 'date_time_mismatch':
             raise TypeError("can't compare datetime.datetime to datetime.date")

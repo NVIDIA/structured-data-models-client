@@ -513,3 +513,108 @@ def test_attrs_copy_effect_is_not_moved_after_target_filter(route: str) -> None:
     request = asked.materialize(predict=scoring, task='regression')
     assert fired
     assert 1 not in request.context.instance_table['id'].tolist()
+
+
+@pytest.mark.parametrize(
+    'family',
+    [
+        'unique_integer',
+        'masked_nulls',
+        'monotonic_ties',
+        'date_unique',
+        'arrow_ties',
+        'multi',
+    ],
+)
+def test_profile_independent_orders_do_not_read_numpy_producer(
+    family: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sdm_client._rust import tabular_index
+
+    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
+
+    def unexpected_profile() -> str:
+        pytest.fail('this sampled order must not depend on a NumPy producer')
+
+    monkeypatch.setattr(tabular_index, '_profile', unexpected_profile)
+    indexes = {
+        'unique_integer': pd.Index(range(110, 99, -1)),
+        'masked_nulls': pd.Index(
+            [None if i % 2 else float(i) for i in range(11)]
+        ),
+        'monotonic_ties': pd.Index([7] * 11),
+        'date_unique': pd.Index(
+            [date(2020, 1, 11 - i) for i in range(11)], dtype=object
+        ),
+        'arrow_ties': pd.Index(
+            pd.array([i % 2 for i in range(11)], dtype='int64[pyarrow]')
+        ),
+        'multi': pd.MultiIndex.from_tuples([(i % 2, i % 3) for i in range(11)]),
+    }
+    data = frame()
+    data.index = indexes[family]
+    expected = json.loads(
+        (
+            Path(__file__).parent / 'data/tabular_pql_profile_reference.json'
+        ).read_text()
+    )[family]
+    request = query(data).materialize(
+        indices=[10],
+        num_context_samples=3,
+        task='regression',
+    )
+    assert request.context.instance_table['id'].tolist() == expected
+    endpoint = Endpoint(1)
+    client = SDMClient.__new__(SDMClient)
+    client._start(endpoint)
+    try:
+        answer = client.predict(request, model=KumoTabular())
+        assert [
+            row[0]
+            for row in endpoint.calls[0]['context']['instance_table']['rows']
+        ] == expected
+        assert len(answer.to_pandas()) == 1
+    finally:
+        client.close()
+
+
+def test_tied_sort_binds_retained_facts_without_native_rereads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sdm_client._rust import tabular_index, tabular_materialize
+
+    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
+    observations = []
+    orders = []
+    original_facts = tabular_index._facts
+    original_call = tabular_materialize._call
+
+    def facts(index: pd.Index, profile: str) -> dict[str, Any]:
+        observations.append(index)
+        return original_facts(index, profile)
+
+    def call(operation: str, arguments: dict[str, Any]) -> Any:
+        if operation == 'order_sampled_tabular_rows':
+            orders.append(arguments['index'])
+        return original_call(operation, arguments)
+
+    monkeypatch.setattr(tabular_index, '_facts', facts)
+    monkeypatch.setattr(tabular_materialize, '_call', call)
+    request = query(indexed_frame('signed_duplicates')).materialize(
+        indices=[80],
+        num_context_samples=40,
+        task='regression',
+    )
+    expected = json.loads(
+        (
+            Path(__file__).parent / 'data/tabular_pql_index_reference.json'
+        ).read_text()
+    )['signed_duplicates']['context_ids']
+    assert request.context.instance_table['id'].tolist() == expected
+    assert len(observations) == 1
+    assert len(orders) == 2
+    assert orders[0]['profile'] == 'unbound'
+    assert orders[1]['profile'] != 'unbound'
+    assert orders[0]['values'] is orders[1]['values']
+    assert orders[0]['missing'] is orders[1]['missing']

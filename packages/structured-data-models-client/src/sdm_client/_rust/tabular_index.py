@@ -34,7 +34,10 @@ def _producer(path: str) -> bool:
 
 
 def _profile() -> str:
-    native = importlib.import_module('numpy._core._multiarray_umath')
+    namespace = (
+        'numpy.core' if np.__version__.startswith('1.') else 'numpy._core'
+    )
+    native = importlib.import_module(f'{namespace}._multiarray_umath')
 
     if not _producer(native.__file__):
         raise RouteError(
@@ -283,7 +286,29 @@ def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
 
 def observe(index: pd.Index) -> dict[str, Any]:
     """Observe a sampled subset after reduction, without sorting in Python."""
-    return {'index': _facts(index, _profile())}
+    return {'index': _facts(index, 'unbound')}
+
+
+def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
+    """Bind retained facts only after the core requests a native sort profile."""
+    profile = _profile()
+
+    def bind(facts: dict[str, Any]) -> dict[str, Any]:
+        result = {
+            **facts,
+            'profile': profile
+            if facts['profile'] == 'unbound'
+            else facts['profile'],
+        }
+        values = facts['values']
+        if values['kind'] == 'multi':
+            result['values'] = {
+                **values,
+                'levels': [bind(level) for level in values['levels']],
+            }
+        return result
+
+    return {'index': bind(observation['index'])}
 
 
 def has_custom_sorter(frame: pd.DataFrame) -> bool:

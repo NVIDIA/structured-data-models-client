@@ -57,9 +57,12 @@ The connected ordinary-input increment uses the existing direct prediction path,
 Its candidate requires two independent exact-source reviews, canonical contract generation, installed-wheel parity, regressions and verified landing.
 The recorded index expectations come from the frozen public client through `materialize`, not from candidate sorting kernels.
 
-The next candidate adds typed complex, finite Decimal/integer, exact date and fixed-offset/naive datetime labels through the existing sampled-index operation.
+Typed complex, finite Decimal/integer, exact date and fixed-offset/naive datetime labels landed at `b62256b51` through the existing sampled-index operation.
 Its frozen public evidence covers sampled indices and unreduced supplied frames separately; supplied frames do not accept an explicit context count.
 The host retains exact owners and observes their closed fields, while Rust compares exact coefficients and civil values and reports reached comparison failures.
+The current candidate delays producer binding until Rust reports that the sampled facts require it.
+Pure total comparisons with monotonic or distinct keys can finish without a NumPy binary binding; stable Arrow paths keep their own profile.
+When ties or comparison failures need the producer, Python binds the retained facts and retries once without rereading native owners.
 This candidate still requires final reviews, canonical contract generation, installed-wheel parity and handoff before landing.
 
 Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, NumPy numeric scalar object labels, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
