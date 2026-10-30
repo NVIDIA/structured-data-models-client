@@ -438,14 +438,18 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
         if code == 'ENDPOINT_REFUSED':
             # Raised under the endpoint's own code (the next test).
             continue
-        made = [
-            errors.error_from_core(_error(code, message, kind=kind), {})
-            for message, kind in [
-                ('one', 'internal'),
-                (CANARY, 'protocol'),
-                (f'{CANARY} INVALID_REQUEST', 'data_source'),
+        # The selected UNSUPPORTED_REQUEST sentence can retain native table
+        # owners. Supply the same owner context as direct constructor admission;
+        # the mapping assertion still varies only diagnostic text and kind.
+        with errors.holding(direct_tables=lambda fields: ['related']):
+            made = [
+                errors.error_from_core(_error(code, message, kind=kind), {})
+                for message, kind in [
+                    ('one', 'internal'),
+                    (CANARY, 'protocol'),
+                    (f'{CANARY} INVALID_REQUEST', 'data_source'),
+                ]
             ]
-        ]
         assert {type(error) for error in made} == {errors.ERRORS[code]}
         assert {error.code for error in made} == {code}
         assert len({str(error) for error in made}) == 1
