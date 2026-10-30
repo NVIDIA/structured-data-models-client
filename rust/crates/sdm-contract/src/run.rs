@@ -5,9 +5,9 @@
 //! The run protocol's messages.
 //!
 //! A host starts a run with an operation and its facts, then asks it for
-//! steps. A step is one of exactly three things: fetch a batch of data, call
-//! the model, or done with the result. No step asks the host for language
-//! behavior. The host answers each fetch and model call with a reply naming
+//! steps. A step fetches data, calls the model, requests a closed native
+//! numeric-owner observation, or finishes. Numeric observations do not ask
+//! the host to compare or sort. The host answers each pending step naming
 //! the step's id. Arrow data and bodies travel as attachments beside the
 //! control message, which names them by [`AttachmentId`].
 //!
@@ -56,6 +56,7 @@ pub enum Step {
         requests: Vec<FetchStep>,
     },
     CallModel(ModelCall),
+    NumericOwner(crate::numeric_owner::NumericOwnerStep),
     Done {
         result: OperationResult,
     },
@@ -205,6 +206,7 @@ pub enum ControlMessage {
     Start(Box<StartRun>),
     FetchReply(FetchReply),
     ModelReply(ModelReply),
+    NumericOwnerReply(crate::numeric_owner::NumericOwnerReply),
     Cancel {},
     // Core to host.
     Step(Step),
