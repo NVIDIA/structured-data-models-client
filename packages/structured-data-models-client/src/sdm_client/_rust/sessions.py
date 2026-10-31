@@ -138,7 +138,7 @@ def send(
         return b'{}'
 
     run(
-        {'op': 'send_tabular_session', 'input': 1},
+        {'op': 'send_tabular_session', 'input': 1, 'payload': 2},
         {1: codec.attachment({'endpoint': endpoint, 'payload': 2}), 2: payload},
         model_endpoints=transmit,
     )
@@ -190,6 +190,8 @@ def fit(
             'pinned_over_a_window': request.target_moves_with_time,
         },
         {2: encoded, 3: codec.attachment({'rows': holdout_rows})},
+        context=2,
+        holdout=3,
     )
     prepared = _value(finished)
     pinned_keys = bytes(finished.take(prepared['pinned_keys']))
@@ -242,6 +244,7 @@ def fit(
         'accept_tabular_session',
         {'state': state, 'observed': 2},
         {2: codec.attachment(observed)},
+        observed=2,
     )
     state = _value(accepted)
     pinned_keys = bytes(accepted.take(state['pinned_keys']))
@@ -331,7 +334,8 @@ def predict(fitted: Any, request: Any) -> Any:
             'request_id': _request_id(),
             'inference_present': inference_present,
         },
-        {2: fitted._tabular_session_keys, 3: scoring},
+        {3: scoring},
+        predict=3,
     )
     prepared = _value(finished)
     layout = json.loads(finished.take(prepared['layout']))
@@ -368,6 +372,8 @@ def _report_overlap(fitted: Any, request: Any) -> None:
         'count_tabular_session_overlap',
         {'state': state, 'predict': 3},
         {2: fitted._tabular_session_keys, 3: encoded},
+        predict=3,
+        pinned_keys=2,
     )
     counts = _value(finished)
     _report_pinned_overlap(counts['overlap_rows'], counts['scoring_rows'])

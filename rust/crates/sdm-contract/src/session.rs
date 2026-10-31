@@ -16,6 +16,45 @@ use serde::{Deserialize, Serialize};
 
 pub const TABULAR_SESSION_VERSION: u32 = 1;
 
+/// Control-message attachment inventory for fit preparation.
+/// Nested metadata references must equal these declared references.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionFitInput {
+    pub input: AttachmentId,
+    pub context: AttachmentId,
+    pub holdout: AttachmentId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionAcceptInput {
+    pub input: AttachmentId,
+    pub observed: AttachmentId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionScoreInput {
+    pub input: AttachmentId,
+    pub predict: AttachmentId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionOverlapInput {
+    pub input: AttachmentId,
+    pub predict: AttachmentId,
+    pub pinned_keys: AttachmentId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionSendInput {
+    pub input: AttachmentId,
+    pub payload: AttachmentId,
+}
+
 /// Reached native key facts, before any session equality policy is applied.
 /// Numeric spelling is the producer's decimal string, not a rounded binary64
 /// conversion. Other native values retain their observed string spelling.

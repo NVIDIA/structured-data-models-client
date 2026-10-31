@@ -10,7 +10,8 @@ use sdm_contract::run::Endpoint;
 use sdm_contract::session::{
     AcceptTabularSession, CheckTabularSessionQuestion, CountTabularSessionOverlap,
     PrepareTabularFit, PrepareTabularScore, PreparedTabularFit, PreparedTabularScore,
-    SendTabularSession, SessionIdObservation, SessionKeys, SessionTransportReply,
+    SendTabularSession, SessionAcceptInput, SessionFitInput, SessionIdObservation, SessionKeys,
+    SessionOverlapInput, SessionScoreInput, SessionSendInput, SessionTransportReply,
     TabularSessionOverlap, TabularSessionState,
 };
 use sdm_contract::{CoreError, Detail, Scalar};
@@ -52,10 +53,16 @@ fn metadata(request_id: String) -> Value {
 
 pub(crate) fn prepare_fit(
     asker: &Asker,
-    input: DirectInput,
+    input: SessionFitInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let request: PrepareTabularFit = take_json(&mut attached, input.input)?;
+    if request.context != input.context || request.holdout != input.holdout {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "session fit metadata names different attachments than its control message",
+        ));
+    }
     let mut payload =
         policy::pinned_metadata(&request.bound, &request.columns, &request.primary_key)?;
     let context = take_value(&mut attached, request.context)?;
@@ -88,10 +95,16 @@ pub(crate) fn prepare_fit(
 
 pub(crate) fn accept(
     asker: &Asker,
-    input: DirectInput,
+    input: SessionAcceptInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let request: AcceptTabularSession = take_json(&mut attached, input.input)?;
+    if request.observed != input.observed {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "session acceptance metadata names a different observation attachment",
+        ));
+    }
     let mut state = request.state;
     let observed = take_value(&mut attached, request.observed)?;
     let keys = policy::observe_pinned(&mut state, &observed)?;
@@ -125,10 +138,16 @@ pub(crate) fn check_reply(
 /// encoding or inference options can fail or perform native work.
 pub(crate) fn count_overlap(
     asker: &Asker,
-    input: DirectInput,
+    input: SessionOverlapInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let request: CountTabularSessionOverlap = take_json(&mut attached, input.input)?;
+    if request.predict != input.predict || request.state.pinned_keys != input.pinned_keys {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "session overlap metadata names different attachments than its control message",
+        ));
+    }
     policy::validate_state(&request.state)?;
     let table = take_value(&mut attached, request.predict)?;
     let scoring = policy::encoded_keys(&table, &request.state.primary_key)?;
@@ -142,10 +161,16 @@ pub(crate) fn count_overlap(
 
 pub(crate) fn prepare_score(
     asker: &Asker,
-    input: DirectInput,
+    input: SessionScoreInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let request: PrepareTabularScore = take_json(&mut attached, input.input)?;
+    if request.predict != input.predict {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "session scoring metadata names a different scoring attachment",
+        ));
+    }
     policy::validate_state(&request.state)?;
     if request.state.closed {
         return Err(CoreError::protocol(
@@ -192,10 +217,16 @@ pub(crate) fn prepare_score(
 
 pub(crate) async fn send(
     asker: &Asker,
-    input: DirectInput,
+    input: SessionSendInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let request: SendTabularSession = take_json(&mut attached, input.input)?;
+    if request.payload != input.payload {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "session send metadata names a different payload attachment",
+        ));
+    }
     match &request.endpoint {
         Endpoint::CreateSession => {}
         Endpoint::SessionPredict { session_id } if !session_id.is_empty() => {}

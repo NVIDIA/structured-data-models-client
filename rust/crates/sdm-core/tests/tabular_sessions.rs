@@ -26,7 +26,7 @@ fn bytes(value: &impl Serialize) -> Attachment {
     Attachment::Bytes(serde_json::to_vec(value).unwrap())
 }
 fn run(
-    operation: fn(DirectInput) -> Operation,
+    operation: impl FnOnce(DirectInput) -> Operation,
     input: &impl Serialize,
     mut attached: Attachments,
 ) -> Run {
@@ -93,7 +93,12 @@ fn reply(run: &mut Run, endpoint: Endpoint, status: u16, response: Value) -> Vec
 }
 fn send(endpoint: Endpoint, payload: Vec<u8>, response: Value) -> Value {
     let mut call = run(
-        Operation::SendTabularSession,
+        |control| {
+            Operation::SendTabularSession(SessionSendInput {
+                input: control.input,
+                payload: AttachmentId(71),
+            })
+        },
         &SendTabularSession {
             endpoint: endpoint.clone(),
             payload: AttachmentId(71),
@@ -137,7 +142,13 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
         target: "y".into(),
     };
     let mut fit = run(
-        Operation::PrepareTabularFit,
+        |control| {
+            Operation::PrepareTabularFit(SessionFitInput {
+                input: control.input,
+                context: AttachmentId(41),
+                holdout: AttachmentId(42),
+            })
+        },
         &PrepareTabularFit {
             bound: bound.clone(),
             columns,
@@ -200,7 +211,12 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
     // context, rather than blindly retain the earlier holdout key attachment.
     sent["context"]["instance_table"]["rows"] = json!([[7, 70.0]]);
     let mut acceptance = run(
-        Operation::AcceptTabularSession,
+        |control| {
+            Operation::AcceptTabularSession(SessionAcceptInput {
+                input: control.input,
+                observed: AttachmentId(81),
+            })
+        },
         &AcceptTabularSession {
             state,
             observed: AttachmentId(81),
@@ -220,7 +236,13 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
     for id in [7, 9] {
         let table = json!({"format":"arrays","columns":["id"],"rows":[[id]]});
         let mut count = run(
-            Operation::CountTabularSessionOverlap,
+            |control| {
+                Operation::CountTabularSessionOverlap(SessionOverlapInput {
+                    input: control.input,
+                    predict: AttachmentId(132),
+                    pinned_keys: AttachmentId(131),
+                })
+            },
             &CountTabularSessionOverlap {
                 state: state.clone(),
                 predict: AttachmentId(132),
@@ -234,7 +256,12 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
         assert_eq!(overlap.scoring_rows, 1);
         assert_eq!(overlap.overlap_rows, usize::from(id == 7));
         let mut score = run(
-            Operation::PrepareTabularScore,
+            |control| {
+                Operation::PrepareTabularScore(SessionScoreInput {
+                    input: control.input,
+                    predict: AttachmentId(151),
+                })
+            },
             &PrepareTabularScore {
                 state: state.clone(),
                 predict: AttachmentId(151),

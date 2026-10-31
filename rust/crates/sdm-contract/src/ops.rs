@@ -37,13 +37,13 @@ use crate::types::ColumnType;
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     ValidateQuery(ValidateQuery),
-    PrepareTabularFit(crate::direct::DirectInput),
-    AcceptTabularSession(crate::direct::DirectInput),
+    PrepareTabularFit(crate::session::SessionFitInput),
+    AcceptTabularSession(crate::session::SessionAcceptInput),
     CheckTabularSessionQuestion(crate::direct::DirectInput),
     CheckTabularSessionReply(crate::direct::DirectInput),
-    PrepareTabularScore(crate::direct::DirectInput),
-    SendTabularSession(crate::direct::DirectInput),
-    CountTabularSessionOverlap(crate::direct::DirectInput),
+    PrepareTabularScore(crate::session::SessionScoreInput),
+    SendTabularSession(crate::session::SessionSendInput),
+    CountTabularSessionOverlap(crate::session::SessionOverlapInput),
     CloseTabularSession(crate::direct::DirectInput),
     ExpandTabularKeys(crate::direct::DirectInput),
     FilterTabularRows(crate::direct::DirectInput),
@@ -171,13 +171,23 @@ impl Operation {
             | Operation::EncodeTabularTable(v)
             | Operation::InferDirectColumn(v)
             | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
-            Operation::PrepareTabularFit(v)
-            | Operation::AcceptTabularSession(v)
-            | Operation::CheckTabularSessionQuestion(v)
+            Operation::PrepareTabularFit(v) => {
+                vec![(v.input, Bytes), (v.context, Bytes), (v.holdout, Bytes)]
+            }
+            Operation::AcceptTabularSession(v) => {
+                vec![(v.input, Bytes), (v.observed, Bytes)]
+            }
+            Operation::PrepareTabularScore(v) => {
+                vec![(v.input, Bytes), (v.predict, Bytes)]
+            }
+            Operation::SendTabularSession(v) => {
+                vec![(v.input, Bytes), (v.payload, Bytes)]
+            }
+            Operation::CountTabularSessionOverlap(v) => {
+                vec![(v.input, Bytes), (v.predict, Bytes), (v.pinned_keys, Bytes)]
+            }
+            Operation::CheckTabularSessionQuestion(v)
             | Operation::CheckTabularSessionReply(v)
-            | Operation::PrepareTabularScore(v)
-            | Operation::SendTabularSession(v)
-            | Operation::CountTabularSessionOverlap(v)
             | Operation::CloseTabularSession(v)
             | Operation::ExpandTabularKeys(v)
             | Operation::FilterTabularRows(v)

@@ -448,6 +448,89 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
     (
+        "Operation/prepare_tabular_fit.holdout",
+        "DirectValue.session_keys",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.pinned_keys",
+        "DirectValue.session_keys",
+    ),
+    (
+        "Operation/encode_tabular_table.input",
+        "EncodeTabularTable.input",
+    ),
+    (
+        "Operation/prepare_tabular_fit.input",
+        "PrepareTabularFit.input",
+    ),
+    (
+        "Operation/accept_tabular_session.input",
+        "AcceptTabularSession.input",
+    ),
+    (
+        "Operation/check_tabular_session_question.input",
+        "CheckTabularSessionQuestion.input",
+    ),
+    (
+        "Operation/check_tabular_session_reply.input",
+        "CheckTabularSessionReply.input",
+    ),
+    (
+        "Operation/prepare_tabular_score.input",
+        "PrepareTabularScore.input",
+    ),
+    (
+        "Operation/send_tabular_session.input",
+        "SendTabularSession.input",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.input",
+        "CountTabularSessionOverlap.input",
+    ),
+    (
+        "Operation/close_tabular_session.input",
+        "CloseTabularSession.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.encoded_table",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_overlap",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_id_selection",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_question_difference",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_reply",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepared_score",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepared_fit",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_state",
+    ),
+    ("OperationResult/direct_value.value", "TabularSession.state"),
+    (
+        "TabularSessionState.pinned_keys",
+        "DirectValue.session_keys",
+    ),
+    ("PreparedTabularFit.pinned_keys", "DirectValue.session_keys"),
+    ("PrepareTabularFit.holdout", "DirectValue.session_keys"),
+    (
         "Operation/select_tabular_rows.input",
         "SelectTabularRows.input",
     ),
@@ -702,6 +785,52 @@ const JSON: &[(&str, &str)] = &[
 
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: &[(&str, &str)] = &[
+    (
+        "Operation/prepare_tabular_fit.context",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "Operation/accept_tabular_session.observed",
+        "the endpoint's actual sent document",
+    ),
+    (
+        "Operation/prepare_tabular_score.predict",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.predict",
+        "the endpoint's encoded key table bytes",
+    ),
+    (
+        "Operation/send_tabular_session.payload",
+        "the endpoint's bytes",
+    ),
+    (
+        "Operation/encode_tabular_table.values",
+        "Arrow, with its schema",
+    ),
+    ("EncodedTabularTable.table", "the endpoint's bytes"),
+    (
+        "PrepareTabularFit.context",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "AcceptTabularSession.observed",
+        "the endpoint's actual sent document",
+    ),
+    (
+        "CountTabularSessionOverlap.predict",
+        "the endpoint's encoded key table bytes",
+    ),
+    (
+        "PrepareTabularScore.predict",
+        "the endpoint's encoded table bytes",
+    ),
+    ("PreparedTabularFit.payload", "the endpoint's bytes"),
+    ("PreparedTabularScore.payload", "the endpoint's bytes"),
+    ("PreparedTabularScore.layout", "the endpoint's layout bytes"),
+    ("SendTabularSession.payload", "the endpoint's bytes"),
+    ("SessionTransportReply.response", "the endpoint's bytes"),
     ("NativeDirectCall.payload", "the endpoint's bytes"),
     ("EncodedDirectBody.payload", "the endpoint's bytes"),
     ("DirectResponseData.payload", "the endpoint's bytes"),
