@@ -661,10 +661,8 @@ pub fn table(rows: &[Row], text_ids: bool) -> Result<RecordBatch, CoreError> {
     )));
     RecordBatch::try_new(
         Arc::new(
-            Schema::new(fields).with_metadata(std::collections::HashMap::from([(
-                "sdm.text_ids".to_owned(),
-                text_ids.to_string(),
-            )])),
+            Schema::new(fields)
+                .with_metadata([("sdm.text_ids".to_owned(), text_ids.to_string())].into()),
         ),
         columns,
     )
