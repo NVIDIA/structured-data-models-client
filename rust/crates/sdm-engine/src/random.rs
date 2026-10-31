@@ -23,6 +23,8 @@
 //! capability `sdm-core` reads).
 
 mod legacy;
+mod mt19937;
+pub use mt19937::{Mt19937, Mt19937State};
 
 pub use legacy::LegacyMt19937;
 

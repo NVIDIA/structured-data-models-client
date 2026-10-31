@@ -1203,6 +1203,39 @@ fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
     Ok(n as u64)
 }
 
+/// The base-only options used by frame link prediction.
+/// This does not broaden the existing warehouse task-kind admission.
+pub fn frame_link_options(given: Option<&Value>) -> Result<Options, CoreError> {
+    if let Some(Value::Object(members)) = given {
+        for (key, _) in members {
+            if !matches!(
+                key.as_str(),
+                "num_estimators" | "column_shuffle" | "category_shuffle" | "hop_shuffle"
+            ) {
+                return Err(option_refused(key, "unknown_option"));
+            }
+        }
+    }
+    options(Kind::Regression, given).map_err(|mut error| {
+        if error.fields.contains_key("task") {
+            error
+                .fields
+                .insert("task".into(), Detail::text("temporal_link_prediction"));
+        }
+        error
+    })
+}
+
+pub fn frame_link_config(options: &Options) -> sdm_wire::payload::BaseConfig {
+    sdm_wire::payload::BaseConfig {
+        kind: "base".into(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
+    }
+}
+
 /// Reads the caller's `inference_config` for a task of `kind`: the keys its
 /// config class holds, each value as the engine's validation takes it, the
 /// rest the class's defaults; a key the class does not hold, or a value it
