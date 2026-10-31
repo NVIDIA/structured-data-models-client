@@ -43,16 +43,17 @@ def _ordinary_warning_outcome(outcome):
     return result
 
 
-@pytest.mark.parametrize('promotion_mode', ['weak', 'weak_and_warn'])
+@pytest.mark.parametrize(
+    'promotion_mode',
+    ['weak', 'weak_and_warn']
+    if np.__version__.startswith(('1.26.', '2.1.'))
+    else ['weak'],
+)
 @pytest.mark.parametrize('route', ['old', 'core'])
 @pytest.mark.parametrize('name', CASES)
 def test_matches_frozen_numeric_receipt(
     monkeypatch, route, name, promotion_mode
 ):
-    if promotion_mode == 'weak_and_warn' and not np.__version__.startswith(
-        ('1.26.', '2.1.')
-    ):
-        pytest.skip('this producer has no audited mutable weak-and-warn mode')
     directory = Path(os.environ['SDM_PQL_NUMERIC_REFERENCE'])
     runtime = runtime_identity()
     receipt = json.loads(
