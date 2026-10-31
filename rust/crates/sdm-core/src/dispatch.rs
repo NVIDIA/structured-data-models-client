@@ -286,6 +286,9 @@ pub fn start(
                 move |asker| async move { crate::direct::encode(&asker, request, attachments) },
             )
         }
+        Operation::DecodeDirectResponse(request) => Run::new(move |asker| async move {
+            crate::direct::decode_response(&asker, request, attachments)
+        }),
         Operation::LayoutDirect(request) => {
             Run::new(
                 move |asker| async move { crate::direct::layout(&asker, request, attachments) },

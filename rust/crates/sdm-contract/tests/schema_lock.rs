@@ -751,6 +751,10 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.attributed",
     ),
+    (
+        "Operation/decode_direct_response.input",
+        "DecodeDirectResponse.input",
+    ),
     ("Operation/layout_direct.input", "LayoutDirect.input"),
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
@@ -833,9 +837,19 @@ const OTHER: &[(&str, &str)] = &[
     ("SessionTransportReply.response", "the endpoint's bytes"),
     ("NativeDirectCall.payload", "the endpoint's bytes"),
     ("EncodedDirectBody.payload", "the endpoint's bytes"),
+    ("DirectDecodeInput.payload", "the endpoint's bytes"),
+    ("DirectDecodeInput.response", "the endpoint's bytes"),
     ("DirectResponseData.payload", "the endpoint's bytes"),
     ("DirectResponseData.response", "the endpoint's bytes"),
     ("DirectModelInput.payload", "the endpoint's bytes"),
+    (
+        "Operation/decode_direct_response.payload",
+        "the endpoint's bytes",
+    ),
+    (
+        "Operation/decode_direct_response.response",
+        "the endpoint's bytes",
+    ),
     ("Operation/layout_direct.payload", "the endpoint's bytes"),
     ("Operation/layout_direct.response", "the endpoint's bytes"),
     (

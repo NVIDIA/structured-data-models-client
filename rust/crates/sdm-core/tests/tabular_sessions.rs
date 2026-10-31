@@ -278,13 +278,41 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
         assert_eq!(body["predict"]["instance_table"], table);
         let layout: Value = serde_json::from_slice(&take(&mut score, prepared.layout)).unwrap();
         assert_eq!(layout["schema"], sent["schema"]);
-        send(
+        let response = send(
             Endpoint::SessionPredict {
                 session_id: state.session_id.clone(),
             },
             payload,
-            json!({"predictions":[{"prediction":id}]}),
+            json!({"id":"answer", "model":"kumo-tabular", "metadata":{}, "predictions":[{"row_index":0, "prediction":id}]}),
         );
+        let mut decoder = run(
+            |control| {
+                Operation::DecodeDirectResponse(sdm_contract::direct::DecodeDirectResponseInput {
+                    input: control.input,
+                    payload: AttachmentId(171),
+                    response: AttachmentId(172),
+                })
+            },
+            &sdm_contract::direct::DirectDecodeInput {
+                bound: prepared.bound,
+                payload: AttachmentId(171),
+                response: AttachmentId(172),
+            },
+            Attachments::from([
+                (AttachmentId(171), bytes(&layout)),
+                (AttachmentId(172), bytes(&response)),
+            ]),
+        );
+        let Step::Done {
+            result: OperationResult::DecodedDirectResponse(decoded),
+        } = decoder.next().unwrap()
+        else {
+            panic!("pure reply decoder");
+        };
+        let data: sdm_contract::direct::DirectResponseData =
+            serde_json::from_slice(&take(&mut decoder, decoded.value)).unwrap();
+        assert_eq!(data.scope.response_rows, 1);
+        assert_eq!(data.scope.scoring_rows, 1);
     }
     let endpoint = Endpoint::DeleteSession {
         session_id: state.session_id.clone(),

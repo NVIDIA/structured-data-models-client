@@ -24,7 +24,10 @@ fn ordinary_numeric_spelling_matches_frozen_reference_matrix() {
         for right in &equivalent {
             assert_eq!(canonical_key(left).unwrap(), canonical_key(right).unwrap());
         }
-        assert_ne!(canonical_key(left).unwrap(), canonical_key(&text("1.00")).unwrap());
+        assert_ne!(
+            canonical_key(left).unwrap(),
+            canonical_key(&text("1.00")).unwrap()
+        );
     }
 }
 
@@ -56,23 +59,39 @@ fn holdout_preserves_source_order_and_overlap_counts_duplicate_rows() {
 #[test]
 fn composites_keep_boundaries_and_boolean_spelling() {
     let composite = vec![
-        SessionKeyPart::Numeric { decimal: "1.0".into() },
+        SessionKeyPart::Numeric {
+            decimal: "1.0".into(),
+        },
         SessionKeyPart::Boolean { value: true },
     ];
     let same = vec![
         SessionKeyPart::Spelling { value: "1".into() },
-        SessionKeyPart::Spelling { value: "True".into() },
+        SessionKeyPart::Spelling {
+            value: "True".into(),
+        },
     ];
-    assert_eq!(canonical_key(&composite).unwrap(), canonical_key(&same).unwrap());
-    assert_ne!(canonical_key(&composite).unwrap(), canonical_key(&text("1,True")).unwrap());
-    assert_ne!(canonical_key(&vec![SessionKeyPart::Boolean { value: true }]).unwrap(), canonical_key(&number("1")).unwrap());
+    assert_eq!(
+        canonical_key(&composite).unwrap(),
+        canonical_key(&same).unwrap()
+    );
+    assert_ne!(
+        canonical_key(&composite).unwrap(),
+        canonical_key(&text("1,True")).unwrap()
+    );
+    assert_ne!(
+        canonical_key(&vec![SessionKeyPart::Boolean { value: true }]).unwrap(),
+        canonical_key(&number("1")).unwrap()
+    );
 }
 
 #[test]
 fn exact_numeric_identity_does_not_round_high_precision_keys() {
     let first = number("1.12345678901234567890123456781");
     let second = number("1.12345678901234567890123456782");
-    assert_ne!(canonical_key(&first).unwrap(), canonical_key(&second).unwrap());
+    assert_ne!(
+        canonical_key(&first).unwrap(),
+        canonical_key(&second).unwrap()
+    );
     assert_eq!(filter_holdout(&[first], &[second]).unwrap().removed_rows, 0);
 }
 
@@ -87,11 +106,17 @@ fn decimal_format_boundaries_match_only_canonical_text() {
         ("-1.20E-7", "-1.2E-7"),
         ("-100.0500", "-100.05"),
     ] {
-        assert_eq!(canonical_key(&number(numeric)).unwrap(), canonical_key(&text(spelling)).unwrap());
+        assert_eq!(
+            canonical_key(&number(numeric)).unwrap(),
+            canonical_key(&text(spelling)).unwrap()
+        );
     }
     for noncanonical in ["-0", "+1", "01", "1e0", "1E+0", "1.0"] {
         let normalized = if noncanonical == "-0" { "0" } else { "1" };
-        assert_ne!(canonical_key(&text(noncanonical)).unwrap(), canonical_key(&number(normalized)).unwrap());
+        assert_ne!(
+            canonical_key(&text(noncanonical)).unwrap(),
+            canonical_key(&number(normalized)).unwrap()
+        );
     }
 }
 
@@ -99,15 +124,30 @@ fn decimal_format_boundaries_match_only_canonical_text() {
 fn huge_exponents_remain_compact_and_never_expand_to_compare_short_text() {
     let first = number("1E+999999999999999999");
     let same = number("10E+999999999999999998");
-    assert_eq!(canonical_key(&first).unwrap(), canonical_key(&same).unwrap());
-    assert_ne!(canonical_key(&first).unwrap(), canonical_key(&text("1E+999999999999999999")).unwrap());
-    assert_eq!(canonical_key(&number("1E-999999999999999999")).unwrap(), canonical_key(&text("1E-999999999999999999")).unwrap());
+    assert_eq!(
+        canonical_key(&first).unwrap(),
+        canonical_key(&same).unwrap()
+    );
+    assert_ne!(
+        canonical_key(&first).unwrap(),
+        canonical_key(&text("1E+999999999999999999")).unwrap()
+    );
+    assert_eq!(
+        canonical_key(&number("1E-999999999999999999")).unwrap(),
+        canonical_key(&text("1E-999999999999999999")).unwrap()
+    );
 }
 
 #[test]
 fn nonfinite_numeric_spellings_and_malformed_facts_are_explicit() {
-    assert_eq!(canonical_key(&number("Infinity")).unwrap(), canonical_key(&text("Infinity")).unwrap());
-    assert_ne!(canonical_key(&number("Infinity")).unwrap(), canonical_key(&number("inf")).unwrap());
+    assert_eq!(
+        canonical_key(&number("Infinity")).unwrap(),
+        canonical_key(&text("Infinity")).unwrap()
+    );
+    assert_ne!(
+        canonical_key(&number("Infinity")).unwrap(),
+        canonical_key(&number("inf")).unwrap()
+    );
     for invalid in ["", "1e", "--1", "one", "NaN"] {
         assert!(canonical_key(&number(invalid)).is_err());
     }

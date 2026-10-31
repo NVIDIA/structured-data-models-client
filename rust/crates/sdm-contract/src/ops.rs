@@ -80,6 +80,7 @@ pub enum Operation {
     InspectDirectPair(crate::direct::DirectFrames),
     ResolveTabular(crate::direct::DirectFrames),
     EncodeTabular(crate::direct::DirectFrames),
+    DecodeDirectResponse(crate::direct::DecodeDirectResponseInput),
     LayoutDirect(crate::direct::LayoutDirect),
 
     DescribeSource(DescribeSource),
@@ -151,6 +152,7 @@ impl Operation {
             Operation::InspectDirectPair(_) => "inspect_direct_pair",
             Operation::ResolveTabular(_) => "resolve_tabular",
             Operation::EncodeTabular(_) => "encode_tabular",
+            Operation::DecodeDirectResponse(_) => "decode_direct_response",
             Operation::LayoutDirect(_) => "layout_direct",
 
             Operation::DescribeSource(_) => "describe_source",
@@ -222,6 +224,9 @@ impl Operation {
                 vec![(v.input, Bytes), (v.context, Arrow), (v.predict, Arrow)]
             }
             Operation::LayoutNativeDirect(v) => vec![(v.input, Bytes)],
+            Operation::DecodeDirectResponse(v) => {
+                vec![(v.input, Bytes), (v.payload, Bytes), (v.response, Bytes)]
+            }
             Operation::LayoutDirect(v) => {
                 vec![(v.input, Bytes), (v.payload, Bytes), (v.response, Bytes)]
             }
@@ -1812,6 +1817,8 @@ pub struct Attachments {
     pub attributedirectrow_input: crate::direct::DirectAttributionInput,
     #[schemars(rename = "DirectValue.attributed")]
     pub directvalue_attributed: crate::direct::AttributedDirectRow,
+    #[schemars(rename = "DecodeDirectResponse.input")]
+    pub decodedirectresponse_input: crate::direct::DirectDecodeInput,
     #[schemars(rename = "LayoutDirect.input")]
     pub layoutdirect_input: crate::direct::DirectLayoutInput,
 

@@ -220,3 +220,78 @@ def test_holdout_does_not_round_high_precision_entity_identity(client):
     key_at = table['columns'].index('id')
     assert [row[key_at] for row in table['rows']] == keys[1:]
     fitted.close()
+
+
+def test_ordinary_session_replies_are_batched(client, monkeypatch):
+    from sdm_client._rust import direct
+
+    client, _ = client
+    context = frame()
+    opening = request(
+        context, pd.DataFrame({'id': range(100, 200), 'x': [4.5] * 100})
+    )
+    fitted = client.fit(opening, model=KumoTabular())
+    operations = []
+    original = direct._run
+
+    def observed(op, *args, **kwargs):
+        operations.append(op)
+        return original(op, *args, **kwargs)
+
+    monkeypatch.setattr(direct, '_run', observed)
+    result = fitted.predict(opening)
+    assert len(result) == 100
+    assert operations.count('decode_direct_response') == 1
+    assert operations.count('check_direct_rows') == 1
+    assert 'check_direct_response_field' not in operations
+    assert len(operations) < 20
+
+
+@pytest.mark.parametrize('custom', [False, True])
+def test_session_reply_preserves_nested_native_owners(client, custom):
+    client, endpoint = client
+    context = frame()
+    opening = request(context, pd.DataFrame({'id': [4], 'x': [4.5]}))
+    fitted = client.fit(opening, model=KumoTabular())
+    nested = {'values': [1, 2]}
+
+    class Native(dict):
+        pass
+
+    metadata = Native(nested=nested) if custom else {'nested': nested}
+    endpoint.session_predict = lambda *_: {
+        'id': 'reply',
+        'model': 'kumo-tabular',
+        'metadata': metadata,
+        'predictions': [
+            {'row_index': 0, 'prediction': 1.0, 'metadata': metadata}
+        ],
+    }
+    result = fitted.predict(opening)
+    assert result.metadata['nested'] is nested
+    assert result.items[0].metadata['nested'] is nested
+
+
+@pytest.mark.parametrize(
+    'row',
+    [{}, {'row_index': 'bad'}, {'row_index': 0, 'probabilities': {'x': 'bad'}}],
+)
+def test_session_invalid_reply_keeps_native_diagnostic(monkeypatch, row):
+    outcomes = []
+    for routes in ('', ROUTES):
+        monkeypatch.setenv('SDM_CORE_ROUTES', routes)
+        endpoint = SessionEndpoint()
+        endpoint.session_predict = lambda *_: {
+            'id': 'reply',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [row],
+        }
+        client = SDMClient.__new__(SDMClient)
+        client._start(endpoint)
+        opening = request(frame(), pd.DataFrame({'id': [4], 'x': [4.5]}))
+        with client, client.fit(opening, model=KumoTabular()) as fitted:
+            with pytest.raises(StructuredDataError) as caught:
+                fitted.predict(opening)
+            outcomes.append((type(caught.value), str(caught.value)))
+    assert outcomes[0] == outcomes[1]

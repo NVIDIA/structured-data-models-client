@@ -458,6 +458,23 @@ pub struct LayoutDirect {
     pub response: AttachmentId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecodeDirectResponseInput {
+    pub input: AttachmentId,
+    pub payload: AttachmentId,
+    pub response: AttachmentId,
+}
+
+/// A reusable reply decoder binds the actual sent layout to the original call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectDecodeInput {
+    pub bound: BoundDirectCall,
+    pub payload: AttachmentId,
+    pub response: AttachmentId,
+}
+
 /// Resolved wire metadata, before native warning delivery and row encoding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

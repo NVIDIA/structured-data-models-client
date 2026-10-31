@@ -528,3 +528,83 @@ def restore(
             dataclasses.replace(item, **changed) if changed else item
         )
     return restored_items
+
+
+def _json_tree(value: Any, active: set[int]) -> bool:
+    """Recognize exact JSON owners without invoking user conversion methods."""
+    kind = type(value)
+    if value is None or kind in (str, bool, int):
+        return True
+    if kind is float:
+        return math.isfinite(value)
+    if kind not in (dict, list) or id(value) in active:
+        return False
+    active.add(id(value))
+    try:
+        if kind is dict:
+            return all(
+                type(key) is str and _json_tree(item, active)
+                for key, item in value.items()
+            )
+        return all(_json_tree(item, active) for item in value)
+    finally:
+        active.remove(id(value))
+
+
+def decoded_reply(
+    reply: Any, payload: dict[str, Any], bound: dict[str, Any]
+) -> Any:
+    """Batch ordinary replies through the same Rust decoder as direct calls.
+
+    A pure decode refusal falls back before presentation, retaining native
+    diagnostics. Custom values keep the native reader and their owners.
+    """
+    import dataclasses
+    import json
+
+    from sdm_client._rust import codec, direct, predict, results
+
+    try:
+        ordinary = _json_tree(reply, set()) and _json_tree(payload, set())
+    except RecursionError:
+        ordinary = False
+    if not ordinary:
+        return None
+    try:
+        finished = direct._run(
+            'decode_direct_response',
+            {'bound': bound, 'payload': 2, 'response': 3},
+            {2: codec.attachment(payload), 3: codec.attachment(reply)},
+            payload=2,
+            response=3,
+        )
+    except StructuredDataError:
+        return None
+    finished = direct._response(finished)
+    answer = results.expect(finished.result, results.Predicted)
+    result = predict._result(
+        predict._rows(finished.take(answer.result)),
+        model=answer.model,
+        request_id=answer.request_id,
+        metadata=json.loads(finished.take(answer.metadata)),
+        outputs=answer.outputs,
+        by_step=False,
+    )
+    # Rust decides validity and attribution. Preserve the shallow native
+    # ownership of opaque result fields when presenting those decisions.
+    result.metadata = dict(reply['metadata'])
+    retained = []
+    for item, native in zip(result.items, reply['predictions'], strict=True):
+        fields: dict[str, Any] = {
+            name: None if native.get(name) is None else dict(native[name])
+            for name in ('metadata', 'explanation')
+        }
+        rankings = native.get('rankings')
+        fields['rankings'] = (
+            None if rankings is None else tuple(dict(row) for row in rankings)
+        )
+        if type(native.get('prediction')) in (dict, list):
+            fields['prediction'] = native['prediction']
+        retained.append(dataclasses.replace(item, **fields))
+    result.items = tuple(retained)
+    return result

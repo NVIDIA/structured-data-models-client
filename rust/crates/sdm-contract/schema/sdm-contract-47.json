@@ -507,6 +507,9 @@
         "DirectValue.attributed": {
           "$ref": "#/$defs/AttributedDirectRow"
         },
+        "DecodeDirectResponse.input": {
+          "$ref": "#/$defs/DirectDecodeInput"
+        },
         "LayoutDirect.input": {
           "$ref": "#/$defs/DirectLayoutInput"
         },
@@ -681,6 +684,7 @@
         "DirectValue.member",
         "AttributeDirectRow.input",
         "DirectValue.attributed",
+        "DecodeDirectResponse.input",
         "LayoutDirect.input",
         "ValidateQuery.query",
         "ValidateQuery.schema",
@@ -8645,6 +8649,27 @@
         "selected"
       ]
     },
+    "DirectDecodeInput": {
+      "description": "A reusable reply decoder binds the actual sent layout to the original call.",
+      "type": "object",
+      "properties": {
+        "bound": {
+          "$ref": "#/$defs/BoundDirectCall"
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "response": {
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "bound",
+        "payload",
+        "response"
+      ]
+    },
     "DirectLayoutInput": {
       "type": "object",
       "properties": {
@@ -11203,6 +11228,31 @@
             "input",
             "context",
             "predict"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "payload": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "response": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "decode_direct_response"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "input",
+            "payload",
+            "response"
           ]
         },
         {

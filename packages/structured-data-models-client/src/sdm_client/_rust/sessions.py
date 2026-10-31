@@ -345,12 +345,15 @@ def predict(fitted: Any, request: Any) -> Any:
         bytes(finished.take(prepared['payload'])),
         inference=options,
     )
+    # Use the actual mutable object consumed by the transport with the pinned
+    # server schema. Ordinary replies share direct prediction's Rust decoder.
+    layout.update(sent)
+    result = direct_response.decoded_reply(reply, layout, prepared['bound'])
+    if result is not None:
+        return result
     response = direct_response.Reader(direct._call).response(
         reply, fitted.model
     )
-    # The server schema is pinned; the scoring payload remains the actual
-    # mutable object consumed by the transport, as on the original path.
-    layout.update(sent)
     return direct_response.present(
         response, layout, prepared['bound'], direct._call
     )

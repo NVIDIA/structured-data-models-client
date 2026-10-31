@@ -820,6 +820,15 @@ pub(crate) async fn predict(
     let answer =
         crate::predict::call_answer(&asker, payload.to_bytes(), request.model_endpoint.as_ref())
             .await?;
+    decoded_result(&asker, bound, payload, answer)
+}
+
+fn decoded_result(
+    asker: &Asker,
+    bound: BoundDirectCall,
+    payload: Value,
+    answer: Value,
+) -> Result<OperationResult, CoreError> {
     let (_response, scope, rows) = decoded(&payload, &answer)?;
     let payload = asker.attach(Attachment::Bytes(payload.to_bytes()))?;
     let response = asker.attach(Attachment::Bytes(answer.to_bytes()))?;
@@ -841,6 +850,29 @@ pub(crate) async fn predict(
     Ok(OperationResult::DecodedDirectResponse(
         DecodedDirectResponse { value },
     ))
+}
+
+pub(crate) fn decode_response(
+    asker: &Asker,
+    request: DecodeDirectResponseInput,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    let input: DirectDecodeInput = take_json(&mut attached, request.input)?;
+    sdm_request::direct::bound(&input.bound)?;
+    if input.payload != request.payload || input.response != request.response {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "reply decoder attachment bindings differ",
+        ));
+    }
+    let bytes = |attached: &mut Attachments, id| match attached.remove(&id) {
+        Some(Attachment::Bytes(bytes)) => Ok(bytes),
+        _ => Err(internal("response bytes are absent")),
+    };
+    let payload = crate::predict::payload(&bytes(&mut attached, request.payload)?)?;
+    let answer = sdm_wire::json::read_answer(&bytes(&mut attached, request.response)?)
+        .map_err(|_| internal("response bytes are not readable"))?;
+    decoded_result(asker, input.bound, payload, answer)
 }
 
 pub(crate) fn layout(
