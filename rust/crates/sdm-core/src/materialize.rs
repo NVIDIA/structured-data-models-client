@@ -3474,11 +3474,11 @@ read_times.read(
     let mut labelled = if let Shape::Links(window) = &asked.target {
         let rows = fetched.get(&window.table).ok_or_else(|| internal("link target rows were not read"))?;
         let column = window.column.as_ref().ok_or_else(|| internal("link target has no column"))?;
-        let values = static_column(named(&rows.rows, column)?, &(0..rows.rows.num_rows()).collect::<Vec<_>>())?;
+        let values = named(&rows.rows, column)?;
         let kept = window.filter.as_ref().map(|filter| labels::truth(&row_condition(filter, &rows.rows)?).map(|v| v.values)).transpose()?;
         let starts = shifted(&examples.anchors, window.start, "anchor_time")?;
         let ends = shifted(&examples.anchors, window.end, "anchor_time")?;
-        let linked = sdm_engine::frame_labels::distinct(examples.index.len(), &rows.batch, &values, &rows.times,
+        let linked = sdm_engine::frame_labels::distinct_identifiers(examples.index.len(), &rows.batch, values, &rows.times,
             labels::Bounds { starts: Some(&starts), ends: &ends }, kept.as_deref())?;
         PreparedLabelled { mask: linked.mask, labels: PreparedLabels::Links(linked.labels) }
     } else {

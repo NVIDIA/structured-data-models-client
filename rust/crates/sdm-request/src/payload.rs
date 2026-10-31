@@ -863,9 +863,9 @@ fn link_target_cells(
                         LinkValue::UInt(value) => value.to_string(),
                         LinkValue::Float(value) => {
                             if !value.is_finite() {
-                                return Err(not_finite(TARGET, f64::from(*value)));
+                                return Err(not_finite(TARGET, *value));
                             }
-                            float_text(f64::from(*value))
+                            float_text(*value)
                         }
                         LinkValue::Bool(value) => if *value { "True" } else { "False" }.into(),
                         LinkValue::Text(value) => value.clone(),

@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, _routing
+from sdm_client.errors import StructuredDataError
 
 
 @pytest.fixture(autouse=True)
@@ -112,7 +113,7 @@ def test_temporal_frame_materialization():
     assert first == materialize(query)
 
 
-@pytest.mark.parametrize('rank', ['', ' RANK TOP 2'])
+@pytest.mark.parametrize('rank', [False, True])
 def test_link_prediction_frame_materialization(rank):
     data = Schema.from_data(
         {
@@ -135,9 +136,25 @@ def test_link_prediction_frame_materialization(rank):
         time_columns={'orders': 'time'},
     )
     query = PredictiveQuery(
-        f'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days){rank} FOR EACH users.user_id',
+        'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id',
         data,
     )
+    if rank:
+        ranked = PredictiveQuery(
+            'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 2 '
+            'FOR EACH users.user_id',
+            data,
+        )
+        with pytest.raises(StructuredDataError, match='candidates'):
+            materialize(ranked)
+        request = ranked.materialize(
+            indices=[1, 2],
+            random_seed=7,
+            model=KumoRelational(),
+            candidates=[1, 2, 3],
+        )
+        assert len(request.parts) == 3
+        return
     first = materialize(query)
     assert len(first) == 1
     assert first[0]['task']['kind'] == 'temporal_link_prediction'
@@ -169,3 +186,41 @@ def test_composite_neighbor_identity_is_materialized():
     )
     assert len(first) == 1
     assert 'orders' in first[0]['schema']['related_tables']
+
+
+def test_float_link_identifiers_keep_source_precision():
+    data = Schema.from_data(
+        {
+            'users': pd.DataFrame({'user_id': range(1, 21)}),
+            'items': pd.DataFrame(
+                {'item_id': [16777216.0, 16777217.0], 'price': [1.0, 2.0]}
+            ),
+            'orders': pd.DataFrame(
+                {
+                    'order_id': range(160),
+                    'user_id': [i % 20 + 1 for i in range(160)],
+                    'item_id': [16777216.0 + (i // 20) % 2 for i in range(160)],
+                    'time': pd.date_range('2024-01-01', periods=160, freq='D'),
+                }
+            ),
+        },
+        primary_keys={
+            'users': 'user_id',
+            'items': 'item_id',
+            'orders': 'order_id',
+        },
+        time_columns={'orders': 'time'},
+    )
+    query = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id',
+        data,
+    )
+    payload = materialize(query)[0]
+    context = payload['context']['instance_table']
+    position = context['columns'].index('TARGET')
+    targets = [row[position] for row in context['rows']]
+    assert {value for group in targets for value in group} == {
+        '16777216.0',
+        '16777217.0',
+    }
+    assert any(set(group) == {'16777216.0', '16777217.0'} for group in targets)
