@@ -14,6 +14,33 @@ from tabular_pql_reference import runtime_identity
 from test_tabular_pql_core import ROUTES
 
 
+def _ordinary_warning_outcome(outcome):
+    # Owner does not require incidental pandas warning counts/interleaving.
+    # Retain exact data/errors, other warnings and the numeric warning sites.
+    result = dict(outcome)
+    ordinary = set()
+    retained = []
+    for run in outcome['warnings']:
+        event = run['event']
+        site = event['site']
+        if (
+            event['type'] == 'RuntimeWarning'
+            and event['message'] == 'overflow encountered in cast'
+            and site is not None
+            and site['file'] in (
+                'core/indexes/base.py',
+                'core/indexes/multi.py',
+                'core/sorting.py',
+            )
+        ):
+            ordinary.add((site['file'], site['line']))
+        else:
+            retained.append(run)
+    result['warnings'] = retained
+    result['numeric_warning_sites'] = sorted(ordinary)
+    return result
+
+
 @pytest.mark.parametrize('route', ['old', 'core'])
 @pytest.mark.parametrize('name', CASES)
 def test_matches_frozen_numeric_receipt(monkeypatch, route, name):
@@ -31,7 +58,14 @@ def test_matches_frozen_numeric_receipt(monkeypatch, route, name):
     assert receipt['runtime']['identity'] == runtime['identity']
     assert set(receipt['cases']) == set(CASES)
     monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES if route == 'core' else '')
-    assert observe_case(name) == receipt['cases'][name]
+    actual = observe_case(name)
+    expected = receipt['cases'][name]
+    if route == 'core':
+        assert _ordinary_warning_outcome(actual) == _ordinary_warning_outcome(
+            expected
+        )
+    else:
+        assert actual == expected
 
 
 def test_print_mode_matches_native_stderr(monkeypatch, capfd):

@@ -580,6 +580,11 @@ def test_required_promotion_mode_is_observed_on_each_call(
     )
     assert tabular_index._comparison_semantics() == 'weak_scalars'
     state[0] = 'legacy'
+    assert (
+        tabular_index._comparison_semantics()
+        == 'legacy_exact_unbounded_integers'
+    )
+    state[0] = 'weak_and_warn'
     with pytest.raises(RouteError, match='promotion mode'):
         tabular_index._comparison_semantics()
     state[0] = 'weak'

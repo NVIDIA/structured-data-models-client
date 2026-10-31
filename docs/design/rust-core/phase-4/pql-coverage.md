@@ -121,3 +121,10 @@ Second, reached level errors carry a level path plus operand positions, so Pytho
 Third, mixed ambiguous-time owners can be ordering ties without being equal; expanded-value stable lexsort can preserve alternating sampled codes that distinct integer ranks would reorder.
 The native object stable-sort helper family is identical across the audited NumPy 1.23.5, 1.26.4, 2.1.3, 2.3.4 and 2.5.4 sources.
 This source evidence establishes the implementation target, not candidate validation or a completed temporal landing.
+
+## Ordinary numeric warning acceptance
+
+The owner does not require incidental pandas warning counts or their interleaving.
+For numeric overflow RuntimeWarnings from pandas index/sorting sites, acceptance retains raw frozen receipts and compares the warning sites, while ignoring repetition and placement among other warnings.
+Selected rows, encoded rows, predictions, exceptions (including warning-as-error), unrelated warnings and printed diagnostics remain exact.
+This does not authorize a different comparison algorithm, Python callbacks or a broader fallback.
