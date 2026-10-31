@@ -36,9 +36,11 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 
 - Delivered Java warehouse candidate/ranking/forecast handling and model defaults (`f04b23144`).
 - Implemented Rust-resolved in-memory queries, frame schema edits and fresh Arrow/pandas key observations, plus Java direct options and Tabular task overrides (`7895f4fd4`, `9aaeb732e`).
-  The installed Python run passed 629 cases; one new fixture used a prohibited column name, and its corrected quoted-name case passed with the other three policy tests.
-  Java passed 66 cases with two environment skips; these are regression results, not live parity certification.
-- Next: standalone Python column/table consistency policy, Java result/transport convenience APIs, then readers/persistence and permanent parity machinery.
+- Added standalone schema checks, explicit missing-dtype preservation, Java result merging, request parts and endpoint discovery (`01f460072`, `5baef1dcf`).
+  The latest installed Python sweep passed 735 cases; both failures were corrected and all 55 cases in the affected files then passed.
+  Java passed 69 cases with two environment skips; Clippy passed across core and JNI.
+  These are regression results, not live parity certification.
+- Next: shared policy for Python's public result merge, Java readers/persistence, remaining provider obligations and permanent parity machinery.
   The real endpoint matrix and remaining scope reconciliation are still pending.
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
