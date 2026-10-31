@@ -459,6 +459,15 @@ FRAME_SESSIONS = tuple(
 )
 FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA + FRAME_SESSIONS
 
+# Session rules consume materialized payloads, independently of the provider
+# that gathered them. Keep each backend's fit and scoring routes together.
+WAREHOUSE_SESSIONS = {
+    backend: _on(FRAME_SESSIONS, backend) for backend in (*PREDICT, 'lakebase')
+}
+WAREHOUSE_SESSION_ROUTES = tuple(
+    path for paths in WAREHOUSE_SESSIONS.values() for path in paths
+)
+
 
 CORE_ROUTED = frozenset(
     S0
@@ -467,6 +476,7 @@ CORE_ROUTED = frozenset(
     + DIRECT_CONSUMERS
     + TABULAR_MATERIALIZERS
     + TABULAR_SESSIONS
+    + WAREHOUSE_SESSION_ROUTES
     + FROM_SOURCE_DUCKDB
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB

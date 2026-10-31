@@ -754,10 +754,14 @@ class SDMClient:
             from sdm_client._rust import sessions
 
             return sessions.fit(self, request, model, outputs, holdout)
-        if (
-            self._spec(model).model_id == 'kumo-relational'
-            and request.schema.source is None
-            and _routing.on_frames(_routing.FRAME_SESSIONS)
+        if self._spec(model).model_id == 'kumo-relational' and (
+            (
+                request.schema.source is None
+                and _routing.on_frames(_routing.FRAME_SESSIONS)
+            )
+            or _routing.on_the_core(
+                request.schema.source, _routing.WAREHOUSE_SESSIONS
+            )
         ):
             from sdm_client._rust import frame_sessions
 

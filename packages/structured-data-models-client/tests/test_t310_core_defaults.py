@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[3]
         _routing.DIRECT_CONSUMERS,
         _routing.TABULAR_MATERIALIZERS,
         _routing.TABULAR_SESSIONS,
+        _routing.WAREHOUSE_SESSION_ROUTES,
         _routing.FROM_SOURCE_DUCKDB,
         _routing.MATERIALIZE_DUCKDB,
         _routing.PREDICT_DUCKDB,
@@ -75,11 +76,11 @@ def test_an_explicit_override_can_select_old_then_restore_defaults(
     assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'core'
 
 
-def test_unimplemented_training_still_uses_its_existing_route(
+def test_warehouse_fit_uses_shared_session_rules(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    assert _routing.route(('client.fit/regression/duckdb',)) == 'old'
+    assert _routing.route(('client.fit/regression/duckdb',)) == 'core'
 
 
 @pytest.mark.parametrize('backend', ['duckdb', 'sqlite'])

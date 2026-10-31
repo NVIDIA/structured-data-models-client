@@ -2,7 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Frame-session owners and transport; Rust owns envelopes and compatibility."""
+"""Materialized Relational sessions; Rust owns envelopes and compatibility.
+
+The historical frame_session opcode also accepts warehouse-prepared payloads.
+No provider or sampling decision belongs to this transport/ownership bridge.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,8 @@ from typing import Any
 from sdm_client._rust import codec, results, sessions
 from sdm_client._rust import predict as prediction
 from sdm_client._rust.run import Refused, run
+from sdm_client.adapters.relational import _keys_the_caller_set
+from sdm_client.errors import StructuredDataError
 
 
 def _run(
@@ -51,7 +57,15 @@ def _run(
     def transmit(endpoint: Any, body: bytes) -> bytes:
         payload = json.loads(body)
         if endpoint == 'create_session':
-            reply = client._transport.create_session(payload)
+            try:
+                reply = client._transport.create_session(payload)
+            except StructuredDataError as error:
+                explained = client._adapters[value['model']].explain_error(
+                    error, payload
+                )
+                if explained is error:
+                    raise
+                raise explained from error
         elif isinstance(endpoint, dict) and 'session_predict' in endpoint:
             reply = client._transport.session_predict(
                 endpoint['session_predict']['session_id'], payload
@@ -95,7 +109,6 @@ def fit(
         _adapter_for,
         _report_held_back,
     )
-    from sdm_client.errors import StructuredDataError
 
     if isinstance(holdout, (str, bytes)):
         raise StructuredDataError(
@@ -110,6 +123,10 @@ def fit(
         for key in (() if holdout is None else holdout)
     ]
     spec = client._spec(model)
+    adapter = client._adapters.get(spec.model_id)
+    if adapter is None:
+        adapter = _adapter_for(spec)
+        client._adapters[spec.model_id] = adapter
     try:
         finished = _run(
             client,
@@ -122,7 +139,9 @@ def fit(
                 'windowed': request.target_moves_with_time,
                 'request_id': _request_id(),
                 'inference_asked': sorted(
-                    request.requested_inference.get('inference_config', {})
+                    _keys_the_caller_set(
+                        request.requested_inference.get('inference_config', {})
+                    )
                 ),
             },
             request,
@@ -136,10 +155,6 @@ def fit(
         raise
     accepted = _value(finished)
     state = accepted['state']
-    adapter = client._adapters.get(spec.model_id)
-    if adapter is None:
-        adapter = _adapter_for(spec)
-        client._adapters[spec.model_id] = adapter
     fitted = FittedModel._open(
         client,
         adapter,
@@ -169,7 +184,9 @@ def predict(fitted: Any, request: Any) -> Any:
                 'question': sessions.question(request),
                 'request_ids': [_request_id() for _ in request.payloads],
                 'inference_asked': sorted(
-                    request.requested_inference.get('inference_config', {})
+                    _keys_the_caller_set(
+                        request.requested_inference.get('inference_config', {})
+                    )
                 ),
             },
             request,
