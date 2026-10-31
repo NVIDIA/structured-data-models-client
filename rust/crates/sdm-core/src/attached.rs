@@ -52,7 +52,10 @@ pub fn check_attachments(
                     *id,
                 ));
             }
-            _ => {}
+            (Some(Attachment::Bytes(_)), AttachmentKind::Bytes)
+            | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
+            | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
+            _ => return Err(invalid("the attachment does not match its declared kind", *id)),
         }
     }
     if let Some(id) = attachments.keys().find(|id| !seen.contains(id)) {

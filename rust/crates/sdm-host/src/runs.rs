@@ -272,6 +272,16 @@ impl HostRun {
             // The core resolves zones through the host's own resolver, the
             // one whose sources the host records (decision H14).
             let core_zones: Arc<dyn sdm_core::Zones> = zones.clone();
+            let mut attachments = attachments;
+            if let sdm_contract::ops::Operation::PrepareFrameGraph(input) = &start.operation {
+                check_attachments(&start.operation.attachments(), &attachments)?;
+                for id in &input.tables {
+                    let Some(Attachment::Arrow(data)) = attachments.remove(id) else {
+                        return Err(invalid("frame graph input is not Arrow"));
+                    };
+                    attachments.insert(*id, Attachment::Arrow(crate::frames::detach(data)?));
+                }
+            }
             let run = sdm_core::start(root, *start, attachments, core_zones)?;
             Ok(HostRun::with(run, zones))
         })

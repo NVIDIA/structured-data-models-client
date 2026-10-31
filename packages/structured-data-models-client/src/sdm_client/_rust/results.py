@@ -536,7 +536,13 @@ def _predicted(read: dict[str, Any]) -> Predicted:
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class PreparedFrameGraph:
+    graph: int
+
+
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
+    'prepared_frame_graph': (('graph',), (), lambda read: PreparedFrameGraph(_int(read['graph'], 'graph'))),
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
     'describe_source': (('description',), ('notes',), _described),
     'edit_schema': (('schema',), ('declared',), _edited),

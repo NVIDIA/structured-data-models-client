@@ -594,6 +594,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::KeyMissingValuesColumn => said(
             r#"{table}.{column} has {missing:,} row(s) with no value, in {column!r}, so those rows cannot be identified; fill or drop them before using it as a primary key. {advice:skip_key_check()}"#,
         ),
+        S::FrameKeyMissingParts => said(
+            r#"the primary key of {table!r}, {columns!l}, has {missing:,} row(s) with no value in {parts!l}; fill or drop those rows before using the key."#,
+        ),
         S::KeyMissingValuesColumns => said(
             r#"the primary key of {table!r}, {columns!l}, has {missing:,} row(s) with no value in part of it, so those rows cannot be identified; fill or drop them before using them as a primary key. {advice:skip_key_check()}"#,
         ),
@@ -1115,6 +1118,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::HeldBySeveralRowsMany => said(
             r#"Cannot score {shown!j} and {more:,} more: more than one row of table '{table}' holds each of these values of '{key}', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row."#,
         ),
+        S::FrameNativeCaller => said("Cannot use column '{column}' of table '{table}' as row identity: {native_key_reason}{detail}"),
+        S::FrameTaskReferences => said("Task references {rows} unresolved row(s) in table '{table}' after graph sanitization{detail}"),
+        S::FrameNoValidRows => said("Found no valid rows in table '{table}'; supply valid non-missing {requirements}."),
         S::NotInTable => said(r#""The primary keys {keys!r} do not exist in the '{table}' table""#),
         S::SubgraphPastTables => said(
             r#"the request's subgraph carries {tables:,} tables, and the endpoint reads at most {limit:,}"#,

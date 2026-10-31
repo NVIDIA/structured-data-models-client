@@ -41,6 +41,7 @@ use crate::compose::{DataAccess, Route};
 /// Data that travels beside a control message.
 #[derive(Debug, Clone)]
 pub enum Attachment {
+    FrameGraph(crate::materialize::frames::FrameGraph),
     Bytes(Vec<u8>),
     Arrow(ArrowData),
 }

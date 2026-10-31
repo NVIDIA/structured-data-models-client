@@ -409,6 +409,11 @@ def gather(
             provider=provider,
             state=materializer._core_sampler_state,
         )
+    return unpack(finished)
+
+
+def unpack(finished: Any) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
+    """Present an existing core materialization result, for either data source."""
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state
     if gathered.query is None:

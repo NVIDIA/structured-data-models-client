@@ -1072,6 +1072,10 @@ sentences! {
     HeldBySeveralRowsOne = "held_by_several_rows_one", E::InvalidRequest;
     HeldBySeveralRows = "held_by_several_rows", E::InvalidRequest;
     HeldBySeveralRowsMany = "held_by_several_rows_many", E::InvalidRequest;
+    FrameNativeCaller = "frame_native_caller", E::InvalidRequest;
+    FrameTaskReferences = "frame_task_references", E::InvalidRequest;
+    FrameKeyMissingParts = "frame_key_missing_parts", E::InvalidRequest;
+    FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
     NotInTable = "not_in_table", E::InvalidRequest;
     SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;
     Unresolved = "unresolved", E::InvalidRequest;
