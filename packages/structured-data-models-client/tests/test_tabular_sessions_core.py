@@ -369,3 +369,42 @@ def test_class_probability_spelling_retains_native_conversion(
         with client, client.fit(opening, model=KumoTabular()) as fitted:
             answers.append(fitted.predict(opening).items[0].probabilities)
     assert answers == [{expected: 0.5}, {expected: 0.5}]
+
+
+def test_session_string_holdout_is_refused(client):
+    client, endpoint = client
+    with pytest.raises(StructuredDataError, match='string'):
+        client.fit(
+            request(frame(), frame().head(1).drop(columns='y')),
+            model=KumoTabular(),
+            holdout='one',
+        )
+    assert not endpoint.created
+
+
+def test_session_unsupported_endpoint_is_explained(client, monkeypatch):
+    client, endpoint = client
+
+    def unsupported(payload):
+        error = RuntimeError('not implemented')
+        error.status_code = 501
+        raise error
+
+    monkeypatch.setattr(endpoint, 'create_session', unsupported)
+    with pytest.raises(StructuredDataError) as refused:
+        client.fit(
+            request(frame(), frame().head(1).drop(columns='y')),
+            model=KumoTabular(),
+        )
+    assert refused.value.code == 'SESSIONS_UNSUPPORTED'
+
+
+def test_session_missing_identifier_is_refused(client, monkeypatch):
+    client, endpoint = client
+    monkeypatch.setattr(endpoint, 'create_session', lambda payload: {})
+    with pytest.raises(StructuredDataError) as refused:
+        client.fit(
+            request(frame(), frame().head(1).drop(columns='y')),
+            model=KumoTabular(),
+        )
+    assert refused.value.code == 'INVALID_RESPONSE'

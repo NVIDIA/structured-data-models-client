@@ -1,7 +1,7 @@
 {
   "commit": {
-    "clean": true,
-    "sha": "259a60af18535fc2a5e3351c093d05880dda1239"
+    "clean": false,
+    "sha": "abb4cf8cf7555f20f95bfaf5f1d16e00959f651d"
   },
   "database": "duckdb",
   "departs": [
@@ -807,7 +807,7 @@
           "stage": "materialize"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1"
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#1"
     },
     {
       "departs": false,
@@ -843,7 +843,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2"
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#2"
     },
     {
       "departs": false,
@@ -883,7 +883,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3"
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#3"
     },
     {
       "departs": false,
@@ -897,7 +897,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4"
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#4"
     },
     {
       "departs": false,
@@ -911,7 +911,7 @@
           "stage": "predict"
         }
       },
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5"
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#5"
     },
     {
       "departs": false,
@@ -1345,7 +1345,7 @@
     "clean": true,
     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
   },
-  "sites": 50,
+  "sites": 69,
   "unmeasured": [
     "postgres",
     "sqlite"

@@ -244,3 +244,26 @@ def test_empty_explanation_score_is_local_and_new_context_is_not_validated(
     scoring._payloads[0]['predict']['instance_table']['rows'] = []
     assert fitted.predict(scoring).to_pandas().empty
     assert len(endpoint.scored) == 1
+
+
+def test_session_string_holdout_is_refused(client):
+    client, endpoint = client
+    with pytest.raises(StructuredDataError, match='string'):
+        client.fit(
+            gather(query(), [1, 2]), model=KumoRelational(), holdout='one'
+        )
+    assert not endpoint.created
+
+
+def test_session_unsupported_endpoint_is_explained(client, monkeypatch):
+    client, endpoint = client
+
+    def unsupported(payload):
+        error = RuntimeError('not implemented')
+        error.status_code = 501
+        raise error
+
+    monkeypatch.setattr(endpoint, 'create_session', unsupported)
+    with pytest.raises(StructuredDataError) as refused:
+        client.fit(gather(query(), [1, 2]), model=KumoRelational())
+    assert refused.value.code == 'SESSIONS_UNSUPPORTED'

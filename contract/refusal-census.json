@@ -569,7 +569,7 @@
       }
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1",
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#1",
       "why": "no context rows left; an anchor before the data is refused first (field anchor_time), so not reached this way",
       "input": {
         "base": "shop",
@@ -585,7 +585,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2",
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#2",
       "why": "a target of 15 classes, past the model's 10",
       "input": {
         "base": "shop",
@@ -604,7 +604,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3",
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#3",
       "why": "a classification whose every context row has one answer",
       "input": {
         "base": "shop",
@@ -620,7 +620,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4",
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#4",
       "why": "an explanation of more than one entity; the public predict here asks no explanation, so not reached",
       "input": {
         "base": "shop",
@@ -636,7 +636,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5",
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight_halves::predict::unsupported#5",
       "why": "an explanation outside the fast run mode; the public predict here asks no explanation, so not reached",
       "input": {
         "base": "shop",
@@ -664,7 +664,7 @@
           ],
           "anchor_time": "2024-03-01",
           "inference_config": {
-            "num_estimators": 1e400
+            "num_estimators": Infinity
           }
         }
       },
@@ -943,6 +943,177 @@
       "options": {
         "task": "link_prediction"
       }
+    },
+    {
+      "site": "rule:frame_link_identifier_type",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_float_link_identifiers_keep_source_precision"
+      ],
+      "reachability": "unmeasured",
+      "why": "Unsupported Arrow identifier fallback is behind public frame admission. Regression covers exact supported identifier identity; direct fallback reachability is unmeasured."
+    },
+    {
+      "site": "rule:frame_link_time_target",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization"
+      ],
+      "reachability": "unmeasured",
+      "why": "Temporal identifiers are outside the supported link target domain. Regression covers the supported link family; direct time-target guard reachability is unmeasured."
+    },
+    {
+      "site": "rule:frame_neighbor_count",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_query_engine_boundary.py::test_both_spellings_of_no_hop_are_refused_alike"
+      ],
+      "reachability": "unmeasured",
+      "why": "Frame neighbor counts must fit signed native indexing. Public option refusal regression; oversized unsigned guard reachability is unmeasured."
+    },
+    {
+      "site": "rule:frame_neighbor_expression",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_query_engine_boundary.py::test_both_spellings_of_no_hop_are_refused_alike"
+      ],
+      "reachability": "unmeasured",
+      "why": "Provider SQL neighbor expressions do not apply to local frame traversal. Public neighbor-option regression; expression guard reachability is unmeasured."
+    },
+    {
+      "site": "rule:frame_time_type",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_admission_core.py::test_text_timestamps_match_native_utc_instants"
+      ],
+      "reachability": "unmeasured",
+      "why": "Host converts declared dates before native traversal. Regression covers admitted timestamp conversion; incompatible Arrow storage guard is defensive and reachability unmeasured."
+    },
+    {
+      "site": "rule:frame_wide_timestamps",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_static_payload_matches_old_client"
+      ],
+      "reachability": "unmeasured",
+      "why": "Native time traversal requires nanosecond range. Regression verifies corrected lower-bound sentinel behavior; out-of-range guard reachability is unmeasured."
+    },
+    {
+      "site": "rule:link_labels_only",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization"
+      ],
+      "reachability": "unmeasured",
+      "why": "Labels-only operation is test-ops-only and excludes list labels. Public link regression does not claim to exercise that private guard."
+    },
+    {
+      "site": "rule:link_prediction_lags",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization"
+      ],
+      "reachability": "unmeasured",
+      "why": "Link prediction is supported without scalar autoregressive lags. Public link regression; lag guard reachability unmeasured."
+    },
+    {
+      "site": "rule:link_prediction_statistic",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization"
+      ],
+      "reachability": "unmeasured",
+      "why": "Scalar prediction statistics do not apply to link labels. Public link regression; explicit statistic refusal reachability unmeasured."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frame_schema.py::from_data#1",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_schema.py::test_bad_input_is_named_rather_than_crashing_later"
+      ],
+      "reachability": "unmeasured",
+      "why": "Frame constructor input validation; public invalid table regression. Table-name variant coverage is added explicitly."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frame_schema.py::from_data#2",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_schema.py::test_bad_input_is_named_rather_than_crashing_later"
+      ],
+      "reachability": "unmeasured",
+      "why": "Frame constructor input validation; public invalid table regression. Table-name variant coverage is added explicitly."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frame_schema.py::from_data#3",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_schema.py::test_bad_input_is_named_rather_than_crashing_later"
+      ],
+      "reachability": "unmeasured",
+      "why": "Frame constructor input validation; public invalid table regression. Table-name variant coverage is added explicitly."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frame_schema.py::from_data#4",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_schema_is_what_was_gathered.py::test_something_that_is_not_a_relationship_is_named"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public invalid relationship regression."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frame_sessions.py::fit#1",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_string_holdout_is_refused"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public fit refuses string holdout without issuing a model call."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frame_sessions.py::fit#2",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_unsupported_endpoint_is_explained"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public fit translates unsupported endpoint response without retrying a different model."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/sessions.py::fit#1",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_tabular_sessions_core.py::test_session_string_holdout_is_refused"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public fit refuses string holdout without issuing a model call."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/sessions.py::fit#2",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_tabular_sessions_core.py::test_session_unsupported_endpoint_is_explained"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public fit translates unsupported endpoint response without retrying a different model."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/sessions.py::fit#3",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_tabular_sessions_core.py::test_session_missing_identifier_is_refused"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public fit refuses a successful response that omitted both session identifiers."
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/sessions.py::predict#1",
+      "databases": [],
+      "local_regression": [
+        "packages/structured-data-models-client/tests/test_limits_and_sessions.py::test_a_session_refuses_a_frame_built_request_with_another_context"
+      ],
+      "reachability": "unmeasured",
+      "why": "Public fitted prediction refuses a changed pinned question/context."
     }
   ]
 }

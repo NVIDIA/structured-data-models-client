@@ -30,6 +30,12 @@ probe, and each probe run on both routes.
   with a code other than ``INTERNAL_ERROR`` in the client's core bridge
   (``sdm_client/_rust``), named ``<path>::<fn>#<n>``.
 
+Frame-only and fitted-session sites can instead name local regression tests,
+with ``databases: []`` and explicit unmeasured site reachability.
+These references are checked for existence, but are not claimed as paired
+warehouse executions or evidence that a particular guard was reached.
+The native client suite executes those regressions separately.
+
 Each site has ``id``, ``rule`` (or null), ``code`` (the error code it
 fixes, or null) and ``where`` (``<path>:<line>``, relative to DIR).
 
@@ -281,6 +287,32 @@ def probes(root: Path) -> list[dict[str, Any]]:
         raise CensusError(f'{PROBES}: not sdm-refusal-census/1')
     listed: list[dict[str, Any]] = document['probes']
     for at, probe in enumerate(listed):
+        if isinstance(probe, dict) and 'local_regression' in probe:
+            references = probe['local_regression']
+            if (
+                not isinstance(probe.get('site'), str)
+                or probe.get('databases') != []
+                or not probe.get('why')
+                or probe.get('reachability') != 'unmeasured'
+                or not isinstance(references, list)
+                or not references
+            ):
+                raise CensusError(f'{PROBES}: local probe {at} is not explicit')
+            for reference in references:
+                path, separator, function = reference.partition('::')
+                source = root / path
+                if (
+                    not separator
+                    or not source.is_file()
+                    or not re.search(
+                        rf'\b(?:def|fn) {re.escape(function)}\(',
+                        source.read_text(),
+                    )
+                ):
+                    raise CensusError(
+                        f'{PROBES}: local probe {at} has no regression {reference}'
+                    )
+            continue
         if (
             not isinstance(probe, dict)
             or not isinstance(probe.get('site'), str)
