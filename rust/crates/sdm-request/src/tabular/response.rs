@@ -582,29 +582,6 @@ pub(crate) fn validate_position(index: &str, rows: usize, prior: bool) -> Result
     Ok(at)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_classification_keeps_the_declared_target_type() {
-        for (dtype, expected) in [
-            ("bool", AnswerType::Bool),
-            ("int64", AnswerType::Int),
-            ("float64", AnswerType::FloatClass),
-        ] {
-            let payload = sdm_wire::json::read(
-                format!(r#"{{"task":{{"kind":"classification","target":{{"dtype":"{dtype}"}}}}}}"#)
-                    .as_bytes(),
-            )
-            .unwrap();
-            let part = empty(predict::TABULAR, &payload).unwrap();
-            assert_eq!(part.answers, expected);
-            assert!(part.rows.is_empty());
-        }
-    }
-}
-
 /// Whether the bounded result representation preserves native session answers.
 /// A negative decision keeps the existing native reader; it is not a refusal.
 pub fn native_reply_representable(payload: &Value, response: &PredictionResponse) -> bool {
@@ -669,4 +646,27 @@ pub fn native_reply_representable(payload: &Value, response: &PredictionResponse
                     })
             })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_classification_keeps_the_declared_target_type() {
+        for (dtype, expected) in [
+            ("bool", AnswerType::Bool),
+            ("int64", AnswerType::Int),
+            ("float64", AnswerType::FloatClass),
+        ] {
+            let payload = sdm_wire::json::read(
+                format!(r#"{{"task":{{"kind":"classification","target":{{"dtype":"{dtype}"}}}}}}"#)
+                    .as_bytes(),
+            )
+            .unwrap();
+            let part = empty(predict::TABULAR, &payload).unwrap();
+            assert_eq!(part.answers, expected);
+            assert!(part.rows.is_empty());
+        }
+    }
 }
