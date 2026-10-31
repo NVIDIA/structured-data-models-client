@@ -63,7 +63,9 @@ def main() -> None:
         '--output-dir', type=Path, default=TESTS / 'data/tabular_pql_reference'
     )
     parser.add_argument(
-        '--group', choices=('labels', 'counts', 'numeric'), default='labels'
+        '--group',
+        choices=('labels', 'counts', 'numeric', 'decimal'),
+        default='labels',
     )
     args = parser.parse_args()
     reference = args.reference_checkout.resolve()
@@ -98,11 +100,13 @@ def main() -> None:
     assert Path(sdm_client.__file__).resolve().is_relative_to(reference), (
         sdm_client.__file__
     )
-    if args.group in ('counts', 'numeric'):
+    if args.group in ('counts', 'numeric', 'decimal'):
         if args.group == 'counts':
             from tabular_pql_count_cases import CASES, observe_case
-        else:
+        elif args.group == 'numeric':
             from tabular_numeric_pure_cases import CASES, observe_case
+        else:
+            from tabular_decimal_cases import CASES, observe_case
 
         assert (
             args.output_dir.resolve()

@@ -128,3 +128,15 @@ The owner does not require incidental pandas warning counts or their interleavin
 For numeric overflow RuntimeWarnings from pandas index/sorting sites, acceptance retains raw frozen receipts and compares the warning sites, while ignoring repetition and placement among other warnings.
 Selected rows, encoded rows, predictions, exceptions (including warning-as-error), unrelated warnings and printed diagnostics remain exact.
 This does not authorize a different comparison algorithm, Python callbacks or a broader fallback.
+
+## Decimal comparison increment
+
+The one-way numeric increment landed at `4b9369bc`, with six-runtime frozen-reference acceptance and the required reviewed handoff.
+Mixed finite Decimal/Python-float labels are the next demonstrated gap: the reference sets `FloatOperation` and sorts or raises its trap, while the landed core refuses admission.
+Python retains the actual standard Decimal context and supplies its trap settings with exact scalar facts.
+Rust owns exact comparison, stage-specific trap suppression and sorting; it returns ordered closed numeric diagnostics and the result or refusal.
+Python presents diagnostics in order, ORs reached Decimal flags into the retained context, and then constructs the result or raises the selected exception.
+An earlier warning-as-error prevents later flag presentation, without callbacks, a new Run step or changes to warehouse paths.
+Both public entrypoints cover ordinary finite values, precision boundaries, float infinity/NaN, sticky flags and mixed-level warning/error ordering.
+Previously matching all-Decimal NaN cases remain regression controls; arbitrary Decimal subclasses and mixed Decimal-NaN owners are not claimed by this increment.
+The old client remains a reference for useful behavior, not a requirement to copy demonstrated bugs or incidental implementation details; intentional improvements require explicit justification and verification.

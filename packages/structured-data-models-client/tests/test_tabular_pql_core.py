@@ -419,9 +419,11 @@ def test_tied_sort_binds_retained_facts_without_native_rereads(
     original_facts = tabular_index._facts
     original_call = tabular_materialize._call
 
-    def facts(index: pd.Index, profile: str) -> dict[str, Any]:
+    def facts(
+        index: pd.Index, profile: str, decimal_context: Any
+    ) -> dict[str, Any]:
         observations.append(index)
-        return original_facts(index, profile)
+        return original_facts(index, profile, decimal_context)
 
     def call(operation: str, arguments: dict[str, Any]) -> Any:
         if operation == 'order_sampled_tabular_rows':

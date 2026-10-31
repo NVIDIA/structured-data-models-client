@@ -11,7 +11,13 @@ import importlib
 import struct
 import sys
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import (
+    Context,
+    Decimal,
+    FloatOperation,
+    InvalidOperation,
+    getcontext,
+)
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -232,7 +238,9 @@ def _scalar(value: Any) -> dict[str, Any]:
     )
 
 
-def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
+def _array(
+    values: Any, missing: list[bool], profile: str, decimal_context: Context
+) -> dict[str, Any]:
     dtype = values.dtype
     result: dict[str, Any]
     if isinstance(dtype, np.dtype) and dtype.kind in 'biu':
@@ -305,16 +313,59 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
             for value, absent in zip(values, missing, strict=True)
         ]
         kinds = {atom['kind'] for atom in atoms}
-        if 'decimal' in kinds and 'floating' in kinds:
-            raise RouteError(
-                'mixed Decimal/float index comparison effects are not yet '
-                'represented by the core'
-            )
         has_numpy_missing = any(
             absent and type(value) in (np.float16, np.float32, np.float64)
             for value, absent in zip(values, missing, strict=True)
         )
-        if kinds & {'fixed_integer', 'fixed_floating'} or has_numpy_missing:
+        has_float_missing = any(
+            absent and type(value) is float
+            for value, absent in zip(values, missing, strict=True)
+        )
+        if 'decimal' in kinds and ('floating' in kinds or has_float_missing):
+            if not kinds <= {'decimal', 'integer', 'boolean', 'floating'}:
+                raise RouteError('this mixed Decimal owner is not represented')
+            for position, (value, absent) in enumerate(
+                zip(values, missing, strict=True)
+            ):
+                if absent:
+                    if type(value) is float:
+                        atoms[position] = _scalar(value)
+                    elif value is None or value is pd.NA or value is pd.NaT:
+                        atoms[position] = {
+                            'kind': 'native_missing',
+                            'owner': 'none'
+                            if value is None
+                            else 'ambiguous'
+                            if value is pd.NA
+                            else 'temporal',
+                        }
+                    else:
+                        raise RouteError(
+                            'this missing mixed Decimal owner is not represented'
+                        )
+            probe_policies = {
+                '2.2.2': False,
+                '2.2.3': False,
+                '2.3.3': False,
+                '3.0.6': True,
+                '3.1.0': True,
+            }
+            if pd.__version__ not in probe_policies:
+                raise RouteError(
+                    'this Decimal probe producer is not represented'
+                )
+            result = {
+                'kind': 'decimal_object',
+                'values': atoms,
+                'trap_float_operation': decimal_context.traps[FloatOperation],
+                'trap_invalid_operation': decimal_context.traps[
+                    InvalidOperation
+                ],
+                'probe_catches_invalid_operation': probe_policies[
+                    pd.__version__
+                ],
+            }
+        elif kinds & {'fixed_integer', 'fixed_floating'} or has_numpy_missing:
             if not kinds <= {
                 'integer',
                 'floating',
@@ -370,7 +421,9 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
     return {'values': result, 'missing': missing, 'profile': profile}
 
 
-def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
+def _facts(
+    index: pd.Index, profile: str, decimal_context: Context
+) -> dict[str, Any]:
     ordinary = (
         pd.Index,
         pd.RangeIndex,
@@ -388,7 +441,10 @@ def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
         return {
             'values': {
                 'kind': 'multi',
-                'levels': [_facts(level, profile) for level in index.levels],
+                'levels': [
+                    _facts(level, profile, decimal_context)
+                    for level in index.levels
+                ],
                 'codes': [code.tolist() for code in index.codes],
             },
             'missing': [False] * len(index),
@@ -407,13 +463,17 @@ def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
         }
     values = index._values
     if type(values) is np.ndarray:
-        return _array(values, pd.isna(values).tolist(), profile)
+        return _array(
+            values, pd.isna(values).tolist(), profile, decimal_context
+        )
     if type(values) in (
         pd.arrays.DatetimeArray,
         pd.arrays.TimedeltaArray,
         pd.arrays.PeriodArray,
     ):
-        return _array(values._ndarray, values.isna().tolist(), profile)
+        return _array(
+            values._ndarray, values.isna().tolist(), profile, decimal_context
+        )
     if type(values) in (
         pd.arrays.IntegerArray,
         pd.arrays.FloatingArray,
@@ -421,9 +481,11 @@ def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
     ):
         # Preserve nullable validity separately from any present NaN value.
         missing = values.isna().tolist()
-        return _array(values._data, missing, profile)
+        return _array(values._data, missing, profile, decimal_context)
     if type(values) is pd.arrays.StringArray:
-        return _array(values._ndarray, values.isna().tolist(), profile)
+        return _array(
+            values._ndarray, values.isna().tolist(), profile, decimal_context
+        )
     if type(values) in (
         pd.arrays.ArrowExtensionArray,
         pd.arrays.ArrowStringArray,
@@ -448,7 +510,7 @@ def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
             data = array.fill_null(
                 False if pa.types.is_boolean(dtype) else 0
             ).to_numpy()
-            return _array(data, missing, 'stable')
+            return _array(data, missing, 'stable', decimal_context)
         if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
             return {
                 'values': {
@@ -471,9 +533,12 @@ def _facts(index: pd.Index, profile: str) -> dict[str, Any]:
     )
 
 
-def observe(index: pd.Index) -> dict[str, Any]:
+def observe(
+    index: pd.Index, *, decimal_context: Context | None = None
+) -> dict[str, Any]:
     """Observe a sampled subset after reduction, without sorting in Python."""
-    return {'index': _facts(index, 'unbound')}
+    context = getcontext() if decimal_context is None else decimal_context
+    return {'index': _facts(index, 'unbound', context)}
 
 
 def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
@@ -485,7 +550,11 @@ def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
         values = facts['values']
         selected = facts['profile']
         if selected == 'unbound':
-            if values['kind'] in ('scalar_object', 'temporal_object'):
+            if values['kind'] in (
+                'scalar_object',
+                'temporal_object',
+                'decimal_object',
+            ):
                 # Object argsort uses the generic scalar implementation even
                 # when this binary dispatches numeric arrays to SIMD kernels.
                 selected = 'scalar'

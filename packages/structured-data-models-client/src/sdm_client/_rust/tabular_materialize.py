@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import warnings
 from datetime import date, datetime
+from decimal import Context, FloatOperation, InvalidOperation, getcontext
 from typing import Any
 
 import numpy as np
@@ -261,13 +262,14 @@ def _context(
     subset = candidates.take(
         np.asarray(sampled['offsets'], dtype=np.intp), axis=sampling_axis
     )
-    observation = observe(subset.index)
+    decimal_context = getcontext()
+    observation = observe(subset.index, decimal_context=decimal_context)
     ordering = _call('order_sampled_tabular_rows', observation)
     if ordering['kind'] == 'needs_profile':
         ordering = _call(
             'order_sampled_tabular_rows', bind_profile(observation)
         )
-    _numeric_diagnostics(ordering)
+    _numeric_diagnostics(ordering, decimal_context)
     if ordering['kind'] == 'refused':
         owner_index = subset.index
         for level in ordering.get('levels', []):
@@ -279,6 +281,10 @@ def _context(
                     'comparison refusal has invalid level address'
                 )
             owner_index = owner_index.levels[level]
+        if ordering['reason'] == 'decimal_float_operation':
+            raise FloatOperation([FloatOperation])
+        if ordering['reason'] == 'decimal_invalid_operation':
+            raise InvalidOperation([InvalidOperation])
         if ordering['reason'] == 'floating_overflow':
             raise FloatingPointError('overflow encountered in cast')
         if ordering['reason'] == 'integer_intermediate_overflow':
@@ -422,30 +428,40 @@ def _task(query: Any, target: pd.Series, stated: str | None) -> str:
     return answer['kind']
 
 
-def _numeric_diagnostics(ordering: dict[str, Any]) -> None:
-    """Present final numeric diagnostics before reconstructing native rows."""
-    diagnostics = ordering.get('overflow_warnings', [])
-    if diagnostics:
-        from pandas.core import sorting
-        from pandas.core.indexes import base, multi
+def _numeric_diagnostics(
+    ordering: dict[str, Any], decimal_context: Context
+) -> None:
+    """Present reached diagnostics in order before rebuilding native rows."""
+    diagnostics = ordering.get('numeric_diagnostics', [])
+    if not diagnostics:
+        return
+    from pandas.core import sorting
+    from pandas.core.indexes import base, multi
 
-        # Audited source sites of the native probe and object argsort calls.
-        # Their module registries preserve normal warning filters and dedup.
-        sites = {
-            '2.2.2': (2251, 439, 1709, 6053),
-            '2.2.3': (2251, 439, 1709, 6053),
-            '2.3.3': (2258, 439, 1728, 6066),
-            '3.0.6': (2395, 442, 1807, 6088),
-            '3.1.0': (2490, 473, 1896, 6366),
-        }
-        lines = sites.get(pd.__version__)
-        if lines is None:
-            raise RouteError(
-                'this numeric warning presentation producer is not represented'
-            )
-        for diagnostic in diagnostics:
-            stage = diagnostic['stage']
+    sites = {
+        '2.2.2': (2251, 439, 1709, 6053),
+        '2.2.3': (2251, 439, 1709, 6053),
+        '2.3.3': (2258, 439, 1728, 6066),
+        '3.0.6': (2395, 442, 1807, 6088),
+        '3.1.0': (2490, 473, 1896, 6366),
+    }
+    for diagnostic in diagnostics:
+        kind = diagnostic['kind']
+        if kind == 'decimal_float_operation':
+            decimal_context.flags[FloatOperation] = True
+        elif kind == 'decimal_invalid_operation':
+            decimal_context.flags[InvalidOperation] = True
+        elif kind == 'cast_print':
+            for _ in range(diagnostic['count']):
+                os.write(2, b'Warning: overflow encountered in cast\n')
+        elif kind == 'cast_warning':
+            lines = sites.get(pd.__version__)
+            if lines is None:
+                raise RouteError(
+                    'this numeric warning presentation producer is not represented'
+                )
             stages = ('probe', 'sort', 'multi_probe', 'level_sort')
+            stage = diagnostic['stage']
             if stage not in stages:
                 raise AssertionError('invalid numeric warning stage')
             module = (base, sorting, multi, base)[stages.index(stage)]
@@ -460,8 +476,8 @@ def _numeric_diagnostics(ordering: dict[str, Any]) -> None:
                     module=module.__name__,
                     registry=registry,
                 )
-    for _ in range(ordering.get('overflow_prints', 0)):
-        os.write(2, b'Warning: overflow encountered in cast\n')
+        else:
+            raise AssertionError('invalid numeric diagnostic kind')
 
 
 def materialize(
