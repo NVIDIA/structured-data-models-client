@@ -135,7 +135,11 @@ class Column:
     )
 
     def __post_init__(self) -> None:
-        self._check_stype(self.stype)
+        # Assignment already checked the completed declaration on the core.
+        from sdm_client._rust.edits import standalone_enabled
+
+        if not standalone_enabled():
+            self._check_stype(self.stype)
 
     def _mark_as_key(self) -> None:
         r"""Type this column as an identifier because the schema joins on it.
@@ -193,18 +197,16 @@ class Column:
                 'assign the dtype you want instead',
                 code='INVALID_REQUEST',
             )
-        if key == 'stype' and _edits_on_the_core(
-            getattr(getattr(self, '_table', None), '_schema', None)
-        ):
-            # A core-built schema's column: the core checks and makes the
-            # edit, and its answer is stored (T1.24b, decision E66(g)).
+        if key == 'stype':
             from sdm_client._rust import edits
 
             if edits.column(self, value):
                 return
-        if key == 'stype':
-            self._check_stype(value)
-            self._check_supports_dtype(value, getattr(self, 'dtype', None))
+            if edits.standalone_enabled():
+                edits.check_column(self, value, validate_stype=True)
+            else:
+                self._check_stype(value)
+                self._check_supports_dtype(value, getattr(self, 'dtype', None))
             if hasattr(self, 'stype'):
                 object.__setattr__(self, 'stype_declared', True)
         if key == 'dtype' and getattr(self, 'untyped', False):
@@ -285,6 +287,11 @@ class Column:
         has finished and before anything is sent.
         """
         if self.dtype is None or self.stype is None:
+            return
+        from sdm_client._rust import edits
+
+        if edits.standalone_enabled():
+            edits.check_column(self, self.stype, validate_stype=False)
             return
         self._check_supports_dtype(self.stype, self.dtype)
 
@@ -411,11 +418,7 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key in ('primary_key', 'time_column') and _edits_on_the_core(
-            getattr(self, '_schema', None)
-        ):
-            # A core-built schema's table: the core checks and makes the
-            # edit, and its answer is stored (T1.24b, decision E66(g)).
+        if key in ('primary_key', 'time_column'):
             from sdm_client._rust import edits
 
             if edits.table(self, key, value):
@@ -874,6 +877,11 @@ class Schema:
         left typed ``numerical`` would otherwise pass this and be sent as a
         float.
         """
+        from sdm_client._rust import edits
+
+        if edits.standalone_enabled() or _edits_on_the_core(self):
+            edits.check_schema(self)
+            return
         self._mark_key_columns()
         for table in self.tables.values():
             for column in table.columns.values():
@@ -898,15 +906,20 @@ class Schema:
         }
         from sdm_client import _routing
 
-        if (
-            source is None
-            and self._tables
-            and all(isinstance(table, Table) for table in self._tables.values())
-            and _routing.on_frames(_routing.FRAME_SCHEMA)
-        ):
-            object.__setattr__(self, '_core_origin', 'frames')
+        if _routing.on_frames(_routing.FRAME_SCHEMA):
+            # Declared source metadata is editable without pretending a catalog
+            # described it. Only actual frame tables carry frame observations.
+            origin = (
+                'frames'
+                if source is None
+                and all(
+                    isinstance(table, Table) for table in self._tables.values()
+                )
+                else 'declared'
+            )
+            object.__setattr__(self, '_core_origin', origin)
             for table in self._tables.values():
-                object.__setattr__(table, '_core_origin', 'frames')
+                object.__setattr__(table, '_core_origin', origin)
                 object.__setattr__(table, '_schema', self)
             object.__setattr__(self, 'relationships', _Links([], self))
         self.relationships = relationships
@@ -2014,7 +2027,10 @@ def _edits_on_the_core(schema: Any) -> bool:
     Frame origin is independent of catalog facts: it must never make a frame
     column appear described by a warehouse provider.
     """
-    if schema is not None and vars(schema).get('_core_origin') == 'frames':
+    if schema is not None and vars(schema).get('_core_origin') in (
+        'frames',
+        'declared',
+    ):
         return True
     return _described_on_the_core(schema)
 

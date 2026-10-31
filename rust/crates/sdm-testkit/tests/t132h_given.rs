@@ -345,6 +345,8 @@ fn edit_raw(description: &Value, edit: &Value) -> Got {
     ]);
     let operation = Operation::EditSchema(EditSchema {
         schema: AttachmentId(1),
+        context: None,
+        frame: None,
         edit: AttachmentId(2),
     });
     let handle = match start(operation, CONTRACT_VERSION, attachments) {

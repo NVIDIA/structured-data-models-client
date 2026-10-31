@@ -48,15 +48,53 @@ from sdm_client._rust.codec import spelled as _spelled
 def _schema_holding(table: Any) -> tuple[Any, str] | None:
     r"""The core-built schema holding ``table``, and the name it holds it
     under; ``None`` for a table no core-built schema holds."""
-    from sdm_client.schema import _edits_on_the_core
+    from sdm_client.schema import Schema, Table, _edits_on_the_core
 
     schema = getattr(table, '_schema', None)
+    if schema is None and standalone_enabled() and hasattr(table, 'columns'):
+        # A temporary view owns no object. The table keeps its identity and owner.
+        schema = Schema.__new__(Schema)
+        object.__setattr__(schema, '_tables', {table.name: table})
+        object.__setattr__(schema, 'relationships', [])
+        object.__setattr__(schema, '_transient_edit', True)
+        if isinstance(table, Table):
+            object.__setattr__(schema, '_core_origin', 'frames')
+        return schema, table.name
     if not _edits_on_the_core(schema):
         return None
     for name, held in vars(schema).get('_tables', {}).items():
         if held is table:
             return schema, name
     return None
+
+
+def standalone_enabled() -> bool:
+    from sdm_client import _routing
+
+    return _routing.on_frames(_routing.FRAME_SCHEMA)
+
+
+def check_column(column: Any, stype: Any, *, validate_stype: bool) -> None:
+    from sdm_client._rust import codec
+    from sdm_client._rust.run import run
+
+    run(
+        {'op': 'check_column', 'input': 1},
+        {
+            1: codec.attachment(
+                {
+                    'name': column.name,
+                    'dtype': getattr(column, 'dtype', None),
+                    'stype': _text(stype),
+                    'validate_stype': validate_stype,
+                }
+            )
+        },
+    )
+
+
+def check_schema(schema: Any) -> None:
+    _made(schema, {'edit': 'check'})
 
 
 def _link(link: Any) -> Any:
@@ -153,7 +191,11 @@ def _store(
 
     # The tables and columns this schema marks are its own, as the
     # reference's setters take them before marking.
-    schema._own_tables()
+    if getattr(schema, '_transient_edit', False):
+        for table in schema.tables.values():
+            table._own_columns()
+    else:
+        schema._own_tables()
     answered = {table['name']: table for table in answer['tables']}
     for name, table in schema.tables.items():
         given = answered[name]

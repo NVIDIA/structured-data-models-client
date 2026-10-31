@@ -194,6 +194,13 @@ pub fn start(
                 )
             })
         }
+        Operation::CheckColumn(request) => {
+            let input: sdm_contract::ops::CheckColumn = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_schema::edit::check_column(&input, &crate::edit::supports)?;
+                crate::direct::value(&asker, &true)
+            })
+        }
         Operation::CheckDirectOption(request) => {
             let input: sdm_contract::direct::DirectOptionObservation =
                 take_json(&mut attachments, request.input)?;

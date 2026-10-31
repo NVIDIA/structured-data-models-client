@@ -168,8 +168,9 @@ pub(crate) fn schema(held: &HeldSchema) -> Result<sdm_schema::held::Read, CoreEr
                     .columns
                     .iter()
                     .find(|native| native.name == column.name)
+                    && let Some(dtype) = &native.dtype
                     && let Ok(dtype) =
-                        serde_json::from_value(serde_json::Value::String(native.dtype.clone()))
+                        serde_json::from_value(serde_json::Value::String(dtype.clone()))
                 {
                     column.dtype = dtype;
                 }
@@ -288,7 +289,10 @@ pub(crate) fn prepare(
         task,
         target: target.clone(),
         entity_table: input.shape.entity_table,
-        target_dtype: column.dtype.clone(),
+        target_dtype: column
+            .dtype
+            .clone()
+            .ok_or_else(|| internal("materialized target lacks a dtype"))?,
     };
     value(asker, &description)
 }
@@ -1010,7 +1014,7 @@ pub(crate) fn assemble_frame_schema(
         })
         .collect::<Result<Vec<_>, CoreError>>()?;
     let mut assembled = sdm_schema::assemble::assemble_frames(
-        read.description,
+        read.description.clone(),
         choices,
         &input.primary_keys,
         &input.time_columns,
@@ -1034,6 +1038,6 @@ pub(crate) fn assemble_frame_schema(
     for warning in assembled.warnings {
         asker.warn(warning);
     }
-    let held = sdm_schema::held::held(&assembled.description, &read.unfacted, &read.retyped);
+    let held = read.hold(&assembled.description);
     value(asker, &held)
 }

@@ -132,7 +132,8 @@ pub(crate) async fn run(
         ));
     }
     let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
-    let mut edited = sdm_schema::edit::edit(read.description, &edit, &supports, &read.types)?;
+    let mut edited =
+        sdm_schema::edit::edit(read.description.clone(), &edit, &supports, &read.types)?;
     if let Some(sdm_contract::ops::SchemaEditContext::Frames { key_counts }) = context
         && let SchemaEdit::PrimaryKey { table, .. } = &edit
     {
@@ -165,7 +166,7 @@ pub(crate) async fn run(
     for warning in edited.warnings {
         asker.warn(warning);
     }
-    let answer = sdm_schema::held::held(&edited.description, &read.unfacted, &read.retyped);
+    let answer = read.hold(&edited.description);
     let bytes = serde_json::to_vec(&answer)
         .map_err(|_| internal("the schema edited does not write as JSON"))?;
     let schema = asker.attach(Attachment::Bytes(bytes))?;

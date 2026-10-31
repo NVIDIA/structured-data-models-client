@@ -130,6 +130,8 @@ pub fn messages() -> Vec<ControlMessage> {
         })),
         start(Operation::EditSchema(EditSchema {
             schema: AttachmentId(1),
+            context: None,
+            frame: None,
             edit: AttachmentId(3),
         })),
         start(Operation::Materialize(Materialize {

@@ -77,7 +77,7 @@ fn source(relation: &str, dtype: Dtype, received: ColumnType, unique: bool) -> O
 fn held_column(name: &str, dtype: Dtype, stype: Stype, facts: Option<SourceFacts>) -> HeldColumn {
     HeldColumn {
         name: name.into(),
-        dtype: dtype.wire_name().into(),
+        dtype: Some(dtype.wire_name().into()),
         stype,
         stype_before_key: None,
         source: facts,
@@ -458,6 +458,8 @@ fn edit(
     let mut run = run_of(
         Operation::EditSchema(EditSchema {
             schema: AttachmentId(1),
+            context: None,
+            frame: None,
             edit: AttachmentId(2),
         }),
         Attachments::from([
@@ -505,7 +507,7 @@ fn a_column_with_no_facts_is_edited_by_its_data_type_and_keeps_none() {
     .unwrap();
     let country = column(&answered, "users", "country");
     assert_eq!(country.stype, Stype::Text);
-    assert_eq!(country.dtype, "string");
+    assert_eq!(country.dtype.as_deref(), Some("string"));
     assert_eq!(country.source, None);
     assert_eq!(declared.unwrap().column, "country");
     // Every other column keeps the facts it was handed, as handed.
@@ -555,7 +557,7 @@ fn numeric() -> HeldSchema {
                     (ExactNumber::Other, false)
                 };
                 column.source = Some(exact(&table.name, kind, text));
-                column.dtype = if text { "string" } else { "float64" }.into();
+                column.dtype = Some(if text { "string" } else { "float64" }.into());
             }
         }
     }
@@ -576,21 +578,27 @@ fn an_exact_number_s_facts_follow_its_role_through_edits() {
     // Joined to the key's text, the column is read as text too (T2.21);
     // the key keeps its digits.
     let foreign = column(&answered, "orders", "user_id");
-    assert_eq!(foreign.dtype, "string");
+    assert_eq!(foreign.dtype.as_deref(), Some("string"));
     assert_eq!(
         foreign.source.as_ref().map(|f| (&f.received, f.dtype)),
         Some((&ColumnType::Utf8, Dtype::String))
     );
-    assert_eq!(column(&answered, "users", "user_id").dtype, "string");
+    assert_eq!(
+        column(&answered, "users", "user_id").dtype.as_deref(),
+        Some("string")
+    );
     // Cleared, it is a double again, the key still text.
     let (cleared, _) = edit(&answered, &SchemaEdit::Relationships { links: vec![] }).unwrap();
     let foreign = column(&cleared, "orders", "user_id");
-    assert_eq!(foreign.dtype, "float64");
+    assert_eq!(foreign.dtype.as_deref(), Some("float64"));
     assert_eq!(
         foreign.source.as_ref().map(|f| &f.received),
         Some(&ColumnType::Float64)
     );
-    assert_eq!(column(&cleared, "users", "user_id").dtype, "string");
+    assert_eq!(
+        column(&cleared, "users", "user_id").dtype.as_deref(),
+        Some("string")
+    );
     // A key edit keeps the key's digits, and sets its repeats as the
     // reference's key setter does.
     let (unkeyed, _) = edit(
@@ -601,7 +609,10 @@ fn an_exact_number_s_facts_follow_its_role_through_edits() {
         },
     )
     .unwrap();
-    assert_eq!(column(&unkeyed, "users", "user_id").dtype, "string");
+    assert_eq!(
+        column(&unkeyed, "users", "user_id").dtype.as_deref(),
+        Some("string")
+    );
     let users = unkeyed.tables.iter().find(|t| t.name == "users").unwrap();
     assert_eq!(users.duplicate_keys, Some(Scalar::UInt64(0)));
 }

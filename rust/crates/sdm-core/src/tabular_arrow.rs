@@ -209,7 +209,8 @@ fn prepare(
         .and_then(|t| t.columns.iter().find(|c| c.name == request.target))
         .ok_or_else(|| invalid("target absent from schema"))?
         .dtype
-        .clone();
+        .clone()
+        .ok_or_else(|| invalid("target dtype absent from schema"))?;
     Ok(DirectDescription {
         schema: held,
         task: request.task.clone(),
@@ -905,7 +906,7 @@ fn question(request: &ArrowRequest) -> Option<sdm_contract::session::SessionQues
                 .as_ref()
                 .and_then(|s| s.tables.iter().find(|t| t.name == request.entity_table))
                 .and_then(|t| t.columns.iter().find(|c| c.name == request.target))
-                .map(|c| c.dtype.clone())
+                .and_then(|c| c.dtype.clone())
                 .unwrap_or_default(),
             entity_table: Some(request.entity_table.clone()),
             context: request.context_identity.clone(),

@@ -61,6 +61,7 @@ pub enum Operation {
     CheckTabularCap(crate::direct::DirectInput),
     CheckDirectShape(crate::direct::DirectInput),
     CheckDirectCell(crate::direct::DirectInput),
+    CheckColumn(crate::direct::DirectInput),
     CheckDirectOption(crate::direct::DirectInput),
     CheckDirectResponseField(crate::direct::DirectInput),
     RestoreDirectResponse(crate::direct::DirectInput),
@@ -140,6 +141,7 @@ impl Operation {
             Operation::CheckTabularCap(_) => "check_tabular_cap",
             Operation::CheckDirectShape(_) => "check_direct_shape",
             Operation::CheckDirectCell(_) => "check_direct_cell",
+            Operation::CheckColumn(_) => "check_column",
             Operation::CheckDirectOption(_) => "check_direct_option",
             Operation::CheckDirectResponseField(_) => "check_direct_response_field",
             Operation::RestoreDirectResponse(_) => "restore_direct_response",
@@ -281,6 +283,7 @@ impl Operation {
             | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
+            | Operation::CheckColumn(v)
             | Operation::CheckDirectOption(v)
             | Operation::CheckDirectResponseField(v)
             | Operation::RestoreDirectResponse(v)
@@ -388,6 +391,18 @@ pub enum OperationResult {
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
     Test(TestResult),
+}
+
+/// A standalone column's declared meaning checked without a fabricated schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckColumn {
+    pub name: String,
+    pub dtype: Option<String>,
+    pub stype: Given<String>,
+    /// Declarations check the public semantic-type whitelist before dtype compatibility.
+    /// Consistency checks only inspect compatibility, preserving incomplete declarations.
+    pub validate_stype: bool,
 }
 
 // --- validate_query -------------------------------------------------------------
@@ -900,7 +915,8 @@ pub struct HeldColumn {
     pub name: String,
     /// The column's data type as the host names it, on the client's wire
     /// ([`Dtype::wire_name`]).
-    pub dtype: String,
+    /// None means the caller has not declared a dtype.
+    pub dtype: Option<String>,
     pub stype: Stype,
     /// What the column meant before the schema joined on it, as the host
     /// holds it ([`DescribedColumn::stype_before_key`]).
@@ -953,6 +969,8 @@ pub struct SourceFacts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "edit", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SchemaEdit {
+    /// Validate current meanings and links, restoring key roles without declaring meanings.
+    Check {},
     /// A table's primary key set (`schema[table].primary_key = key`), its
     /// columns in order, or cleared (`null`).
     PrimaryKey {
@@ -1827,6 +1845,8 @@ pub struct Attachments {
 
     #[schemars(rename = "CheckDirectCell.input")]
     pub checkdirectcell_input: crate::direct::cell::DirectCellInput,
+    #[schemars(rename = "CheckColumn.input")]
+    pub checkcolumn_input: CheckColumn,
     #[schemars(rename = "CheckDirectOption.input")]
     pub checkdirectoption_input: crate::direct::DirectOptionObservation,
     #[schemars(rename = "ObserveDirectDtype.input")]

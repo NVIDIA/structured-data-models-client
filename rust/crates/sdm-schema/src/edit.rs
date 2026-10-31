@@ -79,6 +79,25 @@ pub fn edit(
     let mut declared = None;
     let mut warnings = Vec::new();
     match edit {
+        SchemaEdit::Check {} => {
+            mark_keys(&mut description);
+            for table in &description.tables {
+                for column in &table.columns {
+                    if types.is_unknown(&table.name, &column.name) {
+                        continue;
+                    }
+                    check_compatibility(
+                        &table.name,
+                        &column.name,
+                        types.name(&table.name, &column.name, column.dtype),
+                        column.stype,
+                        supports,
+                        "stype",
+                    )?;
+                }
+            }
+            crate::assemble::check_links(&description, types)?;
+        }
         SchemaEdit::PrimaryKey { table, key } => {
             primary_key(&mut description, table, key, types)?;
         }
@@ -263,6 +282,11 @@ fn stype_of(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "stype")?;
     column_at(&description.tables[at], column, "stype")?;
+    let meaning = declared_stype(table, column, stype)?;
+    assign(description, at, column, meaning, supports, "stype", types)
+}
+
+fn declared_stype(table: &str, column: &str, stype: &Given<String>) -> Result<Stype, CoreError> {
     let meaning = stype.value().and_then(|text| {
         SEMANTIC_TYPES
             .iter()
@@ -298,7 +322,46 @@ fn stype_of(
             Given::Unreadable => refused(Sentence::NotASemanticTypeUnread),
         });
     };
-    assign(description, at, column, meaning, supports, "stype", types)
+    Ok(meaning)
+}
+
+/// Check one standalone declaration without constructing a synthetic table.
+pub fn check_column(
+    input: &sdm_contract::ops::CheckColumn,
+    supports: Supports<'_>,
+) -> Result<(), CoreError> {
+    let meaning = if input.validate_stype {
+        Some(declared_stype("", &input.name, &input.stype)?)
+    } else {
+        input.stype.value().and_then(|text| {
+            serde_json::from_value::<Stype>(serde_json::Value::String(text.clone())).ok()
+        })
+    };
+    if let (Some(dtype), Some(meaning)) = (&input.dtype, meaning) {
+        check_compatibility("", &input.name, dtype, meaning, supports, "stype")?;
+    }
+    Ok(())
+}
+
+/// A single native compatibility policy shared by assignment and inspection.
+fn check_compatibility(
+    table: &str,
+    column: &str,
+    dtype: &str,
+    meaning: Stype,
+    supports: Supports<'_>,
+    field: &str,
+) -> Result<(), CoreError> {
+    if let Some(known) = crate::held::named_dtype(dtype)
+        && !supports(meaning, known)
+    {
+        let said = SEMANTIC_TYPES
+            .iter()
+            .find(|(_, stype)| *stype == meaning)
+            .map_or("unsupported", |(name, _)| *name);
+        return Err(meaning_not_carried(table, column, dtype, said, field));
+    }
+    Ok(())
 }
 
 /// A meaning assigned to a column of the table at `at`
@@ -319,20 +382,15 @@ fn assign(
 ) -> Result<(), CoreError> {
     let shape = &mut description.tables[at];
     let index = column_at(shape, column, field)?;
-    // A column named by no data type the old client knows, which its checks
-    // let through (`supports_dtype`, T3.16); any other by its type.
-    if !types.is_unknown(&shape.name, column) && !supports(meaning, shape.columns[index].dtype) {
-        let said = SEMANTIC_TYPES
-            .iter()
-            .find(|(_, stype)| *stype == meaning)
-            .map_or("unsupported", |(name, _)| *name);
-        return Err(meaning_not_carried(
+    if !types.is_unknown(&shape.name, column) {
+        check_compatibility(
             &shape.name,
             column,
             types.name(&shape.name, column, shape.columns[index].dtype),
-            said,
+            meaning,
+            supports,
             field,
-        ));
+        )?;
     }
     shape.columns[index].stype = meaning;
     if meaning == Stype::Timestamp

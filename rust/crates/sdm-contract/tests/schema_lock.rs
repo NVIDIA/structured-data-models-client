@@ -655,6 +655,7 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.native_layout",
     ),
+    ("Operation/check_column.input", "CheckColumn.input"),
     ("Operation/check_direct_cell.input", "CheckDirectCell.input"),
     (
         "Operation/check_direct_option.input",

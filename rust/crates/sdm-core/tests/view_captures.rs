@@ -809,7 +809,7 @@ fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
                     .iter()
                     .map(|c| HeldColumn {
                         name: c.name.clone(),
-                        dtype: c.dtype.wire_name().into(),
+                        dtype: Some(c.dtype.wire_name().into()),
                         stype: c.stype,
                         stype_before_key: c.stype_before_key,
                         source: Some(SourceFacts {
@@ -1300,7 +1300,7 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
             .iter_mut()
             .find(|c| c.name == "order_id")
             .unwrap()
-            .dtype = dtype.into();
+            .dtype = Some(dtype.into());
         let result = materialize_over(&document, recorded, &schema, &Edits::default());
         if dtype == "string" {
             let Located::Ended(error) = result else {
