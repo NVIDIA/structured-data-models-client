@@ -312,7 +312,12 @@ impl Operation {
             }
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => vec![(d.source, Bytes)],
-            Operation::EditSchema(e) => vec![(e.schema, Bytes), (e.edit, Bytes)],
+            Operation::EditSchema(e) => {
+                let mut attachments = vec![(e.schema, Bytes), (e.edit, Bytes)];
+                attachments.extend(e.context.map(|id| (id, Bytes)));
+                attachments.extend(e.frame.map(|id| (id, Arrow)));
+                attachments
+            }
             Operation::Materialize(m) => {
                 let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
                 named.extend(m.indices.map(|id| (id, Arrow)));
@@ -817,6 +822,22 @@ pub struct EditSchema {
     pub schema: AttachmentId,
     /// A bytes attachment of a [`SchemaEdit`] as JSON.
     pub edit: AttachmentId,
+    /// Optional explicit frame provenance and fresh native observations.
+    /// Absent means source-table semantics; no catalog facts are fabricated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<AttachmentId>,
+    /// Whole edited table for fresh Rust key observations, only with frame context.
+    /// Alternative to explicit native key counts; never combined with them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame: Option<AttachmentId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SchemaEditContext {
+    Frames {
+        key_counts: std::collections::BTreeMap<String, crate::frames::FrameKeyCount>,
+    },
 }
 
 /// `edit_schema`'s result.
@@ -1365,6 +1386,10 @@ pub struct Materialized {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct QueryFacts {
+    /// Resolved identifiers for an ordinary column-to-column question.
+    /// Hosts must not recover these by splitting the canonical query text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub columns: Option<QueryColumns>,
     /// The table whose rows are the entities.
     pub entity_table: String,
     pub problem_type: Option<crate::pql::ProblemType>,
@@ -1379,6 +1404,14 @@ pub struct QueryFacts {
     /// each question's text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryColumns {
+    pub entity: ColumnRef,
+    pub target: ColumnRef,
+    pub target_stype: Stype,
 }
 
 /// The version of [`RequestState`]'s format this build writes and reads
@@ -1935,6 +1968,8 @@ pub struct Attachments {
     pub edit_schema_schema: HeldSchema,
     #[schemars(rename = "EditSchema.edit")]
     pub edit_schema_edit: SchemaEdit,
+    #[schemars(rename = "EditSchema.context")]
+    pub edit_schema_context: SchemaEditContext,
     #[schemars(rename = "SchemaEdited.schema")]
     pub schema_edited_schema: HeldSchema,
     #[schemars(rename = "Materialize.schema")]

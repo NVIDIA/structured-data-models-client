@@ -26,8 +26,8 @@ use std::collections::BTreeSet;
 
 use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::{
-    ColumnRef, Dtype, PqlDiagnostic, QueryFacts, QuerySchema, QueryValidation, Severity, Span,
-    Stype,
+    ColumnRef, Dtype, PqlDiagnostic, QueryColumns, QueryFacts, QuerySchema, QueryValidation,
+    Severity, Span, Stype,
 };
 use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
@@ -108,6 +108,26 @@ impl Validation {
         let query = self.query.as_ref()?;
         let features = features(query, schema);
         Some(QueryFacts {
+            columns: match (&query.entity.kind, &query.target.kind) {
+                (NodeKind::Column { column: entity }, NodeKind::Column { column: target }) => {
+                    schema
+                        .tables
+                        .iter()
+                        .find(|table| table.name == target.table)
+                        .and_then(|table| {
+                            table
+                                .columns
+                                .iter()
+                                .find(|column| column.name == target.column)
+                        })
+                        .map(|column| QueryColumns {
+                            entity: entity.clone(),
+                            target: target.clone(),
+                            target_stype: column.stype,
+                        })
+                }
+                _ => None,
+            },
             entity_table: features.entity_table,
             problem_type: query.problem_type,
             windowed: features.temporal_target,

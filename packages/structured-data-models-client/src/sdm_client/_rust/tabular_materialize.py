@@ -383,7 +383,7 @@ def _context(
 def _task(query: Any, target: pd.Series, stated: str | None) -> str:
     from sdm_client.materializers.tabular import TABULAR_TASK_KINDS
 
-    stype = query.target_stype.value
+    stype = query.columns.target_stype
     answer = _call(
         'decide_tabular_task', {'stage': 'target', 'target_stype': stype}
     )
@@ -412,8 +412,8 @@ def _task(query: Any, target: pd.Series, stated: str | None) -> str:
         if answer['reason'] == 'unsupported_target':
             raise StructuredDataError(
                 f'tabular materialization requires a categorical or '
-                f'numerical target; {query.target_column!r} has semantic '
-                f'type {query.target_stype.value!r}',
+                f'numerical target; {query.columns.target_name!r} has semantic '
+                f'type {query.columns.target_stype!r}',
                 code='UNSUPPORTED_REQUEST',
             )
         supported = ['classification', 'regression']
@@ -425,7 +425,7 @@ def _task(query: Any, target: pd.Series, stated: str | None) -> str:
         )
     if answer['warn_binary']:
         warnings.warn(
-            f'{query.target_column} holds two whole numbers, which is how '
+            f'{query.columns.target_name} holds two whole numbers, which is how '
             f'a binary label is usually written, so this is being asked as '
             f'a classification. If they are quantities rather than labels, '
             f'pass task="regression" to ask for one; pass '
@@ -498,11 +498,14 @@ def materialize(
     num_context_samples: int | None = None,
     task: str | None = None,
 ) -> Request:
-    from predictive_query.validator.utils import col_name, table_name
-
-    table = table_name(query.entity_column)
-    entity = col_name(query.entity_column)
-    target = col_name(query.target_column)
+    if query.columns is None:
+        raise StructuredDataError(
+            'Rust omitted resolved Tabular columns', code='INTERNAL_ERROR'
+        )
+    table = query.columns.entity_table
+    entity = query.columns.entity_name
+    target = query.columns.target_name
+    entity_label = f'{table}.{entity}'
     frame = _rows(schema[table])
     requested = list(indices) if predict is None else None
     selected = _ordinary_selection(
@@ -512,14 +515,14 @@ def materialize(
     if selected is not None:
         if selected['kind'] == 'missing':
             assert requested is not None
-            _missing(requested, selected['ordinals'], query.entity_column)
+            _missing(requested, selected['ordinals'], entity_label)
         decision = selected['context']
     if predict is None:
         assert requested is not None
         scored = (
             selected['scored']
             if selected is not None
-            else _expand(frame[entity], requested, query.entity_column)
+            else _expand(frame[entity], requested, entity_label)
         )
         predict = frame.iloc[scored].drop(columns=[target])
         if selected is None:

@@ -1266,6 +1266,8 @@ fn edit_schema(
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::EditSchema(EditSchema {
+            context: None,
+            frame: None,
             schema: AttachmentId(1),
             edit: AttachmentId(2),
         }),

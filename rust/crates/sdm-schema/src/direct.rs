@@ -274,6 +274,22 @@ pub fn distinct(batches: &[RecordBatch], column: usize) -> Result<usize, CoreErr
     )?))
 }
 
+/// Exact key equality for Arrow frame edits, including full-width decimal identities.
+pub(crate) fn key_values(
+    batches: &[RecordBatch],
+    column: usize,
+    field: &arrow_schema::Field,
+) -> Result<Vec<Option<Value>>, CoreError> {
+    if matches!(
+        field.data_type(),
+        DataType::Decimal128(_, _) | DataType::Decimal256(_, _)
+    ) {
+        decimal_values(batches, column)
+    } else {
+        native_values(batches, column, field)
+    }
+}
+
 fn native_values(
     batches: &[RecordBatch],
     column: usize,

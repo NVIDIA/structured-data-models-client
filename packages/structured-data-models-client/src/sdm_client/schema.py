@@ -193,7 +193,7 @@ class Column:
                 'assign the dtype you want instead',
                 code='INVALID_REQUEST',
             )
-        if key == 'stype' and _described_on_the_core(
+        if key == 'stype' and _edits_on_the_core(
             getattr(getattr(self, '_table', None), '_schema', None)
         ):
             # A core-built schema's column: the core checks and makes the
@@ -411,7 +411,7 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key in ('primary_key', 'time_column') and _described_on_the_core(
+        if key in ('primary_key', 'time_column') and _edits_on_the_core(
             getattr(self, '_schema', None)
         ):
             # A core-built schema's table: the core checks and makes the
@@ -787,7 +787,7 @@ class SourceTable(_TableShape):
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
-        if _described_on_the_core(getattr(self, '_schema', None)):
+        if _edits_on_the_core(getattr(self, '_schema', None)):
             # A core-built schema's table: the core checks and makes the
             # edit, and its answer is stored (T1.24b).
             from sdm_client._rust import edits
@@ -896,6 +896,19 @@ class Schema:
         self._tables = {
             name: _copy_table(table) for name, table in tables.items()
         }
+        from sdm_client import _routing
+
+        if (
+            source is None
+            and self._tables
+            and all(isinstance(table, Table) for table in self._tables.values())
+            and _routing.on_frames(_routing.FRAME_SCHEMA)
+        ):
+            object.__setattr__(self, '_core_origin', 'frames')
+            for table in self._tables.values():
+                object.__setattr__(table, '_core_origin', 'frames')
+                object.__setattr__(table, '_schema', self)
+            object.__setattr__(self, 'relationships', _Links([], self))
         self.relationships = relationships
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
@@ -945,7 +958,7 @@ class Schema:
             key == 'relationships'
             # An edit of a schema that stands: building one is no edit.
             and 'relationships' in vars(self)
-            and _described_on_the_core(self)
+            and _edits_on_the_core(self)
         ):
             # A core-built schema: the core checks and makes the edit, and
             # its answer is stored (T1.24b, decision E66(g)).
@@ -1049,6 +1062,24 @@ class Schema:
         question to guard against an edit nobody makes to a frame would cost
         more than the defect. What is copied is everything a schema *says*.
         """
+        if _edits_on_the_core(self):
+            copied = Schema.__new__(Schema)
+            object.__setattr__(copied, '_source', self._source)
+            object.__setattr__(
+                copied, '_core_origin', getattr(self, '_core_origin', None)
+            )
+            tables = {
+                name: _copy_table(table) for name, table in self._tables.items()
+            }
+            object.__setattr__(copied, '_tables', tables)
+            for table in tables.values():
+                object.__setattr__(table, '_schema', copied)
+            object.__setattr__(
+                copied, 'relationships', _Links(self.relationships, copied)
+            )
+            copied._engine_tables = self._engine_tables
+            copied._conversion_notes = self._conversion_notes
+            return copied
         copied = Schema(
             {name: _copy_table(table) for name, table in self._tables.items()},
             list(self.relationships),
@@ -1977,18 +2008,19 @@ def _require_column(
     return column
 
 
-def _described_on_the_core(schema: Any) -> bool:
-    r"""Whether ``schema`` was described on the core: a column of it holds
-    what the source said of it (``Column._source``, T3.16), so its edits are
-    the core's ``edit_schema``'s (T1.24b, decision E66(g)); ``None`` and a
-    schema of frames are not.
+def _edits_on_the_core(schema: Any) -> bool:
+    """Frame provenance or retained catalog facts select shared edit policy.
 
-    The rule follows the facts, wherever they go: a schema of tables adopted
-    from one described on the core edits on the core too, as its copy and
-    snapshot do, and a schema whose every column lost its facts (each table
-    pointed at another relation and edited since) edits on the old route.
-    Either way the edit is the old client's, which the both-routes tests
-    hold."""
+    Frame origin is independent of catalog facts: it must never make a frame
+    column appear described by a warehouse provider.
+    """
+    if schema is not None and vars(schema).get('_core_origin') == 'frames':
+        return True
+    return _described_on_the_core(schema)
+
+
+def _described_on_the_core(schema: Any) -> bool:
+    """Whether columns retain actual catalog provenance from core description."""
     tables = vars(schema).get('_tables') if schema is not None else None
     return any(
         column._source is not None
@@ -2110,6 +2142,8 @@ def _copy_table(table: _T) -> _T:
         'columns',
         {name: _copy_column(column) for name, column in table.columns.items()},
     )
+    if getattr(table, '_core_origin', None) == 'frames':
+        object.__setattr__(copied, '_core_origin', 'frames')
     for carried in ('primary_key', 'time_column', 'duplicate_keys'):
         object.__setattr__(copied, carried, getattr(table, carried))
     for column in copied.columns.values():
@@ -2809,7 +2843,7 @@ class _Links(list):
         object.__setattr__(self, '_schema', schema)
 
     def _resettle(self, links: list[Relationship]) -> None:
-        if _described_on_the_core(self._schema):
+        if _edits_on_the_core(self._schema):
             # A core-built schema: the core checks and makes the edit, and
             # its answer is stored in this list (T1.24b).
             from sdm_client._rust import edits

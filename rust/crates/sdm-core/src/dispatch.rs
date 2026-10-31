@@ -402,7 +402,18 @@ pub fn start(
         Operation::EditSchema(request) => {
             let held: HeldSchema = take_json(&mut attachments, request.schema)?;
             let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
-            Run::new(move |asker| crate::edit::run(asker, held, edit))
+            let context = request
+                .context
+                .map(|id| take_json(&mut attachments, id))
+                .transpose()?;
+            let frame = request
+                .frame
+                .map(|id| match attachments.remove(&id) {
+                    Some(Attachment::Arrow(data)) => Ok(data),
+                    _ => Err(internal("frame edit attachment is not Arrow")),
+                })
+                .transpose()?;
+            Run::new(move |asker| crate::edit::run(asker, held, edit, context, frame))
         }
         operation @ Operation::Materialize(_) => materialize(
             root,

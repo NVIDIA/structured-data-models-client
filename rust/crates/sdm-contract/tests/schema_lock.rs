@@ -788,6 +788,7 @@ const JSON: &[(&str, &str)] = &[
     ("Operation/describe_source.source", "DescribeSource.source"),
     ("Operation/edit_schema.schema", "EditSchema.schema"),
     ("Operation/edit_schema.edit", "EditSchema.edit"),
+    ("Operation/edit_schema.context", "EditSchema.context"),
     ("OperationResult/edit_schema.schema", "SchemaEdited.schema"),
     ("Operation/materialize.schema", "Materialize.schema"),
     ("Operation/materialize.query", "Materialize.query"),
@@ -816,6 +817,7 @@ const JSON: &[(&str, &str)] = &[
 
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: &[(&str, &str)] = &[
+    ("Operation/edit_schema.frame", "Arrow, with its schema"),
     ("Operation/fit.payloads", "encoded endpoint payloads"),
     ("Operation/predict.payloads", "encoded endpoint payloads"),
     ("Operation/predict.pinned", "encoded pinned context"),

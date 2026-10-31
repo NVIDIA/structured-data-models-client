@@ -126,10 +126,12 @@ def assemble(
         # Catalog provenance would incorrectly route edits through source-only checks.
         for column in rebound[name].columns.values():
             object.__setattr__(column, '_source', None)
+        object.__setattr__(rebound[name], '_core_origin', 'frames')
         object.__setattr__(rebound[name], '_schema', result)
     for name, value in (
         ('_tables', rebound),
         ('_source', None),
+        ('_core_origin', 'frames'),
         ('_engine_tables', None),
         ('_conversion_notes', ()),
         (

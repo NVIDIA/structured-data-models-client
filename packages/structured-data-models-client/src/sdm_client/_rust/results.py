@@ -187,6 +187,30 @@ class SourceFacts:
 
 
 @dataclasses.dataclass(frozen=True)
+class QueryColumns:
+    entity_table: str
+    entity_name: str
+    target_table: str
+    target_name: str
+    target_stype: str
+
+    @classmethod
+    def from_contract(cls, value: Any) -> QueryColumns:
+        facts = _fields(
+            value, 'query columns', ('entity', 'target', 'target_stype')
+        )
+        entity = _fields(facts['entity'], 'entity column', ('table', 'column'))
+        target = _fields(facts['target'], 'target column', ('table', 'column'))
+        return cls(
+            _text(entity['table'], 'table'),
+            _text(entity['column'], 'column'),
+            _text(target['table'], 'table'),
+            _text(target['column'], 'column'),
+            _text(facts['target_stype'], 'target_stype'),
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class QueryFacts:
     r"""What the core resolved of a query (the contract's ``QueryFacts``)."""
 
@@ -195,6 +219,7 @@ class QueryFacts:
     windowed: bool
     num_forecasts: int
     text: str | None
+    columns: QueryColumns | None = None
 
     @classmethod
     def from_contract(cls, value: Any) -> QueryFacts:
@@ -202,7 +227,7 @@ class QueryFacts:
             value,
             "a query's facts",
             ('entity_table', 'windowed', 'num_forecasts'),
-            ('problem_type', 'text'),
+            ('problem_type', 'text', 'columns'),
         )
         return cls(
             entity_table=_text(read['entity_table'], 'entity_table'),
@@ -210,6 +235,9 @@ class QueryFacts:
             windowed=_flag(read['windowed'], 'windowed'),
             num_forecasts=_int(read['num_forecasts'], 'num_forecasts'),
             text=_maybe(read['text'], _text, 'text'),
+            columns=None
+            if read['columns'] is None
+            else QueryColumns.from_contract(read['columns']),
         )
 
 
@@ -746,6 +774,7 @@ class CoreQuery:
     text: str
     num_forecasts: int | None
     refusal: StructuredDataError | None
+    columns: QueryColumns | None = None
 
     def to_string(self) -> str:
         r"""The query's text, which materialize sends."""

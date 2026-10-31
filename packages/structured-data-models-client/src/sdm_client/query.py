@@ -252,7 +252,18 @@ class PredictiveQuery:
         # Resolved once, and against the profile this request is for, because
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
-        asked = self._resolve(RELATIONAL if relational else TABULAR)
+        core_tabular = (
+            not relational
+            and _routing.route(
+                _routing.TABULAR_FRAME
+                if predict is not None
+                else _routing.TABULAR_INDICES
+            )
+            == 'core'
+        )
+        asked = self._resolve(
+            RELATIONAL if relational else TABULAR, core_tabular=core_tabular
+        )
         if on_the_core:
             # The call's own checks first, as for any relational query.
             if task is not None:
@@ -265,6 +276,25 @@ class PredictiveQuery:
                 candidates=candidates,
                 options=options,
             )
+        if core_tabular:
+            if candidates is not None:
+                raise StructuredDataError(
+                    f'candidates are the rows a ranking is over, and {self.text!r} does '
+                    'not rank anything. Ask it without candidates, or rank with '
+                    '"RANK TOP k", which is the question they are for',
+                    code='INVALID_REQUEST',
+                )
+            from sdm_client._rust.tabular_materialize import materialize
+
+            return materialize(
+                self.schema,
+                asked,
+                indices=indices,
+                predict=predict,
+                num_context_samples=num_context_samples,
+                task=task,
+            )
+
         rewritten = parts_of(
             asked,
             self.text,
@@ -288,26 +318,6 @@ class PredictiveQuery:
                 num_context_samples=num_context_samples,
                 model=model,
                 **options,
-            )
-
-        if (
-            not relational
-            and _routing.route(
-                _routing.TABULAR_FRAME
-                if predict is not None
-                else _routing.TABULAR_INDICES
-            )
-            == 'core'
-        ):
-            from sdm_client._rust.tabular_materialize import materialize
-
-            return materialize(
-                self.schema,
-                asked,
-                indices=indices,
-                predict=predict,
-                num_context_samples=num_context_samples,
-                task=task,
             )
 
         if predict is not None:
@@ -694,15 +704,16 @@ class PredictiveQuery:
         carrier._asked = self.text
         return carrier
 
-    def _resolve(self, profile: str) -> ValidatedPredictiveQuery | CoreQuery:
+    def _resolve(
+        self, profile: str, *, core_tabular: bool = False
+    ) -> ValidatedPredictiveQuery | CoreQuery:
         r"""Parse and validate the query.
 
         On the core route (S0, the private routing seam) the core decides
-        validity (P2-MID2-1, design choice 9). A query it accepts that a
-        relational materialize gathers on the core is the core's to resolve
-        as it gathers it: :class:`~sdm_client._rust.results.CoreQuery`,
-        the text alone, so the old validator is never reached on the core
-        route. Only where the old materializer gathers it is the accepted
+        validity (P2-MID2-1, design choice 9). Native Relational and Tabular
+        materialization consume :class:`~sdm_client._rust.results.CoreQuery`,
+        containing the text and Rust-resolved facts, without invoking the
+        old validator. Only where the old materializer gathers it is the accepted
         query resolved by the old validator, for that materializer, which
         also checks that the two agree.
 
@@ -715,9 +726,12 @@ class PredictiveQuery:
         """
         from sdm_client import _routing
 
-        core = _routing.route(_routing.S0) == 'core'
-        gathered_on_the_core = profile == RELATIONAL and _routing.on_the_core(
-            self.schema.source, _routing.MATERIALIZE
+        # Native Tabular materialization consumes resolved Rust identifiers,
+        # including when a comparison test selects only materialization routes.
+        core = core_tabular or _routing.route(_routing.S0) == 'core'
+        gathered_on_the_core = profile == RELATIONAL and (
+            _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
+            or (self.schema.source is None and _routing.on_frames())
         )
         from sdm_client.schema import (
             names_a_query_cannot_say,
@@ -735,7 +749,7 @@ class PredictiveQuery:
             )
             if not accepted:
                 raise self._refusal(messages, profile)
-            if gathered_on_the_core:
+            if gathered_on_the_core or core_tabular:
                 from sdm_client._rust import errors
                 from sdm_client._rust.results import CoreQuery
 
@@ -751,6 +765,7 @@ class PredictiveQuery:
                         None if resolved is None else resolved.num_forecasts
                     ),
                     refusal=None,
+                    columns=None if resolved is None else resolved.columns,
                 )
             with warnings.catch_warnings():
                 # Said once, as the core's query schema was written.

@@ -48,10 +48,10 @@ from sdm_client._rust.codec import spelled as _spelled
 def _schema_holding(table: Any) -> tuple[Any, str] | None:
     r"""The core-built schema holding ``table``, and the name it holds it
     under; ``None`` for a table no core-built schema holds."""
-    from sdm_client.schema import _described_on_the_core
+    from sdm_client.schema import _edits_on_the_core
 
     schema = getattr(table, '_schema', None)
-    if not _described_on_the_core(schema):
+    if not _edits_on_the_core(schema):
         return None
     for name, held in vars(schema).get('_tables', {}).items():
         if held is table:
@@ -80,6 +80,36 @@ def _link(link: Any) -> Any:
     )
 
 
+def _frame_key_counts(schema: Any, edit: dict[str, Any]) -> dict[str, Any]:
+    """Observe current native values; Rust validates the edit and chooses policy."""
+    from sdm_client.schema import _key_quality
+
+    if edit['edit'] != 'primary_key':
+        return {}
+    table = schema.tables.get(edit['table'])
+    given = edit['key']
+    if table is None or not isinstance(given, dict) or 'value' not in given:
+        return {}
+    names = given['value']
+    if not isinstance(names, list) or not names:
+        return {}
+    frame = table.data
+    if any(not isinstance(name, str) or name not in frame for name in names):
+        return {}
+    quality = _key_quality(frame, names)
+    return {
+        edit['table']: {
+            'rows': len(frame),
+            'missing': quality.nulls,
+            'missing_columns': [
+                name for name in names if bool(frame[name].isna().any())
+            ],
+            'distinct': len(frame) - quality.nulls - quality.duplicates,
+            'example': None,
+        }
+    }
+
+
 def _made(schema: Any, edit: dict[str, Any]) -> dict[str, Any]:
     r"""``edit`` made by the core to ``schema``, its answer stored: the
     schema the core answered."""
@@ -90,10 +120,16 @@ def _made(schema: Any, edit: dict[str, Any]) -> dict[str, Any]:
     # The schema as it stands, as plain data, as materialize sends it
     # (T3.16).
     operation = {'op': 'edit_schema', 'schema': 1, 'edit': 2}
-    finished = run(
-        operation,
-        {1: codec.attachment(held_schema(schema)), 2: codec.attachment(edit)},
-    )
+    attachments = {
+        1: codec.attachment(held_schema(schema)),
+        2: codec.attachment(edit),
+    }
+    if getattr(schema, '_core_origin', None) == 'frames':
+        operation['context'] = 3
+        attachments[3] = codec.attachment(
+            {'kind': 'frames', 'key_counts': _frame_key_counts(schema, edit)}
+        )
+    finished = run(operation, attachments)
     edited = results.expect(finished.result, results.Edited)
     answer: dict[str, Any] = json.loads(finished.take(edited.schema))
     _store(schema, answer, edited.declared)
@@ -249,9 +285,9 @@ def relationships(schema: Any, links: Any, into: Any = None) -> bool:
     (``into``, the list), made on the core when ``schema`` is core-built;
     whether it was. Each relationship the answer holds is the caller's own
     object where the caller gave one equal to it."""
-    from sdm_client.schema import Relationship, _described_on_the_core, _Links
+    from sdm_client.schema import Relationship, _edits_on_the_core, _Links
 
-    if not _described_on_the_core(schema):
+    if not _edits_on_the_core(schema):
         return False
     given = list(links)
     answer = _made(

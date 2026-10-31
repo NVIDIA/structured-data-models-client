@@ -89,6 +89,34 @@ fn codes_of(query: &str, profile: &Profile) -> Vec<String> {
 }
 
 #[test]
+fn resolved_column_facts_preserve_names_without_text_splitting() {
+    let mut schema = shop();
+    schema.tables.retain(|table| table.name == "users");
+    schema.links.clear();
+    let name = "value.with.dot";
+    schema.tables[0].columns[1].name = name.into();
+    let query = "PREDICT users.`value.with.dot` FOR EACH users.user_id";
+    let validation = resolve(
+        query,
+        &schema,
+        &profile(ProfileName::Tabular, &[]),
+        &facts(),
+        &NoZones,
+    )
+    .unwrap();
+    let result = validation.to_result(&schema);
+    assert!(result.accepted, "{:?}", result.diagnostics);
+    let resolved = result.query.unwrap();
+    let columns = resolved.columns.unwrap();
+    assert_eq!(columns.entity.table, "users");
+    assert_eq!(columns.entity.column, "user_id");
+    assert_eq!(columns.target.table, "users");
+    assert_eq!(columns.target.column, name);
+    assert_eq!(columns.target_stype, sdm_contract::ops::Stype::Numerical);
+    assert_eq!(resolved.text.as_deref(), Some(query));
+}
+
+#[test]
 fn a_time_range_is_refused_before_resolution() {
     // A tabular model predicts values as they stand: the window is the
     // reason no schema can fix, and it is the only one given.
