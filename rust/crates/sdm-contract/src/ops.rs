@@ -36,6 +36,8 @@ use crate::types::ColumnType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    PrepareFrameGraph(crate::frames::PrepareFrameGraph),
+    MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
@@ -63,6 +65,7 @@ pub enum Operation {
     LayoutNativeDirect(crate::direct::DirectInput),
     ObserveDirectDtype(crate::direct::DirectInput),
     ObserveDirectSchema(crate::direct::DirectInput),
+    AssembleFrameSchema(crate::direct::DirectInput),
     CheckDirectPreparation(crate::direct::DirectInput),
     ResolveDirectDtype(crate::direct::DirectInput),
     ResolveObservedTabular(crate::direct::DirectInput),
@@ -97,6 +100,7 @@ pub enum Operation {
 /// What an attachment a message names holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AttachmentKind {
+    FrameGraph,
     /// Bytes, such as the UTF-8 JSON of an input-sized field or a model
     /// body.
     Bytes,
@@ -109,6 +113,8 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
+            Operation::PrepareFrameGraph(_) => "prepare_frame_graph",
+            Operation::MaterializeFrames(_) => "materialize_frames",
             Operation::PrepareTabularFit(_) => "prepare_tabular_fit",
             Operation::AcceptTabularSession(_) => "accept_tabular_session",
             Operation::CheckTabularSessionQuestion(_) => "check_tabular_session_question",
@@ -135,6 +141,7 @@ impl Operation {
             Operation::LayoutNativeDirect(_) => "layout_native_direct",
             Operation::ObserveDirectDtype(_) => "observe_direct_dtype",
             Operation::ObserveDirectSchema(_) => "observe_direct_schema",
+            Operation::AssembleFrameSchema(_) => "assemble_frame_schema",
             Operation::CheckDirectPreparation(_) => "check_direct_preparation",
             Operation::ResolveDirectDtype(_) => "resolve_direct_dtype",
             Operation::ResolveObservedTabular(_) => "resolve_observed_tabular",
@@ -169,6 +176,16 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::PrepareFrameGraph(v) => {
+                let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
+                ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
+                ids
+            }
+            Operation::MaterializeFrames(v) => {
+                let mut ids = vec![(v.graph, AttachmentKind::FrameGraph), (v.input, Bytes), (v.indices, Arrow)];
+                ids.extend(v.values.map(|id| (id, Bytes)));
+                ids
+            }
             Operation::EncodeDirectColumn(v)
             | Operation::EncodeTabularTable(v)
             | Operation::InferDirectColumn(v)
@@ -208,6 +225,7 @@ impl Operation {
             | Operation::ObserveDirectOutputs(v)
             | Operation::ObserveDirectDtype(v)
             | Operation::ObserveDirectSchema(v)
+            | Operation::AssembleFrameSchema(v)
             | Operation::CheckDirectPreparation(v)
             | Operation::ResolveDirectDtype(v)
             | Operation::ResolveObservedTabular(v)
@@ -289,6 +307,7 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    PreparedFrameGraph(crate::frames::PreparedFrameGraph),
     DirectValue(crate::direct::DirectValue),
     DecodedDirectResponse(crate::direct::DecodedDirectResponse),
     /// The host must retain native response owners for this reply.
@@ -1709,6 +1728,8 @@ pub struct Attachments {
     pub checkdirectoption_input: crate::direct::DirectOptionObservation,
     #[schemars(rename = "ObserveDirectDtype.input")]
     pub observedirectdtype_input: crate::direct::dtype::DtypeObservation,
+    #[schemars(rename = "AssembleFrameSchema.input")]
+    pub assembleframeschema_input: crate::frames::AssembleFrameSchema,
     #[schemars(rename = "ObserveDirectSchema.input")]
     pub observedirectschema_input: crate::direct::schema::SchemaObservation,
     #[schemars(rename = "DirectValue.observed_schema")]

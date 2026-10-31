@@ -216,6 +216,39 @@ pub fn assemble_converted(
     )
 }
 
+/// Assemble in-memory tables whose column and time observations are complete.
+///
+/// Unlike a semantic model, frames have no authoritative declared graph, so
+/// ordinary name-based relationship inference applies unless the caller
+/// supplied relationships. Reuse the same override and link validation as
+/// source schemas without changing their assembly paths.
+pub fn assemble_frames(
+    mut description: SourceDescription,
+    choices: Vec<TimeChoice>,
+    primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
+    time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
+    relationships: Option<&[Link]>,
+) -> Result<Assembled, CoreError> {
+    if description.tables.len() != choices.len() {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "frame schema requires one time observation per table",
+        ));
+    }
+    apply_described_keys_and_times(&mut description.tables, primary_keys, time_columns)?;
+    let timed = time_columns.keys().cloned().collect();
+    assemble_described(
+        description.tables,
+        choices,
+        Vec::new(),
+        Given {
+            time_columns: Some(&timed),
+            relationships,
+        },
+        true,
+    )
+}
+
 fn assemble_described(
     mut described: Vec<DescribedTable>,
     mut choices: Vec<TimeChoice>,

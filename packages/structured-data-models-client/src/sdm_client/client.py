@@ -892,7 +892,10 @@ def _predicts_on_the_core(request: Request) -> Any | None:
         return None
     from sdm_client import _routing
 
-    if not _routing.on_the_core(source, _routing.PREDICT):
+    if source is None:
+        if not _routing.on_frames(_routing.FRAME_PREDICT):
+            return None
+    elif not _routing.on_the_core(source, _routing.PREDICT):
         return None
     from sdm_client._rust import predict as on_the_core
 

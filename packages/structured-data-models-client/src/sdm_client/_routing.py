@@ -443,6 +443,18 @@ TABULAR_INDICES = (
 TABULAR_FRAME = ('query.materialize/predict-frame/frames',)
 TABULAR_MATERIALIZERS = TABULAR_INDICES + TABULAR_FRAME
 
+# Frame relational and Tabular share the ordinary indices path identifiers.
+# A relational materializer can produce all six task kinds, so force them
+# together; direct Tabular preparation retains its existing route group.
+FRAME_MATERIALIZE = _on(MATERIALIZE_DUCKDB, 'frames')
+FRAME_PREDICT = _on(PREDICT_DUCKDB, 'frames')
+FRAME_SCHEMA = (
+    'schema.from-data/frames/frames',
+    'schema.from-data/mapping/frames',
+)
+FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA
+
+
 CORE_ROUTED = frozenset(
     S0
     + CAPABILITIES
@@ -509,6 +521,7 @@ def forced() -> frozenset[str]:
             and path not in DIRECT_CONSUMERS
             and path not in TABULAR_MATERIALIZERS
             and path not in TABULAR_SESSIONS
+            and path not in FRAME_ROUTES
         ):
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
@@ -561,3 +574,8 @@ def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
     if kind is None or kind not in paths:
         return False
     return route(paths[kind]) == 'core'
+
+
+def on_frames(paths: tuple[str, ...] = FRAME_MATERIALIZE) -> bool:
+    """Whether the explicitly selected source-less operation uses Rust."""
+    return route(paths) == 'core'
