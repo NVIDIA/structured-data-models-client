@@ -10,6 +10,7 @@ import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Json;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -30,6 +31,7 @@ import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.TimeStampMilliVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.table.Table;
 import org.junit.jupiter.api.Test;
@@ -45,10 +47,14 @@ class RelationalTest {
   static Table users(RootAllocator allocator) {
     BigIntVector id = new BigIntVector("user_id", allocator);
     Float8Vector value = new Float8Vector("value", allocator);
+    VarCharVector group = new VarCharVector("group", allocator); group.allocateNew();
     id.allocateNew(20); value.allocateNew(20);
-    for (int i = 0; i < 20; i++) { id.setSafe(i, i + 1); value.setSafe(i, i * 1.25); }
-    id.setValueCount(20); value.setValueCount(20);
-    return new Table(List.of(id, value));
+    for (int i = 0; i < 20; i++) {
+      id.setSafe(i, i + 1); value.setSafe(i, i * 1.25);
+      group.setSafe(i, (i % 2 == 0 ? "a" : "b").getBytes(StandardCharsets.UTF_8));
+    }
+    id.setValueCount(20); value.setValueCount(20); group.setValueCount(20);
+    return new Table(List.of(id, value, group));
   }
 
   static Table orders(RootAllocator allocator, boolean temporal, boolean links) {
@@ -64,7 +70,7 @@ class RelationalTest {
     vectors.add(order); vectors.add(user); vectors.add(price);
     if (links) {
       BigIntVector item = new BigIntVector("item_id", allocator); item.allocateNew(400);
-      for (int i = 0; i < 400; i++) item.setSafe(i, (i / 20) % 5 + 1);
+      for (int i = 0; i < 400; i++) item.setSafe(i, i % 5 + 1);
       item.setValueCount(400); vectors.add(item);
     }
     if (temporal) {
@@ -133,8 +139,9 @@ class RelationalTest {
     assertThrows(StructuredDataException.class,
         () -> query.materialize(schema, MaterializeOptions.builder().indices(1L, 2L).build()));
     Request request = query.materialize(schema, options(1L, 2L).build());
-    assertEquals(2, request.predictRows()); assertEquals(18, request.contextRows());
-    assertTrue(request.isRelational()); assertEquals("regression", request.problemType().orElseThrow());
+    assertEquals(2, request.predictRows()); assertEquals(16, request.contextRows());
+    assertTrue(request.isRelational());
+    assertEquals("regression", map(payload(request, 0).get("task")).get("kind"));
     assertTrue(map(map(payload(request, 0).get("schema")).get("related_tables")).containsKey("orders"));
     try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client()) {
       assertEquals(2, client.predict(request, SdmClient.KUMO_RELATIONAL).rows());
@@ -164,7 +171,7 @@ class RelationalTest {
     Schema schema = fixture(true, true);
     try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client();
         RelationalMaterializer owner = new RelationalMaterializer(schema)) {
-      Request temporal = PredictiveQuery.parse(TEMPORAL).materialize(owner, options(1L, 2L).build());
+      Request temporal = PredictiveQuery.parse(TEMPORAL).materialize(owner, options(1L, 2L).anchorTime(LocalDate.of(2024, 6, 1)).build());
       assertTrue(temporal.targetMovesWithTime());
       assertEquals(2, client.predict(temporal, SdmClient.KUMO_RELATIONAL).rows());
       Request link = PredictiveQuery.parse(LINK).materialize(owner, options(1L, 2L).build());
@@ -174,7 +181,7 @@ class RelationalTest {
       assertThrows(StructuredDataException.class,
           () -> PredictiveQuery.parse(RANK).materialize(owner, options(1L, 2L).build()));
       Request ranked = PredictiveQuery.parse(RANK).materialize(owner,
-          options(1L, 2L).candidates(List.of(1L, 2L, 3L)).build());
+          options(1L, 2L).anchorTime(LocalDate.of(2024, 6, 1)).candidates(List.of(1L, 2L, 3L)).build());
       assertEquals(2, client.predict(ranked, SdmClient.KUMO_RELATIONAL).rows());
       Request forecast = PredictiveQuery.parse(FORECAST).materialize(owner, options(1L, 2L).build());
       PredictionResult forecasted = client.predict(forecast, SdmClient.KUMO_RELATIONAL);
@@ -249,7 +256,7 @@ class RelationalTest {
         assertEquals(before, opening.payloads());
         Map<String, Object> uploaded = endpoint.created.get(0);
         assertFalse(uploaded.containsKey("predict"));
-        assertEquals(16, rows(instance(uploaded, "context")).size());
+        assertEquals(opening.contextRows() - 2, rows(instance(uploaded, "context")).size());
         Set<Object> remaining = instanceIds(instance(uploaded, "context"));
         for (Object related : map(map(uploaded.get("context")).get("related_tables")).values())
           assertTrue(remaining.containsAll(instanceIds(map(related))));
@@ -278,6 +285,30 @@ class RelationalTest {
     }
   }
 
+  @Test void equivalentQuoteStylesKeepTheSameSessionQuestion() throws Exception {
+    Schema schema = fixture(false, false);
+    Request opening = PredictiveQuery.parse("PREDICT users.group = 'a' FOR EACH users.user_id")
+        .materialize(schema, options(1L, 2L).build());
+    Request scoring = PredictiveQuery.parse("PREDICT users.group = \"a\" FOR EACH users.user_id")
+        .materialize(schema, options(3L, 4L).build());
+    try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client();
+        FittedModel fitted = client.fit(opening, SdmClient.KUMO_RELATIONAL)) {
+      assertEquals(2, fitted.predict(scoring).rows());
+      assertEquals(1, endpoint.scored.size());
+    }
+  }
+
+  @Test void ordinaryNumericCandidateTypesKeepExactIntegralValues() throws Exception {
+    Schema schema = fixture(true, true);
+    PredictiveQuery query = PredictiveQuery.parse(RANK);
+    MaterializeOptions integral = options(1L, 2L).anchorTime(LocalDate.of(2024, 6, 1))
+        .candidates(List.of(1L, 2L, 3L)).build();
+    MaterializeOptions numeric = options(1L, 2L).anchorTime(LocalDate.of(2024, 6, 1))
+        .candidates(List.of(1.0f, 2.0d, new BigDecimal("3"))).build();
+    assertEquals(query.materialize(schema, integral).payloads(),
+        query.materialize(schema, numeric).payloads());
+  }
+
   @Test void laterSessionFailureRetainsAlreadyAnsweredRows() throws Exception {
     Schema schema = fixture(false, false);
     PredictiveQuery query = PredictiveQuery.parse(SCALAR);
@@ -287,8 +318,14 @@ class RelationalTest {
       Request score = query.materialize(schema, options(2L, 3L).rowsPerCall(1).build());
       StructuredDataException failed = assertThrows(StructuredDataException.class, () -> fitted.predict(score));
       assertEquals(1, ((Number) failed.details().get("calls_answered")).intValue());
+      assertEquals(2, endpoint.scored.size());
+      assertInstanceOf(ModelEndpointException.class, failed);
       assertEquals(1, ((Number) failed.details().get("rows_answered")).intValue());
-      assertTrue(failed.details().containsKey("answered"));
+      try (ArrowReader answered = failed.answered(ArrowData.allocator()).orElseThrow()) {
+        assertTrue(answered.loadNextBatch());
+        assertEquals(1, answered.getVectorSchemaRoot().getRowCount());
+        assertFalse(answered.loadNextBatch());
+      }
     }
   }
 
