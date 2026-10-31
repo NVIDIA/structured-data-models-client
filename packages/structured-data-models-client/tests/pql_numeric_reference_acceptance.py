@@ -27,7 +27,8 @@ def _ordinary_warning_outcome(outcome):
             event['type'] == 'RuntimeWarning'
             and event['message'] == 'overflow encountered in cast'
             and site is not None
-            and site['file'] in (
+            and site['file']
+            in (
                 'core/indexes/base.py',
                 'core/indexes/multi.py',
                 'core/sorting.py',
