@@ -20,7 +20,9 @@ fn check(index: TabularIndexFacts, positions: Vec<usize>, already_ordered: bool)
         order_sampled(&index).unwrap(),
         OrderedSampledTabularRows::Sorted {
             positions,
-            already_ordered
+            already_ordered,
+            overflow_warnings: Vec::new(),
+            overflow_prints: 0,
         }
     );
 }
@@ -290,6 +292,9 @@ fn object_failure_reasons_keep_first_reached_comparison_owners() {
                 left: 1,
                 right: 0,
                 levels: Vec::new(),
+                overflow_warnings: Vec::new(),
+                overflow_prints: 0,
+                integer_destination: None,
             }
         );
     }
@@ -531,6 +536,7 @@ fn unconditional_simd_entry_does_not_disable_outer_index_monotonic_shortcut() {
         let OrderedSampledTabularRows::Sorted {
             positions,
             already_ordered,
+            ..
         } = order_sampled(&index).unwrap()
         else {
             panic!("expected ordered positions")

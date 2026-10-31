@@ -30,7 +30,11 @@ fn floating(width: u8, value: f64) -> Atom {
 fn facts(values: Vec<Atom>, semantics: Semantics) -> TabularIndexFacts {
     let missing = vec![false; values.len()];
     TabularIndexFacts {
-        values: TabularIndexValues::ScalarObject { values, semantics },
+        values: TabularIndexValues::ScalarObject {
+            values,
+            semantics,
+            overflow: None,
+        },
         missing,
         profile: TabularSortProfile::Scalar,
     }
@@ -40,7 +44,9 @@ fn ordered(values: Vec<Atom>, semantics: Semantics, positions: Vec<usize>, alrea
         order_sampled(&facts(values, semantics)).unwrap(),
         Outcome::Sorted {
             positions,
-            already_ordered
+            already_ordered,
+            overflow_warnings: Vec::new(),
+            overflow_prints: 0,
         }
     );
 }
@@ -113,6 +119,9 @@ fn huge_integer_overflow_is_reached_during_monotonic_probe_only_in_weak_mode() {
             left: 1,
             right: 0,
             levels: Vec::new(),
+            overflow_warnings: Vec::new(),
+            overflow_prints: 0,
+            integer_destination: None,
         }
     );
     for semantics in [Semantics::CommonType, Semantics::ExactIntegerPairs] {
@@ -143,6 +152,9 @@ fn finite_narrowing_overflow_stays_an_explicit_pending_native_effect() {
                 left: 1,
                 right: 0,
                 levels: Vec::new(),
+                overflow_warnings: Vec::new(),
+                overflow_prints: 0,
+                integer_destination: None,
             }
         );
     }
@@ -160,7 +172,9 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
             order_sampled(&index).unwrap(),
             Outcome::Sorted {
                 positions: vec![0],
-                already_ordered: owner == NativeMissingOwner::None
+                already_ordered: owner == NativeMissingOwner::None,
+                overflow_warnings: Vec::new(),
+                overflow_prints: 0,
             }
         );
     }
@@ -180,7 +194,9 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
         order_sampled(&index).unwrap(),
         Outcome::Sorted {
             positions: vec![2, 0, 1, 3],
-            already_ordered: false
+            already_ordered: false,
+            overflow_warnings: Vec::new(),
+            overflow_prints: 0,
         }
     );
     let mut index = facts(
@@ -200,6 +216,9 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
             left: 1,
             right: 0,
             levels: Vec::new(),
+            overflow_warnings: Vec::new(),
+            overflow_prints: 0,
+            integer_destination: None,
         }
     );
 }
@@ -222,4 +241,230 @@ fn owner_ranges_and_unbound_profile_are_checked_before_any_order_claim() {
     );
     index.profile = TabularSortProfile::Unbound;
     assert_eq!(order_sampled(&index).unwrap(), Outcome::NeedsProfile);
+}
+
+fn configured(
+    values: Vec<Atom>,
+    semantics: Semantics,
+    overflow: sdm_contract::tabular::NumericOverflowPolicy,
+) -> TabularIndexFacts {
+    let mut index = facts(values, semantics);
+    let TabularIndexValues::ScalarObject {
+        overflow: setting, ..
+    } = &mut index.values
+    else {
+        unreachable!()
+    };
+    *setting = Some(overflow);
+    index
+}
+#[test]
+fn ordinary_overflow_modes_keep_probe_diagnostics_and_terminal_error() {
+    use sdm_contract::tabular::{NumericOverflowPolicy as Policy, NumericWarningStage};
+    for policy in [Policy::Ignore, Policy::Raise, Policy::Warn, Policy::Print] {
+        let index = configured(
+            vec![
+                floating(4, 1.0),
+                Atom::Floating {
+                    bits: 1e100_f64.to_bits(),
+                },
+            ],
+            Semantics::WeakScalars,
+            policy,
+        );
+        let result = order_sampled(&index).unwrap();
+        if policy == Policy::Raise {
+            assert!(matches!(
+                result,
+                Outcome::Refused {
+                    reason: Error::FloatingOverflow,
+                    left: 1,
+                    right: 0,
+                    ..
+                }
+            ));
+        } else {
+            let Outcome::Sorted {
+                positions,
+                already_ordered,
+                overflow_warnings,
+                overflow_prints,
+            } = result
+            else {
+                panic!("ordinary overflow must finish")
+            };
+            assert_eq!(positions, vec![0, 1]);
+            assert!(already_ordered);
+            assert_eq!(overflow_prints, if policy == Policy::Print { 2 } else { 0 });
+            if policy == Policy::Warn {
+                assert_eq!(
+                    overflow_warnings,
+                    vec![sdm_contract::tabular::NumericOverflowWarnings {
+                        stage: NumericWarningStage::Probe,
+                        count: 2
+                    }]
+                );
+            } else {
+                assert!(overflow_warnings.is_empty());
+            }
+        }
+    }
+}
+#[test]
+fn weak_legacy_integer_bounds_name_the_actual_unbounded_operand() {
+    use sdm_contract::tabular::{IntegerDestination, NumericOverflowPolicy};
+    for (signed, value) in [(true, "128"), (false, "-1")] {
+        for reversed in [false, true] {
+            let mut values = vec![
+                integer(signed, 1, 1),
+                Atom::Integer {
+                    value: value.into(),
+                },
+            ];
+            if reversed {
+                values.reverse();
+            }
+            let index = configured(
+                values,
+                Semantics::WeakFixedIntegerPairs,
+                NumericOverflowPolicy::Ignore,
+            );
+            let Outcome::Refused {
+                reason,
+                left,
+                integer_destination,
+                ..
+            } = order_sampled(&index).unwrap()
+            else {
+                panic!("bounds failure expected")
+            };
+            assert_eq!(reason, Error::IntegerOutOfBounds);
+            assert_eq!(left, usize::from(!reversed));
+            assert_eq!(
+                integer_destination,
+                Some(IntegerDestination { signed, width: 1 })
+            );
+        }
+    }
+}
+#[test]
+fn leading_nan_does_not_reach_a_later_huge_integer_conversion() {
+    use sdm_contract::tabular::NumericOverflowPolicy;
+    let mut index = configured(
+        vec![
+            floating(4, f64::NAN),
+            Atom::Integer {
+                value: format!("1{}", "0".repeat(400)),
+            },
+        ],
+        Semantics::WeakScalars,
+        NumericOverflowPolicy::Raise,
+    );
+    index.missing[0] = true;
+    assert!(
+        matches!(order_sampled(&index).unwrap(),Outcome::Sorted {positions,already_ordered:false,..} if positions==vec![1,0])
+    );
+}
+#[test]
+fn a_terminal_conversion_error_keeps_prior_overflow_warnings() {
+    use sdm_contract::tabular::NumericOverflowPolicy;
+    let index = configured(
+        vec![
+            floating(4, 2.0),
+            Atom::Floating {
+                bits: 1e100_f64.to_bits(),
+            },
+            floating(4, 1.0),
+            Atom::Integer {
+                value: format!("1{}", "0".repeat(400)),
+            },
+        ],
+        Semantics::WeakScalars,
+        NumericOverflowPolicy::Warn,
+    );
+    let Outcome::Refused {
+        reason,
+        overflow_warnings,
+        ..
+    } = order_sampled(&index).unwrap()
+    else {
+        panic!("huge integer failure expected")
+    };
+    assert_eq!(reason, Error::IntegerToFloatOverflow);
+    assert!(!overflow_warnings.is_empty());
+}
+
+#[test]
+fn intermediate_integer_overflow_precedes_destination_bounds() {
+    use sdm_contract::tabular::NumericOverflowPolicy;
+    for (signed, width) in [(true, 1), (true, 8), (false, 1), (false, 8)] {
+        let index = configured(
+            vec![
+                integer(signed, width, 1),
+                Atom::Integer {
+                    value: "18446744073709551616".into(),
+                },
+            ],
+            Semantics::WeakFixedIntegerPairs,
+            NumericOverflowPolicy::Ignore,
+        );
+        assert!(matches!(
+            order_sampled(&index).unwrap(),
+            Outcome::Refused {
+                reason: Error::IntegerIntermediateOverflow,
+                left: 1,
+                ..
+            }
+        ));
+    }
+}
+#[test]
+fn earlier_multi_level_diagnostics_survive_a_later_numeric_failure() {
+    use sdm_contract::tabular::{NumericOverflowPolicy, NumericWarningStage};
+    let first = configured(
+        vec![
+            floating(4, 1.0),
+            Atom::Floating {
+                bits: 1e100_f64.to_bits(),
+            },
+        ],
+        Semantics::WeakScalars,
+        NumericOverflowPolicy::Warn,
+    );
+    let second = configured(
+        vec![
+            floating(4, 1.0),
+            Atom::Integer {
+                value: format!("1{}", "0".repeat(400)),
+            },
+        ],
+        Semantics::WeakScalars,
+        NumericOverflowPolicy::Warn,
+    );
+    let index = TabularIndexFacts {
+        values: TabularIndexValues::Multi {
+            levels: vec![first, second],
+            codes: vec![vec![0, 1], vec![0, 1]],
+        },
+        missing: vec![false, false],
+        profile: TabularSortProfile::Scalar,
+    };
+    let Outcome::Refused {
+        reason,
+        levels,
+        overflow_warnings,
+        ..
+    } = order_sampled(&index).unwrap()
+    else {
+        panic!("later numeric failure expected")
+    };
+    assert_eq!(reason, Error::IntegerToFloatOverflow);
+    assert_eq!(levels, vec![1]);
+    assert_eq!(
+        overflow_warnings,
+        vec![sdm_contract::tabular::NumericOverflowWarnings {
+            stage: NumericWarningStage::Probe,
+            count: 2
+        }]
+    );
 }

@@ -375,6 +375,10 @@ pub(super) fn order(
             reason,
             left,
             right,
+
+            overflow_warnings: Vec::new(),
+            overflow_prints: 0,
+            integer_destination: None,
         }),
     }
 }

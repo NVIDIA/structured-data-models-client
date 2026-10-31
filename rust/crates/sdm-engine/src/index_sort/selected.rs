@@ -37,6 +37,9 @@ fn sorted(positions: Vec<usize>, already_ordered: bool) -> ResultOrder {
     ResultOrder::Sorted {
         positions,
         already_ordered,
+
+        overflow_warnings: Vec::new(),
+        overflow_prints: 0,
     }
 }
 
@@ -191,22 +194,33 @@ impl PartialOrd for Object<'_> {
     }
 }
 
-fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<ResultOrder, CoreError> {
+fn multi(
+    levels: &[Facts],
+    codes: &[Vec<i64>],
+    missing: &[bool],
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<ResultOrder, CoreError> {
     if levels.len() != codes.len() || codes.iter().any(|c| c.len() != missing.len()) {
         return Err(invalid());
     }
-    if levels
-        .iter()
-        .any(|level| matches!(&level.values, Values::TemporalObject { .. }))
-    {
-        return temporal_multi::order(levels, codes, missing);
+    if levels.iter().any(|level| {
+        matches!(
+            &level.values,
+            Values::TemporalObject { .. }
+                | Values::ScalarObject {
+                    overflow: Some(_),
+                    ..
+                }
+        )
+    }) {
+        return temporal_multi::order(levels, codes, missing, diagnostics);
     }
     let mut ranks = Vec::new();
     let mut incomparable_levels = Vec::new();
     let mut needs_profile = false;
     for (level_no, (level, code)) in levels.iter().zip(codes).enumerate() {
         let n = level.missing.len();
-        let permutation = match order_sampled(level)? {
+        let permutation = match order_inner(level, diagnostics)? {
             ResultOrder::Sorted { positions, .. } => {
                 incomparable_levels.push(false);
                 positions
@@ -221,9 +235,13 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
                 left,
                 right,
                 levels: mut path,
+                ..
             } if matches!(
                 reason,
                 sdm_contract::tabular::TabularOrderError::IntegerToFloatOverflow
+                    | sdm_contract::tabular::TabularOrderError::IntegerIntermediateOverflow
+                    | sdm_contract::tabular::TabularOrderError::IntegerOutOfBounds
+                    | sdm_contract::tabular::TabularOrderError::FloatingOverflow
                     | sdm_contract::tabular::TabularOrderError::NativeEffectsPending
                     | sdm_contract::tabular::TabularOrderError::TemporalYearOutOfRange
             ) =>
@@ -234,6 +252,10 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
                     left,
                     right,
                     levels: path,
+
+                    overflow_warnings: Vec::new(),
+                    overflow_prints: 0,
+                    integer_destination: None,
                 });
             }
             ResultOrder::Refused { .. } => {
@@ -314,6 +336,43 @@ impl PartialOrd for Complex {
 }
 
 pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
+    let mut diagnostics = numeric_objects::Diagnostics::default();
+    let mut result = order_inner(facts, &mut diagnostics)?;
+    if diagnostics.count_overflow {
+        return Err(invalid());
+    }
+    match &mut result {
+        ResultOrder::Sorted {
+            overflow_warnings,
+            overflow_prints,
+            ..
+        } => {
+            *overflow_warnings = diagnostics.warnings;
+            *overflow_prints = diagnostics.prints;
+        }
+        ResultOrder::Refused {
+            overflow_warnings,
+            overflow_prints,
+            integer_destination,
+            left,
+            right,
+            ..
+        } => {
+            *overflow_warnings = diagnostics.warnings;
+            *overflow_prints = diagnostics.prints;
+            *integer_destination = diagnostics.destination;
+            if diagnostics.reverse_failure {
+                std::mem::swap(left, right);
+            }
+        }
+        ResultOrder::NeedsProfile => {}
+    }
+    Ok(result)
+}
+fn order_inner(
+    facts: &Facts,
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<ResultOrder, CoreError> {
     let mask = &facts.missing;
     let profile = facts.profile;
     let result = match &facts.values {
@@ -413,12 +472,24 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             }
             order(values, mask, profile, |v| scalar(v, profile))?
         }
-        Values::Multi { levels, codes } => return multi(levels, codes, mask),
+        Values::Multi { levels, codes } => return multi(levels, codes, mask, diagnostics),
         Values::TemporalObject { values } => {
             return temporal::order(values, mask, profile);
         }
-        Values::ScalarObject { values, semantics } => {
-            return numeric_objects::order(values, mask, profile, *semantics);
+        Values::ScalarObject {
+            values,
+            semantics,
+            overflow,
+        } => {
+            return numeric_objects::order(
+                values,
+                mask,
+                profile,
+                *semantics,
+                *overflow,
+                diagnostics,
+                numeric_objects::OrderStage::Rows,
+            );
         }
         Values::Object { values } => {
             if values.len() != mask.len() {
@@ -492,6 +563,10 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
                     reason: failure_reason(&values[left], &values[right]),
                     left,
                     right,
+
+                    overflow_warnings: Vec::new(),
+                    overflow_prints: 0,
+                    integer_destination: None,
                 });
             }
             return Ok(sorted(positions, monotonic));

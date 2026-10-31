@@ -5,7 +5,7 @@
 //! Temporal levels preserve the native early guard and expanded-value stable passes.
 use super::{
     Complex, Facts, MissingLast, ResultOrder, Values, atoms, invalid, numeric_objects,
-    object_stable, order_sampled, sorted, temporal,
+    object_stable, order_inner, sorted, temporal,
 };
 use sdm_contract::CoreError;
 use sdm_contract::tabular::TabularOrderError as Error;
@@ -18,12 +18,21 @@ fn refused((reason, level, left, right): Failure) -> ResultOrder {
         levels: vec![level],
         left,
         right,
+
+        overflow_warnings: Vec::new(),
+        overflow_prints: 0,
+        integer_destination: None,
     }
 }
 fn is_type_error(reason: Error) -> bool {
     !matches!(
         reason,
-        Error::IntegerToFloatOverflow | Error::NativeEffectsPending | Error::TemporalYearOutOfRange
+        Error::IntegerToFloatOverflow
+            | Error::IntegerIntermediateOverflow
+            | Error::IntegerOutOfBounds
+            | Error::FloatingOverflow
+            | Error::NativeEffectsPending
+            | Error::TemporalYearOutOfRange
     )
 }
 fn code_order(codes: &[Vec<i64>], rows: usize) -> bool {
@@ -43,7 +52,12 @@ fn real(bits: u64, width: u8) -> f64 {
     }
 }
 
-fn compare(level: &Facts, left: usize, right: usize) -> Result<Ordering, Error> {
+fn compare(
+    level: &Facts,
+    left: usize,
+    right: usize,
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<Ordering, Error> {
     if level.missing[left] || level.missing[right] {
         return Ok(level.missing[left].cmp(&level.missing[right]));
     }
@@ -71,12 +85,18 @@ fn compare(level: &Facts, left: usize, right: usize) -> Result<Ordering, Error> 
         Values::Unicode { values } => values[left].cmp(&values[right]),
         Values::Object { values } => atoms::compare_atom(&values[left], &values[right])
             .ok_or_else(|| atoms::failure_reason(&values[left], &values[right]))?,
-        Values::ScalarObject { values, semantics } => numeric_objects::sort_comparison(
+        Values::ScalarObject {
+            values,
+            semantics,
+            overflow,
+        } => numeric_objects::sort_comparison(
             &values[left],
             &values[right],
             false,
             false,
             *semantics,
+            *overflow,
+            diagnostics,
         )?,
         Values::TemporalObject { values } => {
             temporal::sort_comparison(&values[left], &values[right])?
@@ -85,9 +105,14 @@ fn compare(level: &Facts, left: usize, right: usize) -> Result<Ordering, Error> 
     })
 }
 
-fn tuple_monotonic(levels: &[Facts], codes: &[Vec<i64>], rows: usize) -> bool {
-    (1..rows).all(|row| {
-        for (level, code) in levels.iter().zip(codes) {
+fn tuple_monotonic(
+    levels: &[Facts],
+    codes: &[Vec<i64>],
+    rows: usize,
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<bool, Failure> {
+    for row in 1..rows {
+        for (level_no, (level, code)) in levels.iter().zip(codes).enumerate() {
             let (left, right) = (code[row - 1] as usize, code[row] as usize);
             // Tuple equality first recognizes the very same retained owner.
             if left == right {
@@ -97,14 +122,21 @@ fn tuple_monotonic(levels: &[Facts], codes: &[Vec<i64>], rows: usize) -> bool {
                 Values::TemporalObject { values } => {
                     temporal::rank_comparison(&values[left], &values[right])
                 }
-                _ => compare(level, left, right).ok(),
+                _ => match compare(level, left, right, diagnostics) {
+                    Ok(order) => Some(order),
+                    Err(reason) if is_type_error(reason) => None,
+                    Err(reason) => return Err((reason, level_no, left, right)),
+                },
             };
             if order != Some(Ordering::Equal) {
-                return order == Some(Ordering::Less);
+                if order != Some(Ordering::Less) {
+                    return Ok(false);
+                }
+                break;
             }
         }
-        true
-    })
+    }
+    Ok(true)
 }
 
 fn outer_monotonic(
@@ -113,6 +145,7 @@ fn outer_monotonic(
     rows: usize,
     monotonic: &[bool],
     ranks: Option<&[Vec<usize>]>,
+    diagnostics: &mut numeric_objects::Diagnostics,
 ) -> Result<bool, Failure> {
     if codes.iter().flatten().any(|c| *c == -1) {
         return Ok(false);
@@ -134,12 +167,12 @@ fn outer_monotonic(
     for level_no in (0..levels.len()).rev() {
         let answer = object_stable::sort(&mut positions, |a, b| {
             let (left, right) = (codes[level_no][a] as usize, codes[level_no][b] as usize);
-            compare(&levels[level_no], left, right)
+            compare(&levels[level_no], left, right, diagnostics)
                 .map_err(|reason| (reason, level_no, left, right))
         });
         if let Err(failure) = answer {
             if is_type_error(failure.0) {
-                return Ok(tuple_monotonic(levels, codes, rows));
+                return tuple_monotonic(levels, codes, rows, diagnostics);
             }
             return Err(failure);
         }
@@ -151,6 +184,7 @@ pub(super) fn order(
     levels: &[Facts],
     codes: &[Vec<i64>],
     missing: &[bool],
+    diagnostics: &mut numeric_objects::Diagnostics,
 ) -> Result<ResultOrder, CoreError> {
     for (level, code) in levels.iter().zip(codes) {
         if matches!(level.values, Values::Multi { .. })
@@ -163,8 +197,39 @@ pub(super) fn order(
     }
     let mut original_monotonic = Vec::new();
     let mut cached = Vec::new();
-    for level in levels {
-        if let Values::TemporalObject { values } = &level.values {
+    let early_guard = code_order(codes, missing.len());
+    let mut numeric_probes = vec![None; levels.len()];
+    let mut previous_monotonic = true;
+    for (level_no, level) in levels.iter().enumerate() {
+        if let Values::ScalarObject {
+            values,
+            semantics,
+            overflow,
+        } = &level.values
+        {
+            let monotonic = if early_guard && previous_monotonic {
+                match numeric_objects::monotonic(
+                    values,
+                    &level.missing,
+                    &(0..values.len()).collect::<Vec<_>>(),
+                    *semantics,
+                    *overflow,
+                    diagnostics,
+                )? {
+                    Ok(value) => {
+                        numeric_probes[level_no] = Some(value);
+                        value
+                    }
+                    Err((reason, left, right)) => {
+                        return Ok(refused((reason, level_no, left, right)));
+                    }
+                }
+            } else {
+                false
+            };
+            original_monotonic.push(monotonic);
+            cached.push(None);
+        } else if let Values::TemporalObject { values } = &level.values {
             original_monotonic.push(temporal::monotonic(
                 values,
                 &level.missing,
@@ -172,7 +237,7 @@ pub(super) fn order(
             )?);
             cached.push(None);
         } else {
-            let result = order_sampled(level)?;
+            let result = order_inner(level, diagnostics)?;
             if matches!(result, ResultOrder::NeedsProfile) {
                 return Ok(result);
             }
@@ -185,11 +250,19 @@ pub(super) fn order(
             ));
             cached.push(Some(result));
         }
+        previous_monotonic &= *original_monotonic.last().unwrap();
     }
     // Native level normalization first permits an already-lexsorted index to
     // retain even unused, mutually incomparable level owners without sorting.
-    if code_order(codes, missing.len()) {
-        match outer_monotonic(levels, codes, missing.len(), &original_monotonic, None) {
+    if early_guard {
+        match outer_monotonic(
+            levels,
+            codes,
+            missing.len(),
+            &original_monotonic,
+            None,
+            diagnostics,
+        ) {
             Ok(true) => return Ok(sorted((0..missing.len()).collect(), true)),
             Err(failure) => return Ok(refused(failure)),
             Ok(false) => {}
@@ -197,14 +270,47 @@ pub(super) fn order(
     }
     let mut ranks = Vec::new();
     let mut normalized_monotonic = Vec::new();
+    let mut numeric_permutations = vec![None; levels.len()];
     for (level_no, (level, code)) in levels.iter().zip(codes).enumerate() {
         let result = match cached[level_no].take() {
             Some(result) => result,
-            None => order_sampled(level)?,
+            None => {
+                if let Values::ScalarObject {
+                    values,
+                    semantics,
+                    overflow,
+                } = &level.values
+                {
+                    if numeric_probes[level_no] == Some(true) {
+                        sorted((0..values.len()).collect(), true)
+                    } else {
+                        numeric_objects::order(
+                            values,
+                            &level.missing,
+                            level.profile,
+                            *semantics,
+                            *overflow,
+                            diagnostics,
+                            numeric_objects::OrderStage::Level {
+                                probe_first: numeric_probes[level_no].is_none(),
+                            },
+                        )?
+                    }
+                } else {
+                    order_inner(level, diagnostics)?
+                }
+            }
         };
         let permutation = match result {
             ResultOrder::NeedsProfile => return Ok(ResultOrder::NeedsProfile),
-            ResultOrder::Sorted { positions, .. } => {
+            ResultOrder::Sorted {
+                positions,
+                already_ordered,
+                ..
+            } => {
+                if !already_ordered && matches!(level.values, Values::ScalarObject { .. }) {
+                    numeric_permutations[level_no] = Some(positions.clone());
+                }
                 normalized_monotonic.push(
                     if let Values::TemporalObject { values } = &level.values {
                         temporal::monotonic(values, &level.missing, &positions)?
@@ -219,6 +325,7 @@ pub(super) fn order(
                 left,
                 right,
                 levels: mut path,
+                ..
             } => {
                 if !is_type_error(reason) {
                     path.insert(0, level_no);
@@ -227,6 +334,10 @@ pub(super) fn order(
                         left,
                         right,
                         levels: path,
+
+                        overflow_warnings: Vec::new(),
+                        overflow_prints: 0,
+                        integer_destination: None,
                     });
                 }
                 normalized_monotonic.push(false);
@@ -249,12 +360,39 @@ pub(super) fn order(
                 .collect::<Vec<_>>(),
         );
     }
+    for (level_no, level) in levels.iter().enumerate() {
+        if let (
+            Values::ScalarObject {
+                values,
+                semantics,
+                overflow,
+            },
+            Some(positions),
+        ) = (&level.values, &numeric_permutations[level_no])
+        {
+            normalized_monotonic[level_no] = match numeric_objects::monotonic(
+                values,
+                &level.missing,
+                positions,
+                *semantics,
+                *overflow,
+                diagnostics,
+            )? {
+                Ok(value) => value,
+                Err((reason, left, right)) => return Ok(refused((reason, level_no, left, right))),
+            };
+        }
+        if !normalized_monotonic[level_no] {
+            break;
+        }
+    }
     match outer_monotonic(
         levels,
         codes,
         missing.len(),
         &normalized_monotonic,
         Some(&ranks),
+        diagnostics,
     ) {
         Ok(true) => return Ok(sorted((0..missing.len()).collect(), true)),
         Err(failure) => return Ok(refused(failure)),

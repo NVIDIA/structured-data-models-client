@@ -218,7 +218,42 @@ pub enum TabularIndexValues {
     ScalarObject {
         values: Vec<TabularIndexScalar>,
         semantics: NumericComparisonProfile,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        overflow: Option<NumericOverflowPolicy>,
     },
+}
+
+/// Ordinary scalar-cast overflow behavior, observed once before core ordering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NumericOverflowPolicy {
+    Ignore,
+    Raise,
+    Warn,
+    Print,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct IntegerDestination {
+    pub signed: bool,
+    pub width: u8,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NumericWarningStage {
+    Probe,
+    Sort,
+    MultiProbe,
+    LevelSort,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NumericOverflowWarnings {
+    pub stage: NumericWarningStage,
+    pub count: u64,
+}
+fn zero_count(value: &u64) -> bool {
+    *value == 0
 }
 
 /// Native instant storage resolution; scaling takes place in widened arithmetic.
@@ -268,6 +303,10 @@ pub enum NumericComparisonProfile {
     /// signed64/unsigned64 boundary. This policy must be bound to the producer's
     /// common-type promotion mode, not a weak or warning-producing mode.
     ExactIntegerPairs,
+    /// Weak rules with reached self-width integer bounds, without the later exact shortcut.
+    WeakFixedIntegerPairs,
+    /// Legacy floating rules with the unconditional exact unbounded/fixed integer shortcut.
+    LegacyExactUnboundedIntegers,
     /// Compare integer pairs exactly. A plain binary64 operand paired with a
     /// fixed floating owner is narrowed to that owner's width; an unbounded
     /// integer paired with a fixed floating owner converts through binary64 and
@@ -364,11 +403,21 @@ pub enum OrderedSampledTabularRows {
     /// Reuse the same facts after binding their remaining producer profiles.
     NeedsProfile,
     Sorted {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overflow_warnings: Vec<NumericOverflowWarnings>,
+        #[serde(default, skip_serializing_if = "zero_count")]
+        overflow_prints: u64,
         positions: Vec<usize>,
         /// Native sort_index may copy/finalize without taking a permutation.
         already_ordered: bool,
     },
     Refused {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overflow_warnings: Vec<NumericOverflowWarnings>,
+        #[serde(default, skip_serializing_if = "zero_count")]
+        overflow_prints: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        integer_destination: Option<IntegerDestination>,
         reason: TabularOrderError,
         /// Index-level path containing the left/right owners; empty for rows.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -386,6 +435,9 @@ pub enum TabularOrderError {
     DateTimeMismatch,
     NaiveAwareDatetime,
     IntegerToFloatOverflow,
+    IntegerOutOfBounds,
+    IntegerIntermediateOverflow,
+    FloatingOverflow,
     NativeEffectsPending,
     TimestampDateMismatch,
     TimestampAwarenessMismatch,

@@ -427,16 +427,16 @@ def _numeric_diagnostics(ordering: dict[str, Any]) -> None:
     diagnostics = ordering.get('overflow_warnings', [])
     if diagnostics:
         from pandas.core import sorting
-        from pandas.core.indexes import base
+        from pandas.core.indexes import base, multi
 
         # Audited source sites of the native probe and object argsort calls.
         # Their module registries preserve normal warning filters and dedup.
         sites = {
-            '2.2.2': (2251, 439),
-            '2.2.3': (2251, 439),
-            '2.3.3': (2258, 439),
-            '3.0.6': (2395, 442),
-            '3.1.0': (2490, 473),
+            '2.2.2': (2251, 439, 1709, 6053),
+            '2.2.3': (2251, 439, 1709, 6053),
+            '2.3.3': (2258, 439, 1728, 6066),
+            '3.0.6': (2395, 442, 1807, 6088),
+            '3.1.0': (2490, 473, 1896, 6366),
         }
         lines = sites.get(pd.__version__)
         if lines is None:
@@ -445,10 +445,11 @@ def _numeric_diagnostics(ordering: dict[str, Any]) -> None:
             )
         for diagnostic in diagnostics:
             stage = diagnostic['stage']
-            if stage not in ('probe', 'sort'):
+            stages = ('probe', 'sort', 'multi_probe', 'level_sort')
+            if stage not in stages:
                 raise AssertionError('invalid numeric warning stage')
-            module = base if stage == 'probe' else sorting
-            line = lines[0 if stage == 'probe' else 1]
+            module = (base, sorting, multi, base)[stages.index(stage)]
+            line = lines[stages.index(stage)]
             registry = module.__dict__.setdefault('__warningregistry__', {})
             for _ in range(diagnostic['count']):
                 warnings.warn_explicit(
