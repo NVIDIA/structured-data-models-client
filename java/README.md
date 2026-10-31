@@ -17,6 +17,10 @@ Tabular accepts Apache Arrow Java `Table` inputs, with the same context/scoring/
 
 ```java
 Request request = new Request(context, scoring, "price", "regression");
+// Optional explicit schema, table name and JSON-family request options:
+RequestOptions options = RequestOptions.builder().entityTable("instance")
+    .inference(Map.of("temperature", 0.5)).build();
+Request configured = new Request(context, scoring, "price", "regression", options);
 PredictionResult result = client.predict(request, SdmClient.KUMO_TABULAR);
 try (FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR)) {
   PredictionResult repeated = fitted.predict(request);

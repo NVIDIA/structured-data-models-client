@@ -283,7 +283,17 @@ public final class Schema {
     Map<Integer, Object> attachments = new LinkedHashMap<>();
     attachments.put(1, Host.attachment(toHeld()));
     attachments.put(2, Host.attachment(edit));
-    try (Host.Finished finished = Host.run(operation, attachments)) {
+    Map<Integer, byte[]> frames = new LinkedHashMap<>();
+    if (!data.isEmpty()) {
+      operation.put("context", 3);
+      attachments.put(3, Host.attachment(Map.of("kind", "frames", "key_counts", Map.of())));
+      if ("primary_key".equals(edit.get("edit")) && data.containsKey(edit.get("table"))) {
+        operation.put("frame", 4);
+        frames.put(4, data.get(edit.get("table")));
+      }
+    }
+    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(
+        operation, attachments, frames, Host.Call.none())) {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
       Schema changed = held(read(finished.bytes(edited.schema())), source);
       Schema result = new Schema(changed.tables, changed.relationships, source, conversionNotes);

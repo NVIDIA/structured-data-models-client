@@ -74,11 +74,24 @@ public final class PredictiveQuery {
 
   /** Materialize one in-memory table using new Arrow rows to score. */
   public Request materialize(Schema schema, org.apache.arrow.vector.table.Table predict) {
+    return materialize(schema, predict, MaterializeOptions.builder().build());
+  }
+
+  /** Materialize Tabular scoring rows with an explicit task or context sample limit. */
+  public Request materialize(Schema schema, org.apache.arrow.vector.table.Table predict,
+      MaterializeOptions options) {
+    Objects.requireNonNull(options, "options");
+    if (options.indices() != null || options.candidates() != null || !options.options().isEmpty()
+        || options.anchorTime() != null || options.contextAnchorGiven()
+        || SdmClient.KUMO_RELATIONAL.equals(options.model()))
+      throw new StructuredDataException("supplied Tabular rows accept task and context size options",
+          "INVALID_REQUEST", Map.of(), null);
     if (schema.data().size() != 1)
       throw new StructuredDataException("Arrow scoring requires one in-memory table", "INVALID_REQUEST", Map.of(), null);
     Map<String, Object> input = new LinkedHashMap<>();
     input.put("schema", schema.toHeld()); input.put("query", text);
-    input.put("indices", List.of()); input.put("num_context_samples", null);
+    input.put("indices", List.of()); input.put("num_context_samples", options.numContextSamples());
+    input.put("task", options.task());
     try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("materialize_predict", input,
         Map.of("table", schema.data().values().iterator().next(), "predict",
             com.nvidia.sdm.internal.ArrowTabular.snapshot(predict)), null)) {
@@ -131,6 +144,7 @@ public final class PredictiveQuery {
       input.put("schema", schema.toHeld()); input.put("query", text);
       input.put("indices", options.indices().stream().map(com.nvidia.sdm.internal.ArrowTabular::key).toList());
       input.put("num_context_samples", options.numContextSamples());
+      input.put("task", options.task());
       if (options.candidates() != null || !options.options().isEmpty() || options.anchorTime() != null || options.contextAnchorGiven())
         throw new StructuredDataException("warehouse sampling options do not apply to Tabular",
             "INVALID_REQUEST", Map.of(), null);
@@ -241,6 +255,7 @@ public final class PredictiveQuery {
     Map<String, Object> values = new LinkedHashMap<>();
     values.put("num_context_samples", options.numContextSamples());
     values.putAll(new TreeMap<>(options.options()));
+    if (options.task() != null) values.put("task", options.task());
     if (options.contextAnchorGiven()) {
       Object anchor = options.contextAnchorTime();
       values.put(

@@ -223,6 +223,53 @@ struct Prepared {
     columns: TabularColumns,
     keys: Vec<String>,
 }
+fn check_options(options: &DirectInference) -> Result<(), CoreError> {
+    fn visit(value: &PrimitiveOption, depth: usize) -> Result<(), CoreError> {
+        tabular::check_option(&DirectOptionObservation {
+            integer: match value {
+                PrimitiveOption::Integer(v) => Some(v.clone()),
+                _ => None,
+            },
+            repeated: false,
+            depth,
+        })?;
+        match value {
+            PrimitiveOption::Array(values) => {
+                for value in values {
+                    visit(value, depth + 1)?;
+                }
+            }
+            PrimitiveOption::Object(values) => {
+                for (_, value) in values {
+                    visit(value, depth + 1)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    for (_, value) in &options.entries {
+        visit(value, 1)?;
+    }
+    Ok(())
+}
+
+fn option_truth(value: &PrimitiveOption) -> bool {
+    use sdm_contract::Scalar;
+    match value {
+        PrimitiveOption::Integer(value) => value.bytes().any(|v| v.is_ascii_digit() && v != b'0'),
+        PrimitiveOption::Array(values) => !values.is_empty(),
+        PrimitiveOption::Object(values) => !values.is_empty(),
+        PrimitiveOption::Value(Scalar::Null) => false,
+        PrimitiveOption::Value(Scalar::Bool(value)) => *value,
+        PrimitiveOption::Value(Scalar::Utf8(value)) => !value.is_empty(),
+        PrimitiveOption::Value(Scalar::Float64(value)) => *value != 0.0,
+        PrimitiveOption::Value(Scalar::Int64(value)) => *value != 0,
+        PrimitiveOption::Value(Scalar::UInt64(value)) => *value != 0,
+        _ => true,
+    }
+}
+
 fn bound(
     asker: &Asker,
     input: &ArrowPrediction,
@@ -234,7 +281,14 @@ fn bound(
         model: input.model.clone(),
         outputs: input.outputs.clone(),
         kind: input.request.task.clone(),
-        anchored: false,
+        anchored: input
+            .request
+            .task_options
+            .entries
+            .iter()
+            .rev()
+            .find(|(name, _)| name == "anchor_time_column")
+            .is_some_and(|(_, value)| option_truth(value)),
         relationships: !description.schema.links.is_empty(),
         tables: description.schema.tables.len(),
         context_rows: header(context).rows,
@@ -306,7 +360,9 @@ async fn predict(
         &prepared.bound.outputs,
         crate::pql::float_text,
     )?;
-    let payload = tabular::complete_body(payload, &input.request_id, DirectInference::default())?;
+    check_options(&input.request.inference)?;
+    let payload =
+        tabular::complete_body(payload, &input.request_id, input.request.inference.clone())?;
     if header(&scoring).rows == 0 {
         return crate::predict::finish(
             asker,
@@ -591,9 +647,12 @@ async fn score(
         ),
         (
             "metadata",
-            object([("request_id", Value::Text(input.request_id))]),
+            object([("request_id", Value::Text(input.request_id.clone()))]),
         ),
     ]);
+    check_options(&input.request.inference)?;
+    let payload =
+        tabular::complete_body(payload, &input.request_id, input.request.inference.clone())?;
     let mut layout = policy::state_metadata(state)?;
     if let Value::Object(fields) = &payload {
         for (name, value) in fields {
@@ -786,7 +845,7 @@ fn materialize(
         .find(|c| c.name == target.column)
         .ok_or_else(|| internal("selected target missing"))?;
     let task = match query.problem_type {
-        Some(ProblemType::Classify) => "classification".to_owned(),
+        Some(ProblemType::Classify) if input.task.is_none() => "classification".to_owned(),
         _ => {
             let encoded = encoded_column(&context, &target.column)?;
             let distinct = match encoded.get("rows") {
@@ -803,10 +862,14 @@ fn materialize(
             let binary=distinct.len()==2 && distinct.iter().all(|v| matches!(sdm_wire::json::read(v), Ok(Value::Number(n)) if n.parse::<f64>().is_ok_and(|n| n.is_finite() && n.fract()==0.0)));
             match tabular::decide_materialized_task(DecideTabularTask::Kind {
                 target_stype: direct::stype_name(target_column.stype).into(),
-                stated: None,
+                stated: input
+                    .task
+                    .as_ref()
+                    .map(|task| matches!(task.as_str(), "classification" | "regression")),
                 binary_whole: Some(binary),
             }) {
                 TabularTaskDecision::Task { kind, .. } => kind,
+                TabularTaskDecision::Explicit => input.task.clone().expect("explicit task"),
                 _ => return Err(invalid("target is not supported by Tabular")),
             }
         }
@@ -818,6 +881,8 @@ fn materialize(
         schema: Some(input.schema.clone()),
         query: Some(input.query.clone()),
         context_identity: None,
+        inference: DirectInference::default(),
+        task_options: DirectInference::default(),
     };
     let description = prepare(asker, &request, &context, &scoring)?;
     let context = asker.attach(Attachment::Arrow(native(context)?))?;

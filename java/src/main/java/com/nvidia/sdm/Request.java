@@ -26,11 +26,32 @@ public final class Request {
   private Map<String, Object> direct;
   private com.nvidia.sdm.internal.MaterializedRequest materialized;
 
-  /** A model-neutral request from Arrow tables. The constructor takes an owned snapshot. */
+  /** A Tabular request from Arrow tables. The constructor takes an owned snapshot. */
   public Request(org.apache.arrow.vector.table.Table context,
       org.apache.arrow.vector.table.Table predict, String target, String task) {
+    this(context, predict, target, task, RequestOptions.builder().build());
+  }
+
+  /** Direct Tabular request with optional explicit schema and entity-table name. */
+  public Request(org.apache.arrow.vector.table.Table context,
+      org.apache.arrow.vector.table.Table predict, String target, String task, RequestOptions options) {
     this(ArrowTabular.snapshot(context), ArrowTabular.snapshot(predict),
-        ArrowTabular.request(target, task, "instance", null), "");
+        directOptions(target, task, options), "");
+    this.inference = options.inference();
+    this.taskOptions = options.taskOptions();
+  }
+
+  private Map<String, Object> inference = Map.of();
+  private Map<String, Object> taskOptions = Map.of();
+  public Map<String, Object> inference() { return inference; }
+  public Map<String, Object> taskOptions() { return taskOptions; }
+
+  private static Map<String, Object> directOptions(String target, String task, RequestOptions options) {
+    Map<String, Object> input = ArrowTabular.request(target, task, options.entityTable(),
+        options.schema() == null ? null : options.schema().toHeld());
+    input.put("inference", com.nvidia.sdm.internal.DirectOptions.encode(options.inference()));
+    input.put("task_options", com.nvidia.sdm.internal.DirectOptions.encode(options.taskOptions()));
+    return input;
   }
 
   Request(byte[] context, byte[] predict, Map<String, Object> request, String query) {
@@ -40,9 +61,11 @@ public final class Request {
         Map.of("context", context, "predict", predict), null)) {
       Map<String, Object> description = ArrowTabular.value(finished);
       this.schema = Schema.held(description.get("schema"), null);
-      this.direct = ArrowTabular.request((String) description.get("target"),
-          (String) description.get("task"), (String) description.get("entity_table"),
-          description.get("schema"));
+      this.direct = new java.util.LinkedHashMap<>(request);
+      this.direct.put("target", description.get("target"));
+      this.direct.put("task", description.get("task"));
+      this.direct.put("entity_table", description.get("entity_table"));
+      this.direct.put("schema", description.get("schema"));
     }
     if (!query.isEmpty()) {
       this.direct.put("query", query);

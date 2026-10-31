@@ -40,6 +40,7 @@ public final class MaterializeOptions {
   static final Object EACH_ENTITY = new Object();
 
   private final String model;
+  private final String task;
   private final List<Object> candidates;
   private final List<Object> indices;
   private final Object anchorTime;
@@ -50,6 +51,7 @@ public final class MaterializeOptions {
 
   private MaterializeOptions(Builder builder) {
     this.model = builder.model;
+    this.task = builder.task;
     this.candidates = builder.candidates == null ? null : Collections.unmodifiableList(new ArrayList<>(builder.candidates));
     this.indices = builder.indices == null ? null : Collections.unmodifiableList(builder.indices);
     this.anchorTime = builder.anchorTime;
@@ -64,6 +66,7 @@ public final class MaterializeOptions {
   }
 
   String model() { return model; }
+  String task() { return task; }
   List<Object> candidates() { return candidates; }
 
   List<Object> indices() {
@@ -93,6 +96,7 @@ public final class MaterializeOptions {
   /** Builds {@link MaterializeOptions}. */
   public static final class Builder {
     private String model;
+    private String task;
     private List<Object> candidates;
     private List<Object> indices;
     private Object anchorTime;
@@ -110,6 +114,9 @@ public final class MaterializeOptions {
       this.model = model;
       return this;
     }
+
+    /** Explicit Tabular task, such as regression or classification; Rust validates it. */
+    public Builder task(String task) { this.task = Objects.requireNonNull(task); return this; }
 
     /** Values to rank, in caller order. Rust prepares and combines candidate questions. */
     public Builder candidates(List<?> candidates) {

@@ -67,6 +67,10 @@ pub struct ArrowRequest {
     pub schema: Option<HeldSchema>,
     pub query: Option<String>,
     pub context_identity: Option<String>,
+    #[serde(default)]
+    pub inference: crate::direct::DirectInference,
+    #[serde(default)]
+    pub task_options: crate::direct::DirectInference,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -108,4 +112,6 @@ pub struct ArrowMaterialize {
     pub query: String,
     pub indices: Vec<crate::session::SessionKeyPart>,
     pub num_context_samples: Option<usize>,
+    #[serde(default)]
+    pub task: Option<String>,
 }
