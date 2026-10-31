@@ -113,9 +113,8 @@ def test_temporal_frame_materialization():
     assert first == materialize(query)
 
 
-@pytest.mark.parametrize('rank', [False, True])
-def test_link_prediction_frame_materialization(rank):
-    data = Schema.from_data(
+def link_schema():
+    return Schema.from_data(
         {
             'users': pd.DataFrame({'user_id': range(1, 21)}),
             'items': pd.DataFrame({'item_id': range(1, 6), 'price': range(5)}),
@@ -135,6 +134,11 @@ def test_link_prediction_frame_materialization(rank):
         },
         time_columns={'orders': 'time'},
     )
+
+
+@pytest.mark.parametrize('rank', [False, True])
+def test_link_prediction_frame_materialization(rank):
+    data = link_schema()
     query = PredictiveQuery(
         'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id',
         data,
@@ -224,3 +228,61 @@ def test_float_link_identifiers_keep_source_precision():
         '16777217.0',
     }
     assert any(set(group) == {'16777216.0', '16777217.0'} for group in targets)
+
+
+def test_link_prediction_old_and_core_present_the_same_rankings(monkeypatch):
+    from sdm_client import SDMClient
+
+    class Transport:
+        url = 'http://127.0.0.1:9'
+
+        def __init__(self):
+            self.sent = []
+
+        def predict(self, payload):
+            self.sent.append(payload)
+            assert payload['task']['kind'] == 'temporal_link_prediction'
+            assert payload['output']['fields'] == ['rankings']
+            rows = payload['predict']['instance_table']['rows']
+            columns = payload['predict']['instance_table']['columns']
+            identity = columns.index('instance_id')
+            return {
+                'id': 'link-response',
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': [
+                    {
+                        'row_index': 1,
+                        'id': str(rows[1][identity]),
+                        'rankings': [
+                            {'item': '3', 'score': 0.9},
+                            {'item': '1', 'score': 0.4},
+                        ],
+                    },
+                    {
+                        'row_index': 0,
+                        'id': str(rows[0][identity]),
+                        'rankings': [{'item': '2', 'score': 0.7}],
+                    },
+                ],
+            }
+
+    query = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id',
+        link_schema(),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = query.materialize(
+            indices=[1, 2], random_seed=7, model=KumoRelational()
+        )
+    client = SDMClient('http://127.0.0.1:9', 'none')
+    transport = Transport()
+    monkeypatch.setattr(client, '_transport', transport)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
+    old = client.predict(request, model=KumoRelational())
+    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.FRAME_ROUTES))
+    core = client.predict(request, model=KumoRelational())
+    assert core.items == old.items
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert len(transport.sent) == 2
