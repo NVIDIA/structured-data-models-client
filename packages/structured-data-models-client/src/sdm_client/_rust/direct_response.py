@@ -580,6 +580,9 @@ def decoded_reply(
         )
     except StructuredDataError:
         return None
+    if finished.result['op'] == 'native_direct_response':
+        results.expect(finished.result, results.NativeDirectResponse)
+        return None
     finished = direct._response(finished)
     answer = results.expect(finished.result, results.Predicted)
     result = predict._result(

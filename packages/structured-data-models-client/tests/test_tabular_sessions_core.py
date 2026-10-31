@@ -295,3 +295,73 @@ def test_session_invalid_reply_keeps_native_diagnostic(monkeypatch, row):
                 fitted.predict(opening)
             outcomes.append((type(caught.value), str(caught.value)))
     assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize(
+    'task,value',
+    [
+        ('regression', '1.5'),
+        ('regression', True),
+        ('regression', [1, 2]),
+        ('regression', {'answer': 1}),
+        ('regression', 2**80),
+        ('classification', str(2**63)),
+    ],
+)
+def test_session_unbounded_native_answers_keep_old_behavior(
+    monkeypatch, task, value
+):
+    answers = []
+    for routes in ('', ROUTES):
+        monkeypatch.setenv('SDM_CORE_ROUTES', routes)
+        endpoint = SessionEndpoint()
+        endpoint.session_predict = lambda *_: {
+            'id': 'reply',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [{'row_index': 0, 'prediction': value}],
+        }
+        client = SDMClient.__new__(SDMClient)
+        client._start(endpoint)
+        opening = Request(
+            pd.DataFrame({'x': [1, 2], 'y': [0, 1]}),
+            pd.DataFrame({'x': [3]}),
+            target='y',
+            task=task,
+        )
+        with client, client.fit(opening, model=KumoTabular()) as fitted:
+            answer = fitted.predict(opening).items[0].prediction
+            answers.append((type(answer), answer))
+    assert answers[0] == answers[1]
+
+
+def test_float_class_probability_spelling_retains_native_conversion(
+    monkeypatch,
+):
+    answers = []
+    for routes in ('', ROUTES):
+        monkeypatch.setenv('SDM_CORE_ROUTES', routes)
+        endpoint = SessionEndpoint()
+        endpoint.session_predict = lambda *_: {
+            'id': 'reply',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [
+                {
+                    'row_index': 0,
+                    'prediction': 1.0,
+                    'probabilities': {'1_0': 0.5},
+                }
+            ],
+        }
+        client = SDMClient.__new__(SDMClient)
+        client._start(endpoint)
+        opening = Request(
+            pd.DataFrame({'x': [1, 2], 'y': [0.0, 1.0]}),
+            pd.DataFrame({'x': [3]}),
+            target='y',
+            task='classification',
+        )
+        with client, client.fit(opening, model=KumoTabular()) as fitted:
+            answers.append(fitted.predict(opening).items[0].probabilities)
+    assert answers == [{'10.0': 0.5}, {'10.0': 0.5}]

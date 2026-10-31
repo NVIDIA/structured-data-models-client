@@ -291,6 +291,8 @@ impl Operation {
 pub enum OperationResult {
     DirectValue(crate::direct::DirectValue),
     DecodedDirectResponse(crate::direct::DecodedDirectResponse),
+    /// The host must retain native response owners for this reply.
+    NativeDirectResponse,
     PreparedDirectCall(crate::direct::native_response::PreparedDirectCall),
     ValidateQuery(QueryValidation),
     DescribeSource(DescribedSource),

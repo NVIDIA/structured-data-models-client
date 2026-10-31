@@ -872,6 +872,10 @@ pub(crate) fn decode_response(
     let payload = crate::predict::payload(&bytes(&mut attached, request.payload)?)?;
     let answer = sdm_wire::json::read_answer(&bytes(&mut attached, request.response)?)
         .map_err(|_| internal("response bytes are not readable"))?;
+    let (response, _, _) = decoded(&payload, &answer)?;
+    if !tabular::response::native_reply_representable(&payload, &response) {
+        return Ok(OperationResult::NativeDirectResponse);
+    }
     decoded_result(asker, input.bound, payload, answer)
 }
 

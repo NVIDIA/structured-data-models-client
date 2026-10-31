@@ -13651,6 +13651,20 @@
           ]
         },
         {
+          "description": "The host must retain native response owners for this reply.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "native_direct_response"
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false
+        },
+        {
           "description": "A prepared, unsent call. Native response owners never cross this boundary.",
           "type": "object",
           "properties": {

@@ -604,3 +604,61 @@ mod tests {
         }
     }
 }
+
+/// Whether the bounded result representation preserves native session answers.
+/// A negative decision keeps the existing native reader; it is not a refusal.
+pub fn native_reply_representable(payload: &Value, response: &PredictionResponse) -> bool {
+    let task = payload.get("task");
+    let kind = task.and_then(|v| v.get("kind")).and_then(Value::as_text);
+    let dtype = task
+        .and_then(|v| v.get("target"))
+        .and_then(|v| v.get("dtype"))
+        .and_then(Value::as_text)
+        .unwrap_or("");
+    let integer = |value: &Value| match value {
+        Value::Number(text) | Value::Text(text) => text.trim().parse::<i64>().is_ok(),
+        _ => false,
+    };
+    let scalar = |value: &Value| {
+        if kind == Some("regression") {
+            return match value {
+                Value::Number(text) if sdm_wire::json::is_integer_token(text) => {
+                    text.parse::<i64>().is_ok()
+                }
+                Value::Number(text) => text.parse::<f64>().is_ok_and(f64::is_finite),
+                _ => false,
+            };
+        }
+        if dtype.starts_with("int") {
+            integer(value)
+        } else if dtype.starts_with("float") {
+            match value {
+                Value::Number(text) | Value::Text(text) => {
+                    text.trim().parse::<f64>().is_ok_and(f64::is_finite)
+                }
+                _ => false,
+            }
+        } else if dtype.starts_with("bool") {
+            matches!(value, Value::Bool(_))
+        } else {
+            matches!(value, Value::Text(_))
+        }
+    };
+    response.predictions.iter().all(|item| {
+        item.prediction.as_ref().is_none_or(scalar)
+            && item
+                .forecast_step
+                .is_none_or(|step| i64::try_from(step).is_ok())
+            && item.probabilities.as_ref().is_none_or(|values| {
+                !(dtype.starts_with("int") || dtype.starts_with("float"))
+                    || values.iter().all(|(key, _)| {
+                        let value = Value::Text(key.clone());
+                        if dtype.starts_with("int") {
+                            integer(&value)
+                        } else {
+                            key.trim().parse::<f64>().is_ok_and(f64::is_finite)
+                        }
+                    })
+            })
+    })
+}
