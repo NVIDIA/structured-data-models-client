@@ -40,7 +40,10 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
   The latest installed Python sweep passed 735 cases; both failures were corrected and all 55 cases in the affected files then passed.
   Java passed 69 cases with two environment skips; Clippy passed across core and JNI.
   These are regression results, not live parity certification.
-- Next: shared policy for Python's public result merge, Java readers/persistence, remaining provider obligations and permanent parity machinery.
+- Shared Python/Java result-merge policy is implemented (`3b0bddd0d`, `4fe90fa0e`), preserving original Python row/metadata owners.
+  All 58 installed Python regression checks pass, including the corrected shared error diagnostics.
+  Native merging keeps exact numeric candidates and compares aware datetimes by UTC instant; stable deduplication removes duplicates within each part too.
+- Next: integrate reviewed Java readers, then persistence, remaining provider obligations and permanent parity machinery.
   The real endpoint matrix and remaining scope reconciliation are still pending.
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
