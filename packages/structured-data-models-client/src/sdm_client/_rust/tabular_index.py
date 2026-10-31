@@ -100,7 +100,12 @@ def _comparison_semantics() -> str:
     required_mode = families[2]
     if required_mode is not None:
         promotion = getattr(np, '_get_promotion_state', None)
-        if promotion is None or promotion() != required_mode:
+        mode = None if promotion is None else promotion()
+        if required_mode == 'legacy' and mode == 'weak':
+            return 'weak_fixed_integer_pairs'
+        if required_mode == 'weak' and mode == 'legacy':
+            return 'legacy_exact_unbounded_integers'
+        if mode != required_mode:
             raise RouteError(
                 'this NumPy scalar promotion mode is not yet represented by the core'
             )
@@ -349,6 +354,9 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                 'values': atoms,
                 'semantics': _comparison_semantics(),
             }
+            overflow = np.geterr()['over']
+            if overflow in ('ignore', 'raise', 'warn', 'print'):
+                result['overflow'] = overflow
         elif all(
             absent or atom['kind'] == 'text'
             for atom, absent in zip(atoms, missing, strict=True)

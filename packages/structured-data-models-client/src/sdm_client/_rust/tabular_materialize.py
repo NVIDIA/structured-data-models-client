@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import warnings
 from datetime import date, datetime
 from typing import Any
@@ -266,6 +267,7 @@ def _context(
         ordering = _call(
             'order_sampled_tabular_rows', bind_profile(observation)
         )
+    _numeric_diagnostics(ordering)
     if ordering['kind'] == 'refused':
         owner_index = subset.index
         for level in ordering.get('levels', []):
@@ -277,6 +279,16 @@ def _context(
                     'comparison refusal has invalid level address'
                 )
             owner_index = owner_index.levels[level]
+        if ordering['reason'] == 'floating_overflow':
+            raise FloatingPointError('overflow encountered in cast')
+        if ordering['reason'] == 'integer_out_of_bounds':
+            destination = ordering['integer_destination']
+            prefix = 'int' if destination['signed'] else 'uint'
+            width = destination['width'] * 8
+            value = owner_index[ordering['left']]
+            raise OverflowError(
+                f'Python integer {value} out of bounds for {prefix}{width}'
+            )
         if ordering['reason'] == 'integer_to_float_overflow':
             raise OverflowError('int too large to convert to float')
         if ordering['reason'] == 'native_effects_pending':
@@ -406,6 +418,47 @@ def _task(query: Any, target: pd.Series, stated: str | None) -> str:
             stacklevel=caller_stacklevel(),
         )
     return answer['kind']
+
+
+def _numeric_diagnostics(ordering: dict[str, Any]) -> None:
+    """Present final numeric diagnostics before reconstructing native rows."""
+    diagnostics = ordering.get('overflow_warnings', [])
+    if diagnostics:
+        from pandas.core import sorting
+        from pandas.core.indexes import base
+
+        # Audited source sites of the native probe and object argsort calls.
+        # Their module registries preserve normal warning filters and dedup.
+        sites = {
+            '2.2.2': (2251, 439),
+            '2.2.3': (2251, 439),
+            '2.3.3': (2258, 439),
+            '3.0.6': (2395, 442),
+            '3.1.0': (2490, 473),
+        }
+        lines = sites.get(pd.__version__)
+        if lines is None:
+            raise RouteError(
+                'this numeric warning presentation producer is not represented'
+            )
+        for diagnostic in diagnostics:
+            stage = diagnostic['stage']
+            if stage not in ('probe', 'sort'):
+                raise AssertionError('invalid numeric warning stage')
+            module = base if stage == 'probe' else sorting
+            line = lines[0 if stage == 'probe' else 1]
+            registry = module.__dict__.setdefault('__warningregistry__', {})
+            for _ in range(diagnostic['count']):
+                warnings.warn_explicit(
+                    'overflow encountered in cast',
+                    RuntimeWarning,
+                    filename=module.__file__ or module.__name__,
+                    lineno=line,
+                    module=module.__name__,
+                    registry=registry,
+                )
+    for _ in range(ordering.get('overflow_prints', 0)):
+        os.write(2, b'Warning: overflow encountered in cast\n')
 
 
 def materialize(
