@@ -250,14 +250,8 @@ pub(super) fn order(
         .collect();
     let result = object_sort::argsort(present.len(), |left, right| {
         let (left, right) = (present[left], present[right]);
-        if relation(
-            keys[left],
-            keys[right],
-            Ordering::Less,
-            policy,
-            diagnostics,
-        )
-        .map_err(|reason| (reason, left, right))?
+        if relation(keys[left], keys[right], Ordering::Less, policy, diagnostics)
+            .map_err(|reason| (reason, left, right))?
         {
             return Ok(true);
         }
