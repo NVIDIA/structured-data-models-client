@@ -7,7 +7,6 @@ package com.nvidia.sdm;
 import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Indices;
-import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.internal.Providers;
 import com.nvidia.sdm.internal.Results;
 import java.math.BigInteger;
@@ -101,9 +100,8 @@ public final class PredictiveQuery {
    * scores is gathered as several calls, which {@link SdmClient#predict} answers as one.
    *
    * @throws StructuredDataException {@code INVALID_REQUEST} for a query the core does not accept
-   *     or an option it refuses, naming it; {@code UNSUPPORTED_REQUEST} for what the core does not
-   *     materialize yet (a ranking or a forecast, which the Java library does not ask yet), naming
-   *     the rule; {@code PROVIDER_ERROR} when the database failed a read
+   *     or an option it refuses, naming it; {@code UNSUPPORTED_REQUEST} for a capability the core
+   *     does not support, naming the rule; {@code PROVIDER_ERROR} when the database failed a read
    */
   public Request materialize(Schema schema, MaterializeOptions options) {
     Objects.requireNonNull(schema, "schema");
@@ -116,7 +114,9 @@ public final class PredictiveQuery {
           Map.of(),
           null);
     }
-    if (!schema.data().isEmpty() && SdmClient.KUMO_RELATIONAL.equals(options.model())) {
+    boolean relational = SdmClient.KUMO_RELATIONAL.equals(options.model())
+        || (options.model() == null && (schema.tables().size() > 1 || !schema.relationships().isEmpty()));
+    if (!schema.data().isEmpty() && relational) {
       try (RelationalMaterializer materializer = new RelationalMaterializer(schema)) {
         return materialize(materializer, options);
       }
@@ -155,6 +155,7 @@ public final class PredictiveQuery {
     operation.put("indices", 3);
     operation.put("anchor_time", anchor == MaterializeOptions.EACH_ENTITY ? null : timestamp(anchor));
     operation.put("seed", seed(options.options().get("random_seed")));
+    operation.put("unseeded", options.options().containsKey("random_seed") && options.options().get("random_seed") == null);
     operation.put("anchor_entity", anchor == MaterializeOptions.EACH_ENTITY);
     operation.put("values", 5);
     operation.put("options", List.of());
@@ -163,6 +164,10 @@ public final class PredictiveQuery {
     attachments.put(2, Host.attachment(text));
     attachments.put(3, Indices.column(options.indices(), ArrowData.allocator()));
     attachments.put(5, Host.optionAttachment(values(options)));
+    if (options.candidates() != null) {
+      operation.put("candidates", 4);
+      attachments.put(4, Host.attachment(candidates(options.candidates())));
+    }
     Map<String, Function<Map<String, Object>, Object>> held =
         new LinkedHashMap<>(Providers.held(schema.source()));
     held.put("query", fields -> text);
@@ -170,38 +175,15 @@ public final class PredictiveQuery {
         Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {
       Results.Gathered gathered =
           (Results.Gathered) Results.expect(finished.result(), "materialize");
-      Results.State state = gathered.state();
       if (gathered.query() == null) {
         throw new StructuredDataException(
             "the core gathered a query and said nothing of it", "INTERNAL_ERROR", Map.of(), null);
       }
-      if (state.inParts()) {
-        throw new StructuredDataException(
-            "the core gathered a question in parts, which the Java library does not ask yet",
-            "UNSUPPORTED_REQUEST",
-            Map.of("rule", "in_parts"),
-            null);
-      }
-      List<byte[]> payloads = new ArrayList<>();
-      payloads.add(finished.bytes(state.payload()));
-      String query = (String) read(finished.bytes(state.query()));
-      List<Long> rows = null;
-      if (state.batches() != null) {
-        rows = new ArrayList<>();
-        for (Results.Batch batch : state.batches()) {
-          payloads.add(finished.bytes(batch.payload()));
-          rows.add(batch.rows());
-        }
-      }
-      return new Request(
-          schema,
-          payloads,
-          text,
-          state.version(),
-          rows,
-          gathered.query(),
-          inferenceAsked(options.options().get("inference_config")),
-          query);
+      @SuppressWarnings("unchecked") Map<String, Object> state = (Map<String, Object>) finished.result().get("state");
+      com.nvidia.sdm.internal.MaterializedRequest retained =
+          new com.nvidia.sdm.internal.MaterializedRequest(state, finished);
+      return new Request(schema, retained, text, gathered.query(),
+          inferenceAsked(options.options().get("inference_config")));
     }
   }
 
@@ -311,15 +293,6 @@ public final class PredictiveQuery {
       else throw new StructuredDataException("unsupported ranking candidate type", "INVALID_REQUEST", Map.of(), null);
     }
     return written;
-  }
-
-  private static Object read(byte[] json) {
-    try {
-      return Json.read(json);
-    } catch (Json.JsonException e) {
-      throw new StructuredDataException(
-          "the core answered JSON this host cannot read", "INTERNAL_ERROR", Map.of(), null);
-    }
   }
 
   @Override

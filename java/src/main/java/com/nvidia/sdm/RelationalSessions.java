@@ -19,7 +19,7 @@ final class RelationalSessions {
   static void requireRequest(Request request) {
     if (request.direct()) throw new StructuredDataException(
         "this session needs a materialized Relational request", "INVALID_REQUEST", Map.of(), null);
-    if (request.frame() != null && request.frame().inParts()) throw new StructuredDataException(
+    if (request.materialized() != null && request.materialized().inParts()) throw new StructuredDataException(
         "a session pins one question; use predict() for ranking or forecast parts",
         "UNSUPPORTED_REQUEST", Map.of(), null);
   }

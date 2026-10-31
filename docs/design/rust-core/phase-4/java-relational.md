@@ -38,7 +38,7 @@ try (RelationalMaterializer sampler = new RelationalMaterializer(schema)) {
 ```
 
 For one call, `materialize(schema, options.model(KUMO_RELATIONAL))` uses a temporary sampler.
-Without explicit model selection, in-memory `materialize(schema, options)` retains the existing single-table Tabular default.
+Without explicit model selection, multiple tables or any relationship select Relational; a single unrelated table selects Tabular.
 Existing schema key, time-column and relationship setters apply before constructing the sampler.
 
 **Ownership:** callers can mutate or close input Arrow tables after `Schema.fromData`.
@@ -67,3 +67,11 @@ Fit and fitted prediction do not reconnect to the warehouse or resample data.
 Databricks Model Serving transport still refuses sessions; a session-capable model HTTP endpoint is required.
 No warehouse SQL or provider implementation changes are needed.
 Two independent reviews approved this extension; ten DuckDB/SQLite HTTP lifecycle tests passed, including scoring after closing the JDBC connection, temporal windows, holdout filtering, partial results and retryable cleanup.
+
+## Warehouse decomposition and model defaults
+
+Both in-memory and warehouse materialization retain one internal `MaterializedRequest`, including typed candidate/forecast parts and their owned attachments.
+Prediction hands that state back to Rust; Java does not rank, merge forecast steps, or implement another prediction policy.
+Warehouse candidates use the existing contract attachment, without SQL/provider changes.
+Default selection now matches Python: multiple tables or any relationship select Relational; one unrelated table selects Tabular.
+Explicit model selection remains available.

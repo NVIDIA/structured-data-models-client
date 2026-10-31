@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Audit evidence: successful public journeys and explicit current JDBC decomposition gaps. */
+/** Public regressions for task coverage across Arrow and JDBC inputs. */
 class Phase4CoverageAuditTest {
   static Schema linkSchema(String provider, Connection connection) throws Exception {
     try (Statement sql = connection.createStatement()) {
@@ -41,29 +41,69 @@ class Phase4CoverageAuditTest {
   }
 
   @ParameterizedTest @ValueSource(strings = {"duckdb", "sqlite"})
-  void jdbcRankingWithExplicitCandidatesRecordsCurrentUnsupportedGap(String provider) throws Exception {
+  void jdbcRankingRetainsTypedCandidatesAndPredictsAfterConnectionCloses(String provider) throws Exception {
+    Request request;
     try (Connection connection = WarehouseSessionTest.open(provider)) {
       Schema schema = linkSchema(provider, connection);
-      StructuredDataException error = assertThrows(StructuredDataException.class,
-          () -> PredictiveQuery.parse(RANK).materialize(schema,
-              WarehouseSessionTest.asked(1L, 2L).candidates(List.of(1L, 2L, 3L)).build()));
-      assertEquals("INVALID_REQUEST", error.code());
-      assertEquals("candidates_missing", error.details().get("rule"));
-      assertEquals("candidates", error.details().get("field"));
-      System.out.println("AUDIT JDBC_RANK " + provider + " " + error.code() + " " + error.details()
-          + " " + error.getMessage());
+      request = PredictiveQuery.parse(RANK).materialize(schema,
+          WarehouseSessionTest.asked(1L, 2L)
+              .candidates(List.of(1L, new java.math.BigDecimal("1.0"), 2, 3L)).build());
+    }
+    assertEquals(3, request.payloads().size());
+    List<String> original = request.payloads();
+    try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client()) {
+      for (int attempt = 0; attempt < 2; attempt++) {
+        PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+        assertEquals(2, result.rows());
+        try (ArrowReader reader = result.read(ArrowData.allocator())) {
+          assertTrue(reader.loadNextBatch());
+          List<?> ranked = (List<?>) reader.getVectorSchemaRoot().getVector("rankings").getObject(0);
+          assertEquals(List.of("1", "2"), ranked.stream().map(Object::toString).toList());
+        }
+      }
+      assertEquals(original, request.payloads());
+      assertThrows(StructuredDataException.class, () -> client.fit(request, SdmClient.KUMO_RELATIONAL));
     }
   }
 
   @ParameterizedTest @ValueSource(strings = {"duckdb", "sqlite"})
-  void jdbcForecastRecordsCurrentUnsupportedPartsGap(String provider) throws Exception {
+  void jdbcForecastRetainsStepsAndPredictsAfterConnectionCloses(String provider) throws Exception {
+    Request request;
     try (Connection connection = WarehouseSessionTest.open(provider)) {
-      Schema schema = WarehouseSessionTest.schema(provider, connection);
+      request = PredictiveQuery.parse(FORECAST).materialize(
+          WarehouseSessionTest.schema(provider, connection), WarehouseSessionTest.asked(1L, 2L).build());
+    }
+    assertEquals(2, request.payloads().size());
+    try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client()) {
+      PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+      assertEquals(4, result.rows());
+      try (ArrowReader reader = result.read(ArrowData.allocator())) {
+        assertTrue(reader.loadNextBatch());
+        assertNotNull(reader.getVectorSchemaRoot().getVector("forecast_step"));
+      }
+      assertThrows(StructuredDataException.class, () -> client.fit(request, SdmClient.KUMO_RELATIONAL));
+    }
+  }
+
+  @ParameterizedTest @ValueSource(strings = {"duckdb", "sqlite"})
+  void failedLaterForecastKeepsCompletedRows(String provider) throws Exception {
+    Request request;
+    try (Connection connection = WarehouseSessionTest.open(provider)) {
+      request = PredictiveQuery.parse(FORECAST).materialize(
+          WarehouseSessionTest.schema(provider, connection), WarehouseSessionTest.asked(1L, 2L).build());
+    }
+    java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+    try (T312Shop.Endpoint endpoint = new T312Shop.Endpoint(body -> calls.incrementAndGet() == 1
+        ? Map.entry(200, T312Shop.scripted(body))
+        : Map.entry(400, "{\"detail\":\"later step failed\"}".getBytes(StandardCharsets.UTF_8)));
+        SdmClient client = SdmClient.connect(endpoint.url(), ClientOptions.builder().maxRetries(0).build())) {
       StructuredDataException error = assertThrows(StructuredDataException.class,
-          () -> PredictiveQuery.parse(FORECAST).materialize(schema, WarehouseSessionTest.asked(1L, 2L).build()));
-      assertEquals("UNSUPPORTED_REQUEST", error.code());
-      assertEquals("in_parts", error.details().get("rule"));
-      System.out.println("AUDIT JDBC_FORECAST " + provider + " " + error.code() + " " + error.details());
+          () -> client.predict(request, SdmClient.KUMO_RELATIONAL));
+      assertEquals(2, calls.get());
+      try (ArrowReader reader = error.answered(ArrowData.allocator()).orElseThrow()) {
+        assertTrue(reader.loadNextBatch()); assertEquals(2, reader.getVectorSchemaRoot().getRowCount());
+        assertNotNull(reader.getVectorSchemaRoot().getVector("forecast_step"));
+      }
     }
   }
 
@@ -131,6 +171,32 @@ class Phase4CoverageAuditTest {
       try (ArrowReader reader = result.read(ArrowData.allocator())) {
         assertTrue(reader.loadNextBatch());
         assertEquals("class0", reader.getVectorSchemaRoot().getVector("prediction").getObject(0).toString());
+      }
+    }
+  }
+
+  @Test void aSingleRelatedTableDefaultsToRelationalButAnUnrelatedTableStaysTabular() throws Exception {
+    try (RootAllocator allocator = new RootAllocator()) {
+      BigIntVector id = new BigIntVector("id", allocator); id.allocateNew(12);
+      BigIntVector parent = new BigIntVector("parent", allocator); parent.allocateNew(12);
+      Float8Vector value = new Float8Vector("value", allocator); value.allocateNew(12);
+      for (int i = 0; i < 12; i++) {
+        id.setSafe(i, i + 1); parent.setSafe(i, (i + 1) % 12 + 1); value.setSafe(i, i * 1.25);
+      }
+      id.setValueCount(12); parent.setValueCount(12); value.setValueCount(12);
+      try (Table input = new Table(List.of(id, parent, value))) {
+        Schema plain = Schema.fromData(Map.of("users", input)).withPrimaryKey("users", "id")
+            .withStype("users", "value", "numerical").withRelationships(List.of());
+        PredictiveQuery query = PredictiveQuery.parse("PREDICT users.value FOR EACH users.id");
+        MaterializeOptions options = MaterializeOptions.builder().indices(1L, 2L).build();
+        Request tabular = query.materialize(plain, options);
+        assertFalse(tabular.isRelational()); assertTrue(tabular.payloads().isEmpty());
+        Schema related = plain.withRelationship(new Relationship("users", "parent", "users", "id"));
+        Request relational = query.materialize(related, options);
+        assertTrue(relational.isRelational()); assertFalse(relational.payloads().isEmpty());
+        try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client()) {
+          assertEquals(2, client.predict(relational, SdmClient.KUMO_RELATIONAL).rows());
+        }
       }
     }
   }

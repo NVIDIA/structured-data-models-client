@@ -9,9 +9,7 @@ import com.nvidia.sdm.internal.ArrowTabular;
 import com.nvidia.sdm.internal.HttpTransport;
 import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.internal.NativeCore;
-import com.nvidia.sdm.internal.PythonText;
 import com.nvidia.sdm.internal.Results;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -144,66 +142,16 @@ public final class SdmClient implements AutoCloseable {
         return predicted(finished);
       }
     }
-    if (request.frame() != null) {
-      Map<String, Object> operation = new LinkedHashMap<>();
-      operation.put("op", "predict");
-      operation.put("state", request.frame().predictionState(SdmClient::requestId));
-      operation.put("model", model); operation.put("request_id", requestId());
-      operation.put("outputs", outputs == null ? List.of() : List.copyOf(outputs));
-      operation.put("default_outputs", outputs == null);
-      operation.put("inference_asked", request.inferenceAsked());
-      if (serving != null) operation.put("model_endpoint", serving.modelEndpoint());
-      try (Host.Finished finished = Host.run(operation, request.frame().attachments(),
-          new Host.Call(null, this::call, request.frame().held()))) { return predicted(finished); }
-    }
-    List<byte[]> payloads = request.payloadBytes();
-    Map<String, Object> state = new LinkedHashMap<>();
-    state.put("version", request.version());
-    state.put("payload", 1);
-    state.put("query", 2);
-    Map<Integer, Object> attachments = new LinkedHashMap<>();
-    attachments.put(1, payload(payloads.get(0)));
-    attachments.put(2, Host.attachment(request.query()));
-    if (request.batchRows() != null) {
-      List<Object> batches = new ArrayList<>();
-      for (int at = 0; at < request.batchRows().size(); at++) {
-        int id = 3 + at;
-        attachments.put(id, payload(payloads.get(at + 1)));
-        Map<String, Object> batch = new LinkedHashMap<>();
-        batch.put("payload", id);
-        batch.put("rows", request.batchRows().get(at));
-        batch.put("request_id", requestId());
-        batches.add(batch);
-      }
-      state.put("batches", batches);
-    }
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "predict");
-    operation.put("state", state);
-    operation.put("model", model);
-    operation.put("request_id", requestId());
+    operation.put("state", request.materialized().predictionState(SdmClient::requestId));
+    operation.put("model", model); operation.put("request_id", requestId());
     operation.put("outputs", outputs == null ? List.of() : List.copyOf(outputs));
+    operation.put("default_outputs", outputs == null);
     operation.put("inference_asked", request.inferenceAsked());
-    if (outputs == null) {
-      operation.put("default_outputs", true);
-    }
-    if (serving != null) {
-      // The endpoint whose envelope the core writes and whose answers it reads (T3.13).
-      operation.put("model_endpoint", serving.modelEndpoint());
-    }
-    try (Host.Finished finished =
-        Host.run(operation, attachments, new Host.Call(null, this::call, Map.of()))) {
-      Results.Predicted predicted =
-          (Results.Predicted) Results.expect(finished.result(), "predict");
-      Object metadata = read(finished.bytes(predicted.metadata()));
-      byte[] rows = finished.arrow(predicted.result());
-      return new PredictionResult(
-          predicted.model(),
-          predicted.requestId(),
-          metadata,
-          predicted.outputs(),
-          rows);
-    }
+    if (serving != null) operation.put("model_endpoint", serving.modelEndpoint());
+    try (Host.Finished finished = Host.run(operation, request.materialized().attachments(),
+        new Host.Call(null, this::call, request.materialized().held()))) { return predicted(finished); }
   }
 
   Map<String, Object> predictionInput(Request request, String model, List<String> outputs) {
@@ -289,22 +237,6 @@ public final class SdmClient implements AutoCloseable {
       throw new Host.TransportFailed();
     } catch (ModelEndpointException refused) {
       throw new Host.Refused(refused::with, refused.status());
-    }
-  }
-
-  /**
-   * A payload as the Python host sends it: the JSON the core wrote, read and written back by
-   * Python's {@code json.dumps}, a value it has no form for refused as its transport refuses it.
-   */
-  private static byte[] payload(byte[] written) {
-    try {
-      return PythonText.dumpsDefault(written).getBytes(StandardCharsets.UTF_8);
-    } catch (IllegalArgumentException e) {
-      throw new StructuredDataException(
-          "this request carries a value that cannot be sent as JSON",
-          "INVALID_REQUEST",
-          Map.of(),
-          null);
     }
   }
 

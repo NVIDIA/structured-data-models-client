@@ -51,10 +51,11 @@ try (RelationalMaterializer sampler = new RelationalMaterializer(schema)) {
 The reusable sampler owns the native graph and continuing RNG; close releases it.
 Its calls and close are serialized, and completed requests survive its closure.
 For a single call, select `.model(SdmClient.KUMO_RELATIONAL)` in the options passed to `materialize(schema, options)`.
-Omitting that selection preserves the existing single-table Tabular default.
+Without an explicit selection, multiple tables or any relationship select Relational; a single unrelated table selects Tabular.
 Static/temporal targets, links, ranking and forecasts use Rust sampling; ordinary requests also support `fit`, fitted `predict` and `close`.
 Sessions require a compatible model endpoint and reject rewritten ranking/forecast requests.
 Warehouse requests already gathered by `materialize` also support the same fitted-session lifecycle, without further warehouse reads.
+Warehouse ranking and forecasts retain their complete Rust request state and use the same prediction merging as in-memory requests; fitted sessions still require one ordinary question.
 Databricks Model Serving transport does not support sessions; use a compatible model HTTP endpoint.
 If a later model call fails, `exception.answered(allocator)` returns any completed rows as an optional Arrow reader that the caller closes.
 
@@ -178,5 +179,5 @@ Request request = PredictiveQuery.parse("PREDICT data.price FOR EACH data.id")
     .materialize(schema, predict);
 ```
 
-`Schema.fromData` currently accepts one table for Tabular.
+`Schema.fromData` accepts named Arrow tables; Tabular requires one unrelated table.
 Warehouse-backed schemas retain their existing Relational workflow.

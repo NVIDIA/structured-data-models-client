@@ -103,7 +103,7 @@ public final class MaterializeOptions {
 
     private Builder() {}
 
-    /** Explicit model selection; existing in-memory calls default to Tabular. */
+    /** Explicit model selection; otherwise multiple tables or relationships select Relational. */
     public Builder model(String model) {
       if (!SdmClient.KUMO_RELATIONAL.equals(model) && !SdmClient.KUMO_TABULAR.equals(model))
         throw new StructuredDataException("unknown model " + model, "UNKNOWN_MODEL", Map.of(), null);

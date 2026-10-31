@@ -141,11 +141,14 @@ class RelationalTest {
     assertEquals(Double.toString((double) 0.1f), map(map(encoded.get(2)).get("value")).get("v"));
   }
 
-  @Test void multipleTablesRequireExplicitRelationalAndSurviveCallerClosure() throws Exception {
+  @Test void multipleTablesSelectRelationalAndSurviveCallerClosure() throws Exception {
     Schema schema = fixture(false, false);
     PredictiveQuery query = PredictiveQuery.parse(SCALAR);
-    assertThrows(StructuredDataException.class,
-        () -> query.materialize(schema, MaterializeOptions.builder().indices(1L, 2L).build()));
+    Request inferred = query.materialize(schema, MaterializeOptions.builder().indices(1L, 2L).build());
+    assertTrue(inferred.isRelational());
+    assertEquals("regression", map(payload(inferred, 0).get("task")).get("kind"));
+    assertThrows(StructuredDataException.class, () -> query.materialize(schema,
+        MaterializeOptions.builder().model(SdmClient.KUMO_TABULAR).indices(1L, 2L).build()));
     Request request = query.materialize(schema, options(1L, 2L).build());
     assertEquals(2, request.predictRows()); assertEquals(16, request.contextRows());
     assertTrue(request.isRelational());

@@ -11,12 +11,12 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /** Retains the complete core RequestState, including every part's attachments. */
-public final class FrameRequest {
+public final class MaterializedRequest {
   private final Map<String, Object> state;
   private final Map<Integer, Object> attachments = new LinkedHashMap<>();
   private final List<byte[]> payloads = new ArrayList<>();
 
-  public FrameRequest(Map<String, Object> state, Host.Finished finished) {
+  public MaterializedRequest(Map<String, Object> state, Host.Finished finished) {
     this.state = state;
     take(state, finished);
     for (Map<String, Object> part : parts(state)) take(part, finished);

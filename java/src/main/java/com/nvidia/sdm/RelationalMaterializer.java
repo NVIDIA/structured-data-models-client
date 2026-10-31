@@ -6,7 +6,7 @@ package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.ArrowFrames;
-import com.nvidia.sdm.internal.FrameRequest;
+import com.nvidia.sdm.internal.MaterializedRequest;
 import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Indices;
 import com.nvidia.sdm.internal.NativeFrameGraph;
@@ -74,7 +74,7 @@ public final class RelationalMaterializer implements AutoCloseable {
     try (Host.Finished finished = Host.run(op, attached)) {
       Results.Gathered gathered = (Results.Gathered) Results.expect(finished.result(), "materialize");
       @SuppressWarnings("unchecked") Map<String, Object> state = (Map<String, Object>) finished.result().get("state");
-      FrameRequest retained = new FrameRequest(state, finished);
+      MaterializedRequest retained = new MaterializedRequest(state, finished);
       return new Request(schema, retained, query.text(), gathered.query(),
           PredictiveQuery.inferenceAsked(options.options().get("inference_config")));
     }
