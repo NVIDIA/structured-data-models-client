@@ -1222,6 +1222,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::AnchorAfterData => said(
             r#"Anchor timestamp '{anchor!t}' is after the latest timestamp '{latest!t}' in the data. Please make sure this is intended."#,
         ),
+        S::BinaryTargetAsQuantity => said(
+            r#"{table}.{column} holds two whole numbers, which is how a binary label is usually written, and this is being asked as a regression because that is what the column says it holds. If they are labels, say so on the column: schema[{table!r}][{column!r}].stype = 'categorical'."#,
+        ),
         S::Float32Overflow => owned(
             r#"a value past the range of a 32-bit float was cast to one, as an infinity"#,
             Owner::HostCast,

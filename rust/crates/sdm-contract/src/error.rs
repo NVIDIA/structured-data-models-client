@@ -711,6 +711,7 @@ impl From<WarningCode> for Code {
 
 warning_codes! {
     FrameSchema = "FRAME_SCHEMA",
+    BinaryTargetAsQuantity = "BINARY_TARGET_AS_QUANTITY",
     KeyNoValue = "KEY_NO_VALUE",
     KeyRepeats = "KEY_REPEATS",
     KeyDeclined = "KEY_DECLINED",
@@ -912,6 +913,7 @@ sentences! {
     ColumnsLeftOut = "columns_left_out", W::ColumnsLeftOut;
     TimeValuesUnread = "time_values_unread", W::TimeValuesUnread;
     DatesReadDayFirst = "dates_read_day_first", W::DatesReadDayFirst;
+    BinaryTargetAsQuantity = "binary_target_as_quantity", W::BinaryTargetAsQuantity;
     KeyCandidatesTied = "key_candidates_tied", W::KeyCandidatesTied;
     LinkCannotJoinNotTheKey = "link_cannot_join_not_the_key", W::LinkCannotJoin;
     LinkCannotJoinNoKey = "link_cannot_join_no_key", W::LinkCannotJoin;

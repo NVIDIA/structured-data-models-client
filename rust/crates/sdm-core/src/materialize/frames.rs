@@ -62,6 +62,9 @@ impl FrameGraph {
     pub(super) fn graph(&self) -> Graph {
         self.0.graph.clone()
     }
+    pub(super) fn two_whole_values(&self, table: &str, column: &str) -> Result<bool, CoreError> {
+        self.0.snapshot.two_whole_values(table, column)
+    }
     pub(super) fn time_bounds(&self, table: &str) -> Result<(Option<i64>, Option<i64>), CoreError> {
         self.0.snapshot.time_bounds(table)
     }

@@ -3289,6 +3289,22 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Err(err) => return Err(err),
     };
     let asked = asked(&validated, frames.is_some())?;
+    if let Some(frame) = &frames
+        && asked.task == Task::Regression
+        && let Shape::Column(column) = &asked.target
+        && frame.two_whole_values(&asked.entity_table, column)?
+    {
+        asker.warn(
+            CoreWarning::new(
+                Sentence::BinaryTargetAsQuantity,
+                "a numerical target with two whole values is being asked as a regression",
+            )
+            .with_fields([
+                ("table", Detail::text(&asked.entity_table)),
+                ("column", Detail::text(column)),
+            ]),
+        );
+    }
     if matches!(asked.target, Shape::Links(_)) {
         if statistic.is_some() {
             return Err(not_yet("link_prediction_statistic"));

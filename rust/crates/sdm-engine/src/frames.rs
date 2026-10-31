@@ -543,6 +543,74 @@ impl Snapshot {
     }
 
     /// The graph's valid nanosecond values, before second sampler cuts.
+    /// Inspect the borrowed full target, stopping after the third distinct value.
+    /// Nulls and NaNs are missing; fractions and infinities are not whole labels.
+    pub fn two_whole_values(&self, table: &str, column: &str) -> Result<bool, CoreError> {
+        let table = self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("unknown target table"))?;
+        let array = named(&table.rows, column)?;
+        fn two<T: PartialEq + Copy>(
+            values: impl Iterator<Item = Option<T>>,
+            whole: impl Fn(T) -> bool,
+        ) -> bool {
+            let mut first = None;
+            let mut second = None;
+            for value in values.flatten() {
+                if !whole(value) {
+                    return false;
+                }
+                if first.is_none() {
+                    first = Some(value);
+                } else if first != Some(value) {
+                    if second.is_none() {
+                        second = Some(value);
+                    } else if second != Some(value) {
+                        return false;
+                    }
+                }
+            }
+            second.is_some()
+        }
+        macro_rules! integer {
+            ($($ty:ty),*) => { $(
+                if let Some(values) = array.as_any().downcast_ref::<$ty>() {
+                    return Ok(two(values.iter(), |_| true));
+                }
+            )* };
+        }
+        integer!(
+            arrow_array::Int8Array,
+            arrow_array::Int16Array,
+            arrow_array::Int32Array,
+            Int64Array,
+            arrow_array::UInt8Array,
+            arrow_array::UInt16Array,
+            arrow_array::UInt32Array,
+            UInt64Array,
+            BooleanArray
+        );
+        if let Some(values) = array.as_any().downcast_ref::<Float64Array>() {
+            return Ok(two(values.iter().map(|v| v.filter(|v| !v.is_nan())), |v| {
+                v.is_finite() && v.fract() == 0.0
+            }));
+        }
+        if let Some(values) = array.as_any().downcast_ref::<Float32Array>() {
+            return Ok(two(values.iter().map(|v| v.filter(|v| !v.is_nan())), |v| {
+                v.is_finite() && v.fract() == 0.0
+            }));
+        }
+        if let Some(values) = array
+            .as_any()
+            .downcast_ref::<arrow_array::Decimal128Array>()
+        {
+            let divisor = 10_i128.checked_pow(values.scale().max(0) as u32);
+            return Ok(two(values.iter(), |v| divisor.is_some_and(|d| v % d == 0)));
+        }
+        Ok(false)
+    }
+
     pub fn time_bounds(&self, table: &str) -> Result<(Option<i64>, Option<i64>), CoreError> {
         let table = self
             .tables
