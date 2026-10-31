@@ -50,7 +50,7 @@ def assemble(
     Public input validation and key-quality observations precede this step.
     No table data or public column owner is copied during result binding.
     """
-    from sdm_client.schema import Relationship, _key_quality
+    from sdm_client.schema import Relationship, _key_quality, _Links
 
     held = {'tables': [], 'links': []}
     for table in built.values():
@@ -66,8 +66,12 @@ def assemble(
             for link in relationships
         ]
     )
+    # Read iterable key declarations once, before observations and encoding.
+    keys = {
+        name: codec.given_key(key) for name, key in (primary_keys or {}).items()
+    }
     counts = {}
-    for name, key in (primary_keys or {}).items():
+    for name, (_, key) in keys.items():
         names = [key] if isinstance(key, str) else key
         if (
             name not in built
@@ -98,8 +102,7 @@ def assemble(
             'times': times,
             'key_counts': counts,
             'primary_keys': {
-                name: codec.given_key(key)[0]
-                for name, key in (primary_keys or {}).items()
+                name: encoded for name, (encoded, _) in keys.items()
             },
             'time_columns': {
                 name: codec.given_name_or_none(value)
@@ -131,15 +134,18 @@ def assemble(
         ('_conversion_notes', ()),
         (
             'relationships',
-            [
-                Relationship(
-                    source_table=left['table'],
-                    source_column=left['column'],
-                    target_table=right['table'],
-                    target_column=right['column'],
-                )
-                for left, right in description['links']
-            ],
+            _Links(
+                [
+                    Relationship(
+                        source_table=left['table'],
+                        source_column=left['column'],
+                        target_table=right['table'],
+                        target_column=right['column'],
+                    )
+                    for left, right in description['links']
+                ],
+                result,
+            ),
         ),
     ):
         object.__setattr__(result, name, value)
