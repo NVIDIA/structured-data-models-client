@@ -64,6 +64,11 @@ These capabilities are in scope for equivalent Java support; exact persistence c
 Java equivalents need not read Python pickle bytes or use identical method names.
 Only Java Snowflake remains explicitly deferred.
 
+Frozen-runtime probes also confirmed pickle round trips for direct requests and materialized Tabular and in-memory Relational requests, not just schemas.
+Prediction after restore remains an E2E acceptance case.
+Original scope still includes large-value description (the old client could omit a >2GiB binary column and predict), custom-provider whole-column text-time rules, and declared provider fallback.
+The latter two are provider capabilities, not failures of the five built-in SQL connectors; ordinary frame sampling does not discharge them.
+
 ## Permanent parity machinery: small and enforceable
 
 Use a product-owned `tests/parity/` directory, not migration-only `contract/` or `scripts/rust_core/` infrastructure.
