@@ -6,6 +6,7 @@
 
 import json
 import warnings
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,10 @@ CASES += [
     f'float32/indices/warn/{action}/{direction}'
     for action in ('always', 'ignore', 'error')
     for direction in ('forward', 'reverse')
+]
+CASES += [
+    f'tuple_float32/{entry}/warn/always/reverse'
+    for entry in ('indices', 'predict')
 ]
 if np.__version__.startswith('1.26.'):
     CASES += [
@@ -60,7 +65,7 @@ def observe_case(name: str) -> dict[str, Any]:
 
     width, entry, mode, action, direction = name.split('/')
     n = 81 if entry == 'indices' else 10002
-    first = getattr(np, width.removeprefix('multi_'))(1)
+    first = getattr(np, width.removeprefix('multi_').removeprefix('tuple_'))(1)
     second = 128 if width == 'int8' else -1 if width == 'uint8' else 1e100
     pair = [first, second]
     if direction == 'reverse':
@@ -69,12 +74,19 @@ def observe_case(name: str) -> dict[str, Any]:
     for position in range(n):
         labels[position] = pair[position % 2]
     index = pd.Index(labels, dtype=object)
-    if width.startswith('multi_'):
+    if width.startswith(('multi_', 'tuple_')):
         level = np.empty(2, dtype=object)
         level[:] = pair
+        second_level = pd.Index([0])
+        second_codes = np.zeros(n, dtype=np.intp)
+        if width.startswith('tuple_'):
+            temporal = np.empty(2, dtype=object)
+            temporal[:] = [date(2020, 1, 1), datetime(2020, 1, 1)]
+            second_level = pd.Index(temporal, dtype=object)
+            second_codes = np.arange(n) % 2
         index = pd.MultiIndex(
-            levels=[pd.Index(level, dtype=object), pd.Index([0])],
-            codes=[np.arange(n) % 2, np.zeros(n, dtype=np.intp)],
+            levels=[pd.Index(level, dtype=object), second_level],
+            codes=[np.arange(n) % 2, second_codes],
             verify_integrity=False,
         )
     frame = pd.DataFrame(
