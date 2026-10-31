@@ -449,6 +449,9 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
             "error_codes": ErrorCode::ALL.map(ErrorCode::as_str),
             // Each data type's name on the client's wire, by the contract's
             // name of it: what a schema holds a described column's type as.
+            "dtype_names": sdm_host::dtype_names()
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>(),
             "wire_names": sdm_host::wire_names()
                 .into_iter()
                 .collect::<std::collections::BTreeMap<_, _>>(),

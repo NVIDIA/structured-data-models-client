@@ -345,13 +345,15 @@ public final class Schema {
     return schema;
   }
 
+  @SuppressWarnings("unchecked")
   Map<String, Object> queryShape() {
+    Map<String, String> dtypeNames = (Map<String, String>) NativeCore.load().get("dtype_names");
     List<Object> named = new ArrayList<>();
     for (Table table : tables) {
       Map<String, Object> value = new LinkedHashMap<>();
       value.put("name", table.name());
-      value.put("columns", table.columns().stream().map(c ->
-          Map.of("name", c.name(), "dtype", c.dtype(), "stype", c.stype())).toList());
+      value.put("columns", table.columns().stream().filter(c -> dtypeNames.containsKey(c.dtype())).map(c ->
+          Map.of("name", c.name(), "dtype", dtypeNames.get(c.dtype()), "stype", c.stype())).toList());
       value.put("primary_key", table.primaryKey().size() == 1 ? table.primaryKey().get(0) : null);
       value.put("time_column", table.timeColumn().orElse(null));
       value.put("end_time_column", null);
