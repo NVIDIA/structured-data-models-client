@@ -42,8 +42,17 @@ def _graph(materializer: Any) -> Any:
     for number, name in enumerate(names, start=3):
         table = schema[name]
         arrays = []
-        for column in table.columns:
-            array = pa.array(table.data[column])
+        for column, description in table.columns.items():
+            values = table.data[column]
+            if description.dtype == 'string':
+                # The schema already chose text semantics. Native object
+                # columns may mix numbers and strings; Arrow inference must
+                # not reinterpret them as a numeric column. Nullable string
+                # conversion retains missing values rather than spelling them.
+                values = values.astype('string')
+                array = pa.array(values, type=pa.string())
+            else:
+                array = pa.array(values)
             if pa.types.is_dictionary(array.type):
                 array = array.dictionary_decode()
             arrays.append(array)
@@ -67,6 +76,27 @@ def gather(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None = None,
+) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
+    # Waiting here releases the GIL and does not occupy the Rust executor.
+    # Include initialization: concurrent first callers must publish one graph.
+    with materializer._core_frame_lock:
+        return _gather_locked(
+            materializer,
+            query,
+            indices,
+            num_context_samples,
+            options,
+            candidates,
+        )
+
+
+def _gather_locked(
+    materializer: Any,
+    query: Any,
+    indices: Sequence[Any],
+    num_context_samples: int | None,
+    options: dict[str, Any],
+    candidates: Sequence[Any] | None,
 ) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
     from sdm_client import decompose
     from sdm_client.materializers import relational

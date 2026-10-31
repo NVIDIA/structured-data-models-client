@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import math
+import threading
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -253,6 +254,8 @@ class RelationalMaterializer:
         # run left, which its next run is handed back.
         self._core_sampler_state: dict[str, Any] = {}
         self._core_frame_graph: Any = None
+        # One owner covers first snapshot publication and continuing native RNG.
+        self._core_frame_lock = threading.Lock()
 
     _RESERVED = ('instance_id', '__kumo_anchor_time')
 
