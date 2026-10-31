@@ -5,6 +5,8 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Json;
+import com.nvidia.sdm.internal.ArrowTabular;
+import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Results;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -19,6 +21,48 @@ import java.util.Optional;
  * the schema it was gathered from never changes under it.
  */
 public final class Request {
+  private byte[] contextData;
+  private byte[] predictData;
+  private Map<String, Object> direct;
+
+  /** A model-neutral request from Arrow tables. The constructor takes an owned snapshot. */
+  public Request(org.apache.arrow.vector.table.Table context,
+      org.apache.arrow.vector.table.Table predict, String target, String task) {
+    this(ArrowTabular.snapshot(context), ArrowTabular.snapshot(predict),
+        ArrowTabular.request(target, task, "instance", null), "");
+  }
+
+  Request(byte[] context, byte[] predict, Map<String, Object> request, String query) {
+    this.contextData = context;
+    this.predictData = predict;
+    try (Host.Finished finished = ArrowTabular.run("prepare", request,
+        Map.of("context", context, "predict", predict), null)) {
+      Map<String, Object> description = ArrowTabular.value(finished);
+      this.schema = Schema.held(description.get("schema"), null);
+      this.direct = ArrowTabular.request((String) description.get("target"),
+          (String) description.get("task"), (String) description.get("entity_table"),
+          description.get("schema"));
+    }
+    if (!query.isEmpty()) {
+      this.direct.put("query", query);
+      try {
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(context);
+        this.direct.put("context_identity", new java.math.BigInteger(1, digest).toString());
+      } catch (java.security.NoSuchAlgorithmException error) { throw new IllegalStateException(error); }
+    }
+    this.payloads = List.of();
+    this.query = query;
+    this.version = 0;
+    this.batchRows = null;
+    this.inferenceAsked = List.of();
+    this.facts = null;
+  }
+
+  boolean direct() { return direct != null; }
+  Map<String, Object> directInput() { return direct; }
+  byte[] contextData() { return contextData; }
+  byte[] predictData() { return predictData; }
+
   private final Schema schema;
   private final List<byte[]> payloads;
   private final String query;
@@ -66,17 +110,17 @@ public final class Request {
 
   /** The table whose entities the query is about. */
   public String entityTable() {
-    return facts.entityTable();
+    return direct() ? (String) direct.get("entity_table") : facts.entityTable();
   }
 
   /** The task the query is, as the core resolved it, when it resolved one. */
   public Optional<String> problemType() {
-    return Optional.ofNullable(facts.problemType());
+    return direct() ? Optional.of((String) direct.get("task")) : Optional.ofNullable(facts.problemType());
   }
 
   /** Whether the answer is a window rather than a standing value, as Python's attribute. */
   public boolean targetMovesWithTime() {
-    return facts.windowed();
+    return !direct() && facts.windowed();
   }
 
   /**
@@ -84,6 +128,7 @@ public final class Request {
    * context carries related tables, or its schema holds a relationship or more than one table.
    */
   public boolean isRelational() {
+    if (direct()) return false;
     if (schema.tables().size() > 1 || !schema.relationships().isEmpty()) {
       return true;
     }
@@ -104,16 +149,17 @@ public final class Request {
 
   /** How many rows the model learns the answer from, across every call. */
   public long contextRows() {
-    return rows("context");
+    return direct() ? directRows(contextData) : rows("context");
   }
 
   /** How many rows are asked about, across every call. */
   public long predictRows() {
-    return rows("predict");
+    return direct() ? directRows(predictData) : rows("predict");
   }
 
   /** Whether the request is known to ask about no row at all. */
   public boolean nothingToScore() {
+    if (direct()) return predictRows() == 0;
     for (byte[] payload : payloads) {
       Long rows = rows(payload, "predict");
       if (rows == null || rows != 0) {
@@ -121,6 +167,15 @@ public final class Request {
       }
     }
     return true;
+  }
+
+  private static long directRows(byte[] data) {
+    try (org.apache.arrow.vector.ipc.ArrowReader reader =
+        com.nvidia.sdm.internal.ArrowData.reader(data, com.nvidia.sdm.internal.ArrowData.allocator())) {
+      long rows = 0;
+      while (reader.loadNextBatch()) rows += reader.getVectorSchemaRoot().getRowCount();
+      return rows;
+    } catch (java.io.IOException e) { throw new IllegalStateException(e); }
   }
 
   private long rows(String half) {

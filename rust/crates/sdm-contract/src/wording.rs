@@ -366,6 +366,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectTextCategorical => said(
             r#"kumo-tabular cannot read a text column, so {columns!c} travel(s) as categorical instead. "#,
         ),
+        S::ArrowTabularInput => said(r#"{reason}"#),
         S::DirectUnfinished => said(r#"the partial direct request requires {family}"#),
         S::DirectUnknownModel => said(
             r#"Unknown model {model!r}; this client can send: {known_models!r}. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."#,

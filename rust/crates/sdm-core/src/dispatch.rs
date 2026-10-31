@@ -61,6 +61,9 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::TabularArrow(request) => Run::new(move |asker| async move {
+            crate::tabular_arrow::run(asker, request, attachments, facts, zones).await
+        }),
         Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {
             crate::session::count_overlap(&asker, request, attachments)
         }),

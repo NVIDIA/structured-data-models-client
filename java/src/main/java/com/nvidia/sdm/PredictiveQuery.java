@@ -73,6 +73,26 @@ public final class PredictiveQuery {
     return text;
   }
 
+  /** Materialize one in-memory table using new Arrow rows to score. */
+  public Request materialize(Schema schema, org.apache.arrow.vector.table.Table predict) {
+    if (schema.data().size() != 1)
+      throw new StructuredDataException("Arrow scoring requires one in-memory table", "INVALID_REQUEST", Map.of(), null);
+    Map<String, Object> input = new LinkedHashMap<>();
+    input.put("schema", schema.toHeld()); input.put("query", text);
+    input.put("indices", List.of()); input.put("num_context_samples", null);
+    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("materialize_predict", input,
+        Map.of("table", schema.data().values().iterator().next(), "predict",
+            com.nvidia.sdm.internal.ArrowTabular.snapshot(predict)), null)) {
+      Map<String, Object> result = com.nvidia.sdm.internal.ArrowTabular.value(finished);
+      @SuppressWarnings("unchecked") Map<String, Object> description = (Map<String, Object>) result.get("description");
+      Map<String, Object> request = com.nvidia.sdm.internal.ArrowTabular.request(
+          (String) description.get("target"), (String) description.get("task"),
+          (String) description.get("entity_table"), description.get("schema"));
+      return new Request(finished.arrow(((Number) result.get("context")).intValue()),
+          finished.arrow(((Number) result.get("predict")).intValue()), request, text);
+    }
+  }
+
   /**
    * The request that answers this query over {@code schema}'s tables, gathered on the core as
    * Python's {@code materialize(indices=...)} gathers it on the core route: the core resolves the
@@ -95,6 +115,25 @@ public final class PredictiveQuery {
           "INVALID_REQUEST",
           Map.of(),
           null);
+    }
+    if (!schema.data().isEmpty()) {
+      Map<String, Object> input = new LinkedHashMap<>();
+      input.put("schema", schema.toHeld()); input.put("query", text);
+      input.put("indices", options.indices().stream().map(com.nvidia.sdm.internal.ArrowTabular::key).toList());
+      input.put("num_context_samples", options.numContextSamples());
+      if (!options.options().isEmpty() || options.anchorTime() != null || options.contextAnchorGiven())
+        throw new StructuredDataException("warehouse sampling options do not apply to Tabular",
+            "INVALID_REQUEST", Map.of(), null);
+      try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("materialize", input,
+          Map.of("table", schema.data().values().iterator().next()), null)) {
+        Map<String, Object> result = com.nvidia.sdm.internal.ArrowTabular.value(finished);
+        @SuppressWarnings("unchecked") Map<String, Object> description = (Map<String, Object>) result.get("description");
+        Map<String, Object> request = com.nvidia.sdm.internal.ArrowTabular.request(
+            (String) description.get("target"), (String) description.get("task"),
+            (String) description.get("entity_table"), description.get("schema"));
+        return new Request(finished.arrow(((Number) result.get("context")).intValue()),
+            finished.arrow(((Number) result.get("predict")).intValue()), request, text);
+      }
     }
     Providers.Chosen chosen = Providers.of(schema.source());
     Object anchor = options.anchorTime();
