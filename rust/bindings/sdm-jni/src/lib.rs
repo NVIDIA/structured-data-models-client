@@ -445,6 +445,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
         let info = serde_json::json!({
             "contract": CONTRACT_VERSION,
             "test_ops": cfg!(feature = "test-ops"),
+            "request_state_version": sdm_contract::ops::REQUEST_STATE_VERSION,
             "providers": sdm_host::providers(),
             "error_codes": ErrorCode::ALL.map(ErrorCode::as_str),
             // Each data type's name on the client's wire, by the contract's

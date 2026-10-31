@@ -11,6 +11,17 @@ It describes the tables of a DuckDB, SQLite, Postgres or Databricks database thr
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
+## Save and restore in-memory objects
+
+`Schema.writeTo(OutputStream)` / `Schema.readFrom(InputStream)` and the same methods on `Request` save owned snapshots.
+Streams remain caller-owned, including on failure.
+The format has its own version, a small JSON manifest and length-framed binary Arrow/payload attachments; it uses neither Java object serialization nor Python pickle.
+Each existing attachment is written once, without base64 or another retained row representation.
+Restore checks framing, Arrow data and Rust schema/query contracts without sampling or making remote calls.
+Direct requests pass through Rust preparation again; materialized payload semantics remain checked by Rust before prediction/session HTTP.
+Original query, parts, options, schema frames and conversion notes survive restoration.
+Live sources, open connections and fitted sessions cannot be saved.
+
 ## Read tables and files
 
 Readers return an owned Arrow `Table`; callers close it before their `BufferAllocator`.

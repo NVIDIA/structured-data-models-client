@@ -84,6 +84,63 @@ public final class Schema {
     }
   }
 
+  /** Save this source-less schema and its owned frame snapshots; does not close/flush output. */
+  public void writeTo(java.io.OutputStream output) throws java.io.IOException {
+    Snapshots.Writer writer = new Snapshots.Writer();
+    writer.write(Map.of("kind", "schema", "schema", saved(writer)), output);
+  }
+
+  /** Restore a data-only schema using the core's consistency checks; leaves input open. */
+  public static Schema readFrom(java.io.InputStream input) throws java.io.IOException {
+    Snapshots.Reader reader = Snapshots.read(input);
+    if (!"schema".equals(reader.manifest.get("kind"))) throw Snapshots.invalid("snapshot is not a schema", null);
+    Schema schema = restored(reader.manifest.get("schema"), reader);
+    reader.complete();
+    return schema;
+  }
+
+  Map<String, Object> saved(Snapshots.Writer writer) throws java.io.IOException {
+    if (source != null) throw new StructuredDataException(
+        "a schema with a live source cannot be saved", "UNSUPPORTED_REQUEST", Map.of(), null);
+    List<Object> frames = new ArrayList<>();
+    data.forEach((name, bytes) -> frames.add(Map.of("name", name, "blob", writer.blob(bytes))));
+    return Map.of("held", toHeld(), "notes", conversionNotes, "frames", frames);
+  }
+
+  static Schema restored(Object value, Snapshots.Reader reader) throws java.io.IOException {
+    Map<String, Object> saved = Snapshots.object(value);
+    Map<String, byte[]> frames = new LinkedHashMap<>();
+    for (Object item : Snapshots.list(saved.get("frames"))) {
+      Map<String, Object> frame = Snapshots.object(item);
+      String name = Snapshots.text(frame.get("name"));
+      byte[] bytes = reader.blob(frame.get("blob"));
+      if (frames.putIfAbsent(name, bytes) != null) throw Snapshots.invalid("duplicate frame name in snapshot", null);
+      Snapshots.validateArrow(bytes);
+    }
+    Map<String, Object> operation = new LinkedHashMap<>();
+    operation.put("op", "edit_schema"); operation.put("schema", 1); operation.put("edit", 2);
+    Map<Integer, Object> attachments = new LinkedHashMap<>();
+    attachments.put(1, Host.attachment(Snapshots.object(saved.get("held"))));
+    attachments.put(2, Host.attachment(Map.of("edit", "check")));
+    if (!frames.isEmpty()) {
+      operation.put("context", 3);
+      attachments.put(3, Host.attachment(Map.of("kind", "frames", "key_counts", Map.of())));
+    }
+    try (Host.Finished finished = Host.run(operation, attachments)) {
+      Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
+      Schema checked = held(read(finished.bytes(edited.schema())), null);
+      if (!frames.isEmpty() && !frames.keySet().equals(checked.tables.stream().map(Table::name)
+          .collect(java.util.stream.Collectors.toSet()))) {
+        throw Snapshots.invalid("snapshot frames do not match its schema tables", null);
+      }
+      Schema result = new Schema(checked.tables, checked.relationships, null, Snapshots.texts(saved.get("notes")));
+      result.data = java.util.Collections.unmodifiableMap(frames);
+      return result;
+    } catch (ClassCastException | NullPointerException | IllegalArgumentException malformed) {
+      throw Snapshots.invalid("invalid schema snapshot", malformed);
+    }
+  }
+
   /** Every table {@code source} holds, described on the core, keys checked. */
   public static Schema fromSource(Source source) {
     return fromSource(source, FromSourceOptions.defaults());

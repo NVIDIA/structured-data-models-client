@@ -31,6 +31,23 @@ public final class MaterializedRequest {
     this.payloads.add((byte[]) attachments.get(payload));
   }
 
+  /** Persisted core state, without fresh transport IDs or another payload representation. */
+  public Map<String, Object> snapshotState() { return new LinkedHashMap<>(state); }
+
+  /** Restore already structurally checked state; native prediction validates its semantics. */
+  public static MaterializedRequest restored(Map<String, Object> state, Map<Integer, byte[]> bytes) {
+    Map<Integer, Object> attachments = new LinkedHashMap<>();
+    attachments.putAll(bytes);
+    MaterializedRequest result = new MaterializedRequest(state, attachments);
+    for (Map<String, Object> part : parts(state)) {
+      int payload = ((Number) part.get("payload")).intValue();
+      result.attachments.put(payload, bytes.get(payload));
+      result.payloads.add(bytes.get(payload));
+      if (part.get("query") instanceof Number query) result.attachments.put(query.intValue(), bytes.get(query.intValue()));
+    }
+    return result;
+  }
+
   /** Independent immutable views of each question, sharing owned payload bytes. */
   public List<MaterializedRequest> questions() {
     if (!inParts()) return List.of();

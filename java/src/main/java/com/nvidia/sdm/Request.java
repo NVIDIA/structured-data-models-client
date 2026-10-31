@@ -99,6 +99,120 @@ public final class Request {
 
   com.nvidia.sdm.internal.MaterializedRequest materialized() { return materialized; }
 
+  /** Save an in-memory request's owned snapshots; leaves the caller's stream open. */
+  public void writeTo(java.io.OutputStream output) throws java.io.IOException {
+    Snapshots.Writer writer = new Snapshots.Writer();
+    Map<String, Object> saved = new java.util.LinkedHashMap<>();
+    saved.put("schema", schema.saved(writer));
+    saved.put("query", query); saved.put("inference", inference); saved.put("task_options", taskOptions);
+    if (direct()) {
+      saved.put("kind", "direct_request"); saved.put("input", direct);
+      saved.put("context", writer.blob(contextData)); saved.put("predict", writer.blob(predictData));
+    } else {
+      saved.put("kind", "materialized_request"); saved.put("state", materialized.snapshotState());
+      saved.put("inference_asked", inferenceAsked);
+      List<Object> attached = new ArrayList<>();
+      materialized.attachments().forEach((id, bytes) -> attached.add(Map.of("id", id, "blob", writer.blob((byte[]) bytes))));
+      saved.put("attachments", attached);
+    }
+    writer.write(saved, output);
+  }
+
+  /** Restore snapshots without sampling or HTTP; core validation still governs prediction. */
+  public static Request readFrom(java.io.InputStream input) throws java.io.IOException {
+    Snapshots.Reader reader = Snapshots.read(input);
+    Map<String, Object> saved = reader.manifest;
+    String kind = Snapshots.text(saved.get("kind"));
+    if (!kind.equals("direct_request") && !kind.equals("materialized_request")) {
+      throw Snapshots.invalid("snapshot is not a request", null);
+    }
+    Schema schema = Schema.restored(saved.get("schema"), reader);
+    String query = Snapshots.text(saved.get("query"));
+    Map<String, Object> inference = com.nvidia.sdm.internal.DirectOptions.snapshot(Snapshots.object(saved.get("inference")));
+    Map<String, Object> taskOptions = com.nvidia.sdm.internal.DirectOptions.snapshot(Snapshots.object(saved.get("task_options")));
+    Request request;
+    if (kind.equals("direct_request")) {
+      byte[] context = reader.blob(saved.get("context")), predict = reader.blob(saved.get("predict"));
+      Snapshots.validateArrow(context); Snapshots.validateArrow(predict);
+      Map<String, Object> direct = Snapshots.object(saved.get("input"));
+      Map<String, Object> empty = Map.of("entries", List.of());
+      if (!java.util.Objects.equals(direct.getOrDefault("inference", empty), com.nvidia.sdm.internal.DirectOptions.encode(inference))
+          || !java.util.Objects.equals(direct.getOrDefault("task_options", empty), com.nvidia.sdm.internal.DirectOptions.encode(taskOptions))) {
+        throw Snapshots.invalid("snapshot option metadata disagrees with its request", null);
+      }
+      request = new Request(context, predict, direct, query);
+      if (!request.schema().toHeld().equals(schema.toHeld())) throw Snapshots.invalid("snapshot schema disagrees with its request", null);
+    } else {
+      Map<String, Object> state = Snapshots.object(saved.get("state"));
+      int version = Snapshots.integer(state.get("version"));
+      Object supportedVersion = com.nvidia.sdm.internal.NativeCore.load().get("request_state_version");
+      if (!(supportedVersion instanceof Number supportedNumber)) {
+        throw new StructuredDataException("native library does not support request restoration", "UNSUPPORTED_REQUEST", Map.of(), null);
+      }
+      int supported = supportedNumber.intValue();
+      if (version != supported) throw Snapshots.invalid("unsupported materialized request state version", null);
+      Map<Integer, byte[]> attachments = new java.util.LinkedHashMap<>();
+      for (Object item : Snapshots.list(saved.get("attachments"))) {
+        Map<String, Object> entry = Snapshots.object(item);
+        int id = Snapshots.integer(entry.get("id"));
+        if (id < 0 || attachments.putIfAbsent(id, reader.blob(entry.get("blob"))) != null) {
+          throw Snapshots.invalid("duplicate or invalid request attachment id", null);
+        }
+      }
+      validateStateAttachments(state, attachments);
+      Map<String, Object> operation = Map.of("op", "validate_query", "query", 1, "schema", 2,
+          "profile", Map.of("name", "RELATIONAL"));
+      try (Host.Finished finished = Host.run(operation,
+          Map.of(1, Host.attachment(query), 2, Host.attachment(schema.queryShape())))) {
+        Results.Validated result = (Results.Validated) Results.expect(finished.result(), "validate_query");
+        if (!result.accepted() || result.query() == null) throw Snapshots.invalid("snapshot query is not accepted", null);
+        request = new Request(schema, com.nvidia.sdm.internal.MaterializedRequest.restored(state, attachments),
+            query, result.query(), Snapshots.texts(saved.get("inference_asked")));
+      }
+    }
+    request.inference = inference;
+    request.taskOptions = taskOptions;
+    reader.complete();
+    return request;
+  }
+
+  /** Framing and JSON shapes only; native RequestState remains the semantic authority. */
+  private static void validateStateAttachments(Map<String, Object> state, Map<Integer, byte[]> attachments)
+      throws java.io.IOException {
+    List<Map<String, Object>> parts = new ArrayList<>(); parts.add(state);
+    int decompositions = 0;
+    for (String name : List.of("forecast", "batches")) {
+      if (state.containsKey(name)) {
+        decompositions++;
+        for (Object item : Snapshots.list(state.get(name))) parts.add(Snapshots.object(item));
+      }
+    }
+    if (state.containsKey("ranking")) {
+      decompositions++;
+      Map<String, Object> ranking = Snapshots.object(state.get("ranking"));
+      for (Object item : Snapshots.list(ranking.get("parts"))) parts.add(Snapshots.object(item));
+    }
+    if (decompositions > 1) throw Snapshots.invalid("snapshot contains conflicting request decompositions", null);
+    java.util.Set<Integer> used = new java.util.HashSet<>();
+    for (Map<String, Object> part : parts) {
+      int payload = Snapshots.integer(part.get("payload"));
+      byte[] bytes = attachments.get(payload);
+      if (bytes == null) throw Snapshots.invalid("snapshot request is missing its payload", null);
+      used.add(payload);
+      try { Snapshots.object(Json.read(bytes)); }
+      catch (Json.JsonException malformed) { throw Snapshots.invalid("invalid request payload JSON", malformed); }
+      if (part == state || !state.containsKey("batches")) {
+        int query = Snapshots.integer(part.get("query"));
+        byte[] text = attachments.get(query);
+        if (text == null) throw Snapshots.invalid("snapshot request is missing its query", null);
+        used.add(query);
+        try { Snapshots.text(Json.read(text)); }
+        catch (Json.JsonException malformed) { throw Snapshots.invalid("invalid request query JSON", malformed); }
+      }
+    }
+    if (!used.equals(attachments.keySet())) throw Snapshots.invalid("snapshot has unreferenced request attachments", null);
+  }
+
   /** The schema the request was gathered from. */
   public Schema schema() {
     return schema;
