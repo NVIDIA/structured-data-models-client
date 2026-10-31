@@ -52,7 +52,7 @@ def assemble(
     """
     from sdm_client.schema import Relationship, _key_quality, _Links
 
-    held = {'tables': [], 'links': []}
+    held: dict[str, Any] = {'tables': [], 'links': []}
     for table in built.values():
         held['tables'].extend(spec.held_schema(table._schema)['tables'])
     links = (

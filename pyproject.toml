@@ -92,6 +92,11 @@ exclude = [
 ]
 
 # --- Baseline recorded 2026-09-17 -------------------------------------------
+[[tool.mypy.overrides]]
+module = ["predictive_query.grammar.*"]
+# Discovery exclusions do not prevent imports from following generated code.
+follow_imports = "skip"
+
 # 37 errors across 11 hand-written modules in the four pure-python packages,
 # plus 62 across 21 in the relational engine. Retire an entry by fixing its
 # module and deleting its line.

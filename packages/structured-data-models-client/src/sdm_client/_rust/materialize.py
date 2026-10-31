@@ -412,7 +412,9 @@ def gather(
     return unpack(finished)
 
 
-def unpack(finished: Any) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
+def unpack(
+    finished: Any,
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
     """Present an existing core materialization result, for either data source."""
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state

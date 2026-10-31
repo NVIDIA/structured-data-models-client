@@ -542,7 +542,11 @@ class PreparedFrameGraph:
 
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
-    'prepared_frame_graph': (('graph',), (), lambda read: PreparedFrameGraph(_int(read['graph'], 'graph'))),
+    'prepared_frame_graph': (
+        ('graph',),
+        (),
+        lambda read: PreparedFrameGraph(_int(read['graph'], 'graph')),
+    ),
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
     'describe_source': (('description',), ('notes',), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
@@ -629,6 +633,7 @@ def decode(
 
 _T = TypeVar(
     '_T',
+    PreparedFrameGraph,
     Validated,
     Described,
     Edited,
