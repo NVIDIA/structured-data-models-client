@@ -1312,6 +1312,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::UnsupportedTypeUnread => said(
             r#"column {column!r} holds a value of the Arrow type {arrow_type} that the core cannot read"#,
         ),
+        S::LargeTextMaterialize => said(
+            r#"column {column!r} retains Arrow LargeUtf8 storage, which can be described but is not supported for materialization; normal host admission narrows text that fits Utf8"#,
+        ),
         S::AdmittedPastType => said(
             r#"column {column!r} holds a value of the Arrow type {arrow_type} that {admitted_type}, the type the core takes it as, cannot hold"#,
         ),

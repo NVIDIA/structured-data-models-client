@@ -1023,6 +1023,7 @@ pub(crate) async fn replies(
 pub(crate) fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
     match reply {
         Reply::Fetch(FetchResult::Data(data)) => Ok(data),
+        Reply::Fetch(FetchResult::Refused(error)) => Err(error),
         Reply::Fetch(FetchResult::Error(error)) => {
             Err(CoreError::provider(&error).with_field("request", Detail::text(request)))
         }

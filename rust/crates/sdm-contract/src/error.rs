@@ -1146,6 +1146,7 @@ sentences! {
     ValueNotAtScale = "value_not_at_scale", E::ProviderSchemaMismatch;
     TextNotUtf8 = "text_not_utf8", E::ValueOutOfRange, rule "text_not_utf8";
     UnsupportedTypeUnread = "unsupported_type_unread", E::UnsupportedType;
+    LargeTextMaterialize = "large_text_materialize", E::UnsupportedType;
     AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
     InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
     PartForecastStep = "part_forecast_step", Code::Part;

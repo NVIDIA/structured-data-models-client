@@ -197,6 +197,7 @@ fn host() -> ProviderChoice {
             null_order: Some(NullOrder::Last),
             index_advice: Some(IndexAdvice::SingleColumn),
             sampling: Determinism::SeededStable,
+            fallback_text_order: None,
             fallback: None,
         },
     }

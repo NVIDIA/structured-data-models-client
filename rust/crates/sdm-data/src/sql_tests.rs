@@ -203,6 +203,7 @@ impl SqlDialect for Plain {
             text_times: None,
             null_order: None,
             index_advice: None,
+            fallback_text_order: None,
             fallback: None,
         }
     }

@@ -791,6 +791,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback_text_order: None,
             fallback: None,
         },
     };
@@ -951,4 +952,21 @@ fn a_run_end_column_declared_without_nulls_may_not_hold_a_null_run() {
     let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(ree)]).unwrap();
     let err = admit(&ArrowData::new(schema, vec![batch])).unwrap_err();
     assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{err:?}");
+}
+
+#[test]
+fn an_oversized_large_text_or_binary_value_remains_borrowed_for_description() {
+    let text: ArrayRef = Arc::new(arrow_array::LargeStringArray::from(vec![
+        "longer than capacity",
+    ]));
+    let binary: ArrayRef = Arc::new(arrow_array::LargeBinaryArray::from(vec![
+        b"longer than capacity".as_slice(),
+    ]));
+    for array in [text, binary] {
+        let original = array.to_data().buffers()[1].as_ptr();
+        let out = admit_with_capacity(&data(vec![("large", array.clone())]), 3).unwrap();
+        let admitted = column(&out, "large");
+        assert_eq!(admitted.data_type(), array.data_type());
+        assert_eq!(admitted.to_data().buffers()[1].as_ptr(), original);
+    }
 }

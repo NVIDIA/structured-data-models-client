@@ -83,6 +83,8 @@ pub enum FetchResult {
         continuation: String,
     },
     Error(ProviderError),
+    /// A core-computed fallback refusal, returned to its requesting operation.
+    Refused(CoreError),
 }
 
 /// The host's answer to one model call.
@@ -728,12 +730,13 @@ impl Budget {
         if rows as u64 > self.rows {
             return Some(self.past_rows.clone());
         }
-        let bytes: usize = data
-            .batches
-            .iter()
-            .map(RecordBatch::get_array_memory_size)
-            .sum();
-        (bytes as u64 > self.bytes).then(|| self.past_bytes.clone())
+        let bytes = data.batches.iter().try_fold(0u64, |bytes, batch| {
+            crate::memory::batch_bytes(batch).map(|size| bytes.saturating_add(size))
+        });
+        match bytes {
+            Ok(bytes) => (bytes > self.bytes).then(|| self.past_bytes.clone()),
+            Err(error) => Some(error),
+        }
     }
 }
 
@@ -929,8 +932,7 @@ fn poll_parts(
         }
     };
     if let Some(err) = past(budget, &whole) {
-        lock(shared).exhausted.get_or_insert(err);
-        return Poll::Pending;
+        return Poll::Ready(Reply::Fetch(FetchResult::Refused(err)));
     }
     Poll::Ready(Reply::Fetch(FetchResult::Data(whole)))
 }
@@ -1028,8 +1030,7 @@ impl Future for Ask {
                     };
                     // Past the budget: no next page is asked for.
                     if let Some(err) = past(&this.budget, &pages) {
-                        shared.exhausted.get_or_insert(err);
-                        return Poll::Pending;
+                        return Poll::Ready(Reply::Fetch(FetchResult::Refused(err)));
                     }
                     let Some(asked) = fetch else {
                         shared
@@ -1063,10 +1064,7 @@ impl Future for Ask {
                 // answer, held to the budget.
                 Some(Reply::Fetch(FetchResult::Data(data))) => match add_page(pages, data) {
                     Ok(whole) => match past(&this.budget, &whole) {
-                        Some(err) => {
-                            shared.exhausted.get_or_insert(err);
-                            Poll::Pending
-                        }
+                        Some(err) => Poll::Ready(Reply::Fetch(FetchResult::Refused(err))),
                         None => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
                     },
                     Err(err) => {

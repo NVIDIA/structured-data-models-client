@@ -1025,7 +1025,7 @@ impl Times {
             frames: None,
             reader,
             text,
-            text_utc: false,
+            text_utc: text == Some(TextTimes::ClientRules),
             stored: Mutex::new(
                 memo.stored_times
                     .iter()
@@ -1036,13 +1036,11 @@ impl Times {
     }
 
     pub(super) fn for_frames(reader: Reader) -> Self {
-        let mut times = Self::new(
+        Self::new(
             reader,
-            Some(TextTimes::ValueByValue),
+            Some(TextTimes::ClientRules),
             &SamplerMemo::default(),
-        );
-        times.text_utc = true;
-        times
+        )
     }
 
     /// Each table's stored value read so far, for the memo the run leaves.
@@ -1188,8 +1186,9 @@ impl Times {
             DataType::Utf8 => {
                 let values: Vec<Option<&str>> = array.as_string::<i32>().iter().collect();
                 let read = match self.text {
-                    Some(TextTimes::ValueByValue) => self.reader.column(&values, self.text_utc),
-                    Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
+                    Some(TextTimes::ValueByValue | TextTimes::ClientRules) => {
+                        self.reader.column(&values, self.text_utc)
+                    }
                     None => return Err(not_yet("text_times")),
                 }
                 .map_err(|why| self.text_error(why, &values, column))?;
@@ -1304,8 +1303,9 @@ impl Times {
                 let text = array.as_string::<i32>();
                 let values: Vec<Option<&str>> = text.iter().collect();
                 let read = match self.text {
-                    Some(TextTimes::ValueByValue) => self.reader.column(&values, self.text_utc),
-                    Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
+                    Some(TextTimes::ValueByValue | TextTimes::ClientRules) => {
+                        self.reader.column(&values, self.text_utc)
+                    }
                     None => return Err(not_yet("text_times")),
                 }
                 .map_err(|why| {
@@ -1829,7 +1829,7 @@ fn sampling_capabilities(asker: &Asker) -> Result<NullOrder, CoreError> {
         OptionalRequest::Neighbors,
         OptionalRequest::Lookup,
     ] {
-        if !capabilities.optional.contains(&needed) {
+        if !capabilities.optional.contains(&needed) && capabilities.fallback.is_none() {
             return Err(crate::compose::undeclared(needed.name()));
         }
     }
@@ -3191,6 +3191,21 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         }
     }
 
+    // Normal host admission narrows text that fits small offsets. A retained
+    // large physical representation can be described without copying, but is
+    // not materialized. Metadata alone is not a measurement of value length.
+    for table in &description.tables {
+        for column in &table.columns {
+            if column.received == ColumnType::LargeUtf8 {
+                return Err(CoreError::new(
+                    Sentence::LargeTextMaterialize,
+                    "retained large text storage is not supported for materialization",
+                )
+                .with_field("column", Detail::text(&column.name)));
+            }
+        }
+    }
+
     let graph = if let Some(frames) = &frames {
         frames.graph()
     } else {
@@ -3338,7 +3353,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         &memo.memo,
     );
     read_times.frames = frames.clone();
-    read_times.text_utc = frames.is_some();
+    read_times.text_utc |= frames.is_some();
 
     // The tables whose times bound the anchor: a temporal query's
     // aggregated tables; for a static query, every table with a time

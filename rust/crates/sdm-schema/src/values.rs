@@ -34,6 +34,61 @@ pub enum Floats {
     NanMissing,
 }
 
+/// A preview text value borrowed from Arrow when it cannot fit small offsets.
+#[derive(Clone)]
+pub(crate) enum Text {
+    Owned(String),
+    Large {
+        array: std::sync::Arc<arrow_array::LargeStringArray>,
+        row: usize,
+    },
+}
+impl Text {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Owned(v) => v,
+            Self::Large { array, row } => array.value(*row),
+        }
+    }
+}
+impl From<String> for Text {
+    fn from(v: String) -> Self {
+        Self::Owned(v)
+    }
+}
+impl std::ops::Deref for Text {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+impl std::fmt::Debug for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Text").field("bytes", &self.len()).finish()
+    }
+}
+impl std::fmt::Display for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+impl PartialEq for Text {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+impl Eq for Text {}
+impl PartialOrd for Text {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Text {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
 /// One value, ordered and compared exactly.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Value {
@@ -44,7 +99,7 @@ pub(crate) enum Value {
     /// A float's bits, as [`Floats`] reads them; a decimal of scale > 0
     /// as the float64 the reference's cast gives it.
     Float(u64),
-    Text(String),
+    Text(Text),
 }
 
 /// The values of column `index` of `batches`, in row order.
@@ -147,10 +202,22 @@ pub(crate) fn column(
                     ));
                 }
             }
+            DataType::LargeUtf8 => {
+                let array = std::sync::Arc::new(array.as_string::<i64>().clone());
+                for i in 0..n {
+                    push(
+                        i,
+                        Value::Text(Text::Large {
+                            array: array.clone(),
+                            row: i,
+                        }),
+                    );
+                }
+            }
             DataType::Utf8 => {
                 let a = array.as_string::<i32>();
                 for i in 0..n {
-                    push(i, Value::Text(a.value(i).to_owned()));
+                    push(i, Value::Text(a.value(i).to_owned().into()));
                 }
             }
             _ => return Err(not_yet("column_type")),

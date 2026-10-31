@@ -259,7 +259,36 @@ fn admitted(
     let fields: Vec<Field> = read
         .fields()
         .iter()
-        .map(|f| admitted_field(f.name(), f, admitted_type))
+        .enumerate()
+        .map(|(index, f)| {
+            let oversized = read_batches.iter().any(|batch| {
+                let array = batch.column(index);
+                match array.data_type() {
+                    DataType::LargeUtf8 => array
+                        .as_string::<i64>()
+                        .value_offsets()
+                        .windows(2)
+                        .enumerate()
+                        .any(|(row, v)| {
+                            array.is_valid(row) && (v[1] - v[0]) as u64 > capacity as u64
+                        }),
+                    DataType::LargeBinary => array
+                        .as_binary::<i64>()
+                        .value_offsets()
+                        .windows(2)
+                        .enumerate()
+                        .any(|(row, v)| {
+                            array.is_valid(row) && (v[1] - v[0]) as u64 > capacity as u64
+                        }),
+                    _ => false,
+                }
+            });
+            if oversized {
+                Ok(f.as_ref().clone())
+            } else {
+                admitted_field(f.name(), f, admitted_type)
+            }
+        })
         .collect::<Result<_, CoreError>>()?;
     let schema: SchemaRef = Arc::new(Schema::new_with_metadata(fields, read.metadata().clone()));
     let admit = Admit { capacity };

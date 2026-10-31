@@ -330,6 +330,7 @@ fn fetching_run() -> Run {
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback_text_order: None,
             fallback: None,
         },
     };
@@ -355,6 +356,7 @@ fn fetching_run() -> Run {
                 }
                 Reply::Model(_) => "model".into(),
                 Reply::Fetch(FetchResult::Page { .. }) => "page".into(),
+                Reply::Fetch(FetchResult::Refused(_)) => "refused".into(),
             });
         }
         Ok(OperationResult::ValidateQuery(QueryValidation {

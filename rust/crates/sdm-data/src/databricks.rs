@@ -140,6 +140,7 @@ impl SqlDialect for Databricks {
             // The reference's Databricks sampler neither reads indexes nor
             // warns of missing ones.
             index_advice: None,
+            fallback_text_order: None,
             fallback: None,
             derived_relations: true,
             sample_rows: true,

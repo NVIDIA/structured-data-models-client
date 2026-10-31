@@ -90,7 +90,9 @@ pub enum ColumnType {
         scale: i8,
     },
     Utf8,
+    LargeUtf8,
     Binary,
+    LargeBinary,
     Date32,
     Timestamp {
         unit: Unit,
@@ -155,7 +157,9 @@ pub fn cell_types() -> Vec<&'static str> {
             scale: 0,
         },
         ColumnType::Utf8,
+        ColumnType::LargeUtf8,
         ColumnType::Binary,
+        ColumnType::LargeBinary,
         ColumnType::Date32,
         ColumnType::Timestamp {
             unit: Unit::Ns,
@@ -215,6 +219,8 @@ impl ColumnType {
             C::Decimal128 { .. } => "decimal128",
             C::Decimal256 { .. } => "decimal256",
             C::Utf8 => "utf8",
+            C::LargeUtf8 => "large-utf8",
+            C::LargeBinary => "large-binary",
             C::Binary => "binary",
             C::Date32 => "date32",
             C::Timestamp {
@@ -318,6 +324,8 @@ impl ColumnType {
                 scale: *scale,
             },
             DataType::Utf8 => C::Utf8,
+            DataType::LargeUtf8 => C::LargeUtf8,
+            DataType::LargeBinary => C::LargeBinary,
             DataType::Binary => C::Binary,
             DataType::Date32 => C::Date32,
             // Arrow reads an empty zone as no zone (Schema.fbs), and so does
@@ -402,6 +410,8 @@ impl ColumnType {
             C::Decimal128 { precision, scale } => DataType::Decimal128(*precision, *scale),
             C::Decimal256 { precision, scale } => DataType::Decimal256(*precision, *scale),
             C::Utf8 => DataType::Utf8,
+            C::LargeUtf8 => DataType::LargeUtf8,
+            C::LargeBinary => DataType::LargeBinary,
             C::Binary => DataType::Binary,
             C::Date32 => DataType::Date32,
             C::Timestamp { unit: u, zone } => {

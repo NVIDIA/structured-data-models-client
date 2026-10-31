@@ -20,6 +20,9 @@ mod fallback;
 mod held;
 mod lag;
 pub mod materialize;
+mod memory;
+#[cfg(test)]
+mod memory_tests;
 pub mod pql;
 mod predict;
 pub mod profiles;

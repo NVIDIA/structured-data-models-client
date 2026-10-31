@@ -227,6 +227,7 @@ fn every_operation_dispatches_to_a_run() {
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback_text_order: None,
             fallback: None,
         },
     };
@@ -302,6 +303,7 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
         null_order: None,
         index_advice: None,
         sampling: Determinism::SeededStable,
+        fallback_text_order: None,
         fallback: None,
     }
 }
@@ -655,6 +657,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
                 null_order: None,
                 index_advice: None,
                 sampling: Determinism::SeededStable,
+                fallback_text_order: None,
                 fallback: None,
             },
         },

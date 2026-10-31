@@ -86,7 +86,8 @@ pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dt
                     let Value::Text(coefficient) = value else {
                         return false;
                     };
-                    coefficient == "0" || format!("{coefficient}{suffix}").parse::<i64>().is_ok()
+                    coefficient.as_str() == "0"
+                        || format!("{coefficient}{suffix}").parse::<i64>().is_ok()
                 });
                 return Ok(if fits { Dtype::Int64 } else { Dtype::String });
             }
@@ -361,13 +362,13 @@ fn decimal_values(batches: &[RecordBatch], column: usize) -> Result<Vec<Option<V
                 array
                     .as_primitive::<Decimal128Type>()
                     .iter()
-                    .map(|v| v.map(|v| Value::Text(v.to_string()))),
+                    .map(|v| v.map(|v| Value::Text(v.to_string().into()))),
             ),
             DataType::Decimal256(_, _) => values.extend(
                 array
                     .as_primitive::<Decimal256Type>()
                     .iter()
-                    .map(|v| v.map(|v| Value::Text(v.to_string()))),
+                    .map(|v| v.map(|v| Value::Text(v.to_string().into()))),
             ),
             _ => {
                 return Err(CoreError::protocol(

@@ -89,6 +89,7 @@ pub(crate) fn run(
                         }))
                     }
                     Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
+                    Reply::Fetch(FetchResult::Refused(error)) => Err(error),
                     Reply::Model(_) => Err(internal("a fetch was answered by the model")),
                     Reply::Fetch(FetchResult::Page { .. }) => {
                         Err(internal("a page reached the body"))
