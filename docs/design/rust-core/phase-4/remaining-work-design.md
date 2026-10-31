@@ -4,8 +4,20 @@
 
 # Remaining Phase 4 work: proposed design
 
-**Java in-memory Relational is delegated for implementation; the warehouse sections below are investigation and proposed follow-ups.**
-Warehouse changes are separate work; the restart explicitly preserved those paths.
+**Implementation is underway: Java in-memory Relational is delegated; warehouse sessions and temporal links are owned by the main session.**
+The approved warehouse changes reuse existing Rust policy and leave sampling SQL/providers unchanged.
+
+## Current verification
+
+Warehouse changes are committed on `rust-core-phase-4-warehouse`, pending integration and final runtime validation.
+
+| Work | Evidence so far | Remaining |
+|---|---|---|
+| Python warehouse sessions | Two independent reviews; 21 new DuckDB/SQLite cases pass; affected existing suites, lint and types checked | Combined installed build and live old/new comparison |
+| Warehouse temporal links | Two independent reviews; 11 Rust payload tests pass; public DuckDB/SQLite tests added | Run new connected-path tests against rebuilt native module and compare live answers |
+| Frozen live baseline | Both scalar and temporal-link warehouse journeys passed materialize, predict, fit, repeated scoring and close | Compare the combined Rust client against these recorded results |
+
+These checks do not yet establish that the warehouse changes have landed on `rust-core-phase-4`.
 
 ## 1. Java in-memory Relational
 
