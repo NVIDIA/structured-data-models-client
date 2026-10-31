@@ -335,8 +335,12 @@ def test_session_unbounded_native_answers_keep_old_behavior(
     assert answers[0] == answers[1]
 
 
-def test_float_class_probability_spelling_retains_native_conversion(
-    monkeypatch,
+@pytest.mark.parametrize(
+    'targets,key,expected',
+    [([0.0, 1.0], '1_0', '10.0'), ([False, True], '\x1c1', 'True')],
+)
+def test_class_probability_spelling_retains_native_conversion(
+    monkeypatch, targets, key, expected
 ):
     answers = []
     for routes in ('', ROUTES):
@@ -349,19 +353,19 @@ def test_float_class_probability_spelling_retains_native_conversion(
             'predictions': [
                 {
                     'row_index': 0,
-                    'prediction': 1.0,
-                    'probabilities': {'1_0': 0.5},
+                    'prediction': targets[1],
+                    'probabilities': {key: 0.5},
                 }
             ],
         }
         client = SDMClient.__new__(SDMClient)
         client._start(endpoint)
         opening = Request(
-            pd.DataFrame({'x': [1, 2], 'y': [0.0, 1.0]}),
+            pd.DataFrame({'x': [1, 2], 'y': targets}),
             pd.DataFrame({'x': [3]}),
             target='y',
             task='classification',
         )
         with client, client.fit(opening, model=KumoTabular()) as fitted:
             answers.append(fitted.predict(opening).items[0].probabilities)
-    assert answers == [{'10.0': 0.5}, {'10.0': 0.5}]
+    assert answers == [{expected: 0.5}, {expected: 0.5}]

@@ -650,8 +650,16 @@ pub fn native_reply_representable(payload: &Value, response: &PredictionResponse
                 .forecast_step
                 .is_none_or(|step| i64::try_from(step).is_ok())
             && item.probabilities.as_ref().is_none_or(|values| {
-                !(dtype.starts_with("int") || dtype.starts_with("float"))
+                !(dtype.starts_with("int")
+                    || dtype.starts_with("float")
+                    || dtype.starts_with("bool"))
                     || values.iter().all(|(key, _)| {
+                        if dtype.starts_with("bool") {
+                            return matches!(
+                                key.as_str(),
+                                "true" | "false" | "t" | "f" | "1" | "0"
+                            );
+                        }
                         let value = Value::Text(key.clone());
                         if dtype.starts_with("int") {
                             integer(&value)
