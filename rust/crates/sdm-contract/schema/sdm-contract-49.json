@@ -6365,6 +6365,14 @@
         },
         "same": {
           "type": "boolean"
+        },
+        "first": {
+          "description": "Display-only native value for a nonempty constant population.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,
@@ -15116,6 +15124,7 @@
         "columns_left_out",
         "time_values_unread",
         "dates_read_day_first",
+        "binary_target_as_quantity",
         "key_candidates_tied",
         "link_cannot_join_not_the_key",
         "link_cannot_join_no_key",
@@ -15253,6 +15262,10 @@
         "sampler_state_unread",
         "time_constant_offset",
         "time_constant_past",
+        "frame_rows_dropped",
+        "frame_time_unread",
+        "frame_time_empty",
+        "frame_time_order",
         "time_column_not_a_time",
         "options_without_values",
         "composite_key_float",
