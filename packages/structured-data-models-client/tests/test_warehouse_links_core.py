@@ -129,7 +129,9 @@ def test_link_labels_and_related_rows_obey_each_example_time(source, key_kind):
                     str(item)
                     for _, user, item, when in orders
                     if user == values['__kumo_entity_ref_0']
-                    and anchor < when <= anchor + pd.Timedelta(days=30)
+                    and anchor
+                    < pd.Timestamp(when, tz='UTC')
+                    <= anchor + pd.Timedelta(days=30)
                 }
                 assert set(values['TARGET']) == expected
         assert anchors
@@ -138,8 +140,9 @@ def test_link_labels_and_related_rows_obey_each_example_time(source, key_kind):
             dict(zip(items['columns'], row, strict=True))
             for row in items['rows']
         ]
-        source_items = {item for _, _, item, _ in orders}
-        assert all(row['item_id'] in source_items for row in item_rows)
+        # Large integers are encoded as exact decimal strings on the wire.
+        source_items = {str(item) for _, _, item, _ in orders}
+        assert all(str(row['item_id']) in source_items for row in item_rows)
         item_keys = {(row['instance_id'], row['item_id']) for row in item_rows}
         related = payload[half]['related_tables']['orders']
         for row in related['rows']:
