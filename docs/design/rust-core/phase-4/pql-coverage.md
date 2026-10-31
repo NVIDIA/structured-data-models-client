@@ -140,3 +140,7 @@ An earlier warning-as-error prevents later flag presentation, without callbacks,
 Both public entrypoints cover ordinary finite values, precision boundaries, float infinity/NaN, sticky flags and mixed-level warning/error ordering.
 Previously matching all-Decimal NaN cases remain regression controls; arbitrary Decimal subclasses and mixed Decimal-NaN owners are not claimed by this increment.
 The old client remains a reference for useful behavior, not a requirement to copy demonstrated bugs or incidental implementation details; intentional improvements require explicit justification and verification.
+
+For supplied-frame failures with identical Decimal exceptions and flags, acceptance ignores only the presence of the exact informational default-sampling advisory.
+The old pandas Boolean-Series conversion can compare row labels and raise before that advisory; positional filtering avoids this redundant comparison and reaches the same terminal error during sorting.
+Raw reference evidence, successful-call warnings, unrelated warnings and exceptions remain exact; this allowance does not treat a warning promoted to an exception as equivalent to a Decimal error.
