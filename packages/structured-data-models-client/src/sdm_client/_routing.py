@@ -463,6 +463,7 @@ FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA + FRAME_SESSIONS
 CORE_ROUTED = frozenset(
     S0
     + CAPABILITIES
+    + FRAME_ROUTES
     + FROM_SOURCE_DUCKDB
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB
@@ -496,7 +497,7 @@ CORE_ROUTED = frozenset(
 )
 
 
-#: The Phase 3 defaults. Other paths retain their route until their slice
+#: The Phase 3 and in-memory Phase 4 defaults. Other paths retain their route until their slice
 #: is implemented; edits and inspection of a core-held schema inherit its
 #: source route rather than choosing another route at each accessor.
 ROUTES: dict[str, str] = {
