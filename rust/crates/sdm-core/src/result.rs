@@ -339,9 +339,19 @@ fn written(answer: Answer) -> Answer {
         Answer::Bool(v) => Value::Bool(v),
         Answer::Int(v) => Value::Number(v.to_string()),
         Answer::Text(v) => Value::Text(v),
-        Answer::Float(v) | Answer::NonFinite(v) => {
-            Value::float(v).unwrap_or_else(|| Value::Number(v.to_string()))
-        }
+        Answer::NonFinite(v) => return Answer::NonFinite(v),
+        Answer::Float(v) => Value::float(v).unwrap_or_else(|| {
+            Value::Number(
+                if v.is_nan() {
+                    "NaN"
+                } else if v.is_sign_negative() {
+                    "-Infinity"
+                } else {
+                    "Infinity"
+                }
+                .into(),
+            )
+        }),
         Answer::Written(v) => v,
     })
 }
