@@ -120,10 +120,11 @@ fn group_values(
     let mut seen = vec![BTreeSet::new(); examples];
     let mut groups = vec![Vec::new(); examples];
     for (row, (value, &at)) in values.into_iter().zip(batch).enumerate() {
-        if let Some(value) = value {
-            if included(row, at) && seen[at].insert(value.key()) {
-                groups[at].push(value);
-            }
+        if let Some(value) = value
+            && included(row, at)
+            && seen[at].insert(value.key())
+        {
+            groups[at].push(value);
         }
     }
     Ok(LinkLabels {

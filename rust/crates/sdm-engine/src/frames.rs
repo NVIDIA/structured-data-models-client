@@ -941,14 +941,13 @@ impl Snapshot {
                 &hop.edge.src
             };
             for step in &hop.steps {
-                if let FrameNeighbor::Window(window) = step {
-                    if self.tables[target].time.is_none()
-                        || window.lower.is_some_and(|lower| lower > window.upper)
-                    {
-                        return Err(invalid(
-                            "frame temporal hop requires a timed target and ordered bounds",
-                        ));
-                    }
+                if let FrameNeighbor::Window(window) = step
+                    && (self.tables[target].time.is_none()
+                        || window.lower.is_some_and(|lower| lower > window.upper))
+                {
+                    return Err(invalid(
+                        "frame temporal hop requires a timed target and ordered bounds",
+                    ));
                 }
             }
         }

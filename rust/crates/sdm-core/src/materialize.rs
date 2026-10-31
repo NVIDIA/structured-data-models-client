@@ -4033,9 +4033,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         let walked = if let Some(frames) = &frames {
             frames.walk(
                 &graph,
-                entity,
-                &all_keys,
-                &anchors,
+                frames::SeedRows {
+                    entity,
+                    keys: &all_keys,
+                    anchors: &anchors,
+                },
                 &walk_hops,
                 &excluded,
                 (!unseeded).then(|| seed.to_u128()).flatten(),

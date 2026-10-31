@@ -24,6 +24,13 @@ struct Owner {
 /// Clones share ownership, never a global registry or a schema-wide cache.
 #[derive(Clone)]
 pub struct FrameGraph(Arc<Owner>);
+
+/// Entity rows and their aligned temporal cutoffs for one graph walk.
+pub(super) struct SeedRows<'a> {
+    pub entity: &'a Table,
+    pub keys: &'a ArrayRef,
+    pub anchors: &'a [i64],
+}
 impl fmt::Debug for FrameGraph {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FrameGraph")
@@ -116,13 +123,16 @@ impl FrameGraph {
     pub(super) fn walk(
         &self,
         graph: &Graph,
-        entity: &Table,
-        keys: &ArrayRef,
-        anchors: &[i64],
+        seeds: SeedRows<'_>,
         hops: &[options::Hop],
         excluded: &[(String, String)],
         seed: Option<u128>,
     ) -> Result<crate::subgraph::Walked, CoreError> {
+        let SeedRows {
+            entity,
+            keys,
+            anchors,
+        } = seeds;
         let rows = self.0.snapshot.entity_rows(&entity.name, keys)?;
         let mut counts = Vec::new();
         for hop in hops {
@@ -160,10 +170,10 @@ impl FrameGraph {
                 .table(&table.name)
                 .ok_or_else(|| internal("sampled frame lost its schema"))?;
             let mut names = crate::subgraph::sample_columns(graph, meaning, excluded);
-            if let Some(key) = &meaning.primary_key {
-                if !names.contains(key) {
-                    names.push(key.clone());
-                }
+            if let Some(key) = &meaning.primary_key
+                && !names.contains(key)
+            {
+                names.push(key.clone());
             }
             let mut columns = Vec::new();
             for name in &names {
