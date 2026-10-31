@@ -54,3 +54,7 @@ Failed server deletion remains retryable.
 Arrow dictionaries and dates normalize in Rust without Python callbacks.
 Relational decimals use exact Decimal128 storage (up to 38 digits); integral decimal keys normalize to signed 64-bit storage when the inferred type permits it.
 Out-of-range conversions fail explicitly instead of silently replacing values with null or rounding keys.
+
+Validation: two independent architecture/code reviews, JDK21 full suite (274 tests, zero failures, 13 environment-gated skips), and JDK17 focused sampling/session/ownership tests (16 passing).
+Rust core, schema and contract suites passed, including exact Arrow admission and attachment inventories.
+HTTP lifecycle tests use a local model stub; this change does not claim a new live Java Relational endpoint comparison.
