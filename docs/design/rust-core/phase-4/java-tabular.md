@@ -33,7 +33,7 @@ Java's standard library has no dataframe type.
 Apache Arrow provides `org.apache.arrow.vector.table.Table`, already in our dependency family.
 It offers typed columns, dictionaries and row access; it is not the SDM `Table` class, which describes schema metadata.
 
-**Expose one public input type: Arrow Java `Table`.**
+**The public input type is Arrow Java `Table`.**
 Do not add public `VectorSchemaRoot`, dictionary-provider or `ArrowReader` overloads in this delivery, and do not introduce `TabularData`.
 Those are lower-level Arrow building blocks: a root holds a batch, dictionaries interpret encoded values, and a reader advances through batches.
 Users of our prediction API should not have to choose between them.
@@ -62,7 +62,7 @@ Its four inputs match Python; optional settings can use Java options without cha
 PQL and fitted-session workflows should likewise retain `materialize`, `fit`, `predict` and `close` concepts.
 
 Arrow Java `Table` is experimental in our pinned version 19.0.0.
-Its constructor can share vectors, and `copy()` creates a deep copy; verify the pinned implementation before committing this public dependency. [Arrow Table API](https://arrow.apache.org/java/current/reference/org.apache.arrow.vector/org/apache/arrow/vector/table/Table.html).
+Its constructor can share vectors, and `copy()` creates a deep copy; the implementation and ownership tests use this pinned version. [Arrow Table API](https://arrow.apache.org/java/current/reference/org.apache.arrow.vector/org/apache/arrow/vector/table/Table.html).
 
 **Lifetime rule, verified against Arrow 19:** Request and `Schema.fromData` take an owned snapshot when constructed.
 The caller can then mutate or close the original tables without changing the request.
@@ -85,5 +85,9 @@ Keep existing pandas mutation/index behavior unchanged and review pandas index m
 
 Java supports direct prediction, PQL with entity keys or supplied Arrow rows, and fitted sessions.
 Closing the client attempts to close every owned session; a failed explicit session close can be retried.
-Java Tabular can run beside Relational sampling with at most two packages active and coordinated shared-contract edits.
-Compare correctness, preparation time and peak memory; internal Arrow support alone does not prove public API coverage or zero-copy execution.
+Independent architecture and compatibility reviews passed, and the final integrated JDK17 suite passed 258 tests with 13 environment-gated skips.
+A separate live comparison matched frozen Python predictions through direct prediction and fitted-session use.
+Final cross-package testing and branch integration remain delivery gates.
+
+A 10,000-row, three-column preparation probe took 39.6 ms and retained 244,720 IPC bytes alongside 393,248 bytes of caller Arrow allocation.
+These are construction and retained-storage measurements, not peak RSS or a comparative performance claim; transient and per-call allocations are additional.

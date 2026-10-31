@@ -4,7 +4,7 @@
 
 # In-memory Relational: what happens where
 
-**Goal:** use Rust to prepare related tables for prediction, keeping the existing Python API.
+**Implemented:** Rust prepares related tables for prediction through the existing Python API.
 Database push-down sampling stays unchanged.
 
 ## The user journey
@@ -27,9 +27,9 @@ Sessions require an endpoint that supports them; this design reuses the existing
 For each network call, Rust prepares/checks model data and Python performs HTTP and presents the result.
 This work primarily replaces the in-memory preparation behind `materialize()`; it does not rebuild warehouse sessions.
 
-## What changes inside materialize()
+## Inside materialize()
 
-| Today | Proposed |
+| Previous implementation | Current implementation |
 |---|---|
 | Python and the legacy engine build the graph and sample related rows | Python supplies typed columns; Rust builds the graph and samples related rows |
 | Sampling runs through the old engine | Rust keeps the graph and sampling state together until their owner is released |
@@ -54,13 +54,13 @@ For a bug, document the intended behavior and add a regression check for the imp
 Faster execution and lower memory use are welcome when correctness is preserved and measurements support the claim.
 Do not weaken temporal cutoffs, target exclusions or row attribution just to make comparisons pass.
 
-## Delivery
+## Verification and remaining delivery
 
-First connect one two-table `materialize → predict` journey, then complete remaining task/type cases and session integration checks.
-Finish with old/new correctness checks, memory/time measurements and independent reviews.
-The first example is a checkpoint, not completion.
+Independent architecture and compatibility reviews cover graph ownership, randomness, temporal cutoffs and sessions.
+Paired live regression and temporal-link journeys matched the old client's result values, identities and order through prediction, fit, two scores and close.
+The live candidate preceded the final diagnostic/advisory fixes; final consolidated testing and branch integration remain delivery gates.
 
-The archived implementation has reusable graph ownership code, but it is absent from the current branch and must be reviewed before reuse.
-The earlier independent review approved this direction, especially ownership and random-state rules; this document simplifies that reviewed design.
+One 60,000-row comparison measured repeat materialization at 3.7 ms versus 22.7 ms previously, but first materialization was slower (149.4 versus 137.9 ms) and whole-process peak RSS higher (150.7 versus 136.9 MiB).
+This is one workload, not a general speed or memory improvement claim.
 
-Java Tabular can proceed separately: see [its short plan](java-tabular.md).
+See [Java Tabular](java-tabular.md) for the parallel language implementation.
