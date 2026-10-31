@@ -133,8 +133,8 @@ def test_a_day_first_column_is_refused_rather_than_re_dated():
         on_the_wire(graph(ambiguous))
     message = str(raised.value)
     assert 'events.ts' in message
-    assert 'day-first' in message
-    assert 'dayfirst=True' in message
+    assert 'does not say unambiguously' in message
+    assert 'explicit date format' in message
 
 
 def test_a_time_column_that_is_already_timestamps_is_untouched():
@@ -295,7 +295,7 @@ def test_a_value_past_the_sample_that_is_written_another_way_is_still_found():
     )
     with pytest.raises(StructuredDataError) as raised:
         on_the_wire(graph(values))
-    assert 'written two ways' in str(raised.value)
+    assert 'does not say unambiguously' in str(raised.value)
 
 
 # --- exact means exact, whatever kind of number it is ----------------------

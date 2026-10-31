@@ -50,7 +50,13 @@ def time_column(
         first = present.iloc[0] if held else None
         same = held > 0 and bool((present == first).all())
         populations.append(
-            {'name': name, 'rows': rows, 'held': held, 'same': same}
+            {
+                'name': name,
+                'rows': rows,
+                'held': held,
+                'same': same,
+                'first': str(first) if same else None,
+            }
         )
     # Keep the population observations across parsing: native conversion
     # may mutate the source, but the reference does not reread populations.

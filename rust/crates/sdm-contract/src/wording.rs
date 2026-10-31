@@ -1049,6 +1049,16 @@ pub fn template(sentence: Sentence) -> Template {
         S::TimeConstantPast => said(
             r#"the query compares with a time past what a timestamp of nanoseconds holds, the years 1677 to 2262"#,
         ),
+        S::FrameRowsDropped => said(r#"The graph was built without some of the rows: {summary}"#),
+        S::FrameTimeUnread => said(
+            r#"{column} contains values that do not read as a date. Convert the column to timestamps using an explicit format; to discard invalid values, use the date parser's errors='coerce' option."#,
+        ),
+        S::FrameTimeEmpty => said(
+            r#"{column}: none of its {rows} values read as a date. Supply timestamps or convert valid dates using an explicit format and timezone."#,
+        ),
+        S::FrameTimeOrder => said(
+            r#"{column} does not say unambiguously which date field is the day and which is the month. Convert it to timestamps using an explicit date format before materializing."#,
+        ),
         S::TimeColumnNotATime => said(
             r#"{table}.{column} is the time column of {table!r}, and it does not mean a timestamp, which a time column must"#,
         ),

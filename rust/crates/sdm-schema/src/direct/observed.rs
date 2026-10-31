@@ -59,7 +59,7 @@ pub fn time_choice(observation: SchemaObservation) -> Result<(TimeChoice, Vec<St
                 ColumnRange {
                     held: p.held,
                     same: p.same,
-                    low: None,
+                    low: p.first.map(Scalar::Utf8),
                     start: None,
                 },
             )

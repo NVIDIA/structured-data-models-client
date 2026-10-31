@@ -26,6 +26,9 @@ pub struct TimePopulation {
     pub rows: usize,
     pub held: usize,
     pub same: bool,
+    /// Display-only native value for a nonempty constant population.
+    #[serde(default)]
+    pub first: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

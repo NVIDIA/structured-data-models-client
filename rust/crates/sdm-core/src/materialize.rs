@@ -1000,6 +1000,30 @@ pub(crate) struct Times {
 }
 
 impl Times {
+    fn text_error(&self, why: Unread, values: &[Option<&str>], column: &str) -> CoreError {
+        if !self.text_utc {
+            return text_unread(why);
+        }
+        let sentence = match why {
+            Unread::Order => Sentence::FrameTimeOrder,
+            Unread::Outside
+                if self
+                    .reader
+                    .share(values)
+                    .is_ok_and(|share| share.listed == 0) =>
+            {
+                Sentence::FrameTimeEmpty
+            }
+            _ => Sentence::FrameTimeUnread,
+        };
+        CoreError::new(sentence, "the frame time column cannot be read")
+            .with_field("column", Detail::text(column))
+            .with_field(
+                "rows",
+                count(values.iter().filter(|value| value.is_some()).count()),
+            )
+    }
+
     /// The reading of a run's times, holding the memo's stored values
     /// after the source refresh policy has expired any stale data facts.
     pub(crate) fn new(reader: Reader, text: Option<TextTimes>, memo: &SamplerMemo) -> Self {
@@ -1174,7 +1198,7 @@ impl Times {
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
-                .map_err(text_unread)?;
+                .map_err(|why| self.text_error(why, &values, column))?;
                 values
                     .iter()
                     .zip(read)
@@ -1290,7 +1314,9 @@ impl Times {
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
-                .map_err(text_unread)?;
+                .map_err(|why| {
+                    self.text_error(why, &values, &format!("{}.{}", table.name, name))
+                })?;
                 let mut unread = 0;
                 let mut examples: Vec<Scalar> = Vec::new();
                 for (value, at) in values.iter().zip(&read) {

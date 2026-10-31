@@ -1049,6 +1049,10 @@ sentences! {
     SamplerStateUnread = "sampler_state_unread", E::InvalidRequest;
     TimeConstantOffset = "time_constant_offset", E::InvalidRequest;
     TimeConstantPast = "time_constant_past", E::InvalidRequest;
+    FrameRowsDropped = "frame_rows_dropped", W::FrameSchema;
+    FrameTimeUnread = "frame_time_unread", E::InvalidRequest;
+    FrameTimeEmpty = "frame_time_empty", E::InvalidRequest;
+    FrameTimeOrder = "frame_time_order", E::InvalidRequest;
     TimeColumnNotATime = "time_column_not_a_time", E::InvalidRequest;
     OptionsWithoutValues = "options_without_values", E::InvalidRequest;
     CompositeKeyFloat = "composite_key_float", E::InvalidRequest;

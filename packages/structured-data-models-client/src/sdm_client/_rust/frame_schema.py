@@ -185,7 +185,7 @@ def from_data(
         relationships = list(relationships)
         if any(not isinstance(link, Relationship) for link in relationships):
             raise StructuredDataError(
-                'relationships must contain Relationship objects',
+                'each item in relationships must be a Relationship',
                 code='INVALID_REQUEST',
             )
     built, times = infer_tables(tables)

@@ -279,6 +279,12 @@ pub(crate) fn prepare(
             .map_err(|_| internal("compound identity does not align with frame"))?;
     }
     let snapshot = Snapshot::new_frame(&native, tables, None, identities)?;
+    if let Some(summary) = snapshot.dropped_summary() {
+        asker.warn(
+            CoreWarning::new(Sentence::FrameRowsDropped, "frame graph rows dropped")
+                .with_field("summary", Detail::text(summary)),
+        );
+    }
     let owner = FrameGraph(Arc::new(Owner {
         description,
         snapshot,
