@@ -43,11 +43,15 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - Shared Python/Java result-merge policy is implemented (`3b0bddd0d`, `4fe90fa0e`), preserving original Python row/metadata owners.
   All 58 installed Python regression checks pass, including the corrected shared error diagnostics.
   Native merging keeps exact numeric candidates and compares aware datetimes by UTC instant; stable deduplication removes duplicates within each part too.
-- Next: integrate reviewed Java readers, then persistence, remaining provider obligations and permanent parity machinery.
+- Java readers and caller-owned Spark sources landed (`b6196d1fd`): local/S3 CSV and Parquet, compressed files, JDBC reads and optional Spark integration.
+  Java regression results: 299 passed, 14 explicitly skipped; both independent source reviews passed.
+  Real S3 CSV/ZIP reads and a real Databricks Spark source journey passed with temporary fixtures cleaned up.
+  The Spark journey used a local model stub, so it does not count as real-model parity.
+- Next: persistence, remaining provider obligations and permanent parity machinery.
   The real endpoint matrix and remaining scope reconciliation are still pending.
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
-Spark runtime access remains unverified.
+Java Databricks Connect access and source operations are verified; paired real-model Spark acceptance remains pending.
 
 ## Final E2E matrix
 
