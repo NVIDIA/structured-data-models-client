@@ -54,6 +54,7 @@ class TabularTest {
     int creates;
     int deletes;
     boolean failDelete;
+    int deleteFailuresRemaining;
     boolean wrongId;
     Endpoint() throws Exception {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -62,14 +63,14 @@ class TabularTest {
           String path = exchange.getRequestURI().getPath();
           if (exchange.getRequestMethod().equals("DELETE")) {
             deletes++;
-            if (failDelete) { exchange.sendResponseHeaders(400, -1); return; }
+            if (failDelete || deleteFailuresRemaining-- > 0) { exchange.sendResponseHeaders(400, -1); return; }
             exchange.sendResponseHeaders(204, -1); return;
           }
           @SuppressWarnings("unchecked") Map<String,Object> body = (Map<String,Object>)Json.read(exchange.getRequestBody().readAllBytes());
           calls.add(body);
           byte[] answer;
           if (path.equals("/v1/sessions")) {
-            creates++; answer = Json.write(Map.of("session_id", "s1"));
+            creates++; answer = Json.write(Map.of("session_id", "s" + creates));
           } else {
             @SuppressWarnings("unchecked") Map<String,Object> predict = (Map<String,Object>)body.get("predict");
             @SuppressWarnings("unchecked") Map<String,Object> table = (Map<String,Object>)predict.get("instance_table");
@@ -149,6 +150,23 @@ class TabularTest {
       try (FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR)) {
         assertEquals(1, fitted.predict(request).rows());
       }
+    }
+  }
+
+  @Test void clientCloseAttemptsEverySessionWhenOneDeleteFails() throws Exception {
+    try (RootAllocator allocator = new RootAllocator(); Table context = table(allocator, true, 1, 2);
+        Table scoring = table(allocator, false, 3); Endpoint endpoint = new Endpoint()) {
+      SdmClient client = SdmClient.connect(endpoint.url());
+      Request request = new Request(context, scoring, "y", "regression");
+      FittedModel first = client.fit(request, SdmClient.KUMO_TABULAR);
+      FittedModel second = client.fit(request, SdmClient.KUMO_TABULAR);
+      endpoint.deleteFailuresRemaining = 1;
+      assertThrows(StructuredDataException.class, client::close);
+      assertEquals(2, endpoint.deletes);
+      assertTrue(first.isClosed() ^ second.isClosed());
+      assertThrows(StructuredDataException.class, () -> client.predict(request, SdmClient.KUMO_TABULAR));
+      client.close();
+      assertEquals(2, endpoint.deletes);
     }
   }
 
@@ -263,6 +281,45 @@ class TabularTest {
         assertEquals(1, client.predict(request, SdmClient.KUMO_TABULAR).rows());
       }
     }
+  }
+
+  @Test
+  @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "SDM_TABULAR_LIVE_URL", matches = ".+")
+  void liveTabularDirectAndRepeatedSession() throws Exception {
+    long[] ids = java.util.stream.LongStream.rangeClosed(1, 40).toArray();
+    try (RootAllocator allocator = new RootAllocator(); Table context = table(allocator, true, ids);
+        Table scoring = table(allocator, false, 41, 42);
+        SdmClient client = SdmClient.connect(System.getenv("SDM_TABULAR_LIVE_URL"))) {
+      Request request = new Request(context, scoring, "y", "regression");
+      Map<String, Object> evidence = new java.util.LinkedHashMap<>();
+      evidence.put("direct", liveRows(client.predict(request, SdmClient.KUMO_TABULAR), allocator));
+      try (FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR)) {
+        evidence.put("first", liveRows(fitted.predict(request), allocator));
+        evidence.put("second", liveRows(fitted.predict(request), allocator));
+      }
+      String destination = System.getenv("SDM_TABULAR_LIVE_EVIDENCE");
+      if (destination != null) java.nio.file.Files.write(java.nio.file.Path.of(destination), Json.write(evidence));
+    }
+  }
+
+  private static List<Object> liveRows(PredictionResult result, RootAllocator allocator) throws Exception {
+    assertEquals(2, result.rows());
+    List<Object> rows = new ArrayList<>();
+    try (ArrowReader reader = result.read(allocator)) {
+      while (reader.loadNextBatch()) {
+        var root = reader.getVectorSchemaRoot();
+        for (int row = 0; row < root.getRowCount(); row++) {
+          Map<String, Object> values = new java.util.LinkedHashMap<>();
+          for (FieldVector vector : root.getFieldVectors()) {
+            Object value = vector.getObject(row);
+            values.put(vector.getName(), value instanceof Number || value instanceof Boolean || value == null
+                ? value : value.toString());
+          }
+          rows.add(values);
+        }
+      }
+    }
+    return rows;
   }
 
   @Test void snapshotPreparationMeasurement() {
