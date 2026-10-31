@@ -64,7 +64,7 @@ def main() -> None:
     )
     parser.add_argument(
         '--group',
-        choices=('labels', 'counts', 'numeric', 'decimal'),
+        choices=('labels', 'counts', 'numeric', 'decimal', 'arrow_index'),
         default='labels',
     )
     args = parser.parse_args()
@@ -100,13 +100,15 @@ def main() -> None:
     assert Path(sdm_client.__file__).resolve().is_relative_to(reference), (
         sdm_client.__file__
     )
-    if args.group in ('counts', 'numeric', 'decimal'):
+    if args.group in ('counts', 'numeric', 'decimal', 'arrow_index'):
         if args.group == 'counts':
             from tabular_pql_count_cases import CASES, observe_case
         elif args.group == 'numeric':
             from tabular_numeric_pure_cases import CASES, observe_case
-        else:
+        elif args.group == 'decimal':
             from tabular_decimal_cases import CASES, observe_case
+        else:
+            from tabular_arrow_index_cases import CASES, observe_case
 
         assert (
             args.output_dir.resolve()

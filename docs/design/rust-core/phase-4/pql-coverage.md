@@ -165,3 +165,16 @@ Weak-and-warn validation preserves results, errors and numeric warnings while ex
 Frozen public traces locate it at `codes.max() + 1` and level-code bounds, not label comparisons.
 Rust does not perform that obsolete dtype-promotion check; avoiding its advisory and its warning-as-error failure is an intentional improvement, not claimed warning-handler parity.
 The weak-mode reference checks remain exact, and the weak-and-warn comparison retains every other warning, count and error.
+
+## Ordinary Arrow label completion
+
+Arrow decimal128/decimal256 labels use exact Decimal coefficient/exponent facts and the existing stable object comparator, including negative scales and coefficients wider than i128.
+Arrow date32/date64 labels use their signed physical day/millisecond values; extraction never constructs Python dates.
+Binary, large-binary and fixed-size-binary labels use explicit byte-vector facts with unsigned lexicographic stable ordering, preserving empty values, embedded NUL and non-UTF8 bytes.
+Validity remains separate from payloads, and chunk boundaries do not change row order.
+All representations feed the existing sampled-index operation, including MultiIndex levels; warehouse push-down and session boundaries are unchanged.
+
+The finite public reference group covers both entrypoints, forward/reverse duplicates, all-null and one-present arrays, negative-scale decimals, decimal256 coefficients beyond i128 and three Arrow MultiIndex level families.
+Receipts record SHA256 of every context/encoded ID sequence, row counts, source-index reconstruction equality, index dtype and prediction values.
+Wide date32 values deliberately succeed where the old client's incidental monotonic probe converted them into out-of-range Python dates.
+Their complete public journey must match ordinary date32 reference results after a constant physical-day shift, preserving ordering, nulls, retained indexes, encoded rows and predictions.

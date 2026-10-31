@@ -501,8 +501,13 @@ def _facts(
         array = values._pa_array
         dtype = array.type
         missing = array.is_null().to_pylist()
-        if pa.types.is_timestamp(dtype) or pa.types.is_duration(dtype):
-            data = array.cast(pa.int64()).fill_null(0).to_numpy()
+        if (
+            pa.types.is_timestamp(dtype)
+            or pa.types.is_duration(dtype)
+            or pa.types.is_date(dtype)
+        ):
+            physical = pa.int32() if pa.types.is_date32(dtype) else pa.int64()
+            data = array.cast(physical).fill_null(0).to_numpy()
             return {
                 'values': {'kind': 'temporal', 'values': data.tolist()},
                 'missing': missing,
@@ -517,6 +522,40 @@ def _facts(
                 False if pa.types.is_boolean(dtype) else 0
             ).to_numpy()
             return _array(data, missing, 'stable', decimal_context)
+        if pa.types.is_decimal(dtype):
+            return {
+                'values': {
+                    'kind': 'object',
+                    'values': [
+                        {'kind': 'boolean', 'value': False}
+                        if absent
+                        else _scalar(value)
+                        for value, absent in zip(
+                            array.to_pylist(), missing, strict=True
+                        )
+                    ],
+                },
+                'missing': missing,
+                'profile': 'stable',
+            }
+        if (
+            pa.types.is_binary(dtype)
+            or pa.types.is_large_binary(dtype)
+            or pa.types.is_fixed_size_binary(dtype)
+        ):
+            return {
+                'values': {
+                    'kind': 'bytes',
+                    'values': [
+                        [] if absent else list(value)
+                        for value, absent in zip(
+                            array.to_pylist(), missing, strict=True
+                        )
+                    ],
+                },
+                'missing': missing,
+                'profile': 'stable',
+            }
         if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
             return {
                 'values': {
