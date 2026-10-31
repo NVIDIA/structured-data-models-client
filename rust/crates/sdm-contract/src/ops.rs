@@ -37,6 +37,14 @@ use crate::types::ColumnType;
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     ValidateQuery(ValidateQuery),
+    PrepareTabularFit(crate::direct::DirectInput),
+    AcceptTabularSession(crate::direct::DirectInput),
+    CheckTabularSessionQuestion(crate::direct::DirectInput),
+    CheckTabularSessionReply(crate::direct::DirectInput),
+    PrepareTabularScore(crate::direct::DirectInput),
+    SendTabularSession(crate::direct::DirectInput),
+    CountTabularSessionOverlap(crate::direct::DirectInput),
+    CloseTabularSession(crate::direct::DirectInput),
     ExpandTabularKeys(crate::direct::DirectInput),
     FilterTabularRows(crate::direct::DirectInput),
     DecideTabularContext(crate::direct::DirectInput),
@@ -60,6 +68,7 @@ pub enum Operation {
     ResolveObservedTabular(crate::direct::DirectInput),
     InspectObservedKeys(crate::direct::DirectFrames),
     EncodeDirectColumn(crate::direct::DirectColumnInput),
+    EncodeTabularTable(crate::direct::DirectColumnInput),
     InferDirectColumn(crate::direct::DirectColumnInput),
     InferDirectTimeStart(crate::direct::DirectColumnInput),
     BindDirect(crate::direct::DirectInput),
@@ -99,6 +108,14 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
+            Operation::PrepareTabularFit(_) => "prepare_tabular_fit",
+            Operation::AcceptTabularSession(_) => "accept_tabular_session",
+            Operation::CheckTabularSessionQuestion(_) => "check_tabular_session_question",
+            Operation::CheckTabularSessionReply(_) => "check_tabular_session_reply",
+            Operation::PrepareTabularScore(_) => "prepare_tabular_score",
+            Operation::SendTabularSession(_) => "send_tabular_session",
+            Operation::CountTabularSessionOverlap(_) => "count_tabular_session_overlap",
+            Operation::CloseTabularSession(_) => "close_tabular_session",
             Operation::ExpandTabularKeys(_) => "expand_tabular_keys",
             Operation::FilterTabularRows(_) => "filter_tabular_rows",
             Operation::DecideTabularContext(_) => "decide_tabular_context",
@@ -122,6 +139,7 @@ impl Operation {
             Operation::ResolveObservedTabular(_) => "resolve_observed_tabular",
             Operation::InspectObservedKeys(_) => "inspect_observed_keys",
             Operation::EncodeDirectColumn(_) => "encode_direct_column",
+            Operation::EncodeTabularTable(_) => "encode_tabular_table",
             Operation::InferDirectColumn(_) => "infer_direct_column",
             Operation::InferDirectTimeStart(_) => "infer_direct_time_start",
             Operation::BindDirect(_) => "bind_direct",
@@ -150,9 +168,18 @@ impl Operation {
         use AttachmentKind::{Arrow, Bytes};
         match self {
             Operation::EncodeDirectColumn(v)
+            | Operation::EncodeTabularTable(v)
             | Operation::InferDirectColumn(v)
             | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
-            Operation::ExpandTabularKeys(v)
+            Operation::PrepareTabularFit(v)
+            | Operation::AcceptTabularSession(v)
+            | Operation::CheckTabularSessionQuestion(v)
+            | Operation::CheckTabularSessionReply(v)
+            | Operation::PrepareTabularScore(v)
+            | Operation::SendTabularSession(v)
+            | Operation::CountTabularSessionOverlap(v)
+            | Operation::CloseTabularSession(v)
+            | Operation::ExpandTabularKeys(v)
             | Operation::FilterTabularRows(v)
             | Operation::DecideTabularContext(v)
             | Operation::SampleTabularRows(v)
@@ -1713,6 +1740,44 @@ pub struct Attachments {
     pub directvalue_resolved_tabular: crate::direct::ResolvedTabular,
     #[schemars(rename = "EncodeTabular.input")]
     pub encodetabular_input: crate::direct::TabularEncoding,
+    #[schemars(rename = "EncodeTabularTable.input")]
+    pub encodetabulartable_input: crate::direct::TabularTableEncoding,
+    #[schemars(rename = "DirectValue.encoded_table")]
+    pub directvalue_encoded_table: crate::direct::EncodedTabularTable,
+    #[schemars(rename = "TabularSession.state")]
+    pub tabularsession_state: crate::session::TabularSessionState,
+    #[schemars(rename = "CountTabularSessionOverlap.input")]
+    pub count_tabular_session_overlap_input: crate::session::CountTabularSessionOverlap,
+    #[schemars(rename = "DirectValue.session_overlap")]
+    pub directvalue_session_overlap: crate::session::TabularSessionOverlap,
+    #[schemars(rename = "DirectValue.session_id_selection")]
+    pub directvalue_session_id_selection: crate::session::SessionIdSelection,
+    #[schemars(rename = "DirectValue.session_question_difference")]
+    pub directvalue_session_question_difference: crate::session::SessionQuestionDifference,
+    #[schemars(rename = "DirectValue.session_reply")]
+    pub directvalue_session_reply: crate::session::SessionTransportReply,
+    #[schemars(rename = "DirectValue.session_keys")]
+    pub directvalue_session_keys: crate::session::SessionKeys,
+    #[schemars(rename = "DirectValue.prepared_score")]
+    pub directvalue_prepared_score: crate::session::PreparedTabularScore,
+    #[schemars(rename = "DirectValue.prepared_fit")]
+    pub directvalue_prepared_fit: crate::session::PreparedTabularFit,
+    #[schemars(rename = "SendTabularSession.input")]
+    pub send_tabular_session_input: crate::session::SendTabularSession,
+    #[schemars(rename = "PrepareTabularScore.input")]
+    pub prepare_tabular_score_input: crate::session::PrepareTabularScore,
+    #[schemars(rename = "CheckTabularSessionReply.input")]
+    pub check_tabular_session_reply_input: crate::session::SessionIdObservation,
+    #[schemars(rename = "CheckTabularSessionQuestion.input")]
+    pub check_tabular_session_question_input: crate::session::CheckTabularSessionQuestion,
+    #[schemars(rename = "AcceptTabularSession.input")]
+    pub accept_tabular_session_input: crate::session::AcceptTabularSession,
+    #[schemars(rename = "PrepareTabularFit.input")]
+    pub prepare_tabular_fit_input: crate::session::PrepareTabularFit,
+    #[schemars(rename = "CloseTabularSession.input")]
+    pub closetabularsession_input: crate::session::TabularSessionState,
+    #[schemars(rename = "DirectValue.session_state")]
+    pub directvalue_session_state: crate::session::TabularSessionState,
     #[schemars(rename = "DirectValue.encoded")]
     pub directvalue_encoded: crate::direct::EncodedDirectBody,
     #[schemars(rename = "Predict.direct.input")]

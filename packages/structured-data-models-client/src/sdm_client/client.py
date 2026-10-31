@@ -185,6 +185,10 @@ class FittedModel:
                 f'question that many times. Ask it with predict()',
                 code='UNSUPPORTED_REQUEST',
             )
+        if getattr(self, '_tabular_session', None) is not None:
+            from sdm_client._rust import sessions
+
+            return sessions.predict(self, request)
         asked = getattr(request, '_question', None)
         if self._question is not None and asked is not None:
             _refuse_a_question_the_session_did_not_pin(self._question, asked)
@@ -226,6 +230,11 @@ class FittedModel:
         asks for when it answers `429 Session maintenance is already pending;
         retry the request later` was the one thing the handle could not do.
         """
+        if getattr(self, '_tabular_session', None) is not None:
+            from sdm_client._rust import sessions
+
+            sessions.close(self)
+            return
         if self._closed:
             return
         self._client._transport.delete_session(self._session_id)
@@ -719,6 +728,15 @@ class SDMClient:
         _require_a_request(request)
         _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
+        from sdm_client import _routing
+
+        if (
+            self._spec(model).model_id == 'kumo-tabular'
+            and _routing.route(_routing.TABULAR_SESSIONS) == 'core'
+        ):
+            from sdm_client._rust import sessions
+
+            return sessions.fit(self, request, model, outputs, holdout)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         held = _held_back(payload, holdout)
@@ -1151,9 +1169,17 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     if not keys:
         return 0
     removed = without_the_keys(payload, keys)
+    _report_held_back(removed, len(keys))
+    return removed
+
+
+def _report_held_back(removed: int, named: int) -> None:
+    """Present the selected holdout counts without choosing which rows to drop."""
+    if not named:
+        return
     if not removed:
         warnings.warn(
-            f'none of the {len(keys)} keys named as holdout matched a row of '
+            f'none of the {named} keys named as holdout matched a row of '
             f'the context about to be pinned, so nothing was held back. The '
             f'keys are compared as the schema spells them, so a key given as '
             f'a different type matches nothing. Check they are the same '
@@ -1170,7 +1196,6 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
-    return removed
 
 
 def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
@@ -1225,10 +1250,15 @@ def _warn_scoring_what_was_pinned(
     # number was taken.
     scored = scored_rows(request, with_anchor=over_a_window, dtypes=dtypes)
     shown = sum(1 for named in scored if named in pinned)
+    _report_pinned_overlap(shown, len(scored))
+
+
+def _report_pinned_overlap(shown: int, total: int) -> None:
+    """Present overlap already computed by the active implementation."""
     if not shown:
         return
     warnings.warn(
-        f'{shown} of the {len(scored)} rows being scored are in this '
+        f'{shown} of the {total} rows being scored are in this '
         f"session's pinned context, with their target values, so the model "
         f'is being asked about rows it has already been shown the answers '
         f'for. The context was chosen when fit() ran and cannot be changed '

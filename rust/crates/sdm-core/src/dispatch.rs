@@ -61,6 +61,35 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {
+            crate::session::count_overlap(&asker, request, attachments)
+        }),
+        Operation::SendTabularSession(request) => Run::new(move |asker| async move {
+            crate::session::send(&asker, request, attachments).await
+        }),
+        Operation::PrepareTabularScore(request) => Run::new(move |asker| async move {
+            crate::session::prepare_score(&asker, request, attachments)
+        }),
+        Operation::CheckTabularSessionReply(request) => Run::new(move |asker| async move {
+            crate::session::check_reply(&asker, request, attachments)
+        }),
+        Operation::CheckTabularSessionQuestion(request) => Run::new(move |asker| async move {
+            crate::session::check_question(&asker, request, attachments)
+        }),
+        Operation::AcceptTabularSession(request) => {
+            Run::new(
+                move |asker| async move { crate::session::accept(&asker, request, attachments) },
+            )
+        }
+        Operation::PrepareTabularFit(request) => Run::new(move |asker| async move {
+            crate::session::prepare_fit(&asker, request, attachments)
+        }),
+        Operation::CloseTabularSession(request) => Run::new(move |asker| async move {
+            crate::session::close(&asker, request, attachments).await
+        }),
+        Operation::EncodeTabularTable(request) => Run::new(move |asker| async move {
+            crate::direct::encode_table(&asker, request, attachments)
+        }),
         Operation::EncodeDirectColumn(request) => Run::new(move |asker| async move {
             crate::direct::encode_column(&asker, request, attachments)
         }),

@@ -502,3 +502,19 @@ pub struct TabularEncoding {
     pub context: DirectHeader,
     pub predict: DirectHeader,
 }
+
+/// One table encoded against already-resolved wire types. Sessions send only
+/// this selected half; the other frame is not an attachment to this operation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TabularTableEncoding {
+    pub columns: TabularColumns,
+    pub header: DirectHeader,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EncodedTabularTable {
+    pub table: AttachmentId,
+    pub shape: EncodedTableShape,
+}

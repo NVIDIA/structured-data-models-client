@@ -406,10 +406,61 @@ def construct(
     request.entity_table = entity_table
 
 
-def predict(
-    client: Any, request: Any, model: Any, outputs: Sequence[str] | None
-) -> Any:
-    from sdm_client.adapters.tabular import _request_id
+def resolve_request(
+    request: Any, bound: dict[str, Any]
+) -> tuple[Any, Any, Any, dict[str, Any], Any]:
+    """Resolve shared wire types once, retaining the native frame owners.
+
+    Fit uses this same cross-frame resolution even though it uploads only
+    context. Fitted scoring instead uses the already-pinned types.
+    """
+    from sdm_client._rust import direct_prediction, direct_schema
+
+    if direct_schema.requires(
+        request.context.instance_table
+    ) or direct_schema.requires(request.predict.instance_table):
+        table, context, scoring, resolved, native_dtypes = (
+            direct_prediction.resolve(
+                request,
+                bound,
+                _native_calls,
+                _flags,
+            )
+        )
+    else:
+        native_dtypes = None
+        # Capture the actual live owners and their dtypes at the adapter boundary.
+        schema = request.schema
+        table = schema[request.entity_table]
+        context = request.context.instance_table
+        scoring = request.predict.instance_table
+        resolved_run = _run(
+            'resolve_tabular',
+            {
+                'bound': bound,
+                'schema': spec.held_schema(schema),
+                'flags': _flags(schema, request.entity_table),
+                'entity_table': request.entity_table,
+                'target': request.task.target.column_name,
+                'kind': request.task.kind,
+                'context': _header(context),
+                'predict': _header(scoring),
+            },
+            {2: _table(context), 3: _table(scoring)},
+            context=2,
+            predict=3,
+        )
+        resolved_value = results.expect(
+            resolved_run.result, results.DirectValue
+        )
+        resolved = json.loads(resolved_run.take(resolved_value.value))
+    return table, context, scoring, resolved, native_dtypes
+
+
+def bind_request(
+    request: Any, model: Any, outputs: Sequence[str] | None
+) -> dict[str, Any]:
+    """Supply current request facts to the shared Rust model preflight."""
     from sdm_client.models import KumoRelational, KumoTabular, spec_for
 
     if type(model) is str:
@@ -418,7 +469,7 @@ def predict(
         model_id = model.name
     else:
         model_id = spec_for(model).model_id
-    bound = _call(
+    return _call(
         'bind_direct',
         {
             'model': model_id,
@@ -430,6 +481,15 @@ def predict(
             'context_rows': request._context_rows_per_call(),
         },
     )
+
+
+def predict(
+    client: Any, request: Any, model: Any, outputs: Sequence[str] | None
+) -> Any:
+    from sdm_client.adapters.tabular import _request_id
+
+    bound = bind_request(request, model, outputs)
+    model_id = bound['model']
     attached: dict[int, Any] = {}
     request_id = None
     if request.nothing_to_score:
@@ -467,44 +527,9 @@ def predict(
                 predict=3,
             )
 
-        if direct_schema.requires(
-            request.context.instance_table
-        ) or direct_schema.requires(request.predict.instance_table):
-            table, context, scoring, resolved, native_dtypes = (
-                direct_prediction.resolve(
-                    request,
-                    bound,
-                    _native_calls,
-                    _flags,
-                )
-            )
-        else:
-            native_dtypes = None
-            # Capture the actual live owners and their dtypes at the adapter boundary.
-            schema = request.schema
-            table = schema[request.entity_table]
-            context = request.context.instance_table
-            scoring = request.predict.instance_table
-            resolved_run = _run(
-                'resolve_tabular',
-                {
-                    'bound': bound,
-                    'schema': spec.held_schema(schema),
-                    'flags': _flags(schema, request.entity_table),
-                    'entity_table': request.entity_table,
-                    'target': request.task.target.column_name,
-                    'kind': request.task.kind,
-                    'context': _header(context),
-                    'predict': _header(scoring),
-                },
-                {2: _table(context), 3: _table(scoring)},
-                context=2,
-                predict=3,
-            )
-            resolved_value = results.expect(
-                resolved_run.result, results.DirectValue
-            )
-            resolved = json.loads(resolved_run.take(resolved_value.value))
+        table, context, scoring, resolved, native_dtypes = resolve_request(
+            request, bound
+        )
         # Advice has reached Python. Read the held native owners again, while
         # retaining the wire dtype decisions made before that advice.
         key = table.primary_key

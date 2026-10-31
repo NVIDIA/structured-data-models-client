@@ -280,7 +280,6 @@ def finish(
 
     from sdm_client._rust import results
     from sdm_client._rust.predict import _adapter
-    from sdm_client.result import PredictionResult
 
     prepared = results.expect(finished.result, results.PreparedDirectCall)
     description = json.loads(finished.take(prepared.value))
@@ -292,6 +291,18 @@ def finish(
     response = Reader(call).response(
         client._send(_adapter(client, model_id), payload), model_id
     )
+    return present(response, payload, description['bound'], call)
+
+
+def present(
+    response: NativeResponse,
+    payload: dict[str, Any],
+    bound: dict[str, Any],
+    call: Callable[..., Any],
+) -> Any:
+    """Share Rust attribution and native presentation across model-call kinds."""
+    from sdm_client.result import PredictionResult
+
     items = attribute(response.items, payload, call)
     task = (payload or {}).get('task', {})
     kind = str(task.get('kind', ''))
@@ -316,10 +327,10 @@ def finish(
         request_id=response.request_id,
         items=restored,
         metadata=response.metadata,
-        outputs=description['bound']['outputs'],
+        outputs=bound['outputs'],
     )
     query = {
-        'bound': description['bound'],
+        'bound': bound,
         'rows': len(restored),
         'present': None,
     }

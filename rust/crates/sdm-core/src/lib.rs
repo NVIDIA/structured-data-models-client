@@ -25,6 +25,7 @@ mod predict;
 pub mod profiles;
 mod ranking;
 pub mod run;
+mod session;
 mod subgraph;
 mod tabular_selection;
 #[cfg(feature = "test-ops")]

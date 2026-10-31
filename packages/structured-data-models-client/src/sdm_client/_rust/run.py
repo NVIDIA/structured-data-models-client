@@ -64,6 +64,9 @@ from sdm_client.errors import StructuredDataError
 #: endpoint's answer.
 Model = Callable[[bytes], bytes]
 
+#: Endpoint-aware I/O for session calls; endpoint values come from Rust.
+ModelEndpoints = Callable[[str | dict[str, Any], bytes], bytes]
+
 
 class Page:
     r"""One page of a provider's answer to a fetch, more following:
@@ -184,6 +187,7 @@ def run(
     *,
     provider: Provider | None = None,
     model: Model | None = None,
+    model_endpoints: ModelEndpoints | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
@@ -234,7 +238,9 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(core, handle, provider, model, quiet, given, kept)
+        return _steps(
+            core, handle, provider, model, quiet, given, kept, model_endpoints
+        )
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -279,6 +285,7 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
+    model_endpoints: ModelEndpoints | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
@@ -311,8 +318,10 @@ def _steps(
             )
         if step['step'] == 'done':
             return Finished(step['result'], handle)
-        if step['step'] == 'call_model' and model is not None:
-            refused = _call(core, handle, step, model)
+        if step['step'] == 'call_model' and (
+            model is not None or model_endpoints is not None
+        ):
+            refused = _call(core, handle, step, model, model_endpoints)
             continue
         if step['step'] != 'fetch' or provider is None:
             handle.cancel()
@@ -368,7 +377,11 @@ def _steps(
 
 
 def _call(
-    core: Any, handle: Any, step: dict[str, Any], model: Model
+    core: Any,
+    handle: Any,
+    step: dict[str, Any],
+    model: Model | None,
+    model_endpoints: ModelEndpoints | None = None,
 ) -> Refused | None:
     r"""Answers one model call with ``model``: its answer as a 200, or, when
     the transport failed, the contract's transport error; a refused call
@@ -384,7 +397,12 @@ def _call(
         'retryable': False,
     }
     try:
-        answer = model(body)
+        if model_endpoints is not None:
+            answer = model_endpoints(step['endpoint'], body)
+        elif step['endpoint'] == 'predict' and model is not None:
+            answer = model(body)
+        else:
+            raise RouteError('this host has no sender for the model endpoint')
     except TransportFailed:
         outcome: dict[str, Any] = transport_error
     except EndpointFailed as failed:

@@ -23,6 +23,7 @@ pub mod cell;
 mod decimal;
 pub mod native_response;
 pub mod response;
+pub mod session;
 
 fn text(value: impl Into<String>) -> Value {
     Value::Text(value.into())
@@ -655,6 +656,61 @@ fn instance_schema(plan: &TabularColumns, primary_key: &[String]) -> Value {
     instance
 }
 
+/// Encode one table using already-resolved column types.
+/// Only the supplied batches are consumed; schema resolution remains the caller's job.
+pub fn encode_table(
+    plan: &TabularColumns,
+    batches: &[RecordBatch],
+    float_text: fn(f64) -> String,
+) -> Result<Value, CoreError> {
+    let dtypes: BTreeMap<&str, Dtype> = plan
+        .dtypes
+        .iter()
+        .map(|(name, dtype)| (name.as_str(), *dtype))
+        .collect();
+    let names: Vec<String> = batches
+        .first()
+        .map(|b| {
+            b.schema()
+                .fields()
+                .iter()
+                .map(|f| f.name().clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    let count = batches.iter().map(RecordBatch::num_rows).sum();
+    let mut rows = vec![Vec::with_capacity(names.len()); count];
+    // The native encoder consumes a whole column before the next, across
+    // every Arrow batch, then transposes. Competing failures keep that order.
+    for (at, name) in names.iter().enumerate() {
+        let dtype = dtypes.get(name.as_str()).copied().ok_or_else(|| {
+            invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(name))
+        })?;
+        let mut position = 0;
+        for batch in batches {
+            let native = storage::read(batch.schema().field(at))?;
+            for row in 0..batch.num_rows() {
+                rows[position].push(encoded_cell(
+                    batch,
+                    at,
+                    row,
+                    native.as_ref(),
+                    dtype,
+                    name,
+                    float_text,
+                )?);
+                position += 1;
+            }
+        }
+    }
+    let rows = rows.into_iter().map(Value::Array).collect();
+    Ok(object([
+        ("format", text("arrays")),
+        ("columns", Value::Array(names.iter().map(text).collect())),
+        ("rows", Value::Array(rows)),
+    ]))
+}
+
 /// Encode current values with the schema already resolved before text advice.
 pub fn body(
     plan: &TabularColumns,
@@ -671,49 +727,6 @@ pub fn body(
         .map(|(name, dtype)| (name.as_str(), *dtype))
         .collect();
     let instance = instance_schema(plan, primary_key);
-    let encode = |batches: &[RecordBatch]| -> Result<Value, CoreError> {
-        let names: Vec<String> = batches
-            .first()
-            .map(|b| {
-                b.schema()
-                    .fields()
-                    .iter()
-                    .map(|f| f.name().clone())
-                    .collect()
-            })
-            .unwrap_or_default();
-        let count = batches.iter().map(RecordBatch::num_rows).sum();
-        let mut rows = vec![Vec::with_capacity(names.len()); count];
-        // The native encoder consumes a whole column before the next, across
-        // every Arrow batch, then transposes. Competing failures keep that order.
-        for (at, name) in names.iter().enumerate() {
-            let dtype = dtypes.get(name.as_str()).copied().ok_or_else(|| {
-                invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(name))
-            })?;
-            let mut position = 0;
-            for batch in batches {
-                let native = storage::read(batch.schema().field(at))?;
-                for row in 0..batch.num_rows() {
-                    rows[position].push(encoded_cell(
-                        batch,
-                        at,
-                        row,
-                        native.as_ref(),
-                        dtype,
-                        name,
-                        float_text,
-                    )?);
-                    position += 1;
-                }
-            }
-        }
-        let rows = rows.into_iter().map(Value::Array).collect();
-        Ok(object([
-            ("format", text("arrays")),
-            ("columns", Value::Array(names.iter().map(text).collect())),
-            ("rows", Value::Array(rows)),
-        ]))
-    };
     let target_dtype = dtypes.get(plan.target.as_str()).ok_or_else(|| {
         invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&plan.target))
     })?;
@@ -733,8 +746,14 @@ pub fn body(
             ]),
         ),
         ("schema", object([("instance_table", instance)])),
-        ("context", object([("instance_table", encode(context)?)])),
-        ("predict", object([("instance_table", encode(scoring)?)])),
+        (
+            "context",
+            object([("instance_table", encode_table(plan, context, float_text)?)]),
+        ),
+        (
+            "predict",
+            object([("instance_table", encode_table(plan, scoring, float_text)?)]),
+        ),
         (
             "output",
             object([("fields", Value::Array(outputs.iter().map(text).collect()))]),

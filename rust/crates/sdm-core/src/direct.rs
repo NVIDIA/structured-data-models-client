@@ -931,3 +931,25 @@ pub(crate) fn native_outputs(
     }
     value(asker, &names)
 }
+
+/// Encode only the supplied table, reusing the one-shot column/cell encoder.
+pub(crate) fn encode_table(
+    asker: &Asker,
+    request: DirectColumnInput,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    let input: TabularTableEncoding = take_json(&mut attached, request.input)?;
+    let table = rows(&mut attached, request.values, &input.header)?;
+    let encoded = tabular::encode_table(&input.columns, &table.batches, crate::pql::float_text)?;
+    let table = asker.attach(Attachment::Bytes(encoded.to_bytes()))?;
+    value(
+        asker,
+        &EncodedTabularTable {
+            table,
+            shape: EncodedTableShape {
+                columns: input.header.columns,
+                rows: input.header.rows,
+            },
+        },
+    )
+}
