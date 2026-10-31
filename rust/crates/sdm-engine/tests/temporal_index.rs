@@ -42,8 +42,7 @@ fn assert_order(values: Vec<Atom>, positions: Vec<usize>, already_ordered: bool)
         Outcome::Sorted {
             positions,
             already_ordered,
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
         }
     );
 }
@@ -213,8 +212,7 @@ fn multi_level_range_error_propagates_with_level_local_owners() {
             levels: vec![0],
             left: 0,
             right: 1,
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
             integer_destination: None,
         }
     );

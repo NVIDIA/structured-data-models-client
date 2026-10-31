@@ -15,6 +15,7 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 
 mod atoms;
+mod decimal_objects;
 mod numeric_objects;
 mod object_sort;
 mod object_stable;
@@ -38,8 +39,7 @@ fn sorted(positions: Vec<usize>, already_ordered: bool) -> ResultOrder {
         positions,
         already_ordered,
 
-        overflow_warnings: Vec::new(),
-        overflow_prints: 0,
+        numeric_diagnostics: Vec::new(),
     }
 }
 
@@ -207,6 +207,7 @@ fn multi(
         matches!(
             &level.values,
             Values::TemporalObject { .. }
+                | Values::DecimalObject { .. }
                 | Values::ScalarObject {
                     overflow: Some(_),
                     ..
@@ -253,8 +254,7 @@ fn multi(
                     right,
                     levels: path,
 
-                    overflow_warnings: Vec::new(),
-                    overflow_prints: 0,
+                    numeric_diagnostics: Vec::new(),
                     integer_destination: None,
                 });
             }
@@ -343,23 +343,19 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
     }
     match &mut result {
         ResultOrder::Sorted {
-            overflow_warnings,
-            overflow_prints,
+            numeric_diagnostics,
             ..
         } => {
-            *overflow_warnings = diagnostics.warnings;
-            *overflow_prints = diagnostics.prints;
+            *numeric_diagnostics = diagnostics.events;
         }
         ResultOrder::Refused {
-            overflow_warnings,
-            overflow_prints,
+            numeric_diagnostics,
             integer_destination,
             left,
             right,
             ..
         } => {
-            *overflow_warnings = diagnostics.warnings;
-            *overflow_prints = diagnostics.prints;
+            *numeric_diagnostics = diagnostics.events;
             *integer_destination = diagnostics.destination;
             if diagnostics.reverse_failure {
                 std::mem::swap(left, right);
@@ -476,6 +472,25 @@ fn order_inner(
         Values::TemporalObject { values } => {
             return temporal::order(values, mask, profile);
         }
+        Values::DecimalObject {
+            values,
+            trap_float_operation,
+            trap_invalid_operation,
+            probe_catches_invalid_operation,
+        } => {
+            return decimal_objects::order(
+                values,
+                mask,
+                profile,
+                decimal_objects::Policy {
+                    float_trap: *trap_float_operation,
+                    invalid_trap: *trap_invalid_operation,
+                    catches_invalid: *probe_catches_invalid_operation,
+                },
+                diagnostics,
+                true,
+            );
+        }
         Values::ScalarObject {
             values,
             semantics,
@@ -564,8 +579,7 @@ fn order_inner(
                     left,
                     right,
 
-                    overflow_warnings: Vec::new(),
-                    overflow_prints: 0,
+                    numeric_diagnostics: Vec::new(),
                     integer_destination: None,
                 });
             }

@@ -8,7 +8,7 @@ use super::{invalid, sorted};
 use sdm_contract::CoreError;
 use sdm_contract::tabular::{
     IntegerDestination, NativeMissingOwner, NumericComparisonProfile as Semantics,
-    NumericOverflowPolicy as Overflow, NumericOverflowWarnings, NumericWarningStage as Stage,
+    NumericDiagnostic, NumericOverflowPolicy as Overflow, NumericWarningStage as Stage,
     OrderedSampledTabularRows as Outcome, TabularIndexScalar as Atom, TabularOrderError as Error,
     TabularSortProfile as Profile,
 };
@@ -16,49 +16,62 @@ use std::cmp::Ordering;
 
 use super::object_sort;
 
-/// One operation's bounded overflow diagnostics, shared by nested index levels.
+/// One operation's closed, ordered presentation facts across nested levels.
 #[derive(Default)]
 pub(super) struct Diagnostics {
-    pub warnings: Vec<NumericOverflowWarnings>,
-    pub prints: u64,
+    pub events: Vec<NumericDiagnostic>,
+    /// Operation-local immutable binary64 expansions, shared by nested comparisons.
+    pub decimal_values: std::collections::BTreeMap<u64, Atom>,
     pub destination: Option<IntegerDestination>,
     pub reverse_failure: bool,
     pub count_overflow: bool,
+    decimal_float_seen: bool,
+    decimal_invalid_seen: bool,
 }
 impl Diagnostics {
-    fn overflow(&mut self, policy: Option<Overflow>, stage: Stage) -> Result<(), Error> {
-        match policy {
-            None => Err(Error::NativeEffectsPending),
-            Some(Overflow::Ignore) => Ok(()),
-            Some(Overflow::Raise) => Err(Error::FloatingOverflow),
-            Some(Overflow::Warn) => {
-                if let Some(last) = self.warnings.last_mut()
-                    && last.stage == stage
-                {
-                    match last.count.checked_add(1) {
-                        Some(count) => last.count = count,
-                        None => {
-                            self.count_overflow = true;
-                            return Err(Error::NativeEffectsPending);
-                        }
-                    }
-                } else {
-                    self.warnings
-                        .push(NumericOverflowWarnings { stage, count: 1 });
-                }
-                Ok(())
-            }
-            Some(Overflow::Print) => {
-                match self.prints.checked_add(1) {
-                    Some(count) => self.prints = count,
-                    None => {
-                        self.count_overflow = true;
-                        return Err(Error::NativeEffectsPending);
-                    }
-                }
-                Ok(())
-            }
+    pub fn decimal_float(&mut self) {
+        if !self.decimal_float_seen {
+            self.events.push(NumericDiagnostic::DecimalFloatOperation);
+            self.decimal_float_seen = true;
         }
+    }
+    pub fn decimal_invalid(&mut self) {
+        if !self.decimal_invalid_seen {
+            self.events.push(NumericDiagnostic::DecimalInvalidOperation);
+            self.decimal_invalid_seen = true;
+        }
+    }
+    fn overflow(&mut self, policy: Option<Overflow>, stage: Stage) -> Result<(), Error> {
+        let event = match policy {
+            None => return Err(Error::NativeEffectsPending),
+            Some(Overflow::Ignore) => return Ok(()),
+            Some(Overflow::Raise) => return Err(Error::FloatingOverflow),
+            Some(Overflow::Warn) => NumericDiagnostic::CastWarning { stage, count: 1 },
+            Some(Overflow::Print) => NumericDiagnostic::CastPrint { count: 1 },
+        };
+        let count = match (self.events.last_mut(), event) {
+            (
+                Some(NumericDiagnostic::CastWarning {
+                    stage: previous,
+                    count,
+                }),
+                NumericDiagnostic::CastWarning { stage, .. },
+            ) if *previous == stage => Some(count),
+            (Some(NumericDiagnostic::CastPrint { count }), NumericDiagnostic::CastPrint { .. }) => {
+                Some(count)
+            }
+            _ => None,
+        };
+        if let Some(count) = count {
+            let Some(next) = count.checked_add(1) else {
+                self.count_overflow = true;
+                return Err(Error::NativeEffectsPending);
+            };
+            *count = next;
+        } else {
+            self.events.push(event);
+        }
+        Ok(())
     }
 }
 fn weak(semantics: Semantics) -> bool {
@@ -495,8 +508,7 @@ pub(super) fn order(
                     left,
                     right,
                     levels: Vec::new(),
-                    overflow_warnings: Vec::new(),
-                    overflow_prints: 0,
+                    numeric_diagnostics: Vec::new(),
                     integer_destination: None,
                 });
             }
@@ -551,8 +563,7 @@ pub(super) fn order(
             left,
             right,
 
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
             integer_destination: None,
         }),
     }
@@ -562,9 +573,37 @@ pub(super) fn order(
 mod diagnostic_tests {
     use super::*;
     #[test]
+    fn decimal_flags_keep_their_position_between_cast_runs() {
+        let mut diagnostics = Diagnostics::default();
+        diagnostics
+            .overflow(Some(Overflow::Warn), Stage::Probe)
+            .unwrap();
+        diagnostics.decimal_float();
+        diagnostics.decimal_float();
+        diagnostics
+            .overflow(Some(Overflow::Warn), Stage::Probe)
+            .unwrap();
+        diagnostics.decimal_invalid();
+        assert_eq!(
+            diagnostics.events,
+            vec![
+                NumericDiagnostic::CastWarning {
+                    stage: Stage::Probe,
+                    count: 1
+                },
+                NumericDiagnostic::DecimalFloatOperation,
+                NumericDiagnostic::CastWarning {
+                    stage: Stage::Probe,
+                    count: 1
+                },
+                NumericDiagnostic::DecimalInvalidOperation
+            ]
+        );
+    }
+    #[test]
     fn warning_and_print_counts_do_not_silently_saturate() {
         let mut warnings = Diagnostics {
-            warnings: vec![NumericOverflowWarnings {
+            events: vec![NumericDiagnostic::CastWarning {
                 stage: Stage::Probe,
                 count: u64::MAX,
             }],
@@ -577,7 +616,7 @@ mod diagnostic_tests {
         );
         assert!(warnings.count_overflow);
         let mut prints = Diagnostics {
-            prints: u64::MAX,
+            events: vec![NumericDiagnostic::CastPrint { count: u64::MAX }],
             ..Default::default()
         };
         assert!(prints.overflow(Some(Overflow::Print), Stage::Sort).is_err());

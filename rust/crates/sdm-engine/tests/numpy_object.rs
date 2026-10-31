@@ -45,8 +45,7 @@ fn ordered(values: Vec<Atom>, semantics: Semantics, positions: Vec<usize>, alrea
         Outcome::Sorted {
             positions,
             already_ordered,
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
         }
     );
 }
@@ -119,8 +118,7 @@ fn huge_integer_overflow_is_reached_during_monotonic_probe_only_in_weak_mode() {
             left: 1,
             right: 0,
             levels: Vec::new(),
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
             integer_destination: None,
         }
     );
@@ -152,8 +150,7 @@ fn finite_narrowing_overflow_stays_an_explicit_pending_native_effect() {
                 left: 1,
                 right: 0,
                 levels: Vec::new(),
-                overflow_warnings: Vec::new(),
-                overflow_prints: 0,
+                numeric_diagnostics: Vec::new(),
                 integer_destination: None,
             }
         );
@@ -173,8 +170,7 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
             Outcome::Sorted {
                 positions: vec![0],
                 already_ordered: owner == NativeMissingOwner::None,
-                overflow_warnings: Vec::new(),
-                overflow_prints: 0,
+                numeric_diagnostics: Vec::new(),
             }
         );
     }
@@ -195,8 +191,7 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
         Outcome::Sorted {
             positions: vec![2, 0, 1, 3],
             already_ordered: false,
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
         }
     );
     let mut index = facts(
@@ -216,8 +211,7 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
             left: 1,
             right: 0,
             levels: Vec::new(),
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
             integer_destination: None,
         }
     );
@@ -287,25 +281,29 @@ fn ordinary_overflow_modes_keep_probe_diagnostics_and_terminal_error() {
             let Outcome::Sorted {
                 positions,
                 already_ordered,
-                overflow_warnings,
-                overflow_prints,
+                numeric_diagnostics,
             } = result
             else {
                 panic!("ordinary overflow must finish")
             };
             assert_eq!(positions, vec![0, 1]);
             assert!(already_ordered);
-            assert_eq!(overflow_prints, if policy == Policy::Print { 2 } else { 0 });
+
             if policy == Policy::Warn {
                 assert_eq!(
-                    overflow_warnings,
-                    vec![sdm_contract::tabular::NumericOverflowWarnings {
+                    numeric_diagnostics,
+                    vec![sdm_contract::tabular::NumericDiagnostic::CastWarning {
                         stage: NumericWarningStage::Probe,
                         count: 2
                     }]
                 );
+            } else if policy == Policy::Print {
+                assert_eq!(
+                    numeric_diagnostics,
+                    vec![sdm_contract::tabular::NumericDiagnostic::CastPrint { count: 2 }]
+                );
             } else {
-                assert!(overflow_warnings.is_empty());
+                assert!(numeric_diagnostics.is_empty());
             }
         }
     }
@@ -386,14 +384,14 @@ fn a_terminal_conversion_error_keeps_prior_overflow_warnings() {
     );
     let Outcome::Refused {
         reason,
-        overflow_warnings,
+        numeric_diagnostics,
         ..
     } = order_sampled(&index).unwrap()
     else {
         panic!("huge integer failure expected")
     };
     assert_eq!(reason, Error::IntegerToFloatOverflow);
-    assert!(!overflow_warnings.is_empty());
+    assert!(!numeric_diagnostics.is_empty());
 }
 
 #[test]
@@ -454,7 +452,7 @@ fn earlier_multi_level_diagnostics_survive_a_later_numeric_failure() {
     let Outcome::Refused {
         reason,
         levels,
-        overflow_warnings,
+        numeric_diagnostics,
         ..
     } = order_sampled(&index).unwrap()
     else {
@@ -463,8 +461,8 @@ fn earlier_multi_level_diagnostics_survive_a_later_numeric_failure() {
     assert_eq!(reason, Error::IntegerToFloatOverflow);
     assert_eq!(levels, vec![1]);
     assert_eq!(
-        overflow_warnings,
-        vec![sdm_contract::tabular::NumericOverflowWarnings {
+        numeric_diagnostics,
+        vec![sdm_contract::tabular::NumericDiagnostic::CastWarning {
             stage: NumericWarningStage::Probe,
             count: 2
         }]

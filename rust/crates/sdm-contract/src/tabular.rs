@@ -215,6 +215,12 @@ pub enum TabularIndexValues {
     TemporalObject {
         values: Vec<TabularIndexScalar>,
     },
+    DecimalObject {
+        values: Vec<TabularIndexScalar>,
+        trap_float_operation: bool,
+        trap_invalid_operation: bool,
+        probe_catches_invalid_operation: bool,
+    },
     ScalarObject {
         values: Vec<TabularIndexScalar>,
         semantics: NumericComparisonProfile,
@@ -246,14 +252,19 @@ pub enum NumericWarningStage {
     MultiProbe,
     LevelSort,
 }
+/// Closed ordered numeric presentation facts, never executable host actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct NumericOverflowWarnings {
-    pub stage: NumericWarningStage,
-    pub count: u64,
-}
-fn zero_count(value: &u64) -> bool {
-    *value == 0
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NumericDiagnostic {
+    CastWarning {
+        stage: NumericWarningStage,
+        count: u64,
+    },
+    CastPrint {
+        count: u64,
+    },
+    DecimalFloatOperation,
+    DecimalInvalidOperation,
 }
 
 /// Native instant storage resolution; scaling takes place in widened arithmetic.
@@ -404,18 +415,14 @@ pub enum OrderedSampledTabularRows {
     NeedsProfile,
     Sorted {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        overflow_warnings: Vec<NumericOverflowWarnings>,
-        #[serde(default, skip_serializing_if = "zero_count")]
-        overflow_prints: u64,
+        numeric_diagnostics: Vec<NumericDiagnostic>,
         positions: Vec<usize>,
         /// Native sort_index may copy/finalize without taking a permutation.
         already_ordered: bool,
     },
     Refused {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        overflow_warnings: Vec<NumericOverflowWarnings>,
-        #[serde(default, skip_serializing_if = "zero_count")]
-        overflow_prints: u64,
+        numeric_diagnostics: Vec<NumericDiagnostic>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         integer_destination: Option<IntegerDestination>,
         reason: TabularOrderError,
@@ -438,6 +445,8 @@ pub enum TabularOrderError {
     IntegerOutOfBounds,
     IntegerIntermediateOverflow,
     FloatingOverflow,
+    DecimalFloatOperation,
+    DecimalInvalidOperation,
     NativeEffectsPending,
     TimestampDateMismatch,
     TimestampAwarenessMismatch,

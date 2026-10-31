@@ -391,8 +391,7 @@ pub(super) fn order(
             left,
             right,
 
-            overflow_warnings: Vec::new(),
-            overflow_prints: 0,
+            numeric_diagnostics: Vec::new(),
             integer_destination: None,
         }),
     }

@@ -4,8 +4,8 @@
 
 //! Temporal levels preserve the native early guard and expanded-value stable passes.
 use super::{
-    Complex, Facts, MissingLast, ResultOrder, Values, atoms, invalid, numeric_objects,
-    object_stable, order_inner, sorted, temporal,
+    Complex, Facts, MissingLast, ResultOrder, Values, atoms, decimal_objects, invalid,
+    numeric_objects, object_stable, order_inner, sorted, temporal,
 };
 use sdm_contract::CoreError;
 use sdm_contract::tabular::TabularOrderError as Error;
@@ -19,15 +19,15 @@ fn refused((reason, level, left, right): Failure) -> ResultOrder {
         left,
         right,
 
-        overflow_warnings: Vec::new(),
-        overflow_prints: 0,
+        numeric_diagnostics: Vec::new(),
         integer_destination: None,
     }
 }
 fn is_type_error(reason: Error) -> bool {
     !matches!(
         reason,
-        Error::IntegerToFloatOverflow
+        Error::DecimalInvalidOperation
+            | Error::IntegerToFloatOverflow
             | Error::IntegerIntermediateOverflow
             | Error::IntegerOutOfBounds
             | Error::FloatingOverflow
@@ -49,6 +49,87 @@ fn real(bits: u64, width: u8) -> f64 {
         f64::from_bits(bits)
     } else {
         f64::from(f32::from_bits(bits as u32))
+    }
+}
+
+fn contextual(level: &Facts) -> bool {
+    matches!(
+        level.values,
+        Values::ScalarObject { .. } | Values::DecimalObject { .. }
+    )
+}
+fn decimal_policy(level: &Facts) -> decimal_objects::Policy {
+    let Values::DecimalObject {
+        trap_float_operation,
+        trap_invalid_operation,
+        probe_catches_invalid_operation,
+        ..
+    } = level.values
+    else {
+        unreachable!()
+    };
+    decimal_objects::Policy {
+        float_trap: trap_float_operation,
+        invalid_trap: trap_invalid_operation,
+        catches_invalid: probe_catches_invalid_operation,
+    }
+}
+fn level_probe(
+    level: &Facts,
+    positions: &[usize],
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<Result<bool, (Error, usize, usize)>, CoreError> {
+    match &level.values {
+        Values::ScalarObject {
+            values,
+            semantics,
+            overflow,
+        } => numeric_objects::monotonic(
+            values,
+            &level.missing,
+            positions,
+            *semantics,
+            *overflow,
+            diagnostics,
+        ),
+        Values::DecimalObject { values, .. } => decimal_objects::monotonic(
+            values,
+            &level.missing,
+            positions,
+            decimal_policy(level),
+            diagnostics,
+        ),
+        _ => unreachable!(),
+    }
+}
+fn level_order(
+    level: &Facts,
+    probe_first: bool,
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<ResultOrder, CoreError> {
+    match &level.values {
+        Values::ScalarObject {
+            values,
+            semantics,
+            overflow,
+        } => numeric_objects::order(
+            values,
+            &level.missing,
+            level.profile,
+            *semantics,
+            *overflow,
+            diagnostics,
+            numeric_objects::OrderStage::Level { probe_first },
+        ),
+        Values::DecimalObject { values, .. } => decimal_objects::order(
+            values,
+            &level.missing,
+            level.profile,
+            decimal_policy(level),
+            diagnostics,
+            probe_first,
+        ),
+        _ => unreachable!(),
     }
 }
 
@@ -98,6 +179,27 @@ fn compare(
             *overflow,
             diagnostics,
         )?,
+        Values::DecimalObject { values, .. } => {
+            if decimal_objects::comparison(
+                &values[left],
+                &values[right],
+                Ordering::Less,
+                decimal_policy(level),
+                diagnostics,
+            )? {
+                Ordering::Less
+            } else if decimal_objects::comparison(
+                &values[left],
+                &values[right],
+                Ordering::Greater,
+                decimal_policy(level),
+                diagnostics,
+            )? {
+                Ordering::Greater
+            } else {
+                Ordering::Equal
+            }
+        }
         Values::TemporalObject { values } => {
             temporal::sort_comparison(&values[left], &values[right])?
         }
@@ -132,6 +234,13 @@ fn tuple_relation(
                 diagnostics,
             )
             .map(|order| order == Some(Ordering::Equal)),
+            Values::DecimalObject { values, .. } => decimal_objects::comparison(
+                &values[left],
+                &values[right],
+                Ordering::Equal,
+                decimal_policy(level),
+                diagnostics,
+            ),
             Values::TemporalObject { values } => {
                 temporal::tuple_equal(&values[left], &values[right])
             }
@@ -160,6 +269,13 @@ fn tuple_relation(
                 diagnostics,
             )
             .map(|order| order == Some(relation)),
+            Values::DecimalObject { values, .. } => decimal_objects::comparison(
+                &values[left],
+                &values[right],
+                relation,
+                decimal_policy(level),
+                diagnostics,
+            ),
             _ => compare(level, left, right, diagnostics).map(|order| order == relation),
         }
         .map_err(|reason| (reason, level_no, left, right));
@@ -189,7 +305,17 @@ fn tuple_monotonic(
             Ok::<_, Failure>(())
         })();
         if let Err(failure) = pair {
-            if is_type_error(failure.0) || failure.0 == Error::TemporalYearOutOfRange {
+            if is_type_error(failure.0)
+                || failure.0 == Error::TemporalYearOutOfRange
+                || failure.0 == Error::DecimalInvalidOperation
+                    && matches!(
+                        levels[failure.1].values,
+                        Values::DecimalObject {
+                            probe_catches_invalid_operation: true,
+                            ..
+                        }
+                    )
+            {
                 return Ok(false);
             }
             return Err(failure);
@@ -263,19 +389,11 @@ pub(super) fn order(
     let mut numeric_probes = vec![None; levels.len()];
     let mut previous_monotonic = true;
     for (level_no, level) in levels.iter().enumerate() {
-        if let Values::ScalarObject {
-            values,
-            semantics,
-            overflow,
-        } = &level.values
-        {
+        if contextual(level) {
             let monotonic = if early_guard && previous_monotonic {
-                match numeric_objects::monotonic(
-                    values,
-                    &level.missing,
-                    &(0..values.len()).collect::<Vec<_>>(),
-                    *semantics,
-                    *overflow,
+                match level_probe(
+                    level,
+                    &(0..level.missing.len()).collect::<Vec<_>>(),
                     diagnostics,
                 )? {
                     Ok(value) => {
@@ -337,26 +455,11 @@ pub(super) fn order(
         let result = match cached[level_no].take() {
             Some(result) => result,
             None => {
-                if let Values::ScalarObject {
-                    values,
-                    semantics,
-                    overflow,
-                } = &level.values
-                {
+                if contextual(level) {
                     if numeric_probes[level_no] == Some(true) {
-                        sorted((0..values.len()).collect(), true)
+                        sorted((0..level.missing.len()).collect(), true)
                     } else {
-                        numeric_objects::order(
-                            values,
-                            &level.missing,
-                            level.profile,
-                            *semantics,
-                            *overflow,
-                            diagnostics,
-                            numeric_objects::OrderStage::Level {
-                                probe_first: numeric_probes[level_no].is_none(),
-                            },
-                        )?
+                        level_order(level, numeric_probes[level_no].is_none(), diagnostics)?
                     }
                 } else {
                     order_inner(level, diagnostics)?
@@ -370,7 +473,7 @@ pub(super) fn order(
                 already_ordered,
                 ..
             } => {
-                if !already_ordered && matches!(level.values, Values::ScalarObject { .. }) {
+                if !already_ordered && contextual(level) {
                     numeric_permutations[level_no] = Some(positions.clone());
                 }
                 normalized_monotonic.push(
@@ -397,8 +500,7 @@ pub(super) fn order(
                         right,
                         levels: path,
 
-                        overflow_warnings: Vec::new(),
-                        overflow_prints: 0,
+                        numeric_diagnostics: Vec::new(),
                         integer_destination: None,
                     });
                 }
@@ -423,23 +525,8 @@ pub(super) fn order(
         );
     }
     for (level_no, level) in levels.iter().enumerate() {
-        if let (
-            Values::ScalarObject {
-                values,
-                semantics,
-                overflow,
-            },
-            Some(positions),
-        ) = (&level.values, &numeric_permutations[level_no])
-        {
-            normalized_monotonic[level_no] = match numeric_objects::monotonic(
-                values,
-                &level.missing,
-                positions,
-                *semantics,
-                *overflow,
-                diagnostics,
-            )? {
+        if let Some(positions) = &numeric_permutations[level_no] {
+            normalized_monotonic[level_no] = match level_probe(level, positions, diagnostics)? {
                 Ok(value) => value,
                 Err((reason, left, right)) => return Ok(refused((reason, level_no, left, right))),
             };
@@ -501,8 +588,8 @@ mod tuple_tests {
         assert!(!tuple_monotonic(&[level], &[vec![0, 1, 0]], 3, &mut diagnostics).unwrap());
         // Descending: EQ then LT. Ascending: EQ/LT then EQ/GT.
         assert_eq!(
-            diagnostics.warnings,
-            vec![sdm_contract::tabular::NumericOverflowWarnings {
+            diagnostics.events,
+            vec![sdm_contract::tabular::NumericDiagnostic::CastWarning {
                 stage: NumericWarningStage::Probe,
                 count: 6
             }]
