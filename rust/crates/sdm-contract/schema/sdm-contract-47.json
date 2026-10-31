@@ -10356,10 +10356,16 @@
           ]
         },
         {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
+          "description": "Control-message attachment inventory for fit preparation.\nNested metadata references must equal these declared references.",
           "type": "object",
           "properties": {
             "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "context": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "holdout": {
               "$ref": "#/$defs/AttachmentId"
             },
             "op": {
@@ -10370,14 +10376,18 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "input"
+            "input",
+            "context",
+            "holdout"
           ]
         },
         {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
           "type": "object",
           "properties": {
             "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "observed": {
               "$ref": "#/$defs/AttachmentId"
             },
             "op": {
@@ -10388,7 +10398,8 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "input"
+            "input",
+            "observed"
           ]
         },
         {
@@ -10428,10 +10439,12 @@
           ]
         },
         {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
           "type": "object",
           "properties": {
             "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "predict": {
               "$ref": "#/$defs/AttachmentId"
             },
             "op": {
@@ -10442,14 +10455,17 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "input"
+            "input",
+            "predict"
           ]
         },
         {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
           "type": "object",
           "properties": {
             "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "payload": {
               "$ref": "#/$defs/AttachmentId"
             },
             "op": {
@@ -10460,14 +10476,20 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "input"
+            "input",
+            "payload"
           ]
         },
         {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
           "type": "object",
           "properties": {
             "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "predict": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "pinned_keys": {
               "$ref": "#/$defs/AttachmentId"
             },
             "op": {
@@ -10478,7 +10500,9 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "input"
+            "input",
+            "predict",
+            "pinned_keys"
           ]
         },
         {
