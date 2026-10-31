@@ -175,24 +175,24 @@ fn probe(
         let previous = current - 1;
         let result = (|| {
             if relation(
-                &keys[current],
-                &keys[previous],
+                keys[current],
+                keys[previous],
                 Ordering::Less,
                 policy,
                 diagnostics,
             )? {
                 increasing = false;
             } else if relation(
-                &keys[current],
-                &keys[previous],
+                keys[current],
+                keys[previous],
                 Ordering::Greater,
                 policy,
                 diagnostics,
             )? {
                 decreasing = false;
             } else if !relation(
-                &keys[current],
-                &keys[previous],
+                keys[current],
+                keys[previous],
                 Ordering::Equal,
                 policy,
                 diagnostics,
@@ -251,8 +251,8 @@ pub(super) fn order(
     let result = object_sort::argsort(present.len(), |left, right| {
         let (left, right) = (present[left], present[right]);
         if relation(
-            &keys[left],
-            &keys[right],
+            keys[left],
+            keys[right],
             Ordering::Less,
             policy,
             diagnostics,
@@ -262,8 +262,8 @@ pub(super) fn order(
             return Ok(true);
         }
         let _ = relation(
-            &keys[left],
-            &keys[right],
+            keys[left],
+            keys[right],
             Ordering::Greater,
             policy,
             diagnostics,
