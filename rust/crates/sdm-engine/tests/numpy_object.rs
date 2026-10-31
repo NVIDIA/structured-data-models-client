@@ -378,6 +378,8 @@ fn a_terminal_conversion_error_keeps_prior_overflow_warnings() {
             Atom::Integer {
                 value: format!("1{}", "0".repeat(400)),
             },
+            // The final fixed owner actually reaches conversion of the huge integer.
+            floating(4, 3.0),
         ],
         Semantics::WeakScalars,
         NumericOverflowPolicy::Warn,
