@@ -144,3 +144,11 @@ Maintain one finite acceptance table and one execution record per immutable cand
 Preserve existing Phase 3 regressions, separate Python suite collection, heavy guard, Cargo jobs=2, nightly CI and phase-end acceptance.
 General pandas warning differences remain governed by the owner's existing direction and must not become a new delivery campaign.
 The final default switch and full Phase 4 exit requirements remain separate from an increment's landing.
+
+## Final PQL delivery sequence (owner direction, 2026-10-31)
+
+Finish the bounded remaining ordinary-family implementation and coverage reconciliation together before the final validation pass.
+Review datatype and contract decisions early; use targeted public reproductions only to establish behavior needed for implementation.
+Do not repeat broad suites or create a separate landing cycle for each remaining family.
+After the connected changes are complete, obtain two independent exact-source reviews, generate canonical artifacts, review those artifacts, and run consolidated parity, relevant regressions and the required handoff before landing.
+The already-submitted AVX512 validation job continues independently; inspect its existing run before considering any retry.

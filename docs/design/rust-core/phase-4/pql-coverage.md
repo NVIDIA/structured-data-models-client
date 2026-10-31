@@ -4,177 +4,74 @@
 
 # Tabular PQL acceptance
 
-The direct-input path landed at `391723fb`.
-This work connects both PQL entrypoints to that path under [boundaries](boundaries.md) and [restart](restart.md).
-Both public entrypoints landed in the ordinary-input increment at `60335b57c`.
-The frozen-reference pilot passes five public journeys, and a generated reference fixture records exact sampled contexts or failures for 16 ordinary index families.
+Scope: both frame-backed PQL materialization entrypoints through the existing direct Request → KumoTabular → PredictionResult path.
+Follow [boundaries](boundaries.md) and [restart](restart.md).
+PQL completion does not include fitted/file-fed Tabular, relational migration or changing default routes.
+The development route remains opt-in.
 
-| Requirement | Public evidence required |
+## Required behavior and evidence
+
+| Requirement | Implementation / public evidence |
 | --- | --- |
-| Indices | Repeated requested keys expand to every matching source position in request order; missing keys preserve diagnostics. |
-| Supplied scoring frame | Exclude matching entity keys, including duplicates; preserve the supplied frame and its owners. |
-| Context | Remove unknown targets after scoring exclusion; retain candidate order when no reduction is needed. |
-| Sampling | Fresh legacy seed 42, sample without replacement, then sort only the sampled index; verify final encoded context order. |
-| Counts | Explicit and default caps, invalid counts, empty candidates, exact cap and cap plus one; preserve warning timing. |
-| Task | Explicit overrides and inference from the selected context, including binary whole-number targets. |
-| Index families | Range, signed/unsigned numeric, float with missing labels, string/object, temporal, categorical and MultiIndex; duplicates and mixed labels where supported. |
-| Native effects | Reached key equality/hash, frame/index operations and substantive failures; user-defined comparison/sorting functions excluded by owner decision. |
-| Prediction | Materialized Request through KumoTabular to attributed PredictionResult, compared with frozen Python. |
-| Isolation | Existing source-backed materialization, warehouse sampling and fitted lifecycle remain unchanged. |
+| Requested indices | Expand repeated requested keys to all matching source positions in request order; preserve missing-key diagnostics before target inspection. `test_tabular_pql_core.py` and canonical `tabular_pql_reference` receipts. |
+| Supplied scoring frame | Exclude matching entity keys, including duplicates, while retaining the supplied frame and native owners. Same public suite and receipts. |
+| Context filtering | Remove unknown targets after scoring exclusion; keep candidate order and do not inspect index labels when reduction is unnecessary. Same public suite; `test_tabular_sorting_scope.py`. |
+| Sampling | Fresh seed 42, sample without replacement, then sort the actual sampled labels. Verify selected and encoded row order through prediction, including 320-row duplicate/missing boundaries. Same public suite and receipts. |
+| Counts and task | Actual cap, cap plus one, invalid/empty cases, explicit overrides and task inference from selected context. Count/task landing `447498a66`: 11 frozen public journeys and 44 installed checks. |
+| Native effects | Preserve reached key/hash/frame observations, substantive errors and ordinary numeric/Decimal signals. Canonical numeric and Decimal groups, with explicit owner decisions below. |
+| Prediction | Reuse direct path landed at `391723fb`; both PQL entrypoints first landed at `60335b57c`. Public fixtures compare context order, encoded order, errors and attributed predictions. |
+| Isolation | Warehouse source dispatch, SQL/providers/fallback, continuing warehouse RNG and fitted lifecycle remain unchanged. No universal sampler, new crate or numeric callback protocol. |
 
-Python retains actual frames and native owners and applies returned row positions.
-Rust composes scoring expansion, exclusion, known-target filtering and conditional sampling in `sdm-core`, with selection policy in `sdm-engine::tabular`.
-Index observations are acquired only on the reduction path at their actual consumption point.
-The sort profile must match the supported producer; the existing datetime introsort is not evidence for numeric SIMD tie ordering.
-Task inference follows selection and uses the same generic Request builder as direct calls.
+Python retains actual frames and native owners and applies source-row positions returned by Rust.
+Rust composes ordinary scoring expansion, exclusion, known-target filtering and cap policy in `sdm-core`, using `sdm-engine::tabular` for selection.
+Native-effect paths retain reached key/mask observations.
+Reduction warnings precede sampling reads; sampling observes the retained candidate population afterward.
+Task inference follows final selection and uses the generic Request builder.
 
-Before implementation, independently review the concrete observations and native failure boundaries against the frozen materializer.
-Then freeze one connected candidate, obtain two exact-source approvals, run consolidated parity and regression checks, and land immediately.
-Each row above remains pending until its public evidence is recorded.
+## Finite index and runtime matrix
 
-## Early review decisions
+| Index family | Coverage and status |
+| --- | --- |
+| Range, signed/unsigned numeric, floating, Boolean, string, nullable and primitive Arrow | Frozen public `indices` and supplied-frame journeys, including duplicates, missing labels and sampled ties. |
+| Complex, finite Decimal/integer, date, fixed-offset/naive datetime | Landed `b62256b51`; generic object comparison semantics and reached failures are retained. |
+| NumPy scalar objects and mixed precision | Exact owners and widths; source-bound promotion semantics separate from sorting profile. Landed `6e78eb1`; ordinary ignore/raise/warn/print behavior completed at `4b9369bc`. |
+| Timestamp, standard ZoneInfo/pytz, temporal MultiIndex | Landed `87ca02c27`: identity/fold, precision, wide-year failures, unused-level guards and non-total mixed temporal lexsort. |
+| Decimal/float context effects | Landed `bee780b9`: exact finite comparisons, FloatOperation/InvalidOperation traps and ordered sticky flags, including failures. Canonical Decimal public receipts and Rust controls. |
+| Categorical and MultiIndex | Category order/codes, levels/codes, missingness, duplicates, nested owner addressing and actual sampled-subset ordering; existing public suites. |
+| Arrow decimal/date/binary | Landed `5060b299`: six runtimes each passed 728 public checks. Exact coefficients/scales, physical dates, explicit unsigned bytes, chunks, nulls and MultiIndex levels. |
+| Object bytes, Decimal infinities and Python timedelta | Final batch implementation; frozen public witnesses prove the old client succeeds on both entrypoints in current/floor runtimes. Consolidated validation and landing remain required. |
 
-Both independent reviewers verified that the current and frozen materializers differ only in import placement.
-The source path uses dictionary lookup for indices, but set construction followed by pandas membership for supplied frames.
-These are distinct observations, especially for missing entities; a shared equality shortcut is not justified.
+Supported producer bindings are explicit official NumPy binaries, not a guess from a CPU name or version alone.
+The local six-runtime matrix covers NumPy 1.23.5, 1.26.4, 2.1.3, 2.3.4 and 2.5.4; pandas 2.2.2 through 3.1.0; Arrow 14 through 26; Python 3.10, 3.12 and 3.14.
+Per-runtime canonical receipts retain exact binary hashes and effective CPU dispatch features.
+Arm floor/newest baseline acceptance landed with `a4f7295d8`; the final runtime runner also includes Arrow and ordinary-object completion suites.
+Live AVX512 acceptance is still required separately from AVX2/Arm results and independent source vectors.
+The legacy 1.26 network64 profile landed at `7b022ce92`; source vectors alone do not establish native execution.
 
-Selection returns source positions, with scoring expansion separate from candidate filtering.
-Only a reduced context enters the sampled-index ordering operation, with labels in draw order.
-The selected-context task decision precedes schema snapshot and generic Request construction.
-Sampling advice precedes the sampling read and can raise or mutate native data, so it is a real observation boundary.
+Object values keep their actual comparison family and generic sorting behavior; they are not silently converted into Arrow or typed numeric ordering.
+Ordering profiles are bound only when needed, using retained observations without rereading native owners.
+Stable Arrow arrays use stable ordering; generic object comparisons retain their source-bound algorithm and substantive failures.
+Byte vectors are distinct from Unicode, durations use normalized components and widened arithmetic, and Decimal infinity retains its Decimal owner for contextual float signals.
 
-The engine owns a small legacy seed-42 generator implementation.
-The existing warehouse MT19937 coefficient implementation and crate dependencies remain untouched: the dependency rules forbid coupling the data and engine crates for reuse.
-Archived sorting kernels are source material for review, not inherited validation or a completed public route.
+## Explicit compatibility decisions
 
-The capacity decision occurs before warning delivery, but permutation generation consumes the retained candidate population afterward.
-This preserves warning-driven changes in candidate length without reconstructing candidates from a potentially different source frame.
-Missing-key refusal must also precede target-validity observation; bulk admission is limited to proven passive inputs.
+- User-defined comparison/sorting functions are unsupported by the October 31 owner decision.
+  This supersedes the former custom-sort Python fallback exception; removal landed at `eb26d7c2`.
+  Inspect the actual sampled owner only when sorting is required; do not execute custom sorting or inspect unused indexes.
+- Synthetic custom NumPy handler mutations do not require emulation.
+  Numeric conversion/comparison stays in Rust through one-way facts/results; no callback interpreter or numeric Run step.
+  Ordinary precision, rounding, overflow modes, errors and required diagnostic order remain covered.
+- Incidental pandas warnings need not match one-for-one.
+  Weak-and-warn admission landed at `eb26d7c2`; the exact reference-only int64-to-int8 promotion advisory from MultiIndex code arithmetic is excluded from mode comparison.
+  Avoiding that obsolete warning-as-error failure is an intentional improvement; every other warning/count and error remains checked.
+- A bounded supplied-frame Decimal failure comparison allows the informational reduction advisory when both clients have identical substantive error and Decimal flags.
+  Raw reference observations remain retained.
+- Wide Arrow dates deliberately avoid the old monotonic probe's incidental Python-date range failure.
+  Both public entrypoints match the complete ordinary-date reference journey after a constant physical-day shift, including reconstructed indexes, encoded rows and predictions.
 
-## Current increment and remaining scope
+## Final delivery gate
 
-The connected ordinary-input increment uses the existing direct prediction path, native owner observations, Rust selection and sampled-index ordering.
-Its candidate requires two independent exact-source reviews, canonical contract generation, installed-wheel parity, regressions and verified landing.
-The recorded index expectations come from the frozen public client through `materialize`, not from candidate sorting kernels.
-
-Typed complex, finite Decimal/integer, exact date and fixed-offset/naive datetime labels landed at `b62256b51` through the existing sampled-index operation.
-Its frozen public evidence covers sampled indices and unreduced supplied frames separately; supplied frames do not accept an explicit context count.
-The host retains exact owners and observes their closed fields, while Rust compares exact coefficients and civil values and reports reached comparison failures.
-The increment landed at `795dba504` delays producer binding until Rust reports that the sampled facts require it.
-Pure total comparisons with monotonic or distinct keys can finish without a NumPy binary binding; stable Arrow paths keep their own profile.
-When ties or comparison failures need the producer, Python binds the retained facts and retries once without rereading native owners.
-The older scalar producer bindings landed at `b719a516`, with frozen public receipts selected by the actual runtime rather than reusing another NumPy version's tie order.
-
-The increment landed at `6e78eb1` retains exact NumPy integer and floating scalar owners inside object indexes.
-Its `ScalarObject` facts carry a source-bound comparison-semantics tag independently of the sorting profile.
-NumPy 1.23 legacy, NumPy 1.26 legacy and audited NumPy 2.5 weak-scalar comparisons differ; NumPy 1.26's promotion mode is observed rather than inferred from its binary.
-The engine uses generic object comparison and sorting for these facts, without claiming a total order or applying the profile-free unique-key shortcut to mixed-precision comparisons.
-Reached integer-to-float overflow has a closed result; native warning-handler effects remain an explicit unfinished obligation.
-Its public parity passed 379 cases in each of the prepared NumPy 1.23.5, 1.26.4 and 2.5.4 runtimes.
-
-The increment landed at `b5c8a403` binds the official NumPy 2.1.3 and 2.3.4 deployment wheels.
-The former requires unconditional four- and eight-lane SIMD entry profiles; only the original-array sorted shortcut differs, while the outer monotonic check remains unchanged.
-Frozen public materialization confirms a tie-order difference at 320 sampled rows with sorted duplicate present keys and a missing label.
-Compiler/source evidence supports the existing GNU fallback family, and receipt identity includes effective AVX2 and AVX512 dispatch groups.
-The current host provides live AVX2 evidence; source compatibility does not claim live AVX512 execution.
-Two independent exact-source reviews, canonical contract 40 generation and the required handoff passed before verified landing.
-Installed-wheel public parity passed 394 cases in each of the current, NumPy 2.1.3 and NumPy 2.3.4 runtimes; six runtime-specific frozen receipts contain 183 journeys each.
-
-Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, remaining numeric promotion modes and effects, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
-Ordinary input gaps remain obligations; the subsequent owner decision below explicitly excludes arbitrary comparison/sorting functions.
-The development route remains opt-in; existing defaults and warehouse paths are unchanged.
-A frozen public custom-label comparison witness has been presented for an owner decision; no broader fallback is implemented.
-
-The ordinary integer-key/primitive-target path uses one `SelectTabularRows` composition for both entrypoints.
-That operation composes expansion or key exclusion, known-target filtering and capacity policy in Rust.
-Only native-effect paths retain staged key/mask observations; sampling stays after warning delivery for both.
-Forced frame routes explicitly refuse relational materialization until its separate core consumer exists, avoiding a silent legacy route.
-
-The increment landed at `a4f7295d8` binds the official NumPy 2.5.4 cp314 binary and the Arm floor/newest binaries to existing audited sorting and comparison profiles.
-Frozen reference recording uses Python 3.14.8, pandas 3.1.0 and Arrow 26.0.0.
-Date/datetime comparison refusals retain Rust-selected operand positions; Python presents the native exception for that exact admitted pair because the diagnostic changed in Python 3.13.
-This single failure-presentation operation does not provide a sorting callback or broaden custom-owner admission.
-Two independent source reviews and handoff passed before verified landing.
-Installed-wheel parity passed 394 cases each on current x86, Python 3.14 x86, Arm floor and Arm newest; both native Arm lanes ran on the exact candidate `fa9b13d25`.
-The targeted Arm run is PQL evidence and does not replace full CI.
-
-The count/task increment landed at `447498a66` with 11 canonical frozen public journeys and 44 installed-client checks.
-It covers the actual 10,000-row cap and cap plus one with default/explicit counts, both empty selected-context causes, binary task inference after scoring exclusion on both entrypoints, an integer-subclass count and reduction-warning handlers that record or raise.
-The dedicated frozen acceptance compares context and encoded row order, results, errors and event sequences in the matching current runtime.
-The ordinary semantic checks also run without runtime-specific receipts; neither path silently substitutes a different runtime oracle.
-No product change was needed for these cases.
-
-The increment landed at `7b022ce92` addresses NumPy 1.26 AVX512 with a distinct eight-lane profile: unconditional entry, a 64-element recursive network cutoff and zero-filled masked index lanes.
-Its existing partition and GNU depth fallback remain shared; the host alone selects the audited producer profile.
-Independent vectors are transcribed from the pinned upstream network headers and cover ordinary duplicates, maximum/infinity keys and nonzero-index subranges.
-Those vectors establish network behavior, not native AVX512 public execution; live AVX512 evidence is still absent on this host.
-
-Object-held Timestamp support is the next connected temporal increment.
-Frozen public witnesses distinguish instant comparison from mixed Timestamp/datetime wall-clock comparison, including timezone identity, fold, submicrosecond precision and years outside Python datetime range.
-Native tick values and resolution preserve wide instants without forcing nanoseconds into int64 or eagerly calling range-sensitive timezone methods.
-The core must preserve separate LT/GT/EQ outcomes and reached year-range refusals; a total-order shortcut is not valid for ambiguous mixed temporal owners.
-Standard pandas 2 pytz and pandas 3 ZoneInfo owners are part of the planned coverage; arbitrary custom timezone callbacks remain unresolved.
-
-Temporal MultiIndex acceptance must cover three distinct boundaries, verified through frozen public calls on pandas 2 and 3.
-First, ordered used codes can return before sorting an unused level containing a wide Timestamp and datetime; forcing normalization with alternating secondary codes reaches the year-range ValueError.
-Second, reached level errors carry a level path plus operand positions, so Python presents the error from the retained level owners rather than indexing top-level tuples.
-Third, mixed ambiguous-time owners can be ordering ties without being equal; expanded-value stable lexsort can preserve alternating sampled codes that distinct integer ranks would reorder.
-The native object stable-sort helper family is identical across the audited NumPy 1.23.5, 1.26.4, 2.1.3, 2.3.4 and 2.5.4 sources.
-This source evidence establishes the implementation target, not candidate validation or a completed temporal landing.
-
-## Ordinary numeric warning acceptance
-
-The owner does not require incidental pandas warning counts or their interleaving.
-For numeric overflow RuntimeWarnings from pandas index/sorting sites, acceptance retains raw frozen receipts and compares the warning sites, while ignoring repetition and placement among other warnings.
-Selected rows, encoded rows, predictions, exceptions (including warning-as-error), unrelated warnings and printed diagnostics remain exact.
-This does not authorize a different comparison algorithm, Python callbacks or a broader fallback.
-
-## Decimal comparison increment
-
-The one-way numeric increment landed at `4b9369bc`, with six-runtime frozen-reference acceptance and the required reviewed handoff.
-Mixed finite Decimal/Python-float labels are the next demonstrated gap: the reference sets `FloatOperation` and sorts or raises its trap, while the landed core refuses admission.
-Python retains the actual standard Decimal context and supplies its trap settings with exact scalar facts.
-Rust owns exact comparison, stage-specific trap suppression and sorting; it returns ordered closed numeric diagnostics and the result or refusal.
-Python presents diagnostics in order, ORs reached Decimal flags into the retained context, and then constructs the result or raises the selected exception.
-An earlier warning-as-error prevents later flag presentation, without callbacks, a new Run step or changes to warehouse paths.
-Both public entrypoints cover ordinary finite values, precision boundaries, float infinity/NaN, sticky flags and mixed-level warning/error ordering.
-Previously matching all-Decimal NaN cases remain regression controls; arbitrary Decimal subclasses and mixed Decimal-NaN owners are not claimed by this increment.
-The old client remains a reference for useful behavior, not a requirement to copy demonstrated bugs or incidental implementation details; intentional improvements require explicit justification and verification.
-
-For supplied-frame failures with identical Decimal exceptions and flags, acceptance ignores only the presence of the exact informational default-sampling advisory.
-The old pandas Boolean-Series conversion can compare row labels and raise before that advisory; positional filtering avoids this redundant comparison and reaches the same terminal error during sorting.
-Raw reference evidence, successful-call warnings, unrelated warnings and exceptions remain exact; this allowance does not treat a warning promoted to an exception as equivalent to a Decimal error.
-
-
-## Weak-and-warn comparison binding
-
-Mixed Decimal/Python-float support landed and was verified at `bee780b9`.
-The next binding admits NumPy 1.26 and 2.1 weak-and-warn comparisons through their existing weak comparison profiles, retaining binary provenance checks and observing the mode on each call.
-Pinned generic dispatch checks promotion warnings against output dtypes; comparison outputs remain Boolean, so this does not import arithmetic promotion-warning behavior into sorting.
-The source audit is supported by 2,520 paired native LT/GT/EQ comparisons with identical values, errors and warnings, plus 32 frozen public journeys.
-Public acceptance explicitly requests weak-and-warn and compares with the unchanged frozen weak receipts; the canonical recorder's default remains weak.
-No Rust algorithm, contract, diagnostic event or warehouse path changes.
-
-The owner subsequently excluded user-defined comparison and sorting functions, superseding the earlier custom-sort fallback exception.
-The actual sampled frame/index is checked immediately before index observation; custom sorting is refused without invoking it or entering the legacy materializer.
-An unreduced call returns before this inspection.
-Public controls cover ordinary custom-sort frames, a custom sorter introduced by the sampled `take`, and the unreduced no-inspection path.
-
-
-Weak-and-warn validation preserves results, errors and numeric warnings while excluding one reference-only advisory from pandas MultiIndex code arithmetic: `result dtype changed due to the removal of value-based promotion from NumPy. Changed from int64 to int8.`
-Frozen public traces locate it at `codes.max() + 1` and level-code bounds, not label comparisons.
-Rust does not perform that obsolete dtype-promotion check; avoiding its advisory and its warning-as-error failure is an intentional improvement, not claimed warning-handler parity.
-The weak-mode reference checks remain exact, and the weak-and-warn comparison retains every other warning, count and error.
-
-## Ordinary Arrow label completion
-
-Arrow decimal128/decimal256 labels use exact Decimal coefficient/exponent facts and the existing stable object comparator, including negative scales and coefficients wider than i128.
-Arrow date32/date64 labels use their signed physical day/millisecond values; extraction never constructs Python dates.
-Binary, large-binary and fixed-size-binary labels use explicit byte-vector facts with unsigned lexicographic stable ordering, preserving empty values, embedded NUL and non-UTF8 bytes.
-Validity remains separate from payloads, and chunk boundaries do not change row order.
-All representations feed the existing sampled-index operation, including MultiIndex levels; warehouse push-down and session boundaries are unchanged.
-
-The finite public reference group covers both entrypoints, forward/reverse duplicates, all-null and one-present arrays, negative-scale decimals, decimal256 coefficients beyond i128 and three Arrow MultiIndex level families.
-Receipts record SHA256 of every context/encoded ID sequence, row counts, source-index reconstruction equality, index dtype and prediction values.
-Wide date32 values deliberately succeed where the old client's incidental monotonic probe converted them into out-of-range Python dates.
-Their complete public journey must match ordinary date32 reference results after a constant physical-day shift, preserving ordering, nulls, retained indexes, encoded rows and predictions.
+Finish the remaining connected code and finite coverage before broad testing, per the owner's October 31 direction.
+Obtain two independent exact-source reviews, generate canonical contracts/receipts, review generated artifacts, then run one consolidated public/regression pass and required handoff.
+Retain raw evidence and fix substantive failures; do not turn an unsupported ordinary family into a silent fallback.
+Completion requires verified landing, live runtime evidence and reconciliation of every row above.

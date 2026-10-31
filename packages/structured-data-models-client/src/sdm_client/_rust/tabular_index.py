@@ -10,7 +10,7 @@ import hashlib
 import importlib
 import struct
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import (
     Context,
     Decimal,
@@ -202,12 +202,23 @@ def _scalar(value: Any) -> dict[str, Any]:
         return {'kind': 'floating', 'bits': _bits(value, 8)}
     if type(value) is str:
         return {'kind': 'text', 'points': [ord(char) for char in value]}
+    if type(value) is bytes:
+        return {'kind': 'bytes', 'values': list(value)}
+    if type(value) is timedelta:
+        return {
+            'kind': 'duration',
+            'days': value.days,
+            'seconds': value.seconds,
+            'micros': value.microseconds,
+        }
     if type(value) is complex:
         return {
             'kind': 'complex',
             'real_bits': _bits(value.real, 8),
             'imag_bits': _bits(value.imag, 8),
         }
+    if type(value) is Decimal and value.is_infinite():
+        return {'kind': 'decimal_infinity', 'negative': value.is_signed()}
     if type(value) is Decimal and value.is_finite():
         parts = value.as_tuple()
         return {
@@ -325,10 +336,18 @@ def _array(
             absent and type(value) is float
             for value, absent in zip(values, missing, strict=True)
         )
-        if 'decimal' in kinds and ('floating' in kinds or has_float_missing):
+        if kinds & {'decimal', 'decimal_infinity'} and (
+            'floating' in kinds or has_float_missing
+        ):
             if type(decimal_context) is not Context:
                 raise RouteError('custom Decimal contexts are not represented')
-            if not kinds <= {'decimal', 'integer', 'boolean', 'floating'}:
+            if not kinds <= {
+                'decimal',
+                'decimal_infinity',
+                'integer',
+                'boolean',
+                'floating',
+            }:
                 raise RouteError('this mixed Decimal owner is not represented')
             for position, (value, absent) in enumerate(
                 zip(values, missing, strict=True)

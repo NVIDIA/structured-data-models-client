@@ -107,6 +107,23 @@ def main() -> None:
         env=frozen_env,
         cwd=out,
     )
+    for group in ('arrow_index', 'ordinary_index'):
+        run(
+            [
+                sys.executable,
+                str(ROOT / 'scripts/record_tabular_pql.py'),
+                '--reference-checkout',
+                str(reference),
+                '--reference-revision',
+                REFERENCE,
+                '--group',
+                group,
+                '--output-dir',
+                str(out / ('reference-' + group)),
+            ],
+            env=frozen_env,
+            cwd=out,
+        )
     tests = out / 'tests'
     tests.mkdir()
     source = ROOT / 'packages/structured-data-models-client/tests'
@@ -114,11 +131,20 @@ def main() -> None:
         'test_tabular_pql_core.py',
         'tabular_pql_fixtures.py',
         'tabular_pql_reference.py',
+        'tabular_numeric_pure_cases.py',
+        'tabular_arrow_index_cases.py',
+        'test_tabular_arrow_indexes.py',
+        'tabular_ordinary_index_cases.py',
+        'test_tabular_ordinary_indexes.py',
     ):
         shutil.copy2(source / name, tests / name)
     shutil.copytree(source / 'data', tests / 'data')
     shutil.rmtree(tests / 'data/tabular_pql_reference')
     shutil.copytree(out / 'reference', tests / 'data/tabular_pql_reference')
+    for group in ('arrow_index', 'ordinary_index'):
+        target = tests / ('data/tabular_' + group + '_reference')
+        shutil.rmtree(target)
+        shutil.copytree(out / ('reference-' + group), target)
     run(
         [
             sys.executable,
@@ -140,6 +166,8 @@ def main() -> None:
             '-m',
             'pytest',
             str(tests / 'test_tabular_pql_core.py'),
+            str(tests / 'test_tabular_arrow_indexes.py'),
+            str(tests / 'test_tabular_ordinary_indexes.py'),
             '-q',
             '-o',
             'addopts=',
