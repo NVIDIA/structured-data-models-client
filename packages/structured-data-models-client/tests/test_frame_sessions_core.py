@@ -36,13 +36,19 @@ class Endpoint:
 
     def session_predict(self, session_id, payload):
         self.scored.append(copy.deepcopy(payload))
-        rows = payload['predict']['instance_table']['rows']
+        table = payload['predict']['instance_table']
+        rows = table['rows']
+        instance = table['columns'].index('instance_id')
         return {
             'model': 'kumo-relational',
             'id': 'answer',
             'metadata': {},
             'predictions': [
-                {'row_index': i, 'prediction': 5.0 + i}
+                {
+                    'id': str(rows[i][instance]),
+                    'row_index': i,
+                    'prediction': 5.0 + i,
+                }
                 for i in reversed(range(len(rows)))
             ],
         }
