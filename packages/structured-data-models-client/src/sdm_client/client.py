@@ -116,6 +116,8 @@ class FittedModel:
     _pinned: dict[str, Any]
     _question: Question | None
     _closed: bool
+    _tabular_session: dict[str, Any] | None
+    _tabular_session_keys: bytes
 
     def __init__(self) -> None:
         raise TypeError(
@@ -152,6 +154,8 @@ class FittedModel:
         fitted._pinned = pinned or {}
         fitted._question = question
         fitted._closed = False
+        fitted._tabular_session = None
+        fitted._tabular_session_keys = b''
         return fitted
 
     @property

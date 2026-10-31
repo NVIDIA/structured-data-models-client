@@ -270,11 +270,11 @@ def fit(
 
 def predict(fitted: Any, request: Any) -> Any:
     """Encode scoring rows against the pinned schema and reuse attribution."""
+    from sdm_client._rust import direct_options, direct_response
     from sdm_client.adapters.tabular import (
         _a_row_the_pinned_schema_cannot_hold,
         _request_id,
     )
-    from sdm_client._rust import direct_options, direct_response
     from sdm_client.client import _empty_answer
     from sdm_client.errors import StructuredDataError
 

@@ -8,10 +8,10 @@ import copy
 
 import pandas as pd
 import pytest
+from sdm_connectors import read
 
 from sdm_client import KumoTabular, Request, Schema, SDMClient
 from sdm_client.errors import StructuredDataError
-from sdm_connectors import read
 
 ROUTES = 'client.fit/tabular/frames,fitted.predict/tabular/frames'
 
