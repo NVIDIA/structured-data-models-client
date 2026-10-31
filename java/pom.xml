@@ -58,6 +58,35 @@
   </properties>
 
   <dependencies>
+    <!-- Streaming file decompression and S3 input; no subprocess or whole-object heap copy. -->
+    <dependency>
+      <groupId>org.apache.commons</groupId><artifactId>commons-compress</artifactId><version>1.28.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.tukaani</groupId><artifactId>xz</artifactId><version>1.12</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId><artifactId>s3</artifactId><version>2.57.8</version>
+      <exclusions>
+        <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>apache-client</artifactId></exclusion>
+        <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>netty-nio-client</artifactId></exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId><artifactId>url-connection-client</artifactId><version>2.57.8</version>
+    </dependency>
+    <!-- Caller-provided Spark API. Ordinary JDBC/Arrow users need no Spark runtime. -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_2.13</artifactId>
+      <version>4.0.1</version>
+      <scope>provided</scope>
+      <optional>true</optional>
+      <exclusions>
+        <!-- Applications choose the SLF4J binding; tests already use slf4j-simple. -->
+        <exclusion><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-slf4j2-impl</artifactId></exclusion>
+      </exclusions>
+    </dependency>
     <!-- Official unified authentication, including refreshed OAuth credentials. -->
     <dependency>
       <groupId>com.databricks</groupId>
@@ -163,6 +192,8 @@
         <version>3.14.0</version>
         <configuration>
           <release>17</release>
+          <!-- No generated Java sources: do not discover processors from optional drivers/Spark. -->
+          <proc>none</proc>
           <compilerArgs>
             <!-- Arrow's class files name annotations of a library it does not
                  ship (the Checker Framework's), which javac reports as

@@ -11,6 +11,36 @@ It describes the tables of a DuckDB, SQLite, Postgres or Databricks database thr
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
+## Read tables and files
+
+Readers return an owned Arrow `Table`; callers close it before their `BufferAllocator`.
+
+| API | Responsibility |
+| --- | --- |
+| `Readers.readTable(Source, table, allocator)` | Read one named table on the caller's connection/session. |
+| `Readers.readQuery(Source, sql, allocator)` | Read the caller's SQL result on that same connection/session. |
+| `Readers.read(URI, ReadOptions, allocator)` | Read local/file/S3 CSV or Parquet, including partitioned datasets. |
+| `DatabricksSparkSource.of(SparkSession, catalog, schema)` | Execute Rust's existing Databricks SQL through the caller's Spark session. |
+
+`Source` is the common source boundary; `JdbcSource` owns `connection()` and the four existing JDBC classes keep their concrete getters.
+This is an explicit pre-release change to `Source.connection()`, not a fake JDBC connection for Spark.
+`Schema.source()` continues returning the actual `Source`.
+Spark APIs use an optional/provided dependency; ordinary applications must work without Spark JARs.
+Java owns driver/session access and lossless Arrow conversion; Rust keeps schema, sampling and prediction policy.
+File readers require the caller-provided DuckDB JDBC driver; its S3 extensions download/load automatically on first use.
+S3 reads accept native credential-chain profiles or explicit temporary credentials through `ReadOptions`.
+The tested refreshed AWS CLI login profile is not understood by DuckDB's native profile provider; export temporary credentials in the caller's environment or supply them explicitly.
+No subprocess or AWS CLI dependency is added to the library.
+CSV uses standard pandas missing-value tokens, keeps dates as strings, and preserves wide integers exactly instead of rounding them through floating point.
+`ReadOptions.csvTypes(Map.of("id", ReadOptions.CsvType.STRING))` overrides selected CSV types using a fixed enum; arbitrary SQL options are not accepted.
+Mixed fractional and integers above the exact float range remain strings, an intentional precision improvement over implicit float conversion.
+CSV names include `.csv` and `.txt`; Parquet includes `.parquet`, `.parq`, `.pq` and directories.
+CSV gzip/zstd compression is decoded by DuckDB; bzip2/xz and single-file ZIP/TAR archives use streaming decompression into private temporary data files.
+Temporary files are removed on success or failure; archive entry paths are never extracted.
+This bounds conversion memory but needs local disk space for decoded data (ZIP also needs a compressed spool for reliable directory inspection).
+Reader operations close only resources they create, never the supplied connection/session.
+Persistence is a separate package.
+
 ## In-memory Tabular
 
 Tabular accepts Apache Arrow Java `Table` inputs, with the same context/scoring/target/task concepts as Python.

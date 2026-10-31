@@ -4,19 +4,5 @@
 
 package com.nvidia.sdm;
 
-import java.sql.Connection;
-
-/**
- * Where a schema's tables are: a database reached through the caller's own {@link Connection}, as
- * Python's {@code Source} classes wrap a driver connection (design choice 10). The library runs
- * the core's statements on it and never closes it; the caller keeps it open while the schema, a
- * request gathered from it, or a prediction is in use.
- *
- * <p>A source is one of {@link DuckDbSource}, {@link SqliteSource}, {@link PostgresSource} and
- * {@link DatabricksSource}.
- */
-public sealed interface Source
-    permits DuckDbSource, SqliteSource, PostgresSource, DatabricksSource {
-  /** The connection the tables are read through. */
-  Connection connection();
-}
+/** A caller-owned database connection or Spark session; the library never closes it. */
+public sealed interface Source permits JdbcSource, DatabricksSparkSource {}

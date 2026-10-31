@@ -17,7 +17,7 @@ import java.util.Optional;
  *
  * <p>Authentication is the connection's: the caller opens it with a token of its own.
  */
-public final class DatabricksSource implements Source {
+public final class DatabricksSource implements JdbcSource {
   private final Connection connection;
   private final String catalog;
   private final String schema;

@@ -12,7 +12,7 @@ import java.util.Objects;
  * Python's {@code SQLiteSource}: a key set a read joins to is kept in a temporary table of the
  * connection, and the database itself is left as it was.
  */
-public final class SqliteSource implements Source {
+public final class SqliteSource implements JdbcSource {
   private final Connection connection;
 
   private SqliteSource(Connection connection) {

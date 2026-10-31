@@ -201,6 +201,24 @@ public final class JdbcProvider implements Host.Provider {
     };
   }
 
+  /** Read caller SQL on the same connection, including its temporary tables. */
+  public ArrowReader readQuery(String sql, BufferAllocator allocator) throws Exception {
+    if (driver == Driver.POSTGRES) {
+      return postgres(List.of(new Planned(sql, Map.of(), null)), Map.of(), allocator);
+    }
+    try (Statement statement = connection.createStatement()) {
+      statement.setEscapeProcessing(false);
+      try (ResultSet rows = statement.executeQuery(sql)) {
+        return switch (driver) {
+          case DUCKDB -> DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS);
+          case SQLITE -> built(ConversionTable.sqlite(rows), allocator);
+          case DATABRICKS -> built(ConversionTable.databricks(rows), allocator);
+          case POSTGRES -> throw new IllegalStateException("Postgres is handled above");
+        };
+      }
+    }
+  }
+
   /** Each key set read once, whole: a key set is the core's, and small. */
   private static Map<Integer, KeySets.Keys> read(Map<Integer, ArrowReader> keys) throws Exception {
     Map<Integer, KeySets.Keys> read = new LinkedHashMap<>();
@@ -211,7 +229,7 @@ public final class JdbcProvider implements Host.Provider {
   }
 
   /** Each key set's text read once: the one cell the core wrote ({@link KeySets#text}). */
-  private static Map<Integer, String> texts(Map<Integer, ArrowReader> keys) throws Exception {
+  static Map<Integer, String> texts(Map<Integer, ArrowReader> keys) throws Exception {
     Map<Integer, String> texts = new LinkedHashMap<>();
     for (Map.Entry<Integer, ArrowReader> each : keys.entrySet()) {
       texts.put(each.getKey(), KeySets.text(each.getValue()));
@@ -494,7 +512,7 @@ public final class JdbcProvider implements Host.Provider {
    * attachment ({@link KeyText}).
    */
   @SuppressWarnings("unchecked")
-  private static List<DatabricksStatement> databricksPlanned(
+  static List<DatabricksStatement> databricksPlanned(
       List<Object> statements, Map<Integer, ArrowReader> keys) throws PlanNotRun {
     List<DatabricksStatement> planned = new ArrayList<>();
     for (Object item : statements) {
@@ -526,7 +544,7 @@ public final class JdbcProvider implements Host.Provider {
   }
 
   /** One Databricks statement: its text, and its values in order. */
-  private record DatabricksStatement(String text, List<Object> values) {}
+  record DatabricksStatement(String text, List<Object> values) {}
 
   /**
    * A contract scalar as the value the driver binds: text, a boolean, a whole number or a double;

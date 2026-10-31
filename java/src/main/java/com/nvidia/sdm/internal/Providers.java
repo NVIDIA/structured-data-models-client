@@ -9,6 +9,9 @@ import com.nvidia.sdm.DuckDbSource;
 import com.nvidia.sdm.PostgresSource;
 import com.nvidia.sdm.SqliteSource;
 import com.nvidia.sdm.Source;
+import com.nvidia.sdm.DatabricksSparkSource;
+import com.nvidia.sdm.internal.jdbc.SparkProvider;
+import com.nvidia.sdm.JdbcSource;
 import com.nvidia.sdm.internal.jdbc.JdbcProvider;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -35,10 +38,24 @@ public final class Providers {
     if (source instanceof DatabricksSource databricks && databricks.semanticModel().isPresent()) {
       held.put("semantic_model", fields -> source);
     }
+    if (source instanceof DatabricksSparkSource spark && spark.semanticModel().isPresent()) {
+      held.put("semantic_model", fields -> source);
+    }
     return Map.copyOf(held);
   }
 
   public static Chosen of(Source source) {
+    if (source instanceof DatabricksSparkSource spark) {
+      Map<String, Object> choice = new LinkedHashMap<>();
+      choice.put("provider", "sql");
+      choice.put("dialect", "databricks");
+      if (spark.catalog().isPresent() || spark.schema().isPresent()) {
+        choice.put("namespace", Arrays.asList(spark.catalog().orElse(null), spark.schema().orElse(null)));
+      }
+      if (spark.semanticModel().isPresent()) choice.put("view", Map.of("name", spark.semanticModel().orElseThrow(),
+          "trust_expressions", spark.trustExpressions()));
+      return new Chosen(choice, new SparkProvider(spark.session()));
+    }
     JdbcProvider.Driver driver;
     if (source instanceof DuckDbSource) {
       driver = JdbcProvider.Driver.DUCKDB;
@@ -74,6 +91,6 @@ public final class Providers {
       choice.put("view", Map.of("name", databricks.semanticModel().orElseThrow(),
           "trust_expressions", databricks.trustExpressions()));
     }
-    return new Chosen(choice, new JdbcProvider(source.connection(), driver));
+    return new Chosen(choice, new JdbcProvider(((JdbcSource) source).connection(), driver));
   }
 }

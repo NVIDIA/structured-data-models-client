@@ -111,6 +111,21 @@ public final class ArrowColumns {
       nulls.setValueCount(rows);
       return;
     }
+    if (vector instanceof org.apache.arrow.vector.complex.StructVector structure) {
+      structure.setInitialCapacity(Math.max(rows, 1));
+      structure.allocateNew();
+      for (FieldVector child : structure.getChildrenFromFields()) {
+        List<Object> members = new ArrayList<>();
+        for (Object value : values) members.add(value == null ? null : ((Map<?, ?>) value).get(child.getName()));
+        fill(child, members);
+      }
+      for (int row = 0; row < rows; row++) {
+        if (values.get(row) == null) structure.setNull(row);
+        else structure.setIndexDefined(row);
+      }
+      structure.setValueCount(rows);
+      return;
+    }
     if (vector instanceof ListVector list) {
       fillList(list, values);
       return;
