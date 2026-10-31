@@ -52,7 +52,7 @@ def test_tabular_quoted_identifiers_use_resolved_columns(monkeypatch):
             'users': pd.DataFrame(
                 {
                     'id': range(20),
-                    'value.with.dot': [i + 0.25 for i in range(20)],
+                    'value with spaces': [i + 0.25 for i in range(20)],
                 }
             )
         },
@@ -60,6 +60,6 @@ def test_tabular_quoted_identifiers_use_resolved_columns(monkeypatch):
     )
     monkeypatch.setattr(predictive_query, 'validate', legacy_policy)
     request = PredictiveQuery(
-        'PREDICT users.`value.with.dot` FOR EACH users.id', schema
+        'PREDICT users.`value with spaces` FOR EACH users.id', schema
     ).materialize(indices=[1, 2], model=KumoTabular())
-    assert request.task.target.column_name == 'value.with.dot'
+    assert request.task.target.column_name == 'value with spaces'

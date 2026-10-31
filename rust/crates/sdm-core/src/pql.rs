@@ -120,10 +120,12 @@ impl Validation {
                                 .iter()
                                 .find(|column| column.name == target.column)
                         })
-                        .map(|column| QueryColumns {
-                            entity: entity.clone(),
-                            target: target.clone(),
-                            target_stype: column.stype,
+                        .map(|column| {
+                            Box::new(QueryColumns {
+                                entity: entity.clone(),
+                                target: target.clone(),
+                                target_stype: column.stype,
+                            })
                         })
                 }
                 _ => None,

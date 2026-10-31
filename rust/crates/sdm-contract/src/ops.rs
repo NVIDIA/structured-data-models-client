@@ -1389,7 +1389,7 @@ pub struct QueryFacts {
     /// Resolved identifiers for an ordinary column-to-column question.
     /// Hosts must not recover these by splitting the canonical query text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub columns: Option<QueryColumns>,
+    pub columns: Option<Box<QueryColumns>>,
     /// The table whose rows are the entities.
     pub entity_table: String,
     pub problem_type: Option<crate::pql::ProblemType>,
