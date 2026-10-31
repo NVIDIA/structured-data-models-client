@@ -281,6 +281,8 @@ def _context(
             owner_index = owner_index.levels[level]
         if ordering['reason'] == 'floating_overflow':
             raise FloatingPointError('overflow encountered in cast')
+        if ordering['reason'] == 'integer_intermediate_overflow':
+            raise OverflowError('Python int too large to convert to C long')
         if ordering['reason'] == 'integer_out_of_bounds':
             destination = ordering['integer_destination']
             prefix = 'int' if destination['signed'] else 'uint'
