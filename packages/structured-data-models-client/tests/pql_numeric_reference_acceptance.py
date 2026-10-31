@@ -32,3 +32,20 @@ def test_matches_frozen_numeric_receipt(monkeypatch, route, name):
     assert set(receipt['cases']) == set(CASES)
     monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES if route == 'core' else '')
     assert observe_case(name) == receipt['cases'][name]
+
+
+def test_print_mode_matches_native_stderr(monkeypatch, capfd):
+    # NumPy uses C stderr, so FD capture is intentional rather than capsys.
+    outcomes = []
+    streams = []
+    for route in ('old', 'core'):
+        monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES if route == 'core' else '')
+        outcomes.append(observe_case('float32/indices/print/default/forward'))
+        streams.append(capfd.readouterr())
+    assert outcomes[0] == outcomes[1]
+    assert streams[0] == streams[1]
+    assert streams[0].out == ''
+    assert all(
+        line == 'Warning: overflow encountered in cast'
+        for line in streams[0].err.splitlines()
+    )
