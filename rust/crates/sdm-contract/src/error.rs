@@ -823,6 +823,10 @@ sentences! {
     TabularRowBounds = "tabular_row_bounds", E::InvalidResponse;
     TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
     TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
+    ResultMergeEmpty = "result_merge_empty", E::InternalError;
+    ResultMergeModels = "result_merge_models", E::InternalError;
+    ResultMergeOutputs = "result_merge_outputs", E::InternalError;
+    ResultMergeCandidateType = "result_merge_candidate_type", E::InternalError;
     Internal = "internal", E::InternalError;
     ProviderFailed = "provider_failed", E::ProviderError;
     TransportFailed = "transport_failed", E::TransportError;

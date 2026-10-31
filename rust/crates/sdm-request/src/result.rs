@@ -4,7 +4,7 @@
 
 //! Shared result metadata and stable candidate selection, independent of row storage.
 use sdm_contract::result::{MergeCandidate as C, MergeDescriptor, MergeTimeUnit, ResultMergePlan};
-use sdm_contract::{CoreError, Sentence};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::{
     json::{self, Value},
     key,
@@ -135,9 +135,11 @@ fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
             framed("map", keys)
         }
         C::Unsupported { type_name } => {
-            return Err(invalid(format!(
-                "result candidate type {type_name} is not supported by the shared merge"
-            )));
+            return Err(CoreError::new(
+                Sentence::ResultMergeCandidateType,
+                "unsupported result candidate type",
+            )
+            .with_field("type_name", Detail::text(type_name)));
         }
     }))
 }
@@ -145,7 +147,10 @@ fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
 /// Empty/single/model/output ordering matches the public client; row owners stay host-side.
 pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
     let Some(first) = parts.first() else {
-        return Err(invalid("no parts to merge"));
+        return Err(CoreError::new(
+            Sentence::ResultMergeEmpty,
+            "no parts to merge",
+        ));
     };
     let mut plan = ResultMergePlan {
         single: parts.len() == 1,
@@ -167,14 +172,19 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
     }
     let models: BTreeSet<_> = parts.iter().map(|p| p.model.as_str()).collect();
     if models.len() > 1 {
-        return Err(invalid(format!(
-            "cannot merge results from different models: [{}]",
-            models
-                .into_iter()
-                .map(quoted)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )));
+        return Err(CoreError::new(
+            Sentence::ResultMergeModels,
+            "cannot merge results from different models",
+        )
+        .with_field(
+            "models",
+            Detail::List(
+                models
+                    .into_iter()
+                    .map(|v| Scalar::Utf8(v.to_owned()))
+                    .collect(),
+            ),
+        ));
     }
     let shapes: BTreeSet<_> = parts.iter().map(|p| &p.outputs).collect();
     if shapes.len() > 1 {
@@ -189,9 +199,11 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        return Err(invalid(format!(
-            "these parts were asked for different outputs ([{shapes}]), so they are not slices of one request"
-        )));
+        return Err(CoreError::new(
+            Sentence::ResultMergeOutputs,
+            "parts were asked for different outputs",
+        )
+        .with_field("outputs", Detail::text(format!("[{shapes}]"))));
     }
     let mut seen = BTreeSet::new();
     let mut offset = 0u32;
@@ -286,19 +298,25 @@ mod tests {
         let mut second = descriptor(vec![]);
         second.model = "other".into();
         second.outputs = vec![];
-        assert!(
-            plan(&[one.clone(), second.clone()])
-                .unwrap_err()
-                .message
-                .contains("different models")
+        let model = plan(&[one.clone(), second.clone()]).unwrap_err();
+        assert_eq!(model.sentence, Sentence::ResultMergeModels);
+        assert_eq!(
+            model.fields.get("models"),
+            Some(&Detail::List(vec![
+                Scalar::Utf8("m".into()),
+                Scalar::Utf8("other".into())
+            ]))
         );
         second.model = "m".into();
-        assert!(
-            plan(&[one, second])
-                .unwrap_err()
-                .message
-                .contains("different outputs")
+        let outputs = plan(&[one.clone(), second]).unwrap_err();
+        assert_eq!(outputs.sentence, Sentence::ResultMergeOutputs);
+        assert!(outputs.fields.contains_key("outputs"));
+        let candidate = plan(&[one, descriptor(vec![])]).unwrap_err();
+        assert_eq!(candidate.sentence, Sentence::ResultMergeCandidateType);
+        assert_eq!(
+            candidate.fields.get("type_name"),
+            Some(&Detail::text("custom"))
         );
-        assert!(plan(&[]).unwrap_err().message.contains("no parts"));
+        assert_eq!(plan(&[]).unwrap_err().sentence, Sentence::ResultMergeEmpty);
     }
 }

@@ -442,6 +442,14 @@ pub fn template(sentence: Sentence) -> Template {
         }
         S::TabularRowRepeated => said(r#"the response answers row {index} more than once"#),
         S::TabularRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
+        S::ResultMergeEmpty => said("no parts to merge"),
+        S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
+        S::ResultMergeOutputs => said(
+            "these parts were asked for different outputs ({outputs}), so they are not slices of one request",
+        ),
+        S::ResultMergeCandidateType => {
+            said("result candidate type {type_name} is not supported by the shared merge")
+        }
         S::Internal => said(r#"the core failed; this is a defect, not a problem with the request"#),
         S::ProviderFailed => said(r#"the data source failed"#),
         S::TransportFailed => said(
