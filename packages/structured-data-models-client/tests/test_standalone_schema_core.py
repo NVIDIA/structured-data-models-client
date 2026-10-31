@@ -177,6 +177,7 @@ def test_source_schema_declarations_and_missing_dtype(
         source = DuckDBSource(connection)
         if catalog_facts:
             connection.execute('CREATE TABLE items(id INTEGER, value DOUBLE)')
+            connection.execute('INSERT INTO items VALUES (1, 1.5), (2, 2.5)')
             schema = Schema.from_source(source, {'items': 'items'})
             schema['items']['value'].dtype = None
         else:

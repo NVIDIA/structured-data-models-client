@@ -424,15 +424,18 @@ UNREADABLE = 'unreadable'
 SPELLED_MOST = 2_000
 
 
-def spelled(value: Any) -> Any:
+def spelled(value: Any, *, include_type: bool = False) -> Any:
     r"""A value no contract type holds, as ``Given`` writes it with the
     text Python shows it as (``repr``), which the core names in its refusal
     as the reference names the value (T2.14b); :data:`UNREADABLE` where its
-    ``repr`` fails or is past :data:`SPELLED_MOST` characters."""
+    ``repr`` fails or is past :data:`SPELLED_MOST` characters.
+    ``include_type`` also names the native type in that bounded diagnostic."""
     try:
         text = repr(value)
     except Exception:  # noqa: BLE001 - a caller's value's own repr
         return UNREADABLE
+    if include_type and isinstance(text, str):
+        text = f'{type(value).__name__}: {text}'
     if not isinstance(text, str) or len(text) > SPELLED_MOST:
         return UNREADABLE
     return {'spelled': str.__str__(text)}

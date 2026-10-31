@@ -101,7 +101,7 @@ def _link(link: Any) -> Any:
     from sdm_client.schema import Relationship
 
     if not isinstance(link, Relationship):
-        return _spelled(link)
+        return _spelled(link, include_type=True)
     names = (
         link.source_table,
         link.source_column,
