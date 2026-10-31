@@ -102,11 +102,16 @@ def _combinations(
 
 
 def _expanded() -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    r"""Every job the workflow runs: its name with the matrix expanded, the
-    job, and the matrix values it runs with."""
+    r"""Every Java job: its expanded name, job, and matrix values.
+
+    Other job families may use runtime matrices; Java coverage must not
+    depend on statically evaluating an unrelated job's GitHub expression.
+    """
     workflow = yaml.safe_load(CI.read_text(encoding='utf-8'))
     found = []
     for key, job in workflow['jobs'].items():
+        if not str(job.get('name', key)).startswith('java'):
+            continue
         matrix = (job.get('strategy') or {}).get('matrix') or {}
         if isinstance(matrix, str):
             matrix = {}
