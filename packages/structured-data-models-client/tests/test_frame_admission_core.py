@@ -81,3 +81,35 @@ def test_concurrent_first_and_unseeded_calls_share_one_serial_owner(
             assert all(call.result(timeout=30)._payloads for call in calls)
     assert prepared == 1
     assert maximum == 1
+
+
+@pytest.mark.parametrize(
+    'dates',
+    [
+        ['2020-01-01', '2020-01-02 00:00 +0100'],
+        ['2020-01-01 00:00 +0100', '2020-01-02 00:00 -0800'],
+        ['2020-01-01', '2020-01-02T00:00:00Z'],
+    ],
+)
+def test_text_timestamps_match_native_utc_instants(dates):
+    def payload(values):
+        frame = pd.DataFrame(
+            {
+                'id': range(20),
+                'time': values,
+                'y': [i * 1.25 for i in range(20)],
+            }
+        )
+        data = Schema.from_data(
+            {'t': frame}, primary_keys={'t': 'id'}, time_columns={'t': 'time'}
+        )
+        data['t']['y'].stype = 'numerical'
+        return (
+            PredictiveQuery('PREDICT t.y FOR EACH t.id', data)
+            .materialize(indices=[1, 2], model=KumoRelational(), random_seed=7)
+            .payloads
+        )
+
+    text = dates * 10
+    native = pd.to_datetime(text, format='mixed', utc=True)
+    assert payload(text) == payload(native)

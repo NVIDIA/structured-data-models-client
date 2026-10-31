@@ -219,11 +219,7 @@ pub(crate) fn prepare(
     let description = read.description;
     let native = sdm_engine::graph::NativeGraph::new(&description)?;
     let graph = native.topology.clone();
-    let times = Times::new(
-        crate::describe::text_reader(facts)?,
-        Some(TextTimes::ValueByValue),
-        &SamplerMemo::default(),
-    );
+    let times = Times::for_frames(crate::describe::text_reader(facts)?);
     let mut tables = BTreeMap::new();
     for (name, id) in names.into_iter().zip(input.tables) {
         let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {

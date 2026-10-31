@@ -956,6 +956,8 @@ pub(crate) struct Times {
     frames: Option<frames::FrameGraph>,
     reader: Reader,
     text: Option<TextTimes>,
+    /// Native frame dates normalize offsets to UTC before sampling.
+    text_utc: bool,
     /// Each windowed table's stored value, by the schema's name of the
     /// table: the text read, or none where its column held no text.
     stored: Mutex<BTreeMap<String, Option<String>>>,
@@ -969,6 +971,7 @@ impl Times {
             frames: None,
             reader,
             text,
+            text_utc: false,
             stored: Mutex::new(
                 memo.stored_times
                     .iter()
@@ -976,6 +979,12 @@ impl Times {
                     .collect(),
             ),
         }
+    }
+
+    pub(super) fn for_frames(reader: Reader) -> Self {
+        let mut times = Self::new(reader, Some(TextTimes::ValueByValue), &SamplerMemo::default());
+        times.text_utc = true;
+        times
     }
 
     /// Each table's stored value read so far, for the memo the run leaves.
@@ -1121,7 +1130,7 @@ impl Times {
             DataType::Utf8 => {
                 let values: Vec<Option<&str>> = array.as_string::<i32>().iter().collect();
                 let read = match self.text {
-                    Some(TextTimes::ValueByValue) => self.reader.each(&values),
+                    Some(TextTimes::ValueByValue) => self.reader.column(&values, self.text_utc),
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
@@ -1237,7 +1246,7 @@ impl Times {
                 let text = array.as_string::<i32>();
                 let values: Vec<Option<&str>> = text.iter().collect();
                 let read = match self.text {
-                    Some(TextTimes::ValueByValue) => self.reader.each(&values),
+                    Some(TextTimes::ValueByValue) => self.reader.column(&values, self.text_utc),
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
@@ -3217,6 +3226,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         &memo.memo,
     );
     read_times.frames = frames.clone();
+    read_times.text_utc = frames.is_some();
 
     // The tables whose times bound the anchor: a temporal query's
     // aggregated tables; for a static query, every table with a time

@@ -55,6 +55,10 @@ def _graph(materializer: Any) -> Any:
                 array = pa.array(values)
             if pa.types.is_dictionary(array.type):
                 array = array.dictionary_decode()
+            if pa.types.is_large_string(array.type):
+                # Pandas may export text with 64-bit offsets even when its
+                # held meaning is a timestamp. The frame wire uses UTF-8.
+                array = array.cast(pa.string())
             arrays.append(array)
         attachments[number] = pa.Table.from_arrays(
             arrays, names=list(table.columns)
