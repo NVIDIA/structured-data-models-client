@@ -107,6 +107,10 @@ def _comparison_semantics() -> str:
     if required_mode is not None:
         promotion = getattr(np, '_get_promotion_state', None)
         mode = None if promotion is None else promotion()
+        # Audited comparisons return Boolean outputs in both weak modes.
+        # The generic weak-and-warn path adds no promotion warning here.
+        if mode == 'weak_and_warn':
+            mode = 'weak'
         if required_mode == 'legacy' and mode == 'weak':
             return 'weak_fixed_integer_pairs'
         if required_mode == 'weak' and mode == 'legacy':

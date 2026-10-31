@@ -144,3 +144,13 @@ The old client remains a reference for useful behavior, not a requirement to cop
 For supplied-frame failures with identical Decimal exceptions and flags, acceptance ignores only the presence of the exact informational default-sampling advisory.
 The old pandas Boolean-Series conversion can compare row labels and raise before that advisory; positional filtering avoids this redundant comparison and reaches the same terminal error during sorting.
 Raw reference evidence, successful-call warnings, unrelated warnings and exceptions remain exact; this allowance does not treat a warning promoted to an exception as equivalent to a Decimal error.
+
+
+## Weak-and-warn comparison binding
+
+Mixed Decimal/Python-float support landed and was verified at `bee780b9`.
+The next binding admits NumPy 1.26 and 2.1 weak-and-warn comparisons through their existing weak comparison profiles, retaining binary provenance checks and observing the mode on each call.
+Pinned generic dispatch checks promotion warnings against output dtypes; comparison outputs remain Boolean, so this does not import arithmetic promotion-warning behavior into sorting.
+The source audit is supported by 2,520 paired native LT/GT/EQ comparisons with identical values, errors and warnings, plus 32 frozen public journeys.
+Public acceptance explicitly requests weak-and-warn and compares with the unchanged frozen weak receipts; the canonical recorder's default remains weak.
+No Rust algorithm, contract, diagnostic event or warehouse path changes.

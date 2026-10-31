@@ -60,7 +60,7 @@ class Endpoint:
         pass
 
 
-def observe_case(name: str) -> dict[str, Any]:
+def observe_case(name: str, *, promotion_mode: str = 'weak') -> dict[str, Any]:
     from sdm_client import KumoTabular, PredictiveQuery, SDMClient
 
     width, entry, mode, action, direction = name.split('/')
@@ -101,7 +101,7 @@ def observe_case(name: str) -> dict[str, Any]:
     setmode = getattr(np, '_set_promotion_state', None)
     previous = None if getmode is None else getmode()
     if setmode is not None:
-        setmode('weak')
+        setmode(promotion_mode)
     outcome: dict[str, Any] = {}
     endpoint = Endpoint()
     client = SDMClient.__new__(SDMClient)

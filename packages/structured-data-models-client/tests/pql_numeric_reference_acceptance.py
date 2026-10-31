@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 from tabular_numeric_pure_cases import CASES, observe_case
 from tabular_pql_reference import runtime_identity
@@ -42,9 +43,16 @@ def _ordinary_warning_outcome(outcome):
     return result
 
 
+@pytest.mark.parametrize('promotion_mode', ['weak', 'weak_and_warn'])
 @pytest.mark.parametrize('route', ['old', 'core'])
 @pytest.mark.parametrize('name', CASES)
-def test_matches_frozen_numeric_receipt(monkeypatch, route, name):
+def test_matches_frozen_numeric_receipt(
+    monkeypatch, route, name, promotion_mode
+):
+    if promotion_mode == 'weak_and_warn' and not np.__version__.startswith(
+        ('1.26.', '2.1.')
+    ):
+        pytest.skip('this producer has no audited mutable weak-and-warn mode')
     directory = Path(os.environ['SDM_PQL_NUMERIC_REFERENCE'])
     runtime = runtime_identity()
     receipt = json.loads(
@@ -59,7 +67,7 @@ def test_matches_frozen_numeric_receipt(monkeypatch, route, name):
     assert receipt['runtime']['identity'] == runtime['identity']
     assert set(receipt['cases']) == set(CASES)
     monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES if route == 'core' else '')
-    actual = observe_case(name)
+    actual = observe_case(name, promotion_mode=promotion_mode)
     expected = receipt['cases'][name]
     if route == 'core':
         assert _ordinary_warning_outcome(actual) == _ordinary_warning_outcome(

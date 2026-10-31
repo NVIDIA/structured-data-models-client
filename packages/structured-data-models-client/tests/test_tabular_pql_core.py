@@ -587,6 +587,9 @@ def test_required_promotion_mode_is_observed_on_each_call(
         == 'legacy_exact_unbounded_integers'
     )
     state[0] = 'weak_and_warn'
+    assert tabular_index._comparison_semantics() == 'weak_scalars'
+    assert state[0] == 'weak_and_warn'
+    state[0] = 'unrepresented'
     with pytest.raises(RouteError, match='promotion mode'):
         tabular_index._comparison_semantics()
     state[0] = 'weak'
