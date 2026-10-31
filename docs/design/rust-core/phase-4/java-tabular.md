@@ -5,7 +5,7 @@
 # Tabular inputs: use existing table types
 
 **Recommendation: keep pandas, support Arrow directly, and avoid a new public `TabularData` class unless a concrete gap requires one.**
-This revises the earlier custom-holder proposal; new APIs below are not implemented yet.
+The Java implementation uses the API below; direct Python Arrow input remains a separate extension.
 
 ## Python: Arrow-backed pandas is already an efficient option
 
@@ -51,27 +51,28 @@ request = Request(context, predict, target="price", task="regression")
 result = client.predict(request, model=KumoTabular())
 ```
 
-Proposed Java, with Arrow Tables instead of DataFrames:
+Java, with Arrow Tables instead of DataFrames:
 
 ```java
 Request request = new Request(context, predict, "price", "regression");
 PredictionResult result = client.predict(request, "kumo-tabular");
 ```
 
-The Java constructor is proposed, not implemented.
 Its four inputs match Python; optional settings can use Java options without changing their meaning.
 PQL and fitted-session workflows should likewise retain `materialize`, `fit`, `predict` and `close` concepts.
 
 Arrow Java `Table` is experimental in our pinned version 19.0.0.
 Its constructor can share vectors, and `copy()` creates a deep copy; verify the pinned implementation before committing this public dependency. [Arrow Table API](https://arrow.apache.org/java/current/reference/org.apache.arrow.vector/org/apache/arrow/vector/table/Table.html).
 
-**Lifetime rule:** borrow the tables; the caller keeps them and their allocators open and does not mutate their backing vectors while dependent requests are used.
-The client does not silently close or copy them.
-A caller wanting an isolated snapshot can explicitly copy first.
-This avoids both an obligatory extra copy and a new public holder class.
-A fitted session retains only required metadata after successful fit; it must not depend on uploaded context buffers remaining open.
+**Lifetime rule, verified against Arrow 19:** Request and `Schema.fromData` take an owned snapshot when constructed.
+The caller can then mutate or close the original tables without changing the request.
+Arrow 19's public `exportTable` consumes its vectors, so borrowing it through that method would corrupt reusable inputs.
+The adapter instead copies columns and writes an internal Arrow IPC snapshot, preserving dictionaries; there is no new public holder or closeable Request.
+Repeated predictions reuse that snapshot, although decoding it for each core call still allocates.
+This is a correctness-first lifetime adjustment, not a zero-copy claim; measure construction time and memory separately from repeated prediction.
+A fitted session retains only required metadata after successful fit and needs no original context buffers.
 
-Before implementation, verify the pinned Table/dictionary export and lifetime behavior in a small end-to-end prototype.
+End-to-end tests verify caller-table reuse/closure and dictionary values against the pinned implementation.
 Keep batch/dictionary handling inside the adapter; reader-import conveniences are outside this delivery.
 If this exposes a real ownership gap, keep storage management internal where possible rather than creating another dataframe API.
 
@@ -82,6 +83,7 @@ Do not fabricate pandas conversion facts for native Arrow inputs.
 Preserve null versus NaN, numeric precision, timestamps and dictionaries; Arrow row identity defaults to position, with entity keys explicitly named.
 Keep existing pandas mutation/index behavior unchanged and review pandas index metadata before accepting exported Arrow tables as model features.
 
-First validate the Java input/lifetime contract, then add direct prediction, PQL and fitted sessions.
+Java supports direct prediction, PQL with entity keys or supplied Arrow rows, and fitted sessions.
+Closing the client attempts to close every owned session; a failed explicit session close can be retried.
 Java Tabular can run beside Relational sampling with at most two packages active and coordinated shared-contract edits.
 Compare correctness, preparation time and peak memory; internal Arrow support alone does not prove public API coverage or zero-copy execution.

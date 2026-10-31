@@ -39,6 +39,9 @@ import java.util.function.Function;
  * }</pre>
  */
 public final class Schema {
+  private Map<String, byte[]> data = Map.of();
+  Map<String, byte[]> data() { return data; }
+
   private final List<Table> tables;
   private final List<Relationship> relationships;
   private final Source source;
@@ -54,6 +57,21 @@ public final class Schema {
     this.relationships = List.copyOf(relationships);
     this.source = source;
     this.conversionNotes = List.copyOf(conversionNotes);
+  }
+
+  /** Describe one in-memory Arrow table for Tabular PQL, taking an owned snapshot. */
+  public static Schema fromData(Map<String, org.apache.arrow.vector.table.Table> tables) {
+    Objects.requireNonNull(tables, "tables");
+    if (tables.size() != 1) throw new StructuredDataException(
+        "in-memory Java Tabular needs exactly one table", "INVALID_REQUEST", Map.of(), null);
+    Map.Entry<String, org.apache.arrow.vector.table.Table> entry = tables.entrySet().iterator().next();
+    byte[] bytes = com.nvidia.sdm.internal.ArrowTabular.snapshot(entry.getValue());
+    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("describe",
+        Map.of("entity_table", entry.getKey()), Map.of("table", bytes), null)) {
+      Schema schema = held(com.nvidia.sdm.internal.ArrowTabular.value(finished), null);
+      schema.data = Map.of(entry.getKey(), bytes);
+      return schema;
+    }
   }
 
   /** Every table {@code source} holds, described on the core, keys checked. */
@@ -258,7 +276,9 @@ public final class Schema {
     try (Host.Finished finished = Host.run(operation, attachments)) {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
       Schema changed = held(read(finished.bytes(edited.schema())), source);
-      return new Schema(changed.tables, changed.relationships, source, conversionNotes);
+      Schema result = new Schema(changed.tables, changed.relationships, source, conversionNotes);
+      result.data = data;
+      return result;
     }
   }
 
@@ -377,7 +397,7 @@ public final class Schema {
 
   /** The schema of a {@code HeldSchema} the core answered an edit with. */
   @SuppressWarnings("unchecked")
-  private static Schema held(Object read, Source source) {
+  static Schema held(Object read, Source source) {
     Map<String, Object> answer = (Map<String, Object>) read;
     List<Table> tables = new ArrayList<>();
     for (Object item : (List<Object>) answer.get("tables")) {

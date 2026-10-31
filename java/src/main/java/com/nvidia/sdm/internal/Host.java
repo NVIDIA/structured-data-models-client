@@ -86,6 +86,13 @@ public final class Host {
   @FunctionalInterface
   public interface Model {
     byte[] call(byte[] body) throws TransportFailed, Refused, EndpointFailed;
+
+    /** Session-aware transports override this; existing model callbacks remain prediction-only. */
+    default byte[] call(Object endpoint, byte[] body) throws TransportFailed, Refused, EndpointFailed {
+      if (!"predict".equals(endpoint)) throw new StructuredDataException(
+          "this transport does not support sessions", "SESSIONS_UNSUPPORTED", Map.of(), null);
+      return call(body);
+    }
   }
 
   /**
@@ -544,7 +551,7 @@ public final class Host {
     Map<Integer, Object> attached = new LinkedHashMap<>();
     Refused refused = null;
     try {
-      byte[] answer = model.call(body);
+      byte[] answer = model.call(step.get("endpoint"), body);
       attached.put(1, answer);
       outcome = response(200);
     } catch (TransportFailed failed) {

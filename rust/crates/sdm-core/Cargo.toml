@@ -18,6 +18,7 @@ test-ops = ["sdm-contract/test-ops", "sdm-pql/test-ops"]
 
 [dependencies]
 arrow-array.workspace = true
+arrow-cast.workspace = true
 arrow-buffer.workspace = true
 arrow-row.workspace = true
 arrow-schema.workspace = true

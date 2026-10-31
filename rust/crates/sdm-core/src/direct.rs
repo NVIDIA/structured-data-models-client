@@ -158,7 +158,7 @@ fn rows(
     Ok(data)
 }
 
-fn schema(held: &HeldSchema) -> Result<sdm_schema::held::Read, CoreError> {
+pub(crate) fn schema(held: &HeldSchema) -> Result<sdm_schema::held::Read, CoreError> {
     let mut read = sdm_schema::held::read(held.clone(), &BTreeMap::new(), true)?;
     // Preserve the concrete wire width beside the generic language family.
     for table in &mut read.description.tables {

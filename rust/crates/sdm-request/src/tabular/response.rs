@@ -648,6 +648,60 @@ pub fn native_reply_representable(payload: &Value, response: &PredictionResponse
     })
 }
 
+/// Response layout for typed Arrow hosts. JSON ids and raw ids are supported;
+/// Python literal evaluation is deliberately not a portable host requirement.
+pub fn portable_layout(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+) -> Result<Part, CoreError> {
+    let (scope, rows) = decode(payload, response, float_text)?;
+    let mut attributed = Vec::with_capacity(rows.len());
+    let mut seen = IndexSet::new();
+    for row in rows {
+        let at = row_index(&scope, &row)?;
+        seen.insert(at);
+        let parsed = row
+            .id
+            .as_ref()
+            .filter(|v| v.chars().count() <= 1024)
+            .and_then(|v| sdm_wire::json::read(v.as_bytes()).ok());
+        let parsed = match parsed {
+            Some(Value::Array(mut values)) if values.len() == 1 => values.pop(),
+            other => other,
+        };
+        let name = parsed
+            .and_then(|value| match value {
+                Value::Text(v) => Some(v),
+                Value::Bool(v) => Some(if v { "True" } else { "False" }.into()),
+                Value::Number(v) => Some(v),
+                _ => None,
+            })
+            .map(|v| Name::Text(v.chars().map(u32::from).collect()));
+        let checked = CheckedDirectRow {
+            scope: scope.clone(),
+            id: representation(&row)?,
+            row,
+        };
+        attributed.push(attribution(&checked, name, None, None, None, float_text)?);
+    }
+    let missing: Vec<_> = (0..scope.scoring_rows)
+        .filter(|n| !seen.contains(n))
+        .map(|n| Scalar::UInt64(n as u64))
+        .collect();
+    if !missing.is_empty() {
+        return Err(
+            invalid(Sentence::TabularRowsUnanswered).with_field("missing", Detail::List(missing))
+        );
+    }
+    let mut part =
+        predict::layout_with_answers(payload, response, float_text, answer_type(payload)?)?;
+    for (row, accepted) in part.rows.iter_mut().zip(attributed) {
+        row.id = entity(&accepted.id)?;
+    }
+    Ok(part)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

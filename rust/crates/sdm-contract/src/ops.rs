@@ -37,6 +37,7 @@ use crate::types::ColumnType;
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     ValidateQuery(ValidateQuery),
+    TabularArrow(crate::tabular_arrow::ArrowTabular),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
     CheckTabularSessionQuestion(crate::direct::DirectInput),
@@ -108,6 +109,7 @@ impl Operation {
     /// The operation's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
+            Operation::TabularArrow(_) => "tabular_arrow",
             Operation::ValidateQuery(_) => "validate_query",
             Operation::PrepareTabularFit(_) => "prepare_tabular_fit",
             Operation::AcceptTabularSession(_) => "accept_tabular_session",
@@ -169,6 +171,36 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::TabularArrow(v) => {
+                use crate::tabular_arrow::ArrowTabular::*;
+                match v {
+                    Describe { input, table } | Materialize { input, table } => {
+                        vec![(*input, Bytes), (*table, Arrow)]
+                    }
+                    MaterializePredict {
+                        input,
+                        table,
+                        predict,
+                    } => vec![(*input, Bytes), (*table, Arrow), (*predict, Arrow)],
+                    Prepare {
+                        input,
+                        context,
+                        predict,
+                    }
+                    | Predict {
+                        input,
+                        context,
+                        predict,
+                    }
+                    | Fit {
+                        input,
+                        context,
+                        predict,
+                    } => vec![(*input, Bytes), (*context, Arrow), (*predict, Arrow)],
+                    Score { input, predict } => vec![(*input, Bytes), (*predict, Arrow)],
+                    Close { input } => vec![(*input, Bytes)],
+                }
+            }
             Operation::EncodeDirectColumn(v)
             | Operation::EncodeTabularTable(v)
             | Operation::InferDirectColumn(v)
@@ -1648,6 +1680,14 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    pub tabular_arrow_request: crate::tabular_arrow::ArrowRequest,
+    pub tabular_arrow_prediction: crate::tabular_arrow::ArrowPrediction,
+    pub tabular_arrow_fit: crate::tabular_arrow::ArrowFit,
+    pub tabular_arrow_score: crate::tabular_arrow::ArrowScore,
+    pub tabular_arrow_materialize: crate::tabular_arrow::ArrowMaterialize,
+    pub tabular_arrow_description: crate::tabular_arrow::ArrowDescription,
+    pub tabular_arrow_session: crate::tabular_arrow::ArrowSession,
+
     #[schemars(rename = "SelectTabularRows.input")]
     pub select_tabular_rows_input: crate::tabular::SelectTabularRows,
     #[schemars(rename = "DirectValue.select_tabular_rows")]

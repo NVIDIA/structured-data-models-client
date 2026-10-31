@@ -130,12 +130,31 @@ public final class HttpTransport {
    * @throws Failed the endpoint could not be reached, or its answer could not be read
    */
   public byte[] predict(byte[] body) throws Failed {
-    URI target = URI.create(url + PREDICTIONS);
+    return call("predict", body);
+  }
+
+  /** Executes an endpoint selected by the core. Session creation is never retried. */
+  public byte[] call(Object endpoint, byte[] body) throws Failed {
+    String path = PREDICTIONS;
+    boolean delete = false;
+    boolean create = "create_session".equals(endpoint);
+    if (create) path = "/v1/sessions";
+    else if (endpoint instanceof java.util.Map<?, ?> map) {
+      Object details = map.get("session_predict");
+      if (details == null) { details = map.get("delete_session"); delete = true; }
+      if (!(details instanceof java.util.Map<?, ?> fields) || !(fields.get("session_id") instanceof String id))
+        throw new Failed("invalid session endpoint");
+      String encoded = java.net.URLEncoder.encode(id, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+      path = "/v1/sessions/" + encoded + (delete ? "" : "/predictions");
+    } else if (!"predict".equals(endpoint)) throw new Failed("invalid model endpoint");
+    int retries = create ? 0 : maxRetries;
+    URI target = URI.create(url + path);
     HttpRequest.Builder request =
         HttpRequest.newBuilder(target)
             .timeout(timeout)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofByteArray(body));
+    if (delete) request.DELETE();
     if (apiKey != null) {
       request.header("X-API-Key", apiKey);
     }
@@ -145,13 +164,13 @@ public final class HttpTransport {
       try {
         response = attempt(built);
       } catch (HttpTimeoutException e) {
-        if (attempt < maxRetries) {
+        if (attempt < retries) {
           backoff(attempt, null);
           continue;
         }
         throw new Failed("the request timed out after " + timeout + ", the timeout given");
       } catch (IOException e) {
-        if (attempt < maxRetries) {
+        if (attempt < retries) {
           backoff(attempt, null);
           continue;
         }
@@ -159,7 +178,7 @@ public final class HttpTransport {
       }
       int status = response.statusCode();
       byte[] content = response.body();
-      if (RETRY_STATUS.contains(status) && attempt < maxRetries) {
+      if (RETRY_STATUS.contains(status) && attempt < retries) {
         backoff(attempt, response.headers().firstValue("Retry-After").orElse(null));
         continue;
       }

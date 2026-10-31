@@ -11,6 +11,30 @@ It describes the tables of a DuckDB, SQLite, Postgres or Databricks database thr
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
+## In-memory Tabular
+
+Tabular accepts Apache Arrow Java `Table` inputs, with the same context/scoring/target/task concepts as Python.
+
+```java
+Request request = new Request(context, scoring, "price", "regression");
+PredictionResult result = client.predict(request, SdmClient.KUMO_TABULAR);
+try (FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR)) {
+  PredictionResult repeated = fitted.predict(request);
+}
+```
+
+`context` and `scoring` are `org.apache.arrow.vector.table.Table` values; context includes the target and scoring omits it.
+Request construction snapshots data, so callers can close their Arrow tables afterward.
+This copies data into internal Arrow IPC storage; it is not zero-copy ingestion.
+The client reuses those snapshots for subsequent calls; fitted prediction sends only scoring rows.
+`fit` uploads examples, not model training; endpoint session support is required.
+Use `fit(request, model, holdoutKeys)` to exclude entities that will be scored later.
+A failed `FittedModel.close()` can be retried; close fitted objects before closing their client.
+
+For single-table PQL, use `Schema.fromData(Map.of("data", table))`, then the existing `PredictiveQuery.parse(...).materialize(schema, options)` workflow.
+Warehouse-backed schemas continue to use the Relational path.
+Rust owns selection, validation and encoding in both paths; Java owns snapshots, HTTP and presentation.
+
 ## Coordinates
 
 | | |
@@ -122,3 +146,14 @@ mvn -f java/pom.xml verify
 ```
 
 The contract cases run on the Java host through `contract/runners/run_java.py` (`--database duckdb|sqlite|postgres` for the S1 cases), which hands `contract/runners/java/ContractRunner.java` the calls to make and writes the observations the comparator judges; `mvn package` copies the JDBC drivers it opens the databases with into `target/jdbc`.
+
+PQL can select entity keys through `MaterializeOptions`, or score a supplied Arrow table:
+
+```java
+Schema schema = Schema.fromData(Map.of("data", context));
+Request request = PredictiveQuery.parse("PREDICT data.price FOR EACH data.id")
+    .materialize(schema, predict);
+```
+
+`Schema.fromData` currently accepts one table for Tabular.
+Warehouse-backed schemas retain their existing Relational workflow.

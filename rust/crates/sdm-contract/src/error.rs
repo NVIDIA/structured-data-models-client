@@ -803,6 +803,7 @@ sentences! {
     DirectCategoricalPopulation = "direct_categorical_population", W::FrameSchema;
     DirectDatesAsText = "direct_dates_as_text", W::FrameSchema;
     DirectTextCategorical = "direct_text_categorical", W::FrameSchema;
+    ArrowTabularInput = "arrow_tabular_input", E::InvalidRequest;
     DirectUnfinished = "direct_unfinished", E::UnsupportedRequest;
     DirectUnknownModel = "direct_unknown_model", E::UnknownModel;
     DirectWireFraction = "direct_wire_fraction", E::InvalidRequest;
