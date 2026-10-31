@@ -100,3 +100,22 @@ fn subnormal_conversion_is_exact_and_independent_of_decimal_exponent_size() {
     .unwrap();
     assert!(matches!(outcome,Outcome::Sorted {positions,..} if positions==vec![1,0]));
 }
+
+#[test]
+fn masked_float_nan_against_an_integer_is_unordered_without_decimal_signals() {
+    for first in [
+        Atom::Integer { value: "1".into() },
+        Atom::Boolean { value: true },
+    ] {
+        let mut index = facts(
+            vec![first, floating(f64::NAN), decimal("11", -1)],
+            false,
+            false,
+            true,
+        );
+        index.missing[1] = true;
+        assert!(
+            matches!(order_sampled(&index).unwrap(),Outcome::Sorted {positions,numeric_diagnostics,..} if positions==vec![0,2,1] && numeric_diagnostics.is_empty())
+        );
+    }
+}

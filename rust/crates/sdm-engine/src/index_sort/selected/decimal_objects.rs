@@ -143,6 +143,14 @@ fn relation(
     if matches!(a, Atom::NativeMissing { .. }) || matches!(b, Atom::NativeMissing { .. }) {
         return Ok(false);
     }
+    // Non-decimal scalar NaNs are unordered without Decimal context signals.
+    // Keep this after the mixed-owner branch, whose traps have precedence.
+    if [a, b]
+        .iter()
+        .any(|value| matches!(value,Atom::Floating {bits} if f64::from_bits(*bits).is_nan()))
+    {
+        return Ok(false);
+    }
     Ok(atoms::compare_atom(a, b) == Some(operator))
 }
 fn caught(error: Error, policy: Policy) -> bool {
