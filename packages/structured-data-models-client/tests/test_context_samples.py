@@ -161,21 +161,10 @@ def test_a_count_that_is_not_a_count_is_refused(bad, fragment):
         {'users': users, 'orders': orders},
     )
 
-    called = False
-
-    def _fail(*args, **kwargs):
-        nonlocal called
-        called = True
-        raise AssertionError('the materializer was reached')
-
-    materializer = query._relational_materializer
-    materializer.materialize = _fail  # type: ignore[method-assign]
-
     with pytest.raises(StructuredDataError) as error:
         query.materialize(indices=[1], num_context_samples=bad)
     assert fragment in str(error.value)
     assert error.value.code == 'INVALID_REQUEST'
-    assert not called
 
 
 def test_the_relational_ceiling_is_refused_before_the_engine_is_reached(

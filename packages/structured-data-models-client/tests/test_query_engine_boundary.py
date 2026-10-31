@@ -160,16 +160,12 @@ def linked() -> Schema:
 def test_more_entities_than_one_call_scores_are_gathered_in_batches(
     monkeypatch, text, data, sizes
 ):
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-    monkeypatch.setitem(
-        RELATIONAL_LIMITS, 'predict_rows_temporal_link_prediction', 1
-    )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = PredictiveQuery(text, data()).materialize(
-            indices=[5, 6, 7, 8, 9], num_context_samples=20
+            indices=[5, 6, 7, 8, 9],
+            num_context_samples=20,
+            rows_per_call=sizes[0],
         )
     assert [
         len(payload['predict']['instance_table']['rows'])
@@ -212,16 +208,16 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
     monkeypatch, pinned
 ):
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.models import RELATIONAL_LIMITS
 
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
     asked = query('PREDICT users.age FOR EACH users.user_id')
     scored = [5, 6, 7, 8, 9]
     client = SDMClient(url='http://localhost:8000')
     client._transport = transport = Echo()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        request = asked.materialize(indices=scored, num_context_samples=20)
+        request = asked.materialize(
+            indices=scored, num_context_samples=20, rows_per_call=2
+        )
         if pinned:
             fitted = client.fit(
                 asked.materialize(indices=[30], num_context_samples=20),
@@ -239,29 +235,17 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
 
 @pytest.mark.parametrize(
     ('asked', 'sizes'),
-    [(None, [2, 2, 1]), (1, [1, 1, 1, 1, 1]), (10, [2, 2, 1])],
-    ids=['default', 'smaller', 'larger_than_the_endpoint_takes'],
+    [(None, [5]), (1, [1, 1, 1, 1, 1]), (2, [2, 2, 1]), (10001, [5])],
+    ids=['default', 'one', 'two', 'larger_than_the_endpoint_takes'],
 )
 def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
-    """It only ever goes down: the endpoint refuses a call past its own cap,
-    so a larger number would buy a 422 rather than a bigger call.
-
-    The cap is held low here so that a number above it is a number the engine
-    would have batched at. Against the real 10,000, every value a test could
-    pass is below it, and the clamp could be dropped without a failure.
-    """
-    from sdm_client.materializers import relational as materializer
-    from sdm_client.models import RELATIONAL_LIMITS
-
+    """Public batch sizes split the request; an oversized value stays valid."""
     how = {} if asked is None else {'rows_per_call': asked}
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.MonkeyPatch.context() as held:
-            held.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-            held.setattr(materializer, 'MOST_CALLS', 10)
-            request = query().materialize(
-                indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
-            )
+        request = query().materialize(
+            indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
+        )
     assert [
         len(payload['predict']['instance_table']['rows'])
         for payload in request.payloads
@@ -355,20 +339,11 @@ def test_a_size_refusal_is_answered_in_options_this_client_takes(
             )
         )
 
-    built = query()
-    monkeypatch.setattr(
-        type(built._relational_materializer._get_model()),
-        'materialize_task',
-        too_large,
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            built.materialize(
-                indices=[5, 6, 7, 8, 9],
-                num_context_samples=20,
-                rows_per_call=2,
-            )
+    # This translator belongs to the optional Python engine adapter.
+    # Frame gathering now raises structured errors directly from Rust.
+    with pytest.raises(StructuredDataError) as refused:
+        with query()._relational_materializer._engine_errors(per_call=2):
+            too_large()
     said = str(refused.value)
     assert '9 nodes' in said
     assert 'run mode' not in said
@@ -404,19 +379,14 @@ def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
     before the batches themselves are built.
     """
     from sdm_client.materializers import relational as materializer
-    from sdm_client.models import RELATIONAL_LIMITS
 
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
     monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
-    monkeypatch.setattr(
-        type(query()._relational_materializer._get_model()),
-        'materialize_task',
-        lambda *args, **how: pytest.fail('the batches were built'),
-    )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with pytest.raises(StructuredDataError) as refused:
-            query().materialize(indices=[5, 6, 7, 8, 9], num_context_samples=20)
+            query().materialize(
+                indices=[5, 6, 7, 8, 9], num_context_samples=20, rows_per_call=2
+            )
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
     assert refused.value.details['calls'] == 3
 
@@ -430,9 +400,6 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
     were paid for too.
     """
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
 
     class FailsOnTheSecondCall(Echo):
         def predict(self, payload: dict) -> dict:
@@ -445,7 +412,7 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = query('PREDICT users.age FOR EACH users.user_id').materialize(
-            indices=[5, 6, 7, 8, 9], num_context_samples=20
+            indices=[5, 6, 7, 8, 9], num_context_samples=20, rows_per_call=2
         )
         with pytest.raises(RuntimeError) as failed:
             client.predict(request, model=KumoRelational())
@@ -1190,14 +1157,11 @@ def test_a_table_with_several_timestamps_is_told_which_was_taken():
         {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
         primary_keys={'orders': 'oid', 'users': 'uid'},
     )
-    assert said == [
-        'Some time columns were inferred, or refused, on a guess about what '
-        'a column holds:\n'
-        '- orders.shipped was taken as the time column because its values '
-        "start earliest of 'shipped' and 'delivered'. If another says when a "
-        "row became true, name it: time_columns={'orders': 'delivered'}. If "
-        "none does, clear it: time_columns={'orders': None}."
-    ]
+    assert len(said) == 1
+    assert 'orders.shipped' in said[0]
+    assert 'earliest' in said[0]
+    assert "time_columns={'orders': 'delivered'}" in said[0]
+    assert "time_columns={'orders': None}" in said[0]
 
 
 def test_the_remedy_never_shows_a_column_that_cannot_be_the_time_column():

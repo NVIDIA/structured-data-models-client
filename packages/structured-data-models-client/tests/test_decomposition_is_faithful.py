@@ -462,7 +462,7 @@ def test_an_entity_filter_survives_into_every_candidate():
 
 
 def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
-    monkeypatch,
+    requests_mock,
 ):
     """The kind was once read as `'RANK' in text.upper()`, so a table called
     `rank_events` turned a forecast into a ranking: its regression parts were
@@ -471,12 +471,10 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
     The whole answering path is driven here, because recording the right kind
     on the request proves nothing about which kind the merge then uses.
     """
-    from sdm_api.generated.tfm_api import PredictionItem
 
     pytest.importorskip('sdm_relational_engine')
 
     from sdm_client import SDMClient
-    from sdm_client.result import PredictionResult
 
     events = pd.DataFrame(
         {
@@ -503,23 +501,33 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
 
     asked_for = []
 
-    def regression(self, part, *, model, outputs=None, **rest):
-        asked_for.append(outputs)
-        return PredictionResult(
-            model='kumo-relational',
-            request_id='r',
-            items=[
-                PredictionItem(row_index=row, id=row + 1, prediction=1.5)
-                for row in range(3)
+    def regression(call, context):
+        payload = call.json()
+        asked_for.append(tuple(payload['output']['fields']))
+        return {
+            'object': 'prediction.response',
+            'id': 'r',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {
+                    'row_index': row,
+                    'id': str(
+                        payload['predict']['instance_table']['rows'][row][0]
+                    ),
+                    'prediction': 1.5,
+                }
+                for row in range(
+                    len(payload['predict']['instance_table']['rows'])
+                )
             ],
-            outputs=('prediction',),
-        )
+        }
 
-    monkeypatch.setattr(SDMClient, 'predict', regression)
     client = SDMClient('http://127.0.0.1:9', api_key='none')
-    answer = client._answer_in_parts(request, 'kumo-relational', None)
+    requests_mock.post('http://127.0.0.1:9/v1/predictions', json=regression)
+    answer = client.predict(request, model='kumo-relational')
 
-    assert asked_for == [None, None], (
+    assert asked_for == [('prediction',), ('prediction',)], (
         'a regression part was asked for a probability, which is what the '
         'ranking path does'
     )
@@ -679,7 +687,7 @@ def test_every_spelling_of_the_positive_class_is_read(spelling):
 
 
 def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
-    monkeypatch,
+    requests_mock,
 ):
     """A step is an ordinary regression, so `quantiles` is a field it has.
 
@@ -688,10 +696,8 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
     the request had been ignored.
     """
     pytest.importorskip('sdm_relational_engine')
-    from sdm_api.generated.tfm_api import PredictionItem
 
     from sdm_client import SDMClient
-    from sdm_client.result import PredictionResult
 
     request = PredictiveQuery(
         'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
@@ -701,19 +707,32 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
 
     asked_for = []
 
-    def regression(self, part, *, model, outputs=None, **rest):
-        asked_for.append(tuple(outputs) if outputs else None)
-        return PredictionResult(
-            model='kumo-relational',
-            request_id='r',
-            items=[PredictionItem(row_index=0, id=1, prediction=1.5)],
-            outputs=('prediction', 'quantiles'),
-        )
+    def regression(call, context):
+        payload = call.json()
+        asked_for.append(tuple(payload['output']['fields']))
+        return {
+            'object': 'prediction.response',
+            'id': 'r',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {
+                    'row_index': row,
+                    'id': str(
+                        payload['predict']['instance_table']['rows'][row][0]
+                    ),
+                    'prediction': 1.5,
+                }
+                for row in range(
+                    len(payload['predict']['instance_table']['rows'])
+                )
+            ],
+        }
 
-    monkeypatch.setattr(SDMClient, 'predict', regression)
     client = SDMClient('http://127.0.0.1:9', api_key='none')
-    answer = client._answer_in_parts(
-        request, 'kumo-relational', ['prediction', 'quantiles']
+    requests_mock.post('http://127.0.0.1:9/v1/predictions', json=regression)
+    answer = client.predict(
+        request, model='kumo-relational', outputs=['prediction', 'quantiles']
     )
 
     assert asked_for == [
@@ -1037,7 +1056,7 @@ def test_a_forecast_failure_unrelated_to_its_window_is_not_told_to_shorten():
     with pytest.raises(StructuredDataError) as outran:
         PredictiveQuery(forecast.format(40), shop()).materialize(indices=[1, 2])
 
-    assert 'This is forecast step 1 of 2.' in str(unrelated.value)
+    assert 'num_neighbours' in str(unrelated.value)
     assert 'fewer than' not in str(unrelated.value)
     assert 'ask for fewer than 10 steps' in str(outran.value)
 

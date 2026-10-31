@@ -102,16 +102,16 @@ def test_more_entities_than_one_call_scores_is_refused_before_gathering(
     from sdm_client.materializers.relational import RelationalMaterializer
     from sdm_client.models import RELATIONAL_LIMITS
 
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    count = RELATIONAL_LIMITS['predict_rows_max'] + 1
     monkeypatch.setattr(
         RelationalMaterializer,
         '_get_model',
         lambda self: pytest.fail('the engine was reached'),
     )
     with pytest.raises(StructuredDataError) as refused:
-        built(query, indices=[1, 2, 3, 4, 5], **how)
+        built(query, indices=[1] * count, **how)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['entities'] == 5
+    assert refused.value.details['entities'] == count
     assert 'fewer entities' in str(refused.value)
 
 
