@@ -196,9 +196,7 @@ public final class Host {
       if (taken instanceof byte[] bytes) {
         return bytes;
       }
-      if (taken instanceof NativeArrow arrow) {
-        arrow.close();
-      }
+      closeUnexpected(taken);
       throw internal("the core's result names a bytes attachment it did not give");
     }
 
@@ -206,6 +204,7 @@ public final class Host {
     public byte[] arrow(int id) {
       Object taken = take(id);
       if (!(taken instanceof NativeArrow arrow)) {
+        closeUnexpected(taken);
         throw internal("the core's result names an Arrow attachment it did not give");
       }
       try (arrow) {
@@ -216,6 +215,19 @@ public final class Host {
         }
         return ipc;
       }
+    }
+
+    /** Takes ownership of a retained relational graph independently of this finished run. */
+    public NativeFrameGraph graph(int id) {
+      Object taken = take(id);
+      if (taken instanceof NativeFrameGraph graph) return graph;
+      closeUnexpected(taken);
+      throw internal("the core's result names a frame graph attachment it did not give");
+    }
+
+    private static void closeUnexpected(Object taken) {
+      if (taken instanceof NativeArrow arrow) arrow.close();
+      if (taken instanceof NativeFrameGraph graph) graph.close();
     }
 
     private Object take(int id) {
@@ -276,7 +288,7 @@ public final class Host {
 
   /**
    * Runs {@code operation} to its result, with the attachments its fields name, each a {@code
-   * byte[]} or an {@link ArrowReader} this exports and closes.
+   * byte[]}, a retained graph, or an {@link ArrowReader} this exports and closes.
    */
   public static Finished run(
       Map<String, Object> operation, Map<Integer, ?> attachments, Call call) {
