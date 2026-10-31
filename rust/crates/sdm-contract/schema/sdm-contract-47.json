@@ -7775,17 +7775,19 @@
     "SessionIdObservation": {
       "type": "object",
       "properties": {
-        "session_id_truthy": {
+        "session_id_available": {
+          "description": "Host-reported eligibility of the primary ID candidate; conversion stays in the host.",
           "type": "boolean"
         },
-        "id_truthy": {
+        "id_available": {
+          "description": "Host-reported eligibility of the fallback ID candidate.",
           "type": "boolean"
         }
       },
       "additionalProperties": false,
       "required": [
-        "session_id_truthy",
-        "id_truthy"
+        "session_id_available",
+        "id_available"
       ]
     },
     "CheckTabularSessionQuestion": {

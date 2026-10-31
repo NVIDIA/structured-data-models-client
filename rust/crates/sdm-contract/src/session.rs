@@ -239,8 +239,10 @@ pub struct SessionTransportReply {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SessionIdObservation {
-    pub session_id_truthy: bool,
-    pub id_truthy: bool,
+    /// Host-reported eligibility of the primary ID candidate; conversion stays in the host.
+    pub session_id_available: bool,
+    /// Host-reported eligibility of the fallback ID candidate.
+    pub id_available: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -97,9 +97,9 @@ pub fn select_session_id(
     observed: &sdm_contract::session::SessionIdObservation,
 ) -> sdm_contract::session::SessionIdSelection {
     use sdm_contract::session::SessionIdSelection as Selected;
-    if observed.session_id_truthy {
+    if observed.session_id_available {
         Selected::SessionId
-    } else if observed.id_truthy {
+    } else if observed.id_available {
         Selected::Id
     } else {
         Selected::Missing

@@ -214,7 +214,7 @@ def fit(
     fallback = created.get('id') if not primary else None
     selected = direct._call(
         'check_tabular_session_reply',
-        {'session_id_truthy': bool(primary), 'id_truthy': bool(fallback)},
+        {'session_id_available': bool(primary), 'id_available': bool(fallback)},
     )
     if selected == 'missing':
         raise StructuredDataError(
