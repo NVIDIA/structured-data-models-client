@@ -133,9 +133,19 @@ def test_link_labels_and_related_rows_obey_each_example_time(source, key_kind):
                 }
                 assert set(values['TARGET']) == expected
         assert anchors
+        items = payload[half]['related_tables']['items']
+        item_rows = [
+            dict(zip(items['columns'], row, strict=True))
+            for row in items['rows']
+        ]
+        source_items = {item for _, _, item, _ in orders}
+        assert all(row['item_id'] in source_items for row in item_rows)
+        item_keys = {(row['instance_id'], row['item_id']) for row in item_rows}
         related = payload[half]['related_tables']['orders']
         for row in related['rows']:
             values = dict(zip(related['columns'], row, strict=True))
+            if values['item_id'] is not None:
+                assert (values['instance_id'], values['item_id']) in item_keys
             assert (
                 pd.Timestamp(values['time']) <= anchors[values['instance_id']]
             )
