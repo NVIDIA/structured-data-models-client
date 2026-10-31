@@ -294,12 +294,15 @@ def test_a_predict_frame_request_keeps_its_schema_too():
 # --- the values are read once ----------------------------------------------
 
 
-def test_a_column_is_typed_from_one_reading_of_its_values():
+def test_a_column_is_typed_from_one_reading_of_its_values(monkeypatch):
     """`infer_tfm_dtype` walks every cell of an object column, and it was
     asked three times per column, for the dtype, again inside the stype, and
     again to record that there was no type. On a million rows of warehouse
     `Decimal` that was five seconds before anything was sent."""
     import sdm_client.schema as schema_module
+
+    # Count calls to the old Python typer; Rust never calls this helper.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
 
     reads: list[str] = []
     real = schema_module.infer_tfm_dtype

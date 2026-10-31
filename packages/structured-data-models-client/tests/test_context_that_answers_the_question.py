@@ -128,7 +128,9 @@ def test_the_rows_removed_are_counted():
 
     _, said = gathered(STATIC)
     complaint = next(s for s in said if 'being scored' in s)
-    assert complaint.startswith('5 of the rows')
+    assert (complaint.partition('] ')[2] or complaint).startswith(
+        '5 of the rows'
+    )
 
 
 # --- what must not be removed ----------------------------------------------

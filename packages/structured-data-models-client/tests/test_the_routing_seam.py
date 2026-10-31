@@ -105,6 +105,10 @@ def test_every_core_path_of_the_manifest_is_routed_and_covered_defaults_are_core
         _routing.S0
         # From T3.12, a model's capabilities, from the core's table.
         + _routing.CAPABILITIES
+        + _routing.FRAME_ROUTES
+        + _routing.DIRECT_CONSUMERS
+        + _routing.TABULAR_MATERIALIZERS
+        + _routing.TABULAR_SESSIONS
         + _routing.FROM_SOURCE_DUCKDB
         + _routing.FROM_SOURCE_DUCKDB_TABLES
         + _routing.MATERIALIZE_DUCKDB
@@ -215,8 +219,8 @@ def test_an_unknown_or_unrouted_forced_path_fails_the_call(
         assert named in _routing.ROUTES
         assert named not in _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, setting)
-    query = PredictiveQuery(ACCEPTED, {'users': _users()})
     with pytest.raises(_routing.RouteError, match=named):
+        query = PredictiveQuery(ACCEPTED, {'users': _users()})
         query.materialize(indices=[1])
     assert not isinstance(_routing.RouteError('x'), StructuredDataError)
 

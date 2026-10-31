@@ -272,9 +272,7 @@ def test_forced_tabular_frame_routes_do_not_silently_run_legacy_relational(
         raise AssertionError('legacy relational materialization was reached')
 
     monkeypatch.setattr(RelationalMaterializer, 'materialize', unexpected)
-    with pytest.raises(
-        RouteError, match='relational frames have no core route'
-    ):
+    with pytest.raises(RouteError, match='forces some of'):
         query(frame()).materialize(
             indices=[10], num_context_samples=3, model=KumoRelational()
         )

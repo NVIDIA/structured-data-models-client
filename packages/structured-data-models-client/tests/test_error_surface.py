@@ -246,11 +246,16 @@ def relational_schema(child: pd.DataFrame) -> Schema:
     return schema
 
 
-def test_a_failure_while_building_the_graph_is_a_client_error():
-    """`Graph.from_data`, the key and stype assignments, the links and
-    `graph.validate()` all ran one line above the guard that converts their
-    failures."""
+@pytest.mark.parametrize('route', ['old', 'core'])
+def test_an_empty_related_table_is_supported_by_the_core(route, monkeypatch):
+    """Preserve the legacy refusal while permitting a valid empty neighbor set."""
     pytest.importorskip('sdm_relational_engine')
+    from sdm_client import _routing
+
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT,
+        ','.join(_routing.FRAME_ROUTES) if route == 'core' else '',
+    )
 
     schema = relational_schema(
         pd.DataFrame(
@@ -260,14 +265,25 @@ def test_a_failure_while_building_the_graph_is_a_client_error():
             }
         )
     )
-    with pytest.raises(StructuredDataError) as raised:
-        PredictiveQuery(
+
+    def materialize():
+        return PredictiveQuery(
             'PREDICT parent.label FOR EACH parent.ID', schema
         ).materialize(
             indices=[1], num_context_samples=2, model=KumoRelational()
         )
-    assert raised.value.code == 'INVALID_REQUEST'
-    assert 'empty' in str(raised.value).lower()
+
+    if route == 'old':
+        with pytest.raises(StructuredDataError) as raised:
+            materialize()
+        assert raised.value.code == 'INVALID_REQUEST'
+        assert 'empty' in str(raised.value).lower()
+    else:
+        # An empty child has no neighbors; it need not invalidate its parents.
+        request = materialize()
+        assert (
+            len(request.payloads[0]['predict']['instance_table']['rows']) == 1
+        )
 
 
 def test_a_working_graph_is_not_affected():
