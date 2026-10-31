@@ -107,6 +107,8 @@ pub(crate) struct Walked {
 }
 
 pub(crate) struct Walk<'a> {
+    /// A link task's second entity keeps its source key in the payload.
+    pub link_entity: Option<&'a str>,
     pub asker: &'a Asker,
     pub graph: &'a Graph,
     pub times: &'a Times,
@@ -693,7 +695,8 @@ impl Walk<'_> {
                 }
                 frame = first_of_each_key(frame, table, key)?;
             }
-            let entity = table.name == self.entity.name;
+            let entity =
+                table.name == self.entity.name || self.link_entity == Some(table.name.as_str());
             let features = features(self.graph, table, self.excluded);
             let mut sent: BTreeSet<String> = features.iter().map(|(n, _)| n.clone()).collect();
             if entity && let Some(key) = &table.primary_key {

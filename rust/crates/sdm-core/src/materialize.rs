@@ -4080,6 +4080,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             )?
         } else {
             crate::subgraph::Walk {
+                link_entity: match &asked.target {
+                    Shape::Links(window) => graph.edges.iter().find_map(|edge| {
+                        (edge.src == window.table && Some(&edge.fkey) == window.column.as_ref())
+                            .then_some(edge.dst.as_str())
+                    }),
+                    _ => None,
+                },
                 asker,
                 graph: &graph,
                 times: &read_times,
