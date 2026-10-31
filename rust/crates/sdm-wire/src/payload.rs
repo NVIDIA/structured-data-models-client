@@ -309,6 +309,43 @@ pub struct ClassificationConfig {
     pub class_shuffle: Option<bool>,
 }
 
+/// A temporal link's label is a list of target keys, encoded as text.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct TemporalLinkTarget {
+    pub column_name: String,
+    #[schemars(with = "StringListKind")]
+    pub dtype: Dtype,
+}
+
+/// The two entity roles of an in-memory link query, in query order.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct TemporalLinkTask {
+    #[schemars(with = "TemporalLinkKind")]
+    pub kind: String,
+    pub target: TemporalLinkTarget,
+    pub entity_table_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub anchor_time_column: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
+    pub top_k: Option<u32>,
+}
+
+/// The reference's base inference configuration, used by link prediction.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct BaseConfig {
+    #[schemars(with = "BaseConfigKind")]
+    pub kind: String,
+    pub num_estimators: u64,
+    pub column_shuffle: bool,
+    pub category_shuffle: bool,
+    pub hop_shuffle: bool,
+}
+
 /// What the request was made from.
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -343,6 +380,13 @@ macro_rules! kind_name {
     };
 }
 
+kind_name!(
+    TemporalLinkKind,
+    "TemporalLinkKind",
+    ["temporal_link_prediction"]
+);
+kind_name!(StringListKind, "StringListKind", ["stringlist"]);
+kind_name!(BaseConfigKind, "BaseConfigKind", ["base"]);
 kind_name!(RegressionKind, "RegressionKind", ["regression"]);
 kind_name!(BinaryKind, "BinaryKind", ["binary_classification"]);
 kind_name!(RegressionConfigKind, "RegressionConfigKind", ["regression"]);
@@ -437,6 +481,7 @@ pub struct MulticlassTask {
 #[serde(untagged)]
 #[schemars(rename = "Task")]
 pub enum AnyTask {
+    TemporalLink(TemporalLinkTask),
     Regression(RegressionTask),
     Binary(BinaryTask),
     Multiclass(MulticlassTask),
@@ -449,6 +494,7 @@ pub enum AnyTask {
 #[serde(untagged)]
 #[schemars(rename = "InferenceOptions")]
 pub enum AnyConfig {
+    Base(BaseConfig),
     Regression(InferenceConfig),
     Classification(ClassificationConfig),
 }

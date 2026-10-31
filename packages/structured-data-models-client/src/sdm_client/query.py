@@ -234,8 +234,9 @@ class PredictiveQuery:
             # The core bounds the context size on its route (T1.28a): a
             # schema over a DuckDB, SQLite or Postgres source is relational (refused above if
             # not), and goes to the core where the seam forces it there.
-            bounded_by_the_core=_routing.on_the_core(
-                self.schema.source, _routing.MATERIALIZE
+            bounded_by_the_core=(
+                _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
+                or (relational and not in_place and _routing.on_frames())
             ),
         )
 
@@ -244,22 +245,14 @@ class PredictiveQuery:
         # in its candidates (T2.8), each refusal of either the core's, said
         # here as this client says it; as is a query only the core resolves
         # (KO2-36).
-        on_the_core = relational and _routing.on_the_core(
-            self.schema.source, _routing.MATERIALIZE
+        on_the_core = relational and (
+            _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
+            or (not in_place and _routing.on_frames())
         )
         # Resolved once, and against the profile this request is for, because
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
-        if (
-            relational
-            and not in_place
-            and _routing.forced().intersection(_routing.TABULAR_INDICES)
-        ):
-            raise _routing.RouteError(
-                'forced frame indices routes currently support only '
-                'tabular materialization; relational frames have no core route'
-            )
         if on_the_core:
             # The call's own checks first, as for any relational query.
             if task is not None:

@@ -21,6 +21,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod frame_identity;
+pub mod frame_labels;
+pub mod frame_strings;
+pub mod frames;
 pub mod graph;
 pub mod keys;
 pub mod labels;

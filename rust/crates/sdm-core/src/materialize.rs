@@ -57,6 +57,8 @@
 //! P1B-3), and the requests and policies it needs of its provider before
 //! anything is fetched.
 
+pub(crate) mod frames;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -163,6 +165,7 @@ pub use sdm_contract::ops::REQUEST_STATE_VERSION;
 /// What a `materialize` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {
+    pub frames: Option<frames::FrameGraph>,
     pub description: SourceDescription,
     pub query: String,
     pub indices: Option<ArrowData>,
@@ -392,7 +395,8 @@ fn query_schema(description: &SourceDescription) -> QuerySchema {
 /// A windowed aggregation of a table referring to the entity's.
 #[derive(Debug, Clone)]
 struct Windowed {
-    aggregation: labels::Aggregation,
+    /// None for the explicit list-valued Shape::Links path.
+    aggregation: Option<labels::Aggregation>,
     /// The aggregated table, and its column; none for the table's `*`.
     table: String,
     column: Option<String>,
@@ -420,6 +424,8 @@ enum Shape {
     /// operand; in a filter, a column of the rows aggregated.
     Column(String),
     Aggregated(Windowed),
+    /// Frame-only list-valued target.
+    Links(Windowed),
     /// A column or an aggregation tested.
     Condition {
         target: Box<Shape>,
@@ -441,7 +447,7 @@ impl Shape {
     fn windowed<'a>(&'a self, into: &mut Vec<&'a Windowed>) {
         match self {
             Shape::Column(_) => {}
-            Shape::Aggregated(windowed) => into.push(windowed),
+            Shape::Aggregated(windowed) | Shape::Links(windowed) => into.push(windowed),
             Shape::Condition { target, .. } | Shape::Not(target) => target.windowed(into),
             Shape::Both { left, right, .. } => {
                 left.windowed(into);
@@ -457,7 +463,7 @@ impl Shape {
             Shape::Column(column) => {
                 into.insert(column.clone());
             }
-            Shape::Aggregated(_) => {}
+            Shape::Aggregated(_) | Shape::Links(_) => {}
             Shape::Condition { target, .. } | Shape::Not(target) => target.entity_columns(into),
             Shape::Both { left, right, .. } => {
                 left.entity_columns(into);
@@ -465,6 +471,37 @@ impl Shape {
             }
         }
     }
+}
+
+/// A request's labels retain their actual scalar or list representation.
+enum PreparedLabels {
+    Scalar(labels::Labels),
+    Links(Vec<Vec<sdm_engine::frame_labels::LinkValue>>),
+}
+impl PreparedLabels {
+    fn kept(self, keep: &[bool]) -> Self {
+        match self {
+            Self::Scalar(values) => Self::Scalar(values.kept(keep)),
+            Self::Links(values) => Self::Links(
+                values
+                    .iter()
+                    .zip(keep)
+                    .filter(|(_, keep)| **keep)
+                    .map(|(v, _)| v.clone())
+                    .collect(),
+            ),
+        }
+    }
+    fn truncated(self, count: usize) -> Self {
+        match self {
+            Self::Scalar(values) => Self::Scalar(values.truncated(count)),
+            Self::Links(values) => Self::Links(values.iter().take(count).cloned().collect()),
+        }
+    }
+}
+struct PreparedLabelled {
+    mask: Vec<bool>,
+    labels: PreparedLabels,
 }
 
 /// The parts of a validated query this build materializes.
@@ -513,7 +550,7 @@ fn column_of(node: &PqlNode) -> Option<&ColumnRef> {
 /// neither prefix, and the entities scored are the call's indices
 /// (`_get_task_table`, a forecast's named entity replaced by the first
 /// index). The query text the payload carries keeps them as written.
-fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
+fn asked(query: &ValidatedQuery, frames: bool) -> Result<Asked, CoreError> {
     if query.problem_type.is_some() || query.num_forecasts != 1 || query.top_k.is_some() {
         return Err(not_yet("problem_type"));
     }
@@ -535,10 +572,14 @@ fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
         .chain(query.assuming.as_ref())
         .map(|condition| condition_shape(condition, &operand))
         .collect::<Result<Vec<_>, _>>()?;
-    let target = shape(&query.target, &entity.table)?;
+    let target = if frames {
+        frame_target(&query.target, &entity.table)?
+    } else {
+        shape(&query.target, &entity.table)?
+    };
     let task = match &target {
         Shape::Condition { .. } | Shape::Not(_) | Shape::Both { .. } => Task::Binary,
-        Shape::Aggregated(_) => Task::Regression,
+        Shape::Aggregated(_) | Shape::Links(_) => Task::Regression,
         Shape::Column(_) => match query.target.stype {
             Some(Stype::Id | Stype::Categorical) => Task::Multiclass,
             Some(Stype::Numerical) => Task::Regression,
@@ -632,7 +673,7 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
                 .start
                 .ok_or_else(|| unvalidated("a window with no start"))?;
             Ok(Shape::Aggregated(Windowed {
-                aggregation,
+                aggregation: Some(aggregation),
                 table: column.table.clone(),
                 column: (column.column != "*").then(|| column.column.clone()),
                 filter,
@@ -646,6 +687,50 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
         NodeKind::Filter { .. } => Err(unvalidated("a filter outside an aggregation")),
         NodeKind::Constant { .. } => Err(unvalidated("a constant target")),
     }
+}
+
+/// Only a frame target admits LIST_DISTINCT; warehouse parsing is unchanged.
+fn frame_target(node: &PqlNode, entity: &str) -> Result<Shape, CoreError> {
+    if let NodeKind::Join { target, .. } = &node.kind {
+        return frame_target(target, entity);
+    }
+    if let NodeKind::Aggregation {
+        aggregation: Aggregation::ListDistinct,
+        target,
+        window,
+        ..
+    } = &node.kind
+    {
+        let (column, filter) = match &target.kind {
+            NodeKind::Filter { target, condition } => {
+                let column =
+                    column_of(target).ok_or_else(|| unvalidated("link filter without a column"))?;
+                (
+                    column,
+                    Some(Box::new(condition_shape(condition, &|node| {
+                        filter_column(node, &column.table)
+                    })?)),
+                )
+            }
+            _ => (
+                column_of(target).ok_or_else(|| unvalidated("link target without a column"))?,
+                None,
+            ),
+        };
+        let window = window.ok_or_else(|| unvalidated("link target without a window"))?;
+        let start = window
+            .start
+            .ok_or_else(|| unvalidated("link window without a start"))?;
+        return Ok(Shape::Links(Windowed {
+            aggregation: None,
+            table: column.table.clone(),
+            column: Some(column.column.clone()),
+            filter,
+            start: Offset::of(start, window.unit),
+            end: Offset::of(window.end, window.unit),
+        }));
+    }
+    shape(node, entity)
 }
 
 /// A filter's column: one of the aggregated table's, the validation
@@ -904,8 +989,11 @@ fn times_ns_from(
 /// it on each window bound's seed column ([`SEED_STORED_TIME`]) for the
 /// data layer to spell the bound by.
 pub(crate) struct Times {
+    frames: Option<frames::FrameGraph>,
     reader: Reader,
     text: Option<TextTimes>,
+    /// Native frame dates normalize offsets to UTC before sampling.
+    text_utc: bool,
     /// Each windowed table's stored value, by the schema's name of the
     /// table: the text read, or none where its column held no text.
     stored: Mutex<BTreeMap<String, Option<String>>>,
@@ -916,8 +1004,10 @@ impl Times {
     /// after the source refresh policy has expired any stale data facts.
     pub(crate) fn new(reader: Reader, text: Option<TextTimes>, memo: &SamplerMemo) -> Self {
         Times {
+            frames: None,
             reader,
             text,
+            text_utc: false,
             stored: Mutex::new(
                 memo.stored_times
                     .iter()
@@ -925,6 +1015,16 @@ impl Times {
                     .collect(),
             ),
         }
+    }
+
+    pub(super) fn for_frames(reader: Reader) -> Self {
+        let mut times = Self::new(
+            reader,
+            Some(TextTimes::ValueByValue),
+            &SamplerMemo::default(),
+        );
+        times.text_utc = true;
+        times
     }
 
     /// Each table's stored value read so far, for the memo the run leaves.
@@ -1070,7 +1170,7 @@ impl Times {
             DataType::Utf8 => {
                 let values: Vec<Option<&str>> = array.as_string::<i32>().iter().collect();
                 let read = match self.text {
-                    Some(TextTimes::ValueByValue) => self.reader.each(&values),
+                    Some(TextTimes::ValueByValue) => self.reader.column(&values, self.text_utc),
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
@@ -1186,7 +1286,7 @@ impl Times {
                 let text = array.as_string::<i32>();
                 let values: Vec<Option<&str>> = text.iter().collect();
                 let read = match self.text {
-                    Some(TextTimes::ValueByValue) => self.reader.each(&values),
+                    Some(TextTimes::ValueByValue) => self.reader.column(&values, self.text_utc),
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
@@ -1570,6 +1670,18 @@ async fn time_bounds(
     times: &Times,
     tables: &[&Table],
 ) -> Result<Bounds, CoreError> {
+    if let Some(frames) = &times.frames {
+        let mut bounds = Bounds {
+            min: TIME_MAX,
+            max: TIME_MIN,
+        };
+        for table in tables {
+            let (min, max) = frames.time_bounds(&table.name)?;
+            bounds.min = bounds.min.min(min.unwrap_or(TIME_MAX));
+            bounds.max = bounds.max.max(max.unwrap_or(TIME_MIN));
+        }
+        return Ok(bounds);
+    }
     let mut unknown: Vec<(&Table, String)> = Vec::new();
     for table in tables {
         let column = table
@@ -2852,6 +2964,7 @@ fn resolved(
 
 /// One question gathered: the body of `materialize` before T1.36 fix 21.
 pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
+    let frames = inputs.frames.clone();
     // The memo the run leaves the host: the one handed back, or a new one
     // (decision E52), left as it is by a run refused before it reads.
     let mut memo = Memo {
@@ -2951,10 +3064,20 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Some(seed) => seed,
         None if unseeded => Seed::from(u128::from(fresh_seed(
             &facts.now,
-            asker.capabilities()?.max_seed,
+            if frames.is_some() {
+                u32::MAX as u64
+            } else {
+                asker.capabilities()?.max_seed
+            },
         ))),
         None => Seed::from(DEFAULT_SEED),
     };
+    if frames.is_some() && seed.to_u128().is_none_or(|seed| seed > u32::MAX as u128) {
+        return Err(crate::compose::past_seed_range(
+            OptionalRequest::SampleEntities.name(),
+            u32::MAX as u64,
+        ));
+    }
     let entropy = Entropy::from_hex(seed.magnitude_hex())
         .ok_or_else(|| internal("a seed's digits do not read"))?;
 
@@ -3043,10 +3166,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         if resolved.query.is_none() {
             return Err(unresolved(&query, &resolved.diagnostics));
         }
-        refuse_composite_keys(&description)?;
+        if frames.is_none() {
+            refuse_composite_keys(&description)?;
+        }
     }
 
-    let graph = Graph::new(&description)?;
+    let graph = if let Some(frames) = &frames {
+        frames.graph()
+    } else {
+        Graph::new(&description)?
+    };
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,
         model: None,
@@ -3084,7 +3213,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // What the sampler needs of its provider, refused before anything is
     // fetched.
-    let nulls = sampling_capabilities(asker)?;
+    let nulls = if frames.is_some() {
+        NullOrder::Last
+    } else {
+        sampling_capabilities(asker)?
+    };
     // The index read, the sampler's check of the indexes it would use
     // (only under the provider's index advice, once for a materializer),
     // comes before anything of the task is read, as the reference builds
@@ -3093,10 +3226,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
-    missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
+    if frames.is_none() {
+        missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
+    }
     // Each table's rows, where the provider sizes its sampling by them,
     // as the reference's warehouse sampler counts them as it is built.
-    table_rows(&mut memo, &graph).await?;
+    if frames.is_none() {
+        table_rows(&mut memo, &graph).await?;
+    }
     // The context's anchor and the candidates per example, read with the
     // task (`_get_task_table`).
     let (context_anchor, max_pq_iterations) = options::task_table(&deferred)?;
@@ -3116,13 +3253,23 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Err(_) if !seed.is_negative() => {
             return Err(crate::compose::past_seed_range(
                 OptionalRequest::SampleEntities.name(),
-                asker.capabilities()?.max_seed,
+                if frames.is_some() {
+                    u32::MAX as u64
+                } else {
+                    asker.capabilities()?.max_seed
+                },
             ));
         }
         Err(err) => return Err(err),
     };
-    let asked = asked(&validated)?;
-    options::statistic_for(asked.task, statistic.as_ref())?;
+    let asked = asked(&validated, frames.is_some())?;
+    if matches!(asked.target, Shape::Links(_)) {
+        if statistic.is_some() {
+            return Err(not_yet("link_prediction_statistic"));
+        }
+    } else {
+        options::statistic_for(asked.task, statistic.as_ref())?;
+    }
     let entity = graph
         .table(&asked.entity_table)
         .ok_or_else(|| internal("the query's entity table is not in the graph"))?;
@@ -3145,11 +3292,17 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
 
     // The times every fetch below returns, read as the reference's engine
     // reads them.
-    let read_times = Times::new(
+    let mut read_times = Times::new(
         crate::describe::text_reader(&facts)?,
-        asker.capabilities()?.text_times,
+        if frames.is_some() {
+            Some(TextTimes::ValueByValue)
+        } else {
+            asker.capabilities()?.text_times
+        },
         &memo.memo,
     );
+    read_times.frames = frames.clone();
+    read_times.text_utc = frames.is_some();
 
     // The tables whose times bound the anchor: a temporal query's
     // aggregated tables; for a static query, every table with a time
@@ -3261,38 +3414,42 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // Seeds are optional. An unseeded provider documents its limitation
     // without issuing a routine warning for the default seed (P3D-13).
-    let sampled = read_times.read(
-        asker,
-        entity,
-        one_batch(
-            &ask(
-                asker,
-                DataRequest::SampleEntities {
-                    table: entity.source.clone(),
-                    key: vec![key.clone()],
-                    n: trials as u64,
-                    seed: seed_value,
-                    columns: entity.ordered(&entity_columns),
-                    filters,
-                    // The schema's type of the key, for a provider that
-                    // orders the draw by it (SQLite's, which reads the
-                    // type the key's declaration fixes first).
-                    key_dtype: asker
-                        .samples_by_key_dtype()
-                        .then(|| entity.column(&key).map(|c| c.dtype))
-                        .flatten(),
-                    // The table's rows, for a provider sizing its draw by
-                    // them (the reference's sampled percentage).
-                    rows: if asker.capabilities()?.sample_rows {
-                        rows_of(&memo.memo, &entity.name)
-                    } else {
-                        None
+    let sampled = if let Some(frames) = &frames {
+        frames.entities(entity, &entity.ordered(&entity_columns), trials, &seed)?
+    } else {
+        read_times.read(
+            asker,
+            entity,
+            one_batch(
+                &ask(
+                    asker,
+                    DataRequest::SampleEntities {
+                        table: entity.source.clone(),
+                        key: vec![key.clone()],
+                        n: trials as u64,
+                        seed: seed_value,
+                        columns: entity.ordered(&entity_columns),
+                        filters,
+                        // The schema's type of the key, for a provider that
+                        // orders the draw by it (SQLite's, which reads the
+                        // type the key's declaration fixes first).
+                        key_dtype: asker
+                            .samples_by_key_dtype()
+                            .then(|| entity.column(&key).map(|c| c.dtype))
+                            .flatten(),
+                        // The table's rows, for a provider sizing its draw by
+                        // them (the reference's sampled percentage).
+                        rows: if asker.capabilities()?.sample_rows {
+                            rows_of(&memo.memo, &entity.name)
+                        } else {
+                            None
+                        },
                     },
-                },
-            )
-            .await?,
-        )?,
-    )?;
+                )
+                .await?,
+            )?,
+        )?
+    };
     if sampled.num_rows() == 0 {
         return Err(invalid(
             Sentence::EntityTableEmpty,
@@ -3389,7 +3546,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         examples: &examples,
     };
     let fetched = labelling.read(&labelled_fetches).await?;
-    let target = labelling.build(&asked.target, &fetched, true)?;
+
     // The examples the entity filter and the assumption choose: each
     // condition's truth over the examples, and-ed (`execute`'s `mask`).
     let mut chosen: Option<Vec<bool>> = None;
@@ -3400,14 +3557,50 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
         });
     }
-    drop(fetched);
-    // A classification keeps a decimal column's distinct values apart as
-    // classes; any other task reads them as numbers (T2.0c, round 1).
-    let mut labelled = if matches!(asked.task, Task::Multiclass) {
-        labels::label_classes(&target)?
+    let mut labelled = if let Shape::Links(window) = &asked.target {
+        let rows = fetched
+            .get(&window.table)
+            .ok_or_else(|| internal("link target rows were not read"))?;
+        let column = window
+            .column
+            .as_ref()
+            .ok_or_else(|| internal("link target has no column"))?;
+        let values = named(&rows.rows, column)?;
+        let kept = window
+            .filter
+            .as_ref()
+            .map(|filter| labels::truth(&row_condition(filter, &rows.rows)?).map(|v| v.values))
+            .transpose()?;
+        let starts = shifted(&examples.anchors, window.start, "anchor_time")?;
+        let ends = shifted(&examples.anchors, window.end, "anchor_time")?;
+        let linked = sdm_engine::frame_labels::distinct_identifiers(
+            examples.index.len(),
+            &rows.batch,
+            values,
+            &rows.times,
+            labels::Bounds {
+                starts: Some(&starts),
+                ends: &ends,
+            },
+            kept.as_deref(),
+        )?;
+        PreparedLabelled {
+            mask: linked.mask,
+            labels: PreparedLabels::Links(linked.labels),
+        }
     } else {
-        labels::label(&target)?
+        let target = labelling.build(&asked.target, &fetched, true)?;
+        let scalar = if matches!(asked.task, Task::Multiclass) {
+            labels::label_classes(&target)?
+        } else {
+            labels::label(&target)?
+        };
+        PreparedLabelled {
+            mask: scalar.mask,
+            labels: PreparedLabels::Scalar(scalar.labels),
+        }
     };
+    drop(fetched);
     null_compared(&asked.target, &labelled.mask)?;
     // The examples the entity filter or the assumption leaves out keep no
     // label (`out[mask[_mask]]`, `mask & _mask`).
@@ -3485,6 +3678,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let steps = match lag_timesteps {
         None => 0,
         Some(asked) => asked.refusal(!fetches.is_empty())?,
+    };
+    // The old client validates lag count but does not add scalar lag features to link targets.
+    let steps = if matches!(asked.target, Shape::Links(_)) {
+        0
+    } else {
+        steps
     };
     let lag = match steps {
         0 => None,
@@ -3565,7 +3764,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let labels = labelled.labels.truncated(num_train);
     #[cfg(feature = "test-ops")]
     if labels_only {
-        return labels_result(asker, &train_keys, &anchors, &labels).map(Gathered::Done);
+        let PreparedLabels::Scalar(scalar) = &labels else {
+            return Err(not_yet("link_labels_only"));
+        };
+        return labels_result(asker, &train_keys, &anchors, scalar).map(Gathered::Done);
     }
     // How many entities one call scores: the endpoint's 10,000, or fewer
     // where the caller asked (`rows_per_call`); a request of more is
@@ -3594,7 +3796,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // options, read for the task's config class, as the engine reads them
     // before it lays out any request.
     let top_k = top_k.as_ref().map(options::top_k).transpose()?;
-    let options = options::options(asked.task, inference_config.as_ref())?;
+    let options = if matches!(asked.target, Shape::Links(_)) {
+        options::frame_link_options(inference_config.as_ref())?
+    } else {
+        options::options(asked.task, inference_config.as_ref())?
+    };
     // A static target's columns, kept out of what the request reads and
     // sends (`get_exclude_cols_dict`); each must be one of its table's
     // features, as the reference's sampler requires.
@@ -3619,10 +3825,21 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // (`_columns_to_leave_out`, then the hops `_resolve_options` resolves,
     // then the names `sample_subgraph` checks.)
     let exclude_cols = options::excluded(&deferred)?;
-    let walk_hops = options::neighbors(&deferred, mode)?;
+    let walk_hops = options::neighbors(
+        &deferred,
+        if matches!(asked.target, Shape::Links(_)) {
+            options::RunMode::Fast
+        } else {
+            mode
+        },
+    )?;
     // Each fact table's look-back rate, where the provider's neighbor
     // reads look back no further than the reference's warehouse samplers.
-    let lookback = lookbacks(&mut memo, &read_times, &graph).await?;
+    let lookback = if frames.is_some() {
+        Vec::new()
+    } else {
+        lookbacks(&mut memo, &read_times, &graph).await?
+    };
     let hops_ignored = options::hops_ignored(&deferred);
     // The engine says it ignores `num_hops` where `num_neighbors` is given
     // (`_resolve_options`), once the task is labelled.
@@ -3683,22 +3900,26 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         anchors.extend(std::iter::repeat_n(anchor, num_test));
 
         // The subgraph: each example's entity row.
-        let looked_up = read_times.read(
-            asker,
-            entity,
-            one_batch(
-                &ask(
-                    asker,
-                    sample::by_pkey(
-                        entity,
-                        entity_read.clone(),
-                        key_set(asker, sample::seeds(all_keys, vec![])?)?,
-                        true,
-                    )?,
-                )
-                .await?,
-            )?,
-        )?;
+        let looked_up = if let Some(frames) = &frames {
+            frames.lookup(entity, &all_keys, &entity_read)?
+        } else {
+            read_times.read(
+                asker,
+                entity,
+                one_batch(
+                    &ask(
+                        asker,
+                        sample::by_pkey(
+                            entity,
+                            entity_read.clone(),
+                            key_set(asker, sample::seeds(all_keys.clone(), vec![])?)?,
+                            true,
+                        )?,
+                    )
+                    .await?,
+                )?,
+            )?
+        };
         let positions = batches(&looked_up, examples_total)?;
         // A key the source enforces unique is held by one row each: a
         // dialect may leave its count out (`SEED_KEY_UNIQUE`), and any
@@ -3809,19 +4030,31 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .map_err(|_| internal("the entity rows do not make one batch"))?;
 
         // The neighbors of each example's entity, hop by hop.
-        let walked = crate::subgraph::Walk {
-            asker,
-            graph: &graph,
-            times: &read_times,
-            anchors: &anchors,
-            nulls,
-            entity,
-            neighbors: &walk_hops,
-            excluded: &excluded,
-            lookback: &lookback,
-        }
-        .run(entity_rows)
-        .await?;
+        let walked = if let Some(frames) = &frames {
+            frames.walk(
+                &graph,
+                entity,
+                &all_keys,
+                &anchors,
+                &walk_hops,
+                &excluded,
+                (!unseeded).then(|| seed.to_u128()).flatten(),
+            )?
+        } else {
+            crate::subgraph::Walk {
+                asker,
+                graph: &graph,
+                times: &read_times,
+                anchors: &anchors,
+                nulls,
+                entity,
+                neighbors: &walk_hops,
+                excluded: &excluded,
+                lookback: &lookback,
+            }
+            .run(entity_rows)
+            .await?
+        };
         keep_stored_times(&mut memo, &read_times);
         // The subgraph carries at most as many tables as the endpoint
         // reads, refused as the reference's engine refuses it
@@ -3867,12 +4100,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         // as the request is built.
         let (use_prediction_time, return_embeddings) = options::request_flags(&deferred)?;
 
-        let built = payload::build(&Sampled {
+        let sampled_payload = Sampled {
             num_train,
             num_test,
             anchors: anchors.clone(),
             kind: asked.task,
-            labels: labels.clone(),
+            labels: match &labels {
+                PreparedLabels::Scalar(values) => values.clone(),
+                PreparedLabels::Links(_) => labels::Labels::Float(Vec::new()),
+            },
             windowed: asked.range.is_some(),
             tables: walked.tables,
             links: walked.links,
@@ -3887,7 +4123,42 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             top_k,
             lags,
             float_text: crate::pql::float_text,
-        })?;
+        };
+        let built = match &labels {
+            PreparedLabels::Scalar(_) => payload::build(&sampled_payload)?,
+            PreparedLabels::Links(values) => {
+                let Shape::Links(window) = &asked.target else {
+                    return Err(internal("link labels without a link target"));
+                };
+                let column = window
+                    .column
+                    .as_ref()
+                    .ok_or_else(|| internal("link target column missing"))?;
+                let edge = graph
+                    .edges
+                    .iter()
+                    .find(|edge| edge.src == window.table && edge.fkey == *column)
+                    .ok_or_else(|| internal("link target does not refer to an entity table"))?;
+                if !sampled_payload
+                    .tables
+                    .iter()
+                    .any(|table| table.name == edge.dst)
+                {
+                    return Err(invalid(
+                        Sentence::InvalidMessage,
+                        "link prediction requires historical target entities; increase the number of hops",
+                        "num_hops",
+                    ));
+                }
+                payload::build_frame_links(
+                    &sampled_payload,
+                    &payload::FrameLinkTarget {
+                        table: edge.dst.clone(),
+                        labels: values.clone(),
+                    },
+                )?
+            }
+        };
         answering += built.answering;
         gathered.push((
             built.bytes,
@@ -4184,7 +4455,11 @@ fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
     else {
         return Ok(());
     };
-    let Shape::Aggregated(Windowed { aggregation, .. }) = target.as_ref() else {
+    let Shape::Aggregated(Windowed {
+        aggregation: Some(aggregation),
+        ..
+    }) = target.as_ref()
+    else {
         return Ok(());
     };
     let rule = match aggregation {
@@ -4516,6 +4791,9 @@ impl Labelling<'_> {
         whole: bool,
     ) -> Result<labels::Target, CoreError> {
         Ok(match shape {
+            Shape::Links(_) => {
+                return Err(internal("link labels require the frame label operation"));
+            }
             Shape::Column(column) => {
                 let array = named(self.sampled, column)?;
                 if float32_overflows(&take(array, self.entity_rows)?) {
@@ -4612,6 +4890,7 @@ fn temporal_target(
             left: Box::new(part(left)?),
             right: Box::new(part(right)?),
         },
+        Shape::Links(_) => return Err(not_yet("link_prediction_lags")),
         Shape::Column(_) => return Err(unvalidated("a static column in a temporal target")),
     })
 }
@@ -4627,6 +4906,9 @@ async fn fetch_rows(
     starts: Vec<i64>,
     ends: Vec<i64>,
 ) -> Result<Fetched, CoreError> {
+    if let Some(frames) = &times.frames {
+        return frames.fetch(fetch, &keys, &starts, &ends);
+    }
     let examples = keys.len();
     let table = fetch.table;
     let time_column = table
@@ -4691,7 +4973,9 @@ fn aggregate(
         Some(filter) => Some(labels::truth(&row_condition(filter, &fetched.rows)?)?.values),
     };
     labels::aggregate_kept(
-        windowed.aggregation,
+        windowed
+            .aggregation
+            .ok_or_else(|| internal("a link target reached scalar aggregation"))?,
         examples,
         &fetched.batch,
         &values,
@@ -4734,7 +5018,9 @@ fn row_condition(filter: &Shape, rows: &RecordBatch) -> Result<labels::Target, C
             left: Box::new(row_condition(left, rows)?),
             right: Box::new(row_condition(right, rows)?),
         },
-        Shape::Aggregated(_) => return Err(unvalidated("an aggregation in a filter")),
+        Shape::Aggregated(_) | Shape::Links(_) => {
+            return Err(unvalidated("an aggregation in a filter"));
+        }
     })
 }
 
@@ -4894,6 +5180,17 @@ mod tests {
         }
     }
     use super::*;
+
+    #[test]
+    fn frame_link_labels_preserve_list_groups_when_filtered_and_narrowed() {
+        use sdm_engine::frame_labels::LinkValue::Int;
+        let labels = PreparedLabels::Links(vec![vec![Int(1), Int(2)], vec![Int(3)], vec![Int(4)]]);
+        let PreparedLabels::Links(groups) = labels.kept(&[true, false, true]).truncated(1) else {
+            panic!("lost list labels")
+        };
+        assert_eq!(groups, vec![vec![Int(1), Int(2)]]);
+    }
+
     use sdm_contract::ErrorCode;
     use sdm_contract::pql::TimeUnit;
 
@@ -4946,7 +5243,7 @@ mod tests {
     fn counted(op: labels::RelOp) -> Shape {
         Shape::Condition {
             target: Box::new(Shape::Aggregated(Windowed {
-                aggregation: labels::Aggregation::Count,
+                aggregation: Some(labels::Aggregation::Count),
                 table: "orders".to_owned(),
                 column: None,
                 filter: None,

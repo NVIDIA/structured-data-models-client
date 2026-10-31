@@ -24,6 +24,13 @@ ROOT = Path(__file__).resolve().parents[3]
     [
         _routing.S0,
         _routing.CAPABILITIES,
+        _routing.FRAME_SCHEMA,
+        _routing.FRAME_MATERIALIZE,
+        _routing.FRAME_PREDICT,
+        _routing.FRAME_SESSIONS,
+        _routing.DIRECT_CONSUMERS,
+        _routing.TABULAR_MATERIALIZERS,
+        _routing.TABULAR_SESSIONS,
         _routing.FROM_SOURCE_DUCKDB,
         _routing.MATERIALIZE_DUCKDB,
         _routing.PREDICT_DUCKDB,

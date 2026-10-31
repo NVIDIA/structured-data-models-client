@@ -989,3 +989,128 @@ pub(crate) fn encode_table(
         },
     )
 }
+
+/// Assemble source-less schemas using the existing schema policies.
+pub(crate) fn assemble_frame_schema(
+    asker: &Asker,
+    input: sdm_contract::frames::AssembleFrameSchema,
+) -> Result<OperationResult, CoreError> {
+    let read = sdm_schema::held::read(input.schema, &BTreeMap::new(), false)?;
+    let choices = input
+        .times
+        .into_iter()
+        .map(|facts| {
+            let (choice, pending) = sdm_schema::direct::observed::time_choice(facts)?;
+            if !pending.is_empty() {
+                return Err(internal(
+                    "frame time observation requires completed earliest-time facts",
+                ));
+            }
+            Ok(choice)
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    let mut assembled = sdm_schema::assemble::assemble_frames(
+        read.description,
+        choices,
+        &input.primary_keys,
+        &input.time_columns,
+        input.relationships.as_deref(),
+    )?;
+    for name in input.primary_keys.keys() {
+        let table = assembled
+            .description
+            .tables
+            .iter_mut()
+            .find(|t| &t.name == name)
+            .ok_or_else(|| internal("frame key override names an absent table"))?;
+        let count = input
+            .key_counts
+            .get(name)
+            .ok_or_else(|| internal("frame key override lacks whole-table counts"))?;
+        if count.missing > count.rows || count.distinct > count.rows - count.missing {
+            return Err(internal("frame key counts exceed their population"));
+        }
+        if count.missing > 0 && table.primary_key.len() > 1 {
+            if count.missing_columns.is_empty()
+                || count
+                    .missing_columns
+                    .iter()
+                    .any(|c| !table.primary_key.contains(c))
+            {
+                return Err(internal(
+                    "frame key missing-column observations disagree with the key",
+                ));
+            }
+            return Err(CoreError::new(
+                Sentence::FrameKeyMissingParts,
+                "frame key contains missing parts",
+            )
+            .with_field("table", Detail::text(name))
+            .with_field(
+                "columns",
+                Detail::List(
+                    table
+                        .primary_key
+                        .iter()
+                        .cloned()
+                        .map(sdm_contract::Scalar::Utf8)
+                        .collect(),
+                ),
+            )
+            .with_field(
+                "parts",
+                Detail::List(
+                    count
+                        .missing_columns
+                        .iter()
+                        .cloned()
+                        .map(sdm_contract::Scalar::Utf8)
+                        .collect(),
+                ),
+            )
+            .with_field(
+                "missing",
+                Detail::Scalar(sdm_contract::Scalar::UInt64(count.missing)),
+            ));
+        }
+        let inferred = sdm_schema::infer::InferredTable {
+            name: name.clone(),
+            source: table.source.clone(),
+            columns: vec![],
+            left_out: vec![],
+            unread_times: vec![],
+            day_first: vec![],
+            tied_keys: vec![],
+            primary_key: table.primary_key.clone(),
+            time: Default::default(),
+            time_column: table.time_column.clone(),
+            unique: vec![],
+            declared: Default::default(),
+        };
+        let checked = sdm_schema::keys::hold(
+            &mut [inferred],
+            &[(
+                0,
+                sdm_schema::keys::Counted {
+                    rows: count.rows,
+                    distinct: count.distinct,
+                    missing: count.missing,
+                    example: count.example.clone(),
+                },
+            )],
+            &std::collections::BTreeSet::from([name.clone()]),
+            false,
+        )?;
+        table.duplicate_keys = Some(sdm_contract::Scalar::UInt64(
+            count.rows - count.missing - count.distinct,
+        ));
+        for warning in checked.warnings {
+            asker.warn(warning);
+        }
+    }
+    for warning in assembled.warnings {
+        asker.warn(warning);
+    }
+    let held = sdm_schema::held::held(&assembled.description, &read.unfacted, &read.retyped);
+    value(asker, &held)
+}

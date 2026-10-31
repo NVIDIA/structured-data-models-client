@@ -694,3 +694,65 @@ fn entirely_invalid_partial_maps_leave_the_edge_absent() {
             .all(|name| name != "user_id")
     );
 }
+
+#[test]
+fn frame_link_payload_has_two_entity_roles_and_list_labels() {
+    use sdm_engine::frame_labels::LinkValue;
+    use sdm_request::payload::{FrameLinkTarget, build_frame_links};
+    let mut sampled = shop();
+    sampled.statistic = None;
+    sampled.top_k = Some(3);
+    let link = FrameLinkTarget {
+        table: "orders".into(),
+        labels: vec![
+            vec![LinkValue::Int(7), LinkValue::Int(8)],
+            vec![LinkValue::Int(9)],
+            vec![LinkValue::Text("large-id".into())],
+        ],
+    };
+    let built = build_frame_links(&sampled, &link).unwrap();
+    let payload: Value = serde_json::from_slice(&built.bytes).unwrap();
+    assert_eq!(payload["task"]["kind"], "temporal_link_prediction");
+    assert_eq!(
+        payload["task"]["entity_table_names"],
+        json!(["users", "orders"])
+    );
+    assert_eq!(payload["task"]["target"]["dtype"], "stringlist");
+    assert_eq!(payload["task"]["top_k"], 3);
+    assert_eq!(payload["output"]["fields"], json!(["rankings"]));
+    assert_eq!(payload["inference"]["inference_config"]["kind"], "base");
+    assert!(
+        payload["inference"]["inference_config"]
+            .get("target_transforms")
+            .is_none()
+    );
+    let context = &payload["context"]["instance_table"];
+    let columns = context["columns"].as_array().unwrap();
+    let target = columns.iter().position(|name| name == "TARGET").unwrap();
+    assert_eq!(context["rows"][0][target], json!(["7", "8"]));
+    assert_eq!(
+        payload["schema"]["instance_table"]["columns"]["TARGET"]["stype"],
+        "multicategorical"
+    );
+    assert_eq!(
+        payload["schema"]["relationships"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|link| link.get("source_table").is_none())
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn frame_link_options_do_not_admit_scalar_task_knobs() {
+    use sdm_request::options::frame_link_options;
+    let value = sdm_wire::json::read(br#"{"column_shuffle":true,"num_estimators":2}"#).unwrap();
+    assert!(frame_link_options(Some(&value)).unwrap().column_shuffle);
+    for name in ["output_type", "class_shuffle", "target_transforms"] {
+        let value =
+            sdm_wire::json::Value::Object(vec![(name.into(), sdm_wire::json::Value::Bool(true))]);
+        assert!(frame_link_options(Some(&value)).is_err());
+    }
+}

@@ -28,3 +28,5 @@ pub mod serving;
 
 pub mod direct;
 pub mod tabular;
+
+pub mod frame_session;

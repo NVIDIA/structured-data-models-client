@@ -28,6 +28,8 @@ def time_column(
     columns: list[dict[str, Any]],
     key: str | None,
     call: DirectOperations,
+    *,
+    observations: list[dict[str, Any]] | None = None,
 ) -> str | None:
     names = call(
         'observe_direct_schema',
@@ -77,7 +79,10 @@ def time_column(
             else:
                 start = call.time_start(parsed, name)
             starts.append((name, start))
-        choice = call('observe_direct_schema', {**observed, 'starts': starts})
+        observed = {**observed, 'starts': starts}
+        choice = call('observe_direct_schema', observed)
+    if observations is not None:
+        observations.append(observed)
     return native_names.get(choice['column'], choice['column'])
 
 
@@ -297,6 +302,159 @@ def requires(frame: pd.DataFrame) -> bool:
     return False
 
 
+def infer_frame_schema(
+    context: pd.DataFrame,
+    entity: str,
+    call: DirectOperations,
+    build: Callable[..., Any],
+    *,
+    time_observations: list[dict[str, Any]] | None = None,
+    advice: bool = True,
+) -> Any:
+    """Infer a frame with shared Rust policy and host-owned native values.
+
+    Admission of the table name, column names and frame shape belongs to
+    the calling public operation. This helper does not require a prediction
+    target or scoring frame, so schema construction can reuse the policy.
+    """
+    for name in context.columns:
+        direct_cells.admit(context[name], 'context', 'string', call)
+    from sdm_client.schema import Column
+
+    native_columns = {}
+    for name in context.columns:
+        series = context[name]
+        finding = direct_dtypes.observe(series, call)
+        observed = call(
+            'observe_direct_schema',
+            {
+                'kind': 'column',
+                'name': name,
+                'finding': finding,
+                'distinct': int(series.nunique(dropna=True))
+                if finding['dtype'] == 'string'
+                else None,
+            },
+        )
+        facts = observed['column']
+        column = Column.__new__(Column)
+        for field, value in (
+            ('name', name),
+            ('dtype', facts['dtype']),
+            ('stype', facts['stype']),
+            ('untyped', facts['untyped']),
+            ('stype_declared', False),
+            ('_stype_before_key', None),
+            ('_source', None),
+        ):
+            object.__setattr__(column, field, value)
+        # The reference inserts each inferred column before reading the next.
+        native_columns[name] = column
+    columns = [
+        {
+            'name': column.name,
+            'dtype': column.dtype,
+            'stype': column.stype,
+            'untyped': column.untyped,
+        }
+        for column in native_columns.values()
+    ]
+    native_names = {
+        str.__str__(column.name): column.name
+        for column in native_columns.values()
+    }
+    direct_admission.name(entity, call)
+    for name in context.columns:
+        direct_admission.name(name, call)
+        direct_cells.admit(context[name], 'context', 'string', call)
+    candidates = call(
+        'observe_direct_schema',
+        {
+            'kind': 'key_candidates',
+            'columns': columns,
+            'rows': len(context),
+        },
+    )
+    key = None
+    for selected in candidates['names']:
+        name = native_names[selected]
+        distinct = int(context[name].nunique(dropna=True))
+        counted = call(
+            'observe_direct_schema',
+            {
+                'kind': 'key_count',
+                'rows': len(context),
+                'distinct': distinct,
+            },
+        )
+        if counted['accepted']:
+            key = name
+            break
+    duplicates = 0
+    if key is not None:
+        if bool(context[key].isna().any()):
+            call(
+                'check_direct_preparation',
+                {
+                    'kind': 'missing_key',
+                    'table': entity,
+                    'column': key,
+                    'count': int(context[key].isna().sum()),
+                },
+            )
+        elif not context.empty:
+            from sdm_client.schema import _key_quality
+
+            quality = _key_quality(context, (key,))
+            empty = (
+                [key]
+                if quality.nulls
+                and key in context.columns
+                and bool(context[key].isna().any())
+                else []
+            )
+            with errors.holding(
+                direct_key_example=lambda fields: quality.example,
+            ):
+                call(
+                    'observe_direct_schema',
+                    {
+                        'kind': 'key_validity',
+                        'table': entity,
+                        'column': key,
+                        'nulls': quality.nulls,
+                        'duplicates': quality.duplicates,
+                        'rows': len(context),
+                        'empty': empty,
+                    },
+                )
+        duplicates = repeated_key(context, entity, key, columns, call)
+    selected_time = time_column(
+        context, columns, key, call, observations=time_observations
+    )
+    described = call(
+        'observe_direct_schema',
+        {
+            'kind': 'assemble',
+            'table': entity,
+            'columns': columns,
+            'primary_key': key,
+            'duplicates': duplicates,
+            'time_column': selected_time,
+        },
+    )
+    schema = build(
+        described['schema'],
+        context,
+        described['flags'],
+        native_columns=native_columns,
+    )
+    if advice:
+        date_advice(context, entity, columns, key, selected_time, call)
+        categorical_advice(schema, call)
+    return schema
+
+
 def prepare(
     context: pd.DataFrame,
     scoring: pd.DataFrame,
@@ -316,138 +474,7 @@ def prepare(
             direct_admission.table_entry_name(entity, call)
             direct_admission.names(context, entity, call)
     if schema is None:
-        for name in context.columns:
-            direct_cells.admit(context[name], 'context', 'string', call)
-        from sdm_client.schema import Column
-
-        native_columns = {}
-        for name in context.columns:
-            series = context[name]
-            finding = direct_dtypes.observe(series, call)
-            observed = call(
-                'observe_direct_schema',
-                {
-                    'kind': 'column',
-                    'name': name,
-                    'finding': finding,
-                    'distinct': int(series.nunique(dropna=True))
-                    if finding['dtype'] == 'string'
-                    else None,
-                },
-            )
-            facts = observed['column']
-            column = Column.__new__(Column)
-            for field, value in (
-                ('name', name),
-                ('dtype', facts['dtype']),
-                ('stype', facts['stype']),
-                ('untyped', facts['untyped']),
-                ('stype_declared', False),
-                ('_stype_before_key', None),
-                ('_source', None),
-            ):
-                object.__setattr__(column, field, value)
-            # The reference inserts each inferred column before reading the next.
-            native_columns[name] = column
-        columns = [
-            {
-                'name': column.name,
-                'dtype': column.dtype,
-                'stype': column.stype,
-                'untyped': column.untyped,
-            }
-            for column in native_columns.values()
-        ]
-        native_names = {
-            str.__str__(column.name): column.name
-            for column in native_columns.values()
-        }
-        direct_admission.name(entity, call)
-        for name in context.columns:
-            direct_admission.name(name, call)
-            direct_cells.admit(context[name], 'context', 'string', call)
-        candidates = call(
-            'observe_direct_schema',
-            {
-                'kind': 'key_candidates',
-                'columns': columns,
-                'rows': len(context),
-            },
-        )
-        key = None
-        for selected in candidates['names']:
-            name = native_names[selected]
-            distinct = int(context[name].nunique(dropna=True))
-            counted = call(
-                'observe_direct_schema',
-                {
-                    'kind': 'key_count',
-                    'rows': len(context),
-                    'distinct': distinct,
-                },
-            )
-            if counted['accepted']:
-                key = name
-                break
-        duplicates = 0
-        if key is not None:
-            if bool(context[key].isna().any()):
-                call(
-                    'check_direct_preparation',
-                    {
-                        'kind': 'missing_key',
-                        'table': entity,
-                        'column': key,
-                        'count': int(context[key].isna().sum()),
-                    },
-                )
-            elif not context.empty:
-                from sdm_client.schema import _key_quality
-
-                quality = _key_quality(context, (key,))
-                empty = (
-                    [key]
-                    if quality.nulls
-                    and key in context.columns
-                    and bool(context[key].isna().any())
-                    else []
-                )
-                with errors.holding(
-                    direct_key_example=lambda fields: quality.example,
-                ):
-                    call(
-                        'observe_direct_schema',
-                        {
-                            'kind': 'key_validity',
-                            'table': entity,
-                            'column': key,
-                            'nulls': quality.nulls,
-                            'duplicates': quality.duplicates,
-                            'rows': len(context),
-                            'empty': empty,
-                        },
-                    )
-            duplicates = repeated_key(context, entity, key, columns, call)
-        selected_time = time_column(context, columns, key, call)
-        described = call(
-            'observe_direct_schema',
-            {
-                'kind': 'assemble',
-                'table': entity,
-                'columns': columns,
-                'primary_key': key,
-                'duplicates': duplicates,
-                'time_column': selected_time,
-            },
-        )
-        schema = build(
-            described['schema'],
-            context,
-            described['flags'],
-            native_columns=native_columns,
-        )
-        date_advice(context, entity, columns, key, selected_time, call)
-        categorical_advice(schema, call)
+        schema = infer_frame_schema(context, entity, call, build)
     table = schema[entity]
     for name in scoring.columns:
         column = table.columns.get(name)

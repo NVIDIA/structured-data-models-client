@@ -841,12 +841,61 @@ fn answering(
         .collect())
 }
 
+/// The extra target role and list labels of an in-memory link request.
+/// Kept separate from scalar warehouse task kinds and labels.
+pub struct FrameLinkTarget {
+    pub table: String,
+    pub labels: Vec<Vec<sdm_engine::frame_labels::LinkValue>>,
+}
+
+fn link_target_cells(
+    link: &FrameLinkTarget,
+    float_text: fn(f64) -> String,
+) -> Result<Vec<Value>, CoreError> {
+    use sdm_engine::frame_labels::LinkValue;
+    link.labels
+        .iter()
+        .map(|list| {
+            list.iter()
+                .map(|value| {
+                    let text = match value {
+                        LinkValue::Int(value) => value.to_string(),
+                        LinkValue::UInt(value) => value.to_string(),
+                        LinkValue::Float(value) => {
+                            if !value.is_finite() {
+                                return Err(not_finite(TARGET, *value));
+                            }
+                            float_text(*value)
+                        }
+                        LinkValue::Bool(value) => if *value { "True" } else { "False" }.into(),
+                        LinkValue::Text(value) => value.clone(),
+                        LinkValue::Decimal(value, scale) => decimal_text(*value, *scale),
+                    };
+                    Ok(Value::text(&text))
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Array)
+        })
+        .collect()
+}
+
+/// Frame-only link encoding; the shared scalar task representation is unused.
+pub fn build_frame_links(sampled: &Sampled, target: &FrameLinkTarget) -> Result<Built, CoreError> {
+    build_mode(sampled, Some(target))
+}
+
 /// The payload of one batch's request, as the reference's engine builds it
 /// (`predict_request_to_json`) and its client then sends it, the context
 /// that answers the question taken out.
 pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
+    build_mode(sampled, None)
+}
+
+fn build_mode(sampled: &Sampled, link: Option<&FrameLinkTarget>) -> Result<Built, CoreError> {
     let examples = sampled.num_train + sampled.num_test;
-    if sampled.anchors.len() != examples || sampled.labels.len() != sampled.num_train {
+    if sampled.anchors.len() != examples
+        || link.map_or_else(|| sampled.labels.len(), |link| link.labels.len()) != sampled.num_train
+    {
         return Err(internal("the examples, anchors and labels do not align"));
     }
     let kind = sampled.kind;
@@ -908,6 +957,50 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         dtype: reference_dtype,
         cells: reference_cells,
     });
+    let mut entity_names = vec![sampled.entity_table.clone()];
+    let mut link_reference = None;
+    if let Some(link) = link {
+        entity_names.push(link.table.clone());
+        let target = sampled
+            .tables
+            .iter()
+            .find(|table| table.name == link.table)
+            .ok_or_else(|| internal("the link target table was not sampled"))?;
+        let key = target
+            .primary_key
+            .as_deref()
+            .ok_or_else(|| internal("the link target table has no key"))?;
+        let array = target
+            .columns
+            .iter()
+            .find_map(|(name, column)| match column {
+                SampledColumn::Arrow(array) if name == key => Some(array),
+                _ => None,
+            })
+            .ok_or_else(|| internal("the link target key was not sampled"))?;
+        let name = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_1"));
+        occupied.push(name.clone());
+        let dtype = match key_dtype(array)? {
+            Dtype::Float32 => Dtype::Float64,
+            dtype => dtype,
+        };
+        let mut first = vec![None; examples];
+        for (row, &example) in target.batch.iter().enumerate() {
+            if example < examples && first[example].is_none() {
+                first[example] = Some(row);
+            }
+        }
+        let cells = first
+            .iter()
+            .map(|row| row.map_or(Ok(Value::Null), |row| cell(array, row, &name, dtype)))
+            .collect::<Result<Vec<_>, _>>()?;
+        instance.columns.push(FrameColumn {
+            name: name.clone(),
+            dtype,
+            cells,
+        });
+        link_reference = Some(name);
+    }
     let anchor_column =
         if !sampled.anchors.is_empty() && sampled.anchors.iter().any(|a| *a != NO_ANCHOR) {
             let name = unique_name(&occupied, ANCHOR_TIME);
@@ -933,8 +1026,14 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         } else {
             None
         };
-    let (target_dtype, mut target_cells, classes) =
-        target(kind, &sampled.labels, sampled.float_text)?;
+    let (target_dtype, mut target_cells, classes) = match link {
+        Some(link) => (
+            Dtype::StringList,
+            link_target_cells(link, sampled.float_text)?,
+            Vec::new(),
+        ),
+        None => target(kind, &sampled.labels, sampled.float_text)?,
+    };
     target_cells.resize(examples, Value::Null);
     instance.columns.push(FrameColumn {
         name: TARGET.to_owned(),
@@ -991,6 +1090,18 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             source_table: None,
             source_columns: vec![reference.clone()],
             target_table: sampled.entity_table.clone(),
+            target_columns: vec![target_column.clone()],
+        });
+    }
+    if let (Some(link), Some(reference)) = (link, &link_reference) {
+        let (_, _, target_column, _) = frames
+            .iter()
+            .find(|(name, ..)| name == &link.table)
+            .ok_or_else(|| internal("link target rows are absent"))?;
+        relationships.push(Relationship {
+            source_table: None,
+            source_columns: vec![reference.clone()],
+            target_table: link.table.clone(),
             target_columns: vec![target_column.clone()],
         });
     }
@@ -1078,12 +1189,17 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         (INSTANCE_ID.to_owned(), Stype::Id),
         (reference.clone(), Stype::Id),
     ];
+    if let Some(reference) = &link_reference {
+        instance_stypes.push((reference.clone(), Stype::Id));
+    }
     if let Some(anchor) = &anchor_column {
         instance_stypes.push((anchor.clone(), Stype::Timestamp));
     }
     instance_stypes.push((
         TARGET.to_owned(),
-        if kind.is_classification() {
+        if link.is_some() {
+            Stype::Multicategorical
+        } else if kind.is_classification() {
             Stype::Categorical
         } else {
             Stype::Numerical
@@ -1143,10 +1259,16 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         }
     };
 
-    let mut fields: Vec<String> = match kind {
-        Kind::Regression if sampled.options.output_type == "quantiles" => vec!["quantiles".into()],
-        Kind::Regression => vec!["prediction".into()],
-        Kind::Binary | Kind::Multiclass => vec!["prediction".into(), "probabilities".into()],
+    let mut fields: Vec<String> = if link.is_some() {
+        vec!["rankings".into()]
+    } else {
+        match kind {
+            Kind::Regression if sampled.options.output_type == "quantiles" => {
+                vec!["quantiles".into()]
+            }
+            Kind::Regression => vec!["prediction".into()],
+            Kind::Binary | Kind::Multiclass => vec!["prediction".into(), "probabilities".into()],
+        }
     };
     if sampled.return_embeddings {
         fields.push("embeddings".into());
@@ -1187,7 +1309,28 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         num_prediction_examples: sampled.num_test as u64,
     };
     let model = "kumo-relational".to_owned();
-    let bytes = if kind.is_classification() {
+    let bytes = if link.is_some() {
+        StatePayload {
+            model,
+            task: sdm_wire::payload::TemporalLinkTask {
+                kind: "temporal_link_prediction".into(),
+                target: sdm_wire::payload::TemporalLinkTarget {
+                    column_name: TARGET.into(),
+                    dtype: target_dtype,
+                },
+                entity_table_names: entity_names,
+                anchor_time_column: anchor_column.clone(),
+                top_k: sampled.top_k,
+            },
+            schema,
+            context: half(true),
+            predict: half(false),
+            output,
+            inference: inference!(crate::options::frame_link_config(&sampled.options)),
+            metadata,
+        }
+        .to_bytes()
+    } else if kind.is_classification() {
         StatePayload {
             model,
             task: task!(ClassTarget {

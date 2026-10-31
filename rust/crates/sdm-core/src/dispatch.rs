@@ -64,6 +64,15 @@ pub fn start(
         Operation::TabularArrow(request) => Run::new(move |asker| async move {
             crate::tabular_arrow::run(asker, request, attachments, facts, zones).await
         }),
+        Operation::FrameSession(input) => Run::new(move |asker| async move {
+            crate::frame_session::run(asker, input, attachments).await
+        }),
+        Operation::PrepareFrameGraph(input) => Run::new(move |asker| async move {
+            crate::materialize::frames::prepare(&asker, input, attachments, &facts)
+        }),
+        Operation::MaterializeFrames(input) => Run::new(move |asker| async move {
+            crate::materialize::frames::materialize(asker, input, attachments, facts, zones).await
+        }),
         Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {
             crate::session::count_overlap(&asker, request, attachments)
         }),
@@ -117,6 +126,13 @@ pub fn start(
         Operation::InspectObservedKeys(request) => Run::new(move |asker| async move {
             crate::direct::inspect_observed_keys(&asker, request, attachments)
         }),
+        Operation::AssembleFrameSchema(request) => {
+            let input: sdm_contract::frames::AssembleFrameSchema =
+                take_json(&mut attachments, request.input)?;
+            Run::new(
+                move |asker| async move { crate::direct::assemble_frame_schema(&asker, input) },
+            )
+        }
         Operation::ObserveDirectSchema(request) => {
             let input: sdm_contract::direct::schema::SchemaObservation =
                 take_json(&mut attachments, request.input)?;
@@ -678,6 +694,7 @@ pub(crate) fn materialize(
             // this provider and schema (decision E52).
             let inputs =
                 move |description, source: String, pending, types| crate::materialize::Inputs {
+                    frames: None,
                     memo: memo.filter(|memo| memo.source == source),
                     source,
                     description,

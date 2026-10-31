@@ -118,6 +118,8 @@ class FittedModel:
     _closed: bool
     _tabular_session: dict[str, Any] | None
     _tabular_session_keys: bytes
+    _relational_session: dict[str, Any] | None
+    _relational_session_pinned: bytes
 
     def __init__(self) -> None:
         raise TypeError(
@@ -156,6 +158,8 @@ class FittedModel:
         fitted._closed = False
         fitted._tabular_session = None
         fitted._tabular_session_keys = b''
+        fitted._relational_session = None
+        fitted._relational_session_pinned = b''
         return fitted
 
     @property
@@ -189,6 +193,10 @@ class FittedModel:
                 f'question that many times. Ask it with predict()',
                 code='UNSUPPORTED_REQUEST',
             )
+        if getattr(self, '_relational_session', None) is not None:
+            from sdm_client._rust import frame_sessions
+
+            return frame_sessions.predict(self, request)
         if getattr(self, '_tabular_session', None) is not None:
             from sdm_client._rust import sessions
 
@@ -234,6 +242,11 @@ class FittedModel:
         asks for when it answers `429 Session maintenance is already pending;
         retry the request later` was the one thing the handle could not do.
         """
+        if getattr(self, '_relational_session', None) is not None:
+            from sdm_client._rust import frame_sessions
+
+            frame_sessions.close(self)
+            return
         if getattr(self, '_tabular_session', None) is not None:
             from sdm_client._rust import sessions
 
@@ -741,6 +754,14 @@ class SDMClient:
             from sdm_client._rust import sessions
 
             return sessions.fit(self, request, model, outputs, holdout)
+        if (
+            self._spec(model).model_id == 'kumo-relational'
+            and request.schema.source is None
+            and _routing.on_frames(_routing.FRAME_SESSIONS)
+        ):
+            from sdm_client._rust import frame_sessions
+
+            return frame_sessions.fit(self, request, model, outputs, holdout)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         held = _held_back(payload, holdout)
@@ -892,7 +913,10 @@ def _predicts_on_the_core(request: Request) -> Any | None:
         return None
     from sdm_client import _routing
 
-    if not _routing.on_the_core(source, _routing.PREDICT):
+    if source is None:
+        if not _routing.on_frames(_routing.FRAME_PREDICT):
+            return None
+    elif not _routing.on_the_core(source, _routing.PREDICT):
         return None
     from sdm_client._rust import predict as on_the_core
 

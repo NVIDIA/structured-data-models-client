@@ -303,6 +303,13 @@ fn attachment_object<'local>(
     attachment: Attachment,
 ) -> Result<JObject<'local>, jni::errors::Error> {
     Ok(match attachment {
+        Attachment::FrameGraph(_) => {
+            env.throw_new(
+                jni::jni_str!("java/lang/UnsupportedOperationException"),
+                jni::jni_str!("frame graph owners are not exposed by this Java binding"),
+            )?;
+            return Err(jni::errors::Error::JavaException);
+        }
         Attachment::Bytes(bytes) => env.byte_array_from_slice(&bytes)?.into(),
         Attachment::Arrow(data) => {
             let classes = CLASSES

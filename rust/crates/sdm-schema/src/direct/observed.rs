@@ -15,6 +15,100 @@ use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, Scalar, Sentence};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Full time decision for frame assembly, including link-dependent edit stamps.
+pub fn time_choice(observation: SchemaObservation) -> Result<(TimeChoice, Vec<String>), CoreError> {
+    let SchemaObservation::TimeChoice {
+        columns,
+        primary_key,
+        rows,
+        populations,
+        starts,
+    } = observation
+    else {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "frame time facts require a time observation",
+        ));
+    };
+
+    let expected: Vec<_> = columns
+        .iter()
+        .filter(|c| time_candidate(c, primary_key.as_deref()))
+        .map(|c| c.name.as_str())
+        .collect();
+    if expected
+        != populations
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>()
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native time populations do not match the eligible columns",
+        ));
+    }
+    let row_counts: Vec<_> = populations
+        .iter()
+        .map(|p| (p.name.clone(), p.rows))
+        .collect();
+    let ranges = populations
+        .into_iter()
+        .map(|p| {
+            (
+                p.name,
+                ColumnRange {
+                    held: p.held,
+                    same: p.same,
+                    low: None,
+                    start: None,
+                },
+            )
+        })
+        .collect();
+    let columns: Vec<_> = columns.into_iter().map(inferred_column).collect();
+    let key: Vec<_> = primary_key.into_iter().collect();
+    let mut whole = WholeTable {
+        rows,
+        columns: ranges,
+    };
+    let mut choice = crate::infer::choose_direct_populations(&columns, &key, &whole, &row_counts)?;
+    if let Some(starts) = starts {
+        if choice.how != Some(Taken::Earliest)
+            || starts.iter().map(|(name, _)| name).ne(choice.among.iter())
+        {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "native starts do not match the time finalists",
+            ));
+        }
+        for (name, start) in starts {
+            let value = start
+                .nanos
+                .map(|v| {
+                    v.parse::<i128>().map_err(|_| {
+                        CoreError::protocol(
+                            Sentence::InvalidMessage,
+                            "native time start is not exact nanoseconds",
+                        )
+                    })
+                })
+                .transpose()?;
+            if let Some((_, range)) = whole.columns.iter_mut().find(|(column, _)| *column == name) {
+                range.start = value;
+            }
+        }
+        choice = crate::infer::choose_direct_populations(&columns, &key, &whole, &row_counts)?;
+        Ok((choice, vec![]))
+    } else {
+        let earliest = if choice.how == Some(Taken::Earliest) {
+            choice.among.clone()
+        } else {
+            vec![]
+        };
+        Ok((choice, earliest))
+    }
+}
+
 fn key_candidate(column: &ObservedColumn) -> bool {
     let name = column.name.to_lowercase();
     ["_id", "_key", "id", "key"]
@@ -199,98 +293,11 @@ pub fn observe(input: SchemaObservation) -> Result<(ObservedSchema, Vec<CoreWarn
                 .map(|c| c.name)
                 .collect(),
         },
-        SchemaObservation::TimeChoice {
-            columns,
-            primary_key,
-            rows,
-            populations,
-            starts,
-        } => {
-            let expected: Vec<_> = columns
-                .iter()
-                .filter(|c| time_candidate(c, primary_key.as_deref()))
-                .map(|c| c.name.as_str())
-                .collect();
-            if expected
-                != populations
-                    .iter()
-                    .map(|p| p.name.as_str())
-                    .collect::<Vec<_>>()
-            {
-                return Err(CoreError::protocol(
-                    Sentence::InvalidMessage,
-                    "native time populations do not match the eligible columns",
-                ));
-            }
-            let row_counts: Vec<_> = populations
-                .iter()
-                .map(|p| (p.name.clone(), p.rows))
-                .collect();
-            let ranges = populations
-                .into_iter()
-                .map(|p| {
-                    (
-                        p.name,
-                        ColumnRange {
-                            held: p.held,
-                            same: p.same,
-                            low: None,
-                            start: None,
-                        },
-                    )
-                })
-                .collect();
-            let columns: Vec<_> = columns.into_iter().map(inferred_column).collect();
-            let key: Vec<_> = primary_key.into_iter().collect();
-            let mut whole = WholeTable {
-                rows,
-                columns: ranges,
-            };
-            let mut choice =
-                crate::infer::choose_direct_populations(&columns, &key, &whole, &row_counts)?;
-            if let Some(starts) = starts {
-                if choice.how != Some(Taken::Earliest)
-                    || starts.iter().map(|(name, _)| name).ne(choice.among.iter())
-                {
-                    return Err(CoreError::protocol(
-                        Sentence::InvalidMessage,
-                        "native starts do not match the time finalists",
-                    ));
-                }
-                for (name, start) in starts {
-                    let value = start
-                        .nanos
-                        .map(|v| {
-                            v.parse::<i128>().map_err(|_| {
-                                CoreError::protocol(
-                                    Sentence::InvalidMessage,
-                                    "native time start is not exact nanoseconds",
-                                )
-                            })
-                        })
-                        .transpose()?;
-                    if let Some((_, range)) =
-                        whole.columns.iter_mut().find(|(column, _)| *column == name)
-                    {
-                        range.start = value;
-                    }
-                }
-                choice =
-                    crate::infer::choose_direct_populations(&columns, &key, &whole, &row_counts)?;
-                ObservedSchema::Time {
-                    column: choice.column,
-                    earliest: vec![],
-                }
-            } else {
-                let earliest = if choice.how == Some(Taken::Earliest) {
-                    choice.among
-                } else {
-                    vec![]
-                };
-                ObservedSchema::Time {
-                    column: choice.column,
-                    earliest,
-                }
+        observation @ SchemaObservation::TimeChoice { .. } => {
+            let (choice, earliest) = time_choice(observation)?;
+            ObservedSchema::Time {
+                column: choice.column,
+                earliest,
             }
         }
         SchemaObservation::CategoricalAdvice {

@@ -443,9 +443,30 @@ TABULAR_INDICES = (
 TABULAR_FRAME = ('query.materialize/predict-frame/frames',)
 TABULAR_MATERIALIZERS = TABULAR_INDICES + TABULAR_FRAME
 
+# Frame relational and Tabular share the ordinary indices path identifiers.
+# A relational materializer can produce all six task kinds, so force them
+# together; direct Tabular preparation retains its existing route group.
+FRAME_MATERIALIZE = _on(MATERIALIZE_DUCKDB, 'frames')
+FRAME_PREDICT = _on(PREDICT_DUCKDB, 'frames')
+FRAME_SCHEMA = (
+    'schema.from-data/frames/frames',
+    'schema.from-data/mapping/frames',
+)
+FRAME_SESSIONS = tuple(
+    f'{operation}/{kind}/frames'
+    for operation in ('client.fit', 'fitted.predict')
+    for kind in ('binary', 'multiclass', 'regression')
+)
+FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA + FRAME_SESSIONS
+
+
 CORE_ROUTED = frozenset(
     S0
     + CAPABILITIES
+    + FRAME_ROUTES
+    + DIRECT_CONSUMERS
+    + TABULAR_MATERIALIZERS
+    + TABULAR_SESSIONS
     + FROM_SOURCE_DUCKDB
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB
@@ -479,7 +500,7 @@ CORE_ROUTED = frozenset(
 )
 
 
-#: The Phase 3 defaults. Other paths retain their route until their slice
+#: The Phase 3 and in-memory Phase 4 defaults. Other paths retain their route until their slice
 #: is implemented; edits and inspection of a core-held schema inherit its
 #: source route rather than choosing another route at each accessor.
 ROUTES: dict[str, str] = {
@@ -509,6 +530,7 @@ def forced() -> frozenset[str]:
             and path not in DIRECT_CONSUMERS
             and path not in TABULAR_MATERIALIZERS
             and path not in TABULAR_SESSIONS
+            and path not in FRAME_ROUTES
         ):
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
@@ -561,3 +583,8 @@ def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
     if kind is None or kind not in paths:
         return False
     return route(paths[kind]) == 'core'
+
+
+def on_frames(paths: tuple[str, ...] = FRAME_MATERIALIZE) -> bool:
+    """Whether the explicitly selected source-less operation uses Rust."""
+    return route(paths) == 'core'

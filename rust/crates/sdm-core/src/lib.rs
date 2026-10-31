@@ -54,3 +54,7 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
 pub use sdm_request::predict::{Capabilities, capabilities};
+
+pub use materialize::frames::FrameGraph;
+
+mod frame_session;

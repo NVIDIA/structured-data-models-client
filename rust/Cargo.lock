@@ -1670,6 +1670,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "arrow-select",
  "half",
  "jiff",
  "sdm-contract",
@@ -1683,6 +1684,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
+ "arrow-data",
  "arrow-schema",
  "arrow-select",
  "half",
