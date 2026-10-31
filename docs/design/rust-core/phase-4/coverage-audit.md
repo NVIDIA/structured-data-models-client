@@ -31,3 +31,14 @@ Status: investigating from baseline `cb64d1cca`; previous completion claims are 
 A short human-readable support matrix and API-parity table in this document, with detailed machine-readable cases/evidence alongside it if needed.
 A prioritized list of actual implementation gaps, active legacy paths, test gaps and explicitly deferred items.
 Reproducible tests/logs for route claims, with credentials and user data excluded.
+
+## Confirmed findings so far
+
+| Finding | Evidence | Meaning |
+|---|---|---|
+| In-memory PQL still calls the old Python validator for both models | Installed public materialization probe: one `predictive_query.validate` call per model, with route override absent; equivalent DuckDB Relational probe recorded zero | Rust sampling does not yet mean the old client is unused |
+| Java warehouse materialization rejects decomposed queries | `PredictiveQuery.java` checks `state.inParts()` and refuses | Ranking/forecast parity needs task-specific verification |
+| Original Phase 4 exit names a still-refused custom-provider time mode | Migration plan names `text_time_rules`; Rust still refuses `ClientRules` | Ordinary built-in connector text timestamps work, but the literal original exit needs reconciliation |
+
+The first installed warehouse trace covered ten link/ranking tests and saw dispatcher/formatting helpers, but no legacy engine execution.
+This is narrow evidence, not a claim about all supported combinations.
