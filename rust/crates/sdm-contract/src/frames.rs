@@ -10,6 +10,14 @@ use crate::ops::{GivenCandidate, Seed};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Infer and assemble Arrow-native tables without language-specific observations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DescribeFrameTables {
+    pub names: AttachmentId,
+    pub tables: Vec<AttachmentId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareFrameGraph {

@@ -133,6 +133,14 @@ class RelationalTest {
     return result;
   }
 
+  @Test void candidateNumbersKeepTheirExactValuesAcrossTheBoundary() {
+    List<Object> encoded = PredictiveQuery.candidates(List.of(new java.math.BigDecimal("0.1"), 0.1d, 0.1f,
+        9007199254740993L, 9007199254740992d, 1L, 1d));
+    assertFalse(encoded.subList(0, 6).contains("repeat"));
+    assertEquals("repeat", encoded.get(6));
+    assertEquals(Double.toString((double) 0.1f), map(map(encoded.get(2)).get("value")).get("v"));
+  }
+
   @Test void multipleTablesRequireExplicitRelationalAndSurviveCallerClosure() throws Exception {
     Schema schema = fixture(false, false);
     PredictiveQuery query = PredictiveQuery.parse(SCALAR);

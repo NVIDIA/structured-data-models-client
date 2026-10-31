@@ -24,6 +24,7 @@ public final class Request {
   private byte[] contextData;
   private byte[] predictData;
   private Map<String, Object> direct;
+  private com.nvidia.sdm.internal.FrameRequest frame;
 
   /** A model-neutral request from Arrow tables. The constructor takes an owned snapshot. */
   public Request(org.apache.arrow.vector.table.Table context,
@@ -88,6 +89,15 @@ public final class Request {
     this.facts = facts;
     this.inferenceAsked = List.copyOf(inferenceAsked);
   }
+
+  Request(Schema schema, com.nvidia.sdm.internal.FrameRequest frame, String query,
+      Results.QueryFacts facts, List<String> inferenceAsked) {
+    this.schema = schema; this.frame = frame; this.payloads = frame.payloads();
+    this.query = query; this.facts = facts; this.inferenceAsked = List.copyOf(inferenceAsked);
+    this.version = 0; this.batchRows = null;
+  }
+
+  com.nvidia.sdm.internal.FrameRequest frame() { return frame; }
 
   /** The schema the request was gathered from. */
   public Schema schema() {

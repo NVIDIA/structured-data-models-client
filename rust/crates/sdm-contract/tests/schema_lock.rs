@@ -447,6 +447,33 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
+    ("Operation/describe_frame_tables.names", "FrameTables.names"),
+    ("Operation/prepare_frame_graph.names", "FrameTables.names"),
+    ("Operation/prepare_frame_graph.schema", "Materialize.schema"),
+    (
+        "Operation/materialize_frames.input",
+        "MaterializeFrames.input",
+    ),
+    ("Operation/materialize_frames.values", "Materialize.values"),
+    (
+        "Operation/assemble_frame_schema.input",
+        "AssembleFrameSchema.input",
+    ),
+    ("Operation/fit.input", "FrameSession.input"),
+    ("Operation/predict.input", "FrameSession.input"),
+    ("Operation/close.input", "FrameSession.input"),
+    ("OperationResult/direct_value.value", "FrameSession.state"),
+    ("Operation/describe.input", "tabular_arrow_description"),
+    ("Operation/prepare.input", "tabular_arrow_request"),
+    ("Operation/predict.input", "tabular_arrow_prediction"),
+    ("Operation/materialize.input", "tabular_arrow_materialize"),
+    (
+        "Operation/materialize_predict.input",
+        "tabular_arrow_materialize",
+    ),
+    ("Operation/fit.input", "tabular_arrow_fit"),
+    ("Operation/score.input", "tabular_arrow_score"),
+    ("Operation/close.input", "tabular_arrow_session"),
     (
         "Operation/prepare_tabular_fit.holdout",
         "DirectValue.session_keys",
@@ -789,6 +816,31 @@ const JSON: &[(&str, &str)] = &[
 
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: &[(&str, &str)] = &[
+    ("Operation/fit.payloads", "encoded endpoint payloads"),
+    ("Operation/predict.payloads", "encoded endpoint payloads"),
+    ("Operation/predict.pinned", "encoded pinned context"),
+    ("Operation/describe_frame_tables.tables", "Arrow tables"),
+    ("Operation/prepare_frame_graph.tables", "Arrow tables"),
+    (
+        "Operation/materialize_frames.graph",
+        "retained native graph owner",
+    ),
+    ("Operation/materialize_frames.indices", "Arrow keys"),
+    (
+        "OperationResult/prepared_frame_graph.graph",
+        "retained native graph owner",
+    ),
+    ("Operation/describe.table", "Arrow table"),
+    ("Operation/prepare.context", "Arrow table"),
+    ("Operation/prepare.predict", "Arrow table"),
+    ("Operation/predict.context", "Arrow table"),
+    ("Operation/predict.predict", "Arrow table"),
+    ("Operation/materialize.table", "Arrow table"),
+    ("Operation/materialize_predict.table", "Arrow table"),
+    ("Operation/materialize_predict.predict", "Arrow table"),
+    ("Operation/fit.context", "Arrow table"),
+    ("Operation/fit.predict", "Arrow table"),
+    ("Operation/score.predict", "Arrow table"),
     (
         "Operation/prepare_tabular_fit.context",
         "the endpoint's encoded table bytes",

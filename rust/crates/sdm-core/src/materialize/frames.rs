@@ -238,9 +238,11 @@ pub(crate) fn prepare(
         let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {
             return Err(internal("frame table is not Arrow"));
         };
+        let data = crate::frame_schema::logical(data)?;
         let table = graph
             .table(&name)
             .ok_or_else(|| internal("frame table is absent from schema"))?;
+        let data = crate::frame_schema::graph_columns(data, table)?;
         let rows = times.read(asker, table, one_batch(&data)?)?;
         if tables.insert(name, rows).is_some() {
             return Err(internal("duplicate frame table name"));

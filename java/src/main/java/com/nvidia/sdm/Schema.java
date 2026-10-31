@@ -59,17 +59,27 @@ public final class Schema {
     this.conversionNotes = List.copyOf(conversionNotes);
   }
 
-  /** Describe one in-memory Arrow table for Tabular PQL, taking an owned snapshot. */
+  /** Describe named in-memory Arrow tables, taking owned snapshots before returning. */
   public static Schema fromData(Map<String, org.apache.arrow.vector.table.Table> tables) {
     Objects.requireNonNull(tables, "tables");
-    if (tables.size() != 1) throw new StructuredDataException(
-        "in-memory Java Tabular needs exactly one table", "INVALID_REQUEST", Map.of(), null);
-    Map.Entry<String, org.apache.arrow.vector.table.Table> entry = tables.entrySet().iterator().next();
-    byte[] bytes = com.nvidia.sdm.internal.ArrowTabular.snapshot(entry.getValue());
-    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("describe",
-        Map.of("entity_table", entry.getKey()), Map.of("table", bytes), null)) {
+    if (tables.isEmpty()) throw new StructuredDataException(
+        "an in-memory schema needs at least one table", "INVALID_REQUEST", Map.of(), null);
+    Map<String, byte[]> data = new LinkedHashMap<>();
+    Map<Integer, byte[]> imports = new LinkedHashMap<>();
+    List<Integer> ids = new ArrayList<>();
+    for (Map.Entry<String, org.apache.arrow.vector.table.Table> table : tables.entrySet()) {
+      if (table.getKey() == null || table.getKey().isEmpty()) throw new StructuredDataException(
+          "table names must be non-empty strings", "INVALID_REQUEST", Map.of(), null);
+      byte[] bytes = com.nvidia.sdm.internal.ArrowTabular.snapshot(table.getValue());
+      data.put(table.getKey(), bytes);
+      int id = imports.size() + 2;
+      ids.add(id); imports.put(id, bytes);
+    }
+    Map<String, Object> operation = Map.of("op", "describe_frame_tables", "names", 1, "tables", ids);
+    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(operation,
+        Map.of(1, Host.attachment(new ArrayList<>(data.keySet()))), imports, Host.Call.none())) {
       Schema schema = held(com.nvidia.sdm.internal.ArrowTabular.value(finished), null);
-      schema.data = Map.of(entry.getKey(), bytes);
+      schema.data = java.util.Collections.unmodifiableMap(data);
       return schema;
     }
   }

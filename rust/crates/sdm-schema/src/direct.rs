@@ -130,6 +130,16 @@ pub fn infer(
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<(HeldSchema, Vec<CoreWarning>), CoreError> {
+    let (held, _, warnings) = infer_with_time(name, schema, batches)?;
+    Ok((held, warnings))
+}
+
+/// Whole Arrow table inference retaining the time choice for multi-table assembly.
+pub fn infer_with_time(
+    name: &str,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<(HeldSchema, crate::infer::TimeChoice, Vec<CoreWarning>), CoreError> {
     check_name(name)?;
     for field in schema.fields() {
         check_name(field.name())?;
@@ -231,7 +241,7 @@ pub fn infer(
         columns,
         primary_key,
         time_column: time.column.clone(),
-        time,
+        time: time.clone(),
         left_out: vec![],
         unread_times: vec![],
         day_first: vec![],
@@ -249,7 +259,7 @@ pub fn infer(
         Some(Scalar::UInt64(repeated as u64)),
     )?;
     let held = crate::held::held(&built.description, &BTreeSet::new(), &BTreeMap::new());
-    Ok((held, built.warnings))
+    Ok((held, time, built.warnings))
 }
 
 /// Present target values, using the same equality as ordinary NumPy inference.

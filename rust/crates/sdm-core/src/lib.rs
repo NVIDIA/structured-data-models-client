@@ -57,4 +57,5 @@ pub use sdm_request::predict::{Capabilities, capabilities};
 
 pub use materialize::frames::FrameGraph;
 
+mod frame_schema;
 mod frame_session;

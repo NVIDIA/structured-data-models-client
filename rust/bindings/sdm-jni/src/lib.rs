@@ -295,7 +295,9 @@ fn attachments_from_java(
         let graph = graph_handles[index];
         let attachment = if !element.is_null() {
             if address != 0 || graph != 0 {
-                return Err(Failure::Usage("an attachment has more than one representation"));
+                return Err(Failure::Usage(
+                    "an attachment has more than one representation",
+                ));
             }
             Attachment::Bytes(env.convert_byte_array(&element)?)
         } else if graph != 0 {
@@ -691,7 +693,8 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_start<'caller>(
 ) -> jlong {
     entry(&mut unowned, |env| {
         let message = env.convert_byte_array(&message)?;
-        let (attachments, unreadable) = attachments_from_java(env, &ids, &bytes, &streams, &graphs)?;
+        let (attachments, unreadable) =
+            attachments_from_java(env, &ids, &bytes, &streams, &graphs)?;
         let run = HostRun::start_reading(&default_root(), &message, attachments, &unreadable)
             .map_err(Failure::Core)?;
         Ok(Box::into_raw(Box::new(run)) as jlong)
@@ -730,7 +733,8 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_reply<'caller>(
     entry(&mut unowned, |env| {
         let run = run_of(run)?;
         let message = env.convert_byte_array(&message)?;
-        let (attachments, unreadable) = attachments_from_java(env, &ids, &bytes, &streams, &graphs)?;
+        let (attachments, unreadable) =
+            attachments_from_java(env, &ids, &bytes, &streams, &graphs)?;
         run.reply_reading(&message, attachments, &unreadable)
             .map_err(Failure::Core)
     });

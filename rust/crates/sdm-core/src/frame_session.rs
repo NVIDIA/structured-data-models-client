@@ -21,6 +21,43 @@ use sdm_request::{
 };
 use sdm_wire::json::Value;
 
+// Compare string literals using PQL's lexer and decoder, not JSON's escape rules.
+// Original text remains in session state and on the model wire.
+fn canonical_query(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let Ok(tokens) = sdm_pql::lexer::tokenize(&chars) else {
+        return text.to_owned();
+    };
+    let mut lines = vec![0];
+    for (at, ch) in chars.iter().enumerate() {
+        if *ch == '\n' {
+            lines.push(at + 1);
+        }
+    }
+    let mut result = String::new();
+    let mut last = 0;
+    for token in tokens {
+        if token.kind != sdm_pql::lexer::Kind::Str {
+            continue;
+        }
+        let start = lines[token.line - 1] + token.column;
+        let end = start + token.text.chars().count();
+        let inner = &token.text[1..token.text.len() - 1];
+        if let Ok(value) = sdm_pql::escapes::unescape(inner) {
+            result.extend(chars[last..start].iter());
+            result.push_str(&serde_json::to_string(&value).expect("string serialization"));
+            last = end;
+        }
+    }
+    result.extend(chars[last..].iter());
+    result
+}
+fn normalize_question(question: &mut Option<sdm_contract::session::SessionQuestion>) {
+    if let Some(question) = question {
+        question.query = question.query.as_deref().map(canonical_query);
+    }
+}
+
 fn take(attached: &mut Attachments, id: AttachmentId) -> Result<Value, CoreError> {
     let Some(Attachment::Bytes(bytes)) = attached.remove(&id) else {
         return Err(internal("frame session attachment absent"));
@@ -180,7 +217,11 @@ pub(crate) async fn run(
             if state.closed {
                 return Err(invalid("this fitted model is closed"));
             }
-            if keys::check_question(state.question.as_ref(), question.as_ref()).is_some() {
+            let mut pinned_question = state.question.clone();
+            let mut asked_question = question.clone();
+            normalize_question(&mut pinned_question);
+            normalize_question(&mut asked_question);
+            if keys::check_question(pinned_question.as_ref(), asked_question.as_ref()).is_some() {
                 return Err(invalid(
                     "this session pinned a different question; fit again to ask something else",
                 ));
@@ -311,5 +352,25 @@ pub(crate) async fn run(
             }
             crate::direct::value(&asker, &state)
         }
+    }
+}
+
+#[cfg(test)]
+mod question_tests {
+    use super::canonical_query;
+    #[test]
+    fn quotes_follow_pql_literals_and_leave_identifiers_alone() {
+        assert_eq!(
+            canonical_query("PREDICT u.x = 'web' FOR EACH u.id"),
+            canonical_query("PREDICT u.x = \"web\" FOR EACH u.id")
+        );
+        assert_ne!(
+            canonical_query(r"PREDICT u.x = '\/' FOR EACH u.id"),
+            canonical_query("PREDICT u.x = '/' FOR EACH u.id")
+        );
+        assert_eq!(
+            canonical_query("PREDICT `u'web'`.x FOR EACH u.id"),
+            "PREDICT `u'web'`.x FOR EACH u.id"
+        );
     }
 }

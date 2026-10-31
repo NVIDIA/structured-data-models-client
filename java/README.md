@@ -35,6 +35,27 @@ For single-table PQL, use `Schema.fromData(Map.of("data", table))`, then the exi
 Warehouse-backed schemas continue to use the Relational path.
 Rust owns selection, validation and encoding in both paths; Java owns snapshots, HTTP and presentation.
 
+## In-memory Relational
+
+Use `Schema.fromData(Map.of("users", users, "orders", orders))` with Arrow Tables.
+Existing schema key, time-column and relationship setters apply.
+
+```java
+try (RelationalMaterializer sampler = new RelationalMaterializer(schema)) {
+  Request request = PredictiveQuery.parse("PREDICT users.value FOR EACH users.user_id")
+      .materialize(sampler, MaterializeOptions.builder().indices(1L, 2L).build());
+  PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+}
+```
+
+The reusable sampler owns the native graph and continuing RNG; close releases it.
+Its calls and close are serialized, and completed requests survive its closure.
+For a single call, select `.model(SdmClient.KUMO_RELATIONAL)` in the options passed to `materialize(schema, options)`.
+Omitting that selection preserves the existing single-table Tabular default.
+Static/temporal targets, links, ranking and forecasts use Rust sampling; ordinary requests also support `fit`, fitted `predict` and `close`.
+Sessions require a compatible model endpoint and reject rewritten ranking/forecast requests.
+If a later model call fails, `exception.answered(allocator)` returns any completed rows as an optional Arrow reader that the caller closes.
+
 ## Coordinates
 
 | | |

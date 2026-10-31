@@ -144,6 +144,18 @@ public final class SdmClient implements AutoCloseable {
         return predicted(finished);
       }
     }
+    if (request.frame() != null) {
+      Map<String, Object> operation = new LinkedHashMap<>();
+      operation.put("op", "predict");
+      operation.put("state", request.frame().predictionState(SdmClient::requestId));
+      operation.put("model", model); operation.put("request_id", requestId());
+      operation.put("outputs", outputs == null ? List.of() : List.copyOf(outputs));
+      operation.put("default_outputs", outputs == null);
+      operation.put("inference_asked", request.inferenceAsked());
+      if (serving != null) operation.put("model_endpoint", serving.modelEndpoint());
+      try (Host.Finished finished = Host.run(operation, request.frame().attachments(),
+          new Host.Call(null, this::call, request.frame().held()))) { return predicted(finished); }
+    }
     List<byte[]> payloads = request.payloadBytes();
     Map<String, Object> state = new LinkedHashMap<>();
     state.put("version", request.version());
@@ -236,6 +248,13 @@ public final class SdmClient implements AutoCloseable {
   public synchronized FittedModel fit(Request request, String model, List<?> holdout) {
     requireOpen();
     Objects.requireNonNull(request, "request");
+    if (request.frame() != null) {
+      if (serving != null) throw new StructuredDataException("this transport does not support sessions",
+          "SESSIONS_UNSUPPORTED", Map.of(), null);
+      FittedModel fitted = RelationalSessions.fit(this, request, model, holdout);
+      sessions.add(fitted);
+      return fitted;
+    }
     if (!request.direct()) throw new StructuredDataException("fit needs an in-memory Tabular request",
         "UNSUPPORTED_REQUEST", Map.of(), null);
     if (serving != null) throw new StructuredDataException("this transport does not support sessions",

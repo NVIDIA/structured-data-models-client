@@ -26,7 +26,7 @@ fn invalid(message: &str) -> CoreError {
 
 /// Normalize physical Arrow types into the shared typed-column representation.
 /// All metadata is derived here from Arrow itself, never a claimed Python origin.
-fn normalize(data: ArrowData) -> Result<ArrowData, CoreError> {
+pub(crate) fn normalize(data: ArrowData) -> Result<ArrowData, CoreError> {
     let mut fields = Vec::new();
     let mut types = Vec::new();
     for field in data.schema.fields() {

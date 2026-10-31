@@ -37,6 +37,7 @@ use crate::types::ColumnType;
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     FrameSession(crate::frame_session::FrameSessionOperation),
+    DescribeFrameTables(crate::frames::DescribeFrameTables),
     PrepareFrameGraph(crate::frames::PrepareFrameGraph),
     MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
@@ -117,6 +118,7 @@ impl Operation {
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::ValidateQuery(_) => "validate_query",
             Operation::FrameSession(_) => "frame_session",
+            Operation::DescribeFrameTables(_) => "describe_frame_tables",
             Operation::PrepareFrameGraph(_) => "prepare_frame_graph",
             Operation::MaterializeFrames(_) => "materialize_frames",
             Operation::PrepareTabularFit(_) => "prepare_tabular_fit",
@@ -226,6 +228,11 @@ impl Operation {
                         .collect(),
                     F::Close { input } => vec![(*input, Bytes)],
                 }
+            }
+            Operation::DescribeFrameTables(v) => {
+                let mut ids = vec![(v.names, Bytes)];
+                ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
+                ids
             }
             Operation::PrepareFrameGraph(v) => {
                 let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
@@ -1793,6 +1800,10 @@ pub struct Attachments {
     pub observedirectdtype_input: crate::direct::dtype::DtypeObservation,
     #[schemars(rename = "AssembleFrameSchema.input")]
     pub assembleframeschema_input: crate::frames::AssembleFrameSchema,
+    #[schemars(rename = "FrameTables.names")]
+    pub frame_tables_names: Vec<String>,
+    #[schemars(rename = "MaterializeFrames.input")]
+    pub materialize_frames_input: crate::frames::FrameCall,
     #[schemars(rename = "ObserveDirectSchema.input")]
     pub observedirectschema_input: crate::direct::schema::SchemaObservation,
     #[schemars(rename = "DirectValue.observed_schema")]

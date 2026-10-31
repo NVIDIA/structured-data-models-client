@@ -12,10 +12,16 @@ import java.util.Map;
 public final class FittedModel implements AutoCloseable {
   private final SdmClient client;
   private Map<String, Object> session;
+  private byte[] relationalPinned;
 
   FittedModel(SdmClient client, Map<String, Object> session) {
     this.client = client;
     this.session = session;
+  }
+
+  FittedModel(SdmClient client, Map<String, Object> session, byte[] pinned) {
+    this(client, session);
+    this.relationalPinned = pinned;
   }
 
   @SuppressWarnings("unchecked")
@@ -27,6 +33,8 @@ public final class FittedModel implements AutoCloseable {
   /** Score using the schema and examples uploaded at fit; this request's context is not sent. */
   public synchronized PredictionResult predict(Request request) {
     client.requireOpen();
+    if (isClosed()) throw new StructuredDataException("this fitted model is closed", "INVALID_CONFIGURATION", Map.of(), null);
+    if (relationalPinned != null) return RelationalSessions.predict(client, state(), relationalPinned, request);
     if (!request.direct()) throw new StructuredDataException("fitted prediction needs an in-memory request",
         "INVALID_REQUEST", Map.of(), null);
     Map<String, Object> input = Map.of("session", session, "request", request.directInput(),
@@ -42,6 +50,12 @@ public final class FittedModel implements AutoCloseable {
   public synchronized void close() {
     if (isClosed()) return;
     client.requireOpen();
+    if (relationalPinned != null) {
+      session = RelationalSessions.close(client, state());
+      relationalPinned = null;
+      client.released(this);
+      return;
+    }
     try (Host.Finished finished = ArrowTabular.run("close", session, Map.of(), client.tabularTransport())) {
       session = ArrowTabular.value(finished);
       client.released(this);

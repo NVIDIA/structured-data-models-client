@@ -67,6 +67,9 @@ pub fn start(
         Operation::FrameSession(input) => Run::new(move |asker| async move {
             crate::frame_session::run(asker, input, attachments).await
         }),
+        Operation::DescribeFrameTables(input) => Run::new(move |asker| async move {
+            crate::frame_schema::describe(&asker, input, attachments)
+        }),
         Operation::PrepareFrameGraph(input) => Run::new(move |asker| async move {
             crate::materialize::frames::prepare(&asker, input, attachments, &facts)
         }),

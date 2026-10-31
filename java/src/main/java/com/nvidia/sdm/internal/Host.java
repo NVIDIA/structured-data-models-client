@@ -45,7 +45,7 @@ public final class Host {
   private static final Logger WARNINGS = LoggerFactory.getLogger("com.nvidia.sdm.warnings");
 
   /** The core's fields that say what a failed request had answered (T2.8c). */
-  private static final List<String> ANSWERED = List.of("calls_answered", "parts_answered");
+  private static final List<String> ANSWERED = List.of("calls_answered", "parts_answered", "rows_answered", "answered");
 
   private Host() {}
 
@@ -382,6 +382,18 @@ public final class Host {
         Map<String, Object> details = new LinkedHashMap<>();
         if (driverClass != null && "PROVIDER_ERROR".equals(failed.code())) {
           details.put("driver_class", driverClass);
+        }
+        Map<String, Object> failedFields = Messages.fields(failed.message());
+        if (failedFields.get("answered") instanceof Map<?, ?> answered) {
+          Object attachment = run.takeAttachment(((Number) answered.get("result")).intValue());
+          if (!(attachment instanceof NativeArrow arrow)) {
+            failed.message().close();
+            throw internal("the error's answered rows are absent");
+          }
+          try (arrow) {
+            details.put("answered", ArrowData.ipc(arrow.reader(ArrowData.allocator())));
+            details.put("rows_answered", answered.get("rows"));
+          }
         }
         StructuredDataException error = error(failed, call.held(), details);
         if (refused != null) {
