@@ -119,3 +119,32 @@ fn masked_float_nan_against_an_integer_is_unordered_without_decimal_signals() {
         );
     }
 }
+
+#[test]
+fn decimal_infinity_keeps_float_signals_and_infinite_equality() {
+    for negative in [false, true] {
+        let value = if negative {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
+        let input = facts(
+            vec![Atom::DecimalInfinity { negative }, floating(value)],
+            false,
+            false,
+            true,
+        );
+        assert!(
+            matches!(order_sampled(&input).unwrap(),Outcome::Sorted{already_ordered:true,numeric_diagnostics,..} if numeric_diagnostics==vec![Event::DecimalFloatOperation])
+        );
+        let trapped = facts(
+            vec![Atom::DecimalInfinity { negative }, floating(value)],
+            true,
+            false,
+            true,
+        );
+        assert!(
+            matches!(order_sampled(&trapped).unwrap(),Outcome::Refused{reason:Error::DecimalFloatOperation,numeric_diagnostics,..} if numeric_diagnostics==vec![Event::DecimalFloatOperation])
+        );
+    }
+}

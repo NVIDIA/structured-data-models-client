@@ -72,9 +72,10 @@ fn keys<'a>(values: &'a [Atom], missing: &[bool]) -> Result<Vec<&'a Atom>, CoreE
                     }
                 }
                 Atom::NativeMissing { .. } if *absent => {}
-                Atom::Decimal { .. } | Atom::Integer { .. } | Atom::Boolean { .. } => {
-                    atoms::validate_atom(value)?
-                }
+                Atom::Decimal { .. }
+                | Atom::DecimalInfinity { .. }
+                | Atom::Integer { .. }
+                | Atom::Boolean { .. } => atoms::validate_atom(value)?,
                 _ => return Err(invalid()),
             }
             Ok(value)
@@ -90,19 +91,25 @@ fn relation(
 ) -> Result<bool, Error> {
     let mixed = matches!(
         (a, b),
-        (Atom::Decimal { .. }, Atom::Floating { .. })
-            | (Atom::Floating { .. }, Atom::Decimal { .. })
+        (
+            Atom::Decimal { .. } | Atom::DecimalInfinity { .. },
+            Atom::Floating { .. }
+        ) | (
+            Atom::Floating { .. },
+            Atom::Decimal { .. } | Atom::DecimalInfinity { .. }
+        )
     );
     if mixed {
         diagnostics.decimal_float();
         if operator != Ordering::Equal && policy.float_trap {
             return Err(Error::DecimalFloatOperation);
         }
-        let (decimal, float, reverse) = if matches!(a, Atom::Decimal { .. }) {
-            (a, b, false)
-        } else {
-            (b, a, true)
-        };
+        let (decimal, float, reverse) =
+            if matches!(a, Atom::Decimal { .. } | Atom::DecimalInfinity { .. }) {
+                (a, b, false)
+            } else {
+                (b, a, true)
+            };
         let Atom::Floating { bits } = float else {
             unreachable!()
         };
@@ -122,6 +129,8 @@ fn relation(
                 .entry(*bits)
                 .or_insert_with(|| exact_float(value));
             atoms::compare_atom(decimal, exact).expect("exact decimal comparison")
+        } else if let Atom::DecimalInfinity { negative } = decimal {
+            value.is_sign_negative().cmp(negative)
         } else if value.is_sign_positive() {
             Ordering::Less
         } else {

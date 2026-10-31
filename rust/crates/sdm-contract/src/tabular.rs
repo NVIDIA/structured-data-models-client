@@ -357,6 +357,18 @@ pub enum TabularIndexScalar {
     Floating {
         bits: u64,
     },
+    Bytes {
+        values: Vec<u8>,
+    },
+    DecimalInfinity {
+        negative: bool,
+    },
+    /// Normalized civil duration, with a total range wider than i64 microseconds.
+    Duration {
+        days: i32,
+        seconds: u32,
+        micros: u32,
+    },
     Text {
         points: Vec<u32>,
     },

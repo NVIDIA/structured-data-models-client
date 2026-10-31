@@ -524,7 +524,7 @@ fn order_inner(
                     .zip(mask)
                     .filter_map(|(v, m)| (!m).then_some(v))
             };
-            if present().any(|v| matches!(v, Atom::Decimal { .. }))
+            if present().any(|v| matches!(v, Atom::Decimal { .. } | Atom::DecimalInfinity { .. }))
                 && present().any(|v| matches!(v, Atom::Floating { .. }))
             {
                 return Err(invalid());

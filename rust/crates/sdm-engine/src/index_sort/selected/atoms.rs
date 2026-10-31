@@ -51,6 +51,43 @@ pub(super) fn integer_float(a: &str, b: f64) -> Ordering {
 }
 pub(super) fn compare_atom(a: &Atom, b: &Atom) -> Option<Ordering> {
     match (a, b) {
+        (Atom::Bytes { values: a }, Atom::Bytes { values: b }) => Some(a.cmp(b)),
+        (
+            Atom::Duration {
+                days: a,
+                seconds: sa,
+                micros: ma,
+            },
+            Atom::Duration {
+                days: b,
+                seconds: sb,
+                micros: mb,
+            },
+        ) => {
+            let total = |d: i32, s: u32, m: u32| {
+                i128::from(d) * DAY_MICROS + i128::from(s) * 1_000_000 + i128::from(m)
+            };
+            Some(total(*a, *sa, *ma).cmp(&total(*b, *sb, *mb)))
+        }
+        (Atom::DecimalInfinity { negative: a }, Atom::DecimalInfinity { negative: b }) => {
+            Some(b.cmp(a))
+        }
+        (
+            Atom::DecimalInfinity { negative },
+            Atom::Decimal { .. } | Atom::Integer { .. } | Atom::Boolean { .. },
+        ) => Some(if *negative {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }),
+        (
+            Atom::Decimal { .. } | Atom::Integer { .. } | Atom::Boolean { .. },
+            Atom::DecimalInfinity { negative },
+        ) => Some(if *negative {
+            Ordering::Greater
+        } else {
+            Ordering::Less
+        }),
         (Atom::Text { points: a }, Atom::Text { points: b }) => Some(a.cmp(b)),
         (Atom::Date { ordinal: a }, Atom::Date { ordinal: b }) => Some(a.cmp(b)),
         (
@@ -184,7 +221,17 @@ pub(super) fn validate_atom(value: &Atom) -> Result<(), CoreError> {
         | Atom::FixedInteger { .. }
         | Atom::FixedFloating { .. } => false,
         Atom::Text { points } => points.iter().all(|p| *p <= 0x10ffff),
-        Atom::Boolean { .. } | Atom::Complex { .. } => true,
+        Atom::Boolean { .. }
+        | Atom::Complex { .. }
+        | Atom::Bytes { .. }
+        | Atom::DecimalInfinity { .. } => true,
+        Atom::Duration {
+            days,
+            seconds,
+            micros,
+        } => {
+            (-999_999_999..=999_999_999).contains(days) && *seconds < 86_400 && *micros < 1_000_000
+        }
         Atom::Decimal { digits, .. } => {
             !digits.is_empty()
                 && digits.bytes().all(|b| b.is_ascii_digit())
@@ -233,10 +280,12 @@ pub(super) fn pure_total_family<'a>(values: impl Iterator<Item = &'a Atom>) -> b
                 floating = true;
                 0
             }
-            Atom::Decimal { .. } => {
+            Atom::Decimal { .. } | Atom::DecimalInfinity { .. } => {
                 decimal = true;
                 0
             }
+            Atom::Bytes { .. } => 5,
+            Atom::Duration { .. } => 6,
             Atom::Text { .. } => 1,
             Atom::Date { .. } => 2,
             Atom::DateTime {

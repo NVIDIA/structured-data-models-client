@@ -635,3 +635,88 @@ fn bytes_level_composes_with_temporal_multiindex_consumer() {
         false,
     );
 }
+
+#[test]
+fn ordinary_byte_atoms_use_object_order_and_remain_distinct_from_text() {
+    let bytes = |v: &[u8]| TabularIndexScalar::Bytes { values: v.to_vec() };
+    check(
+        facts(
+            TabularIndexValues::Object {
+                values: vec![bytes(&[255]), bytes(&[0, 1]), bytes(&[]), bytes(&[0])],
+            },
+            vec![false; 4],
+        ),
+        vec![2, 3, 1, 0],
+        false,
+    );
+    let mixed = facts(
+        TabularIndexValues::Object {
+            values: vec![bytes(&[0]), TabularIndexScalar::Text { points: vec![0] }],
+        },
+        vec![false; 2],
+    );
+    assert!(matches!(
+        order_sampled(&mixed).unwrap(),
+        OrderedSampledTabularRows::Refused { .. }
+    ));
+}
+
+#[test]
+fn normalized_duration_extremes_compare_without_i64_overflow() {
+    let duration = |days, seconds, micros| TabularIndexScalar::Duration {
+        days,
+        seconds,
+        micros,
+    };
+    let mut input = facts(
+        TabularIndexValues::Object {
+            values: vec![
+                duration(999_999_999, 86_399, 999_999),
+                duration(-1, 86_399, 999_999),
+                duration(-999_999_999, 0, 0),
+                duration(0, 0, 0),
+            ],
+        },
+        vec![false; 4],
+    );
+    input.profile = TabularSortProfile::Unbound;
+    check(input, vec![2, 1, 3, 0], false);
+    for value in [
+        duration(1_000_000_000, 0, 0),
+        duration(0, 86_400, 0),
+        duration(0, 0, 1_000_000),
+    ] {
+        assert!(
+            order_sampled(&facts(
+                TabularIndexValues::Object {
+                    values: vec![value]
+                },
+                vec![false]
+            ))
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn decimal_infinities_bracket_finite_integer_and_decimal() {
+    check(
+        facts(
+            TabularIndexValues::Object {
+                values: vec![
+                    TabularIndexScalar::DecimalInfinity { negative: false },
+                    TabularIndexScalar::Integer { value: "0".into() },
+                    TabularIndexScalar::DecimalInfinity { negative: true },
+                    TabularIndexScalar::Decimal {
+                        negative: false,
+                        digits: "1".into(),
+                        exponent: -1,
+                    },
+                ],
+            },
+            vec![false; 4],
+        ),
+        vec![2, 1, 3, 0],
+        false,
+    );
+}
