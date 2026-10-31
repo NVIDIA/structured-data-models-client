@@ -42,3 +42,16 @@ Reproducible tests/logs for route claims, with credentials and user data exclude
 
 The first installed warehouse trace covered ten link/ranking tests and saw dispatcher/formatting helpers, but no legacy engine execution.
 This is narrow evidence, not a claim about all supported combinations.
+
+## Runtime routing evidence
+
+The audit runner `scripts/rust_core/phase4_route_audit.py` forces default routes at test-call entry and fails on legacy sampling, adapter prediction/session planning, normalization and decomposition helpers.
+It records function identities only, not data or credentials.
+
+- 61 selected warehouse/frame/Tabular lifecycle and materialization tests passed with no trapped legacy computation.
+- 52 tests recorded execution in the Rust host run loop; the rest include pre-dispatch validation/routing checks and are not counted as Rust execution proof.
+- 15 tests still invoked the old PQL validator; those calls are deliberately observed rather than hidden by the traps.
+- 11 separate old/core comparison cases explicitly selected the old route inside the test and triggered the traps, providing positive-control evidence.
+- These results cover local DuckDB/SQLite and in-memory journeys, not remote warehouse execution or every task combination.
+
+The full matrix and Java runtime audit are still in progress.
