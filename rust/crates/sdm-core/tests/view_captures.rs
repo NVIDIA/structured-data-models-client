@@ -469,7 +469,6 @@ fn replay_spec(
                 }
             }
             Step::CallModel(_) => panic!("a description called a model"),
-            Step::NumericOwner(_) => panic!("a description requested numeric observations"),
         }
     }
 }

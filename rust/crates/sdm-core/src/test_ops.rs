@@ -89,9 +89,7 @@ pub(crate) fn run(
                         }))
                     }
                     Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
-                    Reply::Model(_) | Reply::Numeric { .. } => {
-                        Err(internal("a fetch was answered by a different observation"))
-                    }
+                    Reply::Model(_) => Err(internal("a fetch was answered by the model")),
                     Reply::Fetch(FetchResult::Page { .. }) => {
                         Err(internal("a page reached the body"))
                     }

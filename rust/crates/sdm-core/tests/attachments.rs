@@ -42,7 +42,6 @@ const READ: &[&str] = &[
     "SampleTabularRows.input",
     "ObserveTabularMembership.input",
     "DecideTabularTask.input",
-    "OrderNumericOwners.input",
     "OrderSampledTabularRows.input",
     "SelectTabularRows.input",
     "CheckTabularCap.input",
@@ -277,8 +276,8 @@ fn a_retyped_or_dropped_decode_fails() {
 #[test]
 fn qualified_decode_types_keep_their_locked_shape() {
     assert_eq!(
-        canonical_type("sdm_contract::numeric_owner::OrderNumericOwners").unwrap(),
-        "OrderNumericOwners"
+        canonical_type("sdm_contract::tabular::SampleTabularRows").unwrap(),
+        "SampleTabularRows"
     );
     assert_eq!(
         canonical_type("Vec<sdm_contract::ops::GivenCandidate>").unwrap(),
@@ -286,7 +285,7 @@ fn qualified_decode_types_keep_their_locked_shape() {
     );
     assert!(canonical_type("Option<sdm_contract::ops::GivenCandidate>").is_err());
     let source = dispatch();
-    let original = "let input: sdm_contract::numeric_owner::OrderNumericOwners =";
+    let original = "let input: sdm_contract::tabular::SampleTabularRows =";
     let retyped = source.replace(
         original,
         "let input: sdm_contract::tabular::OrderSampledTabularRows =",
@@ -295,13 +294,13 @@ fn qualified_decode_types_keep_their_locked_shape() {
     assert_eq!(
         mismatches(&retyped),
         [
-            "OrderNumericOwners.input: dispatch decodes OrderSampledTabularRows, the lock OrderNumericOwners"
+            "SampleTabularRows.input: dispatch decodes OrderSampledTabularRows, the lock SampleTabularRows"
         ]
     );
-    let dropped=source.replace("let input: sdm_contract::numeric_owner::OrderNumericOwners =\n                take_json(&mut attachments, request.input)?;", "");
+    let dropped=source.replace("let input: sdm_contract::tabular::SampleTabularRows =\n                take_json(&mut attachments, request.input)?;", "");
     assert_ne!(dropped, source);
     assert_eq!(
         mismatches(&dropped),
-        ["OrderNumericOwners.input: in the lock, not decoded by dispatch"]
+        ["SampleTabularRows.input: in the lock, not decoded by dispatch"]
     );
 }

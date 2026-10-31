@@ -82,3 +82,12 @@ First finish one connected direct Tabular increment, then extend supported famil
 An integer/Boolean pilot is an increment, not completion of Tabular.
 Independent design review against the RCA precedes implementation.
 Two independent exact-source architecture/compatibility reviews precede executable checks; then verify public parity and relevant shared-path regressions and land the increment.
+
+## Numeric sorting scope clarification (owner decision, 2026-10-31)
+
+Keep sampled-index ordering on the existing one-way facts-to-result boundary.
+Rust owns numeric conversion, comparison and sorting; do not introduce per-comparison host callbacks or a numeric Run step.
+Preserving arbitrary custom NumPy error handlers used by synthetic mutation tests is not required.
+This does not relax ordinary numeric precision, rounding, missingness or overflow/error requirements.
+Do not introduce a Python sorting fallback for those synthetic handlers.
+The three existing Run steps and warehouse push-down boundaries remain unchanged.

@@ -401,23 +401,6 @@ impl HostRun {
                     };
                     run.submit_fetch(reply.id, result)
                 }
-                ControlMessage::NumericOwnerReply(reply) => {
-                    use sdm_contract::numeric_owner::NumericOwnerOutcome;
-                    let expected = match &reply.outcome {
-                        NumericOwnerOutcome::SortOwners {
-                            owners_and_facts,
-                            source_positions,
-                            missing_positions,
-                        } => vec![
-                            (*owners_and_facts, AttachmentKind::Bytes),
-                            (*source_positions, AttachmentKind::Bytes),
-                            (*missing_positions, AttachmentKind::Bytes),
-                        ],
-                        _ => Vec::new(),
-                    };
-                    check_attachments(&expected, &attachments)?;
-                    run.submit_numeric(reply.id, reply.outcome, attachments)
-                }
                 ControlMessage::ModelReply(reply) => {
                     let result = match reply.outcome {
                         ModelOutcome::Response {
@@ -472,7 +455,7 @@ impl HostRun {
                     run.submit_model(reply.id, result)
                 }
                 _ => Err(invalid(
-                    "a run takes replies here: a fetch_reply, model_reply or numeric_owner_reply",
+                    "a run takes replies here: a fetch_reply or a model_reply",
                 )),
             }
         })

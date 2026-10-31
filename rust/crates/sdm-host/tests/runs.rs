@@ -354,7 +354,6 @@ fn fetching_run() -> Run {
                     CoreError::provider(&error).code.as_str().to_owned()
                 }
                 Reply::Model(_) => "model".into(),
-                Reply::Numeric { .. } => panic!("scan cannot request numeric observations"),
                 Reply::Fetch(FetchResult::Page { .. }) => "page".into(),
             });
         }

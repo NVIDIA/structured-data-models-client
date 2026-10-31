@@ -32,7 +32,6 @@ use sdm_contract::data::{
     AttachmentId, DataRequest, ExpectedSchema, FetchPlan, KeyData, ProviderCapabilities,
     ProviderError, Relation, RelationColumn,
 };
-use sdm_contract::numeric_owner::{NumericOwnerOutcome, NumericOwnerRequest, NumericOwnerStep};
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorKind, Sentence, Step};
@@ -113,10 +112,6 @@ pub enum ModelResult {
 pub enum Reply {
     Fetch(FetchResult),
     Model(ModelResult),
-    Numeric {
-        outcome: NumericOwnerOutcome,
-        attachments: Attachments,
-    },
 }
 
 /// Where a run is; see the module documentation.
@@ -126,7 +121,6 @@ pub enum RunState {
     /// The fetches still unanswered, in id order.
     AwaitingFetch(Vec<ReplyId>),
     AwaitingModel(ReplyId),
-    AwaitingNumeric(ReplyId),
     Finished,
     Cancelled,
     Poisoned,
@@ -137,10 +131,6 @@ enum State {
     /// Each unanswered fetch, with the schema it expects back.
     AwaitingFetch(BTreeMap<ReplyId, ExpectedSchema>),
     AwaitingModel(ReplyId),
-    AwaitingNumeric {
-        id: ReplyId,
-        request: NumericOwnerRequest,
-    },
     Finished,
     Cancelled,
     Poisoned,
@@ -159,7 +149,6 @@ struct Shared {
     /// Asked by the body since the last step.
     fetches: Vec<FetchStep>,
     calls: Vec<ModelCall>,
-    numeric: Vec<NumericOwnerStep>,
     /// Attached by the body (key sets, model bodies), not yet taken by the
     /// host.
     attachments: BTreeMap<AttachmentId, Attachment>,
@@ -638,16 +627,6 @@ impl Asker {
         }
     }
 
-    /// One closed, sequential numeric observation, separate from model/provider calls.
-    pub fn numeric_owner(&self, request: NumericOwnerRequest) -> Ask {
-        Ask {
-            shared: Arc::clone(&self.shared),
-            state: AskState::New(Asked::Numeric(request)),
-            budget: None,
-            raw: false,
-        }
-    }
-
     /// Attaches data a request names, such as a key set, and returns its id,
     /// or `INTERNAL_ERROR` once the run's ids are used up.
     pub fn attach(&self, attachment: Attachment) -> Result<AttachmentId, CoreError> {
@@ -708,7 +687,6 @@ fn exhausted(shared: &mut Shared, what: &str) -> CoreError {
 }
 
 enum Asked {
-    Numeric(NumericOwnerRequest),
     /// Boxed: a request and its plan are far larger than a model call.
     Fetch(Box<(DataRequest, FetchPlan)>),
     Call {
@@ -994,9 +972,6 @@ impl Future for Ask {
                 };
                 let mut fetch = None;
                 match asked {
-                    Asked::Numeric(request) => {
-                        shared.numeric.push(NumericOwnerStep { id, request })
-                    }
                     Asked::Fetch(asked) => {
                         let (request, plan) = (*asked).clone();
                         if this.raw {
@@ -1191,7 +1166,6 @@ impl Run {
             State::Ready => RunState::Ready,
             State::AwaitingFetch(ids) => RunState::AwaitingFetch(ids.keys().copied().collect()),
             State::AwaitingModel(id) => RunState::AwaitingModel(*id),
-            State::AwaitingNumeric { id, .. } => RunState::AwaitingNumeric(*id),
             State::Finished => RunState::Finished,
             State::Cancelled => RunState::Cancelled,
             State::Poisoned => RunState::Poisoned,
@@ -1229,12 +1203,6 @@ impl Run {
                     format!("{} fetches have no reply yet", ids.len()),
                 ));
             }
-            State::AwaitingNumeric { id, .. } => {
-                return Err(protocol(
-                    Sentence::ReplyMissing,
-                    format!("numeric observation {} has no reply yet", id.0),
-                ));
-            }
             State::AwaitingModel(id) => {
                 return Err(protocol(
                     Sentence::ReplyMissing,
@@ -1268,10 +1236,9 @@ impl Run {
                 }
                 let fetches = mem::take(&mut shared.fetches);
                 let mut calls = mem::take(&mut shared.calls);
-                let mut numeric = mem::take(&mut shared.numeric);
                 drop(shared);
-                let step = match (fetches.is_empty(), calls.len(), numeric.len()) {
-                    (false, 0, 0) => {
+                let step = match (fetches.is_empty(), calls.len()) {
+                    (false, 0) => {
                         self.state = State::AwaitingFetch(
                             fetches
                                 .iter()
@@ -1280,27 +1247,19 @@ impl Run {
                         );
                         Step::Fetch { requests: fetches }
                     }
-                    (true, 1, 0) => {
+                    (true, 1) => {
                         let call = calls.pop().expect("one call");
                         self.state = State::AwaitingModel(call.id);
                         Step::CallModel(call)
                     }
-                    (true, 0, 1) => {
-                        let step = numeric.pop().expect("one numeric observation");
-                        self.state = State::AwaitingNumeric {
-                            id: step.id,
-                            request: step.request.clone(),
-                        };
-                        Step::NumericOwner(step)
-                    }
-                    (true, 0, 0) => {
+                    (true, 0) => {
                         self.state = State::Finished;
                         return Err(internal("the operation waited on nothing it asked for"));
                     }
                     _ => {
                         self.state = State::Finished;
                         return Err(internal(
-                            "the operation mixed exclusive model/numeric observations with other requests",
+                            "the operation waited on a model call together with other requests",
                         ));
                     }
                 };
@@ -1385,10 +1344,6 @@ impl Run {
                 Sentence::WrongReply,
                 format!("{} is a model call, not a fetch", id.0),
             )),
-            State::AwaitingNumeric { id: pending, .. } if *pending == id => Err(protocol(
-                Sentence::WrongReply,
-                "fetch reply names a numeric observation",
-            )),
             _ => Err(unknown(id)),
         }
     }
@@ -1408,71 +1363,8 @@ impl Run {
                 Sentence::WrongReply,
                 format!("{} is a fetch, not a model call", id.0),
             )),
-            State::AwaitingNumeric { id: pending, .. } if *pending == id => Err(protocol(
-                Sentence::WrongReply,
-                "model reply names a numeric observation",
-            )),
             _ => Err(unknown(id)),
         }
-    }
-
-    /// Accept exactly the action awaited, without advancing on a mismatched reply.
-    pub fn submit_numeric(
-        &mut self,
-        id: ReplyId,
-        outcome: NumericOwnerOutcome,
-        attachments: Attachments,
-    ) -> Result<(), CoreError> {
-        if let Some(error) = self.terminal() {
-            return Err(error);
-        }
-        let request = match &self.state {
-            State::AwaitingNumeric {
-                id: pending,
-                request,
-            } if *pending == id => request,
-            State::AwaitingFetch(pending) if pending.contains_key(&id) => {
-                return Err(protocol(
-                    Sentence::WrongReply,
-                    "numeric reply names a fetch",
-                ));
-            }
-            State::AwaitingModel(pending) if *pending == id => {
-                return Err(protocol(
-                    Sentence::WrongReply,
-                    "numeric reply names a model call",
-                ));
-            }
-            _ => return Err(unknown(id)),
-        };
-        use NumericOwnerOutcome as O;
-        use NumericOwnerRequest as R;
-        let matches = matches!(
-            (request, &outcome),
-            (R::LoadProbeOwner { .. }, O::ProbeOwner { .. })
-                | (
-                    R::ObserveComparisonEnvironment,
-                    O::ComparisonEnvironment { .. }
-                )
-                | (R::CaptureSortOwners, O::SortOwners { .. })
-                | (R::ConvertOwner { .. }, O::Converted { .. })
-                | (_, O::Raised { .. })
-        );
-        if !matches {
-            return Err(protocol(
-                Sentence::WrongReply,
-                "numeric reply does not answer the requested observation",
-            ));
-        }
-        self.state = State::Ready;
-        lock(&self.shared).replies.insert(
-            id,
-            Reply::Numeric {
-                outcome,
-                attachments,
-            },
-        );
-        Ok(())
     }
 
     /// Cancels the run: its body is dropped and every later call is refused

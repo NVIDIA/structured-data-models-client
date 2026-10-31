@@ -287,7 +287,6 @@ fn describe_view(definition: &str, spec: SourceSpec) -> (SourceDescription, Vec<
                 }
             }
             Step::CallModel(_) => panic!("a description called a model"),
-            Step::NumericOwner(_) => panic!("a description requested numeric observations"),
         }
     };
     (description, read)

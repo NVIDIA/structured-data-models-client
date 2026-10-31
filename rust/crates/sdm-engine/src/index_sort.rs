@@ -386,7 +386,6 @@ fn partition<T: SimdKey>(
 
 mod scalar;
 mod selected;
-pub use selected::numeric_owner;
 pub use selected::order_sampled;
 
 pub use scalar::scalar_argsort;

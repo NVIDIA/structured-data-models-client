@@ -268,12 +268,6 @@ pub enum NumericComparisonProfile {
     /// signed64/unsigned64 boundary. This policy must be bound to the producer's
     /// common-type promotion mode, not a weak or warning-producing mode.
     ExactIntegerPairs,
-    /// Weak scalar rules without the exact unbounded/fixed-integer shortcut;
-    /// reached integer conversion requires the numeric-owner operation.
-    WeakFixedIntegerPairs,
-    /// Legacy floating rules with an unconditional exact unbounded/fixed-
-    /// integer comparison shortcut, even after a mutable-mode change.
-    LegacyExactUnboundedIntegers,
     /// Compare integer pairs exactly. A plain binary64 operand paired with a
     /// fixed floating owner is narrowed to that owner's width; an unbounded
     /// integer paired with a fixed floating owner converts through binary64 and

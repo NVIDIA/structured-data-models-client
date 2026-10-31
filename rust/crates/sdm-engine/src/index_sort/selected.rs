@@ -16,7 +16,6 @@ use std::cmp::Ordering;
 
 mod atoms;
 mod numeric_objects;
-pub mod numeric_owner;
 mod object_sort;
 mod object_stable;
 #[cfg(test)]

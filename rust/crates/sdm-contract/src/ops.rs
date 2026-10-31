@@ -44,7 +44,6 @@ pub enum Operation {
     ObserveTabularMembership(crate::direct::DirectInput),
     DecideTabularTask(crate::direct::DirectInput),
     OrderSampledTabularRows(crate::direct::DirectInput),
-    OrderNumericOwners(crate::direct::DirectInput),
     SelectTabularRows(crate::direct::DirectInput),
     CheckTabularCap(crate::direct::DirectInput),
     CheckDirectShape(crate::direct::DirectInput),
@@ -107,7 +106,6 @@ impl Operation {
             Operation::ObserveTabularMembership(_) => "observe_tabular_membership",
             Operation::DecideTabularTask(_) => "decide_tabular_task",
             Operation::OrderSampledTabularRows(_) => "order_sampled_tabular_rows",
-            Operation::OrderNumericOwners(_) => "order_numeric_owners",
             Operation::SelectTabularRows(_) => "select_tabular_rows",
             Operation::CheckTabularCap(_) => "check_tabular_cap",
             Operation::CheckDirectShape(_) => "check_direct_shape",
@@ -161,7 +159,6 @@ impl Operation {
             | Operation::ObserveTabularMembership(v)
             | Operation::DecideTabularTask(v)
             | Operation::OrderSampledTabularRows(v)
-            | Operation::OrderNumericOwners(v)
             | Operation::SelectTabularRows(v)
             | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
@@ -1623,14 +1620,6 @@ pub struct Attachments {
     pub decide_tabular_task_input: crate::tabular::DecideTabularTask,
     #[schemars(rename = "DirectValue.decide_tabular_task")]
     pub decide_tabular_task_output: crate::tabular::TabularTaskDecision,
-    #[schemars(rename = "OrderNumericOwners.input")]
-    pub order_numeric_owners_input: crate::numeric_owner::OrderNumericOwners,
-    #[schemars(rename = "DirectValue.order_numeric_owners")]
-    pub order_numeric_owners_output: crate::numeric_owner::OrderedNumericOwners,
-    #[schemars(rename = "NumericOwnerReply.owners_and_facts")]
-    pub numeric_owner_facts: Vec<crate::numeric_owner::NumericOwnerFact>,
-    #[schemars(rename = "NumericOwnerReply.positions")]
-    pub numeric_owner_positions: Vec<usize>,
     #[schemars(rename = "OrderSampledTabularRows.input")]
     pub order_sampled_tabular_rows_input: crate::tabular::OrderSampledTabularRows,
     #[schemars(rename = "DirectValue.order_sampled_tabular_rows")]
