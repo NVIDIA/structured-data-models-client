@@ -54,11 +54,12 @@ For a bug, document the intended behavior and add a regression check for the imp
 Faster execution and lower memory use are welcome when correctness is preserved and measurements support the claim.
 Do not weaken temporal cutoffs, target exclusions or row attribution just to make comparisons pass.
 
-## Verification and remaining delivery
+## Verification
 
 Independent architecture and compatibility reviews cover graph ownership, randomness, temporal cutoffs and sessions.
 Paired live regression and temporal-link journeys matched the old client's result values, identities and order through prediction, fit, two scores and close.
-The live candidate preceded the final diagnostic/advisory fixes; final consolidated testing and branch integration remain delivery gates.
+The live candidate preceded the final diagnostic/advisory fixes; consolidated tests and focused checks of the final installed package are complete.
+All 13 findings from the consolidated run were resolved and passed together on rerun; the separate legacy engine suite and 190 targeted Rust tests also passed.
 
 One 60,000-row comparison measured repeat materialization at 3.7 ms versus 22.7 ms previously, but first materialization was slower (149.4 versus 137.9 ms) and whole-process peak RSS higher (150.7 versus 136.9 MiB).
 This is one workload, not a general speed or memory improvement claim.

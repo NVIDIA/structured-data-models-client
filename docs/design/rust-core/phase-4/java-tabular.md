@@ -85,9 +85,9 @@ Keep existing pandas mutation/index behavior unchanged and review pandas index m
 
 Java supports direct prediction, PQL with entity keys or supplied Arrow rows, and fitted sessions.
 Closing the client attempts to close every owned session; a failed explicit session close can be retried.
-Independent architecture and compatibility reviews passed, and the final integrated JDK17 suite passed 258 tests with 13 environment-gated skips.
+Independent architecture and compatibility reviews passed; the final integrated JDK17 suite ran 258 tests with zero failures and 13 environment-gated skips.
 A separate live comparison matched frozen Python predictions through direct prediction and fitted-session use.
-Final cross-package testing and branch integration remain delivery gates.
+Cross-package testing and the final installed-package checks are complete.
 
 A 10,000-row, three-column preparation probe took 39.6 ms and retained 244,720 IPC bytes alongside 393,248 bytes of caller Arrow allocation.
 These are construction and retained-storage measurements, not peak RSS or a comparative performance claim; transient and per-call allocations are additional.
