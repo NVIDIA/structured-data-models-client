@@ -3016,6 +3016,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         ))),
         None => Seed::from(DEFAULT_SEED),
     };
+    if frames.is_some() && seed.to_u128().is_none_or(|seed| seed > u32::MAX as u128) {
+        return Err(crate::compose::past_seed_range(OptionalRequest::SampleEntities.name(), u32::MAX as u64));
+    }
     let entropy = Entropy::from_hex(seed.magnitude_hex())
         .ok_or_else(|| internal("a seed's digits do not read"))?;
 
