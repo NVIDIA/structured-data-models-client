@@ -14,7 +14,7 @@ import pandas as pd
 
 CASES = [
     f'{width}/{entry}/{mode}/default/{direction}'
-    for width in ('float16', 'float32')
+    for width in ('float16', 'float32', 'multi_float32')
     for entry in ('indices', 'predict')
     for mode in ('ignore', 'raise', 'warn')
     for direction in ('forward', 'reverse')
@@ -60,7 +60,7 @@ def observe_case(name: str) -> dict[str, Any]:
 
     width, entry, mode, action, direction = name.split('/')
     n = 81 if entry == 'indices' else 10002
-    first = getattr(np, width)(1)
+    first = getattr(np, width.removeprefix('multi_'))(1)
     second = 128 if width == 'int8' else -1 if width == 'uint8' else 1e100
     pair = [first, second]
     if direction == 'reverse':
@@ -68,13 +68,22 @@ def observe_case(name: str) -> dict[str, Any]:
     labels = np.empty(n, dtype=object)
     for position in range(n):
         labels[position] = pair[position % 2]
+    index = pd.Index(labels, dtype=object)
+    if width.startswith('multi_'):
+        level = np.empty(2, dtype=object)
+        level[:] = pair
+        index = pd.MultiIndex(
+            levels=[pd.Index(level, dtype=object), pd.Index([0])],
+            codes=[np.arange(n) % 2, np.zeros(n, dtype=np.intp)],
+            verify_integrity=False,
+        )
     frame = pd.DataFrame(
         {
             'id': range(n),
             'feature': np.arange(n) * 0.5,
             'target': np.arange(n) + 100.0,
         },
-        index=pd.Index(labels, dtype=object),
+        index=index,
     )
     getmode = getattr(np, '_get_promotion_state', None)
     setmode = getattr(np, '_set_promotion_state', None)
