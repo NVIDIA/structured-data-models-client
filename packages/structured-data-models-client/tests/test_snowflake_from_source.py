@@ -37,7 +37,11 @@ import pyarrow.compute as pc
 import pytest
 from sdm_connectors import SnowflakeSource
 from snowflake.connector import SnowflakeConnection
-from snowflake.connector.errors import NotSupportedError, ProgrammingError
+from snowflake.connector.errors import (
+    Error,
+    NotSupportedError,
+    ProgrammingError,
+)
 
 from sdm_client import (
     KumoRelational,
@@ -162,6 +166,10 @@ class _Warehouse(SnowflakeConnection):
             else None
         )
         self._paramstyle = 'pyformat'
+        # Connector public methods route raised errors through PEP249 handlers.
+        # Keep that driver behavior without opening a warehouse connection.
+        self._messages = []
+        self._errorhandler = Error.default_errorhandler
         self._last: pa.Table | None = None
         self.upper: set[str] = set()
         self.fail: dict[str, Exception] = {}
