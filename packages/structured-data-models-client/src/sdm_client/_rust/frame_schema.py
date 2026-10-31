@@ -183,11 +183,15 @@ def from_data(
             )
     if relationships is not None:
         relationships = list(relationships)
-        if any(not isinstance(link, Relationship) for link in relationships):
-            raise StructuredDataError(
-                'each item in relationships must be a Relationship',
-                code='INVALID_REQUEST',
-            )
+        for link in relationships:
+            if not isinstance(link, Relationship):
+                raise StructuredDataError(
+                    f'a relationship must be a Relationship, got '
+                    f'{type(link).__name__}. Build one with '
+                    'Relationship(source_table, source_column, '
+                    'target_table, target_column)',
+                    code='INVALID_REQUEST',
+                )
     built, times = infer_tables(tables)
     result = assemble(
         cls,
