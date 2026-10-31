@@ -10,7 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Owned JSON-family values and their lossless native option representation. */
+/** Owned JSON-family values: integers retain their digits; fractional options use float64. */
 public final class DirectOptions {
   private DirectOptions() {}
 

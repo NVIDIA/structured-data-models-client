@@ -37,6 +37,7 @@ public final class RequestOptions {
     /** Explicit immutable schema; Rust checks it against the supplied tables. */
     public Builder schema(Schema schema) { this.schema = Objects.requireNonNull(schema); return this; }
     public Builder entityTable(String name) { entityTable = Objects.requireNonNull(name); return this; }
+    /** JSON-family values, copied on build; fractional values are sent as float64. */
     public Builder inference(Map<String, ?> values) { inference = Objects.requireNonNull(values); return this; }
     public Builder taskOptions(Map<String, ?> values) { taskOptions = Objects.requireNonNull(values); return this; }
     public RequestOptions build() { return new RequestOptions(this); }
