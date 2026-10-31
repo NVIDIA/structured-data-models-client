@@ -834,6 +834,7 @@ sentences! {
     InvalidMessage = "invalid_message", E::InvalidMessage;
     UnknownModel = "unknown_model", E::UnknownModel;
     MissingExtra = "missing_extra", E::MissingExtra;
+    FrameSessionInput = "frame_session_input", E::InvalidRequest;
     SessionsUnsupported = "sessions_unsupported", E::SessionsUnsupported;
     RelationNoPart = "relation_no_part", E::InvalidRequest, rule "relation";
     RelationTooManyParts = "relation_too_many_parts", E::UnsupportedRequest, rule "relation";

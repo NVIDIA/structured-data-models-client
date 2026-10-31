@@ -36,6 +36,7 @@ use crate::types::ColumnType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    FrameSession(crate::frame_session::FrameSessionOperation),
     PrepareFrameGraph(crate::frames::PrepareFrameGraph),
     MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
@@ -113,6 +114,7 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
+            Operation::FrameSession(_) => "frame_session",
             Operation::PrepareFrameGraph(_) => "prepare_frame_graph",
             Operation::MaterializeFrames(_) => "materialize_frames",
             Operation::PrepareTabularFit(_) => "prepare_tabular_fit",
@@ -176,6 +178,14 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::FrameSession(v) => {
+                use crate::frame_session::FrameSessionOperation as F;
+                match v {
+                    F::Fit {input,payloads} => std::iter::once((*input,Bytes)).chain(payloads.iter().map(|id|(*id,Bytes))).collect(),
+                    F::Predict {input,payloads,pinned} => std::iter::once((*input,Bytes)).chain(payloads.iter().map(|id|(*id,Bytes))).chain(std::iter::once((*pinned,Bytes))).collect(),
+                    F::Close {input} => vec![(*input,Bytes)],
+                }
+            }
             Operation::PrepareFrameGraph(v) => {
                 let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
                 ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
@@ -1770,6 +1780,10 @@ pub struct Attachments {
     pub binddirect_input: crate::direct::DirectCallFacts,
     #[schemars(rename = "DirectValue.bound")]
     pub directvalue_bound: crate::direct::BoundDirectCall,
+    #[schemars(rename = "FrameSession.input")]
+    pub frame_session_input: crate::frame_session::FrameSessionInput,
+    #[schemars(rename = "FrameSession.state")]
+    pub frame_session_state: crate::frame_session::FrameSessionState,
     #[schemars(rename = "InspectDirectPair.input")]
     pub inspectdirectpair_input: crate::direct::TabularInput,
     #[schemars(rename = "ResolveTabular.input")]

@@ -61,6 +61,7 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::FrameSession(input) => Run::new(move |asker| async move { crate::frame_session::run(asker, input, attachments).await }),
         Operation::PrepareFrameGraph(input) => Run::new(move |asker| async move { crate::materialize::frames::prepare(&asker, input, attachments, &facts) }),
         Operation::MaterializeFrames(input) => Run::new(move |asker| async move { crate::materialize::frames::materialize(asker, input, attachments, facts, zones).await }),
         Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {

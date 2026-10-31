@@ -70,3 +70,5 @@ pub fn schema_json() -> String {
     text.push('\n');
     text
 }
+
+pub mod frame_session;

@@ -200,7 +200,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
 /// out as `Predicted.result` and attached, with the rows those calls score
 /// and how many calls answered (`calls_answered`); the error keeps its
 /// code. None answered, the error as it is.
-fn carry_calls(
+pub(crate) fn carry_calls(
     asker: &Asker,
     error: CoreError,
     answers: Vec<Part>,

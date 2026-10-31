@@ -452,7 +452,12 @@ FRAME_SCHEMA = (
     'schema.from-data/frames/frames',
     'schema.from-data/mapping/frames',
 )
-FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA
+FRAME_SESSIONS = tuple(
+    f'{operation}/{kind}/frames'
+    for operation in ('client.fit', 'fitted.predict')
+    for kind in ('binary', 'multiclass', 'regression')
+)
+FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA + FRAME_SESSIONS
 
 
 CORE_ROUTED = frozenset(

@@ -55,3 +55,5 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 pub use sdm_request::predict::{Capabilities, capabilities};
 
 pub use materialize::frames::FrameGraph;
+
+mod frame_session;

@@ -548,88 +548,106 @@ pub fn preflight(
     query: &str,
     model: &str,
 ) -> Result<Vec<Notice>, CoreError> {
+    preflight_halves(payloads, outputs, query, model, true, true)
+}
+
+/// Validate only the halves sent by a session operation.
+/// Ordinary prediction uses both halves through `preflight` unchanged.
+pub fn preflight_halves(
+    payloads: &[Value],
+    outputs: &[String],
+    query: &str,
+    model: &str,
+    sends_context: bool,
+    sends_predict: bool,
+) -> Result<Vec<Notice>, CoreError> {
     let mut notices = Vec::new();
-    for payload in payloads {
-        if let Some((_, rows)) = instance_table(payload, "context")
-            && rows.is_empty()
-        {
-            return Err(
-                unsupported(Sentence::NoContextRows, model, "no context rows are left")
-                    .with_field("context_rows", count(0)),
-            );
-        }
-    }
-    for payload in payloads {
-        let kind = kind_of(payload)?;
-        if !classifies(kind) {
-            continue;
-        }
-        let column = payload
-            .get("task")
-            .and_then(|t| t.get("target"))
-            .and_then(|t| t.get("column_name"))
-            .and_then(Value::as_text);
-        if let Some(values) = target_values(payload, column) {
-            let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
-            if labels.len() > CLASSES_MAX {
+    if sends_context {
+        for payload in payloads {
+            if let Some((_, rows)) = instance_table(payload, "context")
+                && rows.is_empty()
+            {
                 return Err(unsupported(
-                    Sentence::TooManyClasses,
+                    Sentence::NoContextRows,
                     model,
-                    "the target has more classes than the model takes",
+                    "no context rows are left",
                 )
-                .with_field("classes", count(labels.len()))
-                .with_field("limit", count(CLASSES_MAX)));
+                .with_field("context_rows", count(0)));
             }
         }
-    }
-    for payload in payloads {
-        let kind = kind_of(payload)?;
-        if !classifies(kind) && kind != "regression" {
-            continue;
+        for payload in payloads {
+            let kind = kind_of(payload)?;
+            if !classifies(kind) {
+                continue;
+            }
+            let column = payload
+                .get("task")
+                .and_then(|t| t.get("target"))
+                .and_then(|t| t.get("column_name"))
+                .and_then(Value::as_text);
+            if let Some(values) = target_values(payload, column) {
+                let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
+                if labels.len() > CLASSES_MAX {
+                    return Err(unsupported(
+                        Sentence::TooManyClasses,
+                        model,
+                        "the target has more classes than the model takes",
+                    )
+                    .with_field("classes", count(labels.len()))
+                    .with_field("limit", count(CLASSES_MAX)));
+                }
+            }
         }
-        let column = payload
-            .get("task")
-            .and_then(|t| t.get("target"))
-            .and_then(|t| t.get("column_name"))
-            .and_then(Value::as_text);
-        let Some(values) = target_values(payload, column) else {
-            continue;
-        };
-        let answered: BTreeSet<String> = values
-            .iter()
-            .filter(|v| !matches!(v, Value::Null))
-            .map(|v| member(v))
-            .collect();
-        if answered.len() != 1 {
-            continue;
-        }
-        let column = column.unwrap_or_default();
-        let constant = constant_context(column, query);
-        if classifies(kind) {
-            // Named as the notice names the target, for the host's words
-            // (the adapter's `_how_to_name_the_target`).
-            let sentence = match constant.sentence {
-                Sentence::ContextConstantColumn => Sentence::OneClassColumn,
-                Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
-                Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
-                _ => Sentence::OneClassAnswer,
+        for payload in payloads {
+            let kind = kind_of(payload)?;
+            if !classifies(kind) && kind != "regression" {
+                continue;
+            }
+            let column = payload
+                .get("task")
+                .and_then(|t| t.get("target"))
+                .and_then(|t| t.get("column_name"))
+                .and_then(Value::as_text);
+            let Some(values) = target_values(payload, column) else {
+                continue;
             };
-            let mut error = unsupported(sentence, model, "every context row has the same answer")
-                .with_field("field", Detail::text("context"))
-                .with_field("reason", Detail::text("one_class"));
-            for (name, value) in constant.fields {
-                error = error.with_field(name, value);
+            let answered: BTreeSet<String> = values
+                .iter()
+                .filter(|v| !matches!(v, Value::Null))
+                .map(|v| member(v))
+                .collect();
+            if answered.len() != 1 {
+                continue;
             }
-            return Err(error.with_field("classes_in_context", count(1)));
+            let column = column.unwrap_or_default();
+            let constant = constant_context(column, query);
+            if classifies(kind) {
+                // Named as the notice names the target, for the host's words
+                // (the adapter's `_how_to_name_the_target`).
+                let sentence = match constant.sentence {
+                    Sentence::ContextConstantColumn => Sentence::OneClassColumn,
+                    Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
+                    Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
+                    _ => Sentence::OneClassAnswer,
+                };
+                let mut error =
+                    unsupported(sentence, model, "every context row has the same answer")
+                        .with_field("field", Detail::text("context"))
+                        .with_field("reason", Detail::text("one_class"));
+                for (name, value) in constant.fields {
+                    error = error.with_field(name, value);
+                }
+                return Err(error.with_field("classes_in_context", count(1)));
+            }
+            notices.push(constant);
+            break;
         }
-        notices.push(constant);
-        break;
     }
     if !outputs.iter().any(|o| o == "explanation") {
         return Ok(notices);
     }
     let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
-    if scored != EXPLANATION_PREDICT_ROWS {
+    if sends_predict && scored != EXPLANATION_PREDICT_ROWS {
         // The output and what to change, for the host's words (T2.13).
         return Err(unsupported(
             Sentence::ExplanationOneEntity,
@@ -640,7 +658,7 @@ pub fn preflight(
         .with_field("remedy", Detail::text("one_entity"))
         .with_field("scored", count(scored)));
     }
-    if asks_for_the_larger_context(payloads) {
+    if sends_context && asks_for_the_larger_context(payloads) {
         return Err(unsupported(
             Sentence::ExplanationFastMode,
             model,

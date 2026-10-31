@@ -456,6 +456,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::InvalidMessage => said(r#"the host sent a message the core cannot read"#),
         S::UnknownModel => said(r#"the model named does not exist"#),
         S::MissingExtra => said(r#"an optional dependency this call needs is not installed"#),
+        S::FrameSessionInput => said(r#"{reason}"#),
         S::SessionsUnsupported => said(r#"the model endpoint does not support sessions"#),
         S::RelationNoPart => said(
             r#"the core asked the data source for a {request} of a relation named by no part, which no source reads"#,
