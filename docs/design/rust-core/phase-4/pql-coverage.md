@@ -18,7 +18,7 @@ The frozen-reference pilot passes five public journeys, and a generated referenc
 | Counts | Explicit and default caps, invalid counts, empty candidates, exact cap and cap plus one; preserve warning timing. |
 | Task | Explicit overrides and inference from the selected context, including binary whole-number targets. |
 | Index families | Range, signed/unsigned numeric, float with missing labels, string/object, temporal, categorical and MultiIndex; duplicates and mixed labels where supported. |
-| Native effects | Reached key equality/hash, frame/index operations and substantive failures; approved custom sorting override exception only. |
+| Native effects | Reached key equality/hash, frame/index operations and substantive failures; user-defined comparison/sorting functions excluded by owner decision. |
 | Prediction | Materialized Request through KumoTabular to attributed PredictionResult, compared with frozen Python. |
 | Isolation | Existing source-backed materialization, warehouse sampling and fitted lifecycle remain unchanged. |
 
@@ -81,7 +81,7 @@ Two independent exact-source reviews, canonical contract 40 generation and the r
 Installed-wheel public parity passed 394 cases in each of the current, NumPy 2.1.3 and NumPy 2.3.4 runtimes; six runtime-specific frozen receipts contain 183 journeys each.
 
 Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, remaining numeric promotion modes and effects, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
-These are retained obligations, not silently unsupported public inputs or an expansion of the approved custom-sort exception.
+Ordinary input gaps remain obligations; the subsequent owner decision below explicitly excludes arbitrary comparison/sorting functions.
 The development route remains opt-in; existing defaults and warehouse paths are unchanged.
 A frozen public custom-label comparison witness has been presented for an owner decision; no broader fallback is implemented.
 
@@ -154,3 +154,8 @@ Pinned generic dispatch checks promotion warnings against output dtypes; compari
 The source audit is supported by 2,520 paired native LT/GT/EQ comparisons with identical values, errors and warnings, plus 32 frozen public journeys.
 Public acceptance explicitly requests weak-and-warn and compares with the unchanged frozen weak receipts; the canonical recorder's default remains weak.
 No Rust algorithm, contract, diagnostic event or warehouse path changes.
+
+The owner subsequently excluded user-defined comparison and sorting functions, superseding the earlier custom-sort fallback exception.
+The actual sampled frame/index is checked immediately before index observation; custom sorting is refused without invoking it or entering the legacy materializer.
+An unreduced call returns before this inspection.
+Public controls cover ordinary custom-sort frames, a custom sorter introduced by the sampled `take`, and the unreduced no-inspection path.

@@ -210,7 +210,11 @@ def _context(
     remedy: str,
     decision: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
-    from sdm_client._rust.tabular_index import bind_profile, observe
+    from sdm_client._rust.tabular_index import (
+        bind_profile,
+        has_custom_sorter,
+        observe,
+    )
     from sdm_client.models import TABULAR_LIMITS
 
     limit = TABULAR_LIMITS['context_rows_max']
@@ -262,8 +266,13 @@ def _context(
     subset = candidates.take(
         np.asarray(sampled['offsets'], dtype=np.intp), axis=sampling_axis
     )
+    sampled_index = subset.index
+    if has_custom_sorter(subset, sampled_index):
+        raise RouteError(
+            'custom Python sorting methods are not supported; use ordinary index labels'
+        )
     decimal_context = getcontext()
-    observation = observe(subset.index, decimal_context=decimal_context)
+    observation = observe(sampled_index, decimal_context=decimal_context)
     ordering = _call('order_sampled_tabular_rows', observation)
     if ordering['kind'] == 'needs_profile':
         ordering = _call(
@@ -271,7 +280,7 @@ def _context(
         )
     _numeric_diagnostics(ordering, decimal_context)
     if ordering['kind'] == 'refused':
-        owner_index = subset.index
+        owner_index = sampled_index
         for level in ordering.get('levels', []):
             if (
                 type(owner_index) is not pd.MultiIndex
@@ -495,17 +504,6 @@ def materialize(
     entity = col_name(query.entity_column)
     target = col_name(query.target_column)
     frame = _rows(schema[table])
-    from sdm_client._rust.tabular_index import has_custom_sorter
-
-    if has_custom_sorter(frame):
-        # Owner-approved exception: preserve the entire existing custom-sort
-        # journey, including hooks that may alter a subsequent prediction.
-        from sdm_client.materializers.tabular import TabularMaterializer
-
-        original = TabularMaterializer(schema)
-        if predict is None:
-            return original.indices(query, indices, num_context_samples, task)
-        return original.table(query=query, predict=predict, task=task)
     requested = list(indices) if predict is None else None
     selected = _ordinary_selection(
         frame, entity, target, requested, predict, num_context_samples

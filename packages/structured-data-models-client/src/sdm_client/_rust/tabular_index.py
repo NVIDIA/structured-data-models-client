@@ -441,7 +441,7 @@ def _facts(
     )
     if type(index) not in ordinary:
         raise RouteError(
-            'custom index producers require their separately approved sorting route'
+            'custom index producers are not supported for Rust sorting'
         )
     if type(index) is pd.MultiIndex:
         return {
@@ -582,8 +582,8 @@ def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
     return {'index': bind(observation['index'])}
 
 
-def has_custom_sorter(frame: pd.DataFrame) -> bool:
-    """Classify sorting overrides without invoking them or reading labels."""
+def has_custom_sorter(frame: pd.DataFrame, index: pd.Index) -> bool:
+    """Inspect the sampled owners without invoking sorting or reading labels."""
     import inspect
 
     def custom(owner: Any, names: tuple[str, ...]) -> bool:
@@ -620,7 +620,4 @@ def has_custom_sorter(frame: pd.DataFrame) -> bool:
 
     if custom(frame, ('sort_index',)):
         return True
-    # Reading the stored manager avoids firing a subclass's index property at
-    # route-selection time, before the reference would consume that property.
-    manager = inspect.getattr_static(frame, '_mgr')
-    return index_custom(manager.axes[1])
+    return index_custom(index)

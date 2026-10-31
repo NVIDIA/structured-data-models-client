@@ -91,3 +91,11 @@ Preserving arbitrary custom NumPy error handlers used by synthetic mutation test
 This does not relax ordinary numeric precision, rounding, missingness or overflow/error requirements.
 Do not introduce a Python sorting fallback for those synthetic handlers.
 The three existing Run steps and warehouse push-down boundaries remain unchanged.
+
+## Custom sorting scope clarification (owner decision, 2026-10-31)
+
+User-defined comparison and sorting functions are not supported.
+This supersedes the former custom-sort Python fallback exception; do not route custom sorters back to the legacy materializer.
+Inspect the actual sampled frame and index only when reduction requires sorting, and refuse custom sorting methods without executing them.
+Do not inspect or reject unused indexes on the unreduced path.
+The ordinary built-in, NumPy, pandas and Arrow type support target and the warehouse boundaries remain unchanged.

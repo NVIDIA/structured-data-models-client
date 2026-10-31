@@ -114,10 +114,11 @@ The sort profile is closed and established from the actual supported producer; i
 A globally precomputed permutation or stable source-row tiebreaker is not equivalent to the reference's selected-subset sorting.
 Pure sort methods remain library components consumed by this operation, not separate deliveries without a caller.
 
-The existing approved exception for custom sorting-method overrides remains precise.
-It does not automatically cover custom objects stored inside an otherwise ordinary Index.
-If a family requires inherently native comparison effects that conflict with the no-native-sorting-callback boundary, produce a public counterexample and a concrete owner decision before claiming that family implemented.
-No broader callback, behavior change or Python fallback is approved by this plan.
+The owner decision of October 31 excludes user-defined comparison and sorting functions from the supported contract.
+It supersedes the earlier Python-route exception for custom sorting-method overrides.
+The core route refuses such sorting when reduction requires it, without invoking the override or falling back to Python.
+Unreduced calls still return before inspecting unused indexes.
+Ordinary supported scalar and array types retain their defined ordering, native settings and substantive errors; unrelated native behavior is not excluded by this decision.
 
 ## Delivery and acceptance
 
