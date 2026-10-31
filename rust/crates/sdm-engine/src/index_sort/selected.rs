@@ -462,6 +462,7 @@ fn order_inner(
             order(&values, mask, profile, |v| scalar(v, profile))?
         }
         Values::Temporal { values } => order(values, mask, profile, |v| scalar(v, profile))?,
+        Values::Bytes { values } => order(values, mask, profile, |v| scalar(v, profile))?,
         Values::Unicode { values } => {
             if values.iter().flatten().any(|point| *point > 0x10ffff) {
                 return Err(invalid());

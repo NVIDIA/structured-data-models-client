@@ -544,3 +544,94 @@ fn unconditional_simd_entry_does_not_disable_outer_index_monotonic_shortcut() {
         assert_ne!(&positions[..319], &(1..320).collect::<Vec<_>>());
     }
 }
+
+#[test]
+fn stable_bytes_preserve_prefix_high_byte_ties_and_null_suffix() {
+    let mut input = facts(
+        TabularIndexValues::Bytes {
+            values: vec![
+                vec![255],
+                vec![],
+                vec![0, 1],
+                vec![0],
+                vec![0],
+                vec![],
+                vec![255],
+            ],
+        },
+        vec![false, false, false, false, false, true, false],
+    );
+    input.profile = TabularSortProfile::Stable;
+    check(input.clone(), vec![1, 3, 4, 2, 0, 6, 5], false);
+    input.missing.pop();
+    assert!(order_sampled(&input).is_err());
+}
+
+#[test]
+fn stable_bytes_empty_and_null_controls() {
+    for (values, missing, expected, ordered) in [
+        (vec![], vec![], vec![], true),
+        (vec![vec![]], vec![false], vec![0], true),
+        (vec![vec![], vec![]], vec![true, true], vec![0, 1], false),
+        (
+            vec![vec![], vec![255], vec![]],
+            vec![true, false, true],
+            vec![1, 0, 2],
+            false,
+        ),
+    ] {
+        let mut input = facts(TabularIndexValues::Bytes { values }, missing);
+        input.profile = TabularSortProfile::Stable;
+        check(input, expected, ordered);
+    }
+}
+
+#[test]
+fn bytes_multiindex_level_uses_unsigned_lexicographic_order() {
+    let mut level = facts(
+        TabularIndexValues::Bytes {
+            values: vec![vec![255], vec![], vec![0]],
+        },
+        vec![false; 3],
+    );
+    level.profile = TabularSortProfile::Stable;
+    check(
+        facts(
+            TabularIndexValues::Multi {
+                levels: vec![level],
+                codes: vec![vec![0, 2, 1, 2]],
+            },
+            vec![false; 4],
+        ),
+        vec![2, 1, 3, 0],
+        false,
+    );
+}
+
+#[test]
+fn bytes_level_composes_with_temporal_multiindex_consumer() {
+    let mut bytes = facts(
+        TabularIndexValues::Bytes {
+            values: vec![vec![255], vec![], vec![0]],
+        },
+        vec![false; 3],
+    );
+    bytes.profile = TabularSortProfile::Stable;
+    let dates = facts(
+        TabularIndexValues::TemporalObject {
+            values: vec![TabularIndexScalar::Date { ordinal: 737425 }],
+        },
+        vec![false],
+    );
+    check(
+        facts(
+            TabularIndexValues::Multi {
+                levels: vec![bytes, dates],
+                codes: vec![vec![0, 2, 1, 2], vec![0; 4]],
+            },
+            vec![false; 4],
+        ),
+        vec![2, 1, 3, 0],
+        false,
+    );
+}

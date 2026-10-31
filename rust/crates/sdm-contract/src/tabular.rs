@@ -196,6 +196,10 @@ pub enum TabularIndexValues {
     Temporal {
         values: Vec<i64>,
     },
+    /// Unsigned bytewise lexicographic keys; empty bytes are distinct from null.
+    Bytes {
+        values: Vec<Vec<u8>>,
+    },
     Unicode {
         values: Vec<Vec<u32>>,
     },

@@ -163,6 +163,7 @@ fn compare(
             };
             key(left).partial_cmp(&key(right)).unwrap()
         }
+        Values::Bytes { values } => values[left].cmp(&values[right]),
         Values::Unicode { values } => values[left].cmp(&values[right]),
         Values::Object { values } => atoms::compare_atom(&values[left], &values[right])
             .ok_or_else(|| atoms::failure_reason(&values[left], &values[right]))?,
