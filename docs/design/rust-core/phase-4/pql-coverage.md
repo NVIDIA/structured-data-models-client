@@ -39,14 +39,16 @@ Task inference follows final selection and uses the generic Request builder.
 | Decimal/float context effects | Landed `bee780b9`: exact finite comparisons, FloatOperation/InvalidOperation traps and ordered sticky flags, including failures. Canonical Decimal public receipts and Rust controls. |
 | Categorical and MultiIndex | Category order/codes, levels/codes, missingness, duplicates, nested owner addressing and actual sampled-subset ordering; existing public suites. |
 | Arrow decimal/date/binary | Landed `5060b299`: six runtimes each passed 728 public checks. Exact coefficients/scales, physical dates, explicit unsigned bytes, chunks, nulls and MultiIndex levels. |
-| Object bytes, Decimal infinities and Python timedelta | Final batch implementation; frozen public witnesses prove the old client succeeds on both entrypoints in current/floor runtimes. Consolidated validation and landing remain required. |
+| Object bytes, Decimal infinities and Python timedelta | Final batch `60b4f4495`: 26 canonical public journeys cover both entrypoints, duplicates/nulls, MultiIndex, exact owner retention and Decimal traps/flags; consolidated x86 and Arm acceptance passes. |
 
 Supported producer bindings are explicit official NumPy binaries, not a guess from a CPU name or version alone.
 The local six-runtime matrix covers NumPy 1.23.5, 1.26.4, 2.1.3, 2.3.4 and 2.5.4; pandas 2.2.2 through 3.1.0; Arrow 14 through 26; Python 3.10, 3.12 and 3.14.
 Per-runtime canonical receipts retain exact binary hashes and effective CPU dispatch features.
 Arm floor/newest baseline acceptance landed with `a4f7295d8`; the final runtime runner also includes Arrow and ordinary-object completion suites.
-Live AVX512 acceptance is still required separately from AVX2/Arm results and independent source vectors.
+Live AVX512 acceptance is tracked separately from AVX2/Arm results and independent source vectors.
 The legacy 1.26 network64 profile landed at `7b022ce92`; source vectors alone do not establish native execution.
+The live SIMD runner is pinned to `5060b299`; its result may carry forward to the final scalar batch because SIMD kernels, numeric dispatch, producer bindings, dependencies and build flags are unchanged.
+This does not claim that the final scalar binary itself executed on AVX512.
 
 Object values keep their actual comparison family and generic sorting behavior; they are not silently converted into Arrow or typed numeric ordering.
 Ordering profiles are bound only when needed, using retained observations without rereading native owners.
@@ -75,3 +77,13 @@ Finish the remaining connected code and finite coverage before broad testing, pe
 Obtain two independent exact-source reviews, generate canonical contracts/receipts, review generated artifacts, then run one consolidated public/regression pass and required handoff.
 Retain raw evidence and fix substantive failures; do not turn an unsupported ordinary family into a silent fallback.
 Completion requires verified landing, live runtime evidence and reconciliation of every row above.
+
+
+## Consolidated final evidence
+
+The reviewed implementation and generated artifacts are pinned at `60b4f449571c89c4f06b1c1024e34d540bd8ec08`.
+Six installed x86 runtime lanes pass 6,490 public checks in total: 1,047 each for current, floor, NumPy 2.3 and newest, 1,167 for NumPy 1.26 and 1,135 for NumPy 2.1.
+The native Arm floor and newest lanes each pass 780 checks with zero skips on that exact candidate, including newly recorded Arrow and ordinary-object reference groups ([targeted run](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41162901138)).
+The engine/contract Rust suites pass 290 tests across 36 suites; strict Clippy, Python type-checking, lint, formatting and canonical lock checks pass.
+These are targeted PQL acceptance results, not a claim that all Phase 4 or full CI is complete.
+Required handoff, verified landing and the separately retained live SIMD evidence close the delivery gate.
