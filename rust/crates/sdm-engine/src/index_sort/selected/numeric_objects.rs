@@ -346,6 +346,24 @@ fn compare(
     }
 }
 
+/// One reached rich comparison during the native monotonic tuple probe.
+pub(super) fn probe_comparison(
+    a: &Atom,
+    b: &Atom,
+    semantics: Semantics,
+    overflow: Option<Overflow>,
+    diagnostics: &mut Diagnostics,
+) -> Result<Option<Ordering>, Error> {
+    compare(
+        observe(a, true).expect("validated scalar owner"),
+        observe(b, true).expect("validated scalar owner"),
+        semantics,
+        overflow,
+        Stage::Probe,
+        diagnostics,
+    )
+}
+
 pub(super) fn sort_comparison(
     a: &Atom,
     b: &Atom,

@@ -273,6 +273,21 @@ fn compare(a: &Atom, b: &Atom) -> Result<Compared, Error> {
     }
 }
 
+/// Tuple equality can be false where ordered temporal comparison raises.
+pub(super) fn tuple_equal(a: &Atom, b: &Atom) -> Result<bool, Error> {
+    match compare(a, b) {
+        Ok(result) => Ok(result.equal),
+        Err(
+            Error::Incomparable
+            | Error::DateTimeMismatch
+            | Error::NaiveAwareDatetime
+            | Error::TimestampDateMismatch
+            | Error::TimestampAwarenessMismatch,
+        ) => Ok(false),
+        Err(reason) => Err(reason),
+    }
+}
+
 pub(super) fn sort_comparison(a: &Atom, b: &Atom) -> Result<Ordering, Error> {
     compare(a, b).map(|result| result.ordering)
 }

@@ -105,38 +105,100 @@ fn compare(
     })
 }
 
+fn tuple_relation(
+    levels: &[Facts],
+    codes: &[Vec<i64>],
+    left_row: usize,
+    right_row: usize,
+    relation: Ordering,
+    diagnostics: &mut numeric_objects::Diagnostics,
+) -> Result<bool, Failure> {
+    for (level_no, (level, code)) in levels.iter().zip(codes).enumerate() {
+        let (left, right) = (code[left_row] as usize, code[right_row] as usize);
+        // Tuple comparison first recognizes identity, then asks component EQ.
+        if left == right {
+            continue;
+        }
+        let equal = match &level.values {
+            Values::ScalarObject {
+                values,
+                semantics,
+                overflow,
+            } => numeric_objects::probe_comparison(
+                &values[left],
+                &values[right],
+                *semantics,
+                *overflow,
+                diagnostics,
+            )
+            .map(|order| order == Some(Ordering::Equal)),
+            Values::TemporalObject { values } => {
+                temporal::tuple_equal(&values[left], &values[right])
+            }
+            Values::Object { values } => {
+                Ok(atoms::compare_atom(&values[left], &values[right]) == Some(Ordering::Equal))
+            }
+            _ => compare(level, left, right, diagnostics).map(|order| order == Ordering::Equal),
+        }
+        .map_err(|reason| (reason, level_no, left, right))?;
+        if equal {
+            continue;
+        }
+        if relation == Ordering::Equal {
+            return Ok(false);
+        }
+        return match &level.values {
+            Values::ScalarObject {
+                values,
+                semantics,
+                overflow,
+            } => numeric_objects::probe_comparison(
+                &values[left],
+                &values[right],
+                *semantics,
+                *overflow,
+                diagnostics,
+            )
+            .map(|order| order == Some(relation)),
+            _ => compare(level, left, right, diagnostics).map(|order| order == relation),
+        }
+        .map_err(|reason| (reason, level_no, left, right));
+    }
+    Ok(relation == Ordering::Equal)
+}
+
 fn tuple_monotonic(
     levels: &[Facts],
     codes: &[Vec<i64>],
     rows: usize,
     diagnostics: &mut numeric_objects::Diagnostics,
 ) -> Result<bool, Failure> {
-    for row in 1..rows {
-        for (level_no, (level, code)) in levels.iter().zip(codes).enumerate() {
-            let (left, right) = (code[row - 1] as usize, code[row] as usize);
-            // Tuple equality first recognizes the very same retained owner.
-            if left == right {
-                continue;
+    let (mut increasing, mut decreasing) = (true, true);
+    for current in 1..rows {
+        let mut relation =
+            |order| tuple_relation(levels, codes, current, current - 1, order, diagnostics);
+        let pair = (|| {
+            if relation(Ordering::Less)? {
+                increasing = false;
+            } else if relation(Ordering::Greater)? {
+                decreasing = false;
+            } else if !relation(Ordering::Equal)? {
+                increasing = false;
+                decreasing = false;
             }
-            let order = match &level.values {
-                Values::TemporalObject { values } => {
-                    temporal::rank_comparison(&values[left], &values[right])
-                }
-                _ => match compare(level, left, right, diagnostics) {
-                    Ok(order) => Some(order),
-                    Err(reason) if is_type_error(reason) => None,
-                    Err(reason) => return Err((reason, level_no, left, right)),
-                },
-            };
-            if order != Some(Ordering::Equal) {
-                if order != Some(Ordering::Less) {
-                    return Ok(false);
-                }
-                break;
+            Ok::<_, Failure>(())
+        })();
+        if let Err(failure) = pair {
+            if is_type_error(failure.0) || failure.0 == Error::TemporalYearOutOfRange {
+                return Ok(false);
             }
+            return Err(failure);
+        }
+        if !increasing && !decreasing {
+            break;
         }
     }
-    Ok(true)
+    Ok(increasing)
 }
 
 fn outer_monotonic(
@@ -407,4 +469,43 @@ pub(super) fn order(
             .unwrap_or(Ordering::Equal)
     });
     Ok(sorted(positions, false))
+}
+
+#[cfg(test)]
+mod tuple_tests {
+    use super::*;
+    use sdm_contract::tabular::{
+        NumericComparisonProfile, NumericOverflowPolicy, NumericWarningStage, TabularIndexScalar,
+        TabularSortProfile,
+    };
+    #[test]
+    fn tuple_probe_compares_component_equality_before_each_ordering_attempt() {
+        let level = Facts {
+            values: Values::ScalarObject {
+                values: vec![
+                    TabularIndexScalar::Floating {
+                        bits: 1e100_f64.to_bits(),
+                    },
+                    TabularIndexScalar::FixedFloating {
+                        width: 4,
+                        bits: u64::from(1_f32.to_bits()),
+                    },
+                ],
+                semantics: NumericComparisonProfile::WeakScalars,
+                overflow: Some(NumericOverflowPolicy::Warn),
+            },
+            missing: vec![false, false],
+            profile: TabularSortProfile::Scalar,
+        };
+        let mut diagnostics = numeric_objects::Diagnostics::default();
+        assert!(!tuple_monotonic(&[level], &[vec![0, 1, 0]], 3, &mut diagnostics).unwrap());
+        // Descending: EQ then LT. Ascending: EQ/LT then EQ/GT.
+        assert_eq!(
+            diagnostics.warnings,
+            vec![sdm_contract::tabular::NumericOverflowWarnings {
+                stage: NumericWarningStage::Probe,
+                count: 6
+            }]
+        );
+    }
 }
