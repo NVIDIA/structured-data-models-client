@@ -159,3 +159,9 @@ The owner subsequently excluded user-defined comparison and sorting functions, s
 The actual sampled frame/index is checked immediately before index observation; custom sorting is refused without invoking it or entering the legacy materializer.
 An unreduced call returns before this inspection.
 Public controls cover ordinary custom-sort frames, a custom sorter introduced by the sampled `take`, and the unreduced no-inspection path.
+
+
+Weak-and-warn validation preserves results, errors and numeric warnings while excluding one reference-only advisory from pandas MultiIndex code arithmetic: `result dtype changed due to the removal of value-based promotion from NumPy. Changed from int64 to int8.`
+Frozen public traces locate it at `codes.max() + 1` and level-code bounds, not label comparisons.
+Rust does not perform that obsolete dtype-promotion check; avoiding its advisory and its warning-as-error failure is an intentional improvement, not claimed warning-handler parity.
+The weak-mode reference checks remain exact, and the weak-and-warn comparison retains every other warning, count and error.
