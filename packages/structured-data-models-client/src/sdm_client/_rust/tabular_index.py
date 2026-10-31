@@ -322,6 +322,8 @@ def _array(
             for value, absent in zip(values, missing, strict=True)
         )
         if 'decimal' in kinds and ('floating' in kinds or has_float_missing):
+            if type(decimal_context) is not Context:
+                raise RouteError('custom Decimal contexts are not represented')
             if not kinds <= {'decimal', 'integer', 'boolean', 'floating'}:
                 raise RouteError('this mixed Decimal owner is not represented')
             for position, (value, absent) in enumerate(
