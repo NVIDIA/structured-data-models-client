@@ -698,11 +698,11 @@ fn entirely_invalid_partial_maps_leave_the_edge_absent() {
 #[test]
 fn frame_link_payload_has_two_entity_roles_and_list_labels() {
     use sdm_engine::frame_labels::LinkValue;
-    use sdm_request::payload::{FrameLinkTarget, build_frame_links};
+    use sdm_request::payload::{LinkTarget, build_links};
     let mut sampled = shop();
     sampled.statistic = None;
     sampled.top_k = Some(3);
-    let link = FrameLinkTarget {
+    let link = LinkTarget {
         table: "orders".into(),
         labels: vec![
             vec![LinkValue::Int(7), LinkValue::Int(8)],
@@ -710,7 +710,7 @@ fn frame_link_payload_has_two_entity_roles_and_list_labels() {
             vec![LinkValue::Text("large-id".into())],
         ],
     };
-    let built = build_frame_links(&sampled, &link).unwrap();
+    let built = build_links(&sampled, &link).unwrap();
     let payload: Value = serde_json::from_slice(&built.bytes).unwrap();
     assert_eq!(payload["task"]["kind"], "temporal_link_prediction");
     assert_eq!(

@@ -841,15 +841,15 @@ fn answering(
         .collect())
 }
 
-/// The extra target role and list labels of an in-memory link request.
-/// Kept separate from scalar warehouse task kinds and labels.
-pub struct FrameLinkTarget {
+/// Target entity and list-valued labels of a materialized link request.
+/// Shared by frame and warehouse sampling, separate from scalar labels.
+pub struct LinkTarget {
     pub table: String,
     pub labels: Vec<Vec<sdm_engine::frame_labels::LinkValue>>,
 }
 
 fn link_target_cells(
-    link: &FrameLinkTarget,
+    link: &LinkTarget,
     float_text: fn(f64) -> String,
 ) -> Result<Vec<Value>, CoreError> {
     use sdm_engine::frame_labels::LinkValue;
@@ -879,8 +879,8 @@ fn link_target_cells(
         .collect()
 }
 
-/// Frame-only link encoding; the shared scalar task representation is unused.
-pub fn build_frame_links(sampled: &Sampled, target: &FrameLinkTarget) -> Result<Built, CoreError> {
+/// Link encoding for either source; scalar task labels are unused.
+pub fn build_links(sampled: &Sampled, target: &LinkTarget) -> Result<Built, CoreError> {
     build_mode(sampled, Some(target))
 }
 
@@ -891,7 +891,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     build_mode(sampled, None)
 }
 
-fn build_mode(sampled: &Sampled, link: Option<&FrameLinkTarget>) -> Result<Built, CoreError> {
+fn build_mode(sampled: &Sampled, link: Option<&LinkTarget>) -> Result<Built, CoreError> {
     let examples = sampled.num_train + sampled.num_test;
     if sampled.anchors.len() != examples
         || link.map_or_else(|| sampled.labels.len(), |link| link.labels.len()) != sampled.num_train

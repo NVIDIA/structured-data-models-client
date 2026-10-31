@@ -1203,8 +1203,7 @@ fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
     Ok(n as u64)
 }
 
-/// The base-only options used by frame link prediction.
-/// This does not broaden the existing warehouse task-kind admission.
+/// The base-only options used by in-memory and warehouse link prediction.
 pub fn frame_link_options(given: Option<&Value>) -> Result<Options, CoreError> {
     if let Some(Value::Object(members)) = given {
         for (key, _) in members {

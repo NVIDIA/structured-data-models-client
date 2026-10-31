@@ -550,7 +550,7 @@ fn column_of(node: &PqlNode) -> Option<&ColumnRef> {
 /// neither prefix, and the entities scored are the call's indices
 /// (`_get_task_table`, a forecast's named entity replaced by the first
 /// index). The query text the payload carries keeps them as written.
-fn asked(query: &ValidatedQuery, frames: bool) -> Result<Asked, CoreError> {
+fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
     if query.problem_type.is_some() || query.num_forecasts != 1 || query.top_k.is_some() {
         return Err(not_yet("problem_type"));
     }
@@ -572,11 +572,7 @@ fn asked(query: &ValidatedQuery, frames: bool) -> Result<Asked, CoreError> {
         .chain(query.assuming.as_ref())
         .map(|condition| condition_shape(condition, &operand))
         .collect::<Result<Vec<_>, _>>()?;
-    let target = if frames {
-        frame_target(&query.target, &entity.table)?
-    } else {
-        shape(&query.target, &entity.table)?
-    };
+    let target = target_shape(&query.target, &entity.table)?;
     let task = match &target {
         Shape::Condition { .. } | Shape::Not(_) | Shape::Both { .. } => Task::Binary,
         Shape::Aggregated(_) | Shape::Links(_) => Task::Regression,
@@ -646,10 +642,8 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
                 Aggregation::Avg => labels::Aggregation::Avg,
                 Aggregation::Min => labels::Aggregation::Min,
                 Aggregation::Max => labels::Aggregation::Max,
-                // `LIST_DISTINCT` of a foreign key, which the validation lets
-                // through as a temporal link prediction (`_get_task_type`):
-                // link prediction is Phase 4's (design, "Explicitly out"),
-                // refused by name until then.
+                // List-valued targets use target_shape; a scalar operand
+                // cannot consume an entire set of related identifiers.
                 Aggregation::ListDistinct => return Err(not_yet("aggregation")),
                 _ => return Err(unvalidated("an aggregation the model does not take")),
             };
@@ -689,10 +683,10 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
     }
 }
 
-/// Only a frame target admits LIST_DISTINCT; warehouse parsing is unchanged.
-fn frame_target(node: &PqlNode, entity: &str) -> Result<Shape, CoreError> {
+/// Select scalar or list-valued target semantics independently of the data source.
+fn target_shape(node: &PqlNode, entity: &str) -> Result<Shape, CoreError> {
     if let NodeKind::Join { target, .. } = &node.kind {
-        return frame_target(target, entity);
+        return target_shape(target, entity);
     }
     if let NodeKind::Aggregation {
         aggregation: Aggregation::ListDistinct,
@@ -3288,7 +3282,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         }
         Err(err) => return Err(err),
     };
-    let asked = asked(&validated, frames.is_some())?;
+    let asked = asked(&validated)?;
     if let Some(frame) = &frames
         && asked.task == Task::Regression
         && let Shape::Column(column) = &asked.target
@@ -4194,9 +4188,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                         "num_hops",
                     ));
                 }
-                payload::build_frame_links(
+                payload::build_links(
                     &sampled_payload,
-                    &payload::FrameLinkTarget {
+                    &payload::LinkTarget {
                         table: edge.dst.clone(),
                         labels: values.clone(),
                     },

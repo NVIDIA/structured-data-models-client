@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! List-valued labels for in-memory link prediction, separate from warehouse labels.
+//! List-valued link labels from materialized in-memory or warehouse rows.
 
 use crate::labels::{Bounds, Column};
 use sdm_contract::{CoreError, Sentence};
