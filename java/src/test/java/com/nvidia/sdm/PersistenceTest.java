@@ -43,8 +43,8 @@ class PersistenceTest {
     try (RootAllocator allocator = new RootAllocator(); Table context = TabularTest.table(allocator, true, 1, 2);
         Table scoring = TabularTest.table(allocator, false, 3)) {
       original = new Request(context, scoring, "y", "regression", RequestOptions.builder()
-          .inference(Map.of("wide", new java.math.BigInteger("18446744073709551617"), "temperature", .5))
-          .taskOptions(Map.of("unused", List.of("a", 7))).build());
+          .inference(Map.of("temperature", .5))
+          .taskOptions(Map.of("wide", new java.math.BigInteger("18446744073709551617"), "unused", List.of("a", 7))).build());
     }
     Request restored = restore(original);
     assertEquals(original.inference(), restored.inference()); assertEquals(original.taskOptions(), restored.taskOptions());
@@ -132,7 +132,8 @@ class PersistenceTest {
     assertThrows(IOException.class, () -> Request.readFrom(new ByteArrayInputStream(invalidArrow)));
     Request relational = PredictiveQuery.parse(RelationalTest.SCALAR).materialize(RelationalTest.fixture(false, false), RelationalTest.options(1L).build());
     byte[] unsupported = change(save(relational), manifest -> {
-      @SuppressWarnings("unchecked") Map<String,Object> state = (Map<String,Object>) manifest.get("state"); state.put("version", 999);
+      @SuppressWarnings("unchecked") Map<String,Object> state = new java.util.LinkedHashMap<>((Map<String,Object>) manifest.get("state"));
+      state.put("version", 999); manifest.put("state", state);
     });
     assertThrows(IOException.class, () -> Request.readFrom(new ByteArrayInputStream(unsupported)));
   }
@@ -150,7 +151,7 @@ class PersistenceTest {
   private static byte[] change(byte[] original, java.util.function.Consumer<Map<String,Object>> change) throws Exception {
     DataInputStream input = new DataInputStream(new ByteArrayInputStream(original));
     byte[] prefix = input.readNBytes(12); byte[] metadata = input.readNBytes(input.readInt());
-    @SuppressWarnings("unchecked") Map<String,Object> manifest = (Map<String,Object>) Json.read(metadata);
+    @SuppressWarnings("unchecked") Map<String,Object> manifest = new java.util.LinkedHashMap<>((Map<String,Object>) Json.read(metadata));
     change.accept(manifest); byte[] updated = Json.write(manifest);
     ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream output = new DataOutputStream(bytes);
     output.write(prefix); output.writeInt(updated.length); output.write(updated); input.transferTo(output);
