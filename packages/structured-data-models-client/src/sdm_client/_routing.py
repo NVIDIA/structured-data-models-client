@@ -471,6 +471,7 @@ WAREHOUSE_SESSION_ROUTES = tuple(
 
 CORE_ROUTED = frozenset(
     S0
+    + ('result.merge/merge/any',)
     + CAPABILITIES
     + FRAME_ROUTES
     + DIRECT_CONSUMERS

@@ -304,35 +304,6 @@ fn decode(
         candidates,
     ))
 }
-fn numeric_key(value: &Value) -> Option<String> {
-    match value {
-        Value::Bool(v) => Some(sdm_wire::key::boolean(*v)),
-        Value::Number(n) if n.bytes().all(|b| b.is_ascii_digit() || b == b'-') => {
-            Some(sdm_wire::key::exact(n))
-        }
-        Value::Number(n) => n.parse().ok().and_then(sdm_wire::key::float),
-        _ => None,
-    }
-}
-fn equal(a: &Value, b: &Value) -> bool {
-    if let (Some(a), Some(b)) = (numeric_key(a), numeric_key(b)) {
-        return a == b;
-    }
-    match (a, b) {
-        (Value::Array(a), Value::Array(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equal(a, b))
-        }
-        (Value::Object(a), Value::Object(b)) => {
-            a.len() == b.len()
-                && a.iter().all(|(k, a)| {
-                    b.iter()
-                        .find(|(name, _)| name == k)
-                        .is_some_and(|(_, b)| equal(a, b))
-                })
-        }
-        _ => a == b,
-    }
-}
 fn written(answer: Answer) -> Answer {
     Answer::Written(match answer {
         Answer::None => return Answer::None,
@@ -369,32 +340,35 @@ pub(crate) fn merge(
         .first()
         .map(|v| v.outputs.clone())
         .unwrap_or_default();
-    if input.parts.iter().any(|v| v.outputs != outputs) {
-        return Err(internal("results were asked for different outputs"));
-    }
     let mut parts = Vec::new();
     let mut positions = Vec::new();
-    let mut candidates = Vec::new();
-    let mut unscored = Vec::new();
-    let mut index = 0u32;
+    let mut descriptors = Vec::new();
     for (description, id) in input.parts.iter().zip(request.tables) {
         let Some(Attachment::Arrow(data)) = attached.remove(&id) else {
             return Err(internal("merge lacks Arrow result"));
         };
         let (part, held) = decode(description, &data.schema, &data.batches)?;
+        descriptors.push(sdm_contract::result::MergeDescriptor {
+            model: description.model.clone(),
+            request_id: description.request_id.clone(),
+            outputs: description.outputs.clone(),
+            has_explanation: part
+                .explanation
+                .as_ref()
+                .is_some_and(sdm_request::result::truth),
+            names_rows: true,
+            names_step: part.rows.iter().any(|r| r.forecast_step.is_some()),
+            candidates: description
+                .unscored_candidates
+                .iter()
+                .map(|s| json(s).map(sdm_request::result::candidate))
+                .collect::<Result<_, _>>()?,
+        });
         parts.push(part);
         positions.extend(held);
-        for text in &description.unscored_candidates {
-            let value = json(text)?;
-            if !candidates.iter().any(|v| equal(v, &value)) {
-                candidates.push(value);
-                unscored.push(index);
-            }
-            index = index
-                .checked_add(1)
-                .ok_or_else(|| internal("too many unscored candidates"))?;
-        }
     }
+    let plan = sdm_request::result::plan(&descriptors)?;
+
     if parts
         .first()
         .is_some_and(|first| parts.iter().any(|part| part.answers != first.answers))
@@ -405,7 +379,7 @@ pub(crate) fn merge(
             }
         }
     }
-    let merged = predict::merge(parts)?;
+    let merged = predict::merge_planned(parts, &plan)?;
     let mut laid = predict::table(&merged)?;
     if positions.iter().any(Option::is_some) {
         let mut order: Vec<usize> = (0..merged.rows.len()).collect();
@@ -436,7 +410,7 @@ pub(crate) fn merge(
     }
     let mut result = crate::predict::finish_table(asker, merged, outputs, laid)?;
     if let OperationResult::Predict(value) = &mut result {
-        value.unscored_candidates = unscored;
+        value.unscored_candidates = plan.candidate_positions;
     }
     Ok(result)
 }
@@ -522,19 +496,5 @@ mod tests {
             decoded.rows[1].prediction,
             Answer::Written(Value::Number("3.5".into()))
         );
-    }
-
-    #[test]
-    fn candidate_union_equality_keeps_wide_numbers_exact() {
-        assert!(equal(&json("1").unwrap(), &json("1.0").unwrap()));
-        assert!(equal(&json("true").unwrap(), &json("1").unwrap()));
-        assert!(!equal(
-            &json("9007199254740993").unwrap(),
-            &json("9007199254740992").unwrap()
-        ));
-        assert!(equal(
-            &json("{\"a\":[1,null],\"b\":2}").unwrap(),
-            &json("{\"b\":2.0,\"a\":[true,null]}").unwrap()
-        ));
     }
 }

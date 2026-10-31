@@ -43,6 +43,7 @@ pub enum Operation {
     ValidateQuery(ValidateQuery),
     TabularArrow(crate::tabular_arrow::ArrowTabular),
     MergeResults(crate::result::MergeResults),
+    PlanResultMerge(crate::direct::DirectInput),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
     CheckTabularSessionQuestion(crate::direct::DirectInput),
@@ -118,6 +119,7 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::TabularArrow(_) => "tabular_arrow",
+            Operation::PlanResultMerge(_) => "plan_result_merge",
             Operation::MergeResults(_) => "merge_results",
             Operation::ValidateQuery(_) => "validate_query",
             Operation::FrameSession(_) => "frame_session",
@@ -290,6 +292,7 @@ impl Operation {
             | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
+            | Operation::PlanResultMerge(v)
             | Operation::CheckColumn(v)
             | Operation::CheckDirectOption(v)
             | Operation::CheckDirectResponseField(v)
@@ -1790,6 +1793,10 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "PlanResultMerge.input")]
+    pub plan_result_merge_input: crate::result::PlanResultMerge,
+    #[schemars(rename = "DirectValue.plan_result_merge")]
+    pub plan_result_merge_output: crate::result::ResultMergePlan,
     #[schemars(rename = "MergeResults.input")]
     pub merge_results_input: crate::result::MergeInput,
     pub tabular_arrow_request: crate::tabular_arrow::ArrowRequest,

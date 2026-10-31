@@ -1414,47 +1414,55 @@ fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<
 /// parts) and `batch_request_ids` (each part's id), parts of different
 /// models refused (`INTERNAL_ERROR`).
 pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
-    let internal = |message: &str| CoreError::new(Sentence::Internal, message);
+    let descriptors = parts
+        .iter()
+        .map(|part| sdm_contract::result::MergeDescriptor {
+            model: part.model.clone(),
+            request_id: part.request_id.clone(),
+            outputs: vec![],
+            has_explanation: part.explanation.as_ref().is_some_and(crate::result::truth),
+            names_rows: true,
+            names_step: part.rows.iter().any(|row| row.forecast_step.is_some()),
+            candidates: vec![],
+        })
+        .collect::<Vec<_>>();
+    let plan = crate::result::plan(&descriptors)?;
+    merge_planned(parts, &plan)
+}
+
+/// Assemble owned rows after the common metadata policy has selected owners.
+pub fn merge_planned(
+    parts: Vec<Part>,
+    plan: &sdm_contract::result::ResultMergePlan,
+) -> Result<Part, CoreError> {
     let mut parts = parts.into_iter();
-    let Some(first) = parts.next() else {
-        return Err(internal("no parts to merge"));
+    let Some(mut first) = parts.next() else {
+        return Err(CoreError::new(Sentence::Internal, "no parts to merge"));
     };
-    let rest: Vec<Part> = parts.collect();
-    if rest.is_empty() {
+    if plan.single {
         return Ok(first);
     }
-    if rest.iter().any(|p| p.model != first.model) {
-        return Err(internal("the parts were answered by different models"));
-    }
-    let mut metadata = first.metadata.clone();
-    metadata.set(
+    first.metadata.set(
         "batches",
-        Value::int(i64::try_from(rest.len() + 1).unwrap_or(i64::MAX)),
+        Value::int(i64::try_from(plan.batches).unwrap_or(i64::MAX)),
     );
-    let ids: Vec<&str> = std::iter::once(first.request_id.as_str())
-        .chain(rest.iter().map(|p| p.request_id.as_str()))
-        .collect();
-    metadata.set("batch_request_ids", Value::texts(ids));
-    let mut explanation = first.explanation;
-    let mut rows = first.rows;
-    for part in rest {
-        rows.extend(part.rows);
-        if explanation.is_none() {
-            explanation = part.explanation;
+    first.metadata.set(
+        "batch_request_ids",
+        Value::texts(plan.batch_request_ids.iter().map(String::as_str)),
+    );
+    if plan.explanation_part != Some(0) {
+        first.explanation = None;
+    }
+    for (at, part) in parts.enumerate() {
+        first.rows.extend(part.rows);
+        if plan.explanation_part == Some(at + 1) {
+            first.explanation = part.explanation;
         }
     }
-    for (at, row) in rows.iter_mut().enumerate() {
+    for (at, row) in first.rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
     }
-    Ok(Part {
-        model: first.model,
-        request_id: first.request_id,
-        metadata,
-        rows,
-        answers: first.answers,
-        text_ids: first.text_ids,
-        explanation,
-    })
+    Ok(first)
 }
 
 /// A forecast's answers put together, each step's answer to its own

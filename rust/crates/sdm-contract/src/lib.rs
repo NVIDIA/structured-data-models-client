@@ -28,12 +28,12 @@ pub mod facts;
 pub mod frames;
 pub mod ops;
 pub mod pql;
+pub mod result;
 pub mod run;
 pub mod scalar;
 #[cfg(feature = "schema-check")]
 pub mod schema_check;
 pub mod session;
-pub mod result;
 pub mod tabular;
 pub mod tabular_arrow;
 #[cfg(feature = "test-ops")]
@@ -53,7 +53,7 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 52;
+pub const CONTRACT_VERSION: u32 = 53;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON

@@ -61,9 +61,16 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
-        Operation::MergeResults(request) => Run::new(move |asker| async move {
-            crate::result::merge(&asker, request, attachments)
-        }),
+        Operation::PlanResultMerge(request) => {
+            let input: sdm_contract::result::PlanResultMerge =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::result::plan(&input.parts)?)
+            })
+        }
+        Operation::MergeResults(request) => {
+            Run::new(move |asker| async move { crate::result::merge(&asker, request, attachments) })
+        }
         Operation::TabularArrow(request) => Run::new(move |asker| async move {
             crate::tabular_arrow::run(asker, request, attachments, facts, zones).await
         }),

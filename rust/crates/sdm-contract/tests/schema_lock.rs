@@ -656,6 +656,11 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.native_layout",
     ),
+    ("Operation/plan_result_merge.input", "PlanResultMerge.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.plan_result_merge",
+    ),
     ("Operation/check_column.input", "CheckColumn.input"),
     ("Operation/check_direct_cell.input", "CheckDirectCell.input"),
     (
@@ -819,7 +824,10 @@ const JSON: &[(&str, &str)] = &[
 
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: &[(&str, &str)] = &[
-    ("Operation/merge_results.tables", "normalized Arrow result tables"),
+    (
+        "Operation/merge_results.tables",
+        "normalized Arrow result tables",
+    ),
     ("Operation/edit_schema.frame", "Arrow, with its schema"),
     ("Operation/fit.payloads", "encoded endpoint payloads"),
     ("Operation/predict.payloads", "encoded endpoint payloads"),
