@@ -33,6 +33,7 @@ pub mod scalar;
 #[cfg(feature = "schema-check")]
 pub mod schema_check;
 pub mod session;
+pub mod result;
 pub mod tabular;
 pub mod tabular_arrow;
 #[cfg(feature = "test-ops")]

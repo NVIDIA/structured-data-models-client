@@ -345,6 +345,21 @@ public final class Schema {
     return schema;
   }
 
+  Map<String, Object> queryShape() {
+    List<Object> named = new ArrayList<>();
+    for (Table table : tables) {
+      Map<String, Object> value = new LinkedHashMap<>();
+      value.put("name", table.name());
+      value.put("columns", table.columns().stream().map(c ->
+          Map.of("name", c.name(), "dtype", c.dtype(), "stype", c.stype())).toList());
+      value.put("primary_key", table.primaryKey().size() == 1 ? table.primaryKey().get(0) : null);
+      value.put("time_column", table.timeColumn().orElse(null));
+      value.put("end_time_column", null);
+      named.add(value);
+    }
+    return Map.of("tables", named, "links", links(relationships));
+  }
+
   /** Relationships as the contract writes links, each {@code [foreign key, referenced key]}. */
   static List<List<Object>> links(List<Relationship> relationships) {
     List<List<Object>> links = new ArrayList<>();

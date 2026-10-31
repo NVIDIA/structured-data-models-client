@@ -79,6 +79,30 @@ public final class SdmClient implements AutoCloseable {
     return serving != null ? serving.url() : transport.url();
   }
 
+  /** Model ids advertised by the endpoint, not the SDK's capability registry. */
+  public List<String> models() {
+    requireOpen();
+    if (serving != null) throw new StructuredDataException(
+        "Databricks serving does not list models; name the model on predict", "UNSUPPORTED_REQUEST", Map.of(), null);
+    try { return transport.models(); }
+    catch (HttpTransport.Failed e) { throw discoveryFailure(); }
+  }
+
+  /** Whether the endpoint reports readiness. */
+  public boolean healthReady() {
+    requireOpen();
+    try { return serving == null ? transport.healthReady() : serving.healthReady(); }
+    catch (HttpTransport.Failed | Host.TransportFailed e) { throw discoveryFailure(); }
+    catch (Host.EndpointFailed e) {
+      throw new StructuredDataException("serving readiness check failed", "TRANSPORT_ERROR",
+          Map.of("status_code", e.status()), null);
+    }
+  }
+
+  private static StructuredDataException discoveryFailure() {
+    return new StructuredDataException("endpoint discovery failed", "TRANSPORT_ERROR", Map.of(), null);
+  }
+
   /**
    * What {@code model} supports, as far as this client knows: the core's table of the models, not
    * the endpoint's answer, as Python's {@code capabilities()}.
@@ -151,7 +175,11 @@ public final class SdmClient implements AutoCloseable {
     operation.put("inference_asked", request.inferenceAsked());
     if (serving != null) operation.put("model_endpoint", serving.modelEndpoint());
     try (Host.Finished finished = Host.run(operation, request.materialized().attachments(),
-        new Host.Call(null, this::call, request.materialized().held()))) { return predicted(finished); }
+        new Host.Call(null, this::call, request.materialized().held()))) {
+      Results.Predicted value = (Results.Predicted) Results.expect(finished.result(), "predict");
+      return new PredictionResult(value.model(), value.requestId(), read(finished.bytes(value.metadata())),
+          value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()));
+    }
   }
 
   Map<String, Object> predictionInput(Request request, String model, List<String> outputs) {

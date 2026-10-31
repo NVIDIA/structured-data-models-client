@@ -1860,16 +1860,27 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     )));
     // The result's explanation (T2.13), as the JSON text of
     // [`Part::explanation`], on the schema's metadata under `explanation`.
-    let mut schema = Schema::new(fields);
+    let mut metadata = std::collections::HashMap::from([
+        (
+            "sdm.answer_type".to_owned(),
+            match part.answers {
+                AnswerType::Float => "Float",
+                AnswerType::FloatClass => "FloatClass",
+                AnswerType::Bool => "Bool",
+                AnswerType::Int => "Int",
+                AnswerType::Text => "Text",
+            }
+            .to_owned(),
+        ),
+        ("sdm.text_ids".to_owned(), part.text_ids.to_string()),
+    ]);
     if let Some(explanation) = &part.explanation {
-        schema = schema.with_metadata(
-            [(
-                "explanation".to_owned(),
-                String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
-            )]
-            .into(),
+        metadata.insert(
+            "explanation".to_owned(),
+            String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
         );
     }
+    let schema = Schema::new(fields).with_metadata(metadata);
     RecordBatch::try_new(Arc::new(schema), columns).map_err(|_| internal_layout())
 }
 

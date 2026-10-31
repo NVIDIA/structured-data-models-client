@@ -42,6 +42,7 @@ pub enum Operation {
     MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
     TabularArrow(crate::tabular_arrow::ArrowTabular),
+    MergeResults(crate::result::MergeResults),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
     CheckTabularSessionQuestion(crate::direct::DirectInput),
@@ -117,6 +118,7 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::TabularArrow(_) => "tabular_arrow",
+            Operation::MergeResults(_) => "merge_results",
             Operation::ValidateQuery(_) => "validate_query",
             Operation::FrameSession(_) => "frame_session",
             Operation::DescribeFrameTables(_) => "describe_frame_tables",
@@ -184,6 +186,11 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::MergeResults(v) => {
+                let mut named = vec![(v.input, Bytes)];
+                named.extend(v.tables.iter().map(|id| (*id, Arrow)));
+                named
+            }
             Operation::TabularArrow(v) => {
                 use crate::tabular_arrow::ArrowTabular::*;
                 match v {
@@ -1748,6 +1755,9 @@ pub struct Predicted {
     /// Contract v27 adds, after those, `embeddings` (list of float64, an
     /// answer's embedding in the order written, null where it has none;
     /// T2.11).
+    /// Native result tables also retain scalar `sdm.answer_type` and
+    /// `sdm.text_ids` schema metadata for lossless generic result merging.
+    /// Ranking tables need only `sdm.text_ids` because they hold no prediction column.
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.
     pub model: String,
@@ -1780,6 +1790,8 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "MergeResults.input")]
+    pub merge_results_input: crate::result::MergeInput,
     pub tabular_arrow_request: crate::tabular_arrow::ArrowRequest,
     pub tabular_arrow_prediction: crate::tabular_arrow::ArrowPrediction,
     pub tabular_arrow_fit: crate::tabular_arrow::ArrowFit,

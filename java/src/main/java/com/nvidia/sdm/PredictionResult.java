@@ -30,15 +30,63 @@ public final class PredictionResult {
   private final Object metadata;
   private final List<String> outputs;
   private final byte[] rows;
+  private final List<Object> unscoredCandidates;
 
   PredictionResult(
       String model, String requestId, Object metadata, List<String> outputs, byte[] rows) {
+    this(model, requestId, metadata, outputs, rows, List.of());
+  }
+
+  @SuppressWarnings("unchecked")
+  PredictionResult(String model, String requestId, Object metadata, List<String> outputs,
+      byte[] rows, List<Object> unscoredCandidates) {
     this.model = model;
     this.requestId = requestId;
-    this.metadata = metadata;
+    this.metadata = metadata instanceof Map<?, ?> map
+        ? com.nvidia.sdm.internal.DirectOptions.snapshot((Map<String, ?>) map) : Map.of();
     this.outputs = List.copyOf(outputs);
     this.rows = rows;
+    this.unscoredCandidates = java.util.Collections.unmodifiableList(new ArrayList<>(unscoredCandidates));
   }
+
+  /** Combine already computed slices using the same native merge rules as prediction batching. */
+  public static PredictionResult merge(List<PredictionResult> parts) {
+    java.util.Objects.requireNonNull(parts, "parts");
+    if (parts.size() == 1) return java.util.Objects.requireNonNull(parts.get(0));
+    List<Object> descriptions = new ArrayList<>();
+    List<Object> candidates = new ArrayList<>();
+    Map<Integer, byte[]> tables = new java.util.LinkedHashMap<>();
+    try {
+      for (PredictionResult part : parts) {
+        Map<String, Object> description = new java.util.LinkedHashMap<>();
+        description.put("model", part.model()); description.put("request_id", part.requestId());
+        description.put("outputs", part.outputs());
+        description.put("metadata", new String(Json.write(part.metadata()), StandardCharsets.UTF_8));
+        List<String> unscored = new ArrayList<>();
+        for (Object value : part.unscoredCandidates()) unscored.add(new String(Json.write(value), StandardCharsets.UTF_8));
+        description.put("unscored_candidates", unscored);
+        descriptions.add(description); candidates.addAll(part.unscoredCandidates());
+        tables.put(tables.size() + 2, part.rows);
+      }
+    } catch (Json.JsonException error) {
+      throw new StructuredDataException("result metadata cannot be encoded", "INTERNAL_ERROR", Map.of(), error);
+    }
+    Map<String, Object> operation = Map.of("op", "merge_results", "input", 1, "tables", new ArrayList<>(tables.keySet()));
+    try (com.nvidia.sdm.internal.Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(operation,
+        Map.of(1, com.nvidia.sdm.internal.Host.attachment(Map.of("parts", descriptions))), tables,
+        com.nvidia.sdm.internal.Host.Call.none())) {
+      com.nvidia.sdm.internal.Results.Predicted result = (com.nvidia.sdm.internal.Results.Predicted)
+          com.nvidia.sdm.internal.Results.expect(finished.result(), "predict");
+      Object metadata;
+      try { metadata = Json.read(finished.bytes(result.metadata())); }
+      catch (Json.JsonException error) { throw new IllegalStateException("invalid merged metadata", error); }
+      return new PredictionResult(result.model(), result.requestId(), metadata, result.outputs(),
+          finished.arrow(result.result()), result.unscoredCandidates().stream().map(i -> candidates.get(Math.toIntExact(i))).toList());
+    }
+  }
+
+  /** Candidate values omitted because their sampled context could not teach the question. */
+  public List<Object> unscoredCandidates() { return unscoredCandidates; }
 
   /** The model that answered. */
   public String model() {

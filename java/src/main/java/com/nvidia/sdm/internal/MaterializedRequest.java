@@ -22,6 +22,41 @@ public final class MaterializedRequest {
     for (Map<String, Object> part : parts(state)) take(part, finished);
   }
 
+  private MaterializedRequest(Map<String, Object> state, Map<Integer, Object> attachments) {
+    this.state = state;
+    int payload = ((Number) state.get("payload")).intValue();
+    int query = ((Number) state.get("query")).intValue();
+    this.attachments.put(payload, attachments.get(payload));
+    this.attachments.put(query, attachments.get(query));
+    this.payloads.add((byte[]) attachments.get(payload));
+  }
+
+  /** Independent immutable views of each question, sharing owned payload bytes. */
+  public List<MaterializedRequest> questions() {
+    if (!inParts()) return List.of();
+    List<Map<String, Object>> all = new ArrayList<>();
+    all.add(state); all.addAll(parts(state));
+    List<MaterializedRequest> result = new ArrayList<>();
+    for (Map<String, Object> part : all) {
+      Map<String, Object> child = new LinkedHashMap<>();
+      child.put("version", state.get("version"));
+      child.put("payload", part.get("payload")); child.put("query", part.get("query"));
+      result.add(new MaterializedRequest(child, attachments));
+    }
+    return List.copyOf(result);
+  }
+
+  public String query() {
+    try { return (String) Json.read((byte[]) attachments.get(((Number) state.get("query")).intValue())); }
+    catch (Json.JsonException e) { throw new IllegalStateException("invalid core query", e); }
+  }
+
+  public List<Object> candidates(List<Long> positions) {
+    if (positions.isEmpty()) return List.of();
+    return java.util.Collections.unmodifiableList(new ArrayList<>((List<?>) held().get("candidates")
+        .apply(Map.of("candidates", positions))));
+  }
+
   private void take(Map<String, Object> part, Host.Finished finished) {
     int payload = ((Number) part.get("payload")).intValue();
     byte[] bytes = finished.bytes(payload);

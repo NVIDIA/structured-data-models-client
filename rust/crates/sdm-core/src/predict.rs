@@ -306,6 +306,15 @@ pub(crate) fn finish(
     outputs: Vec<String>,
 ) -> Result<OperationResult, CoreError> {
     let laid = table(&merged)?;
+    finish_table(asker, merged, outputs, laid)
+}
+
+pub(crate) fn finish_table(
+    asker: &Asker,
+    merged: Part,
+    outputs: Vec<String>,
+    laid: arrow_array::RecordBatch,
+) -> Result<OperationResult, CoreError> {
     let mut named = laid.schema().metadata().clone();
     named.insert("absent".to_owned(), absent_text(&merged)?);
     let schema = std::sync::Arc::new(laid.schema().as_ref().clone().with_metadata(named));

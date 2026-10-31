@@ -122,6 +122,54 @@ public final class HttpTransport {
     return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
   }
 
+  public List<String> models() throws Failed {
+    byte[] response = (byte[]) get("/v1/models", false).body();
+    try {
+      Object data = ((Map<?, ?>) Json.read(response)).get("data");
+      if (data == null) return List.of();
+      if (!(data instanceof List<?> entries)) throw new Failed("invalid model list");
+      List<String> models = new java.util.ArrayList<>();
+      for (Object entry : entries) if (entry instanceof Map<?, ?> model) {
+        Object id = model.get("id");
+        if (id != null && !id.equals("") && !id.equals(false) && !id.equals(0L)) models.add(id.toString());
+      }
+      return List.copyOf(models);
+    } catch (Json.JsonException | ClassCastException e) { throw new Failed("invalid model list"); }
+  }
+
+  public boolean healthReady() throws Failed { return get("/v1/health/ready", true).statusCode() == 200; }
+
+  private HttpResponse<?> get(String path, boolean readiness) throws Failed {
+    HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url + path)).timeout(timeout).GET();
+    if (apiKey != null) builder.header("X-API-Key", apiKey);
+    HttpRequest request = builder.build();
+    for (int attempt = 0; ; attempt++) {
+      try {
+        HttpResponse<byte[]> response;
+        if (readiness) {
+          HttpResponse<java.io.InputStream> headers = exchange(client, request,
+              HttpResponse.BodyHandlers.ofInputStream(), timeout.toNanos());
+          headers.body().close();
+          if (RETRY_STATUS.contains(headers.statusCode()) && attempt < maxRetries) {
+            backoff(attempt, headers.headers().firstValue("Retry-After").orElse(null)); continue;
+          }
+          return headers;
+        }
+        response = attempt(request);
+        if (RETRY_STATUS.contains(response.statusCode()) && attempt < maxRetries) {
+          backoff(attempt, response.headers().firstValue("Retry-After").orElse(null)); continue;
+        }
+        if (response.statusCode() != 200) throw ModelEndpointException.of(response.statusCode(), response.body());
+        return response;
+      } catch (IOException e) {
+        if (attempt < maxRetries) { backoff(attempt, null); continue; }
+        throw new Failed("discovery request failed");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt(); throw new Failed("discovery request interrupted");
+      }
+    }
+  }
+
   /**
    * Posts {@code body} to {@link #PREDICTIONS} as it is and gives back the answer's bytes, an
    * empty answer as {@code {}}.
@@ -216,10 +264,10 @@ public final class HttpTransport {
    * One HTTP exchange, including the complete body, within the given remaining budget.
    * Cancels the exchange on timeout or interruption; callers select their own retry policy.
    */
-  public static HttpResponse<byte[]> exchange(
-      HttpClient client, HttpRequest request, HttpResponse.BodyHandler<byte[]> body,
+  public static <T> HttpResponse<T> exchange(
+      HttpClient client, HttpRequest request, HttpResponse.BodyHandler<T> body,
       long remainingNanos) throws IOException, InterruptedException {
-    CompletableFuture<HttpResponse<byte[]>> pending =
+    CompletableFuture<HttpResponse<T>> pending =
         client.sendAsync(request, body);
     try {
       return pending.get(remainingNanos, TimeUnit.NANOSECONDS);

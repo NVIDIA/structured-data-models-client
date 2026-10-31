@@ -27,6 +27,7 @@ mod ranking;
 pub mod run;
 mod session;
 mod subgraph;
+mod result;
 mod tabular_arrow;
 mod tabular_selection;
 #[cfg(feature = "test-ops")]

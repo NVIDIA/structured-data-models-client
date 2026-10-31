@@ -128,6 +128,30 @@ public final class Request {
     return direct() ? Optional.of((String) direct.get("task")) : Optional.ofNullable(facts.problemType());
   }
 
+  /** Original query when this request is decomposed into candidate or forecast questions. */
+  public Optional<String> asked() {
+    return !direct() && materialized.inParts() ? Optional.of(query) : Optional.empty();
+  }
+
+  /** Each independent candidate/forecast request, without sampling again. */
+  public Optional<List<Request>> parts() {
+    if (direct() || !materialized.inParts()) return Optional.empty();
+    List<Request> result = new ArrayList<>();
+    for (com.nvidia.sdm.internal.MaterializedRequest part : materialized.questions()) {
+      String text = part.query();
+      Map<String, Object> operation = Map.of("op", "validate_query", "query", 1, "schema", 2,
+          "profile", Map.of("name", "RELATIONAL"));
+      try (Host.Finished finished = Host.run(operation,
+          Map.of(1, Host.attachment(text), 2, Host.attachment(schema.queryShape())))) {
+        Results.Validated validated = (Results.Validated) Results.expect(finished.result(), "validate_query");
+        if (!validated.accepted() || validated.query() == null)
+          throw new StructuredDataException("core produced an invalid request part", "INTERNAL_ERROR", Map.of(), null);
+        result.add(new Request(schema, part, text, validated.query(), inferenceAsked));
+      }
+    }
+    return Optional.of(List.copyOf(result));
+  }
+
   /** Whether the answer is a window rather than a standing value, as Python's attribute. */
   public boolean targetMovesWithTime() {
     return !direct() && facts.windowed();
