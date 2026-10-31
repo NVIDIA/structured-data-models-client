@@ -58,3 +58,12 @@ Out-of-range conversions fail explicitly instead of silently replacing values wi
 Validation: two independent architecture/code reviews, JDK21 full suite (274 tests, zero failures, 13 environment-gated skips), and JDK17 focused sampling/session/ownership tests (16 passing).
 Rust core, schema and contract suites passed, including exact Arrow admission and attachment inventories.
 HTTP lifecycle tests use a local model stub; this change does not claim a new live Java Relational endpoint comparison.
+
+## Warehouse sessions
+
+A request already materialized from a warehouse uses the same `client.fit(request, KUMO_RELATIONAL)` and fitted `predict`/`close` calls.
+Java forwards the existing sampled payload; Rust owns holdout filtering, pinned-question checks, scoring batches and cleanup state.
+Fit and fitted prediction do not reconnect to the warehouse or resample data.
+Databricks Model Serving transport still refuses sessions; a session-capable model HTTP endpoint is required.
+No warehouse SQL or provider implementation changes are needed.
+Two independent reviews approved this extension; ten DuckDB/SQLite HTTP lifecycle tests passed, including scoring after closing the JDBC connection, temporal windows, holdout filtering, partial results and retryable cleanup.

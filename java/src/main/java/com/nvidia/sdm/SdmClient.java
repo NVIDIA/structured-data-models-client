@@ -248,15 +248,15 @@ public final class SdmClient implements AutoCloseable {
   public synchronized FittedModel fit(Request request, String model, List<?> holdout) {
     requireOpen();
     Objects.requireNonNull(request, "request");
-    if (request.frame() != null) {
+    Objects.requireNonNull(model, "model");
+    Objects.requireNonNull(holdout, "holdout");
+    if (!request.direct()) {
       if (serving != null) throw new StructuredDataException("this transport does not support sessions",
           "SESSIONS_UNSUPPORTED", Map.of(), null);
       FittedModel fitted = RelationalSessions.fit(this, request, model, holdout);
       sessions.add(fitted);
       return fitted;
     }
-    if (!request.direct()) throw new StructuredDataException("fit needs an in-memory Tabular request",
-        "UNSUPPORTED_REQUEST", Map.of(), null);
     if (serving != null) throw new StructuredDataException("this transport does not support sessions",
         "SESSIONS_UNSUPPORTED", Map.of(), null);
     List<Object> keys = new ArrayList<>();

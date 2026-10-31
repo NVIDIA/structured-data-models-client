@@ -54,6 +54,8 @@ For a single call, select `.model(SdmClient.KUMO_RELATIONAL)` in the options pas
 Omitting that selection preserves the existing single-table Tabular default.
 Static/temporal targets, links, ranking and forecasts use Rust sampling; ordinary requests also support `fit`, fitted `predict` and `close`.
 Sessions require a compatible model endpoint and reject rewritten ranking/forecast requests.
+Warehouse requests already gathered by `materialize` also support the same fitted-session lifecycle, without further warehouse reads.
+Databricks Model Serving transport does not support sessions; use a compatible model HTTP endpoint.
 If a later model call fails, `exception.answered(allocator)` returns any completed rows as an optional Arrow reader that the caller closes.
 
 ## Coordinates
