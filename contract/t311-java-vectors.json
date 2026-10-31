@@ -1,7 +1,7 @@
 {
  "about": "T3.11's vectors: the reference's PredictiveQuery constructor on each S0 query text and on blank texts (reference), and Python's binding's answers to each S0 case's validate_query and to the test-only fail operation for every contract error code (binding). java/src/test/java/com/nvidia/sdm/ holds the Java host to them.",
  "binding": {
-  "contract": 29,
+  "contract": 53,
   "errors": {
    "ENDPOINT_REFUSED": {
     "code": "ENDPOINT_REFUSED",
@@ -13,11 +13,11 @@
    },
    "INTERNAL_ERROR": {
     "code": "INTERNAL_ERROR",
-    "digest": "3a194be1f5e28c37b05dfed4e60fcac8874843459deb0c33ce8adba4de0b8d10",
-    "error": "{\"code\": \"INTERNAL_ERROR\", \"kind\": \"internal\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"internal\"}",
+    "digest": "39c96f21e7b6116ca166ce509151ace4cfaaf929f03fa17a8782b38a271f7091",
+    "error": "{\"code\": \"INTERNAL_ERROR\", \"kind\": \"internal\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"result_merge_empty\"}",
     "kind": "internal",
     "retryable": false,
-    "template": "the core failed; this is a defect, not a problem with the request"
+    "template": "no parts to merge"
    },
    "INVALID_CONFIGURATION": {
     "code": "INVALID_CONFIGURATION",
@@ -37,19 +37,19 @@
    },
    "INVALID_REQUEST": {
     "code": "INVALID_REQUEST",
-    "digest": "b2c8c44cb4539ab0b126db6362cc5109cc1a4b16e4119eb2e7a5b97457bec295",
-    "error": "{\"code\": \"INVALID_REQUEST\", \"kind\": \"invalid_request\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"link_unheld\"}",
+    "digest": "91fad74d329fbefa3240433ff1d5c7f87fb6ecfef1954c7278a5710ab953f632",
+    "error": "{\"code\": \"INVALID_REQUEST\", \"kind\": \"invalid_request\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"direct_empty\"}",
     "kind": "invalid_request",
     "retryable": false,
-    "template": "a relationship given names a table or column the schema does not hold"
+    "template": "context has no rows, so there is nothing for the model to learn the answer from"
    },
    "INVALID_RESPONSE": {
     "code": "INVALID_RESPONSE",
-    "digest": "777e3ba5dbd8abe1f7661022b8de4287ab832a1b800be95d0e2edf836f43e71d",
-    "error": "{\"code\": \"INVALID_RESPONSE\", \"kind\": \"model_endpoint\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"response_unread\"}",
+    "digest": "a83ddc6ba6226d4aeb7a4c53a607d1198d31b9a128ba56e26f8652b2e38bb78a",
+    "error": "{\"code\": \"INVALID_RESPONSE\", \"kind\": \"model_endpoint\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"tabular_missing_row_index\"}",
     "kind": "model_endpoint",
     "retryable": false,
-    "template": "the model endpoint answered with something the core cannot read"
+    "template": "kumo-tabular returned a response that does not match the contract: PredictionItem response is missing required field 'row_index'"
    },
    "INVALID_SCHEMA": {
     "code": "INVALID_SCHEMA",
@@ -157,11 +157,11 @@
    },
    "UNSUPPORTED_REQUEST": {
     "code": "UNSUPPORTED_REQUEST",
-    "digest": "a19165aa27dc7265fd1c254840be31ecc81d6ec2eb19c0a429b44ea7f93adfbc",
-    "error": "{\"code\": \"UNSUPPORTED_REQUEST\", \"kind\": \"unsupported\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"key_set_type_unbound\"}",
+    "digest": "880e493247715c1961a243afed74465ba5ee22fae9b6adf10dae1c3c8cf2ebe1",
+    "error": "{\"code\": \"UNSUPPORTED_REQUEST\", \"kind\": \"unsupported\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"direct_relational_frames\"}",
     "kind": "unsupported",
     "retryable": false,
-    "template": "the core asked the data source to match keys of a type its SQL does not bind as text"
+    "template": "a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form"
    },
    "UNSUPPORTED_TYPE": {
     "code": "UNSUPPORTED_TYPE",
@@ -223,7 +223,7 @@
      "2": "eyJ0YWJsZXMiOiBbeyJuYW1lIjogIm9yZGVycyIsICJjb2x1bW5zIjogW3sibmFtZSI6ICJvcmRlcl9pZCIsICJkdHlwZSI6ICJpbnQiLCAic3R5cGUiOiAiSUQifSwgeyJuYW1lIjogInVzZXJfaWQiLCAiZHR5cGUiOiAiaW50IiwgInN0eXBlIjogIklEIn0sIHsibmFtZSI6ICJwcmljZSIsICJkdHlwZSI6ICJmbG9hdCIsICJzdHlwZSI6ICJudW1lcmljYWwifSwgeyJuYW1lIjogInRzIiwgImR0eXBlIjogInRpbWUiLCAic3R5cGUiOiAidGltZXN0YW1wIn1dLCAicHJpbWFyeV9rZXkiOiAib3JkZXJfaWQiLCAidGltZV9jb2x1bW4iOiAidHMiLCAiZW5kX3RpbWVfY29sdW1uIjogbnVsbH0sIHsibmFtZSI6ICJ1c2VycyIsICJjb2x1bW5zIjogW3sibmFtZSI6ICJ1c2VyX2lkIiwgImR0eXBlIjogImludCIsICJzdHlwZSI6ICJJRCJ9LCB7Im5hbWUiOiAiYWdlIiwgImR0eXBlIjogImludCIsICJzdHlwZSI6ICJudW1lcmljYWwifSwgeyJuYW1lIjogImNvdW50cnkiLCAiZHR5cGUiOiAic3RyaW5nIiwgInN0eXBlIjogImNhdGVnb3JpY2FsIn1dLCAicHJpbWFyeV9rZXkiOiAidXNlcl9pZCIsICJ0aW1lX2NvbHVtbiI6IG51bGwsICJlbmRfdGltZV9jb2x1bW4iOiBudWxsfV0sICJsaW5rcyI6IFtbeyJjb2x1bW4iOiAidXNlcl9pZCIsICJ0YWJsZSI6ICJvcmRlcnMifSwgeyJjb2x1bW4iOiAidXNlcl9pZCIsICJ0YWJsZSI6ICJ1c2VycyJ9XV19"
     },
     "codes": [],
-    "digest": "76617046dc5a3207b60e155f196146128dfff09e1dfbca79cf32e67d23a985ce",
+    "digest": "82286d8feb8e7f4e9cc086c2175518fbf80df8a81b12b5b1f40a936b74f5f533",
     "error": null,
     "operation": "{\"op\": \"validate_query\", \"profile\": {\"model\": null, \"name\": \"RELATIONAL\"}, \"query\": 1, \"schema\": 2}",
     "text": "PREDICT users.country FOR EACH users.user_id",
