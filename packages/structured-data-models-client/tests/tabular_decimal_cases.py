@@ -24,12 +24,19 @@ CASES = [
         'finite',
         'boundary',
         'float_nan',
+        'float_nan_integer',
         'infinity',
         'quiet_nan',
         'signaling_nan',
     )
     for entry in ('indices', 'predict')
     for trap in ('clear', 'trapped')
+    for direction in ('forward', 'reverse')
+]
+CASES += [
+    f'{family}/{entry}/invalid_only/{direction}'
+    for family in ('float_nan', 'float_nan_integer')
+    for entry in ('indices', 'predict')
     for direction in ('forward', 'reverse')
 ]
 CASES += [
@@ -47,12 +54,14 @@ def observe_case(name: str) -> dict[str, Any]:
     family, entry, mode, direction = name.split('/')
     n = 81 if entry == 'indices' else 10002
     with localcontext() as context:
+        context.prec = 2
         context.traps[FloatOperation] = False
         context.traps[InvalidOperation] = False
         pairs = {
             'finite': [Decimal('1.1'), 1.1],
             'boundary': [Decimal('9007199254740993'), float(2**53)],
             'float_nan': [Decimal('1.1'), float('nan')],
+            'float_nan_integer': [1, float('nan'), Decimal('1.1')],
             'infinity': [Decimal('1e10000'), float('inf')],
             'quiet_nan': [Decimal('NaN'), Decimal('1')],
             'signaling_nan': [Decimal('sNaN'), Decimal('1')],
@@ -65,7 +74,7 @@ def observe_case(name: str) -> dict[str, Any]:
             pair = pair[::-1]
         labels = np.empty(n, dtype=object)
         for position in range(n):
-            labels[position] = pair[position % 2]
+            labels[position] = pair[position % len(pair)]
         index = pd.Index(labels, dtype=object)
         if family in ('warning_first', 'decimal_first'):
             decimals = np.empty(2, dtype=object)
@@ -97,7 +106,7 @@ def observe_case(name: str) -> dict[str, Any]:
             else {'predict': frame.iloc[[-1]].drop(columns=['target'])}
         )
         context.traps[FloatOperation] = mode == 'trapped'
-        context.traps[InvalidOperation] = mode == 'trapped'
+        context.traps[InvalidOperation] = mode in ('trapped', 'invalid_only')
         context.clear_flags()
         if family == 'sticky':
             context.flags[Inexact] = True
