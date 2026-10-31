@@ -4,7 +4,8 @@
 
 # Remaining Phase 4 work: proposed design
 
-**All four remaining implementations are verified and delivered on `rust-core-phase-4`.**
+**The four deliveries in this plan are verified and delivered on `rust-core-phase-4`.**
+The later [coverage audit](coverage-audit.md) identifies additional migration/parity gaps; this plan is not a complete phase-exit audit.
 Java in-memory Relational and Java warehouse sessions are already merged at `265495550`.
 Python warehouse sessions and temporal links reuse shared Rust policy and leave sampling SQL/providers unchanged.
 

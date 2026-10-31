@@ -7,7 +7,7 @@
 **Audit correction:** the bounded deliveries below landed, but full Phase 4 closure and cross-language parity are not established.
 The [coverage audit](coverage-audit.md) has confirmed active legacy PQL validation and Java warehouse decomposition gaps.
 
-The remaining implementation is complete and verified on `rust-core-phase-4`.
+The bounded warehouse/Java delivery described below is complete and verified on `rust-core-phase-4`.
 This does not claim a merge into `rust-core`, a release, or completion of Phase 5.
 
 ## Delivered
