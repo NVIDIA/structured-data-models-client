@@ -301,6 +301,16 @@ def check_snapshot(tables, fixture):
 
 
 def request_observation(request):
+    # Exercise public inspection without replacing the raw prediction evidence.
+    for name, rows in [
+        ('context', request.context_rows),
+        ('predict', request.predict_rows),
+    ]:
+        split = getattr(request, name)
+        if len(split.instance_table) != rows:
+            raise AssertionError('inspected request row count differs: ' + name)
+        for table in split.related_tables.values():
+            frame(table)
     if request.payloads is not None:
         return scalar(request.payloads)
     return {

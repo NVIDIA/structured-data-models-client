@@ -26,11 +26,41 @@ class DuckDbLargeValueTest {
           .withPrimaryKey("users", "id");
       Request request = PredictiveQuery.parse("PREDICT users.y FOR EACH users.id")
           .materialize(schema, MaterializeOptions.builder().indices(1L).build());
-      try (RelationalTest.Endpoint endpoint = new RelationalTest.Endpoint();
-          SdmClient client = endpoint.client()) {
-        assertEquals(1, client.predict(request, SdmClient.KUMO_RELATIONAL).rows());
+      assertTrue(schema.table("users").columns().stream().noneMatch(c -> c.name().equals("payload")));
+      String serving = System.getProperty("sdm.test.giant.endpoint");
+      if (serving != null) {
+        assertFalse(serving.isBlank(), "sdm.test.giant.endpoint must name a serving endpoint");
+        try (SdmClient client = SdmClient.forDatabricksServing(
+            DatabricksServing.of(new com.databricks.sdk.WorkspaceClient(), serving))) {
+          assertPrediction(client, request);
+        }
+      } else {
+        try (RelationalTest.Endpoint endpoint = new RelationalTest.Endpoint();
+            SdmClient client = endpoint.client()) {
+          assertPrediction(client, request);
+        }
       }
       assertFalse(connection.isClosed());
+    }
+  }
+
+  private static void assertPrediction(SdmClient client, Request request) throws Exception {
+    PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+    assertEquals(1, result.rows());
+    try (var allocator = new org.apache.arrow.memory.RootAllocator();
+        var reader = result.read(allocator)) {
+      long rows = 0;
+      while (reader.loadNextBatch()) {
+        var root = reader.getVectorSchemaRoot();
+        var prediction = root.getVector("prediction");
+        assertNotNull(prediction);
+        for (int at = 0; at < root.getRowCount(); at++) {
+          assertInstanceOf(Number.class, prediction.getObject(at));
+          assertTrue(Double.isFinite(((Number) prediction.getObject(at)).doubleValue()));
+        }
+        rows += root.getRowCount();
+      }
+      assertEquals(1, rows);
     }
   }
 }

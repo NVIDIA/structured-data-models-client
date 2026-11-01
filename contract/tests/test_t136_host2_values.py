@@ -505,6 +505,40 @@ if BIG:
             assert got['outcome']['code'] is not None
             return
         assert name.endswith('.large'), name
+        endpoint = os.environ.get('SDM_T136_LIVE_ENDPOINT')
+        if endpoint is not None and '.blob.' in name:
+            assert endpoint.strip(), (
+                'SDM_T136_LIVE_ENDPOINT must name a serving endpoint'
+            )
+            import math
+
+            import pandas as pd
+            from sdm_client import (
+                KumoRelational,
+                PredictiveQuery,
+                Schema,
+                SDMClient,
+            )
+            from sdm_connectors import DuckDBSource
+
+            # The recorded frozen fixture already succeeded through stub prediction.
+            # This opt-in closes the actual-model gap without rerunning the reference.
+            with R.source(row['setup']) as connection:
+                schema = Schema.from_source(DuckDBSource(connection))
+                assert 'f' not in schema['users'].columns
+                request = PredictiveQuery(R.PQL, schema).materialize(
+                    indices=R.INDICES, anchor_time=pd.Timestamp(R.ANCHOR)
+                )
+                with SDMClient.for_databricks_serving(endpoint) as client:
+                    result = client.predict(
+                        request, model=KumoRelational()
+                    ).to_pandas()
+                assert len(result) == len(R.INDICES)
+                assert all(
+                    math.isfinite(float(value))
+                    for value in result['prediction']
+                )
+            return
         got = _routed('core', row['setup'])
         assert got['described'] is not None, got['outcome']
         columns = got['described']['users']['columns']
