@@ -565,3 +565,67 @@ fn inspect_schema_checks_columns_before_relationships() {
     .unwrap_err();
     assert_eq!(error.sentence, sdm_contract::Sentence::MeaningNotCarried);
 }
+
+#[test]
+fn compatibility_ledger_names_each_semantic_assignment_contract() {
+    let ledger: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../tests/parity/manifest.json")).unwrap();
+    let record = ledger["type_contracts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|record| record["id"] == "semantic-types")
+        .unwrap();
+    let declared: BTreeSet<_> = record["semantic_types"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect();
+    // Exhaustive matching also makes a new Rust semantic type a compile-time
+    // obligation, even if nobody updated the ledger.
+    let expected = |stype| match stype {
+        Stype::Numerical => ("numerical", "float", true),
+        Stype::Categorical => ("categorical", "string", true),
+        Stype::Multicategorical => ("multicategorical", "string", true),
+        Stype::Id => ("ID", "int", true),
+        Stype::Text => ("text", "string", true),
+        Stype::Timestamp => ("timestamp", "string", true),
+        Stype::Sequence => ("sequence", "string", true),
+        Stype::Image => ("image", "string", false),
+        Stype::Unsupported => ("unsupported", "string", false),
+    };
+    let types = [
+        Stype::Numerical,
+        Stype::Categorical,
+        Stype::Multicategorical,
+        Stype::Id,
+        Stype::Text,
+        Stype::Timestamp,
+        Stype::Sequence,
+        Stype::Image,
+        Stype::Unsupported,
+    ];
+    assert_eq!(
+        declared,
+        types.iter().map(|stype| expected(*stype).0).collect()
+    );
+    for stype in types {
+        let (name, dtype, accepted) = expected(stype);
+        let input = sdm_contract::ops::CheckColumn {
+            name: "feature".into(),
+            dtype: Some(dtype.into()),
+            stype: Given::Value(name.into()),
+            validate_stype: true,
+        };
+        let result = edit::check_column(&input, &supports);
+        if accepted {
+            result.unwrap();
+        } else {
+            assert_eq!(
+                result.unwrap_err().sentence,
+                sdm_contract::Sentence::NotASemanticType
+            );
+        }
+    }
+}

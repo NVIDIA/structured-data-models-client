@@ -2911,12 +2911,34 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_standalone_schema_core.py",
-          "packages/structured-data-models-client/tests/test_frame_edits_core.py"
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_column_checks_are_atomic_and_native",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_edit_retains_identity_without_schema_owner",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructor_keeps_borrowed_columns_isolated",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_source_table_edits_do_not_read_source",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_schema_check_preserves_declarations_and_does_not_adopt_time",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_column_consistency_keeps_permissive_incomplete_types",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_bulk_binding_does_not_reenter_standalone_checks",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_source_schema_declarations_and_missing_dtype",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_missing_dtype_survives_frame_constructor_edits_and_checks",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_type_edit_uses_core_and_invalid_edit_is_atomic",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_key_edits_observe_current_values_and_leave_failed_edits_unchanged",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_near_unique_key_keeps_observed_duplicate_count",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_copy_and_pickle_preserve_origin_and_edit_isolation",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_adopted_frame_tables_retain_origin_and_relationship_rules",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_time_edit_preserves_key_exclusion_and_origin",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_manual_and_core_frame_table_adoption_use_shared_edits"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java",
-          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java"
+          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#theShopIsDescribedAsTheReferenceDescribesIt",
+          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#whatTheCallerDeclaresIsTakenByName",
+          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#anEditGivesANewSchemaAndLeavesTheOldOneAsItWas",
+          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#anEditTheReferenceRefusesIsRefusedByTheCore",
+          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#theHeldSchemaCarriesWhatTheSourceSaidOfEachColumn",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#directSchemaAndOptionsAreOwnedAndInferenceTravelsOnPredictAndScore",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#temporalTaskOptionIsRefusedBeforeNetworkAndFalseIsNotTemporal",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#nativeInferenceChecksRejectLossyIntegersBeforeSending",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#explicitTaskOverridesPqlInferenceForBothScoringPaths",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#frameKeyEditsCheckActualRowsAndPreserveOriginalSchema"
         ]
       },
       "gate": "local"
@@ -2939,12 +2961,56 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_tabular_direct_core.py",
-          "packages/structured-data-models-client/tests/test_tabular_input_families.py"
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_direct_columns_and_typed_results",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_boolean_features_and_target",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_direct_indexes_do_not_affect_model_rows",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_uint64_values_travel_as_exact_text",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_supplied_schema_and_live_frames_keep_their_owners",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_zero_column_scoring_retains_nonzero_row_count",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_model_preflight_precedes_empty_no_send",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_empty_call_skips_late_inference_conversion",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_constructor_guard_order",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_response_attribution_failures",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_native_literal_and_opaque_ids",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_direct_core_does_not_import_legacy_inference",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_current_scoring_dtype_is_reconciled_at_prediction",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_direct_context_limit_never_samples",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_target_container_guard_is_immediate",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_request_can_be_reused_with_another_model_and_keep_its_task",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_bad_earlier_row_prevents_later_native_literal_effects",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_constant_target_warning_preserves_live_schema_read",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_direct_overlap_warning_precedes_send",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_text_warning_precedes_live_row_encoding",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_overlap_matches_signed_zero_after_live_frame_mutation",
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py::test_missing_reply_index_fails_before_native_id_parsing",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_direct_family_preserves_wire_and_result",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_time_selection_preserves_nanosecond_order",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_inferred_duplicate_key_advice",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_date_advice_before_scoring",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_invalid_task_precedes_target_cell_inspection",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_custom_nullable_producer_never_takes_arrow_snapshot",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_float_refusal_keeps_specific_diagnostic",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_integer_range_after_earlier_column_mutation",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_conversion_order_and_nested_options"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java",
-          "java/src/test/java/com/nvidia/sdm/TabularTest.java"
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#directSchemaAndOptionsAreOwnedAndInferenceTravelsOnPredictAndScore",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#temporalTaskOptionIsRefusedBeforeNetworkAndFalseIsNotTemporal",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#nativeInferenceChecksRejectLossyIntegersBeforeSending",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#explicitTaskOverridesPqlInferenceForBothScoringPaths",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#frameKeyEditsCheckActualRowsAndPreserveOriginalSchema",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#directRequestSurvivesCallerClosureAndRestoresRowOrder",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#fitScoresWithoutResendingContextAndCleanupIsRetryable",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#fittedHoldoutAndOverlapUseEntityKeys",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#clientCloseAttemptsEverySessionWhenOneDeleteFails",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#pqlUsesOneTableAndDoesNotCallServerDuringMaterialize",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#suppliedPqlScoringAndClientSessionCleanup",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#pqlRetainsLogicalTimestampAndExactDecimalKeys",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#pqlBigIntegerKeysDoNotRoundThroughDouble",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#snapshotRetainsNullAndValidNanSeparately",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#snapshotPreparationMeasurement",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#emptyScoringDoesNotContactModelAndInvalidTasksFailAtConstruction",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#dictionaryInputPreservesValuesAndCallerOwnership"
         ]
       },
       "gate": "local"
@@ -2967,7 +3033,9 @@
           "packages/structured-data-models-client/tests/test_transport_socket.py::test_health_ready_wraps_unreachable_host"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java"
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#endpointDiscoveryUsesTheServerAndEnforcesClosedState",
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#directResultsMergeWithoutAnotherPredictionAndRejectDifferentOutputs",
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#rankingPartsRemainUsableAndUnscoredCandidatesSurviveMerge"
         ]
       },
       "gate": "local"
@@ -2988,10 +3056,20 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_result_merge_core.py"
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_merge_preserves_owners_without_row_or_metadata_serialization",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_stable_union_deduplicates_within_parts_and_keeps_exact_numbers",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_nan_values_remain_distinct_under_ieee_equality",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_temporal_resolution_and_original_objects_survive",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_container_candidates_keep_list_tuple_and_bytes_domains",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_error_order_and_single_identity_do_not_invoke_custom_comparison",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_missing_temporal_and_recursive_container_observations",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_aware_datetimes_compare_by_instant_across_dst_folds",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_aware_datetime_conversion_does_not_overflow_at_year_boundary"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java"
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#endpointDiscoveryUsesTheServerAndEnforcesClosedState",
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#directResultsMergeWithoutAnotherPredictionAndRejectDifferentOutputs",
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#rankingPartsRemainUsableAndUnscoredCandidatesSurviveMerge"
         ]
       },
       "gate": "local"
@@ -3013,10 +3091,16 @@
       "tests": {
         "python": [
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_copy_and_pickle_preserve_origin_and_edit_isolation",
-          "tests/test_t32_request_pickle.py"
+          "tests/test_t32_request_pickle.py::test_a_materialized_request_refuses_pickle_by_its_source"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java"
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#frameSchemaRestoresDataKeysTimesRelationshipsAndCanPredict",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#directRequestRestoresOptionsAndOwnsDataAfterStreamsAndTablesClose",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#materializedTabularPreservesQueryAndCanPredict",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#streamsRemainOpenAndSnapshotsCanBeConcatenated",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#malformedFramingMissingBlobsInvalidArrowAndStateVersionsFailBeforeHttp",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#liveSourcesAreExplicitlyExcluded"
         ]
       },
       "gate": "local"
@@ -3040,15 +3124,43 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-connectors/tests/test_reader.py",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_from_csv",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_from_parquet",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_rejects_storage_options",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_rejects_unsupported_format",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_accepts_parquet_aliases",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_accepts_compressed_csv",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_format_override_reads_suffixless_file",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_parquet_directory_without_trailing_slash",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_the_sqlite_backend_refuses_a_missing_database",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_the_sqlite_backend_refuses_database_and_uri_together",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_table_runs_in_the_caller_duckdb_session",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_table_over_sqlite_by_table_and_query",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_table_over_duckdb_by_table",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_an_integer_column_has_one_dtype_however_it_is_fetched",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_table_over_sqlite_keeps_nullable_integers_exact",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_table_prefers_arrow_over_pandas_fetch",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_table_falls_back_to_pandas_fetch_without_arrow_result",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_accepts_a_path_object",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_rejects_a_non_path_argument",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_still_rejects_a_remote_uri_given_as_a_path",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_the_duckdb_backend_refuses_a_missing_database",
+          "packages/structured-data-models-connectors/tests/test_reader.py::test_the_duckdb_backend_opens_an_in_memory_database",
           "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake",
           "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_trusts_only_built_in_functions_by_default",
           "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/ReadersTest.java",
-          "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java",
-          "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java"
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#parquetPreservesTimezoneNanosecondsAndNulls",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#jdbcReadsUseTheCallerConnectionAndKeepItOpen",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#csvKeepsDateStringsMissingTokensAndExactOversizedIntegers",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#parquetDirectoryPreservesPartitionsDecimalsAndTimestamps",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#compressionAndArchivesReuseTheSameLosslessCsvReader",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#csvRejectsNonDecimalGrammarAndPreservesFiniteOverflow",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#csvTablesFeedTheNativeTabularRequestAfterReaderResourcesClose",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#ordinaryJavaWorksWithoutSparkOrSnowflakeRuntime",
+          "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
+          "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection"
         ]
       },
       "gate": "local"
@@ -3111,10 +3223,56 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_databricks_serving.py"
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_serving_client_holds_what_an_http_client_holds",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_prediction_travels_as_one_request_json_row",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_sdk_s_own_response_type_is_read",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_reply_that_is_not_one_row_is_a_transport_error",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_question_asked_in_parts_is_one_call_per_part",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_route_serving_has_not_got_is_refused_before_a_call",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_readiness_is_the_endpoint_s_own_state",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_served_model_s_code_is_repeated_and_its_text_is_not",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_server_error_that_is_the_caller_s_to_fix_is_reported_as_such",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_gateway_failure_names_the_endpoint_and_nothing_it_said",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_unclassified_failure_is_retryable_rather_than_final",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_bug_is_not_reported_as_the_endpoint_s_failure",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_error_body_in_the_response_is_an_error_named_by_its_code",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_oversized_request_is_refused_before_it_is_sent",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_size_counted_is_the_wrapped_envelope_not_the_payload",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_debug_log_carries_no_rows",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_connectors_name_sdm_client_exactly_as_serving_does",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_passed_workspace_client_s_requests_name_sdm_client",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_ambient_workspace_s_requests_name_sdm_client",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_passed_workspace_client_s_copy_carries_the_bound",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_timeout_for_a_client_that_cannot_be_copied_is_refused",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_timeout_is_refused_when_the_sdk_s_config_cannot_be_copied_apart",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_python_version_is_translated_to_the_semver_databricks_takes",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_version_that_cannot_be_expressed_is_refused_not_invented",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_url_is_refused_without_being_repeated",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_client_says_where_it_sends",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_closed_client_sends_nothing",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_without_the_sdk_the_extra_to_install_is_named",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_ambient_identity_is_used_when_no_client_is_given",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_workspace_that_cannot_authenticate_says_how_to_fix_it",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_unusable_timeout_is_refused_at_construction",
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java"
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aNamedOfficialSdkProfileSuppliesTheCredentials",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#sdkAuthenticationFailuresDoNotExposeTheirCredentialDiagnostic",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#theServingDeadlineIncludesCredentialRefresh",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#timedOutRefreshesDoNotAccumulateBlockedAuthenticationThreads",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#theCoresEnvelopeIsPostedAsItIsAndItsRowRead",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#utf8FeatureValuesUseTheSharedEnvelopeAndActualByteLimit",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#theFourBaseJ2ShapesUseTheSameCoreWithDirectAndServingEndpoints",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#anEndpointsFailureIsPythonsRefusal",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#anAnswerWithNoRowIsATransportError",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aCallPastTheCallersLimitIsRefusedBeforeItIsSent",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aCallTheEndpointThrottlesIsTriedAgainWithTheSameBytes",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#anEndpointThatCannotBeReachedIsAFailureAtItsDeadline",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aResponseBodyThatStallsAfterHeadersIsBoundedByTheCallDeadline",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aRetryHasOnlyTheRemainingCallBudgetToReadItsBody",
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aServingConfigurationThatCannotBeUsedIsRefusedWithoutRepeatingIt"
         ]
       },
       "gate": "local",
@@ -3139,10 +3297,12 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_request_split_core.py"
+          "packages/structured-data-models-client/tests/test_request_split_core.py::test_materialize_inspect_and_pickle_preserve_payloads_and_independent_frames",
+          "packages/structured-data-models-client/tests/test_request_split_core.py::test_inspection_keeps_nullable_wide_integers_exact"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/RequestSplitTest.java"
+          "java/src/test/java/com/nvidia/sdm/RequestSplitTest.java#directViewOwnsReadersAfterOriginalInputCloses",
+          "java/src/test/java/com/nvidia/sdm/RequestSplitTest.java#gatheredViewsPartsAndRestorationLeavePredictionPayloadsUntouched"
         ]
       },
       "gate": "local"
@@ -3161,14 +3321,3505 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_result_items_core.py"
+          "packages/structured-data-models-client/tests/test_result_items_core.py::test_projection_preserves_tuple_fields_mappings_and_endpoint_order",
+          "packages/structured-data-models-client/tests/test_result_items_core.py::test_ranking_projection_reuses_original_candidate_owners_and_requested_outputs",
+          "packages/structured-data-models-client/tests/test_result_items_core.py::test_candidate_position_without_original_owner_is_rejected",
+          "packages/structured-data-models-client/tests/test_result_items_core.py::test_mixed_regular_ranking_segments_preserve_global_answer_order"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java"
+          "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java#directItemsAreSemanticImmutableAndRawReaderStaysCompatible",
+          "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java#rankingOwnersSurviveDifferentCandidateListsAndRepeatedMixedTaskMerges",
+          "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java#temporalLinkDictionariesAndForecastStepsNeedNoJsonParsingByCaller"
         ]
       },
       "gate": "local"
+    },
+    {
+      "id": "sessions",
+      "gate": "local",
+      "apis": {
+        "python": [],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_materialize_fit_holdout_predict_close_and_request_isolation",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_refuses_changed_question_and_retries_failed_close",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_reports_pinned_answer_overlap",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_later_scoring_failure_retains_paid_answers",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_id_fallback",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_fit_explanation_validates_context_then_score_validates_rows",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_holding_back_all_context_is_refused_before_upload",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_empty_explanation_score_is_local_and_new_context_is_not_validated",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_string_holdout_is_refused",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_session_unsupported_endpoint_is_explained",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_warehouse_public_lifecycle_preserves_rows_and_related_holdout",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_warehouse_changed_question_and_failed_delete",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_dataclass_inference_is_observed_without_iterating_it",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_temporal_session_keeps_anchor_and_holdout_identity",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_multiple_contexts_refused_before_upload",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_fit_refusal_retains_column_advice",
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/WarehouseSessionTest.java#scalarSessionsRemoveHeldEntitiesAndScoreAfterConnectionCloses",
+          "java/src/test/java/com/nvidia/sdm/WarehouseSessionTest.java#temporalSessionsReuseTheMaterializedWindow",
+          "java/src/test/java/com/nvidia/sdm/WarehouseSessionTest.java#changedQuestionAndEmptyPinnedContextAreRefusedBeforeScoring",
+          "java/src/test/java/com/nvidia/sdm/WarehouseSessionTest.java#laterBatchFailurePreservesAlreadyPaidForRows",
+          "java/src/test/java/com/nvidia/sdm/WarehouseSessionTest.java#failedDeletionRetriesAndClientCloseStillAttemptsOtherSessions",
+          "java/src/test/java/com/nvidia/sdm/FitOutputsTest.java#tabularFitForwardsRequestedOutputs",
+          "java/src/test/java/com/nvidia/sdm/FitOutputsTest.java#relationalFitForwardsRequestedOutputsAndTraceObservesActualResponses"
+        ]
+      }
+    },
+    {
+      "id": "errors",
+      "gate": "local",
+      "apis": {
+        "python": [],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_error_types_are_exported",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_every_error_is_catchable_as_predict_error",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_error_types_are_documented",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_status_code_is_reachable_for_branching",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_invalid_params_reach_the_message",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_invalid_params_stay_in_details_too",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_invalid_params_are_capped_with_a_count",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_error_without_invalid_params_is_unchanged",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_malformed_invalid_params_render_as_nothing",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_partial_entries_still_render",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_query_failure_maps_to_query_failed",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_read_table_direct_query_failure",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_invalid_table_identifier_is_not_rewrapped",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_local_missing_file_maps_to_not_found",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_local_malformed_parquet_maps_to_read_failed",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_missing_driver_raises_missing_backend",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_require_driver_returns_module",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_require_driver_missing_module_raises_missing_backend",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_connect_time_missing_file_stays_connect_failed",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_read_guard_maps_missing_file_to_not_found",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_propagates_import_error",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_unexpected_connect_kwarg_maps_to_invalid_args",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_a_cursor_close_failure_does_not_mask_result",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_passes_connector_error_through",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_uses_type_name_for_empty_message"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#aCallPast16MiBIsSentAsTheBytesGiven",
+          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#aTransientStatusIsTriedAgain",
+          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#aRefusalIsTheEndpointsAndIsNotTriedAgain",
+          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anAnswerThatIsNoJsonObjectIsAFailedTransport",
+          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anEmptyAnswerIsAnEmptyObject",
+          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anAnswerWhoseBodyIsHeldBackTimesOut"
+        ]
+      }
+    },
+    {
+      "id": "wire-vocabulary",
+      "gate": "local",
+      "apis": {
+        "python": [],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_generated_file_was_not_edited_by_hand",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_provenance_names_a_contract_revision",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_banner_agrees_with_the_recorded_source_digest",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_recorded_contract_digest_still_matches_the_contract",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_both_shipping_models_are_reachable",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_model_field_is_a_closed_enum_which_bounds_the_escape_hatch",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_every_operation_the_client_needs_is_generated",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_prediction_and_session_paths_are_what_the_client_posts_to",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_seven_output_fields_and_the_task_kinds_are_carried",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_package_carries_no_third_party_dependency",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_a_response_item_without_row_index_is_refused",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_a_null_row_index_is_refused_as_well_as_a_missing_one",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_a_response_missing_any_required_field_is_refused",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_a_well_formed_response_parses_and_keeps_its_join_key",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_every_spec_required_field_is_generated_without_a_default",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_recorded_revision_is_the_one_the_digest_belongs_to",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_generator_that_produced_these_bindings_is_recorded",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_the_formatter_does_not_own_the_generated_file",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_a_number_too_large_for_a_float_is_a_contract_error_not_an_overflow",
+          "packages/structured-data-models-api/tests/test_generated_bindings.py::test_a_number_spelled_as_a_string_is_still_accepted",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_fractional_row_index_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_bool_row_index_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_row_index_that_is_not_a_number_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_non_finite_row_index_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_whole_row_index_is_accepted",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_fractional_forecast_step_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_missing_forecast_step_stays_missing",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_whole_forecast_step_is_accepted",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_non_finite_mapping_value_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_non_finite_sequence_value_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_ordinary_probabilities_are_accepted",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_response_id_that_is_not_a_string_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_a_well_formed_response_is_unchanged",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_an_entity_id_that_is_not_a_string_is_refused",
+          "packages/structured-data-models-api/tests/test_response_strictness.py::test_an_entity_id_that_is_absent_or_null_is_still_allowed"
+        ],
+        "java": []
+      }
+    },
+    {
+      "id": "sql-helpers",
+      "gate": "local",
+      "apis": {
+        "python": [],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_quote_ident",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_accepts_valid_identifiers",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_passes_query_through",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_rejects_invalid_identifiers",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_rejection_names_the_workaround",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_quote_ident_reaches_the_names_resolve_sql_refuses",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_accepts_reserved_words_unquoted",
+          "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_requires_exactly_one_source"
+        ],
+        "java": []
+      }
+    },
+    {
+      "id": "release-metadata",
+      "gate": "local",
+      "apis": {
+        "python": [],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "tests/test_release_contract.py::TestDistributionCoherence::test_every_distribution_declares_the_same_version",
+          "tests/test_release_contract.py::TestPublicSurface::test_the_exported_api_matches_the_recorded_snapshot"
+        ],
+        "java": []
+      }
+    },
+    {
+      "id": "relational-materialization",
+      "gate": "local",
+      "apis": {
+        "python": [
+          "PredictiveQuery.materialize"
+        ],
+        "java": [
+          "RelationalMaterializer"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_static_frame_materialization_is_repeatable",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_materializer_snapshot_does_not_alias_input_buffers",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_temporal_frame_materialization",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_composite_neighbor_identity_is_materialized",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_float_link_identifiers_keep_source_precision",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_old_and_core_present_the_same_rankings"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#candidateNumbersKeepTheirExactValuesAcrossTheBoundary",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#schemaSnapshotIgnoresCallerMutationBeforeFirstMaterialization",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#temporalLinkRankingAndForecastUseTheSharedCore",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#independentOwnersAgreeAndSeededCallsResetNeighborSampling",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#concurrentCallsAreSerializedAndCloseIsIdempotent",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#closeRacingAnAdmittedCallCannotReleaseItsGraphEarly",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sessionsExcludeHoldoutAndSendOnlyTheScoringHalf",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#changedQuestionAndEmptyHeldContextAreRejectedBeforeNetwork",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#equivalentQuoteStylesKeepTheSameSessionQuestion",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#ordinaryNumericCandidateTypesKeepExactIntegralValues",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#laterSessionFailureRetainsAlreadyAnsweredRows",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession"
+        ]
+      }
     }
   ],
-  "public_api_snapshot_sha256": "341df3535133e5a5d5ae015c31aba471b9e4d58a32f9b0e55bb8a03cf715b2e4"
+  "public_api_snapshot_sha256": "341df3535133e5a5d5ae015c31aba471b9e4d58a32f9b0e55bb8a03cf715b2e4",
+  "api_inventory": {
+    "python": {
+      "sdm_api.Endpoint": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.Endpoint.get_path": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.Endpoint.method": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.Endpoint.path": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.HTTPMethod": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.HTTPMethod.DELETE": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.HTTPMethod.GET": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.HTTPMethod.POST": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperation": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperation.request_schema": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperation.response_schema": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperation.summary": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperations": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperations.create_session": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperations.delete_session": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperations.run_prediction": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFMOperations.run_session_prediction": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFM_ENDPOINTS_BY_OPERATION_ID": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFM_MODEL_KUMO_RELATIONAL": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFM_MODEL_KUMO_TABULAR": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFM_MODEL_VALUES": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFM_OUTPUT_FIELD_VALUES": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_api.TFM_TASK_KIND_VALUES": {
+        "capability": "wire-vocabulary"
+      },
+      "sdm_client.Column": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Column.check_consistent": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Column.stype_declared": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Column.untyped": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.FittedModel": {
+        "capability": "sessions"
+      },
+      "sdm_client.FittedModel.close": {
+        "capability": "sessions"
+      },
+      "sdm_client.FittedModel.model": {
+        "capability": "sessions"
+      },
+      "sdm_client.FittedModel.predict": {
+        "capability": "sessions"
+      },
+      "sdm_client.FittedModel.session_id": {
+        "capability": "sessions"
+      },
+      "sdm_client.KumoRelational": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.KumoRelational.name": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.KumoTabular": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.KumoTabular.name": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.MissingExtraError": {
+        "capability": "errors"
+      },
+      "sdm_client.Model": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Model.name": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.ModelCapabilities": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.ModelCapabilities.explanation_formats": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.ModelCapabilities.sessions": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.ModelCapabilities.source": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.NimRequestError": {
+        "capability": "errors"
+      },
+      "sdm_client.PredictionResult": {
+        "capability": "results-merge"
+      },
+      "sdm_client.PredictionResult.absent": {
+        "capability": "results-merge"
+      },
+      "sdm_client.PredictionResult.explanation": {
+        "capability": "results-merge"
+      },
+      "sdm_client.PredictionResult.merge": {
+        "capability": "results-merge"
+      },
+      "sdm_client.PredictionResult.to_pandas": {
+        "capability": "results-merge"
+      },
+      "sdm_client.PredictionResult.unscored_candidates": {
+        "capability": "results-merge"
+      },
+      "sdm_client.PredictiveQuery": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.PredictiveQuery.materialize": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Relationship": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Request": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.asked": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.context": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.context_rows": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.is_relational": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.materialized": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.nothing_to_score": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.parts": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.payloads": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.predict": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.predict_rows": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.query": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.target_moves_with_time": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.SDMClient": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.SDMClient.capabilities": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.SDMClient.close": {
+        "capability": "sessions"
+      },
+      "sdm_client.SDMClient.fit": {
+        "capability": "sessions"
+      },
+      "sdm_client.SDMClient.for_databricks_serving": {
+        "capability": "public-serving-refusals"
+      },
+      "sdm_client.SDMClient.health_ready": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.SDMClient.models": {
+        "capability": "readiness-discovery"
+      },
+      "sdm_client.SDMClient.predict": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.SDMClient.url": {
+        "capability": "direct-dtypes-options"
+      },
+      "sdm_client.SDMWarning": {
+        "capability": "errors"
+      },
+      "sdm_client.Schema": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.check_consistent": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.conversion_notes": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.from_data": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.from_source": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.snapshot": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.source": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Schema.tables": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.SourceTable": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.SourceTable.duplicate_keys": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.SourceTable.primary_key": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.SourceTable.time_column": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Split": {
+        "capability": "request-inspection"
+      },
+      "sdm_client.StructuredDataError": {
+        "capability": "errors"
+      },
+      "sdm_client.Table": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Table.duplicate_keys": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Table.primary_key": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Table.time_column": {
+        "capability": "schema-edits"
+      },
+      "sdm_client.Target": {
+        "capability": "request-inspection"
+      },
+      "sdm_client.Target.table_name": {
+        "capability": "request-inspection"
+      },
+      "sdm_client.Task": {
+        "capability": "request-inspection"
+      },
+      "sdm_client.Task.entity_table": {
+        "capability": "request-inspection"
+      },
+      "sdm_client.Task.is_classification": {
+        "capability": "request-inspection"
+      },
+      "sdm_client.UnknownModelError": {
+        "capability": "errors"
+      },
+      "sdm_client.UnsupportedRequestError": {
+        "capability": "errors"
+      },
+      "sdm_client.__version__": {
+        "capability": "release-metadata"
+      },
+      "sdm_connectors.ConnectorError": {
+        "capability": "errors"
+      },
+      "sdm_connectors.DatabricksSource": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DatabricksSource.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DatabricksSource.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DatabricksSource.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DatabricksSource.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DatabricksSource.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DatabricksSource.semantic_model": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DuckDBSource": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DuckDBSource.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DuckDBSource.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DuckDBSource.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DuckDBSource.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.DuckDBSource.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.MissingBackendError": {
+        "capability": "errors"
+      },
+      "sdm_connectors.PostgresSource": {
+        "capability": "readers"
+      },
+      "sdm_connectors.PostgresSource.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.PostgresSource.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.PostgresSource.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.PostgresSource.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.PostgresSource.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SQLiteSource": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SQLiteSource.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SQLiteSource.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SQLiteSource.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SQLiteSource.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SQLiteSource.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.name": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.source": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SemanticModel.trust_expressions": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.SnowflakeSource.semantic_model": {
+        "capability": "readers"
+      },
+      "sdm_connectors.Source": {
+        "capability": "readers"
+      },
+      "sdm_connectors.Source.backend": {
+        "capability": "readers"
+      },
+      "sdm_connectors.Source.connection": {
+        "capability": "readers"
+      },
+      "sdm_connectors.Source.kind": {
+        "capability": "readers"
+      },
+      "sdm_connectors.Source.namespace": {
+        "capability": "readers"
+      },
+      "sdm_connectors.Source.namespace_parts": {
+        "capability": "readers"
+      },
+      "sdm_connectors.__version__": {
+        "capability": "release-metadata"
+      },
+      "sdm_connectors.databricks.lakebase": {
+        "capability": "readers"
+      },
+      "sdm_connectors.databricks.warehouse": {
+        "capability": "readers"
+      },
+      "sdm_connectors.quote_ident": {
+        "capability": "sql-helpers"
+      },
+      "sdm_connectors.read": {
+        "capability": "readers"
+      },
+      "sdm_connectors.read_table": {
+        "capability": "readers"
+      },
+      "sdm_connectors.resolve_sql": {
+        "capability": "sql-helpers"
+      }
+    },
+    "java": {
+      "com.nvidia.sdm.ClientOptions": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions#public static com.nvidia.sdm.ClientOptions defaults();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions#public static com.nvidia.sdm.ClientOptions$Builder builder();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions$Builder": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions build();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder apiKey(java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder maxRetries(int);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder timeout(java.time.Duration);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Column": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Column#public boolean equals(java.lang.Object);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Column#public int hashCode();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Column#public java.lang.String dtype();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Column#public java.lang.String name();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Column#public java.lang.String stype();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Column#public java.lang.String toString();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.DatabricksServing": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public com.nvidia.sdm.DatabricksServing timeout(java.time.Duration);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public java.lang.String endpoint();": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public java.lang.String toString();": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public java.time.Duration timeout();": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public long maxRequestBytes();": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static com.nvidia.sdm.DatabricksServing of(com.databricks.sdk.WorkspaceClient, java.lang.String);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static com.nvidia.sdm.DatabricksServing of(com.databricks.sdk.WorkspaceClient, java.lang.String, long);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static com.nvidia.sdm.DatabricksServing of(java.lang.String);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static com.nvidia.sdm.DatabricksServing of(java.lang.String, java.lang.String, java.util.function.Supplier<java.lang.String>);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static com.nvidia.sdm.DatabricksServing of(java.lang.String, java.lang.String, java.util.function.Supplier<java.lang.String>, long);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static final java.time.Duration DEFAULT_TIMEOUT;": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksServing#public static final long MAX_REQUEST_BYTES = 16000000l;": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.DatabricksSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public boolean trustExpressions();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public com.nvidia.sdm.DatabricksSource semanticModel(java.lang.String, boolean);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public java.lang.String toString();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public java.sql.Connection connection();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public java.util.Optional<java.lang.String> catalog();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public java.util.Optional<java.lang.String> schema();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public java.util.Optional<java.lang.String> semanticModel();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public static com.nvidia.sdm.DatabricksSource of(java.sql.Connection);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSource#public static com.nvidia.sdm.DatabricksSource of(java.sql.Connection, java.lang.String, java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public boolean trustExpressions();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public com.nvidia.sdm.DatabricksSparkSource semanticModel(java.lang.String, boolean);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public java.lang.String toString();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public java.util.Optional<java.lang.String> catalog();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public java.util.Optional<java.lang.String> schema();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public java.util.Optional<java.lang.String> semanticModel();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public org.apache.spark.sql.SparkSession session();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public static com.nvidia.sdm.DatabricksSparkSource of(org.apache.spark.sql.SparkSession);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public static com.nvidia.sdm.DatabricksSparkSource of(org.apache.spark.sql.SparkSession, java.lang.String, java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DuckDbSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DuckDbSource#public java.lang.String toString();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DuckDbSource#public java.sql.Connection connection();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.DuckDbSource#public static com.nvidia.sdm.DuckDbSource of(java.sql.Connection);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.FittedModel": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.FittedModel#public synchronized boolean isClosed();": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.FittedModel#public synchronized com.nvidia.sdm.PredictionResult predict(com.nvidia.sdm.Request);": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.FittedModel#public synchronized java.lang.String sessionId();": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.FittedModel#public synchronized void close();": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.FromSourceOptions": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions#public static com.nvidia.sdm.FromSourceOptions defaults();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions#public static com.nvidia.sdm.FromSourceOptions$Builder builder();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions build();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder checkKeys(boolean);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder noPrimaryKey(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder noTimeColumn(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder primaryKey(java.lang.String, java.lang.String...);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder relationships(java.util.List<com.nvidia.sdm.Relationship>);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder table(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder table(java.lang.String, java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder timeColumn(java.lang.String, java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.JdbcSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.JdbcSource#public abstract java.sql.Connection connection();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.MaterializeOptions": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions#public static com.nvidia.sdm.MaterializeOptions$Builder builder();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions build();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder anchorAtEachEntity();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder anchorTime(java.time.LocalDate);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder anchorTime(java.time.LocalDateTime);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder anchorTime(java.time.ZonedDateTime);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder candidates(java.util.List<?>);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextAnchorAtEachEntity();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextAnchorTime(java.time.LocalDate);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextAnchorTime(java.time.LocalDateTime);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder indices(java.lang.Object...);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder indices(java.util.List<?>);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder model(java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder numContextSamples(int);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder option(java.lang.String, java.lang.Object);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder randomSeed(long);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder rowsPerCall(long);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder task(java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ModelCapabilities": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public boolean multipleTables();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public boolean relationships();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public boolean sessions();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public boolean singleTable();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public com.nvidia.sdm.ModelCapabilities(java.lang.String, java.util.List<java.lang.String>, java.util.List<java.lang.String>, boolean, boolean, boolean, java.util.List<java.lang.String>, boolean, java.lang.String);": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public final boolean equals(java.lang.Object);": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public final int hashCode();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public final java.lang.String toString();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public java.lang.String model();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public java.lang.String source();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public java.util.List<java.lang.String> explanationFormats();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public java.util.List<java.lang.String> outputs();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelCapabilities#public java.util.List<java.lang.String> tasks();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.ModelEndpointException": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.ModelEndpointException#public int status();": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.ModelEndpointException#public static com.nvidia.sdm.ModelEndpointException of(int, byte[]);": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.ModelEndpointException#public static com.nvidia.sdm.ModelEndpointException refused(int, java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>, java.lang.String, boolean);": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.PostgresSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.PostgresSource#public java.lang.String toString();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.PostgresSource#public java.sql.Connection connection();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.PostgresSource#public java.util.Optional<java.lang.String> schema();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.PostgresSource#public static com.nvidia.sdm.PostgresSource of(java.sql.Connection);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.PostgresSource#public static com.nvidia.sdm.PostgresSource of(java.sql.Connection, java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.PredictionItem": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.lang.Long forecastStep();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.lang.Object id();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.lang.Object prediction();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.List<java.lang.Double> embeddings();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.List<java.lang.Double> scores();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.List<java.util.Map<java.lang.Object, java.lang.Object>> rankings();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.Map<java.lang.Object, java.lang.Object> explanation();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.Map<java.lang.Object, java.lang.Object> metadata();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.Map<java.lang.Object, java.lang.Object> probabilities();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.Map<java.lang.Object, java.lang.Object> quantiles();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public java.util.Map<java.lang.String, java.lang.Object> fields();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionItem#public long rowIndex();": {
+        "capability": "result-items"
+      },
+      "com.nvidia.sdm.PredictionResult": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.lang.String model();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.lang.String requestId();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.lang.String toString();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.util.List<com.nvidia.sdm.PredictionItem> items();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.util.List<java.lang.Object> unscoredCandidates();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.util.List<java.lang.String> absent(java.util.List<java.lang.String>);": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.util.List<java.lang.String> outputs();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.util.Map<java.lang.String, java.lang.Object> explanation();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public java.util.Map<java.lang.String, java.lang.Object> metadata();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public long rows();": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public org.apache.arrow.vector.ipc.ArrowReader read(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public static com.nvidia.sdm.PredictionResult merge(java.util.List<com.nvidia.sdm.PredictionResult>);": {
+        "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictiveQuery": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public com.nvidia.sdm.Request materialize(com.nvidia.sdm.RelationalMaterializer, com.nvidia.sdm.MaterializeOptions);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public com.nvidia.sdm.Request materialize(com.nvidia.sdm.Schema, com.nvidia.sdm.MaterializeOptions);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public com.nvidia.sdm.Request materialize(com.nvidia.sdm.Schema, org.apache.arrow.vector.table.Table);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public com.nvidia.sdm.Request materialize(com.nvidia.sdm.Schema, org.apache.arrow.vector.table.Table, com.nvidia.sdm.MaterializeOptions);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public java.lang.String text();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public java.lang.String toString();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public static com.nvidia.sdm.PredictiveQuery parse(java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.ReadOptions": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions#public com.nvidia.sdm.ReadOptions$Format format();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions#public java.lang.String profile();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions#public java.lang.String region();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions#public java.util.Map<java.lang.String, com.nvidia.sdm.ReadOptions$CsvType> csvTypes();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions#public static com.nvidia.sdm.ReadOptions$Builder builder();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions build();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder credentials(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder csvTypes(java.util.Map<java.lang.String, com.nvidia.sdm.ReadOptions$CsvType>);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder format(com.nvidia.sdm.ReadOptions$Format);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder profile(java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder region(java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static com.nvidia.sdm.ReadOptions$CsvType valueOf(java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static com.nvidia.sdm.ReadOptions$CsvType[] values();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static final com.nvidia.sdm.ReadOptions$CsvType BOOLEAN;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static final com.nvidia.sdm.ReadOptions$CsvType FLOAT64;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static final com.nvidia.sdm.ReadOptions$CsvType INT64;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static final com.nvidia.sdm.ReadOptions$CsvType STRING;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$CsvType#public static final com.nvidia.sdm.ReadOptions$CsvType UINT64;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Format": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Format#public static com.nvidia.sdm.ReadOptions$Format valueOf(java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Format#public static com.nvidia.sdm.ReadOptions$Format[] values();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Format#public static final com.nvidia.sdm.ReadOptions$Format CSV;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Format#public static final com.nvidia.sdm.ReadOptions$Format PARQUET;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.Readers": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table read(java.net.URI, com.nvidia.sdm.ReadOptions, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table read(java.nio.file.Path, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readQuery(com.nvidia.sdm.Source, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readTable(com.nvidia.sdm.Source, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.RelationalMaterializer": {
+        "capability": "relational-materialization"
+      },
+      "com.nvidia.sdm.RelationalMaterializer#public com.nvidia.sdm.RelationalMaterializer(com.nvidia.sdm.Schema);": {
+        "capability": "relational-materialization"
+      },
+      "com.nvidia.sdm.RelationalMaterializer#public synchronized void close();": {
+        "capability": "relational-materialization"
+      },
+      "com.nvidia.sdm.Relationship": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public com.nvidia.sdm.Relationship(java.lang.String, java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public final boolean equals(java.lang.Object);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public final int hashCode();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public final java.lang.String toString();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public java.lang.String sourceColumn();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public java.lang.String sourceTable();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public java.lang.String targetColumn();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Relationship#public java.lang.String targetTable();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Request": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public boolean isRelational();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public boolean nothingToScore();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public boolean targetMovesWithTime();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.Request(org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table, java.lang.String, java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.Request(org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table, java.lang.String, java.lang.String, com.nvidia.sdm.RequestOptions);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.RequestSplit context();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.RequestSplit predict();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.Schema schema();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.lang.String entityTable();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.lang.String query();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.lang.String toString();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.util.List<java.lang.String> payloads();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.util.Map<java.lang.String, java.lang.Object> inference();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.util.Map<java.lang.String, java.lang.Object> taskOptions();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.util.Optional<java.lang.String> asked();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.util.Optional<java.lang.String> problemType();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public java.util.Optional<java.util.List<com.nvidia.sdm.Request>> parts();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public long contextRows();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public long predictRows();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public static com.nvidia.sdm.Request readFrom(java.io.InputStream) throws java.io.IOException;": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public void writeTo(java.io.OutputStream) throws java.io.IOException;": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions#public com.nvidia.sdm.Schema schema();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions#public java.lang.String entityTable();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions#public java.util.Map<java.lang.String, java.lang.Object> inference();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions#public java.util.Map<java.lang.String, java.lang.Object> taskOptions();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions#public static com.nvidia.sdm.RequestOptions$Builder builder();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions$Builder": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions$Builder#public com.nvidia.sdm.RequestOptions build();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions$Builder#public com.nvidia.sdm.RequestOptions$Builder entityTable(java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions$Builder#public com.nvidia.sdm.RequestOptions$Builder inference(java.util.Map<java.lang.String, ?>);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions$Builder#public com.nvidia.sdm.RequestOptions$Builder schema(com.nvidia.sdm.Schema);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestOptions$Builder#public com.nvidia.sdm.RequestOptions$Builder taskOptions(java.util.Map<java.lang.String, ?>);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.RequestSplit": {
+        "capability": "request-inspection"
+      },
+      "com.nvidia.sdm.RequestSplit#public java.util.List<java.lang.String> relatedTables();": {
+        "capability": "request-inspection"
+      },
+      "com.nvidia.sdm.RequestSplit#public org.apache.arrow.vector.ipc.ArrowReader read(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "request-inspection"
+      },
+      "com.nvidia.sdm.RequestSplit#public org.apache.arrow.vector.ipc.ArrowReader readRelated(java.lang.String, org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "request-inspection"
+      },
+      "com.nvidia.sdm.Schema": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public boolean equals(java.lang.Object);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema snapshot();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withPrimaryKey(java.lang.String, java.lang.String...);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withRelationship(com.nvidia.sdm.Relationship);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withRelationships(java.util.List<com.nvidia.sdm.Relationship>);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withStype(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withTimeColumn(java.lang.String, java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutColumn(java.lang.String, java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutPrimaryKey(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutTimeColumn(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Source source();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Table table(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public int hashCode();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toString();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.util.List<com.nvidia.sdm.Relationship> relationships();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.util.List<com.nvidia.sdm.Table> tables();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.util.List<java.lang.String> conversionNotes();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromData(java.util.Map<java.lang.String, org.apache.arrow.vector.table.Table>);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromSource(com.nvidia.sdm.Source);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromSource(com.nvidia.sdm.Source, com.nvidia.sdm.FromSourceOptions);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema readFrom(java.io.InputStream) throws java.io.IOException;": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public void checkConsistent();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public void writeTo(java.io.OutputStream) throws java.io.IOException;": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.SdmClient": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public boolean healthReady();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.SdmClient#public com.nvidia.sdm.FittedModel fit(com.nvidia.sdm.Request, java.lang.String);": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.SdmClient#public com.nvidia.sdm.FittedModel fit(com.nvidia.sdm.Request, java.lang.String, java.util.List<?>);": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.SdmClient#public com.nvidia.sdm.ModelCapabilities capabilities(java.lang.String);": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.SdmClient#public com.nvidia.sdm.PredictionResult predict(com.nvidia.sdm.Request, java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public com.nvidia.sdm.PredictionResult predict(com.nvidia.sdm.Request, java.lang.String, java.util.List<java.lang.String>);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public java.lang.String toString();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public java.lang.String url();": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public java.util.List<java.lang.String> models();": {
+        "capability": "readiness-discovery"
+      },
+      "com.nvidia.sdm.SdmClient#public static com.nvidia.sdm.SdmClient connect(java.lang.String);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public static com.nvidia.sdm.SdmClient connect(java.lang.String, com.nvidia.sdm.ClientOptions);": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public static com.nvidia.sdm.SdmClient forDatabricksServing(com.nvidia.sdm.DatabricksServing);": {
+        "capability": "public-serving-refusals"
+      },
+      "com.nvidia.sdm.SdmClient#public static final java.lang.String KUMO_RELATIONAL = \"kumo-relational\";": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public static final java.lang.String KUMO_TABULAR = \"kumo-tabular\";": {
+        "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.SdmClient#public synchronized com.nvidia.sdm.FittedModel fit(com.nvidia.sdm.Request, java.lang.String, java.util.List<?>, java.util.List<java.lang.String>);": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.SdmClient#public synchronized void close();": {
+        "capability": "sessions"
+      },
+      "com.nvidia.sdm.SnowflakeSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public boolean trustExpressions();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public com.nvidia.sdm.SnowflakeSource semanticModel(java.lang.String, boolean);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public java.lang.String toString();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public java.sql.Connection connection();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public java.util.Optional<java.lang.String> database();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public java.util.Optional<java.lang.String> schema();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public java.util.Optional<java.lang.String> semanticModel();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public static com.nvidia.sdm.SnowflakeSource of(java.sql.Connection);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SnowflakeSource#public static com.nvidia.sdm.SnowflakeSource of(java.sql.Connection, java.lang.String, java.lang.String);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.Source": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SqliteSource": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SqliteSource#public java.lang.String toString();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SqliteSource#public java.sql.Connection connection();": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.SqliteSource#public static com.nvidia.sdm.SqliteSource of(java.sql.Connection);": {
+        "capability": "readers"
+      },
+      "com.nvidia.sdm.StructuredDataException": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public boolean retryable();": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public com.nvidia.sdm.StructuredDataException(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>, java.lang.String, boolean, java.lang.Throwable);": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public com.nvidia.sdm.StructuredDataException(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>, java.lang.Throwable);": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public java.lang.String code();": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public java.lang.String kind();": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public java.lang.String toString();": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public java.util.Map<java.lang.String, java.lang.Object> details();": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.StructuredDataException#public java.util.Optional<org.apache.arrow.vector.ipc.ArrowReader> answered(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "errors"
+      },
+      "com.nvidia.sdm.Table": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public boolean equals(java.lang.Object);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public com.nvidia.sdm.Column column(java.lang.String);": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public int hashCode();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.lang.String name();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.lang.String sourceName();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.lang.String toString();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.util.List<com.nvidia.sdm.Column> columns();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.util.List<java.lang.String> primaryKey();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.util.Optional<java.lang.String> timeColumn();": {
+        "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Table#public java.util.OptionalLong duplicateKeys();": {
+        "capability": "schema-edits"
+      }
+    }
+  },
+  "api_exceptions": [
+    {
+      "capability": "wire-vocabulary",
+      "language": "java",
+      "reason": "Python exports the protocol vocabulary package; Java exposes typed client operations, not a separate wire API."
+    },
+    {
+      "capability": "sql-helpers",
+      "language": "java",
+      "reason": "SQL quoting and resolution are implementation details behind Java Readers and Source APIs."
+    },
+    {
+      "capability": "release-metadata",
+      "language": "java",
+      "reason": "Java version metadata is in the JAR manifest rather than a public callable API."
+    },
+    {
+      "capability": "provider-contract",
+      "language": "python",
+      "reason": "This is a shared Rust provider contract; host adapter behavior is covered by readers and relational materialization."
+    },
+    {
+      "capability": "provider-contract",
+      "language": "java",
+      "reason": "This is a shared Rust provider contract; host adapter behavior is covered by readers and relational materialization."
+    }
+  ],
+  "contract_changes": [
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/direct-dtypes-options",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/errors",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/persistence",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/public-serving-refusals",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/readers",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/readiness-discovery",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/relational-materialization",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/release-metadata",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/request-inspection",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/result-items",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/results-merge",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/schema-edits",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/sessions",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/sql-helpers",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/wire-vocabulary",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_exceptions",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_inventory",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.aggregate",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.condition",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.forecast",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.foreign-key",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.ranking",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.regression",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/lifecycle.temporal-link",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/outputs.binary",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/outputs.regression",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.aggregate",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.binary",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.condition",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.forecast",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.foreign-key",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.multiclass",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.ranking",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.regression",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/prediction.temporal-link",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "capabilities/types.regression",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "live_api_tests",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "type_contracts/arrow-admission-and-inference",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "type_contracts/reader-model-type-journeys",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "type_contracts/semantic-types",
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "lifecycle.aggregate",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "refusal.tabular.aggregate",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "lifecycle.condition",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "refusal.tabular.condition",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "lifecycle.forecast",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "refusal.tabular.forecast",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "lifecycle.foreign-key",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "refusal.tabular.foreign-key",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "lifecycle.ranking",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "refusal.tabular.ranking",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "lifecycle.regression",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "lifecycle.fitted",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "persistence.request",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "persistence.tabular-read",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "refusal.source-persistence",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "outcome": "failed",
+            "stage": "restore",
+            "code": "TypeError",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {
+            "java": {
+              "status": "refused",
+              "stage": "restore",
+              "code": "UNSUPPORTED_REQUEST",
+              "rule": null,
+              "verdict": "Improvement"
+            }
+          },
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "lifecycle.holdout",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "lifecycle.temporal-link",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "refusal.tabular.temporal-link",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "sessions",
+        "persistence"
+      ]
+    },
+    {
+      "id": "outputs.binary",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "outputs.binary",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "result-items",
+        "results-merge"
+      ]
+    },
+    {
+      "id": "outputs.regression",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "outputs.regression.tabular",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "outputs.regression.batched",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "result-items",
+        "results-merge"
+      ]
+    },
+    {
+      "id": "prediction.aggregate",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "relational.aggregate",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.binary",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "node.binary",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.condition",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "relational.condition",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.forecast",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "relational.forecast",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.foreign-key",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "relational.foreign-key",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "materialize",
+            "code": "INVALID_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.multiclass",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "node.multiclass",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.ranking",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "relational.ranking",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.regression",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "node.regression",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "direct.regression",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        },
+        {
+          "scenario": "reader.raw.regression",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic",
+            "csv",
+            "parquet",
+            "s3-csv",
+            "s3-parquet",
+            "zip"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "prediction.temporal-link",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "relational.temporal-link",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
+            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "relational-materialization"
+      ]
+    },
+    {
+      "id": "types.regression",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "types.text-null.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "predict",
+            "code": "PAYLOAD_TOO_LARGE",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-text-null.json": "6896c57b757e53d6997b9974658591def6358499e586dd345cea672be24a9ab7"
+          }
+        },
+        {
+          "scenario": "types.text-null.declared",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "predict",
+            "code": "PAYLOAD_TOO_LARGE",
+            "rule": null
+          },
+          "expected_by_model": {
+            "relational": {
+              "status": "refused",
+              "stage": "predict",
+              "code": "UNSUPPORTED_DTYPE",
+              "rule": null
+            }
+          },
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-text-null.json": "6896c57b757e53d6997b9974658591def6358499e586dd345cea672be24a9ab7"
+          }
+        },
+        {
+          "scenario": "types.text.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "predict",
+            "code": "PAYLOAD_TOO_LARGE",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-text.json": "e4d571995618f215fde9b397f512f216cd648b971cca7a145040ba4b8931dfdf"
+          }
+        },
+        {
+          "scenario": "types.null.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-null.json": "1a0e94c7af3cdaf8af0bc29a97878df5b28b0d8fef9d18d0fe4f932afff09793"
+          }
+        },
+        {
+          "scenario": "types.text-short.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-text-short.json": "58c70aec052b3f3fa3e095c3c79fe2730dffbe1357b84b51461b0b564fd4bca9"
+          }
+        },
+        {
+          "scenario": "types.text-short.declared",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {
+            "relational": {
+              "status": "refused",
+              "stage": "predict",
+              "code": "UNSUPPORTED_DTYPE",
+              "rule": null
+            }
+          },
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-text-short.json": "58c70aec052b3f3fa3e095c3c79fe2730dffbe1357b84b51461b0b564fd4bca9"
+          }
+        },
+        {
+          "scenario": "types.tags.declared",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "schema",
+            "code": "UNSUPPORTED_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-tags.json": "22e567958321d02181a9479a7962435843dcfdc3c03573f442f6337d67f4437a"
+          }
+        },
+        {
+          "scenario": "types.sequence.declared",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "refused",
+            "stage": "schema",
+            "code": "UNSUPPORTED_REQUEST",
+            "rule": null
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-sequence.json": "9e77a469f9d5d4ebb8a71ab44f21200d7be8d9731de9f96c31429a9b5909830d"
+          }
+        },
+        {
+          "scenario": "types.numeric.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-numeric.json": "03b86abeaafcee601ce9846e0ac16426be6c2c971a15ba24077c08056e7d03d4"
+          }
+        },
+        {
+          "scenario": "types.temporal.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "duckdb",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {
+            "tabular": {
+              "status": "refused",
+              "stage": "predict",
+              "code": "UNSUPPORTED_DTYPE",
+              "rule": null
+            }
+          },
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-temporal-micro.json": "c3bd0190ed63e67b7ae65b2a74b7826346db5cf67c0a64fc5a4529251ec5b707",
+            "fixtures/shop-temporal.json": "9ae9333f2b055186cc8ae32dd92e3dada298a81626216cb9d1b903ef827a46e8"
+          }
+        },
+        {
+          "scenario": "types.null.session",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-null.json": "1a0e94c7af3cdaf8af0bc29a97878df5b28b0d8fef9d18d0fe4f932afff09793"
+          }
+        },
+        {
+          "scenario": "types.text-short.session",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-text-short.json": "58c70aec052b3f3fa3e095c3c79fe2730dffbe1357b84b51461b0b564fd4bca9"
+          }
+        },
+        {
+          "scenario": "types.null.provider",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "duckdb"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-null.json": "1a0e94c7af3cdaf8af0bc29a97878df5b28b0d8fef9d18d0fe4f932afff09793"
+          }
+        },
+        {
+          "scenario": "types.numeric.provider",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "duckdb"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-numeric.json": "03b86abeaafcee601ce9846e0ac16426be6c2c971a15ba24077c08056e7d03d4"
+          }
+        },
+        {
+          "scenario": "types.temporal.provider",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "duckdb"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-temporal-micro.json": "c3bd0190ed63e67b7ae65b2a74b7826346db5cf67c0a64fc5a4529251ec5b707",
+            "fixtures/shop-temporal.json": "9ae9333f2b055186cc8ae32dd92e3dada298a81626216cb9d1b903ef827a46e8"
+          }
+        },
+        {
+          "scenario": "types.date.inferred",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational",
+            "tabular"
+          ],
+          "connectors": [
+            "memory",
+            "parquet"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {
+            "tabular": {
+              "status": "refused",
+              "stage": "predict",
+              "code": "UNSUPPORTED_DTYPE",
+              "rule": null
+            }
+          },
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/shop-date.json": "2173057dd8413e2e02fce1e29b624b760398ed645e9af4f4036d1c599f2d1ca6"
+          }
+        }
+      ],
+      "api_contracts": [
+        "direct-dtypes-options",
+        "readers",
+        "schema-edits"
+      ]
+    }
+  ],
+  "type_contracts": [
+    {
+      "id": "arrow-admission-and-inference",
+      "boundary": "shared Rust host admission and schema inference, not all model inputs",
+      "vectors": "contract/type-set-vectors.json",
+      "required_vectors": [
+        "null",
+        "boolean",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "float16",
+        "float32",
+        "float64",
+        "timestamp.s.naive",
+        "timestamp.s.utc",
+        "timestamp.ms.naive",
+        "timestamp.ms.utc",
+        "timestamp.us.naive",
+        "timestamp.us.utc",
+        "timestamp.ns.naive",
+        "timestamp.ns.utc",
+        "timestamp.us.named-zone",
+        "timestamp.us.offset-zone",
+        "timestamp.us.empty-zone",
+        "timestamp.ms.named-zone",
+        "date32",
+        "date64",
+        "time32.s",
+        "time32.ms",
+        "time32.us",
+        "time32.ns",
+        "time64.s",
+        "time64.ms",
+        "time64.us",
+        "time64.ns",
+        "duration.s",
+        "duration.ms",
+        "duration.us",
+        "duration.ns",
+        "interval.year-month",
+        "interval.day-time",
+        "interval.month-day-nano",
+        "binary",
+        "fixed-size-binary.16",
+        "large-binary",
+        "binary-view",
+        "utf8",
+        "large-utf8",
+        "utf8-view",
+        "list.int32",
+        "list.float64",
+        "list.utf8",
+        "list.binary",
+        "list.decimal128-38-0",
+        "list.boolean",
+        "list.date32",
+        "list.list-int32",
+        "list.struct",
+        "list.interval",
+        "list.large-utf8",
+        "large-list.int32",
+        "large-list.large-utf8",
+        "list-view.int32",
+        "large-list-view.int32",
+        "fixed-size-list.int32-3",
+        "fixed-size-list.boolean-2",
+        "struct.int32",
+        "struct.int32-utf8",
+        "struct.large-utf8",
+        "struct.interval",
+        "struct.empty",
+        "map.utf8-int32",
+        "map.int32-utf8",
+        "map.large-utf8-int64",
+        "union.sparse",
+        "union.dense",
+        "dictionary.int8-utf8",
+        "dictionary.int16-utf8",
+        "dictionary.int32-utf8",
+        "dictionary.int64-utf8",
+        "dictionary.uint8-utf8",
+        "dictionary.uint16-utf8",
+        "dictionary.uint32-utf8",
+        "dictionary.uint64-utf8",
+        "dictionary.int32-large-utf8",
+        "dictionary.int32-utf8-view",
+        "dictionary.int32-int64",
+        "dictionary.int8-float16",
+        "dictionary.int32-binary",
+        "dictionary.int16-date32",
+        "dictionary.int32-interval",
+        "dictionary.float32-utf8",
+        "decimal32.9-2",
+        "decimal64.18-2",
+        "decimal64.18-0",
+        "decimal128.38-10",
+        "decimal128.38-0",
+        "decimal128.18-2",
+        "decimal128.18-0",
+        "decimal128.38-negative-scale",
+        "decimal128.39-0",
+        "decimal128.0-0",
+        "decimal256.76-0",
+        "decimal256.76-10",
+        "decimal256.77-0",
+        "run-end.int16-int32",
+        "run-end.int32-utf8",
+        "run-end.int64-float64",
+        "run-end.int32-dictionary-utf8",
+        "run-end.int32-interval"
+      ],
+      "tests": {
+        "rust": [
+          "rust/crates/sdm-host/tests/t133_type_set.rs::the_pending_list_only_shrinks",
+          "rust/crates/sdm-host/tests/t133_type_set.rs::the_vectors_are_of_the_arrow_schema_the_workspace_locks",
+          "rust/crates/sdm-host/tests/t133_type_set.rs::every_variant_of_data_type_has_a_vector_and_no_type_has_two",
+          "rust/crates/sdm-host/tests/t133_type_set.rs::each_parameterized_family_has_each_parameter",
+          "rust/crates/sdm-host/tests/t133_type_set.rs::each_type_is_admitted_and_inferred_as_its_vector_says",
+          "rust/crates/sdm-host/tests/t133_type_set.rs::every_expected_refusal_is_named"
+        ],
+        "python": [
+          "contract/tests/test_t133_type_set.py::test_the_pending_list_only_shrinks",
+          "contract/tests/test_t133_type_set.py::test_the_vectors_are_of_the_arrow_schema_cargo_lock_pins",
+          "contract/tests/test_t133_type_set.py::test_each_variant_has_a_vector_and_no_type_has_two",
+          "contract/tests/test_t133_type_set.py::test_each_vector_has_one_class_and_its_inference",
+          "contract/tests/test_t133_type_set.py::test_the_types_a_review_found_reachable_are_reached",
+          "contract/tests/test_t133_type_set.py::test_ids_are_unique_across_vectors_and_reached_rows",
+          "contract/tests/test_t133_type_set.py::test_every_reachable_row_has_its_witness_and_its_recording",
+          "contract/tests/test_t133_type_set.py::test_each_reached_row_is_a_form_admission_sees",
+          "contract/tests/test_t133_type_set.py::test_every_form_a_session_setting_gives_has_a_row",
+          "contract/tests/test_t133_type_set.py::test_varint_is_a_difference_to_register",
+          "contract/tests/test_t133_type_set.py::test_a_lossless_connection_is_described",
+          "contract/tests/test_t133_type_set.py::test_a_difference_from_the_reference_is_registered",
+          "contract/tests/test_t133_type_set.py::test_a_refusal_of_a_type_the_reference_reads_is_the_owner_s",
+          "contract/tests/test_t133_type_set.py::test_a_new_success_is_the_owner_s",
+          "contract/tests/test_t133_type_set.py::test_every_vector_ref_names_a_vector_and_a_transition",
+          "contract/tests/test_t133_type_set.py::test_host_2_marks_each_type_reference_accepted_or_not",
+          "contract/tests/test_t133_type_set.py::test_each_family_host_2_names_has_its_reference_answer"
+        ]
+      },
+      "evidence_level": "local-boundary",
+      "vectors_sha256": "c622bf77ce9b8f1bef0b2aedbc8ba363fd2623f77b58228c5dd49b76744842e3"
+    },
+    {
+      "id": "semantic-types",
+      "boundary": "shared Rust schema edits; model-specific behavior remains in scenarios",
+      "semantic_types": [
+        "numerical",
+        "categorical",
+        "multicategorical",
+        "ID",
+        "text",
+        "timestamp",
+        "sequence",
+        "image",
+        "unsupported"
+      ],
+      "tests": {
+        "rust": [
+          "rust/crates/sdm-schema/tests/edit.rs::a_key_set_marks_its_column_and_gives_the_old_key_back",
+          "rust/crates/sdm-schema/tests/edit.rs::a_key_cleared_counts_no_repeats_and_releases_its_column",
+          "rust/crates/sdm-schema/tests/edit.rs::a_released_timestamp_orders_a_table_that_has_no_time_column",
+          "rust/crates/sdm-schema/tests/edit.rs::a_key_the_reference_refuses_is_refused_at_the_assignment",
+          "rust/crates/sdm-schema/tests/edit.rs::a_composite_key_is_taken_as_the_reference_takes_it",
+          "rust/crates/sdm-schema/tests/edit.rs::a_time_column_set_means_a_timestamp_the_caller_chose",
+          "rust/crates/sdm-schema/tests/edit.rs::a_time_column_cleared_changes_nothing_else",
+          "rust/crates/sdm-schema/tests/edit.rs::a_time_column_the_reference_refuses_is_refused_at_the_assignment",
+          "rust/crates/sdm-schema/tests/edit.rs::a_meaning_is_held_as_the_reference_holds_it",
+          "rust/crates/sdm-schema/tests/edit.rs::a_meaning_the_reference_refuses_is_refused_at_the_assignment",
+          "rust/crates/sdm-schema/tests/edit.rs::a_column_left_out_is_gone_and_the_links_are_kept",
+          "rust/crates/sdm-schema/tests/edit.rs::the_relationships_are_checked_settled_and_warned_of",
+          "rust/crates/sdm-schema/tests/edit.rs::a_refused_edit_changes_nothing",
+          "rust/crates/sdm-schema/tests/edit.rs::a_schema_held_with_its_facts_reads_as_the_description",
+          "rust/crates/sdm-schema/tests/edit.rs::standalone_declarations_check_meaning_before_compatibility",
+          "rust/crates/sdm-schema/tests/edit.rs::inspect_schema_preserves_time_choice_and_declared_state",
+          "rust/crates/sdm-schema/tests/edit.rs::inspect_schema_checks_columns_before_relationships",
+          "rust/crates/sdm-schema/tests/edit.rs::compatibility_ledger_names_each_semantic_assignment_contract"
+        ]
+      },
+      "evidence_level": "local-boundary"
+    },
+    {
+      "id": "reader-model-type-journeys",
+      "boundary": "raw reader to prediction or explicit refusal in both languages",
+      "scenarios": [
+        "types.text-null.inferred",
+        "types.text-null.declared",
+        "types.text.inferred",
+        "types.null.inferred",
+        "types.text-short.inferred",
+        "types.text-short.declared",
+        "types.tags.declared",
+        "types.sequence.declared",
+        "types.numeric.inferred",
+        "types.temporal.inferred",
+        "reader.raw.regression",
+        "types.null.session",
+        "types.text-short.session",
+        "types.null.provider",
+        "types.numeric.provider",
+        "types.temporal.provider",
+        "types.date.inferred"
+      ],
+      "families": [
+        "numeric-width-and-decimal",
+        "boolean",
+        "categorical-string",
+        "free-text",
+        "short-text",
+        "null",
+        "timestamp-unit-and-zone",
+        "date",
+        "multicategorical-list",
+        "numeric-sequence"
+      ],
+      "evidence_level": "live-required"
+    }
+  ],
+  "live_api_tests": [
+    {
+      "api_contract": "direct-dtypes-options",
+      "test": "java/src/test/java/com/nvidia/sdm/TabularTest.java#liveTabularDirectAndRepeatedSession",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "readers",
+      "test": "java/src/test/java/com/nvidia/sdm/ReadersTest.java#configuredS3FixtureUsesThePublicReader",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "readers",
+      "test": "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#liveExactNumbersTemporalValuesAndCallerSettings",
+      "evidence_level": "live-required"
+    }
+  ]
 }

@@ -119,6 +119,34 @@ env:
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
 
 jobs:
+  compatibility-contract:
+    name: Compatibility contract (no native build or endpoint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: landing
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && needs.landing.outputs.skip != 'true' }}
+    env:
+      SDM_API_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/rust-core' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - run: pip install pytest
+      - name: Compare Java APIs and enforce capability coverage
+        run: |
+          python scripts/check_java_api.py --base "$SDM_API_BASE"
+          python scripts/snapshot_java_api.py --out java/target/public-api.json
+          python tests/parity/ledger.py --base "$SDM_API_BASE" --java-inventory java/target/public-api.json
+          python -m pytest tests/parity/test_ledger.py tests/parity/test_api_outcomes.py tests/parity/test_java_api.py tests/parity/test_junit_results.py -q
+
   # The nightly (the schedule): dispatch this workflow, fresh, on the head
   # of every phase branch, rust-core-phase-N for any N; every other job
   # leaves itself out on the schedule (the landing job says skip).
@@ -505,6 +533,9 @@ jobs:
       - run: cargo test --workspace --locked
         env:
           SDM_PYTHON: python
+      - name: Required Rust type and provider test identities
+        working-directory: .
+        run: python tests/parity/api_contracts.py --language rust --gate native --run --out "$RUNNER_TEMP/rust-contract-results.json"
       # Fresh dependency tests deliberately changed the lock, not the
       # committed source the following observations and gate must judge.
       # Preserve that experiment before restoring only its known change.
@@ -2222,6 +2253,11 @@ jobs:
         run: |
           python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
             -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+
+      - name: Required Python API cases and collected result identities
+        run: |
+          python tests/parity/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json"
+          python tests/parity/api_contracts.py --gate native --run --out "$RUNNER_TEMP/python-type-results.json"
 
   # The client's suite with every route forced onto the core (the Phase 2
   # flip dry run), nightly only: the owner's "2026-10-23 early: nightly

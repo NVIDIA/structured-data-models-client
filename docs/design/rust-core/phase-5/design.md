@@ -4,9 +4,10 @@
 
 # Phase 5: make `rust-core` ready for `main`
 
-**Proposal for owner review, not the final implementation plan.**
+**Direction approved; effort 1 implemented and reviewed.**
 Deliver one implementation, clear API/architecture docs, and maintained compatibility checks.
-Implementation waits for review; merging/publishing require owner approval.
+The [API and compatibility contract effort](effort-1/design.md) is implemented; see its [validation results](effort-1/completion.md).
+Legacy removal and final acceptance follow; merging/publishing require owner approval.
 
 ## 1. One implementation, clearly documented
 

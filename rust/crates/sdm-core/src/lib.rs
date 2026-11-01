@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod arrow_logical;
 pub mod attached;
 pub mod big_integer;
 pub mod compose;
@@ -31,7 +32,6 @@ mod result;
 pub mod run;
 mod session;
 mod subgraph;
-mod arrow_logical;
 mod tabular_arrow;
 mod tabular_selection;
 #[cfg(feature = "test-ops")]

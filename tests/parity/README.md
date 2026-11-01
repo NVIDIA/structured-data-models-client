@@ -12,6 +12,34 @@ Local checks never certify live prediction parity.
 | `routes.py` | Legacy-policy traps around setup, calls, cleanup and worker threads |
 | `compare.py` | Frozen-reference comparison and generated evidence matrix |
 
+## Credential-free contract checks
+
+`manifest.json` is also the maintained API/capability ledger.
+Public symbols map to API groups; those groups name required test methods, and model/connector scenarios link back to the groups.
+Type records reuse the existing Arrow vectors and explicit schema tests.
+Support declarations and local checks do not replace the live evidence matrix below.
+
+```sh
+python scripts/check_java_api.py --base origin/rust-core
+python scripts/snapshot_java_api.py --out java/target/public-api.json
+python tests/parity/ledger.py --base origin/rust-core --java-inventory java/target/public-api.json
+python tests/parity/api_contracts.py --run --out python-api-results.json
+python tests/parity/api_contracts.py --gate native --run --out python-type-results.json
+python tests/parity/api_contracts.py --language rust --gate native --run --out rust-contract-results.json
+```
+
+Use an installed candidate Python client with its test extras, JDK/Maven and the pinned Rust toolchain.
+Java behavior tests use the existing `scripts/rust_core/coverage.py --junit-run` command and its fresh Surefire reports; local Postgres is required for its database cases.
+CI reuses its built wheel/native artifacts and existing Python, Java and Cargo jobs.
+The separate compatibility job needs no native compilation, endpoint or private credentials.
+
+For an API or capability change, update the symbol mapping, required test methods and applicable scenario requirements together.
+Record a `contract_changes` entry with the target merge-base commit, changed record ID and reason.
+An absent language implementation needs a specific `api_exceptions` reason; it cannot silently disappear.
+Do not mark a capability passed just because its tests exist.
+
+## Live evidence
+
 Run all applicable Python cells by omitting filters, or repeat `--case`, `--connector` and `--model` to select a scope:
 
 ```sh

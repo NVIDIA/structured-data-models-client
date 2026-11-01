@@ -6,8 +6,7 @@ promises has promised everything.
 
 ## What is public
 
-Public is what the `__all__` of a package in the table below names, and
-nothing else:
+For Python, public objects are those named by `__all__` in the packages below, together with their documented public constructors, methods and attributes:
 
 ```python
 import sdm_client
@@ -49,6 +48,30 @@ What *is* promised beyond the names: the exception hierarchy under
 `StructuredDataError`, the `code` values it carries, the `SDMWarning` category,
 and the columns `PredictionResult.to_pandas()` produces for a given set of
 requested output fields.
+
+## Java and the shared Rust implementation
+
+Java's public surface is the public classes in `com.nvidia.sdm`, including public nested builders and their public/protected members.
+`com.nvidia.sdm.internal` is implementation detail.
+Python and Java promise equivalent capabilities, with idiomatic data containers and naming rather than identical method signatures.
+Python uses pandas/NumPy/Arrow inputs where supported; Java uses its documented Arrow and source APIs.
+The compatibility ledger in `tests/parity/manifest.json` records explicit language applicability exceptions.
+
+| Boundary | Responsibility |
+|---|---|
+| Python/Java APIs and connectors | User objects, conversion, credentials, database/HTTP I/O and presentation |
+| PyO3/JNI and `sdm-host`/`sdm-contract` | Native object ownership, Arrow admission and typed host/core operations |
+| `sdm-core` | Compose operations and request host I/O |
+| Domain crates | Query/schema rules, sampling, SQL generation, model payloads and result interpretation |
+
+The native message protocol is internal and versioned for matching bindings, not a separately supported user API.
+The Rust crates are currently unpublished; a Rust `pub` declaration does not by itself promise an independently stable embedding API.
+Keep shared computation and validation in Rust, and host-specific object handling and I/O in the language adapters.
+
+API changes must update the ledger's symbol mappings and behavior tests.
+Changes to coverage promises require a reason tied to the target branch merge base, including removals and narrowed language applicability.
+A mapping names the tests responsible for a capability; passing local tests does not establish live endpoint coverage.
+The maintained matrix must distinguish supported behavior, local checks and live evidence.
 
 ## What a version number means
 

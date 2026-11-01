@@ -293,6 +293,12 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'public-serving-refusals',
         'result-items',
         'request-inspection',
+        'sessions',
+        'errors',
+        'wire-vocabulary',
+        'sql-helpers',
+        'release-metadata',
+        'relational-materialization',
     }
 
 

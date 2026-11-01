@@ -754,6 +754,70 @@ def junit_check(repo: Path, reports: Path, report: Report) -> None:
             problem = junit_problem(test, ran)
             if problem is not None:
                 report.fail('rule 4', f'java: path {path}: {test}: {problem}')
+    parity_junit_check(repo, reports, report)
+
+
+def parity_junit_check(repo: Path, reports: Path, report: Report) -> None:
+    """Hold the maintained API ledger to this same fresh Surefire run."""
+    import xml.etree.ElementTree as ElementTree
+
+    ledger = repo / 'tests/parity/manifest.json'
+    if not ledger.is_file():
+        return  # Small standalone fixtures for the coverage tool have no ledger.
+    data = json.loads(ledger.read_text())
+    required_tests = {
+        node
+        for group in data['api_contracts']
+        if group['gate'] == 'local'
+        for node in group['tests'].get('java', [])
+    }
+    required = {
+        node.split('#')[0]
+        .removeprefix('java/src/test/java/')
+        .removesuffix('.java')
+        .replace('/', '.')
+        for node in required_tests
+    }
+    seen = set()
+    reached = set()
+    for path in sorted(reports.glob('TEST-*.xml')):
+        suite = ElementTree.parse(path).getroot()
+        for case in suite.iter('testcase'):
+            owner, name = case.get('classname', ''), case.get('name', '')
+            matches = {
+                item
+                for item in required
+                if owner == item or owner.startswith(item + '$')
+            }
+            if not matches:
+                continue
+            method = re.split(r'[(\[]', name, maxsplit=1)[0]
+            if not any(
+                test.endswith('#' + method)
+                and junit_problem(test, {(owner, method)}) is None
+                for test in required_tests
+            ):
+                continue
+            identity = (owner, name)
+            if identity in seen:
+                report.fail('parity API', f'duplicate JUnit result: {identity}')
+            seen.add(identity)
+            reached.update(matches)
+            if any(
+                case.find(tag) is not None
+                for tag in ('skipped', 'failure', 'error')
+            ):
+                report.fail(
+                    'parity API',
+                    f'required JUnit test did not pass: {identity}',
+                )
+    for owner in sorted(required - reached):
+        report.fail('parity API', f'missing required JUnit class: {owner}')
+    ran = junit_ran(reports)
+    for test in sorted(required_tests):
+        problem = junit_problem(test, ran)
+        if problem:
+            report.fail('parity API', f'{test}: {problem}')
 
 
 def rule_4(

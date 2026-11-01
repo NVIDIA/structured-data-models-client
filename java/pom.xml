@@ -290,6 +290,33 @@
   </build>
 
   <profiles>
+    <!-- Compare compiled public APIs with a JAR built from the target merge base.
+         This profile does not load JNI or contact a model endpoint. -->
+    <profile>
+      <id>api-compatibility</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.siom79.japicmp</groupId>
+            <artifactId>japicmp-maven-plugin</artifactId>
+            <version>0.26.5</version>
+            <configuration>
+              <oldVersion><file><path>${sdm.api.baseline}</path></file></oldVersion>
+              <newVersion><file><path>${project.build.directory}/${project.artifactId}-${project.version}.jar</path></file></newVersion>
+              <parameter>
+                <includes><include>com.nvidia.sdm</include></includes>
+                <includeExclusively>true</includeExclusively>
+                <accessModifier>protected</accessModifier>
+                <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
+                <breakBuildOnSourceIncompatibleModifications>true</breakBuildOnSourceIncompatibleModifications>
+                <ignoreMissingClasses>false</ignoreMissingClasses>
+                <reproducibleReport>true</reproducibleReport>
+              </parameter>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <!-- The release JAR: refuses to build without every platform's native
          (locked check 14: a JAR missing one architecture's native). -->
     <profile>
