@@ -216,7 +216,6 @@ def test_a_reply_that_is_not_one_row_is_a_transport_error():
 def test_a_question_asked_in_parts_is_one_call_per_part():
     """A forecast has no task on the endpoint and is asked once per step;
     each step is its own serving call."""
-    pytest.importorskip('sdm_relational_engine')
     request = forecast_request()
     assert request.parts is not None
 
