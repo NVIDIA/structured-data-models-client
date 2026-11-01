@@ -38,6 +38,7 @@ __all__ = [
     'Diagnostic',
     'DirectValue',
     'RequestSplitData',
+    'ResultItems',
     'DecodedDirectResponse',
     'NativeDirectResponse',
     'PreparedDirectCall',
@@ -528,6 +529,40 @@ class DirectValue:
 
 
 @dataclasses.dataclass(frozen=True)
+class ResultItems:
+    """Projected Arrow items and their mechanical host conversions."""
+
+    table: int
+    fields: tuple[tuple[str, str], ...]
+
+
+def _result_items(read: dict[str, Any]) -> ResultItems:
+    fields = []
+    names: set[str] = set()
+    for value in _list(read['fields'], 'fields'):
+        entry = _fields(value, 'result field', ('name', 'encoding'))
+        name = _text(entry['name'], 'name')
+        encoding = _text(entry['encoding'], 'encoding')
+        if (
+            not name
+            or name in names
+            or encoding
+            not in {
+                'native',
+                'value',
+                'mapping',
+                'mappings',
+                'candidate_list',
+                'candidate_rankings',
+            }
+        ):
+            raise CodecError('invalid or repeated result field descriptor')
+        names.add(name)
+        fields.append((name, encoding))
+    return ResultItems(_int(read['table'], 'table'), tuple(fields))
+
+
+@dataclasses.dataclass(frozen=True)
 class RequestSplitData:
     """Arrow attachments for one inspected request half, in table order."""
 
@@ -595,6 +630,7 @@ class PreparedFrameGraph:
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'request_split': (('instance', 'related_tables'), (), _request_split),
+    'result_items': (('table', 'fields'), (), _result_items),
     'prepared_frame_graph': (
         ('graph',),
         (),
@@ -652,6 +688,7 @@ def decode(
     | DecodedDirectResponse
     | NativeDirectResponse
     | RequestSplitData
+    | ResultItems
 ):
     r"""The result a ``done`` step carries, decoded once.
 
@@ -682,6 +719,7 @@ def decode(
         | DecodedDirectResponse
         | NativeDirectResponse
         | RequestSplitData
+        | ResultItems
     ) = build(read)
     return built
 
@@ -699,6 +737,7 @@ _T = TypeVar(
     NativeDirectResponse,
     PreparedDirectCall,
     RequestSplitData,
+    ResultItems,
 )
 
 

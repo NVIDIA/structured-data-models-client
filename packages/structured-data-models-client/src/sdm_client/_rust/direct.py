@@ -654,7 +654,7 @@ def predict(
         finished = _response(finished)
     answer = results.expect(finished.result, results.Predicted)
     return prediction._result(
-        prediction._rows(finished.take(answer.result)),
+        prediction._table(finished.take(answer.result)),
         model=answer.model,
         request_id=answer.request_id,
         metadata=json.loads(finished.take(answer.metadata)),
