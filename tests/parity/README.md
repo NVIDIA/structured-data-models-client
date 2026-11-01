@@ -5,7 +5,7 @@ Local checks never certify live prediction parity.
 
 | File | Purpose |
 |---|---|
-| `manifest.json` | Required scenarios, input paths, API mappings and explicit Java Snowflake deferral |
+| `manifest.json` | Required scenarios, input paths, API mappings and any explicitly approved deferrals |
 | `fixtures/shop.json` | Ordered rows, primary keys and relationships shared by both runners |
 | `observation.schema.json` | JSONL record contract; one record per case/connector/model/language |
 | `python_runner.py` | Public Python calls, including source verification and cleanup |

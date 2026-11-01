@@ -25,16 +25,7 @@
     "s3-parquet",
     "zip"
   ],
-  "deferrals": [
-    {
-      "language": "java",
-      "connectors": [
-        "snowflake",
-        "snowflake-semantic"
-      ],
-      "reason": "Java Snowflake is explicitly deferred."
-    }
-  ],
+  "deferrals": [],
   "scenarios": [
     {
       "id": "node.regression",
