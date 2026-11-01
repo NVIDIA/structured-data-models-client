@@ -50,8 +50,13 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - Rust provider fixes landed (`2d4021249`): client date rules, declared fallback/recovery, explicit text-order compatibility and slice-aware byte limits.
   Validation passed 132 Rust tests, 50 installed Python regressions, contract checks and Clippy.
   Actual >2 GiB Python/DuckDB probes passed: binary is omitted through prediction; text describes then refuses materialization by name (local model stub).
-  Java large-value transport still needs verification; Python evidence does not establish that cell.
-- Next: persistence, Java large-value transport and permanent parity machinery.
+  Java large-value transport is covered separately below; Python evidence does not establish that cell.
+- Java persistence landed (`50f40e34c`): schema, direct requests and materialized requests have data-only stream snapshots; caller streams stay open and live connections/sessions are excluded.
+  Java regression results: 306 passed, 14 explicitly skipped; two source reviews passed.
+- Java DuckDB streaming landed (`22abbf6e1`), retaining result/statement ownership until the Arrow stream closes without whole-result byte-array serialization.
+  Java regression results: 310 passed, 14 explicitly skipped; both source reviews passed.
+  An actual >2 GiB binary column was omitted through materialization and prediction using a local model stub; live-model acceptance remains pending.
+- Next: permanent parity machinery and paired endpoint runs.
   The real endpoint matrix and remaining scope reconciliation are still pending.
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
