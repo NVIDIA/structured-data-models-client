@@ -415,10 +415,30 @@ public final class ParityRunner {
   }
 
   static Object requestEvidence(Request request, RootAllocator allocator) throws Exception {
+    validateInspection(request.context(), request.contextRows(), allocator);
+    validateInspection(request.predict(), request.predictRows(), allocator);
     var payloads = new ArrayList<Object>();
     for (String payload : request.payloads())
       payloads.add(Json.read(payload.getBytes(StandardCharsets.UTF_8)));
     return payloads.isEmpty() ? tabularSnapshot(request, allocator) : payloads;
+  }
+
+  /** Exercise public inspection without replacing the raw request evidence compared below. */
+  static void validateInspection(RequestSplit split, Long expectedRows, RootAllocator allocator)
+      throws Exception {
+    long rows = consume(split.read(allocator));
+    if (expectedRows == null || rows != expectedRows)
+      throw new IllegalStateException("request inspection row count differs from its public count");
+    for (String name : split.relatedTables()) consume(split.readRelated(name, allocator));
+  }
+
+  static long consume(ArrowReader reader) throws Exception {
+    try (reader) {
+      long rows = 0;
+      while (reader.loadNextBatch())
+        rows = Math.addExact(rows, reader.getVectorSchemaRoot().getRowCount());
+      return rows;
+    }
   }
 
   static LocalDateTime fixtureTime(Object value) {
