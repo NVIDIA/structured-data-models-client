@@ -54,16 +54,6 @@ def read(
         {1: codec.attachment(descriptor), 2: table},
     )
     answer = results.expect(finished.result, results.ResultItems)
-    stream = finished.take(answer.table)
-    with pa.RecordBatchReader._import_from_c_capsule(
-        stream.__arrow_c_stream__()
-    ) as reader:
-        projected = reader.read_all()
-    if projected.column_names != [name for name, _ in answer.fields]:
-        raise codec.CodecError('projected fields do not match Arrow columns')
-    maps = {
-        field.name for field in projected.schema if pa.types.is_map(field.type)
-    }
 
     def candidate(position: Any) -> Any:
         if (
@@ -74,34 +64,52 @@ def read(
             raise codec.CodecError('projected candidate position has no owner')
         return candidates[position]
 
-    rows = projected.to_pylist()
-    for row in rows:
-        for name, encoding in answer.fields:
-            value = row[name]
-            if value is None:
-                continue
-            if encoding in ('value', 'mapping', 'mappings'):
-                value = primitive(json.loads(value))
-                if encoding == 'mapping' and value is not None:
+    rows = []
+    for segment in answer.segments:
+        stream = finished.take(segment.table)
+        with pa.RecordBatchReader._import_from_c_capsule(
+            stream.__arrow_c_stream__()
+        ) as reader:
+            projected = reader.read_all()
+        if projected.column_names != [name for name, _ in segment.fields]:
+            raise codec.CodecError(
+                'projected fields do not match Arrow columns'
+            )
+        maps = {
+            field.name
+            for field in projected.schema
+            if pa.types.is_map(field.type)
+        }
+
+        segment_rows = projected.to_pylist()
+        for row in segment_rows:
+            for name, encoding in segment.fields:
+                value = row[name]
+                if value is None:
+                    continue
+                if encoding in ('value', 'mapping', 'mappings'):
+                    value = primitive(json.loads(value))
+                    if encoding == 'mapping' and value is not None:
+                        value = dict(value)
+                    elif encoding == 'mappings' and value is not None:
+                        value = [dict(entry) for entry in value]
+                elif encoding == 'candidate_list':
+                    value = [candidate(position) for position in value]
+                elif encoding == 'candidate_rankings':
+                    value = [
+                        {
+                            'candidate': candidate(entry['position']),
+                            'score': entry['score'],
+                        }
+                        for entry in value
+                    ]
+                elif encoding == 'native' and name in maps:
                     value = dict(value)
-                elif encoding == 'mappings' and value is not None:
-                    value = [dict(entry) for entry in value]
-            elif encoding == 'candidate_list':
-                value = [candidate(position) for position in value]
-            elif encoding == 'candidate_rankings':
-                value = [
-                    {
-                        'candidate': candidate(entry['position']),
-                        'score': entry['score'],
-                    }
-                    for entry in value
-                ]
-            elif encoding == 'native' and name in maps:
-                value = dict(value)
-            if (
-                name in ('scores', 'embeddings', 'rankings')
-                and value is not None
-            ):
-                value = tuple(value)
-            row[name] = value
+                if (
+                    name in ('scores', 'embeddings', 'rankings')
+                    and value is not None
+                ):
+                    value = tuple(value)
+                row[name] = value
+        rows.extend(segment_rows)
     return rows
