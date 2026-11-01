@@ -812,6 +812,8 @@ checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -1630,6 +1632,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
+ "arrow-cast",
  "arrow-ipc",
  "arrow-row",
  "arrow-schema",
@@ -1667,6 +1670,8 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "arrow-select",
+ "half",
  "jiff",
  "sdm-contract",
  "sdm-schema",
@@ -1679,6 +1684,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
+ "arrow-data",
  "arrow-schema",
  "arrow-select",
  "half",
@@ -1733,6 +1739,8 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "arrow-select",
+ "indexmap",
  "sdm-contract",
  "sdm-engine",
  "sdm-wire",

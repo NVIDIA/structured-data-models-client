@@ -179,6 +179,7 @@ fn host() -> ProviderChoice {
             null_order: Some(NullOrder::Last),
             index_advice: Some(IndexAdvice::SingleColumn),
             sampling: Determinism::SeededStable,
+            fallback_text_order: None,
             fallback: None,
         },
     }
@@ -1505,20 +1506,40 @@ fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
 }
 
 #[test]
+fn client_rules_read_approved_formats_and_normalize_mixed_zones() {
+    // phase-0/date-rules.md T1.25b replaces pandas first-shape guessing
+    // with the approved core format list; ClientRules normalizes to UTC.
+    for values in [
+        vec!["2024-01-05", "2024-01-05"],
+        vec!["2024-01-05T01:00:00+01:00", "2024-01-05T00:00:00"],
+    ] {
+        let mut run = materialize(
+            host_reading(Some(TextTimes::ClientRules)),
+            &shop_with_times(ColumnType::Utf8, Dtype::String),
+            QUERY,
+            None,
+        )
+        .unwrap();
+        let column = |n| {
+            Arc::new(StringArray::from(
+                (0..n).map(|i| values[i % values.len()]).collect::<Vec<_>>(),
+            )) as ArrayRef
+        };
+        let (payload, _) = times_to_the_end(&mut run, &column);
+        assert!(sends(&payload.unwrap(), SENT));
+    }
+}
+
+#[test]
 fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() {
     let text = || shop_with_times(ColumnType::Utf8, Dtype::String);
     let days = |n: usize| Arc::new(StringArray::from(vec!["2024-01-05"; n])) as ArrayRef;
-    // No reading declared, the client's rules (not ported), a value outside
+    // No reading declared, a value outside
     // the core's list of formats (T1.25b), day and month values the fetch
     // puts in no order, and offsets mixed: each by its rule's name, before
     // any text is read as a time.
     for (provider, ts, wanted) in [
         (host_reading(None), Box::new(days) as Column, "text_times"),
-        (
-            host_reading(Some(TextTimes::ClientRules)),
-            Box::new(days),
-            "text_time_rules",
-        ),
         (
             host_reading(Some(TextTimes::ValueByValue)),
             Box::new(|n| Arc::new(StringArray::from(vec!["March 5 2024"; n])) as ArrayRef),
@@ -2307,4 +2328,39 @@ fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
         panic!("not JSON");
     };
     assert_eq!(not_json.fields["field"], Detail::text("values"));
+}
+
+#[test]
+fn declared_fallback_admits_materialization_without_optional_pushdowns() {
+    let ProviderChoice::Host { mut capabilities } = host() else {
+        unreachable!()
+    };
+    capabilities.optional.clear();
+    capabilities.index_advice = None;
+    capabilities.fallback = Some(sdm_contract::data::FallbackLimits {
+        max_rows: 1000,
+        max_bytes: 1 << 20,
+    });
+    let mut run = materialize(ProviderChoice::Host { capabilities }, &shop(), QUERY, None).unwrap();
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("expected fallback scan")
+    };
+    assert!(
+        requests
+            .iter()
+            .all(|r| matches!(r.request, DataRequest::Scan { .. }))
+    );
+}
+
+#[test]
+fn raw_large_text_description_has_an_honest_named_materialization_boundary() {
+    let mut description = shop();
+    let column = &mut description.tables[0].columns[0];
+    column.received = ColumnType::LargeUtf8;
+    let name = column.name.clone();
+    let mut run = materialize(host(), &description, QUERY, None).unwrap();
+    let error = run.next().unwrap_err();
+    assert_eq!(error.code, ErrorCode::UnsupportedType);
+    assert_eq!(error.sentence, sdm_contract::Sentence::LargeTextMaterialize);
+    assert_eq!(error.fields.get("column"), Some(&Detail::text(name)));
 }

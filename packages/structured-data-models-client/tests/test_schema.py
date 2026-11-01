@@ -137,6 +137,8 @@ def test_an_unknown_semantic_type_is_refused_when_it_is_set():
     ('tables', 'fragment'),
     [
         ({}, 'at least one table'),
+        ({'': pd.DataFrame({'x': [1]})}, 'non-empty strings'),
+        ({3: pd.DataFrame({'x': [1]})}, 'non-empty strings'),
         ({'t': [1, 2, 3]}, 'must be a pandas DataFrame'),
     ],
 )

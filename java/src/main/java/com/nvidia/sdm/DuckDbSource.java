@@ -12,7 +12,7 @@ import java.util.Objects;
  * {@code DuckDBSource}: each read runs on a cursor of its own ({@code duplicate()}), and the core's
  * statements read the tables of the connection's current schema.
  */
-public final class DuckDbSource implements Source {
+public final class DuckDbSource implements JdbcSource {
   private final Connection connection;
 
   private DuckDbSource(Connection connection) {

@@ -11,6 +11,7 @@ pub mod attached;
 pub mod big_integer;
 pub mod compose;
 mod describe;
+mod direct;
 mod discover;
 pub mod dispatch;
 mod edit;
@@ -19,12 +20,20 @@ mod fallback;
 mod held;
 mod lag;
 pub mod materialize;
+mod memory;
+#[cfg(test)]
+mod memory_tests;
 pub mod pql;
 mod predict;
 pub mod profiles;
 mod ranking;
+mod result;
 pub mod run;
+mod session;
 mod subgraph;
+mod arrow_logical;
+mod tabular_arrow;
+mod tabular_selection;
 #[cfg(feature = "test-ops")]
 mod test_ops;
 pub mod view;
@@ -50,3 +59,10 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
 pub use sdm_request::predict::{Capabilities, capabilities};
+
+pub use materialize::frames::FrameGraph;
+
+mod frame_schema;
+mod frame_session;
+
+mod split;

@@ -55,10 +55,12 @@ without large buffers), the core fails there too, by name (E66(b)). With
 large buffers the reference describes the source (and takes the ``BLOB``,
 which it leaves out, through ``predict``; the ``VARCHAR`` fails its
 ``materialize`` with DuckDB's out-of-memory error on a 24 GB machine), and
-the core refuses it at ``from_source``: register P1B-80, approved by the
-owner on 2026-10-15 (E152), keeps the core's named refusal for Phase 1,
-``VALUE_OUT_OF_RANGE`` naming the column and the Arrow type received,
-matching the reference left to Phase 2 (FX-3).
+Phase 4 now describes both too.
+Binary is omitted and prediction proceeds; retained large text receives a
+named ``UNSUPPORTED_TYPE`` at materialization instead of an out-of-memory
+failure.
+The recorded P1B-80 vectors retain the historical Phase 1 refusal as evidence
+of the gap this closes.
 
 Added after fix 3 (97aefc9d), from its review (register P1B-81):
 
@@ -489,11 +491,12 @@ if BIG:
 
     @pytest.mark.parametrize('name', [row['name'] for row in BIG_ROWS])
     def test_big_a_value_past_int32_offsets_on_the_core(name: str) -> None:
-        r"""Without large buffers, E66(b): the reference fails with no code,
-        the core by name. With them, P1B-80 (approved, E152): the core
-        refuses at from_source, VALUE_OUT_OF_RANGE, naming the column and
-        the large type received, where the reference describes the
-        source."""
+        r"""Phase 4 lifts P1B-80's description refusal.
+
+        Binary is omitted and prediction proceeds; retained large text is
+        described but materialization refuses its physical representation.
+        The historical vectors remain evidence of the original gap.
+        """
         row = next(r for r in BIG_ROWS if r['name'] == name)
         reference = row['reference']
         if reference['described'] is None:
@@ -502,23 +505,48 @@ if BIG:
             assert got['outcome']['code'] is not None
             return
         assert name.endswith('.large'), name
-        saved = os.environ.get('SDM_CORE_ROUTES')
-        os.environ['SDM_CORE_ROUTES'] = ','.join(R.CORE_ROUTES)
-        try:
-            from sdm_client import Schema, StructuredDataError
+        endpoint = os.environ.get('SDM_T136_LIVE_ENDPOINT')
+        if endpoint is not None and '.blob.' in name:
+            assert endpoint.strip(), (
+                'SDM_T136_LIVE_ENDPOINT must name a serving endpoint'
+            )
+            import math
+
+            import pandas as pd
+            from sdm_client import (
+                KumoRelational,
+                PredictiveQuery,
+                Schema,
+                SDMClient,
+            )
             from sdm_connectors import DuckDBSource
 
-            with pytest.raises(StructuredDataError) as refused:
-                Schema.from_source(DuckDBSource(R.source(row['setup'])))
-        finally:
-            if saved is None:
-                os.environ.pop('SDM_CORE_ROUTES', None)
-            else:
-                os.environ['SDM_CORE_ROUTES'] = saved
-        assert str(refused.value.code) == 'VALUE_OUT_OF_RANGE'
-        details = refused.value.details
-        assert isinstance(details, dict), details
-        assert details.get('column') == 'f', details
-        assert details.get('arrow_type') == (
-            'LargeUtf8' if '.varchar.' in name else 'LargeBinary'
-        ), details
+            # The recorded frozen fixture already succeeded through stub prediction.
+            # This opt-in closes the actual-model gap without rerunning the reference.
+            with R.source(row['setup']) as connection:
+                schema = Schema.from_source(DuckDBSource(connection))
+                assert 'f' not in schema['users'].columns
+                request = PredictiveQuery(R.PQL, schema).materialize(
+                    indices=R.INDICES, anchor_time=pd.Timestamp(R.ANCHOR)
+                )
+                with SDMClient.for_databricks_serving(endpoint) as client:
+                    result = client.predict(
+                        request, model=KumoRelational()
+                    ).to_pandas()
+                assert len(result) == len(R.INDICES)
+                assert all(
+                    math.isfinite(float(value))
+                    for value in result['prediction']
+                )
+            return
+        got = _routed('core', row['setup'])
+        assert got['described'] is not None, got['outcome']
+        columns = got['described']['users']['columns']
+        if '.blob.' in name:
+            assert all(column[0] != 'f' for column in columns)
+            assert got['outcome'] == {'result': 'success', 'stage': 'predict'}
+        else:
+            assert ['f', 'string', 'categorical'] in columns
+            assert got['outcome']['stage'] == 'materialize'
+            assert got['outcome']['code'] == 'UNSUPPORTED_TYPE'
+            assert 'f' in got['outcome']['message']

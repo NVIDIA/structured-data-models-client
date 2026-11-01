@@ -186,6 +186,7 @@ impl Memory {
             text_times: None,
             null_order: Some(NullOrder::Last),
             index_advice: None,
+            fallback_text_order: None,
             fallback: None,
         }
     }

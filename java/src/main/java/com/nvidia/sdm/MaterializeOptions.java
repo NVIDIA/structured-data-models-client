@@ -39,6 +39,9 @@ public final class MaterializeOptions {
   /** The anchor time each entity is asked about at its own time ({@code anchor_time='entity'}). */
   static final Object EACH_ENTITY = new Object();
 
+  private final String model;
+  private final String task;
+  private final List<Object> candidates;
   private final List<Object> indices;
   private final Object anchorTime;
   private final Integer numContextSamples;
@@ -47,6 +50,9 @@ public final class MaterializeOptions {
   private final Map<String, Object> options;
 
   private MaterializeOptions(Builder builder) {
+    this.model = builder.model;
+    this.task = builder.task;
+    this.candidates = builder.candidates == null ? null : Collections.unmodifiableList(new ArrayList<>(builder.candidates));
     this.indices = builder.indices == null ? null : Collections.unmodifiableList(builder.indices);
     this.anchorTime = builder.anchorTime;
     this.numContextSamples = builder.numContextSamples;
@@ -58,6 +64,10 @@ public final class MaterializeOptions {
   public static Builder builder() {
     return new Builder();
   }
+
+  String model() { return model; }
+  String task() { return task; }
+  List<Object> candidates() { return candidates; }
 
   List<Object> indices() {
     return indices;
@@ -85,6 +95,9 @@ public final class MaterializeOptions {
 
   /** Builds {@link MaterializeOptions}. */
   public static final class Builder {
+    private String model;
+    private String task;
+    private List<Object> candidates;
     private List<Object> indices;
     private Object anchorTime;
     private Integer numContextSamples;
@@ -93,6 +106,23 @@ public final class MaterializeOptions {
     private final Map<String, Object> options = new LinkedHashMap<>();
 
     private Builder() {}
+
+    /** Explicit model selection; otherwise multiple tables or relationships select Relational. */
+    public Builder model(String model) {
+      if (!SdmClient.KUMO_RELATIONAL.equals(model) && !SdmClient.KUMO_TABULAR.equals(model))
+        throw new StructuredDataException("unknown model " + model, "UNKNOWN_MODEL", Map.of(), null);
+      this.model = model;
+      return this;
+    }
+
+    /** Explicit Tabular task, such as regression or classification; Rust validates it. */
+    public Builder task(String task) { this.task = Objects.requireNonNull(task); return this; }
+
+    /** Values to rank, in caller order. Rust prepares and combines candidate questions. */
+    public Builder candidates(List<?> candidates) {
+      this.candidates = new ArrayList<>(Objects.requireNonNull(candidates, "candidates"));
+      return this;
+    }
 
     /**
      * The entities to predict for, by their keys' values (a {@code Long}, text, a {@code

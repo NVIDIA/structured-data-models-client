@@ -412,6 +412,7 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback_text_order: None,
             fallback: None,
         },
     };

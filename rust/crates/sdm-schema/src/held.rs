@@ -39,6 +39,8 @@ pub struct Read {
     /// each read by its data type ([`by_data_type`]); [`held`] writes them
     /// back with none.
     pub unfacted: BTreeSet<ColumnAt>,
+    /// Explicitly missing host dtypes, retained across schema edits.
+    pub missing_dtypes: BTreeSet<ColumnAt>,
     /// The data type the source gave each column the host holds as another
     /// (a column the caller retyped): the schema is read by the host's, as
     /// the old client's checks read it, and the source's is what its data
@@ -51,6 +53,22 @@ pub struct Read {
 }
 
 impl Read {
+    /// Return checked metadata without inventing a dtype absent from the host.
+    pub fn hold(&self, description: &SourceDescription) -> HeldSchema {
+        let mut answer = held(description, &self.unfacted, &self.retyped);
+        for table in &mut answer.tables {
+            for column in &mut table.columns {
+                if self
+                    .missing_dtypes
+                    .contains(&(table.name.clone(), column.name.clone()))
+                {
+                    column.dtype = None;
+                }
+            }
+        }
+        answer
+    }
+
     /// The schema with each column of the data type the source gave it:
     /// the one the reference's engine reads a table in place by.
     pub fn by_the_source(&self) -> SourceDescription {
@@ -101,10 +119,10 @@ pub fn lacking_facts(held: &HeldSchema) -> Vec<(&HeldTable, Vec<&str>)> {
 /// checks do), held nullable and not unique, of no exact numbers or
 /// declared type. `received` is not read for such a column: only a column
 /// of exact numbers is retyped by its role ([`crate::assemble::read_exact_numbers`]).
-pub fn by_data_type(relation: &Relation, dtype: &str) -> SourceFacts {
+pub fn by_data_type(relation: &Relation, dtype: Option<&str>) -> SourceFacts {
     SourceFacts {
         relation: relation.clone(),
-        dtype: wire_dtype(dtype),
+        dtype: dtype.map(wire_dtype).unwrap_or(Dtype::Unsupported),
         received: ColumnType::Null,
         nullable: true,
         unique: false,
@@ -176,7 +194,10 @@ pub fn check_source_types(
             let Some(source) = found.get(&(table.name.clone(), column.name.clone())) else {
                 continue;
             };
-            if source.exact_number.is_none() && !type_matches(&column.dtype, source.dtype) {
+            let Some(dtype) = &column.dtype else {
+                continue;
+            };
+            if source.exact_number.is_none() && !type_matches(dtype, source.dtype) {
                 return Err(CoreError::new(
                     Sentence::ColumnTypeUnmatched,
                     "a column's type the caller gave is not the one the source holds",
@@ -184,7 +205,7 @@ pub fn check_source_types(
                 .with_field("field", Detail::text("schema"))
                 .with_field("table", Detail::text(&table.name))
                 .with_field("column", Detail::text(&column.name))
-                .with_field("dtype", Detail::text(&column.dtype))
+                .with_field("dtype", Detail::text(dtype))
                 .with_field("source_dtype", Detail::text(source.dtype.wire_name())));
             }
         }
@@ -231,7 +252,10 @@ pub fn wire_dtype(name: &str) -> Dtype {
 /// checks let through, [`Dtype::Unsupported`]); the source's, which tells a
 /// date from a time of day, where the two name one type on the wire.
 fn held_dtype(column: &HeldColumn, facts: &SourceFacts) -> Dtype {
-    let held = wire_dtype(&column.dtype);
+    let Some(dtype) = column.dtype.as_deref() else {
+        return facts.dtype;
+    };
+    let held = wire_dtype(dtype);
     if held.wire_name() == facts.dtype.wire_name() {
         facts.dtype
     } else {
@@ -254,8 +278,18 @@ pub fn read(
     found: &BTreeMap<ColumnAt, SourceFacts>,
     by_type: bool,
 ) -> Result<Read, CoreError> {
+    read_with_frame_widths(held, found, by_type, false)
+}
+
+fn read_with_frame_widths(
+    held: HeldSchema,
+    found: &BTreeMap<ColumnAt, SourceFacts>,
+    by_type: bool,
+    frame_widths: bool,
+) -> Result<Read, CoreError> {
     let mut tables = Vec::with_capacity(held.tables.len());
     let mut unfacted = BTreeSet::new();
+    let mut missing_dtypes = BTreeSet::new();
     let mut retyped = BTreeMap::new();
     let mut types = crate::assemble::HostTypes::default();
     let links = held.links;
@@ -288,20 +322,28 @@ pub fn read(
                     Some(facts) => facts.clone(),
                     None if by_type => {
                         unfacted.insert(at.clone());
-                        by_data_type(&table.source, &column.dtype)
+                        by_data_type(&table.source, column.dtype.as_deref())
                     }
                     None => continue,
                 },
             };
             // The host's name of the type, which a join reads; but for a
             // column of exact numbers, whose type its role decides (T2.21).
-            if facts.exact_number.is_none() {
-                types.names.insert(at.clone(), column.dtype.clone());
+            if let Some(dtype) = &column.dtype {
+                if facts.exact_number.is_none() {
+                    types.names.insert(at.clone(), dtype.clone());
+                }
+            } else {
+                missing_dtypes.insert(at.clone());
             }
-            if named_dtype(&column.dtype).is_none() {
+            if column.dtype.as_deref().and_then(named_dtype).is_none() {
                 types.unknown.insert(at.clone());
             }
-            let dtype = held_dtype(column, &facts);
+            let dtype = if frame_widths && column.dtype.as_deref() == Some("float32") {
+                Dtype::Float32
+            } else {
+                held_dtype(column, &facts)
+            };
             if dtype != facts.dtype && !unfacted.contains(&at) {
                 retyped.insert(at, facts.dtype);
             }
@@ -330,9 +372,16 @@ pub fn read(
     Ok(Read {
         description: SourceDescription { tables, links },
         unfacted,
+        missing_dtypes,
         retyped,
         types,
     })
+}
+
+/// Read native frame metadata without applying warehouse float-width canonicalization.
+/// PQL checks still use `types` and their existing logical aliases.
+pub fn read_frame(held: HeldSchema, by_type: bool) -> Result<Read, CoreError> {
+    read_with_frame_widths(held, &BTreeMap::new(), by_type, true)
 }
 
 /// `description` as a host holds it: each column's data type by its wire
@@ -376,7 +425,7 @@ fn held_column(
     let lacking = unfacted.contains(&at);
     HeldColumn {
         name: column.name.clone(),
-        dtype: column.dtype.wire_name().to_owned(),
+        dtype: Some(column.dtype.wire_name().to_owned()),
         stype: column.stype,
         stype_before_key: column.stype_before_key,
         source: (!lacking).then(|| {

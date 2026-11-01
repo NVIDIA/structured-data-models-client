@@ -36,9 +36,8 @@
 //!   by `row_index` as `PredictionResult.to_pandas` orders them.
 //!
 //! What the result does not carry yet is refused by name, never dropped
-//! (`UNSUPPORTED_REQUEST`, register P1B-4): an item's `scores`, `rankings`,
-//! `embeddings`, a classification answer that is not of its target's type,
-//! and the tabular model. From T2.13 an item's `explanation` and
+//! (`UNSUPPORTED_REQUEST`, register P1B-4): the tabular model on this relational
+//! entrypoint. Scores, rankings and embeddings are carried by the shared layout. From T2.13 an item's `explanation` and
 //! `metadata` are carried (each item's, and the result's explanation,
 //! [`Part::explanation`]), and from T2.9 a regression's `quantiles`.
 
@@ -67,10 +66,11 @@ pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
 pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
 
 /// The task kinds whose call this build writes.
-const CALLED: [&str; 3] = [
+const CALLED: [&str; 4] = [
     "regression",
     "binary_classification",
     "multiclass_classification",
+    "temporal_link_prediction",
 ];
 
 /// The statistic a regression's point prediction reports unless one was
@@ -451,68 +451,14 @@ pub fn prepare(
             Value::Object(members) => !members.is_empty(),
             Value::Bool(true) => true,
         });
-    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
-    let needed = |shape: &str| match shape {
-        "relationships" => linked,
-        "multiple_tables" => tables > 1,
-        "link_prediction" => kind == "temporal_link_prediction",
-        "forecasting" => kind == "forecasting",
-        "temporal" => temporal,
-        "static" => !temporal,
-        _ => false,
-    };
-    let mut lacking: Vec<&str> = SHAPES
-        .into_iter()
-        .filter(|shape| needed(shape) && !spec.shapes.contains(shape))
-        .collect();
-    lacking.sort_unstable();
-    if !lacking.is_empty() {
-        return Err(unsupported(
-            Sentence::ModelLacksShape,
-            spec.id,
-            "the model cannot answer a request of this shape",
-        )
-        .with_field("unsupported", texts(lacking)));
-    }
-    if !spec.tasks.contains(&kind) {
-        return Err(unsupported(
-            Sentence::ModelLacksTask,
-            spec.id,
-            "the model does not serve the task's kind",
-        )
-        .with_field("task", Detail::text(kind))
-        .with_field("supported", texts(sorted(spec.tasks))));
-    }
-    let mut unknown: Vec<&str> = outputs
-        .iter()
-        .map(String::as_str)
-        .filter(|name| !spec.outputs.contains(name))
-        .collect();
-    if !unknown.is_empty() {
-        unknown.sort_unstable();
-        unknown.dedup();
-        return Err(unsupported(
-            Sentence::ModelLacksOutputs,
-            spec.id,
-            "the model does not produce an output asked for",
-        )
-        .with_field("unsupported_outputs", texts(unknown))
-        .with_field("supported_outputs", texts(sorted(spec.outputs))));
-    }
+    check_shapes(spec, kind, anchored, linked, tables)?;
+    check_task_outputs(spec, kind, &outputs, true)?;
     let rows = payloads
         .iter()
         .map(|p| rows_of(p, "context"))
         .max()
         .unwrap_or(0);
-    if spec.id == RELATIONAL && rows > CONTEXT_ROWS_MAX {
-        return Err(unsupported(
-            Sentence::ContextPastModel,
-            spec.id,
-            "the request's context is larger than the model reads",
-        )
-        .with_field("context_rows", count(rows))
-        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
-    }
+    check_capacity(spec, rows, false)?;
     if spec.id == TABULAR {
         // The tabular model takes no relational request this build sends.
         return Err(not_yet("model"));
@@ -602,88 +548,106 @@ pub fn preflight(
     query: &str,
     model: &str,
 ) -> Result<Vec<Notice>, CoreError> {
+    preflight_halves(payloads, outputs, query, model, true, true)
+}
+
+/// Validate only the halves sent by a session operation.
+/// Ordinary prediction uses both halves through `preflight` unchanged.
+pub fn preflight_halves(
+    payloads: &[Value],
+    outputs: &[String],
+    query: &str,
+    model: &str,
+    sends_context: bool,
+    sends_predict: bool,
+) -> Result<Vec<Notice>, CoreError> {
     let mut notices = Vec::new();
-    for payload in payloads {
-        if let Some((_, rows)) = instance_table(payload, "context")
-            && rows.is_empty()
-        {
-            return Err(
-                unsupported(Sentence::NoContextRows, model, "no context rows are left")
-                    .with_field("context_rows", count(0)),
-            );
-        }
-    }
-    for payload in payloads {
-        let kind = kind_of(payload)?;
-        if !classifies(kind) {
-            continue;
-        }
-        let column = payload
-            .get("task")
-            .and_then(|t| t.get("target"))
-            .and_then(|t| t.get("column_name"))
-            .and_then(Value::as_text);
-        if let Some(values) = target_values(payload, column) {
-            let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
-            if labels.len() > CLASSES_MAX {
+    if sends_context {
+        for payload in payloads {
+            if let Some((_, rows)) = instance_table(payload, "context")
+                && rows.is_empty()
+            {
                 return Err(unsupported(
-                    Sentence::TooManyClasses,
+                    Sentence::NoContextRows,
                     model,
-                    "the target has more classes than the model takes",
+                    "no context rows are left",
                 )
-                .with_field("classes", count(labels.len()))
-                .with_field("limit", count(CLASSES_MAX)));
+                .with_field("context_rows", count(0)));
             }
         }
-    }
-    for payload in payloads {
-        let kind = kind_of(payload)?;
-        if !classifies(kind) && kind != "regression" {
-            continue;
+        for payload in payloads {
+            let kind = kind_of(payload)?;
+            if !classifies(kind) {
+                continue;
+            }
+            let column = payload
+                .get("task")
+                .and_then(|t| t.get("target"))
+                .and_then(|t| t.get("column_name"))
+                .and_then(Value::as_text);
+            if let Some(values) = target_values(payload, column) {
+                let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
+                if labels.len() > CLASSES_MAX {
+                    return Err(unsupported(
+                        Sentence::TooManyClasses,
+                        model,
+                        "the target has more classes than the model takes",
+                    )
+                    .with_field("classes", count(labels.len()))
+                    .with_field("limit", count(CLASSES_MAX)));
+                }
+            }
         }
-        let column = payload
-            .get("task")
-            .and_then(|t| t.get("target"))
-            .and_then(|t| t.get("column_name"))
-            .and_then(Value::as_text);
-        let Some(values) = target_values(payload, column) else {
-            continue;
-        };
-        let answered: BTreeSet<String> = values
-            .iter()
-            .filter(|v| !matches!(v, Value::Null))
-            .map(|v| member(v))
-            .collect();
-        if answered.len() != 1 {
-            continue;
-        }
-        let column = column.unwrap_or_default();
-        let constant = constant_context(column, query);
-        if classifies(kind) {
-            // Named as the notice names the target, for the host's words
-            // (the adapter's `_how_to_name_the_target`).
-            let sentence = match constant.sentence {
-                Sentence::ContextConstantColumn => Sentence::OneClassColumn,
-                Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
-                Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
-                _ => Sentence::OneClassAnswer,
+        for payload in payloads {
+            let kind = kind_of(payload)?;
+            if !classifies(kind) && kind != "regression" {
+                continue;
+            }
+            let column = payload
+                .get("task")
+                .and_then(|t| t.get("target"))
+                .and_then(|t| t.get("column_name"))
+                .and_then(Value::as_text);
+            let Some(values) = target_values(payload, column) else {
+                continue;
             };
-            let mut error = unsupported(sentence, model, "every context row has the same answer")
-                .with_field("field", Detail::text("context"))
-                .with_field("reason", Detail::text("one_class"));
-            for (name, value) in constant.fields {
-                error = error.with_field(name, value);
+            let answered: BTreeSet<String> = values
+                .iter()
+                .filter(|v| !matches!(v, Value::Null))
+                .map(|v| member(v))
+                .collect();
+            if answered.len() != 1 {
+                continue;
             }
-            return Err(error.with_field("classes_in_context", count(1)));
+            let column = column.unwrap_or_default();
+            let constant = constant_context(column, query);
+            if classifies(kind) {
+                // Named as the notice names the target, for the host's words
+                // (the adapter's `_how_to_name_the_target`).
+                let sentence = match constant.sentence {
+                    Sentence::ContextConstantColumn => Sentence::OneClassColumn,
+                    Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
+                    Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
+                    _ => Sentence::OneClassAnswer,
+                };
+                let mut error =
+                    unsupported(sentence, model, "every context row has the same answer")
+                        .with_field("field", Detail::text("context"))
+                        .with_field("reason", Detail::text("one_class"));
+                for (name, value) in constant.fields {
+                    error = error.with_field(name, value);
+                }
+                return Err(error.with_field("classes_in_context", count(1)));
+            }
+            notices.push(constant);
+            break;
         }
-        notices.push(constant);
-        break;
     }
     if !outputs.iter().any(|o| o == "explanation") {
         return Ok(notices);
     }
     let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
-    if scored != EXPLANATION_PREDICT_ROWS {
+    if sends_predict && scored != EXPLANATION_PREDICT_ROWS {
         // The output and what to change, for the host's words (T2.13).
         return Err(unsupported(
             Sentence::ExplanationOneEntity,
@@ -694,7 +658,7 @@ pub fn preflight(
         .with_field("remedy", Detail::text("one_entity"))
         .with_field("scored", count(scored)));
     }
-    if asks_for_the_larger_context(payloads) {
+    if sends_context && asks_for_the_larger_context(payloads) {
         return Err(unsupported(
             Sentence::ExplanationFastMode,
             model,
@@ -1093,15 +1057,24 @@ fn target_dtype(payload: &Value) -> Option<&str> {
 /// text.
 fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
     let kind = called(payload)?;
+    if kind == "temporal_link_prediction" {
+        // Link rankings and any optional prediction retain the server's values.
+        return Ok(AnswerType::Text);
+    }
     if !classifies(kind) {
         return Ok(AnswerType::Float);
     }
-    Ok(match target_dtype(payload) {
+    Ok(classification_answer_type(payload))
+}
+
+/// Shared declared-target conversion, after the caller validates its task.
+pub(crate) fn classification_answer_type(payload: &Value) -> AnswerType {
+    match target_dtype(payload) {
         Some(d) if d.starts_with("bool") => AnswerType::Bool,
         Some(d) if d.starts_with("int") => AnswerType::Int,
         Some(d) if d.starts_with("float") => AnswerType::FloatClass,
         _ => AnswerType::Text,
-    })
+    }
 }
 
 /// The spellings a declared boolean is read back from (`_as_bool`).
@@ -1277,7 +1250,16 @@ pub fn layout(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
-    let answers = answer_type(payload)?;
+    layout_with_answers(payload, response, float_text, answer_type(payload)?)
+}
+
+/// Shared row presentation after route-specific task validation.
+pub(crate) fn layout_with_answers(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+    answers: AnswerType,
+) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
         Some(reference) => {
@@ -1432,47 +1414,55 @@ fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<
 /// parts) and `batch_request_ids` (each part's id), parts of different
 /// models refused (`INTERNAL_ERROR`).
 pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
-    let internal = |message: &str| CoreError::new(Sentence::Internal, message);
+    let descriptors = parts
+        .iter()
+        .map(|part| sdm_contract::result::MergeDescriptor {
+            model: part.model.clone(),
+            request_id: part.request_id.clone(),
+            outputs: vec![],
+            has_explanation: part.explanation.as_ref().is_some_and(crate::result::truth),
+            names_rows: true,
+            names_step: part.rows.iter().any(|row| row.forecast_step.is_some()),
+            candidates: vec![],
+        })
+        .collect::<Vec<_>>();
+    let plan = crate::result::plan(&descriptors)?;
+    merge_planned(parts, &plan)
+}
+
+/// Assemble owned rows after the common metadata policy has selected owners.
+pub fn merge_planned(
+    parts: Vec<Part>,
+    plan: &sdm_contract::result::ResultMergePlan,
+) -> Result<Part, CoreError> {
     let mut parts = parts.into_iter();
-    let Some(first) = parts.next() else {
-        return Err(internal("no parts to merge"));
+    let Some(mut first) = parts.next() else {
+        return Err(CoreError::new(Sentence::Internal, "no parts to merge"));
     };
-    let rest: Vec<Part> = parts.collect();
-    if rest.is_empty() {
+    if plan.single {
         return Ok(first);
     }
-    if rest.iter().any(|p| p.model != first.model) {
-        return Err(internal("the parts were answered by different models"));
-    }
-    let mut metadata = first.metadata.clone();
-    metadata.set(
+    first.metadata.set(
         "batches",
-        Value::int(i64::try_from(rest.len() + 1).unwrap_or(i64::MAX)),
+        Value::int(i64::try_from(plan.batches).unwrap_or(i64::MAX)),
     );
-    let ids: Vec<&str> = std::iter::once(first.request_id.as_str())
-        .chain(rest.iter().map(|p| p.request_id.as_str()))
-        .collect();
-    metadata.set("batch_request_ids", Value::texts(ids));
-    let mut explanation = first.explanation;
-    let mut rows = first.rows;
-    for part in rest {
-        rows.extend(part.rows);
-        if explanation.is_none() {
-            explanation = part.explanation;
+    first.metadata.set(
+        "batch_request_ids",
+        Value::texts(plan.batch_request_ids.iter().map(String::as_str)),
+    );
+    if plan.explanation_part != Some(0) {
+        first.explanation = None;
+    }
+    for (at, part) in parts.enumerate() {
+        first.rows.extend(part.rows);
+        if plan.explanation_part == Some(at + 1) {
+            first.explanation = part.explanation;
         }
     }
-    for (at, row) in rows.iter_mut().enumerate() {
+    for (at, row) in first.rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
     }
-    Ok(Part {
-        model: first.model,
-        request_id: first.request_id,
-        metadata,
-        rows,
-        answers: first.answers,
-        text_ids: first.text_ids,
-        explanation,
-    })
+    Ok(first)
 }
 
 /// A forecast's answers put together, each step's answer to its own
@@ -1878,16 +1868,27 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     )));
     // The result's explanation (T2.13), as the JSON text of
     // [`Part::explanation`], on the schema's metadata under `explanation`.
-    let mut schema = Schema::new(fields);
+    let schema = Schema::new(fields);
+    let mut metadata = schema.metadata().clone();
+    metadata.insert(
+        "sdm.answer_type".to_owned(),
+        match part.answers {
+            AnswerType::Float => "Float",
+            AnswerType::FloatClass => "FloatClass",
+            AnswerType::Bool => "Bool",
+            AnswerType::Int => "Int",
+            AnswerType::Text => "Text",
+        }
+        .to_owned(),
+    );
+    metadata.insert("sdm.text_ids".to_owned(), part.text_ids.to_string());
     if let Some(explanation) = &part.explanation {
-        schema = schema.with_metadata(
-            [(
-                "explanation".to_owned(),
-                String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
-            )]
-            .into(),
+        metadata.insert(
+            "explanation".to_owned(),
+            String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
         );
     }
+    let schema = schema.with_metadata(metadata);
     RecordBatch::try_new(Arc::new(schema), columns).map_err(|_| internal_layout())
 }
 
@@ -2134,7 +2135,7 @@ fn entity_dtype(payload: &Value) -> Option<String> {
 /// integer, a whole float, or text Python's `int` reads ([`integer_text`]);
 /// a declared float from a number not past a double's range, or text
 /// Python's `float` reads ([`numeric_text`]); any other dtype as written.
-fn entity(value: &Value, dtype: Option<&str>) -> Entity {
+pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
     let read = match (dtype, value) {
         (None, _) | (_, Value::Null) => None,
         (Some(d), _) if d.starts_with("bool") => {
@@ -2202,9 +2203,148 @@ fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String>
     })
 }
 
+// Direct frames and gathered payloads share model policy over neutral facts.
+fn check_shapes(
+    spec: &Spec,
+    kind: &str,
+    anchored: bool,
+    linked: bool,
+    tables: usize,
+) -> Result<(), CoreError> {
+    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
+    let needed = |shape: &str| match shape {
+        "relationships" => linked,
+        "multiple_tables" => tables > 1,
+        "link_prediction" => kind == "temporal_link_prediction",
+        "forecasting" => kind == "forecasting",
+        "temporal" => temporal,
+        "static" => !temporal,
+        _ => false,
+    };
+    let mut lacking: Vec<&str> = SHAPES
+        .into_iter()
+        .filter(|shape| needed(shape) && !spec.shapes.contains(shape))
+        .collect();
+    lacking.sort_unstable();
+    if !lacking.is_empty() {
+        return Err(unsupported(
+            Sentence::ModelLacksShape,
+            spec.id,
+            "the model cannot answer a request of this shape",
+        )
+        .with_field("unsupported", texts(lacking)));
+    }
+    Ok(())
+}
+fn check_task_outputs(
+    spec: &Spec,
+    kind: &str,
+    outputs: &[String],
+    deduplicate: bool,
+) -> Result<(), CoreError> {
+    if !spec.tasks.contains(&kind) {
+        return Err(unsupported(
+            Sentence::ModelLacksTask,
+            spec.id,
+            "the model does not serve the task's kind",
+        )
+        .with_field("task", Detail::text(kind))
+        .with_field("supported", texts(sorted(spec.tasks))));
+    }
+    let mut unknown: Vec<&str> = outputs
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !spec.outputs.contains(name))
+        .collect();
+    if !unknown.is_empty() {
+        unknown.sort_unstable();
+        if deduplicate {
+            unknown.dedup();
+        }
+        return Err(unsupported(
+            Sentence::ModelLacksOutputs,
+            spec.id,
+            "the model does not produce an output asked for",
+        )
+        .with_field("unsupported_outputs", texts(unknown))
+        .with_field("supported_outputs", texts(sorted(spec.outputs))));
+    }
+    Ok(())
+}
+fn check_capacity(spec: &Spec, rows: usize, direct: bool) -> Result<(), CoreError> {
+    if (direct || spec.id == RELATIONAL) && rows > CONTEXT_ROWS_MAX {
+        return Err(unsupported(
+            if direct {
+                Sentence::DirectContextLimit
+            } else {
+                Sentence::ContextPastModel
+            },
+            spec.id,
+            "the request's context is larger than the model reads",
+        )
+        .with_field("context_rows", count(rows))
+        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
+    }
+    Ok(())
+}
+
+/// Model preflight for live direct request facts, before conversion or empty handling.
+pub fn bind_direct(
+    input: sdm_contract::direct::DirectCallFacts,
+) -> Result<sdm_contract::direct::BoundDirectCall, CoreError> {
+    let facts = input.clone();
+    let spec = MODELS
+        .iter()
+        .find(|spec| spec.id == input.model)
+        .ok_or_else(|| {
+            let mut known: Vec<_> = MODELS.iter().map(|spec| spec.id).collect();
+            known.sort_unstable();
+            CoreError::new(Sentence::DirectUnknownModel, "the model is unknown")
+                .with_field("model", Detail::text(&input.model))
+                .with_field("known_models", texts(known))
+        })?;
+    let named = input.outputs.is_some();
+    let outputs: Vec<String> = input.outputs.unwrap_or_else(|| {
+        default_outputs(&input.kind)
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect()
+    });
+    if outputs.is_empty() {
+        return Err(CoreError::new(
+            Sentence::OutputsNone,
+            "outputs must name at least one field",
+        ));
+    }
+    check_shapes(
+        spec,
+        &input.kind,
+        input.anchored,
+        input.relationships,
+        input.tables,
+    )?;
+    check_task_outputs(spec, &input.kind, &outputs, false)?;
+    check_capacity(spec, input.context_rows, true)?;
+    Ok(sdm_contract::direct::BoundDirectCall {
+        facts,
+        model: input.model,
+        outputs,
+        named,
+        kind: input.kind,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn direct_tabular_support_does_not_expand_gathered_body_tasks() {
+        let payload = sdm_wire::json::read(br#"{"task":{"kind":"classification"}}"#).unwrap();
+        let error = body(&payload, RELATIONAL, "request", &[], &[]).unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(error.fields["rule"], Detail::text("problem_type"));
+    }
     use sdm_contract::ErrorCode;
 
     #[test]
@@ -2332,14 +2472,10 @@ mod tests {
     /// item ranks candidates under `rankings`, a list of objects, which the
     /// reference's bindings read (`_mapping_tuple`) and its result keeps as
     /// a list in one row (`PredictionResult.to_pandas`, `row['rankings']`).
-    /// The core asks no link prediction until Phase 4 (register P2E-19,
-    /// KO2-75): laid out against a link prediction's payload the answer is
-    /// refused by name (`problem_type`), never read as another task's;
-    /// against a payload of a task it asks, its `rankings` are kept, each
-    /// item's mappings in the order written, as the reference keeps them
-    /// (T2.8 reads the field; T2.10).
+    /// Phase 4 carries the ranking mappings unchanged and restores only
+    /// the scored entity identity through the shared result path.
     #[test]
-    fn a_link_prediction_s_answer_is_refused_by_name_never_read_as_another_task_s() {
+    fn a_link_predictions_rankings_are_preserved() {
         let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
         let answer = read(
             r#"{"id": "r1", "model": "kumo-relational", "metadata": {},
@@ -2365,9 +2501,10 @@ mod tests {
             ))
         };
         let spell = |x: f64| x.to_string();
-        let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap_err();
-        assert_eq!(linked.code, ErrorCode::UnsupportedRequest);
-        assert_eq!(linked.fields["rule"], Detail::text("problem_type"));
+        let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap();
+        assert_eq!(linked.rows[0].rankings, response.predictions[0].rankings);
+        assert_eq!(linked.rows[1].rankings, response.predictions[1].rankings);
+        assert_eq!(linked.rows[0].prediction, Answer::None);
         let asked = layout(&payload("regression"), &response, spell).unwrap();
         assert_eq!(asked.rows.len(), 2);
         assert_eq!(asked.rows[0].rankings, response.predictions[0].rankings);

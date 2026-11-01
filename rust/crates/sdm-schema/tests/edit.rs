@@ -511,3 +511,57 @@ fn a_schema_held_with_its_facts_reads_as_the_description() {
     }
     assert_eq!(read.description, expected);
 }
+
+#[test]
+fn standalone_declarations_check_meaning_before_compatibility() {
+    let mut input = sdm_contract::ops::CheckColumn {
+        name: "amount".into(),
+        dtype: Some("string".into()),
+        stype: Given::Value("nonsense".into()),
+        validate_stype: true,
+    };
+    assert_eq!(
+        edit::check_column(&input, &supports).unwrap_err().sentence,
+        sdm_contract::Sentence::NotASemanticType
+    );
+    input.stype = Given::Value("numerical".into());
+    assert_eq!(
+        edit::check_column(&input, &supports).unwrap_err().sentence,
+        sdm_contract::Sentence::MeaningNotCarried
+    );
+    input.dtype = Some("unknown-extension".into());
+    edit::check_column(&input, &supports).unwrap();
+}
+
+#[test]
+fn inspect_schema_preserves_time_choice_and_declared_state() {
+    let mut original = shop();
+    original.tables[0].time_column = None;
+    let result = edit::edit(
+        original.clone(),
+        &SchemaEdit::Check {},
+        &supports,
+        &sdm_schema::assemble::HostTypes::default(),
+    )
+    .unwrap();
+    assert_eq!(result.description, original);
+    assert_eq!(result.declared, None);
+    assert!(result.warnings.is_empty());
+}
+
+#[test]
+fn inspect_schema_checks_columns_before_relationships() {
+    let mut original = shop();
+    original.tables[0].columns[1].dtype = Dtype::String;
+    original
+        .links
+        .push(vec![at("absent", "missing"), at("users", "user_id")]);
+    let error = edit::edit(
+        original,
+        &SchemaEdit::Check {},
+        &supports,
+        &sdm_schema::assemble::HostTypes::default(),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::MeaningNotCarried);
+}

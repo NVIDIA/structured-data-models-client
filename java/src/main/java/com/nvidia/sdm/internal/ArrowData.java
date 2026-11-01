@@ -20,6 +20,7 @@ import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.ipc.ArrowStreamReader;
 import org.apache.arrow.vector.ipc.ArrowStreamWriter;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
+import org.apache.arrow.vector.ipc.message.ArrowDictionaryBatch;
 import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
@@ -88,26 +89,36 @@ public final class ArrowData {
       if (!source.loadNextBatch()) {
         return false;
       }
-      try (ArrowRecordBatch read =
-          new VectorUnloader(source.getVectorSchemaRoot()).getRecordBatch()) {
-        List<ArrowBuf> copies = new ArrayList<>();
-        try {
-          for (ArrowBuf buffer : read.getBuffers()) {
-            long size = buffer.readableBytes();
-            ArrowBuf copy = allocator.buffer(Math.max(size, 1));
-            copy.setBytes(0, buffer, 0, size);
-            copy.writerIndex(size);
-            copies.add(copy);
-          }
-          try (ArrowRecordBatch aligned =
-              new ArrowRecordBatch(read.getLength(), read.getNodes(), copies)) {
-            new VectorLoader(getVectorSchemaRoot()).load(aligned);
-          }
-        } finally {
-          copies.forEach(ArrowBuf::close);
+      // Initializing the destination creates dictionary vectors but does not populate them.
+      // Copy current dictionary values too, including replacements between source batches.
+      getVectorSchemaRoot();
+      for (var entry : source.getDictionaryVectors().entrySet()) {
+        VectorSchemaRoot dictionaryRoot = new VectorSchemaRoot(List.of(entry.getValue().getVector()));
+        try (ArrowRecordBatch read = new VectorUnloader(dictionaryRoot).getRecordBatch();
+            ArrowDictionaryBatch dictionary = new ArrowDictionaryBatch(entry.getKey(), aligned(read), false)) {
+          loadDictionary(dictionary);
         }
       }
+      try (ArrowRecordBatch read =
+          new VectorUnloader(source.getVectorSchemaRoot()).getRecordBatch();
+          ArrowRecordBatch aligned = aligned(read)) {
+        new VectorLoader(getVectorSchemaRoot()).load(aligned);
+      }
       return true;
+    }
+
+    private ArrowRecordBatch aligned(ArrowRecordBatch read) {
+      List<ArrowBuf> copies = new ArrayList<>();
+      try {
+        for (ArrowBuf buffer : read.getBuffers()) {
+          long size = buffer.readableBytes();
+          ArrowBuf copy = allocator.buffer(Math.max(size, 1));
+          copy.setBytes(0, buffer, 0, size);
+          copy.writerIndex(size);
+          copies.add(copy);
+        }
+        return new ArrowRecordBatch(read.getLength(), read.getNodes(), copies);
+      } finally { copies.forEach(ArrowBuf::close); }
     }
 
     @Override
@@ -122,7 +133,11 @@ public final class ArrowData {
 
     @Override
     protected Schema readSchema() throws IOException {
-      return source.getVectorSchemaRoot().getSchema();
+      Schema schema = source.getVectorSchemaRoot().getSchema();
+      java.util.Set<Long> ids = new java.util.HashSet<>();
+      return new Schema(schema.getFields().stream()
+          .map(field -> org.apache.arrow.vector.util.DictionaryUtility.toMessageFormat(field, source, ids))
+          .toList(), schema.getCustomMetadata());
     }
   }
 

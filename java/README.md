@@ -11,6 +11,115 @@ It describes the tables of a DuckDB, SQLite, Postgres or Databricks database thr
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
+## Read semantic predictions
+
+`result.items()` returns immutable `PredictionItem` values in endpoint answer order, matching Python's `PredictionResult.items`.
+Ranking `prediction()` contains candidate values; `rankings()` contains candidate/score mappings, so callers do not parse JSON or resolve positions.
+Probability and quantile mappings, item metadata and explanations retain their keys and values.
+`result.read(allocator)` remains the raw native Arrow layout for efficient column access, including its bookkeeping and encoded carriers.
+The semantic view is decoded only when requested and is not cached alongside a second copy of the rows.
+
+## Inspect request data
+
+`request.context()` and `request.predict()` return a `RequestSplit` for either model.
+Use `split.read(allocator)` for instance rows, `split.relatedTables()` for names and `split.readRelated(name, allocator)` for one related table.
+Each returned Arrow reader is caller-owned and independent; close it before its allocator.
+Inspection uses the held request, never resamples or contacts its source, and leaves prediction payloads unchanged.
+Direct Tabular keeps its original Arrow types; gathered data uses the wire's declared types, including exact nullable int64 values and microsecond timestamps.
+
+## Save and restore in-memory objects
+
+`Schema.writeTo(OutputStream)` / `Schema.readFrom(InputStream)` and the same methods on `Request` save owned snapshots.
+Streams remain caller-owned, including on failure.
+The format has its own version, a small JSON manifest and length-framed binary Arrow/payload attachments; it uses neither Java object serialization nor Python pickle.
+Each existing attachment is written once, without base64 or another retained row representation.
+Restore checks framing, Arrow data and Rust schema/query contracts without sampling or making remote calls.
+Direct requests pass through Rust preparation again; materialized payload semantics remain checked by Rust before prediction/session HTTP.
+Original query, parts, options, schema frames and conversion notes survive restoration.
+Live sources, open connections and fitted sessions cannot be saved.
+
+## Read tables and files
+
+Readers return an owned Arrow `Table`; callers close it before their `BufferAllocator`.
+
+| API | Responsibility |
+| --- | --- |
+| `Readers.readTable(Source, table, allocator)` | Read one named table on the caller's connection/session. |
+| `Readers.readQuery(Source, sql, allocator)` | Read the caller's SQL result on that same connection/session. |
+| `Readers.read(URI, ReadOptions, allocator)` | Read local/file/S3 CSV or Parquet, including partitioned datasets. |
+| `DatabricksSparkSource.of(SparkSession, catalog, schema)` | Execute Rust's existing Databricks SQL through the caller's Spark session. |
+
+`Source` is the common source boundary; `JdbcSource` owns `connection()` and the four existing JDBC classes keep their concrete getters.
+This is an explicit pre-release change to `Source.connection()`, not a fake JDBC connection for Spark.
+`Schema.source()` continues returning the actual `Source`.
+Spark APIs use an optional/provided dependency; ordinary applications must work without Spark JARs.
+Java owns driver/session access and lossless Arrow conversion; Rust keeps schema, sampling and prediction policy.
+File readers require the caller-provided DuckDB JDBC driver; its S3 extensions download/load automatically on first use.
+S3 reads accept native credential-chain profiles or explicit temporary credentials through `ReadOptions`.
+The tested refreshed AWS CLI login profile is not understood by DuckDB's native profile provider; export temporary credentials in the caller's environment or supply them explicitly.
+No subprocess or AWS CLI dependency is added to the library.
+CSV uses standard pandas missing-value tokens, keeps dates as strings, and preserves wide integers exactly instead of rounding them through floating point.
+`ReadOptions.csvTypes(Map.of("id", ReadOptions.CsvType.STRING))` overrides selected CSV types using a fixed enum; arbitrary SQL options are not accepted.
+Mixed fractional and integers above the exact float range remain strings, an intentional precision improvement over implicit float conversion.
+CSV names include `.csv` and `.txt`; Parquet includes `.parquet`, `.parq`, `.pq` and directories.
+CSV gzip/zstd compression is decoded by DuckDB; bzip2/xz and single-file ZIP/TAR archives use streaming decompression into private temporary data files.
+Temporary files are removed on success or failure; archive entry paths are never extracted.
+This bounds conversion memory but needs local disk space for decoded data (ZIP also needs a compressed spool for reliable directory inspection).
+Reader operations close only resources they create, never the supplied connection/session.
+Persistence is a separate package.
+
+## In-memory Tabular
+
+Tabular accepts Apache Arrow Java `Table` inputs, with the same context/scoring/target/task concepts as Python.
+
+```java
+Request request = new Request(context, scoring, "price", "regression");
+// Optional explicit schema, table name and JSON-family request options:
+RequestOptions options = RequestOptions.builder().entityTable("instance")
+    .inference(Map.of("temperature", 0.5)).build();
+Request configured = new Request(context, scoring, "price", "regression", options);
+PredictionResult result = client.predict(request, SdmClient.KUMO_TABULAR);
+try (FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR)) {
+  PredictionResult repeated = fitted.predict(request);
+}
+```
+
+`context` and `scoring` are `org.apache.arrow.vector.table.Table` values; context includes the target and scoring omits it.
+Request construction snapshots data, so callers can close their Arrow tables afterward.
+This copies data into internal Arrow IPC storage; it is not zero-copy ingestion.
+The client reuses those snapshots for subsequent calls; fitted prediction sends only scoring rows.
+`fit` uploads examples, not model training; endpoint session support is required.
+Use `fit(request, model, holdoutKeys)` to exclude entities that will be scored later.
+A failed `FittedModel.close()` can be retried; close fitted objects before closing their client.
+
+For single-table PQL, use `Schema.fromData(Map.of("data", table))`, then the existing `PredictiveQuery.parse(...).materialize(schema, options)` workflow.
+Warehouse-backed schemas continue to use the Relational path.
+Rust owns selection, validation and encoding in both paths; Java owns snapshots, HTTP and presentation.
+
+## In-memory Relational
+
+Use `Schema.fromData(Map.of("users", users, "orders", orders))` with Arrow Tables.
+Existing schema key, time-column and relationship setters apply.
+
+```java
+try (RelationalMaterializer sampler = new RelationalMaterializer(schema)) {
+  Request request = PredictiveQuery.parse("PREDICT users.value FOR EACH users.user_id")
+      .materialize(sampler, MaterializeOptions.builder().indices(1L, 2L).build());
+  PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+}
+```
+
+The reusable sampler owns the native graph and continuing RNG; close releases it.
+Its calls and close are serialized, and completed requests survive its closure.
+For a single call, select `.model(SdmClient.KUMO_RELATIONAL)` in the options passed to `materialize(schema, options)`.
+Without an explicit selection, multiple tables or any relationship select Relational; a single unrelated table selects Tabular.
+Static/temporal targets, links, ranking and forecasts use Rust sampling; ordinary requests also support `fit`, fitted `predict` and `close`.
+Sessions require a compatible model endpoint and reject rewritten ranking/forecast requests.
+Warehouse requests already gathered by `materialize` also support the same fitted-session lifecycle, without further warehouse reads.
+Warehouse ranking and forecasts retain their complete Rust request state and use the same prediction merging as in-memory requests; fitted sessions still require one ordinary question.
+Databricks Model Serving transport does not support sessions; use a compatible model HTTP endpoint.
+If a later model call fails, `exception.answered(allocator)` returns any completed rows as an optional Arrow reader that the caller closes.
+
 ## Coordinates
 
 | | |
@@ -82,13 +191,18 @@ The API mirrors Python's with Java names and plain data:
 | `schema[t].primary_key = k`, `.time_column = c`, `schema[t][c].stype = s`, `del schema[t][c]`, `schema.relationships = [...]` | `withPrimaryKey`, `withoutPrimaryKey`, `withTimeColumn`, `withoutTimeColumn`, `withStype`, `withoutColumn`, `withRelationships`, `withRelationship`: each a new schema, checked and made by the core; a schema never changes, so `snapshot()` is the schema itself |
 | `schema.tables`, `schema[t]`, `check_consistent()` | `tables()`, `table(name)`, `relationships()`, `checkConsistent()`; `Table` and `Column` |
 | `PredictiveQuery(text, schema).materialize(indices=, anchor_time=, **options)` | `PredictiveQuery.parse(text).materialize(schema, MaterializeOptions)`; an option is a name and a plain value (`option("num_neighbors", List.of(8, 8))`), as a keyword argument |
+| `Request.context`, `predict` and their instance/related tables | `context()`, `predict()` return `RequestSplit`: `read(allocator)`, `relatedTables()`, `readRelated(name, allocator)` |
 | `Request.context_rows`, `predict_rows`, `payloads`, ... | `Request.contextRows()`, `predictRows()`, `payloads()`, `nothingToScore()`, `entityTable()`, ... |
 | `SDMClient(url, api_key, timeout=, max_retries=)`, `capabilities(model)`, `predict(request, model=, outputs=)` | `SdmClient.connect(url[, ClientOptions])`, `capabilities(model)`, `predict(request, model[, outputs])` |
 | `SDMClient.for_databricks_serving(endpoint, workspace_client=, timeout=)` | `SdmClient.forDatabricksServing(DatabricksServing.of(endpoint))`, or `DatabricksServing.of(workspaceClient, endpoint[, maxRequestBytes])` with the official SDK's unified authentication; `timeout(Duration)` bounds the call |
+| `PredictionResult.items` | `PredictionResult.items()` returns typed immutable `PredictionItem` values, including restored ranking outputs |
 | `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
 
 The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks's (`com.databricks:databricks-jdbc`); the JAR ships none.
+Use DuckDB JDBC `2.0.0.0`, the version tested here, to preserve timezone-aware Parquet nanoseconds; `1.5.6.0` truncates them to microseconds.
 What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type, as Python's provider types them through psycopg's registry, every value read in text as psycopg reads it; Databricks's by type, as the Databricks SQL connector gives Python's provider its Arrow.
+DuckDB provider results stream directly into Rust; the reader owns its statement and duplicate cursor until consumption finishes, while the caller connection stays open.
+For a single value larger than 2 GiB, enable DuckDB's `arrow_large_buffer_size` setting before describing the source, as in Python.
 The model transport sends the core's call as the bytes the core wrote, over `java.net.http`, retrying a transient failure (429, 502, 503, 504, a dropped connection) as Python's transport does.
 
 Every error is a `StructuredDataException`, as every Python error is a `StructuredDataError`: `code()` is the contract's error code to branch on (`INVALID_REQUEST`, `UNSUPPORTED_REQUEST`, `INTERNAL_ERROR`, ...), and `details()` holds the structured fields the core gave.
@@ -121,4 +235,38 @@ cp rust/target/debug/libsdm_jni.so java/target/natives/linux-x86_64/
 mvn -f java/pom.xml verify
 ```
 
+The resource-heavy `DuckDbLargeValueTest` is opt-in with `-Dsdm.test.giant=true`; it needs roughly 9 GiB of available memory and verifies description, automatic binary-column omission, and prediction with a value larger than 2 GiB.
+
 The contract cases run on the Java host through `contract/runners/run_java.py` (`--database duckdb|sqlite|postgres` for the S1 cases), which hands `contract/runners/java/ContractRunner.java` the calls to make and writes the observations the comparator judges; `mvn package` copies the JDBC drivers it opens the databases with into `target/jdbc`.
+
+PQL can select entity keys through `MaterializeOptions`, or score a supplied Arrow table:
+
+```java
+Schema schema = Schema.fromData(Map.of("data", context));
+Request request = PredictiveQuery.parse("PREDICT data.price FOR EACH data.id")
+    .materialize(schema, predict);
+```
+
+`Schema.fromData` accepts named Arrow tables; Tabular requires one unrelated table.
+Warehouse-backed schemas retain their existing Relational workflow.
+
+## Installed-client parity checks
+
+The opt-in `ParityRunnerTest` reads the shared [parity manifest](../tests/parity/README.md) and launches a JVM using the built client JAR and its recorded native artifact.
+It records raw reader output, materialized requests, model results and Rust operation witnesses; local mode cannot certify live model parity.
+The test-only `parity-connect-pom.xml` resolves Databricks Connect for `sdm.parity.connect.classpath`, without adding it to the published client.
+The caller supplies private connection/endpoint configuration and a build provenance sidecar; missing configuration stays incomplete.
+
+### Snowflake
+
+`SnowflakeSource.of(connection, database, schema)` uses a caller-owned JDBC connection.
+Either namespace argument may be null to use its current value.
+Use `.semanticModel(name, false)` for an existing semantic view; Rust interprets its schema and writes sampling SQL.
+The caller supplies `net.snowflake:snowflake-jdbc:4.4.0` and authentication.
+No connection settings are changed, and closing schemas or requests does not close the connection.
+
+`Readers.readTable(source, name, allocator)` and `Readers.readQuery(source, sql, allocator)` return owned Arrow tables usable with Tabular or Relational `Schema.fromData`.
+Raw Snowflake `NUMBER` columns retain their declared decimal precision and scale, including integers beyond 64 bits and fractions that Python's connector converts to doubles.
+Rust applies the existing warehouse numeric conversion rules when these values enter source-backed Relational sampling.
+Timestamp values retain their precision; zoned timestamps carry the connection's current session timezone, read without changing it.
+`TIME` retains nanoseconds, improving on the Python connector's microsecond truncation.

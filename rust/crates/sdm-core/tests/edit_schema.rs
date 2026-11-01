@@ -116,7 +116,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
                     .iter()
                     .map(|c| HeldColumn {
                         name: c.name.clone(),
-                        dtype: c.dtype.wire_name().into(),
+                        dtype: Some(c.dtype.wire_name().into()),
                         stype: c.stype,
                         stype_before_key: c.stype_before_key,
                         source: Some(SourceFacts {
@@ -142,6 +142,8 @@ fn held(description: &SourceDescription) -> HeldSchema {
 fn edit_op() -> Operation {
     Operation::EditSchema(EditSchema {
         schema: AttachmentId(1),
+        context: None,
+        frame: None,
         edit: AttachmentId(2),
     })
 }
@@ -207,7 +209,7 @@ fn a_column_the_host_retyped_is_edited_by_what_its_source_holds() {
     // T3.16: no description to be changed past; a data type written by
     // hand is no edit, as the reference reads a table in place.
     let mut retyped = held(&described());
-    retyped.tables[0].columns[1].dtype = "float64".into();
+    retyped.tables[0].columns[1].dtype = Some("float64".into());
     assert!(matches!(
         edit_with(json(&retyped), json(&stype("categorical"))).unwrap(),
         Step::Done { .. }

@@ -5,12 +5,11 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.ArrowTabular;
 import com.nvidia.sdm.internal.HttpTransport;
 import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.internal.NativeCore;
-import com.nvidia.sdm.internal.PythonText;
 import com.nvidia.sdm.internal.Results;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -34,12 +33,14 @@ import java.util.Objects;
 public final class SdmClient implements AutoCloseable {
   /** The relational model's id, as Python's {@code KumoRelational()} names it. */
   public static final String KUMO_RELATIONAL = "kumo-relational";
+  public static final String KUMO_TABULAR = "kumo-tabular";
 
   private static final SecureRandom IDS = new SecureRandom();
 
   private final HttpTransport transport;
   private final DatabricksServing serving;
   private volatile boolean closed;
+  private final java.util.Set<FittedModel> sessions = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
   private SdmClient(HttpTransport transport, DatabricksServing serving) {
     this.transport = transport;
@@ -76,6 +77,30 @@ public final class SdmClient implements AutoCloseable {
   /** Where this client sends requests: a URL, or {@code databricks-serving:<endpoint>}. */
   public String url() {
     return serving != null ? serving.url() : transport.url();
+  }
+
+  /** Model ids advertised by the endpoint, not the SDK's capability registry. */
+  public List<String> models() {
+    requireOpen();
+    if (serving != null) throw new StructuredDataException(
+        "Databricks serving does not list models; name the model on predict", "UNSUPPORTED_REQUEST", Map.of(), null);
+    try { return transport.models(); }
+    catch (HttpTransport.Failed e) { throw discoveryFailure(); }
+  }
+
+  /** Whether the endpoint reports readiness. */
+  public boolean healthReady() {
+    requireOpen();
+    try { return serving == null ? transport.healthReady() : serving.healthReady(); }
+    catch (HttpTransport.Failed | Host.TransportFailed e) { throw discoveryFailure(); }
+    catch (Host.EndpointFailed e) {
+      throw new StructuredDataException("serving readiness check failed", "TRANSPORT_ERROR",
+          Map.of("status_code", e.status()), null);
+    }
+  }
+
+  private static StructuredDataException discoveryFailure() {
+    return new StructuredDataException("endpoint discovery failed", "TRANSPORT_ERROR", Map.of(), null);
   }
 
   /**
@@ -135,53 +160,98 @@ public final class SdmClient implements AutoCloseable {
       throw new StructuredDataException(
           "this client was closed", "INVALID_CONFIGURATION", Map.of(), null);
     }
-    List<byte[]> payloads = request.payloadBytes();
-    Map<String, Object> state = new LinkedHashMap<>();
-    state.put("version", request.version());
-    state.put("payload", 1);
-    state.put("query", 2);
-    Map<Integer, Object> attachments = new LinkedHashMap<>();
-    attachments.put(1, payload(payloads.get(0)));
-    attachments.put(2, Host.attachment(request.query()));
-    if (request.batchRows() != null) {
-      List<Object> batches = new ArrayList<>();
-      for (int at = 0; at < request.batchRows().size(); at++) {
-        int id = 3 + at;
-        attachments.put(id, payload(payloads.get(at + 1)));
-        Map<String, Object> batch = new LinkedHashMap<>();
-        batch.put("payload", id);
-        batch.put("rows", request.batchRows().get(at));
-        batch.put("request_id", requestId());
-        batches.add(batch);
+    if (request.direct()) {
+      try (Host.Finished finished = ArrowTabular.run("predict", predictionInput(request, model, outputs),
+          Map.of("context", request.contextData(), "predict", request.predictData()), tabularTransport())) {
+        return predicted(finished);
       }
-      state.put("batches", batches);
     }
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "predict");
-    operation.put("state", state);
-    operation.put("model", model);
-    operation.put("request_id", requestId());
+    operation.put("state", request.materialized().predictionState(SdmClient::requestId));
+    operation.put("model", model); operation.put("request_id", requestId());
     operation.put("outputs", outputs == null ? List.of() : List.copyOf(outputs));
+    operation.put("default_outputs", outputs == null);
     operation.put("inference_asked", request.inferenceAsked());
-    if (outputs == null) {
-      operation.put("default_outputs", true);
+    if (serving != null) operation.put("model_endpoint", serving.modelEndpoint());
+    try (Host.Finished finished = Host.run(operation, request.materialized().attachments(),
+        new Host.Call(null, this::call, request.materialized().held()))) {
+      Results.Predicted value = (Results.Predicted) Results.expect(finished.result(), "predict");
+      return new PredictionResult(value.model(), value.requestId(), read(finished.bytes(value.metadata())),
+          value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()), request.materialized().candidateValues());
     }
-    if (serving != null) {
-      // The endpoint whose envelope the core writes and whose answers it reads (T3.13).
-      operation.put("model_endpoint", serving.modelEndpoint());
+  }
+
+  Map<String, Object> predictionInput(Request request, String model, List<String> outputs) {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("request", request.directInput()); value.put("model", model);
+    value.put("outputs", outputs); value.put("request_id", requestId());
+    value.put("endpoint", serving == null ? null : serving.modelEndpoint());
+    return value;
+  }
+
+  void requireOpen() {
+    if (closed) throw new StructuredDataException("this client was closed", "INVALID_CONFIGURATION", Map.of(), null);
+  }
+
+  Host.Model tabularTransport() {
+    return new Host.Model() {
+      public byte[] call(byte[] body) throws Host.TransportFailed, Host.Refused, Host.EndpointFailed {
+        return SdmClient.this.call(body);
+      }
+      public byte[] call(Object endpoint, byte[] body) throws Host.TransportFailed, Host.Refused, Host.EndpointFailed {
+        requireOpen();
+        if ("predict".equals(endpoint)) return call(body);
+        if (serving != null) throw new StructuredDataException("this transport does not support sessions",
+            "SESSIONS_UNSUPPORTED", Map.of(), null);
+        try { return transport.call(endpoint, body); }
+        catch (HttpTransport.Failed e) { throw new Host.TransportFailed(); }
+        catch (ModelEndpointException e) { throw new Host.Refused(e::with, e.status()); }
+      }
+    };
+  }
+
+  static PredictionResult predicted(Host.Finished finished) {
+    Results.Predicted value = (Results.Predicted) Results.expect(finished.result(), "predict");
+    return new PredictionResult(value.model(), value.requestId(), read(finished.bytes(value.metadata())),
+        value.outputs(), finished.arrow(value.result()));
+  }
+
+  /** Upload examples once for repeated predictions. This does not train the model. */
+  public FittedModel fit(Request request, String model) { return fit(request, model, List.of()); }
+
+  /** Upload examples, excluding these entity keys from the pinned context. */
+  public FittedModel fit(Request request, String model, List<?> holdout) {
+    return fit(request, model, holdout, null);
+  }
+
+  /** Upload examples with the requested outputs retained for subsequent session predictions. */
+  public synchronized FittedModel fit(Request request, String model, List<?> holdout, List<String> outputs) {
+    requireOpen();
+    Objects.requireNonNull(request, "request");
+    Objects.requireNonNull(model, "model");
+    Objects.requireNonNull(holdout, "holdout");
+    if (!request.direct()) {
+      if (serving != null) throw new StructuredDataException("this transport does not support sessions",
+          "SESSIONS_UNSUPPORTED", Map.of(), null);
+      FittedModel fitted = RelationalSessions.fit(this, request, model, holdout, outputs);
+      sessions.add(fitted);
+      return fitted;
     }
-    try (Host.Finished finished =
-        Host.run(operation, attachments, new Host.Call(null, this::call, Map.of()))) {
-      Results.Predicted predicted =
-          (Results.Predicted) Results.expect(finished.result(), "predict");
-      Object metadata = read(finished.bytes(predicted.metadata()));
-      byte[] rows = finished.arrow(predicted.result());
-      return new PredictionResult(
-          predicted.model(),
-          predicted.requestId(),
-          metadata,
-          predicted.outputs(),
-          rows);
+    if (serving != null) throw new StructuredDataException("this transport does not support sessions",
+        "SESSIONS_UNSUPPORTED", Map.of(), null);
+    List<Object> keys = new ArrayList<>();
+    for (Object key : holdout) {
+      Map<String, Object> part = ArrowTabular.key(key);
+      keys.add(List.of(part));
+    }
+    Map<String, Object> input = Map.of("prediction", predictionInput(request, model, outputs),
+        "holdout", Map.of("rows", keys));
+    try (Host.Finished finished = ArrowTabular.run("fit", input,
+        Map.of("context", request.contextData(), "predict", request.predictData()), tabularTransport())) {
+      FittedModel fitted = new FittedModel(this, ArrowTabular.value(finished));
+      sessions.add(fitted);
+      return fitted;
     }
   }
 
@@ -203,24 +273,8 @@ public final class SdmClient implements AutoCloseable {
     }
   }
 
-  /**
-   * A payload as the Python host sends it: the JSON the core wrote, read and written back by
-   * Python's {@code json.dumps}, a value it has no form for refused as its transport refuses it.
-   */
-  private static byte[] payload(byte[] written) {
-    try {
-      return PythonText.dumpsDefault(written).getBytes(StandardCharsets.UTF_8);
-    } catch (IllegalArgumentException e) {
-      throw new StructuredDataException(
-          "this request carries a value that cannot be sent as JSON",
-          "INVALID_REQUEST",
-          Map.of(),
-          null);
-    }
-  }
-
   /** A call's id, as the adapter draws one: {@code sdm-} and twelve hexadecimal digits. */
-  private static String requestId() {
+  static String requestId() {
     byte[] random = new byte[6];
     IDS.nextBytes(random);
     return "sdm-" + HexFormat.of().formatHex(random);
@@ -237,9 +291,20 @@ public final class SdmClient implements AutoCloseable {
 
   /** Closes the client; a later prediction is refused. */
   @Override
-  public void close() {
-    closed = true;
+  public synchronized void close() {
+    if (closed) return;
+    RuntimeException failure = null;
+    try {
+      for (FittedModel session : List.copyOf(sessions)) {
+        try { session.close(); } catch (RuntimeException error) {
+          if (failure == null) failure = error; else failure.addSuppressed(error);
+        }
+      }
+    } finally { closed = true; sessions.clear(); }
+    if (failure != null) throw failure;
   }
+
+  void released(FittedModel session) { sessions.remove(session); }
 
   @Override
   public String toString() {

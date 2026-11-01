@@ -39,6 +39,9 @@ import java.util.function.Function;
  * }</pre>
  */
 public final class Schema {
+  private Map<String, byte[]> data = Map.of();
+  Map<String, byte[]> data() { return data; }
+
   private final List<Table> tables;
   private final List<Relationship> relationships;
   private final Source source;
@@ -54,6 +57,88 @@ public final class Schema {
     this.relationships = List.copyOf(relationships);
     this.source = source;
     this.conversionNotes = List.copyOf(conversionNotes);
+  }
+
+  /** Describe named in-memory Arrow tables, taking owned snapshots before returning. */
+  public static Schema fromData(Map<String, org.apache.arrow.vector.table.Table> tables) {
+    Objects.requireNonNull(tables, "tables");
+    if (tables.isEmpty()) throw new StructuredDataException(
+        "an in-memory schema needs at least one table", "INVALID_REQUEST", Map.of(), null);
+    Map<String, byte[]> data = new LinkedHashMap<>();
+    Map<Integer, byte[]> imports = new LinkedHashMap<>();
+    List<Integer> ids = new ArrayList<>();
+    for (Map.Entry<String, org.apache.arrow.vector.table.Table> table : tables.entrySet()) {
+      if (table.getKey() == null || table.getKey().isEmpty()) throw new StructuredDataException(
+          "table names must be non-empty strings", "INVALID_REQUEST", Map.of(), null);
+      byte[] bytes = com.nvidia.sdm.internal.ArrowTabular.snapshot(table.getValue());
+      data.put(table.getKey(), bytes);
+      int id = imports.size() + 2;
+      ids.add(id); imports.put(id, bytes);
+    }
+    Map<String, Object> operation = Map.of("op", "describe_frame_tables", "names", 1, "tables", ids);
+    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(operation,
+        Map.of(1, Host.attachment(new ArrayList<>(data.keySet()))), imports, Host.Call.none())) {
+      Schema schema = held(com.nvidia.sdm.internal.ArrowTabular.value(finished), null);
+      schema.data = java.util.Collections.unmodifiableMap(data);
+      return schema;
+    }
+  }
+
+  /** Save this source-less schema and its owned frame snapshots; does not close/flush output. */
+  public void writeTo(java.io.OutputStream output) throws java.io.IOException {
+    Snapshots.Writer writer = new Snapshots.Writer();
+    writer.write(Map.of("kind", "schema", "schema", saved(writer)), output);
+  }
+
+  /** Restore a data-only schema using the core's consistency checks; leaves input open. */
+  public static Schema readFrom(java.io.InputStream input) throws java.io.IOException {
+    Snapshots.Reader reader = Snapshots.read(input);
+    if (!"schema".equals(reader.manifest.get("kind"))) throw Snapshots.invalid("snapshot is not a schema", null);
+    Schema schema = restored(reader.manifest.get("schema"), reader);
+    reader.complete();
+    return schema;
+  }
+
+  Map<String, Object> saved(Snapshots.Writer writer) throws java.io.IOException {
+    if (source != null) throw new StructuredDataException(
+        "a schema with a live source cannot be saved", "UNSUPPORTED_REQUEST", Map.of(), null);
+    List<Object> frames = new ArrayList<>();
+    data.forEach((name, bytes) -> frames.add(Map.of("name", name, "blob", writer.blob(bytes))));
+    return Map.of("held", toHeld(), "notes", conversionNotes, "frames", frames);
+  }
+
+  static Schema restored(Object value, Snapshots.Reader reader) throws java.io.IOException {
+    Map<String, Object> saved = Snapshots.object(value);
+    Map<String, byte[]> frames = new LinkedHashMap<>();
+    for (Object item : Snapshots.list(saved.get("frames"))) {
+      Map<String, Object> frame = Snapshots.object(item);
+      String name = Snapshots.text(frame.get("name"));
+      byte[] bytes = reader.blob(frame.get("blob"));
+      if (frames.putIfAbsent(name, bytes) != null) throw Snapshots.invalid("duplicate frame name in snapshot", null);
+      Snapshots.validateArrow(bytes);
+    }
+    Map<String, Object> operation = new LinkedHashMap<>();
+    operation.put("op", "edit_schema"); operation.put("schema", 1); operation.put("edit", 2);
+    Map<Integer, Object> attachments = new LinkedHashMap<>();
+    attachments.put(1, Host.attachment(Snapshots.object(saved.get("held"))));
+    attachments.put(2, Host.attachment(Map.of("edit", "check")));
+    if (!frames.isEmpty()) {
+      operation.put("context", 3);
+      attachments.put(3, Host.attachment(Map.of("kind", "frames", "key_counts", Map.of())));
+    }
+    try (Host.Finished finished = Host.run(operation, attachments)) {
+      Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
+      Schema checked = held(read(finished.bytes(edited.schema())), null);
+      if (!frames.isEmpty() && !frames.keySet().equals(checked.tables.stream().map(Table::name)
+          .collect(java.util.stream.Collectors.toSet()))) {
+        throw Snapshots.invalid("snapshot frames do not match its schema tables", null);
+      }
+      Schema result = new Schema(checked.tables, checked.relationships, null, Snapshots.texts(saved.get("notes")));
+      result.data = java.util.Collections.unmodifiableMap(frames);
+      return result;
+    } catch (ClassCastException | NullPointerException | IllegalArgumentException malformed) {
+      throw Snapshots.invalid("invalid schema snapshot", malformed);
+    }
   }
 
   /** Every table {@code source} holds, described on the core, keys checked. */
@@ -255,10 +340,22 @@ public final class Schema {
     Map<Integer, Object> attachments = new LinkedHashMap<>();
     attachments.put(1, Host.attachment(toHeld()));
     attachments.put(2, Host.attachment(edit));
-    try (Host.Finished finished = Host.run(operation, attachments)) {
+    Map<Integer, byte[]> frames = new LinkedHashMap<>();
+    if (!data.isEmpty()) {
+      operation.put("context", 3);
+      attachments.put(3, Host.attachment(Map.of("kind", "frames", "key_counts", Map.of())));
+      if ("primary_key".equals(edit.get("edit")) && data.containsKey(edit.get("table"))) {
+        operation.put("frame", 4);
+        frames.put(4, data.get(edit.get("table")));
+      }
+    }
+    try (Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(
+        operation, attachments, frames, Host.Call.none())) {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
       Schema changed = held(read(finished.bytes(edited.schema())), source);
-      return new Schema(changed.tables, changed.relationships, source, conversionNotes);
+      Schema result = new Schema(changed.tables, changed.relationships, source, conversionNotes);
+      result.data = data;
+      return result;
     }
   }
 
@@ -303,6 +400,23 @@ public final class Schema {
     schema.put("tables", written);
     schema.put("links", links(relationships));
     return schema;
+  }
+
+  @SuppressWarnings("unchecked")
+  Map<String, Object> queryShape() {
+    Map<String, String> dtypeNames = (Map<String, String>) NativeCore.load().get("dtype_names");
+    List<Object> named = new ArrayList<>();
+    for (Table table : tables) {
+      Map<String, Object> value = new LinkedHashMap<>();
+      value.put("name", table.name());
+      value.put("columns", table.columns().stream().filter(c -> dtypeNames.containsKey(c.dtype())).map(c ->
+          Map.of("name", c.name(), "dtype", dtypeNames.get(c.dtype()), "stype", c.stype())).toList());
+      value.put("primary_key", table.primaryKey().size() == 1 ? table.primaryKey().get(0) : null);
+      value.put("time_column", table.timeColumn().orElse(null));
+      value.put("end_time_column", null);
+      named.add(value);
+    }
+    return Map.of("tables", named, "links", links(relationships));
   }
 
   /** Relationships as the contract writes links, each {@code [foreign key, referenced key]}. */
@@ -377,7 +491,7 @@ public final class Schema {
 
   /** The schema of a {@code HeldSchema} the core answered an edit with. */
   @SuppressWarnings("unchecked")
-  private static Schema held(Object read, Source source) {
+  static Schema held(Object read, Source source) {
     Map<String, Object> answer = (Map<String, Object>) read;
     List<Table> tables = new ArrayList<>();
     for (Object item : (List<Object>) answer.get("tables")) {

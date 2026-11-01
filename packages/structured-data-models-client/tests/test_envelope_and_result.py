@@ -301,7 +301,12 @@ def forecast_through_the_client(explanations, requested):
     handed = iter(answers)
     client.predict = lambda part, model, outputs: next(handed)
 
-    with warnings.catch_warnings(record=True) as caught:
+    with (
+        pytest.MonkeyPatch.context() as patched,
+        warnings.catch_warnings(record=True) as caught,
+    ):
+        # The synthetic parts exercise the legacy Python aggregation helper.
+        patched.setenv('SDM_CORE_ROUTES', '')
         warnings.simplefilter('always')
         SDMClient._answer_in_parts(
             client, request, 'kumo-relational', list(requested)

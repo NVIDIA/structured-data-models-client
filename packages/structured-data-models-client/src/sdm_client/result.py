@@ -247,11 +247,23 @@ class PredictionResult:
         last answer would silently drop every earlier batch, so the parts are
         concatenated here.
 
+        The native route keeps a stable union of unscored candidates, removing
+        duplicates within and across parts. NaNs remain distinct under IEEE
+        equality. Aware datetimes compare by UTC instant, distinguishing DST
+        folds; dates and naive datetimes remain separate. Result items, metadata
+        values and explanation owners are retained.
+
         Raises:
             StructuredDataError: If ``parts`` is empty, which would mean a
                 request was sent with nothing to score, or if the parts do
                 not describe one request.
         """
+        from sdm_client import _routing
+
+        if _routing.route(('result.merge/merge/any',)) == 'core':
+            from sdm_client._rust.result_merge import merge
+
+            return merge(cls, parts)
         if not parts:
             raise StructuredDataError(
                 'no parts to merge', code='INTERNAL_ERROR'

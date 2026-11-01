@@ -188,6 +188,19 @@ public final class DatabricksServing {
    * @throws Host.TransportFailed the call was interrupted
    */
   byte[] post(byte[] body) throws Host.EndpointFailed, Host.TransportFailed {
+    return send("/serving-endpoints/" + endpoint + "/invocations", body);
+  }
+
+  boolean healthReady() throws Host.EndpointFailed, Host.TransportFailed {
+    byte[] response = send("/api/2.0/serving-endpoints/" + endpoint, null);
+    try {
+      Object parsed = com.nvidia.sdm.internal.Json.read(response);
+      return parsed instanceof Map<?, ?> info && info.get("state") instanceof Map<?, ?> state
+          && "READY".equals(state.get("ready"));
+    } catch (com.nvidia.sdm.internal.Json.JsonException e) { throw new Host.TransportFailed(); }
+  }
+
+  private byte[] send(String path, byte[] body) throws Host.EndpointFailed, Host.TransportFailed {
     long deadline = System.nanoTime() + timeout.toNanos();
     for (int attempt = 1; ; attempt++) {
       Authentication granted = authenticate(deadline);
@@ -198,17 +211,15 @@ public final class DatabricksServing {
       // Native SDK authentication can discover the workspace host. Validate it afterwards,
       // before any credential is sent, and on every attempt if the caller edits its config.
       URI target = URI.create(base(granted.host())
-          + "/serving-endpoints/" + endpoint + "/invocations");
+          + path);
       HttpRequest request;
       try {
         HttpRequest.Builder builder = HttpRequest.newBuilder(target)
             .timeout(Duration.ofNanos(remaining));
         granted.headers().forEach(builder::header);
-        request = builder
-            .setHeader("Content-Type", "application/json")
-            .setHeader("User-Agent", userAgent())
-            .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-            .build();
+        builder.setHeader("Content-Type", "application/json").setHeader("User-Agent", userAgent());
+        if (body == null) builder.GET(); else builder.POST(HttpRequest.BodyPublishers.ofByteArray(body));
+        request = builder.build();
       } catch (IllegalArgumentException error) {
         // Header validation diagnostics can quote the invalid credential.
         throw new Host.TransportFailed();

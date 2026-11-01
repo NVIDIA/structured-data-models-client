@@ -100,7 +100,7 @@ def test_a_list_feature_in_the_context_is_refused_by_the_schema():
     with pytest.raises(StructuredDataError) as error:
         Schema.from_data({'t': context(tags=TAGS)})
     message = str(error.value)
-    assert 't.tags' in message
+    assert 'tags' in message
     assert 'list' in message
 
 

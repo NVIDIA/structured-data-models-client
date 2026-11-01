@@ -34,14 +34,14 @@ fn schema() -> HeldSchema {
             columns: vec![
                 HeldColumn {
                     name: "user_id".into(),
-                    dtype: "int64".into(),
+                    dtype: Some("int64".into()),
                     stype: Stype::Id,
                     stype_before_key: Some(Stype::Numerical),
                     source: Some(facts(Dtype::Int, ColumnType::Int64)),
                 },
                 HeldColumn {
                     name: "seen".into(),
-                    dtype: "timestamp[us]".into(),
+                    dtype: Some("timestamp[us]".into()),
                     stype: Stype::Timestamp,
                     stype_before_key: None,
                     source: None,
@@ -174,7 +174,7 @@ fn the_data_type_the_host_holds_is_the_one_its_schema_is_read_by() {
     // caller's, as the old client's checks read it (T3.16 review round 1);
     // what is fetched is still the source's.
     let mut retyped = schema();
-    retyped.tables[0].columns[0].dtype = "string".into();
+    retyped.tables[0].columns[0].dtype = Some("string".into());
     let read = held::read(retyped, &BTreeMap::new(), true).unwrap();
     let key = &read.description.tables[0].columns[0];
     assert_eq!(key.dtype, Dtype::String);
@@ -184,7 +184,7 @@ fn the_data_type_the_host_holds_is_the_one_its_schema_is_read_by() {
     assert_eq!(read.by_the_source().tables[0].columns[0].dtype, Dtype::Int);
     let written = held::held(&read.description, &read.unfacted, &read.retyped);
     let column = &written.tables[0].columns[0];
-    assert_eq!(column.dtype, "string");
+    assert_eq!(column.dtype.as_deref(), Some("string"));
     assert_eq!(column.source.as_ref().map(|f| f.dtype), Some(Dtype::Int));
     // Held as the source gave it, the source's more exact type stands.
     let read = held::read(schema(), &BTreeMap::new(), true).unwrap();
@@ -211,5 +211,48 @@ fn every_spelling_the_old_client_takes_names_its_data_type() {
         ("byte", Dtype::Byte),
     ] {
         assert_eq!(held::wire_dtype(name), dtype, "{name}");
+    }
+}
+
+#[test]
+fn explicitly_missing_dtype_survives_reads_and_edits_with_or_without_source_facts() {
+    for source_facts in [false, true] {
+        let mut input = schema();
+        input.tables[0].columns[0].dtype = None;
+        if !source_facts {
+            input.tables[0].columns[0].source = None;
+        }
+        let read = held::read(input, &BTreeMap::new(), true).unwrap();
+        assert!(read.types.is_unknown("users", "user_id"));
+        let answer = read.hold(&read.description);
+        assert_eq!(answer.tables[0].columns[0].dtype, None);
+        assert_eq!(answer.tables[0].columns[0].source.is_some(), source_facts);
+        let json = serde_json::to_value(&answer).unwrap();
+        assert!(json["tables"][0]["columns"][0]["dtype"].is_null());
+    }
+}
+
+#[test]
+fn frame_float_width_preserves_original_source_facts_and_unfacted_columns() {
+    for source_dtype in [
+        None,
+        Some(Dtype::Float),
+        Some(Dtype::Float64),
+        Some(Dtype::Float32),
+    ] {
+        let mut input = schema();
+        let column = &mut input.tables[0].columns[0];
+        column.dtype = Some("float32".into());
+        column.stype = Stype::Numerical;
+        column.source = source_dtype.map(|dtype| facts(dtype, ColumnType::Float64));
+        let original_source = column.source.clone();
+        let read = held::read_frame(input, true).unwrap();
+        assert_eq!(read.description.tables[0].columns[0].dtype, Dtype::Float32);
+        let answer = read.hold(&read.description);
+        assert_eq!(
+            answer.tables[0].columns[0].dtype.as_deref(),
+            Some("float32")
+        );
+        assert_eq!(answer.tables[0].columns[0].source, original_source);
     }
 }

@@ -162,7 +162,7 @@ abstract class KeySets {
     return switch (driver) {
       case DUCKDB -> new DuckDbKeys();
       case SQLITE -> new SqliteKeys();
-      case POSTGRES, DATABRICKS -> new TextKeys();
+      case POSTGRES, DATABRICKS, SNOWFLAKE -> new TextKeys();
     };
   }
 

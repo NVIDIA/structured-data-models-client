@@ -200,7 +200,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
 /// out as `Predicted.result` and attached, with the rows those calls score
 /// and how many calls answered (`calls_answered`); the error keeps its
 /// code. None answered, the error as it is.
-fn carry_calls(
+pub(crate) fn carry_calls(
     asker: &Asker,
     error: CoreError,
     answers: Vec<Part>,
@@ -300,8 +300,21 @@ fn count(n: usize) -> Detail {
 }
 
 /// The result of a request's answer, attached.
-fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<OperationResult, CoreError> {
+pub(crate) fn finish(
+    asker: &Asker,
+    merged: Part,
+    outputs: Vec<String>,
+) -> Result<OperationResult, CoreError> {
     let laid = table(&merged)?;
+    finish_table(asker, merged, outputs, laid)
+}
+
+pub(crate) fn finish_table(
+    asker: &Asker,
+    merged: Part,
+    outputs: Vec<String>,
+    laid: arrow_array::RecordBatch,
+) -> Result<OperationResult, CoreError> {
     let mut named = laid.schema().metadata().clone();
     named.insert("absent".to_owned(), absent_text(&merged)?);
     let schema = std::sync::Arc::new(laid.schema().as_ref().clone().with_metadata(named));
@@ -399,6 +412,17 @@ async fn call(
     bytes: Vec<u8>,
     endpoint: Option<&ModelEndpoint>,
 ) -> Result<Part, CoreError> {
+    let answer = call_answer(asker, bytes, endpoint).await?;
+    let response = PredictionResponse::read(&answer).map_err(refused)?;
+    layout(payload, &response, crate::pql::float_text)
+}
+
+/// Shared transport/status boundary, returning decoded model JSON data.
+pub(crate) async fn call_answer(
+    asker: &Asker,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+) -> Result<Value, CoreError> {
     let serving = endpoint.map(
         |ModelEndpoint::ServingEndpoint {
              name,
@@ -480,6 +504,5 @@ async fn call(
         }
         (Reply::Fetch(_), _) => return Err(internal("a model call was answered as a fetch")),
     };
-    let response = PredictionResponse::read(&answer).map_err(refused)?;
-    layout(payload, &response, crate::pql::float_text)
+    Ok(answer)
 }

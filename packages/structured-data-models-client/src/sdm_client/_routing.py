@@ -271,6 +271,9 @@ PATHS = (
 #: S0: validation in ``PredictiveQuery.materialize``, accepting or refusing.
 S0 = ('query.validate/accept/any', 'query.validate/refuse/any')
 
+#: Gathered request data is inspected by the shared native decoder.
+REQUEST_INSPECTION = ('request.inspect/attributes/any',)
+
 #: ``Schema.from_source`` over a DuckDB source with no tables named: every
 #: table, and the keys its catalog declares, routed together (T1.11b).
 FROM_SOURCE_DUCKDB = (
@@ -425,43 +428,96 @@ PREDICT = {
 CAPABILITIES = ('client.capabilities/capabilities/any',)
 
 #: The paths this build can run on the core.
-CORE_ROUTED = frozenset(
-    S0
-    + CAPABILITIES
-    + FROM_SOURCE_DUCKDB
-    + FROM_SOURCE_DUCKDB_TABLES
-    + MATERIALIZE_DUCKDB
-    + PREDICT_DUCKDB
-    + FROM_SOURCE_SQLITE
-    + FROM_SOURCE_SQLITE_TABLES
-    + MATERIALIZE_SQLITE
-    + PREDICT_SQLITE
-    + FROM_SOURCE_POSTGRES
-    + FROM_SOURCE_POSTGRES_TABLES
-    + MATERIALIZE_POSTGRES
-    + PREDICT_POSTGRES
-    + FROM_SOURCE_DATABRICKS_SQL
-    + FROM_SOURCE_DATABRICKS_SQL_TABLES
-    + MATERIALIZE_DATABRICKS_SQL
-    + PREDICT_DATABRICKS_SQL
-    + FROM_SOURCE_DATABRICKS_SPARK
-    + FROM_SOURCE_DATABRICKS_SPARK_TABLES
-    + MATERIALIZE_DATABRICKS_SPARK
-    + PREDICT_DATABRICKS_SPARK
-    + FROM_SOURCE_DATABRICKS_METRIC_VIEW
-    + MATERIALIZE_DATABRICKS_METRIC_VIEW
-    + PREDICT_DATABRICKS_METRIC_VIEW
-    + FROM_SOURCE_SNOWFLAKE
-    + FROM_SOURCE_SNOWFLAKE_TABLES
-    + MATERIALIZE_SNOWFLAKE
-    + PREDICT_SNOWFLAKE
-    + FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
-    + MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
-    + PREDICT_SNOWFLAKE_SEMANTIC_VIEW
+DIRECT_CONSTRUCTORS = (
+    'request.tabular/classification/frames',
+    'request.tabular/regression/frames',
+)
+DIRECT_PREDICT = ('client.predict/tabular/frames',)
+DIRECT_CONSUMERS = DIRECT_CONSTRUCTORS + DIRECT_PREDICT
+TABULAR_SESSIONS = (
+    'client.fit/tabular/frames',
+    'fitted.predict/tabular/frames',
+)
+TABULAR_INDICES = (
+    'query.materialize/indices-binary/frames',
+    'query.materialize/indices-multiclass/frames',
+    'query.materialize/indices-regression/frames',
+)
+TABULAR_FRAME = ('query.materialize/predict-frame/frames',)
+TABULAR_MATERIALIZERS = TABULAR_INDICES + TABULAR_FRAME
+
+# Frame relational and Tabular share the ordinary indices path identifiers.
+# A relational materializer can produce all six task kinds, so force them
+# together; direct Tabular preparation retains its existing route group.
+FRAME_MATERIALIZE = _on(MATERIALIZE_DUCKDB, 'frames')
+FRAME_PREDICT = _on(PREDICT_DUCKDB, 'frames')
+FRAME_SCHEMA = (
+    'schema.from-data/frames/frames',
+    'schema.from-data/mapping/frames',
+)
+FRAME_SESSIONS = tuple(
+    f'{operation}/{kind}/frames'
+    for operation in ('client.fit', 'fitted.predict')
+    for kind in ('binary', 'multiclass', 'regression')
+)
+FRAME_ROUTES = FRAME_MATERIALIZE + FRAME_PREDICT + FRAME_SCHEMA + FRAME_SESSIONS
+
+# Session rules consume materialized payloads, independently of the provider
+# that gathered them. Keep each backend's fit and scoring routes together.
+WAREHOUSE_SESSIONS = {
+    backend: _on(FRAME_SESSIONS, backend) for backend in (*PREDICT, 'lakebase')
+}
+WAREHOUSE_SESSION_ROUTES = tuple(
+    path for paths in WAREHOUSE_SESSIONS.values() for path in paths
 )
 
 
-#: The Phase 3 defaults. Other paths retain their route until their slice
+CORE_ROUTED = frozenset(
+    (
+        *S0,
+        *REQUEST_INSPECTION,
+        'result.merge/merge/any',
+        *CAPABILITIES,
+        *FRAME_ROUTES,
+        *DIRECT_CONSUMERS,
+        *TABULAR_MATERIALIZERS,
+        *TABULAR_SESSIONS,
+        *WAREHOUSE_SESSION_ROUTES,
+        *FROM_SOURCE_DUCKDB,
+        *FROM_SOURCE_DUCKDB_TABLES,
+        *MATERIALIZE_DUCKDB,
+        *PREDICT_DUCKDB,
+        *FROM_SOURCE_SQLITE,
+        *FROM_SOURCE_SQLITE_TABLES,
+        *MATERIALIZE_SQLITE,
+        *PREDICT_SQLITE,
+        *FROM_SOURCE_POSTGRES,
+        *FROM_SOURCE_POSTGRES_TABLES,
+        *MATERIALIZE_POSTGRES,
+        *PREDICT_POSTGRES,
+        *FROM_SOURCE_DATABRICKS_SQL,
+        *FROM_SOURCE_DATABRICKS_SQL_TABLES,
+        *MATERIALIZE_DATABRICKS_SQL,
+        *PREDICT_DATABRICKS_SQL,
+        *FROM_SOURCE_DATABRICKS_SPARK,
+        *FROM_SOURCE_DATABRICKS_SPARK_TABLES,
+        *MATERIALIZE_DATABRICKS_SPARK,
+        *PREDICT_DATABRICKS_SPARK,
+        *FROM_SOURCE_DATABRICKS_METRIC_VIEW,
+        *MATERIALIZE_DATABRICKS_METRIC_VIEW,
+        *PREDICT_DATABRICKS_METRIC_VIEW,
+        *FROM_SOURCE_SNOWFLAKE,
+        *FROM_SOURCE_SNOWFLAKE_TABLES,
+        *MATERIALIZE_SNOWFLAKE,
+        *PREDICT_SNOWFLAKE,
+        *FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW,
+        *MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW,
+        *PREDICT_SNOWFLAKE_SEMANTIC_VIEW,
+    )
+)
+
+
+#: The Phase 3 and in-memory Phase 4 defaults. Other paths retain their route until their slice
 #: is implemented; edits and inspection of a core-held schema inherit its
 #: source route rather than choosing another route at each accessor.
 ROUTES: dict[str, str] = {
@@ -486,7 +542,13 @@ def forced() -> frozenset[str]:
     for path in sorted(named):
         if path not in ROUTES:
             raise RouteError(f'{ENVIRONMENT} names an unknown path {path!r}')
-        if path not in CORE_ROUTED:
+        if (
+            path not in CORE_ROUTED
+            and path not in DIRECT_CONSUMERS
+            and path not in TABULAR_MATERIALIZERS
+            and path not in TABULAR_SESSIONS
+            and path not in FRAME_ROUTES
+        ):
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
                 f'route for it in this build'
@@ -538,3 +600,8 @@ def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
     if kind is None or kind not in paths:
         return False
     return route(paths[kind]) == 'core'
+
+
+def on_frames(paths: tuple[str, ...] = FRAME_MATERIALIZE) -> bool:
+    """Whether the explicitly selected source-less operation uses Rust."""
+    return route(paths) == 'core'

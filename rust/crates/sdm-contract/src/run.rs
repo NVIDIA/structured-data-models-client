@@ -95,11 +95,14 @@ pub enum FetchPurpose {
 
 /// Which model endpoint a call goes to.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Endpoint {
     Predict,
+    CreateSession,
+    SessionPredict { session_id: String },
+    DeleteSession { session_id: String },
 }
 
 /// A call to the model; the host sends the body's bytes as they are.

@@ -122,6 +122,54 @@ public final class HttpTransport {
     return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
   }
 
+  public List<String> models() throws Failed {
+    byte[] response = (byte[]) get("/v1/models", false).body();
+    try {
+      Object data = ((Map<?, ?>) Json.read(response)).get("data");
+      if (data == null) return List.of();
+      if (!(data instanceof List<?> entries)) throw new Failed("invalid model list");
+      List<String> models = new java.util.ArrayList<>();
+      for (Object entry : entries) if (entry instanceof Map<?, ?> model) {
+        Object id = model.get("id");
+        if (id != null && !id.equals("") && !id.equals(false) && !id.equals(0L)) models.add(id.toString());
+      }
+      return List.copyOf(models);
+    } catch (Json.JsonException | ClassCastException e) { throw new Failed("invalid model list"); }
+  }
+
+  public boolean healthReady() throws Failed { return get("/v1/health/ready", true).statusCode() == 200; }
+
+  private HttpResponse<?> get(String path, boolean readiness) throws Failed {
+    HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url + path)).timeout(timeout).GET();
+    if (apiKey != null) builder.header("X-API-Key", apiKey);
+    HttpRequest request = builder.build();
+    for (int attempt = 0; ; attempt++) {
+      try {
+        HttpResponse<byte[]> response;
+        if (readiness) {
+          HttpResponse<java.io.InputStream> headers = exchange(client, request,
+              HttpResponse.BodyHandlers.ofInputStream(), timeout.toNanos());
+          headers.body().close();
+          if (RETRY_STATUS.contains(headers.statusCode()) && attempt < maxRetries) {
+            backoff(attempt, headers.headers().firstValue("Retry-After").orElse(null)); continue;
+          }
+          return headers;
+        }
+        response = attempt(request);
+        if (RETRY_STATUS.contains(response.statusCode()) && attempt < maxRetries) {
+          backoff(attempt, response.headers().firstValue("Retry-After").orElse(null)); continue;
+        }
+        if (response.statusCode() != 200) throw ModelEndpointException.of(response.statusCode(), response.body());
+        return response;
+      } catch (IOException e) {
+        if (attempt < maxRetries) { backoff(attempt, null); continue; }
+        throw new Failed("discovery request failed");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt(); throw new Failed("discovery request interrupted");
+      }
+    }
+  }
+
   /**
    * Posts {@code body} to {@link #PREDICTIONS} as it is and gives back the answer's bytes, an
    * empty answer as {@code {}}.
@@ -130,12 +178,31 @@ public final class HttpTransport {
    * @throws Failed the endpoint could not be reached, or its answer could not be read
    */
   public byte[] predict(byte[] body) throws Failed {
-    URI target = URI.create(url + PREDICTIONS);
+    return call("predict", body);
+  }
+
+  /** Executes an endpoint selected by the core. Session creation is never retried. */
+  public byte[] call(Object endpoint, byte[] body) throws Failed {
+    String path = PREDICTIONS;
+    boolean delete = false;
+    boolean create = "create_session".equals(endpoint);
+    if (create) path = "/v1/sessions";
+    else if (endpoint instanceof java.util.Map<?, ?> map) {
+      Object details = map.get("session_predict");
+      if (details == null) { details = map.get("delete_session"); delete = true; }
+      if (!(details instanceof java.util.Map<?, ?> fields) || !(fields.get("session_id") instanceof String id))
+        throw new Failed("invalid session endpoint");
+      String encoded = java.net.URLEncoder.encode(id, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+      path = "/v1/sessions/" + encoded + (delete ? "" : "/predictions");
+    } else if (!"predict".equals(endpoint)) throw new Failed("invalid model endpoint");
+    int retries = create ? 0 : maxRetries;
+    URI target = URI.create(url + path);
     HttpRequest.Builder request =
         HttpRequest.newBuilder(target)
             .timeout(timeout)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofByteArray(body));
+    if (delete) request.DELETE();
     if (apiKey != null) {
       request.header("X-API-Key", apiKey);
     }
@@ -145,13 +212,13 @@ public final class HttpTransport {
       try {
         response = attempt(built);
       } catch (HttpTimeoutException e) {
-        if (attempt < maxRetries) {
+        if (attempt < retries) {
           backoff(attempt, null);
           continue;
         }
         throw new Failed("the request timed out after " + timeout + ", the timeout given");
       } catch (IOException e) {
-        if (attempt < maxRetries) {
+        if (attempt < retries) {
           backoff(attempt, null);
           continue;
         }
@@ -159,7 +226,7 @@ public final class HttpTransport {
       }
       int status = response.statusCode();
       byte[] content = response.body();
-      if (RETRY_STATUS.contains(status) && attempt < maxRetries) {
+      if (RETRY_STATUS.contains(status) && attempt < retries) {
         backoff(attempt, response.headers().firstValue("Retry-After").orElse(null));
         continue;
       }
@@ -197,10 +264,10 @@ public final class HttpTransport {
    * One HTTP exchange, including the complete body, within the given remaining budget.
    * Cancels the exchange on timeout or interruption; callers select their own retry policy.
    */
-  public static HttpResponse<byte[]> exchange(
-      HttpClient client, HttpRequest request, HttpResponse.BodyHandler<byte[]> body,
+  public static <T> HttpResponse<T> exchange(
+      HttpClient client, HttpRequest request, HttpResponse.BodyHandler<T> body,
       long remainingNanos) throws IOException, InterruptedException {
-    CompletableFuture<HttpResponse<byte[]>> pending =
+    CompletableFuture<HttpResponse<T>> pending =
         client.sendAsync(request, body);
     try {
       return pending.get(remainingNanos, TimeUnit.NANOSECONDS);

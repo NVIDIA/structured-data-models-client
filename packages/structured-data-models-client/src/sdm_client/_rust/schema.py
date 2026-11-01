@@ -237,17 +237,14 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             ):
                 object.__setattr__(made, field, value)
             columns[column['name']] = made
-        # Every column the core described is kept, whatever its name: the
-        # core holds a query's table and column apart, so a dot, a backtick
-        # or a line break in a column's name is data (KO2-36, T2.18). The
-        # table is built without its columns, which SourceTable would check
-        # by the old route's rule, and then given them.
-        table_shape = SourceTable(
-            name=name,
-            source_name=codec.relation_name(table['source']),
-            columns={},
+        # Bind the already checked result mechanically, without rerunning
+        # standalone table policy or issuing one Rust operation per field.
+        table_shape = SourceTable.__new__(SourceTable)
+        object.__setattr__(table_shape, 'name', name)
+        object.__setattr__(
+            table_shape, 'source_name', codec.relation_name(table['source'])
         )
-        table_shape.columns = columns
+        object.__setattr__(table_shape, 'columns', columns)
         table_shape._own_columns()
         keys = tuple(table['primary_key'])
         # The key and time column as the core answered them, which marked

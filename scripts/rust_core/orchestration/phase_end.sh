@@ -263,10 +263,12 @@ if git -C "$REPO" cat-file -e "$SHA^{commit}" 2>/dev/null && git -C "$REPO" cat-
   okay "base ${BASE:0:12}, checkpoint ${CHECKPOINT:0:12}, landing ${LANDING:0:12}, CI wheel from ${WHEEL_COMMIT:0:12}"
   [ "$(tree "$WHEEL_COMMIT")" = "$(tree "$SHA")" ] || problem "the wheel commit's tree differs from SHA's"
   if [ -z "$RUN" ]; then
-    RUN=$(alarm 60 gh run list -R "$GH_REPO" --commit "$WHEEL_COMMIT" --workflow ci.yml --json databaseId,conclusion \
-      --jq '[.[] | select(.conclusion == "success")][0].databaseId' 2>/dev/null || true)
+    RUN=$(alarm 60 gh run list -R "$GH_REPO" --commit "$WHEEL_COMMIT" --workflow ci.yml --json databaseId,conclusion,displayTitle \
+      --jq '[.[] | select(.conclusion == "success" and .displayTitle != "Targeted Arm PQL acceptance (not full CI)")][0].databaseId' 2>/dev/null || true)
   fi
   if [ -n "$RUN" ]; then
+    RUN_TITLE=$(alarm 60 gh api "repos/$GH_REPO/actions/runs/$RUN" --jq .display_title 2>/dev/null) || RUN_TITLE=''
+    [ "$RUN_TITLE" != 'Targeted Arm PQL acceptance (not full CI)' ] || problem "targeted PQL run $RUN cannot supply full phase-end CI evidence"
     ARTS=$(alarm 60 gh api "repos/$GH_REPO/actions/runs/$RUN/artifacts" --jq '.artifacts[] | select(.expired | not) | .name' 2>/dev/null || true)
     RUN_SHA=$(alarm 60 gh api "repos/$GH_REPO/actions/runs/$RUN" --jq .head_sha 2>/dev/null) || RUN_SHA=''
     [[ "$RUN_SHA" =~ ^[0-9a-f]{40}$ ]] || RUN_SHA='(unreadable)'

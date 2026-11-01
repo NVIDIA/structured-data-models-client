@@ -105,6 +105,11 @@ def test_every_core_path_of_the_manifest_is_routed_and_covered_defaults_are_core
         _routing.S0
         # From T3.12, a model's capabilities, from the core's table.
         + _routing.CAPABILITIES
+        + _routing.FRAME_ROUTES
+        + _routing.DIRECT_CONSUMERS
+        + _routing.TABULAR_MATERIALIZERS
+        + _routing.TABULAR_SESSIONS
+        + _routing.WAREHOUSE_SESSION_ROUTES
         + _routing.FROM_SOURCE_DUCKDB
         + _routing.FROM_SOURCE_DUCKDB_TABLES
         + _routing.MATERIALIZE_DUCKDB
@@ -200,23 +205,23 @@ def test_the_route_is_read_at_every_call(
         (f'{CORE},nope', 'nope'),
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
-        # Trained models remain a known core path without an implementation
-        # in Phase 3; warehouse and semantic-view prediction now have routes.
+        # Reference pickle migration remains separate from core prediction
+        # and session routing.
         (
-            'client.fit/regression/duckdb',
-            'client.fit/regression/duckdb',
+            'state.pickle/reference-pickle/any',
+            'state.pickle/reference-pickle/any',
         ),
     ],
 )
 def test_an_unknown_or_unrouted_forced_path_fails_the_call(
     monkeypatch: pytest.MonkeyPatch, setting: str, named: str
 ) -> None:
-    if named.startswith('client.'):
+    if named.startswith('state.'):
         assert named in _routing.ROUTES
         assert named not in _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, setting)
-    query = PredictiveQuery(ACCEPTED, {'users': _users()})
     with pytest.raises(_routing.RouteError, match=named):
+        query = PredictiveQuery(ACCEPTED, {'users': _users()})
         query.materialize(indices=[1])
     assert not isinstance(_routing.RouteError('x'), StructuredDataError)
 

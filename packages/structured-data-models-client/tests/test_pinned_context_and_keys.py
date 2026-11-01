@@ -384,12 +384,24 @@ def test_a_session_remembers_the_keys_it_pinned():
         def delete_session(self, session_id):
             pass
 
+        def close(self):
+            pass
+
     client._transport = Fake()
     fitted = client.fit(request, model='kumo-tabular')
 
-    assert len(fitted._pinned_keys) == 298
-    assert _named_by([1]) not in fitted._pinned_keys
-    assert _named_by([5]) in fitted._pinned_keys
+    if fitted._tabular_session is not None:
+        import json
+
+        keys = json.loads(fitted._tabular_session_keys)['rows']
+        assert len(keys) == 298
+        assert [{'kind': 'numeric', 'decimal': '1'}] not in keys
+        assert [{'kind': 'numeric', 'decimal': '5'}] in keys
+    else:
+        assert len(fitted._pinned_keys) == 298
+        assert _named_by([1]) not in fitted._pinned_keys
+        assert _named_by([5]) in fitted._pinned_keys
+    client.close()
 
 
 def test_a_key_that_cannot_be_cast_gets_the_engines_own_message():

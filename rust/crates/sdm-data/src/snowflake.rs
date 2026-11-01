@@ -124,6 +124,7 @@ impl SqlDialect for Snowflake {
             // The reference's Snowflake sampler neither reads indexes nor
             // warns of missing ones.
             index_advice: None,
+            fallback_text_order: None,
             fallback: None,
             derived_relations: true,
             // The sample's size is its own `n ROWS`.

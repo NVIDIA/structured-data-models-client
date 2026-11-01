@@ -416,13 +416,17 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
         .map(String::as_str)
         .collect();
     let mut known: Vec<&str> = OTHER.iter().map(|(field, _)| *field).collect();
-    for (field, attachment) in JSON {
+    for &(field, attachment) in JSON {
         if !listed.contains(&attachment) {
             return Err(format!("{field}'s JSON ({attachment}) is not in the lock"));
         }
         known.push(field);
     }
-    if listed.len() != JSON.len() {
+    // Several typed direct results share one physical DirectValue.value slot.
+    // Compare the distinct locked shapes, not the number of field mappings.
+    let accounted: std::collections::BTreeSet<_> =
+        JSON.iter().map(|(_, attachment)| *attachment).collect();
+    if listed.len() != accounted.len() {
         return Err("the lock lists an attachment no field names".into());
     }
     for field in &found {
@@ -442,12 +446,357 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 26] = [
+const JSON: &[(&str, &str)] = &[
+    ("Operation/read_result_items.input", "ReadResultItems.input"),
+    ("Operation/merge_results.input", "MergeResults.input"),
+    ("Operation/describe_frame_tables.names", "FrameTables.names"),
+    ("Operation/prepare_frame_graph.names", "FrameTables.names"),
+    ("Operation/prepare_frame_graph.schema", "Materialize.schema"),
+    (
+        "Operation/materialize_frames.input",
+        "MaterializeFrames.input",
+    ),
+    ("Operation/materialize_frames.values", "Materialize.values"),
+    (
+        "Operation/assemble_frame_schema.input",
+        "AssembleFrameSchema.input",
+    ),
+    ("Operation/fit.input", "FrameSession.input"),
+    ("Operation/predict.input", "FrameSession.input"),
+    ("Operation/close.input", "FrameSession.input"),
+    ("OperationResult/direct_value.value", "FrameSession.state"),
+    ("Operation/describe.input", "tabular_arrow_description"),
+    ("Operation/prepare.input", "tabular_arrow_request"),
+    ("Operation/predict.input", "tabular_arrow_prediction"),
+    ("Operation/materialize.input", "tabular_arrow_materialize"),
+    (
+        "Operation/materialize_predict.input",
+        "tabular_arrow_materialize",
+    ),
+    ("Operation/fit.input", "tabular_arrow_fit"),
+    ("Operation/score.input", "tabular_arrow_score"),
+    ("Operation/close.input", "tabular_arrow_session"),
+    (
+        "Operation/prepare_tabular_fit.holdout",
+        "DirectValue.session_keys",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.pinned_keys",
+        "DirectValue.session_keys",
+    ),
+    (
+        "Operation/encode_tabular_table.input",
+        "EncodeTabularTable.input",
+    ),
+    (
+        "Operation/prepare_tabular_fit.input",
+        "PrepareTabularFit.input",
+    ),
+    (
+        "Operation/accept_tabular_session.input",
+        "AcceptTabularSession.input",
+    ),
+    (
+        "Operation/check_tabular_session_question.input",
+        "CheckTabularSessionQuestion.input",
+    ),
+    (
+        "Operation/check_tabular_session_reply.input",
+        "CheckTabularSessionReply.input",
+    ),
+    (
+        "Operation/prepare_tabular_score.input",
+        "PrepareTabularScore.input",
+    ),
+    (
+        "Operation/send_tabular_session.input",
+        "SendTabularSession.input",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.input",
+        "CountTabularSessionOverlap.input",
+    ),
+    (
+        "Operation/close_tabular_session.input",
+        "CloseTabularSession.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.encoded_table",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_overlap",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_id_selection",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_question_difference",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_reply",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepared_score",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepared_fit",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_state",
+    ),
+    ("OperationResult/direct_value.value", "TabularSession.state"),
+    (
+        "TabularSessionState.pinned_keys",
+        "DirectValue.session_keys",
+    ),
+    ("PreparedTabularFit.pinned_keys", "DirectValue.session_keys"),
+    ("PrepareTabularFit.holdout", "DirectValue.session_keys"),
+    (
+        "Operation/select_tabular_rows.input",
+        "SelectTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.select_tabular_rows",
+    ),
+    ("Operation/check_tabular_cap.input", "CheckTabularCap.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.check_tabular_cap",
+    ),
+    (
+        "Operation/observe_tabular_membership.input",
+        "ObserveTabularMembership.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.observe_tabular_membership",
+    ),
+    (
+        "Operation/decide_tabular_task.input",
+        "DecideTabularTask.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.decide_tabular_task",
+    ),
+    (
+        "Operation/order_sampled_tabular_rows.input",
+        "OrderSampledTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.order_sampled_tabular_rows",
+    ),
+    (
+        "Operation/expand_tabular_keys.input",
+        "ExpandTabularKeys.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.expand_tabular_keys",
+    ),
+    (
+        "Operation/filter_tabular_rows.input",
+        "FilterTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.filter_tabular_rows",
+    ),
+    (
+        "Operation/decide_tabular_context.input",
+        "DecideTabularContext.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.decide_tabular_context",
+    ),
+    (
+        "Operation/sample_tabular_rows.input",
+        "SampleTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.sample_tabular_rows",
+    ),
+    ("OperationResult/direct_value.value", "DirectValue.meaning"),
+    (
+        "Operation/observe_direct_outputs.input",
+        "ObserveDirectOutputs.input",
+    ),
+    (
+        "Operation/restore_direct_response.input",
+        "RestoreDirectResponse.input",
+    ),
+    (
+        "Operation/check_direct_response_field.input",
+        "CheckDirectResponseField.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_response_field",
+    ),
+    (
+        "OperationResult/prepared_direct_call.value",
+        "PreparedDirectCall.value",
+    ),
+    (
+        "Operation/layout_native_direct.input",
+        "LayoutNativeDirect.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.native_layout",
+    ),
+    ("Operation/plan_result_merge.input", "PlanResultMerge.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.plan_result_merge",
+    ),
+    ("Operation/check_column.input", "CheckColumn.input"),
+    ("Operation/check_direct_cell.input", "CheckDirectCell.input"),
+    (
+        "Operation/check_direct_option.input",
+        "CheckDirectOption.input",
+    ),
+    (
+        "Operation/observe_direct_dtype.input",
+        "ObserveDirectDtype.input",
+    ),
+    (
+        "Operation/observe_direct_schema.input",
+        "ObserveDirectSchema.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.observed_schema",
+    ),
+    (
+        "Operation/check_direct_preparation.input",
+        "CheckDirectPreparation.input",
+    ),
+    (
+        "Operation/resolve_direct_dtype.input",
+        "ResolveDirectDtype.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_resolution",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_declarations",
+    ),
+    (
+        "Operation/resolve_observed_tabular.input",
+        "ResolveObservedTabular.input",
+    ),
+    (
+        "Operation/inspect_observed_keys.input",
+        "InspectObservedKeys.input",
+    ),
+    (
+        "Operation/encode_direct_column.input",
+        "EncodeDirectColumn.input",
+    ),
+    (
+        "Operation/infer_direct_column.input",
+        "InferDirectColumn.input",
+    ),
+    (
+        "Operation/infer_direct_time_start.input",
+        "InferDirectTimeStart.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.time_start",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.encoded_column",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_finding",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_cell",
+    ),
+    (
+        "Operation/check_direct_shape.input",
+        "CheckDirectShape.input",
+    ),
+    ("Operation/prepare_direct.input", "PrepareDirect.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.description",
+    ),
+    ("Operation/bind_direct.input", "BindDirect.input"),
+    ("OperationResult/direct_value.value", "DirectValue.bound"),
+    (
+        "Operation/inspect_direct_pair.input",
+        "InspectDirectPair.input",
+    ),
+    ("Operation/resolve_tabular.input", "ResolveTabular.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.resolved_tabular",
+    ),
+    ("Operation/encode_tabular.input", "EncodeTabular.input"),
+    ("OperationResult/direct_value.value", "DirectValue.encoded"),
+    ("DirectModelInput.input", "Predict.direct.input"),
+    (
+        "OperationResult/decoded_direct_response.value",
+        "DecodedDirectResponse.value",
+    ),
+    ("DirectResponseData.rows", "DirectResponseData.rows"),
+    ("Operation/check_direct_rows.input", "CheckDirectRows.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_rows",
+    ),
+    (
+        "Operation/interpret_direct_json.input",
+        "InterpretDirectJson.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.interpreted",
+    ),
+    (
+        "Operation/select_direct_member.input",
+        "SelectDirectMember.input",
+    ),
+    ("OperationResult/direct_value.value", "DirectValue.member"),
+    (
+        "Operation/attribute_direct_row.input",
+        "AttributeDirectRow.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.attributed",
+    ),
+    (
+        "Operation/decode_direct_response.input",
+        "DecodeDirectResponse.input",
+    ),
+    ("Operation/layout_direct.input", "LayoutDirect.input"),
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),
     ("Operation/edit_schema.schema", "EditSchema.schema"),
     ("Operation/edit_schema.edit", "EditSchema.edit"),
+    ("Operation/edit_schema.context", "EditSchema.context"),
     ("OperationResult/edit_schema.schema", "SchemaEdited.schema"),
     ("Operation/materialize.schema", "Materialize.schema"),
     ("Operation/materialize.query", "Materialize.query"),
@@ -475,7 +824,154 @@ const JSON: [(&str, &str); 26] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 10] = [
+const OTHER: &[(&str, &str)] = &[
+    (
+        "Operation/read_result_items.table",
+        "normalized Arrow result",
+    ),
+    ("ResultItemSegment.table", "semantic Arrow items"),
+    (
+        "Operation/merge_results.tables",
+        "normalized Arrow result tables",
+    ),
+    ("Operation/edit_schema.frame", "Arrow, with its schema"),
+    (
+        "Operation/read_request_split.payloads",
+        "encoded endpoint payloads inspected without modification",
+    ),
+    (
+        "OperationResult/request_split.instance",
+        "inspected instance Arrow table",
+    ),
+    ("RelatedTable.data", "inspected related Arrow table"),
+    ("Operation/fit.payloads", "encoded endpoint payloads"),
+    ("Operation/predict.payloads", "encoded endpoint payloads"),
+    ("Operation/predict.pinned", "encoded pinned context"),
+    ("Operation/describe_frame_tables.tables", "Arrow tables"),
+    ("Operation/prepare_frame_graph.tables", "Arrow tables"),
+    (
+        "Operation/materialize_frames.graph",
+        "retained native graph owner",
+    ),
+    ("Operation/materialize_frames.indices", "Arrow keys"),
+    (
+        "OperationResult/prepared_frame_graph.graph",
+        "retained native graph owner",
+    ),
+    ("Operation/describe.table", "Arrow table"),
+    ("Operation/prepare.context", "Arrow table"),
+    ("Operation/prepare.predict", "Arrow table"),
+    ("Operation/predict.context", "Arrow table"),
+    ("Operation/predict.predict", "Arrow table"),
+    ("Operation/materialize.table", "Arrow table"),
+    ("Operation/materialize_predict.table", "Arrow table"),
+    ("Operation/materialize_predict.predict", "Arrow table"),
+    ("Operation/fit.context", "Arrow table"),
+    ("Operation/fit.predict", "Arrow table"),
+    ("Operation/score.predict", "Arrow table"),
+    (
+        "Operation/prepare_tabular_fit.context",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "Operation/accept_tabular_session.observed",
+        "the endpoint's actual sent document",
+    ),
+    (
+        "Operation/prepare_tabular_score.predict",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.predict",
+        "the endpoint's encoded key table bytes",
+    ),
+    (
+        "Operation/send_tabular_session.payload",
+        "the endpoint's bytes",
+    ),
+    (
+        "Operation/encode_tabular_table.values",
+        "Arrow, with its schema",
+    ),
+    ("EncodedTabularTable.table", "the endpoint's bytes"),
+    (
+        "PrepareTabularFit.context",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "AcceptTabularSession.observed",
+        "the endpoint's actual sent document",
+    ),
+    (
+        "CountTabularSessionOverlap.predict",
+        "the endpoint's encoded key table bytes",
+    ),
+    (
+        "PrepareTabularScore.predict",
+        "the endpoint's encoded table bytes",
+    ),
+    ("PreparedTabularFit.payload", "the endpoint's bytes"),
+    ("PreparedTabularScore.payload", "the endpoint's bytes"),
+    ("PreparedTabularScore.layout", "the endpoint's layout bytes"),
+    ("SendTabularSession.payload", "the endpoint's bytes"),
+    ("SessionTransportReply.response", "the endpoint's bytes"),
+    ("NativeDirectCall.payload", "the endpoint's bytes"),
+    ("EncodedDirectBody.payload", "the endpoint's bytes"),
+    ("DirectDecodeInput.payload", "the endpoint's bytes"),
+    ("DirectDecodeInput.response", "the endpoint's bytes"),
+    ("DirectResponseData.payload", "the endpoint's bytes"),
+    ("DirectResponseData.response", "the endpoint's bytes"),
+    ("DirectModelInput.payload", "the endpoint's bytes"),
+    (
+        "Operation/decode_direct_response.payload",
+        "the endpoint's bytes",
+    ),
+    (
+        "Operation/decode_direct_response.response",
+        "the endpoint's bytes",
+    ),
+    ("Operation/layout_direct.payload", "the endpoint's bytes"),
+    ("Operation/layout_direct.response", "the endpoint's bytes"),
+    (
+        "Operation/inspect_observed_keys.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/inspect_observed_keys.predict",
+        "Arrow, with its schema",
+    ),
+    ("Operation/prepare_direct.context", "Arrow, with its schema"),
+    ("Operation/prepare_direct.predict", "Arrow, with its schema"),
+    (
+        "Operation/inspect_direct_pair.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/inspect_direct_pair.predict",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/resolve_tabular.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/resolve_tabular.predict",
+        "Arrow, with its schema",
+    ),
+    ("Operation/encode_tabular.context", "Arrow, with its schema"),
+    ("Operation/encode_tabular.predict", "Arrow, with its schema"),
+    (
+        "Operation/encode_direct_column.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/infer_direct_column.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/infer_direct_time_start.values",
+        "Arrow, with its schema",
+    ),
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",
@@ -530,6 +1026,31 @@ fn the_lock_accounts_for_every_attachment_a_message_names() {
         .unwrap()
         .remove("DescribeSource.source");
     assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+    // A shared result slot still locks every individual JSON shape.
+    let mut lost = generated();
+    lost["$defs"]["Attachments"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("DirectValue.checked_response_field");
+    assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+    // Nor may the shared physical slot disappear while its shapes remain.
+    let mut lost = generated();
+    let variants = lost["$defs"]["OperationResult"]["oneOf"]
+        .as_array_mut()
+        .unwrap();
+    let direct = variants
+        .iter_mut()
+        .find(|variant| variant["properties"]["op"]["const"] == "direct_value")
+        .unwrap();
+    direct["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("value");
+    assert!(
+        unaccounted(&lost)
+            .unwrap_err()
+            .contains("not in the schema")
+    );
 }
 
 #[test]

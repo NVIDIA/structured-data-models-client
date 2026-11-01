@@ -101,6 +101,7 @@ fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> Provi
             null_order: None,
             index_advice: None,
             sampling: Determinism::SeededStable,
+            fallback_text_order: Some(sdm_contract::data::FallbackTextOrder::BinaryUtf8),
             fallback,
         },
     }
@@ -149,6 +150,7 @@ fn run_with(
                     }))
                 }
                 Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
+                Reply::Fetch(FetchResult::Refused(error)) => Err(error),
                 _ => unreachable!(),
             }
         },
@@ -647,7 +649,7 @@ fn rows_past_the_limit_fail_by_name_and_no_scan_moves_more() {
 #[test]
 fn bytes_past_the_limit_fail_by_name() {
     let ran = run_with(
-        host(&[], Some(limits(1_000, 64))),
+        host(&[], Some(limits(1_000, 32))),
         DataRequest::Preview {
             table: "events".into(),
             columns: vec!["v".into()],
@@ -660,7 +662,7 @@ fn bytes_past_the_limit_fail_by_name() {
     assert_eq!(field(error, "limit"), Some(&Detail::text("max_bytes")));
     assert_eq!(
         field(error, "most"),
-        Some(&Detail::Scalar(Scalar::UInt64(64)))
+        Some(&Detail::Scalar(Scalar::UInt64(32)))
     );
 }
 
@@ -771,4 +773,126 @@ fn portable_neighbors_keep_signed_bounds_and_refuse_sql_code_explicitly() {
         expression.asked.is_empty(),
         "SQL code is not guessed from source rows"
     );
+}
+
+#[test]
+fn preview_budget_counts_returned_slice_not_its_large_parent() {
+    let parent = Arc::new(StringArray::from(vec!["x".repeat(1024); 100]));
+    let page = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new("v", DataType::Utf8, false)])),
+        vec![Arc::new(parent.slice(50, 1))],
+    )
+    .unwrap();
+    let ran = run_with(
+        host(&[], Some(limits(10, 3000))),
+        DataRequest::Preview {
+            table: "events".into(),
+            columns: vec!["v".into()],
+            limit: 1,
+        },
+        None,
+        |_| FetchResult::Data(ArrowData::new(page.schema(), vec![page.clone()])),
+    );
+    assert_eq!(ran.answer.unwrap().num_rows(), 1);
+}
+
+#[test]
+fn a_range_budget_refusal_can_recover_with_preview_in_the_same_run() {
+    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let provider = host(&[], Some(limits(1, 4096)));
+    let mut run = Run::with_data(root.data_access(&provider).unwrap(), |asker| async move {
+        let failed = asker
+            .fetch(DataRequest::ColumnRanges {
+                table: "events".into(),
+                columns: vec!["v".into()],
+            })?
+            .await;
+        let Reply::Fetch(FetchResult::Refused(error)) = failed else {
+            panic!("expected a recoverable range refusal");
+        };
+        assert_eq!(
+            field(&error, "request"),
+            Some(&Detail::text("column_ranges"))
+        );
+        let preview = asker
+            .fetch(DataRequest::Preview {
+                table: "events".into(),
+                columns: vec!["v".into()],
+                limit: 1,
+            })?
+            .await;
+        assert!(matches!(preview, Reply::Fetch(FetchResult::Data(_))));
+        Ok(OperationResult::ValidateQuery(QueryValidation {
+            accepted: true,
+            diagnostics: vec![],
+            query: None,
+        }))
+    });
+    let mut scans = 0;
+    loop {
+        match run.next().unwrap() {
+            Step::Fetch { requests } => {
+                for request in requests {
+                    scans += 1;
+                    let rows = if scans == 1 { 2 } else { 1 };
+                    let batch = RecordBatch::try_new(
+                        Arc::new(Schema::new(vec![Field::new("v", DataType::Int64, false)])),
+                        vec![Arc::new(Int64Array::from(vec![1; rows]))],
+                    )
+                    .unwrap();
+                    run.submit_fetch(
+                        request.id,
+                        FetchResult::Data(ArrowData::new(batch.schema(), vec![batch])),
+                    )
+                    .unwrap();
+                }
+            }
+            Step::Done { .. } => break,
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+    assert_eq!(scans, 2);
+}
+
+#[test]
+fn text_comparisons_require_compatible_declared_collation_but_preview_does_not() {
+    let mut provider = host(&[], Some(limits(100, 1 << 20)));
+    let ProviderChoice::Host { capabilities } = &mut provider else {
+        unreachable!()
+    };
+    capabilities.fallback_text_order = None;
+    let rejected = run_with(
+        provider.clone(),
+        DataRequest::RepeatedKey {
+            table: "events".into(),
+            key: vec!["v".into()],
+        },
+        None,
+        scan_of(table()),
+    );
+    assert_eq!(
+        field(refusal(&rejected), "field"),
+        Some(&Detail::text("fallback_text_order"))
+    );
+    let preview = run_with(
+        provider,
+        DataRequest::Preview {
+            table: "events".into(),
+            columns: vec!["v".into()],
+            limit: 2,
+        },
+        None,
+        scan_of(table()),
+    );
+    assert_eq!(preview.answer.unwrap().num_rows(), 2);
+    // The fixture explicitly declares exact UTF-8 comparisons: distinct
+    // cases and accents are not silently collapsed like locale collations.
+    let binary = fallback(
+        DataRequest::RepeatedKey {
+            table: "events".into(),
+            key: vec!["v".into()],
+        },
+        None,
+    );
+    assert!(binary.answer.is_ok());
 }

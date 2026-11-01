@@ -122,6 +122,8 @@ def test_supplying_rows_for_a_multi_table_schema_is_refused():
 def test_materialize_selects_the_profile_from_the_call_shape(
     monkeypatch, argument, tables, expected_profile, expected_materializer
 ):
+    # This unit test observes the retained Python dispatchers, not core policy.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     data = {'users': users()}
     if tables == 2:
         data['orders'] = pd.DataFrame({'order_id': [1], 'user_id': [0]})
@@ -162,6 +164,7 @@ def test_materialize_selects_the_profile_from_the_call_shape(
 def test_relational_options_are_forwarded_to_the_relational_materializer(
     monkeypatch,
 ):
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     predictive_query = PredictiveQuery(
         'PREDICT users.churn FOR EACH users.user_id',
         {
@@ -224,7 +227,11 @@ def test_a_bad_context_count_is_refused_before_dispatch(path, bad):
 
 
 @pytest.mark.parametrize('count', [1, 500, 10_000, 10_001])
-def test_a_valid_context_count_reaches_the_tabular_materializer(count):
+def test_a_valid_context_count_reaches_the_tabular_materializer(
+    count, monkeypatch
+):
+    # Only the old dispatch handoff is mocked; endpoint limits are tested separately.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     predictive_query = query()
     expected = object()
 

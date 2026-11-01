@@ -60,6 +60,7 @@ where
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback_text_order: None,
             fallback: None,
         },
     };

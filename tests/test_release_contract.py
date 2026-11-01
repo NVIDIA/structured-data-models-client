@@ -1291,6 +1291,7 @@ class TestDistributionCoherence:
                     'requests-mock',
                     'jsonschema',
                     'pyyaml',
+                    'pytz',  # explicit timezone fixtures, including DST folds
                     'databricks-sdk',
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '
@@ -1481,7 +1482,9 @@ class TestConfigurationTellsTheTruth:
 
         checked, missing = 0, []
         for module in named:
-            present = self._module_is_on_disk(module)
+            # Mypy's package.* override includes the package itself as well
+            # as its descendants; the wildcard is not a literal filename.
+            present = self._module_is_on_disk(module.removesuffix('.*'))
             if present is None:
                 continue  # the distribution is absent from this job
             checked += 1

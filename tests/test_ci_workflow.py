@@ -790,7 +790,11 @@ def _expression(condition: object) -> str:
     text = str(condition).strip()
     if text.startswith('${{') and text.endswith('}}'):
         text = text[3:-2]
-    return ' '.join(text.split())
+    text = ' '.join(text.split())
+    guard = "!(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && ("
+    if text.startswith(guard) and text.endswith(')'):
+        text = text[len(guard) : -1]
+    return text
 
 
 def test_ci4_the_pending_list_only_shrinks() -> None:
@@ -2061,12 +2065,27 @@ NATIVE_WHEEL = ROOT / 'scripts/rust_core/native_wheel.py'
 WHEEL_NAME = 'structured_data_models_client-1.0.0-cp310-abi3-{}.whl'
 
 
+def _runtime_matrix_entries(
+    job: dict[str, Any], targeted: bool = False
+) -> list[dict[str, Any]]:
+    entries = job['strategy']['matrix']['include']
+    if isinstance(entries, list):
+        return entries
+    # The dynamic matrix has exactly two literal JSON alternatives; validate
+    # both instead of treating a targeted lane as the normal shipped matrix.
+    choices = re.findall(r"'(\[.*?\])'", entries)
+    assert len(choices) == 2
+    return json.loads(choices[0 if targeted else 1])
+
+
 def _job_names(job_id: str, job: dict[str, Any]) -> list[str]:
     r"""The names a job's runs take: its ``name`` with each matrix entry's
     values put in (a matrix of lists or of ``include`` entries)."""
     name = str(job.get('name', job_id))
     matrix = (job.get('strategy') or {}).get('matrix') or {}
-    entries: list[dict[str, Any]] = list(matrix.get('include') or [])
+    entries: list[dict[str, Any]] = (
+        _runtime_matrix_entries(job) if 'include' in matrix else []
+    )
     for key, values in matrix.items():
         if key != 'include':
             entries = [{key: value} for value in values]
@@ -2112,7 +2131,7 @@ def test_ci7_the_aarch64_jobs_run_natively_on_arm() -> None:
     for name in ('native-wheel-aarch64', 'wheel-smoke-aarch64'):
         assert jobs[name]['runs-on'] == 'ubuntu-24.04-arm', name
     build = jobs['native-wheel-aarch64']
-    entries = build['strategy']['matrix']['include']
+    entries = _runtime_matrix_entries(build)
     assert {e['args'] for e in entries} == {
         '--out native',
         '--out native --test-ops',
@@ -2947,9 +2966,54 @@ def test_t32_the_nightly_runs_the_client_suite_with_every_route_forced() -> (
     # flip dry run, every path the build routes onto the core forced there.
     job = _workflow()['jobs']['forced-routes']
     assert (
-        job['if'] == "github.event_name == 'workflow_dispatch' && inputs.fresh"
+        _expression(job['if'])
+        == "github.event_name == 'workflow_dispatch' && inputs.fresh"
     )
     script = '\n'.join(step.get('run', '') for step in job['steps'])
     assert 'CORE_ROUTED' in script and 'export SDM_CORE_ROUTES' in script
     assert 'packages/structured-data-models-client/tests' in script
     assert '-rf' in script, 'the watchdog names failing tests from FAILED lines'
+
+
+def test_targeted_pql_runtime_cannot_enable_unrelated_ci_jobs() -> None:
+    workflow = _workflow()
+    jobs = workflow['jobs']
+    guard = (
+        "!(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only)"
+    )
+    for name, job in jobs.items():
+        if name not in (
+            'landing',
+            'nightly',
+            'native-wheel-aarch64',
+            'pql-runtime-aarch64',
+        ):
+            assert guard in job['if'], name
+    assert '-pql-runtime' in workflow['concurrency']['group']
+    assert 'not full CI' in workflow['run-name']
+    assert _runtime_matrix_entries(jobs['native-wheel-aarch64'], True) == [
+        {
+            'build': 'shipped',
+            'args': '--out native',
+            'artifact': 'native-wheel-aarch64',
+            'java': '',
+        }
+    ]
+    pql = jobs['pql-runtime-aarch64']
+    assert pql['needs'] == 'native-wheel-aarch64'
+    assert pql['runs-on'] == 'ubuntu-24.04-arm'
+    assert {
+        entry['python'] for entry in pql['strategy']['matrix']['include']
+    } == {'3.10', '3.14'}
+    assert 'inputs.pql_runtime_only' in pql['if']
+    phase_end = (
+        ROOT / 'scripts/rust_core/orchestration/phase_end.sh'
+    ).read_text()
+    assert (
+        '.displayTitle != "Targeted Arm PQL acceptance (not full CI)"'
+        in phase_end
+    )
+    assert (
+        'targeted PQL run $RUN cannot supply full phase-end CI evidence'
+        in phase_end
+    )

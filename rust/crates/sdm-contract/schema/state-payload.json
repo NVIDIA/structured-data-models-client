@@ -11,6 +11,58 @@
       "description": "What is predicted, of which entity: a task of each kind, its kind's\nname and its target. The schema of [`Task`] of each target, for the\nschema only.",
       "anyOf": [
         {
+          "description": "The two entity roles of an in-memory link query, in query order.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "temporal_link_prediction"
+              ]
+            },
+            "target": {
+              "description": "A temporal link's label is a list of target keys, encoded as text.",
+              "type": "object",
+              "properties": {
+                "column_name": {
+                  "type": "string"
+                },
+                "dtype": {
+                  "type": "string",
+                  "enum": [
+                    "stringlist"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "column_name",
+                "dtype"
+              ]
+            },
+            "entity_table_names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "anchor_time_column": {
+              "type": "string"
+            },
+            "top_k": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "entity_table_names"
+          ]
+        },
+        {
           "description": "A regression's task, for the schema only.",
           "type": "object",
           "properties": {
@@ -587,6 +639,40 @@
         "inference_config": {
           "description": "The engine's inference options, a regression's or a classification's,\neach its own type, told apart by its kind: the schema of both, for the\nschema only.",
           "anyOf": [
+            {
+              "description": "The reference's base inference configuration, used by link prediction.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "base"
+                  ]
+                },
+                "num_estimators": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "column_shuffle": {
+                  "type": "boolean"
+                },
+                "category_shuffle": {
+                  "type": "boolean"
+                },
+                "hop_shuffle": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "num_estimators",
+                "column_shuffle",
+                "category_shuffle",
+                "hop_shuffle"
+              ]
+            },
             {
               "description": "A regression's inference options, as the engine writes them\n(`_inference_config_to_json`).",
               "type": "object",

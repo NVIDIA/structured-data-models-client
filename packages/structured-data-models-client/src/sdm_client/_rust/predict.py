@@ -428,6 +428,189 @@ def predict(
     # core's to check.
     model_id = model if isinstance(model, str) else spec_for(model).model_id
 
+    model_call = sender(client, model_id)
+
+    operation: dict[str, Any] = {
+        'op': 'predict',
+        'model': model_id,
+        'request_id': _request_id(),
+        # The outputs the caller named, or that it named none (the core then
+        # asks the task's own, T1.28b).
+        'outputs': [] if outputs is None else list(outputs),
+        # The inference options the caller set (a mapping, on this
+        # route), which the core refuses where the model does not read
+        # them (T1.28a).
+        'inference_asked': sorted(
+            request.requested_inference.get('inference_config', {})
+        ),
+    }
+    if outputs is None:
+        operation['default_outputs'] = True
+    # A serving endpoint the core speaks to: its envelope written and its
+    # answers read there (T3.13).
+    endpoint = getattr(client._transport, 'model_endpoint', None)
+    if endpoint is not None:
+        operation['model_endpoint'] = endpoint
+    if state is None:
+        operation['held'], attachments = _held(request)
+    else:
+        operation['state'], attachments = _from_state(request, state)
+
+    # The candidates the core names by position, as the caller gave them:
+    # the values only this host holds, which its sentences name.
+    try:
+        with errors.holding(
+            candidates=lambda fields: [
+                given[at] for at in fields['candidates']
+            ],
+            candidate=lambda fields: given[fields['candidate']],
+            part_candidate=lambda fields: given[fields['ranking_candidate']],
+        ):
+            finished = run(operation, attachments, model=model_call)
+    except Exception as error:
+        # Whatever the call raised, the answers before it are put on it.
+        _carry_the_answers(error, request.parts is not None)
+        raise
+    answered = results.expect(finished.result, results.Predicted)
+    metadata = json.loads(finished.take(answered.metadata))
+    if ranking:
+        return _ranked(
+            answered, _table(finished.take(answered.result)), metadata, given
+        )
+    table = _table(finished.take(answered.result))
+    # The result's explanation, on the result's schema (T2.13).
+    explained = (table.schema.metadata or {}).get(b'explanation')
+    return _result(
+        table,
+        model=answered.model,
+        request_id=answered.request_id,
+        metadata=metadata,
+        outputs=answered.outputs,
+        by_step=request.parts is not None,
+        explanation=None if explained is None else explained.decode(),
+    )
+
+
+def _result(
+    table: Any,
+    *,
+    model: str,
+    request_id: str,
+    metadata: dict[str, Any],
+    outputs: tuple[str, ...],
+    by_step: bool,
+    explanation: str | None = None,
+) -> PredictionResult:
+    r"""The core's result rows as this client's result: each item's
+    explanation and metadata, and the result's explanation, as the core
+    gives them (T2.13)."""
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client._rust.result_items import read
+    from sdm_client.result import PredictionResult
+
+    items = read(
+        table,
+        model=model,
+        request_id=request_id,
+        metadata=metadata,
+        outputs=outputs,
+    )
+    result = PredictionResult(
+        model=model,
+        request_id=request_id,
+        items=[PredictionItem(**item) for item in items],
+        metadata=metadata,
+        outputs=outputs,
+        explanation=_explanation(explanation, by_step),
+    )
+    # A forecast's answer names its step, rows or none (`_by_step`).
+    result._names_its_step = by_step
+    return result
+
+
+def _ranked(
+    answered: results.Predicted,
+    table: Any,
+    metadata: dict[str, Any],
+    given: dict[int, Any],
+) -> PredictionResult:
+    r"""A ranking's result as the client gives it (``_ranked``): each row's
+    candidates, best first, as the caller gave them (``given``, by the
+    position the result names each by), under ``prediction`` and, with each
+    one's score, under ``rankings``, each where the outputs name it; the
+    candidates left out, unscored, as given (by their positions among those
+    given)."""
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client._rust.result_items import read
+    from sdm_client.result import PredictionResult
+
+    wanted = answered.outputs
+    items = [
+        PredictionItem(**item)
+        for item in read(
+            table,
+            model=answered.model,
+            request_id=answered.request_id,
+            metadata=metadata,
+            outputs=wanted,
+            candidates=given,
+        )
+    ]
+    return PredictionResult(
+        model=answered.model,
+        request_id=answered.request_id,
+        items=items,
+        metadata=metadata,
+        outputs=wanted,
+        unscored_candidates=[given[at] for at in answered.unscored_candidates],
+    )
+
+
+def _carry_the_answers(error: Exception, by_step: bool) -> None:
+    r"""The answers received before a call failed, as the core carried them
+    on its error (T2.8c, ``main``'s 1fc5a686), put in ``error.details`` as
+    the client puts them: ``answered``, the answers received as one result,
+    and, for a request asked in several calls, ``rows_answered``, the rows
+    those calls score, beside the core's ``calls_answered``; for a
+    forecast, its steps' answers, beside the core's ``parts_answered``. The
+    error keeps its own type and code."""
+    import pyarrow as pa
+
+    carried = getattr(error, '_answered', None)
+    if carried is None:
+        return
+    delattr(error, '_answered')
+    stream, rows = carried
+    table = pa.RecordBatchReader._import_from_c_capsule(
+        stream.__arrow_c_stream__()
+    ).read_all()
+    # What the result names beside its rows travels on its schema, as text
+    # (``sdm_core::predict``'s ``carried``).
+    named = {
+        key.decode(): value.decode()
+        for key, value in (table.schema.metadata or {}).items()
+    }
+    held = getattr(error, 'details', None)
+    details = held if isinstance(held, dict) else {}
+    details['answered'] = _result(
+        table,
+        model=named.get('model', ''),
+        request_id=named.get('request_id', ''),
+        metadata=json.loads(named.get('metadata', '{}')),
+        outputs=tuple(json.loads(named.get('outputs', '[]'))),
+        by_step=by_step,
+        explanation=named.get('explanation'),
+    )
+    if not by_step:
+        details['rows_answered'] = rows
+    error.details = details  # type: ignore[attr-defined]
+
+
+def sender(client: SDMClient, model_id: str) -> Any:
+    """The existing transport-only callback, after core model selection."""
+
     def model_call(body: bytes) -> bytes:
         # What failed is noted inside the handlers and raised after them, so
         # the transport's exception, whose text the endpoint wrote, is not
@@ -482,223 +665,4 @@ def predict(
         assert unexpected is not None
         raise Refused(unexpected)
 
-    operation: dict[str, Any] = {
-        'op': 'predict',
-        'model': model_id,
-        'request_id': _request_id(),
-        # The outputs the caller named, or that it named none (the core then
-        # asks the task's own, T1.28b).
-        'outputs': [] if outputs is None else list(outputs),
-        # The inference options the caller set (a mapping, on this
-        # route), which the core refuses where the model does not read
-        # them (T1.28a).
-        'inference_asked': sorted(
-            request.requested_inference.get('inference_config', {})
-        ),
-    }
-    if outputs is None:
-        operation['default_outputs'] = True
-    # A serving endpoint the core speaks to: its envelope written and its
-    # answers read there (T3.13).
-    endpoint = getattr(client._transport, 'model_endpoint', None)
-    if endpoint is not None:
-        operation['model_endpoint'] = endpoint
-    if state is None:
-        operation['held'], attachments = _held(request)
-    else:
-        operation['state'], attachments = _from_state(request, state)
-
-    # The candidates the core names by position, as the caller gave them:
-    # the values only this host holds, which its sentences name.
-    try:
-        with errors.holding(
-            candidates=lambda fields: [
-                given[at] for at in fields['candidates']
-            ],
-            candidate=lambda fields: given[fields['candidate']],
-            part_candidate=lambda fields: given[fields['ranking_candidate']],
-        ):
-            finished = run(operation, attachments, model=model_call)
-    except Exception as error:
-        # Whatever the call raised, the answers before it are put on it.
-        _carry_the_answers(error, request.parts is not None)
-        raise
-    answered = results.expect(finished.result, results.Predicted)
-    metadata = json.loads(finished.take(answered.metadata))
-    if ranking:
-        # The core's rows are ordered by row_index; a ranking's items keep
-        # the order the answers named them in.
-        ranked = sorted(
-            _rows(finished.take(answered.result)),
-            key=lambda row: row['answer_index'],
-        )
-        return _ranked(answered, ranked, metadata, given)
-    table = _table(finished.take(answered.result))
-    # The result's explanation, on the result's schema (T2.13).
-    explained = (table.schema.metadata or {}).get(b'explanation')
-    return _result(
-        table.to_pylist(),
-        model=answered.model,
-        request_id=answered.request_id,
-        metadata=metadata,
-        outputs=answered.outputs,
-        by_step=request.parts is not None,
-        explanation=None if explained is None else explained.decode(),
-    )
-
-
-def _result(
-    rows: list[dict[str, Any]],
-    *,
-    model: str,
-    request_id: str,
-    metadata: dict[str, Any],
-    outputs: tuple[str, ...],
-    by_step: bool,
-    explanation: str | None = None,
-) -> PredictionResult:
-    r"""The core's result rows as this client's result: each item's
-    explanation and metadata, and the result's explanation, as the core
-    gives them (T2.13)."""
-    from sdm_api.generated.tfm_api import PredictionItem
-
-    from sdm_client.result import PredictionResult
-
-    # The core's rows are ordered by row_index, as the result's frame is;
-    # its items keep the endpoint's order, as the old route's do.
-    rows = sorted(rows, key=lambda row: row['answer_index'])
-    result = PredictionResult(
-        model=model,
-        request_id=request_id,
-        items=[
-            PredictionItem(
-                row_index=row['row_index'],
-                id=_id(row),
-                forecast_step=row.get('forecast_step'),
-                prediction=_as_answered(row),
-                probabilities=None
-                if row.get('probabilities') is None
-                else dict(row['probabilities']),
-                # An item's scores and rankings (T2.8), each mapping given
-                # as the JSON text of the reference's item value: an object,
-                # or the list of its pairs where a key is not text.
-                scores=None
-                if row.get('scores') is None
-                else tuple(row['scores']),
-                rankings=None
-                if row.get('rankings') is None
-                else tuple(_mapping(text) for text in row['rankings']),
-                # Its explanation and own metadata (T2.13), each the JSON
-                # text of a mapping, read by the same reader.
-                explanation=None
-                if row.get('explanation') is None
-                else _mapping(row['explanation']),
-                metadata=None
-                if row.get('metadata') is None
-                else _mapping(row['metadata']),
-                # A regression's quantiles (T2.9), keyed as the endpoint
-                # wrote them, each value a double, read by the same reader;
-                # to_pandas spreads them as quantile_<key>.
-                quantiles=None
-                if row.get('quantiles') is None
-                else _mapping(row['quantiles']),
-                embeddings=None
-                if row.get('embeddings') is None
-                else tuple(row['embeddings']),
-            )
-            for row in rows
-        ],
-        metadata=metadata,
-        outputs=outputs,
-        explanation=_explanation(explanation, by_step),
-    )
-    # A forecast's answer names its step, rows or none (`_by_step`).
-    result._names_its_step = by_step
-    return result
-
-
-def _ranked(
-    answered: results.Predicted,
-    rows: list[dict[str, Any]],
-    metadata: dict[str, Any],
-    given: dict[int, Any],
-) -> PredictionResult:
-    r"""A ranking's result as the client gives it (``_ranked``): each row's
-    candidates, best first, as the caller gave them (``given``, by the
-    position the result names each by), under ``prediction`` and, with each
-    one's score, under ``rankings``, each where the outputs name it; the
-    candidates left out, unscored, as given (by their positions among those
-    given)."""
-    from sdm_api.generated.tfm_api import PredictionItem
-
-    from sdm_client.result import PredictionResult
-
-    wanted = answered.outputs
-    items = []
-    for row in rows:
-        chosen = [given[at] for at in row['candidates']]
-        items.append(
-            PredictionItem(
-                row_index=row['row_index'],
-                id=_id(row),
-                prediction=chosen if 'prediction' in wanted else None,
-                rankings=(
-                    tuple(
-                        {'candidate': candidate, 'score': score}
-                        for candidate, score in zip(
-                            chosen, row['scores'], strict=True
-                        )
-                    )
-                    if 'rankings' in wanted
-                    else None
-                ),
-            )
-        )
-    return PredictionResult(
-        model=answered.model,
-        request_id=answered.request_id,
-        items=items,
-        metadata=metadata,
-        outputs=wanted,
-        unscored_candidates=[given[at] for at in answered.unscored_candidates],
-    )
-
-
-def _carry_the_answers(error: Exception, by_step: bool) -> None:
-    r"""The answers received before a call failed, as the core carried them
-    on its error (T2.8c, ``main``'s 1fc5a686), put in ``error.details`` as
-    the client puts them: ``answered``, the answers received as one result,
-    and, for a request asked in several calls, ``rows_answered``, the rows
-    those calls score, beside the core's ``calls_answered``; for a
-    forecast, its steps' answers, beside the core's ``parts_answered``. The
-    error keeps its own type and code."""
-    import pyarrow as pa
-
-    carried = getattr(error, '_answered', None)
-    if carried is None:
-        return
-    delattr(error, '_answered')
-    stream, rows = carried
-    table = pa.RecordBatchReader._import_from_c_capsule(
-        stream.__arrow_c_stream__()
-    ).read_all()
-    # What the result names beside its rows travels on its schema, as text
-    # (``sdm_core::predict``'s ``carried``).
-    named = {
-        key.decode(): value.decode()
-        for key, value in (table.schema.metadata or {}).items()
-    }
-    held = getattr(error, 'details', None)
-    details = held if isinstance(held, dict) else {}
-    details['answered'] = _result(
-        table.to_pylist(),
-        model=named.get('model', ''),
-        request_id=named.get('request_id', ''),
-        metadata=json.loads(named.get('metadata', '{}')),
-        outputs=tuple(json.loads(named.get('outputs', '[]'))),
-        by_step=by_step,
-        explanation=named.get('explanation'),
-    )
-    if not by_step:
-        details['rows_answered'] = rows
-    error.details = details  # type: ignore[attr-defined]
+    return model_call

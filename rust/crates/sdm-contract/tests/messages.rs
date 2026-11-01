@@ -51,6 +51,7 @@ fn provider_choices_round_trip() {
                 null_order: Some(NullOrder::First),
                 index_advice: Some(IndexAdvice::SingleColumn),
                 sampling: Determinism::SeededStable,
+                fallback_text_order: None,
                 fallback: None,
             },
         },

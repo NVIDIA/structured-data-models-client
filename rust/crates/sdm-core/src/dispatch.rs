@@ -61,6 +61,335 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::PlanResultMerge(request) => {
+            let input: sdm_contract::result::PlanResultMerge =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::result::plan(&input.parts)?)
+            })
+        }
+        Operation::ReadResultItems(request) => {
+            Run::new(move |asker| async move { crate::result::items(&asker, request, attachments) })
+        }
+        Operation::ReadRequestSplit(request) => {
+            Run::new(move |asker| async move { crate::split::read(&asker, request, attachments) })
+        }
+        Operation::MergeResults(request) => {
+            Run::new(move |asker| async move { crate::result::merge(&asker, request, attachments) })
+        }
+        Operation::TabularArrow(request) => Run::new(move |asker| async move {
+            crate::tabular_arrow::run(asker, request, attachments, facts, zones).await
+        }),
+        Operation::FrameSession(input) => Run::new(move |asker| async move {
+            crate::frame_session::run(asker, input, attachments).await
+        }),
+        Operation::DescribeFrameTables(input) => Run::new(move |asker| async move {
+            crate::frame_schema::describe(&asker, input, attachments)
+        }),
+        Operation::PrepareFrameGraph(input) => Run::new(move |asker| async move {
+            crate::materialize::frames::prepare(&asker, input, attachments, &facts)
+        }),
+        Operation::MaterializeFrames(input) => Run::new(move |asker| async move {
+            crate::materialize::frames::materialize(asker, input, attachments, facts, zones).await
+        }),
+        Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {
+            crate::session::count_overlap(&asker, request, attachments)
+        }),
+        Operation::SendTabularSession(request) => Run::new(move |asker| async move {
+            crate::session::send(&asker, request, attachments).await
+        }),
+        Operation::PrepareTabularScore(request) => Run::new(move |asker| async move {
+            crate::session::prepare_score(&asker, request, attachments)
+        }),
+        Operation::CheckTabularSessionReply(request) => Run::new(move |asker| async move {
+            crate::session::check_reply(&asker, request, attachments)
+        }),
+        Operation::CheckTabularSessionQuestion(request) => Run::new(move |asker| async move {
+            crate::session::check_question(&asker, request, attachments)
+        }),
+        Operation::AcceptTabularSession(request) => {
+            Run::new(
+                move |asker| async move { crate::session::accept(&asker, request, attachments) },
+            )
+        }
+        Operation::PrepareTabularFit(request) => Run::new(move |asker| async move {
+            crate::session::prepare_fit(&asker, request, attachments)
+        }),
+        Operation::CloseTabularSession(request) => Run::new(move |asker| async move {
+            crate::session::close(&asker, request, attachments).await
+        }),
+        Operation::EncodeTabularTable(request) => Run::new(move |asker| async move {
+            crate::direct::encode_table(&asker, request, attachments)
+        }),
+        Operation::EncodeDirectColumn(request) => Run::new(move |asker| async move {
+            crate::direct::encode_column(&asker, request, attachments)
+        }),
+        Operation::InferDirectColumn(request) => Run::new(move |asker| async move {
+            crate::direct::infer_column(&asker, request, attachments)
+        }),
+        Operation::InferDirectTimeStart(request) => Run::new(move |asker| async move {
+            crate::direct::infer_time_start(&asker, request, attachments)
+        }),
+        Operation::ResolveDirectDtype(request) => {
+            let input: sdm_contract::direct::dtype::DtypeResolutionObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::resolve_dtype(input)?)
+            })
+        }
+        Operation::ResolveObservedTabular(request) => {
+            let input: sdm_contract::direct::ObservedTabularInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::resolve_observed(&asker, input) })
+        }
+        Operation::InspectObservedKeys(request) => Run::new(move |asker| async move {
+            crate::direct::inspect_observed_keys(&asker, request, attachments)
+        }),
+        Operation::AssembleFrameSchema(request) => {
+            let input: sdm_contract::frames::AssembleFrameSchema =
+                take_json(&mut attachments, request.input)?;
+            Run::new(
+                move |asker| async move { crate::direct::assemble_frame_schema(&asker, input) },
+            )
+        }
+        Operation::ObserveDirectSchema(request) => {
+            let input: sdm_contract::direct::schema::SchemaObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                let (result, warnings) = sdm_schema::direct::observed::observe(input)?;
+                for warning in warnings {
+                    asker.warn(warning);
+                }
+                crate::direct::value(&asker, &result)
+            })
+        }
+        Operation::CheckDirectPreparation(request) => {
+            let input: sdm_contract::direct::schema::PreparationObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::check_preparation(&asker, input) })
+        }
+        Operation::ObserveDirectDtype(request) => {
+            let input: sdm_contract::direct::dtype::DtypeObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_schema::direct::dtype::observe(input)?)
+            })
+        }
+        Operation::ObserveDirectOutputs(request) => {
+            let input: sdm_contract::direct::native_response::NativeOutputQuery =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::native_outputs(&asker, input) })
+        }
+        Operation::RestoreDirectResponse(request) => {
+            let input: sdm_contract::direct::native_response::RestorationObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::restore(input),
+                )
+            })
+        }
+        Operation::CheckDirectResponseField(request) => {
+            let input: sdm_contract::direct::native_response::NativeResponseField =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::check(input)?,
+                )
+            })
+        }
+        Operation::LayoutNativeDirect(request) => {
+            let input: sdm_contract::direct::native_response::NativeLayoutInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::layout(input)?,
+                )
+            })
+        }
+        Operation::CheckColumn(request) => {
+            let input: sdm_contract::ops::CheckColumn = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_schema::edit::check_column(&input, &crate::edit::supports)?;
+                crate::direct::value(&asker, &true)
+            })
+        }
+        Operation::CheckDirectOption(request) => {
+            let input: sdm_contract::direct::DirectOptionObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_request::tabular::check_option(&input)?;
+                crate::direct::value(&asker, &true)
+            })
+        }
+        Operation::CheckDirectCell(request) => {
+            let input: sdm_contract::direct::cell::DirectCellInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::cell::check(input)?)
+            })
+        }
+        Operation::ExpandTabularKeys(request) => {
+            let input: sdm_contract::tabular::ExpandTabularKeys =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::expand(input))
+            })
+        }
+        Operation::FilterTabularRows(request) => {
+            let input: sdm_contract::tabular::FilterTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::filter(input)?)
+            })
+        }
+        Operation::DecideTabularContext(request) => {
+            let input: sdm_contract::tabular::DecideTabularContext =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::decide(input))
+            })
+        }
+        Operation::SampleTabularRows(request) => {
+            let input: sdm_contract::tabular::SampleTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::sample(input))
+            })
+        }
+        Operation::ObserveTabularMembership(request) => {
+            let input: sdm_contract::tabular::ObserveTabularMembership =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::membership(input))
+            })
+        }
+        Operation::DecideTabularTask(request) => {
+            let input: sdm_contract::tabular::DecideTabularTask =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::decide_materialized_task(input),
+                )
+            })
+        }
+        Operation::OrderSampledTabularRows(request) => {
+            let input: sdm_contract::tabular::OrderSampledTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::order(input)?)
+            })
+        }
+        Operation::SelectTabularRows(request) => {
+            let input: sdm_contract::tabular::SelectTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::select(input)?)
+            })
+        }
+        Operation::CheckTabularCap(request) => {
+            let input: sdm_contract::tabular::CheckTabularCap =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::check_materialized_cap(input))
+            })
+        }
+        Operation::CheckDirectShape(request) => {
+            let input: sdm_contract::direct::DirectShape =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_request::direct::shape(&input)?;
+                crate::direct::value(&asker, &input)
+            })
+        }
+        Operation::PrepareDirect(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::prepare(&asker, request, attachments) },
+            )
+        }
+        Operation::BindDirect(request) => {
+            let input: sdm_contract::direct::DirectCallFacts =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::direct::bind(input)?)
+            })
+        }
+        Operation::InspectDirectPair(request) => Run::new(move |asker| async move {
+            crate::direct::inspect_pair(&asker, request, attachments)
+        }),
+        Operation::ResolveTabular(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::resolve(&asker, request, attachments) },
+            )
+        }
+        Operation::EncodeTabular(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::encode(&asker, request, attachments) },
+            )
+        }
+        Operation::DecodeDirectResponse(request) => Run::new(move |asker| async move {
+            crate::direct::decode_response(&asker, request, attachments)
+        }),
+        Operation::LayoutDirect(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::layout(&asker, request, attachments) },
+            )
+        }
+        Operation::CheckDirectRows(request) => {
+            let input: sdm_contract::direct::DirectRowsInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::check_rows(
+                        input.scope,
+                        input.rows,
+                        crate::pql::float_text,
+                    )?,
+                )
+            })
+        }
+        Operation::InterpretDirectJson(request) => {
+            let input: sdm_contract::direct::DirectJsonInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::interpret_json(input.checked, input.json)?,
+                )
+            })
+        }
+        Operation::SelectDirectMember(request) => {
+            let input: sdm_contract::direct::DirectMemberInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::select_member(
+                        input.interpreted,
+                        input.literal,
+                    )?,
+                )
+            })
+        }
+        Operation::AttributeDirectRow(request) => {
+            let input: sdm_contract::direct::DirectAttributionInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::attribute(
+                        input.selected,
+                        input.string,
+                        crate::pql::float_text,
+                    )?,
+                )
+            })
+        }
         Operation::ValidateQuery(request) => {
             let query: String = take_json(&mut attachments, request.query)?;
             let schema: QuerySchema = take_json(&mut attachments, request.schema)?;
@@ -96,7 +425,18 @@ pub fn start(
         Operation::EditSchema(request) => {
             let held: HeldSchema = take_json(&mut attachments, request.schema)?;
             let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
-            Run::new(move |asker| crate::edit::run(asker, held, edit))
+            let context = request
+                .context
+                .map(|id| take_json(&mut attachments, id))
+                .transpose()?;
+            let frame = request
+                .frame
+                .map(|id| match attachments.remove(&id) {
+                    Some(Attachment::Arrow(data)) => Ok(data),
+                    _ => Err(internal("frame edit attachment is not Arrow")),
+                })
+                .transpose()?;
+            Run::new(move |asker| crate::edit::run(asker, held, edit, context, frame))
         }
         operation @ Operation::Materialize(_) => materialize(
             root,
@@ -108,6 +448,11 @@ pub fn start(
             false,
         )?,
         Operation::Predict(request) => {
+            if request.direct.is_some() {
+                return Ok(Run::new(move |asker| {
+                    crate::direct::predict(asker, request, attachments)
+                }));
+            }
             // What predict asks: the state `materialize` answered, or a
             // request the core did not materialize, rebuilt from what the
             // host holds of it (T3.26).
@@ -386,6 +731,7 @@ pub(crate) fn materialize(
             // this provider and schema (decision E52).
             let inputs =
                 move |description, source: String, pending, types| crate::materialize::Inputs {
+                    frames: None,
                     memo: memo.filter(|memo| memo.source == source),
                     source,
                     description,

@@ -36,6 +36,12 @@ __all__ = [
     'CoreRequest',
     'Described',
     'Diagnostic',
+    'DirectValue',
+    'RequestSplitData',
+    'ResultItems',
+    'DecodedDirectResponse',
+    'NativeDirectResponse',
+    'PreparedDirectCall',
     'Edited',
     'Gathered',
     'GatheredState',
@@ -183,6 +189,30 @@ class SourceFacts:
 
 
 @dataclasses.dataclass(frozen=True)
+class QueryColumns:
+    entity_table: str
+    entity_name: str
+    target_table: str
+    target_name: str
+    target_stype: str
+
+    @classmethod
+    def from_contract(cls, value: Any) -> QueryColumns:
+        facts = _fields(
+            value, 'query columns', ('entity', 'target', 'target_stype')
+        )
+        entity = _fields(facts['entity'], 'entity column', ('table', 'column'))
+        target = _fields(facts['target'], 'target column', ('table', 'column'))
+        return cls(
+            _text(entity['table'], 'table'),
+            _text(entity['column'], 'column'),
+            _text(target['table'], 'table'),
+            _text(target['column'], 'column'),
+            _text(facts['target_stype'], 'target_stype'),
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class QueryFacts:
     r"""What the core resolved of a query (the contract's ``QueryFacts``)."""
 
@@ -191,6 +221,7 @@ class QueryFacts:
     windowed: bool
     num_forecasts: int
     text: str | None
+    columns: QueryColumns | None = None
 
     @classmethod
     def from_contract(cls, value: Any) -> QueryFacts:
@@ -198,7 +229,7 @@ class QueryFacts:
             value,
             "a query's facts",
             ('entity_table', 'windowed', 'num_forecasts'),
-            ('problem_type', 'text'),
+            ('problem_type', 'text', 'columns'),
         )
         return cls(
             entity_table=_text(read['entity_table'], 'entity_table'),
@@ -206,6 +237,9 @@ class QueryFacts:
             windowed=_flag(read['windowed'], 'windowed'),
             num_forecasts=_int(read['num_forecasts'], 'num_forecasts'),
             text=_maybe(read['text'], _text, 'text'),
+            columns=None
+            if read['columns'] is None
+            else QueryColumns.from_contract(read['columns']),
         )
 
 
@@ -487,6 +521,107 @@ class Predicted:
     unscored_candidates: tuple[int, ...]
 
 
+@dataclasses.dataclass(frozen=True)
+class DirectValue:
+    """A core-owned typed direct description, call or row value."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ResultItemSegment:
+    """One projected Arrow segment with uniform field encodings."""
+
+    table: int
+    fields: tuple[tuple[str, str], ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class ResultItems:
+    """Segments in semantic answer order."""
+
+    segments: tuple[ResultItemSegment, ...]
+
+
+def _result_item_segment(read: dict[str, Any]) -> ResultItemSegment:
+    fields = []
+    names: set[str] = set()
+    for value in _list(read['fields'], 'fields'):
+        entry = _fields(value, 'result field', ('name', 'encoding'))
+        name = _text(entry['name'], 'name')
+        encoding = _text(entry['encoding'], 'encoding')
+        if (
+            not name
+            or name in names
+            or encoding
+            not in {
+                'native',
+                'value',
+                'mapping',
+                'mappings',
+                'candidate_list',
+                'candidate_rankings',
+            }
+        ):
+            raise CodecError('invalid or repeated result field descriptor')
+        names.add(name)
+        fields.append((name, encoding))
+    return ResultItemSegment(_int(read['table'], 'table'), tuple(fields))
+
+
+def _result_items(read: dict[str, Any]) -> ResultItems:
+    return ResultItems(
+        tuple(
+            _result_item_segment(
+                _fields(value, 'item segment', ('table', 'fields'))
+            )
+            for value in _list(read['segments'], 'segments')
+        )
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class RequestSplitData:
+    """Arrow attachments for one inspected request half, in table order."""
+
+    instance: int | None
+    related: tuple[tuple[str, int | None], ...]
+
+
+def _request_split(read: dict[str, Any]) -> RequestSplitData:
+    related = []
+    names: set[str] = set()
+    for value in _list(read['related_tables'], 'related_tables'):
+        entry = _fields(value, 'related table', ('name', 'data'))
+        name = _text(entry['name'], 'name')
+        if not name or name in names:
+            raise CodecError('related table names are empty or repeated')
+        names.add(name)
+        related.append((name, _maybe(entry['data'], _int, 'data')))
+    return RequestSplitData(
+        _maybe(read['instance'], _int, 'instance'), tuple(related)
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class PreparedDirectCall:
+    """An unsent logical direct call with retained native inference options."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
+class NativeDirectResponse:
+    """The reply requires the host's retained native response owners."""
+
+
+@dataclasses.dataclass(frozen=True)
+class DecodedDirectResponse:
+    """Decoded model data before reached native ID conversion."""
+
+    value: int
+
+
 def _predicted(read: dict[str, Any]) -> Predicted:
     return Predicted(
         result=_int(read['result'], 'result'),
@@ -506,7 +641,19 @@ def _predicted(read: dict[str, Any]) -> Predicted:
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class PreparedFrameGraph:
+    graph: int
+
+
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
+    'request_split': (('instance', 'related_tables'), (), _request_split),
+    'result_items': (('segments',), (), _result_items),
+    'prepared_frame_graph': (
+        ('graph',),
+        (),
+        lambda read: PreparedFrameGraph(_int(read['graph'], 'graph')),
+    ),
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
     'describe_source': (('description',), ('notes',), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
@@ -522,6 +669,22 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
             ),
         ),
     ),
+    'direct_value': (
+        ('value',),
+        (),
+        lambda read: DirectValue(_int(read['value'], 'value')),
+    ),
+    'prepared_direct_call': (
+        ('value',),
+        (),
+        lambda read: PreparedDirectCall(_int(read['value'], 'value')),
+    ),
+    'native_direct_response': ((), (), lambda read: NativeDirectResponse()),
+    'decoded_direct_response': (
+        ('value',),
+        (),
+        lambda read: DecodedDirectResponse(_int(read['value'], 'value')),
+    ),
     'predict': (
         ('result', 'model', 'request_id', 'metadata', 'outputs'),
         ('unscored_candidates',),
@@ -532,7 +695,19 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
 
 def decode(
     result: Any,
-) -> Validated | Described | Edited | Gathered | Predicted:
+) -> (
+    Validated
+    | Described
+    | Edited
+    | Gathered
+    | Predicted
+    | DirectValue
+    | PreparedDirectCall
+    | DecodedDirectResponse
+    | NativeDirectResponse
+    | RequestSplitData
+    | ResultItems
+):
     r"""The result a ``done`` step carries, decoded once.
 
     Raises:
@@ -551,11 +726,37 @@ def decode(
         required,
         optional,
     )
-    built: Validated | Described | Edited | Gathered | Predicted = build(read)
+    built: (
+        Validated
+        | Described
+        | Edited
+        | Gathered
+        | Predicted
+        | DirectValue
+        | PreparedDirectCall
+        | DecodedDirectResponse
+        | NativeDirectResponse
+        | RequestSplitData
+        | ResultItems
+    ) = build(read)
     return built
 
 
-_T = TypeVar('_T', Validated, Described, Edited, Gathered, Predicted)
+_T = TypeVar(
+    '_T',
+    PreparedFrameGraph,
+    Validated,
+    Described,
+    Edited,
+    Gathered,
+    Predicted,
+    DirectValue,
+    DecodedDirectResponse,
+    NativeDirectResponse,
+    PreparedDirectCall,
+    RequestSplitData,
+    ResultItems,
+)
 
 
 def expect(result: Any, kind: type[_T]) -> _T:
@@ -658,6 +859,7 @@ class CoreQuery:
     text: str
     num_forecasts: int | None
     refusal: StructuredDataError | None
+    columns: QueryColumns | None = None
 
     def to_string(self) -> str:
         r"""The query's text, which materialize sends."""

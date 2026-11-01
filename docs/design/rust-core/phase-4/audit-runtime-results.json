@@ -1,0 +1,506 @@
+{
+  "baseline": "cb64d1cca",
+  "python": {
+    "pytest_exit": 0,
+    "contract": 50,
+    "cases": [
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_labels_and_related_rows_obey_each_example_time[duckdb-integer]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_labels_and_related_rows_obey_each_example_time[duckdb-large_integer]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_labels_and_related_rows_obey_each_example_time[duckdb-text]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_labels_and_related_rows_obey_each_example_time[sqlite-integer]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_labels_and_related_rows_obey_each_example_time[sqlite-large_integer]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_labels_and_related_rows_obey_each_example_time[sqlite-text]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_prediction_and_session_results_use_rankings[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_link_prediction_and_session_results_use_rankings[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_rank_top_keeps_candidate_classification_path[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_links_core.py::test_rank_top_keeps_candidate_classification_path[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_warehouse_public_lifecycle_preserves_rows_and_related_holdout[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_warehouse_public_lifecycle_preserves_rows_and_related_holdout[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_warehouse_changed_question_and_failed_delete[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_warehouse_changed_question_and_failed_delete[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_dataclass_inference_is_observed_without_iterating_it[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_dataclass_inference_is_observed_without_iterating_it[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_temporal_session_keeps_anchor_and_holdout_identity[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_temporal_session_keeps_anchor_and_holdout_identity[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_multiple_contexts_refused_before_upload[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_multiple_contexts_refused_before_upload[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_fit_refusal_retains_column_advice[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_fit_refusal_retains_column_advice[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[duckdb]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[sqlite]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[postgres]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[databricks-sql]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[databricks-spark]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[databricks-metric-view]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[snowflake]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[snowflake-semantic-view]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently[lakebase]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": false,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_frame_materialize_core.py::test_static_frame_materialization_is_repeatable",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_materialize_core.py::test_temporal_frame_materialization",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization[False]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization[True]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_materialize_fit_holdout_predict_close_and_request_isolation",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_session_refuses_changed_question_and_retries_failed_close",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_session_reports_pinned_answer_overlap",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_later_scoring_failure_retains_paid_answers",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_session_id_fallback[None]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_session_id_fallback[]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_fit_explanation_validates_context_then_score_validates_rows",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_holding_back_all_context_is_refused_before_upload",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_empty_explanation_score_is_local_and_new_context_is_not_validated",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_session_string_holdout_is_refused",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_frame_sessions_core.py::test_session_unsupported_endpoint_is_explained",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": true
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_fit_two_scores_holdout_and_idempotent_close",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_empty_scoring_does_not_send_model_call",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_failed_delete_remains_retryable",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_client_cleanup_closes_transport_after_delete_failure",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_existing_file_reader_feeds_fitted_predictions[csv]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_existing_file_reader_feeds_fitted_predictions[parquet]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_fit_resolves_both_frames_and_later_scores_use_pinned_types",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_incompatible_pinned_column_fails_before_scoring_call",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_holdout_does_not_round_high_precision_entity_identity",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_ordinary_session_replies_are_batched",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_session_reply_preserves_nested_native_owners[False]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_session_reply_preserves_nested_native_owners[True]",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_session_string_holdout_is_refused",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_session_unsupported_endpoint_is_explained",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      },
+      {
+        "case": "tests/test_tabular_sessions_core.py::test_session_missing_identifier_is_refused",
+        "legacy_computation_traps": [],
+        "rust_host_seen": true,
+        "legacy_validator_seen": false
+      }
+    ]
+  },
+  "java": {
+    "tests": "9",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "expected_gap_cases": 4,
+    "positive_functionality_cases": 5,
+    "jdk": "21.0.12.1+1",
+    "native_identity": "java-native-identity.json",
+    "log": "java-audit-r4.log",
+    "tests_source": "java/src/test/java/com/nvidia/sdm/Phase4CoverageAuditTest.java",
+    "native": {
+      "source_commit": "5083e9fabd1d8e536441e6a6ab30ba46442395de",
+      "rust_tree": "35c508dc5c63948a6dc82264eef74c17ddea7809",
+      "native_path": "/home/awadaskar/.cache/sdm-target/t44-r8-parallel/debug/libsdm_jni.so",
+      "sha256": "d7df175e034ef3ccc31809011ca8aa4809e83e81b2ef35eacf22a9476e54a0d9",
+      "features": [
+        "test-ops"
+      ],
+      "toolchain": "1.97.0"
+    }
+  },
+  "shadow_probe": [
+    {
+      "source": "frames",
+      "model": "KumoRelational",
+      "ok": true,
+      "legacy_validator_calls": 1
+    },
+    {
+      "source": "frames",
+      "model": "KumoTabular",
+      "ok": true,
+      "legacy_validator_calls": 1
+    },
+    {
+      "source": "duckdb",
+      "model": "KumoRelational",
+      "ok": true,
+      "legacy_validator_calls": 0
+    }
+  ],
+  "schema_edit_probe": [
+    {
+      "source": "frames",
+      "stype": "categorical",
+      "python_dtype_policy_calls": 1,
+      "rust_edit_calls": 0,
+      "calls": {
+        "schema.py:__getitem__": 2,
+        "schema.py:__setattr__": 1,
+        "schema.py:_described_on_the_core": 1,
+        "schema.py:<genexpr>": 66,
+        "schema.py:_check_stype": 1,
+        "schema.py:_check_supports_dtype": 1,
+        "schema.py:supports_dtype": 1,
+        "schema.py:language_dtype": 1,
+        "schema.py:_dtype_names": 1,
+        "schema.py:_the_core": 2,
+        "schema.py:_native_dtype_names": 1,
+        "schema.py:_meanings": 1,
+        "schema.py:_stay_a_key_if_the_schema_joins_on_this": 1,
+        "schema.py:_mark_key_columns": 1,
+        "schema.py:_own_tables": 1,
+        "schema.py:_own_columns": 1,
+        "schema.py:_as_key_tuple": 1,
+        "schema.py:_mark_as_key": 1,
+        "schema.py:_release_as_key": 1
+      }
+    },
+    {
+      "source": "duckdb",
+      "stype": "categorical",
+      "python_dtype_policy_calls": 0,
+      "rust_edit_calls": 1,
+      "calls": {
+        "schema.py:__getitem__": 2,
+        "schema.py:__setattr__": 1,
+        "schema.py:_described_on_the_core": 2,
+        "schema.py:<genexpr>": 2,
+        "_rust/edits.py:<module>": 1,
+        "_rust/edits.py:column": 1,
+        "_rust/edits.py:_schema_holding": 1,
+        "_rust/edits.py:<genexpr>": 5,
+        "_rust/codec.py:given_text": 1,
+        "_rust/codec.py:given": 1,
+        "_rust/edits.py:_made": 1,
+        "_rust/spec.py:held_schema": 1,
+        "schema.py:tables": 3,
+        "_rust/results.py:to_contract": 2,
+        "_rust/codec.py:relation": 1,
+        "schema.py:_as_key_tuple": 2,
+        "_rust/codec.py:integer": 2,
+        "_rust/spec.py:_links": 1,
+        "schema.py:links_of": 1,
+        "_rust/codec.py:attachment": 2,
+        "_rust/codec.py:written": 2,
+        "_rust/run.py:run": 1,
+        "_rust/run.py:native": 1,
+        "_rust/facts.py:host_facts": 1,
+        "_rust/facts.py:zone_roots": 1,
+        "_rust/facts.py:_system_version": 1,
+        "_rust/codec.py:timestamp": 1,
+        "_rust/facts.py:local_zone": 1,
+        "_rust/facts.py:platform": 1,
+        "_rust/facts.py:date_literal_range": 1,
+        "_rust/codec.py:encode": 1,
+        "_rust/run.py:_steps": 1,
+        "_rust/run.py:_warn": 1,
+        "_rust/codec.py:read": 1,
+        "_rust/codec.py:_json": 1,
+        "_rust/run.py:__init__": 1,
+        "_rust/results.py:expect": 1,
+        "_rust/results.py:decode": 1,
+        "_rust/results.py:_fields": 4,
+        "_rust/results.py:_edited": 1,
+        "_rust/results.py:_text": 6,
+        "_rust/results.py:_int": 1,
+        "_rust/run.py:take": 1,
+        "_rust/edits.py:_store": 1,
+        "schema.py:_own_tables": 1,
+        "schema.py:_own_columns": 1,
+        "_rust/codec.py:decode_scalar": 1,
+        "_rust/codec.py:_digits": 1,
+        "_rust/results.py:from_contract": 2,
+        "_rust/results.py:_flag": 4,
+        "_rust/results.py:_maybe": 4
+      }
+    }
+  ],
+  "trace_scope": "Main-thread pytest test bodies only; fixture setup/teardown and other threads excluded. Nine cases are route checks without Rust host execution."
+}

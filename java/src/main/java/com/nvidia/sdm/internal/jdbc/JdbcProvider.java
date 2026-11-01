@@ -35,23 +35,23 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * <ul>
  *   <li>how a key set the plan names is bound ({@link KeySets}): DuckDB registers it as Arrow and
  *       keeps it as a temporary table, SQLite ingests it as a temporary table as ADBC does,
- *       Postgres binds the JSON text the core wrote of it (T3.28), handed over as one text cell,
- *       as the statement's one parameter, as it was handed; Databricks binds each statement's
- *       values to its {@code ?} markers in order, a text scalar and a key set's text alike, as
- *       Python's Databricks provider binds them (T3.13);
+ *       Postgres binds the JSON text the core wrote of it (T3.28), handed over as one text cell, as
+ *       the statement's one parameter, as it was handed; Databricks binds each statement's values
+ *       to its {@code ?} markers in order, a text scalar and a key set's text alike, as Python's
+ *       Databricks provider binds them (T3.13);
  *   <li>how a result becomes Arrow: the driver's column of the conversion table ({@link
  *       ConversionTable}).
  * </ul>
  *
  * A plan this provider cannot run (one for a host provider, one of another dialect, one with a
- * scalar parameter (on Databricks, one no driver value here holds), one naming a key set it was
- * not handed, two key sets under one name, a key set's Arrow on Postgres or Databricks, or a text
- * on DuckDB or SQLite) is refused by an exception whose text names no value, and the run loop
- * hands the core a provider error.
+ * scalar parameter (on Databricks, one no driver value here holds), one naming a key set it was not
+ * handed, two key sets under one name, a key set's Arrow on Postgres or Databricks, or a text on
+ * DuckDB or SQLite) is refused by an exception whose text names no value, and the run loop hands
+ * the core a provider error.
  *
  * <p>A failure is told to the core by the facts it carries ({@link #failure}): the driver's
- * SQLSTATE and vendor code, and on Databricks its error class, read as Python's Databricks
- * provider reads them ({@code error_fields}). Not part of the API.
+ * SQLSTATE and vendor code, and on Databricks its error class, read as Python's Databricks provider
+ * reads them ({@code error_fields}). Not part of the API.
  */
 public final class JdbcProvider implements Host.Provider {
   /** The databases this provider reads, by the dialect the core names each by. */
@@ -59,7 +59,8 @@ public final class JdbcProvider implements Host.Provider {
     DUCKDB("duckdb"),
     SQLITE("sqlite"),
     POSTGRES("postgres"),
-    DATABRICKS("databricks");
+    DATABRICKS("databricks"),
+    SNOWFLAKE("snowflake");
 
     private final String dialect;
 
@@ -143,8 +144,14 @@ public final class JdbcProvider implements Host.Provider {
           throw new PlanNotRun("an unsupported SQL result conversion");
         }
       }
-      return databricks(databricksPlanned(statements, keys), texts(keys),
-          (List<Map<String, Object>>) conversions, allocator);
+      return qmark(
+          databricksPlanned(statements, keys),
+          texts(keys),
+          (List<Map<String, Object>>) conversions,
+          allocator);
+    }
+    if (driver == Driver.SNOWFLAKE) {
+      return qmark(qmarkPlanned(statements, keys, driver), texts(keys), List.of(), allocator);
     }
     List<Planned> planned = new ArrayList<>();
     Map<String, Integer> relations = new LinkedHashMap<>();
@@ -197,8 +204,39 @@ public final class JdbcProvider implements Host.Provider {
       case DUCKDB -> duckdb(planned, relations, read(keys), allocator);
       case SQLITE -> sqlite(planned, relations, read(keys), allocator);
       case POSTGRES -> postgres(planned, texts(keys), allocator);
-      case DATABRICKS -> throw new PlanNotRun("a Databricks plan is read above");
+      case DATABRICKS, SNOWFLAKE -> throw new PlanNotRun("a qmark warehouse plan is read above");
     };
+  }
+
+  /** Read caller SQL on the same connection, including its temporary tables. */
+  public ArrowReader readQuery(String sql, BufferAllocator allocator) throws Exception {
+    if (driver == Driver.POSTGRES) {
+      return postgres(List.of(new Planned(sql, Map.of(), null)), Map.of(), allocator);
+    }
+    if (driver == Driver.DUCKDB) {
+      Statement statement = connection.createStatement();
+      ResultSet rows = null;
+      try {
+        statement.setEscapeProcessing(false);
+        rows = statement.executeQuery(sql);
+        return DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS, rows, statement);
+      } catch (Exception | Error failure) {
+        closeAfterFailure(failure, rows, statement);
+        throw failure;
+      }
+    }
+    try (Statement statement = connection.createStatement()) {
+      statement.setEscapeProcessing(false);
+      try (ResultSet rows = statement.executeQuery(sql)) {
+        return switch (driver) {
+          case DUCKDB -> throw new IllegalStateException("DuckDB is handled above");
+          case SQLITE -> built(ConversionTable.sqlite(rows), allocator);
+          case SNOWFLAKE -> built(SnowflakeValues.read(rows, connection), allocator);
+          case DATABRICKS -> built(ConversionTable.databricks(rows), allocator);
+          case POSTGRES -> throw new IllegalStateException("Postgres is handled above");
+        };
+      }
+    }
   }
 
   /** Each key set read once, whole: a key set is the core's, and small. */
@@ -211,7 +249,7 @@ public final class JdbcProvider implements Host.Provider {
   }
 
   /** Each key set's text read once: the one cell the core wrote ({@link KeySets#text}). */
-  private static Map<Integer, String> texts(Map<Integer, ArrowReader> keys) throws Exception {
+  static Map<Integer, String> texts(Map<Integer, ArrowReader> keys) throws Exception {
     Map<Integer, String> texts = new LinkedHashMap<>();
     for (Map.Entry<Integer, ArrowReader> each : keys.entrySet()) {
       texts.put(each.getKey(), KeySets.text(each.getValue()));
@@ -233,31 +271,43 @@ public final class JdbcProvider implements Host.Provider {
       BufferAllocator allocator)
       throws Exception {
     Trace trace = Trace.installed();
-    try (Connection cursor = DuckDb.duplicate(connection)) {
-      if (trace != null) {
-        trace.cursor(0);
-      }
+    Connection cursor = DuckDb.duplicate(connection);
+    Statement statement = null;
+    ResultSet rows = null;
+    ArrowReader answer = null;
+    try {
+      if (trace != null) trace.cursor(0);
       for (Map.Entry<String, Integer> relation : relations.entrySet()) {
         keySets.bind(cursor, relation.getKey(), keys.get(relation.getValue()), allocator);
       }
-      try (Statement statement = cursor.createStatement()) {
-        for (int at = 0; at < planned.size() - 1; at++) {
-          run(statement, planned.get(at).text(), trace);
-        }
-        String last = planned.get(planned.size() - 1).text();
-        if (trace != null) {
-          trace.statement(0, last);
-        }
-        try (ResultSet rows = statement.executeQuery(last)) {
-          List<Map<String, Object>> types = types(rows, trace);
-          return answered(
-              DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS), types, allocator, trace);
-        } catch (SQLException e) {
-          if (trace != null) {
-            trace.statementFailed(e.getClass().getName());
-          }
-          throw e;
-        }
+      statement = cursor.createStatement();
+      for (int at = 0; at < planned.size() - 1; at++) {
+        run(statement, planned.get(at).text(), trace);
+      }
+      String last = planned.get(planned.size() - 1).text();
+      if (trace != null) trace.statement(0, last);
+      rows = statement.executeQuery(last);
+      List<Map<String, Object>> types = types(rows, trace);
+      answer = DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS, rows, statement, cursor);
+      return answered(answer, types, allocator, trace);
+    } catch (Exception | Error failure) {
+      if (trace != null && failure instanceof SQLException) {
+        trace.statementFailed(failure.getClass().getName());
+      }
+      if (answer == null) closeAfterFailure(failure, rows, statement, cursor);
+      else closeAfterFailure(failure, answer);
+      throw failure;
+    }
+  }
+
+  /** Close every acquired resource while preserving the operation's original failure. */
+  private static void closeAfterFailure(Throwable failure, AutoCloseable... resources) {
+    for (AutoCloseable resource : resources) {
+      if (resource == null) continue;
+      try {
+        resource.close();
+      } catch (Throwable error) {
+        failure.addSuppressed(error);
       }
     }
   }
@@ -341,10 +391,7 @@ public final class JdbcProvider implements Host.Provider {
   }
 
   private ArrowReader postgresRead(
-      List<Planned> planned,
-      Map<Integer, String> keys,
-      BufferAllocator allocator,
-      Trace trace)
+      List<Planned> planned, Map<Integer, String> keys, BufferAllocator allocator, Trace trace)
       throws Exception {
     boolean managed = !connection.getAutoCommit();
     Savepoint savepoint =
@@ -413,8 +460,7 @@ public final class JdbcProvider implements Host.Provider {
       return plain;
     }
     String bound = keys.get(statement.keyText());
-    PreparedStatement prepared =
-        connection.prepareStatement(KeySets.jdbcText(statement.text()));
+    PreparedStatement prepared = connection.prepareStatement(KeySets.jdbcText(statement.text()));
     try {
       PgSession.inText(prepared);
       prepared.setString(1, bound);
@@ -480,7 +526,6 @@ public final class JdbcProvider implements Host.Provider {
       }
       return intervalStyle;
     }
-
   }
 
   // --- Databricks -----------------------------------------------------------------------
@@ -494,12 +539,18 @@ public final class JdbcProvider implements Host.Provider {
    * attachment ({@link KeyText}).
    */
   @SuppressWarnings("unchecked")
-  private static List<DatabricksStatement> databricksPlanned(
+  static List<BoundStatement> databricksPlanned(
       List<Object> statements, Map<Integer, ArrowReader> keys) throws PlanNotRun {
-    List<DatabricksStatement> planned = new ArrayList<>();
+    return qmarkPlanned(statements, keys, Driver.DATABRICKS);
+  }
+
+  @SuppressWarnings("unchecked")
+  static List<BoundStatement> qmarkPlanned(
+      List<Object> statements, Map<Integer, ArrowReader> keys, Driver driver) throws PlanNotRun {
+    List<BoundStatement> planned = new ArrayList<>();
     for (Object item : statements) {
       Map<String, Object> statement = (Map<String, Object>) item;
-      if (!Driver.DATABRICKS.dialect().equals(statement.get("dialect"))) {
+      if (!driver.dialect().equals(statement.get("dialect"))) {
         throw new PlanNotRun("a plan with no statement or another dialect");
       }
       List<Object> values = new ArrayList<>();
@@ -507,7 +558,11 @@ public final class JdbcProvider implements Host.Provider {
         Map<String, Object> param = (Map<String, Object>) p;
         Object kind = param.get("param");
         if ("value".equals(kind)) {
-          values.add(bindable(param.get("value")));
+          Object scalar = param.get("value");
+          if (driver == Driver.SNOWFLAKE
+              && scalar instanceof Map<?, ?> value
+              && "null".equals(value.get("t"))) values.add(null);
+          else values.add(bindable(scalar));
         } else if ("text".equals(kind)) {
           int attachment = ((Number) param.get("attachment")).intValue();
           if (!keys.containsKey(attachment)) {
@@ -515,18 +570,18 @@ public final class JdbcProvider implements Host.Provider {
           }
           values.add(new KeyText(attachment));
         } else if ("key_set".equals(kind)) {
-          throw new PlanNotRun("a key set Databricks binds only as the text the core wrote of it");
+          throw new PlanNotRun("a key set this driver binds only as the text the core wrote of it");
         } else {
           throw new PlanNotRun("a parameter of an unknown kind");
         }
       }
-      planned.add(new DatabricksStatement(String.valueOf(statement.get("text")), values));
+      planned.add(new BoundStatement(String.valueOf(statement.get("text")), values));
     }
     return planned;
   }
 
-  /** One Databricks statement: its text, and its values in order. */
-  private record DatabricksStatement(String text, List<Object> values) {}
+  /** One qmark statement: its text, and its values in order. */
+  record BoundStatement(String text, List<Object> values) {}
 
   /**
    * A contract scalar as the value the driver binds: text, a boolean, a whole number or a double;
@@ -552,14 +607,15 @@ public final class JdbcProvider implements Host.Provider {
 
   /**
    * The statements run in order on the connection, as Python's provider runs them on one cursor:
-   * one binding no value run as its text alone, with no escape processing, so its text reaches
-   * the warehouse as the core wrote it; one binding values prepared with them, each to its
-   * {@code ?} marker in order. The last one's rows are read by the Databricks column of the
-   * conversion table.
+   * one binding no value run as its text alone, with no escape processing, so its text reaches the
+   * warehouse as the core wrote it; one binding values prepared with them, each to its {@code ?}
+   * marker in order. The last one's rows are read through the selected driver's Arrow adapter.
    */
-  private ArrowReader databricks(
-      List<DatabricksStatement> planned, Map<Integer, String> keys,
-      List<Map<String, Object>> conversions, BufferAllocator allocator)
+  private ArrowReader qmark(
+      List<BoundStatement> planned,
+      Map<Integer, String> keys,
+      List<Map<String, Object>> conversions,
+      BufferAllocator allocator)
       throws Exception {
     Trace trace = Trace.installed();
     if (trace != null) {
@@ -567,19 +623,28 @@ public final class JdbcProvider implements Host.Provider {
     }
     ArrowReader answer = null;
     for (int at = 0; at < planned.size(); at++) {
-      DatabricksStatement statement = planned.get(at);
+      BoundStatement statement = planned.get(at);
       boolean last = at == planned.size() - 1;
       if (trace != null) {
         trace.statement(0, statement.text());
       }
-      try (Statement prepared = databricksStatement(statement, keys)) {
+      try (Statement prepared = boundStatement(statement, keys)) {
         if (!last) {
           execute(prepared, statement.text());
           continue;
         }
         try (ResultSet rows = executeQuery(prepared, statement.text())) {
           List<Map<String, Object>> types = types(rows, trace);
-          answer = answered(built(ConversionTable.databricks(rows, conversions), allocator), types, allocator, trace);
+          answer =
+              answered(
+                  built(
+                      driver == Driver.SNOWFLAKE
+                          ? SnowflakeValues.read(rows, connection)
+                          : ConversionTable.databricks(rows, conversions),
+                      allocator),
+                  types,
+                  allocator,
+                  trace);
         }
       } catch (SQLException e) {
         if (trace != null) {
@@ -591,7 +656,7 @@ public final class JdbcProvider implements Host.Provider {
     return answer;
   }
 
-  private Statement databricksStatement(DatabricksStatement statement, Map<Integer, String> keys)
+  private Statement boundStatement(BoundStatement statement, Map<Integer, String> keys)
       throws SQLException {
     if (statement.values().isEmpty()) {
       Statement plain = connection.createStatement();
@@ -607,7 +672,9 @@ public final class JdbcProvider implements Host.Provider {
     try {
       int at = 1;
       for (Object value : statement.values()) {
-        if (value instanceof KeyText text) {
+        if (value == null) {
+          prepared.setNull(at, java.sql.Types.NULL);
+        } else if (value instanceof KeyText text) {
           prepared.setString(at, keys.get(text.attachment()));
         } else if (value instanceof String text) {
           prepared.setString(at, text);
@@ -640,8 +707,8 @@ public final class JdbcProvider implements Host.Provider {
       Pattern.compile("\\[([A-Z0-9_]+(?:\\.[A-Z0-9_]+)*)\\]");
 
   /**
-   * What {@code failure} tells the core ({@code ProviderError}'s facts), each where it says one:
-   * a driver's {@link SQLException}'s SQLSTATE ({@code sqlstate}) and vendor code ({@code
+   * What {@code failure} tells the core ({@code ProviderError}'s facts), each where it says one: a
+   * driver's {@link SQLException}'s SQLSTATE ({@code sqlstate}) and vendor code ({@code
    * vendor_code}); on Databricks, the SQLSTATE its message writes where the driver gives none, and
    * the error class its message names ({@code error_class}), as Python's provider reads them
    * ({@code sql_state}, {@code error_class}), from the message before the statement Databricks
@@ -656,8 +723,7 @@ public final class JdbcProvider implements Host.Provider {
     if (sql.getMessage() != null) {
       facts.put("driver_message", sql.getMessage());
     }
-    String head =
-        sql.getMessage() == null ? "" : SQL_CONTEXT.split(sql.getMessage(), 2)[0];
+    String head = sql.getMessage() == null ? "" : SQL_CONTEXT.split(sql.getMessage(), 2)[0];
     String state = sql.getSQLState();
     if ((state == null || state.isBlank()) && driver == Driver.DATABRICKS) {
       Matcher found = SQL_STATE.matcher(head);
@@ -721,8 +787,7 @@ public final class JdbcProvider implements Host.Provider {
   }
 
   /** Each column of {@code rows} as the driver describes it, for a listener. */
-  private static List<Map<String, Object>> types(ResultSet rows, Trace trace)
-      throws SQLException {
+  private static List<Map<String, Object>> types(ResultSet rows, Trace trace) throws SQLException {
     if (trace == null) {
       return null;
     }
@@ -740,10 +805,7 @@ public final class JdbcProvider implements Host.Provider {
 
   /** The answer, told to the listener read whole when there is one. */
   private static ArrowReader answered(
-      ArrowReader answer,
-      List<Map<String, Object>> types,
-      BufferAllocator allocator,
-      Trace trace) {
+      ArrowReader answer, List<Map<String, Object>> types, BufferAllocator allocator, Trace trace) {
     if (trace == null) {
       return answer;
     }

@@ -6,8 +6,8 @@ package com.nvidia.sdm.internal;
 
 /**
  * A control message the core wrote, as the native library hands it over: its control bytes, and
- * the attachments it names by id, each a {@code byte[]} or a {@link NativeArrow}. Whoever takes a
- * {@link NativeArrow} from it owns it and closes it; {@link #close} closes those not taken. Not
+ * the attachments it names by id: bytes, Arrow data or a retained graph. Whoever takes an
+ * owned attachment closes it; {@link #close} closes those not taken. Not
  * part of the API.
  */
 public final class NativeMessage implements AutoCloseable {
@@ -56,13 +56,16 @@ public final class NativeMessage implements AutoCloseable {
     return ids.clone();
   }
 
-  /** Closes every Arrow attachment no one took. */
+  /** Closes every native attachment no one took. */
   @Override
   public synchronized void close() {
     for (int i = 0; i < values.length; i++) {
       if (values[i] instanceof NativeArrow arrow) {
         values[i] = null;
         arrow.close();
+      } else if (values[i] instanceof NativeFrameGraph graph) {
+        values[i] = null;
+        graph.close();
       }
     }
   }

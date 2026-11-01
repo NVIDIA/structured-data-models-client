@@ -13,6 +13,7 @@ back is read.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import math
@@ -97,11 +98,32 @@ class Endpoints:
         return type('Endpoint', (), {'state': state})()
 
 
+class ApiClient:
+    """The SDK's raw request interface used by Rust-authored envelopes."""
+
+    def __init__(self, workspace: Workspace) -> None:
+        self.workspace = workspace
+
+    def do(
+        self, method: str, path: str, *, headers: Any, data: Any, raw: bool
+    ) -> Any:
+        assert method == 'POST'
+        assert path == f'/serving-endpoints/{ENDPOINT}/invocations'
+        assert headers == {'Content-Type': 'application/json'}
+        assert raw is True
+        body = json.loads(data.read())
+        answer = self.workspace.serving_endpoints.query(name=ENDPOINT, **body)
+        if hasattr(answer, 'as_dict'):
+            answer = answer.as_dict()
+        return {'contents': io.BytesIO(json.dumps(answer).encode())}
+
+
 class Workspace:
     """Fails loudly on anything the transport should not reach for."""
 
     def __init__(self, **kwargs: Any) -> None:
         self.serving_endpoints = Endpoints(**kwargs)
+        self.api_client = ApiClient(self)
 
     def __getattr__(self, name: str) -> Any:
         raise AssertionError(f'transport reached for WorkspaceClient.{name}')
@@ -194,7 +216,6 @@ def test_a_reply_that_is_not_one_row_is_a_transport_error():
 def test_a_question_asked_in_parts_is_one_call_per_part():
     """A forecast has no task on the endpoint and is asked once per step;
     each step is its own serving call."""
-    pytest.importorskip('sdm_relational_engine')
     request = forecast_request()
     assert request.parts is not None
 

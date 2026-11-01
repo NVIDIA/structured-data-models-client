@@ -111,15 +111,69 @@ pub(crate) async fn run(
     asker: Asker,
     held: HeldSchema,
     edit: SchemaEdit,
+    context: Option<sdm_contract::ops::SchemaEditContext>,
+    frame: Option<crate::ArrowData>,
 ) -> Result<OperationResult, CoreError> {
-    // Edits read no data: a column the source was never asked of is edited
-    // by its data type, as the reference's setters edit any column.
-    let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
-    let edited = sdm_schema::edit::edit(read.description, &edit, &supports, &read.types)?;
+    // Source edits perform no reads. Frame edits may receive a whole Arrow table
+    // or native observations, but never ask the host to execute schema policy.
+    if frame.is_some() && (context.is_none() || !matches!(&edit, SchemaEdit::PrimaryKey { .. })) {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "Arrow edit data requires a frame primary-key edit",
+        ));
+    }
+    if frame.is_some()
+        && let Some(sdm_contract::ops::SchemaEditContext::Frames { key_counts }) = &context
+        && !key_counts.is_empty()
+    {
+        return Err(CoreError::protocol(
+            sdm_contract::Sentence::InvalidMessage,
+            "frame edit provides both Arrow data and native counts",
+        ));
+    }
+    let read = if matches!(
+        &context,
+        Some(sdm_contract::ops::SchemaEditContext::Frames { .. })
+    ) {
+        sdm_schema::held::read_frame(held, true)?
+    } else {
+        sdm_schema::held::read(held, &BTreeMap::new(), true)?
+    };
+    let mut edited =
+        sdm_schema::edit::edit(read.description.clone(), &edit, &supports, &read.types)?;
+    if let Some(sdm_contract::ops::SchemaEditContext::Frames { key_counts }) = context
+        && let SchemaEdit::PrimaryKey { table, .. } = &edit
+    {
+        let shape = edited
+            .description
+            .tables
+            .iter_mut()
+            .find(|shape| &shape.name == table)
+            .ok_or_else(|| internal("edited frame table is absent"))?;
+        if !shape.primary_key.is_empty() {
+            let observed;
+            let count = if let Some(frame) = frame {
+                let frame = crate::arrow_logical::logical(frame)?;
+                observed = sdm_schema::keys::count_frame(
+                    &frame.schema,
+                    &frame.batches,
+                    &shape.primary_key,
+                )?;
+                &observed
+            } else {
+                key_counts
+                    .get(table)
+                    .ok_or_else(|| internal("frame key edit lacks fresh observations"))?
+            };
+            edited
+                .warnings
+                .extend(sdm_schema::keys::hold_frame(shape, count)?);
+        }
+    }
     for warning in edited.warnings {
         asker.warn(warning);
     }
-    let answer = sdm_schema::held::held(&edited.description, &read.unfacted, &read.retyped);
+    let answer = read.hold(&edited.description);
     let bytes = serde_json::to_vec(&answer)
         .map_err(|_| internal("the schema edited does not write as JSON"))?;
     let schema = asker.attach(Attachment::Bytes(bytes))?;

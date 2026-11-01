@@ -140,9 +140,11 @@ public final class Run implements AutoCloseable {
    */
   public static Run start(byte[] message, Map<Integer, ?> attachments) throws NativeError {
     NativeCore.load();
-    Attachments sent = Attachments.of(attachments);
-    return new Run(
-        onCoreStack(() -> NativeCore.start(message, sent.ids(), sent.bytes(), sent.streams())));
+    try (Attachments sent = Attachments.of(attachments)) {
+      return new Run(
+          onCoreStack(
+              () -> NativeCore.start(message, sent.ids(), sent.bytes(), sent.streams(), sent.graphs())));
+    }
   }
 
   /** Makes {@code call} on the run's handle, while the run is open. */
@@ -166,12 +168,13 @@ public final class Run implements AutoCloseable {
 
   /** Hands the run a {@code fetch_reply} or {@code model_reply}, with the attachments it names. */
   public void reply(byte[] message, Map<Integer, ?> attachments) throws NativeError {
-    Attachments sent = Attachments.of(attachments);
-    enter(
-        run -> {
-          NativeCore.reply(run, message, sent.ids(), sent.bytes(), sent.streams());
-          return null;
-        });
+    try (Attachments sent = Attachments.of(attachments)) {
+      enter(
+          run -> {
+            NativeCore.reply(run, message, sent.ids(), sent.bytes(), sent.streams(), sent.graphs());
+            return null;
+          });
+    }
   }
 
   /** Cancels the run. */

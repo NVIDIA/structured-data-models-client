@@ -48,6 +48,7 @@
 
 pub mod assemble;
 pub mod catalog;
+pub mod direct;
 pub mod edit;
 pub mod held;
 pub mod infer;

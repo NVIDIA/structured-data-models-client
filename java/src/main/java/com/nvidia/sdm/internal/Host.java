@@ -45,7 +45,7 @@ public final class Host {
   private static final Logger WARNINGS = LoggerFactory.getLogger("com.nvidia.sdm.warnings");
 
   /** The core's fields that say what a failed request had answered (T2.8c). */
-  private static final List<String> ANSWERED = List.of("calls_answered", "parts_answered");
+  private static final List<String> ANSWERED = List.of("calls_answered", "parts_answered", "rows_answered", "answered");
 
   private Host() {}
 
@@ -86,6 +86,13 @@ public final class Host {
   @FunctionalInterface
   public interface Model {
     byte[] call(byte[] body) throws TransportFailed, Refused, EndpointFailed;
+
+    /** Session-aware transports override this; existing model callbacks remain prediction-only. */
+    default byte[] call(Object endpoint, byte[] body) throws TransportFailed, Refused, EndpointFailed {
+      if (!"predict".equals(endpoint)) throw new StructuredDataException(
+          "this transport does not support sessions", "SESSIONS_UNSUPPORTED", Map.of(), null);
+      return call(body);
+    }
   }
 
   /**
@@ -189,9 +196,7 @@ public final class Host {
       if (taken instanceof byte[] bytes) {
         return bytes;
       }
-      if (taken instanceof NativeArrow arrow) {
-        arrow.close();
-      }
+      closeUnexpected(taken);
       throw internal("the core's result names a bytes attachment it did not give");
     }
 
@@ -199,6 +204,7 @@ public final class Host {
     public byte[] arrow(int id) {
       Object taken = take(id);
       if (!(taken instanceof NativeArrow arrow)) {
+        closeUnexpected(taken);
         throw internal("the core's result names an Arrow attachment it did not give");
       }
       try (arrow) {
@@ -209,6 +215,31 @@ public final class Host {
         }
         return ipc;
       }
+    }
+
+    /** Takes an independent zero-copy reader; closing this run does not close the reader. */
+    public ArrowReader arrowReader(int id, org.apache.arrow.memory.BufferAllocator allocator) {
+      Object taken = take(id);
+      if (!(taken instanceof NativeArrow arrow)) {
+        closeUnexpected(taken);
+        throw internal("the core's result names an Arrow attachment it did not give");
+      }
+      try (arrow) {
+        return arrow.reader(allocator);
+      }
+    }
+
+    /** Takes ownership of a retained relational graph independently of this finished run. */
+    public NativeFrameGraph graph(int id) {
+      Object taken = take(id);
+      if (taken instanceof NativeFrameGraph graph) return graph;
+      closeUnexpected(taken);
+      throw internal("the core's result names a frame graph attachment it did not give");
+    }
+
+    private static void closeUnexpected(Object taken) {
+      if (taken instanceof NativeArrow arrow) arrow.close();
+      if (taken instanceof NativeFrameGraph graph) graph.close();
     }
 
     private Object take(int id) {
@@ -269,7 +300,7 @@ public final class Host {
 
   /**
    * Runs {@code operation} to its result, with the attachments its fields name, each a {@code
-   * byte[]} or an {@link ArrowReader} this exports and closes.
+   * byte[]}, a retained graph, or an {@link ArrowReader} this exports and closes.
    */
   public static Finished run(
       Map<String, Object> operation, Map<Integer, ?> attachments, Call call) {
@@ -363,6 +394,18 @@ public final class Host {
         Map<String, Object> details = new LinkedHashMap<>();
         if (driverClass != null && "PROVIDER_ERROR".equals(failed.code())) {
           details.put("driver_class", driverClass);
+        }
+        Map<String, Object> failedFields = Messages.fields(failed.message());
+        if (failedFields.get("answered") instanceof Map<?, ?> answered) {
+          Object attachment = run.takeAttachment(((Number) answered.get("result")).intValue());
+          if (!(attachment instanceof NativeArrow arrow)) {
+            failed.message().close();
+            throw internal("the error's answered rows are absent");
+          }
+          try (arrow) {
+            details.put("answered", ArrowData.ipc(arrow.reader(ArrowData.allocator())));
+            details.put("rows_answered", answered.get("rows"));
+          }
         }
         StructuredDataException error = error(failed, call.held(), details);
         if (refused != null) {
@@ -544,7 +587,8 @@ public final class Host {
     Map<Integer, Object> attached = new LinkedHashMap<>();
     Refused refused = null;
     try {
-      byte[] answer = model.call(body);
+      byte[] answer = model.call(step.get("endpoint"), body);
+      if (trace != null) trace.modelAnswered(answer);
       attached.put(1, answer);
       outcome = response(200);
     } catch (TransportFailed failed) {

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import math
+import threading
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -252,6 +253,9 @@ class RelationalMaterializer:
         # On the core route (T1.26b, E52): the sampler state the core's last
         # run left, which its next run is handed back.
         self._core_sampler_state: dict[str, Any] = {}
+        self._core_frame_graph: Any = None
+        # One owner covers first snapshot publication and continuing native RNG.
+        self._core_frame_lock = threading.Lock()
 
     _RESERVED = ('instance_id', '__kumo_anchor_time')
 
@@ -289,7 +293,14 @@ class RelationalMaterializer:
         from sdm_client import _routing
 
         kept: CoreRequest | None = None
-        if _routing.on_the_core(self.schema.source, _routing.MATERIALIZE):
+        if self.schema.source is None and _routing.on_frames():
+            from sdm_client._rust import frame_materialize
+
+            payloads, facts, kept = frame_materialize.gather(
+                self, query, indices, num_context_samples, options, candidates
+            )
+            windowed, entity_table = facts.windowed, facts.entity_table
+        elif _routing.on_the_core(self.schema.source, _routing.MATERIALIZE):
             from sdm_client._rust import materialize as on_the_core
 
             payloads, facts, kept = on_the_core.gather(

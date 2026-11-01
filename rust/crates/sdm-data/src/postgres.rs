@@ -157,6 +157,7 @@ impl SqlDialect for Postgres {
             // warns of missing ones.
             index_advice: None,
             // Every optional request is rendered: none falls back.
+            fallback_text_order: None,
             fallback: None,
             // Postgres's driver reads a NaN as missing.
             reads_nan_as_missing: true,

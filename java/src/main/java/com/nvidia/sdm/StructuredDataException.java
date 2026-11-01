@@ -7,6 +7,10 @@ package com.nvidia.sdm;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
+import com.nvidia.sdm.internal.ArrowData;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.vector.ipc.ArrowReader;
 
 /**
  * Every error this client raises, as Python's {@code StructuredDataError} is (design choice 10):
@@ -20,6 +24,7 @@ public class StructuredDataException extends RuntimeException {
 
   private final String code;
   private final transient Map<String, Object> details;
+  private final transient byte[] answeredRows;
   private final String kind;
   private final boolean retryable;
 
@@ -41,6 +46,8 @@ public class StructuredDataException extends RuntimeException {
     this.code = code;
     this.details =
         details == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(details));
+    Object answered = this.details.get("answered");
+    this.answeredRows = answered instanceof byte[] ipc ? ipc.clone() : null;
     this.kind = kind;
     this.retryable = retryable;
   }
@@ -52,7 +59,18 @@ public class StructuredDataException extends RuntimeException {
 
   /** The structured context the error carried, by name; empty when there is none. */
   public Map<String, Object> details() {
-    return details;
+    if (answeredRows == null) return details;
+    Map<String, Object> copy = new LinkedHashMap<>(details);
+    copy.put("answered", answeredRows.clone());
+    return Collections.unmodifiableMap(copy);
+  }
+
+  /**
+   * Rows received before a later model call failed, in the normal prediction layout.
+   * The caller closes the reader; each call opens an independent snapshot.
+   */
+  public Optional<ArrowReader> answered(BufferAllocator allocator) {
+    return answeredRows == null ? Optional.empty() : Optional.of(ArrowData.reader(answeredRows, allocator));
   }
 
   /** The contract's error kind, such as {@code invalid_request}; null when this client raised it. */

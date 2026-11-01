@@ -312,6 +312,7 @@ impl SqlDialect for Duckdb {
             // rest (`_get_missing_index_dict`).
             index_advice: Some(IndexAdvice::SingleColumn),
             // Every optional request is rendered: none falls back.
+            fallback_text_order: None,
             fallback: None,
             // DuckDB's driver hands a HUGEINT, UHUGEINT or VARINT over as
             // its opaque extension type (register P1B-43).

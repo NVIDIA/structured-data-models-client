@@ -193,6 +193,7 @@ impl SqlDialect for Sqlite {
             // read's (`index_info[0] == index[0]`).
             index_advice: Some(IndexAdvice::LeadingColumn),
             // Every optional request is rendered: none falls back.
+            fallback_text_order: None,
             fallback: None,
             // A time is stored as text, compared as stored (`_time_spelling`).
             compares_stored_times: true,

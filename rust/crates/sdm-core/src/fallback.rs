@@ -70,8 +70,8 @@ use crate::run::{ArrowData, Asker, Budget, FetchResult, Reply, internal, schema_
 
 /// The answer to `request`, an optional request the run's provider does not
 /// declare, within `limits`: the rows the fallback computed, or the
-/// provider's failure of a scan it asked. Any other failure ends the run at
-/// its next step ([`Asker::fail`]); the request is then never answered.
+/// provider's failure of a scan it asked. A core refusal is returned to
+/// the requesting operation so bounded discovery can fall back to preview.
 pub(crate) async fn answer(
     asker: Asker,
     request: DataRequest,
@@ -88,10 +88,7 @@ pub(crate) async fn answer(
     match answered(&mut held, seeds).await {
         Ok(data) => Reply::Fetch(FetchResult::Data(data)),
         Err(Failed::Provider(error)) => Reply::Fetch(FetchResult::Error(error)),
-        Err(Failed::Core(error)) => {
-            asker.fail(error);
-            std::future::pending().await
-        }
+        Err(Failed::Core(error)) => Reply::Fetch(FetchResult::Refused(error)),
     }
 }
 
@@ -160,6 +157,7 @@ impl Held<'_> {
         let data = match asked {
             Reply::Fetch(FetchResult::Data(data)) => data,
             Reply::Fetch(FetchResult::Error(error)) => return Err(Failed::Provider(error)),
+            Reply::Fetch(FetchResult::Refused(error)) => return Err(Failed::Core(error)),
             _ => {
                 return Err(internal("a scan the fallback asked is not answered with data").into());
             }
@@ -171,6 +169,7 @@ impl Held<'_> {
             return Err(over(self.request, "max_rows", self.limits.max_rows).into());
         }
         self.hold(&batch)?;
+        self.check_text_order(&batch)?;
         let received = if data.received.fields().len() == batch.num_columns() {
             data.received
         } else {
@@ -179,11 +178,69 @@ impl Held<'_> {
         Ok(Scanned { batch, received })
     }
 
+    // Only columns compared by the core need compatible collation. Feature
+    // text merely projected by lookup/neighbor reads does not.
+    fn check_text_order(&self, batch: &RecordBatch) -> Result<(), CoreError> {
+        if matches!(
+            self.asker.capabilities()?.fallback_text_order,
+            Some(sdm_contract::data::FallbackTextOrder::BinaryUtf8)
+        ) {
+            return Ok(());
+        }
+        let compared: Vec<&str> = match self.request {
+            DataRequest::ColumnRanges { columns, .. }
+            | DataRequest::SampleEntities { columns, .. } => {
+                columns.iter().map(String::as_str).collect()
+            }
+            DataRequest::RepeatedKey { key, .. } | DataRequest::Lookup { key, .. } => {
+                key.iter().map(String::as_str).collect()
+            }
+            DataRequest::KeyCounts { keys } => keys
+                .iter()
+                .flat_map(|key| key.columns.iter().map(String::as_str))
+                .collect(),
+            DataRequest::Neighbors { key, order, .. } => key
+                .iter()
+                .map(String::as_str)
+                .chain(
+                    order
+                        .iter()
+                        .flat_map(|terms| terms.0.iter().map(|term| term.column.as_str())),
+                )
+                .collect(),
+            _ => Vec::new(),
+        };
+        fn holds_text(dtype: &DataType) -> bool {
+            match dtype {
+                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => true,
+                DataType::Dictionary(_, value) => holds_text(value),
+                DataType::List(field)
+                | DataType::LargeList(field)
+                | DataType::FixedSizeList(field, _)
+                | DataType::Map(field, _) => holds_text(field.data_type()),
+                DataType::Struct(fields) => {
+                    fields.iter().any(|field| holds_text(field.data_type()))
+                }
+                _ => false,
+            }
+        }
+        for field in batch.schema().fields() {
+            if compared.contains(&field.name().as_str()) && holds_text(field.data_type()) {
+                return Err(refused(
+                    self.request,
+                    "fallback_text_order",
+                    "fallback text comparisons require declared binary UTF-8 equality and ordering",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Holds `batch`'s Arrow data against the byte limit.
     fn hold(&mut self, batch: &RecordBatch) -> Result<(), CoreError> {
         self.bytes = self
             .bytes
-            .saturating_add(batch.get_array_memory_size() as u64);
+            .saturating_add(crate::memory::batch_bytes(batch)?);
         if self.bytes > self.limits.max_bytes {
             return Err(over(self.request, "max_bytes", self.limits.max_bytes));
         }

@@ -11,6 +11,7 @@ same question is answered higher here than there.
 
 from __future__ import annotations
 
+import io
 import json
 import warnings
 from typing import Any
@@ -107,7 +108,22 @@ def sent_to_databricks(request: Any) -> list[dict[str, Any]]:
                 'predictions': [{'response_json': json.dumps(answer(body))}]
             }
 
-    workspace = type('Workspace', (), {'serving_endpoints': Endpoints()})()
+        def do(self, method, path, *, headers, data, raw):
+            assert method == 'POST'
+            assert path == '/serving-endpoints/kumo-rfm-serving/invocations'
+            assert headers == {'Content-Type': 'application/json'}
+            assert raw is True
+            response = self.query(
+                name='kumo-rfm-serving', **json.loads(data.read())
+            )
+            return {'contents': io.BytesIO(json.dumps(response).encode())}
+
+    endpoints = Endpoints()
+    workspace = type(
+        'Workspace',
+        (),
+        {'serving_endpoints': endpoints, 'api_client': endpoints},
+    )()
     client = SDMClient.for_databricks_serving(
         'kumo-rfm-serving', workspace_client=workspace
     )

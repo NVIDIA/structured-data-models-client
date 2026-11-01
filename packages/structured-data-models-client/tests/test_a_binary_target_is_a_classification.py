@@ -308,7 +308,9 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
                 PredictiveQuery(text, schema).materialize(
                     indices=[0], task='classification', **extra
                 )
-        assert 'decomposed' in str(raised.value)
+        assert raised.value.code == 'INVALID_REQUEST'
+        assert 'task=' in str(raised.value)
+        assert 'relational' in str(raised.value).lower()
 
 
 class TestTheContextIsWhatDecides:

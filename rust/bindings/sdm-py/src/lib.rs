@@ -240,9 +240,16 @@ impl ArrowStream {
     }
 }
 
+/// Opaque retained source-less graph; lifetime follows its Python materializer.
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameGraph {
+    owner: sdm_host::FrameGraph,
+}
+
 /// One attachment as Python sees it: `bytes`, or an [`ArrowStream`].
 fn to_python(py: Python<'_>, attachment: Attachment) -> PyResult<Py<PyAny>> {
     Ok(match attachment {
+        Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
         Attachment::Bytes(bytes) => PyBytes::new(py, &bytes).into_any().unbind(),
         Attachment::Arrow(data) => Py::new(
             py,
@@ -506,6 +513,8 @@ fn attachments_from_python(
         let (id, value): (u32, Bound<'_, PyAny>) = item?.extract()?;
         let attachment = if let Ok(bytes) = value.cast::<PyBytes>() {
             Attachment::Bytes(bytes.as_bytes().to_vec())
+        } else if let Ok(graph) = value.extract::<PyRef<'_, FrameGraph>>() {
+            Attachment::FrameGraph(graph.owner.clone())
         } else if value.hasattr("__arrow_c_stream__")? {
             // Only the public capsule path, never pyarrow's private export.
             match read_arrow(py, &value)? {

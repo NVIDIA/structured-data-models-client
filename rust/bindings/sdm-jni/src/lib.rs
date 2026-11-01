@@ -46,8 +46,8 @@ use jni::{Env, EnvUnowned, JValue, jni_sig, jni_str};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_host::{
-    ArrowData, Attachment, Attachments, HostRun, Outgoing, Unreadable, Unreadables, default_root,
-    write_error,
+    ArrowData, Attachment, Attachments, FrameGraph, HostRun, Outgoing, Unreadable, Unreadables,
+    default_root, write_error,
 };
 
 /// The Java classes this layer makes objects of, handed over by
@@ -56,6 +56,7 @@ use sdm_host::{
 struct Classes {
     message: Global<JClass<'static>>,
     arrow: Global<JClass<'static>>,
+    graph: Global<JClass<'static>>,
     error: Global<JClass<'static>>,
 }
 
@@ -215,6 +216,19 @@ fn arrow_of<'a>(handle: jlong) -> Result<&'a ArrowData, Failure> {
     Ok(data)
 }
 
+/// A retained graph lease. Java owns each boxed handle and keeps it live
+/// throughout this call; cloning shares graph data and continuing sampler state.
+fn graph_of<'a>(handle: jlong) -> Result<&'a FrameGraph, Failure> {
+    if handle == 0 {
+        return Err(Failure::Usage("a released frame graph attachment"));
+    }
+    #[allow(unsafe_code)]
+    // SAFETY: NativeFrameGraph guards retain against close. Attachments then
+    // owns a separate retained lease until the JNI call returns.
+    let graph = unsafe { &*(handle as *const FrameGraph) };
+    Ok(graph)
+}
+
 /// Reads the Arrow stream Java exported into the struct at `address`,
 /// moving it out, so the struct is left released and Java's close of it
 /// releases nothing twice. The batches keep Java's buffers, with no copy,
@@ -249,8 +263,8 @@ fn read_stream(address: jlong) -> Result<Result<ArrowData, Unreadable>, Failure>
     Ok(Ok(ArrowData::new(schema, batches)))
 }
 
-/// The attachments a Java caller sends: `ids[i]` names `bytes[i]` when it
-/// is not null, else the Arrow stream at `streams[i]`. The Arrow ones that
+/// The attachments a Java caller sends: bytes, an Arrow stream, or a
+/// temporary retained graph lease, exactly one representation per id. The Arrow ones that
 /// could not be read are named apart, so `sdm-host` checks the message's
 /// whole set before it decides what an unreadable one means.
 fn attachments_from_java(
@@ -258,28 +272,39 @@ fn attachments_from_java(
     ids: &JIntArray<'_>,
     bytes: &JObjectArray<'_, JByteArray<'_>>,
     streams: &JLongArray<'_>,
+    graphs: &JLongArray<'_>,
 ) -> Result<(Attachments, Unreadables), Failure> {
     let count = ids.len(env)?;
-    if bytes.len(env)? != count || streams.len(env)? != count {
+    if bytes.len(env)? != count || streams.len(env)? != count || graphs.len(env)? != count {
         return Err(Failure::Usage(
-            "an attachment's id, bytes and stream arrays differ in length",
+            "an attachment's id, bytes, stream and graph arrays differ in length",
         ));
     }
     let mut id_values = vec![0; count];
     ids.get_region(env, 0, &mut id_values)?;
     let mut addresses = vec![0; count];
     streams.get_region(env, 0, &mut addresses)?;
+    let mut graph_handles = vec![0; count];
+    graphs.get_region(env, 0, &mut graph_handles)?;
     let mut read: Attachments = BTreeMap::new();
     let mut unreadable = Unreadables::new();
     for (index, (&id, &address)) in id_values.iter().zip(&addresses).enumerate() {
         let id = u32::try_from(id).map_err(|_| Failure::Usage("a negative attachment id"))?;
         let id = AttachmentId(id);
         let element = bytes.get_element(env, index)?;
+        let graph = graph_handles[index];
         let attachment = if !element.is_null() {
-            if address != 0 {
-                return Err(Failure::Usage("an attachment is both bytes and a stream"));
+            if address != 0 || graph != 0 {
+                return Err(Failure::Usage(
+                    "an attachment has more than one representation",
+                ));
             }
             Attachment::Bytes(env.convert_byte_array(&element)?)
+        } else if graph != 0 {
+            if address != 0 {
+                return Err(Failure::Usage("an attachment is both a stream and a graph"));
+            }
+            Attachment::FrameGraph(graph_of(graph)?.clone())
         } else {
             match read_stream(address)? {
                 Ok(data) => Attachment::Arrow(data),
@@ -296,13 +321,31 @@ fn attachments_from_java(
     Ok((read, unreadable))
 }
 
-/// One attachment as Java sees it: `byte[]`, or a `NativeArrow` owning the
-/// data.
+/// One attachment as Java sees it: bytes, owned Arrow data or a retained graph.
 fn attachment_object<'local>(
     env: &mut Env<'local>,
     attachment: Attachment,
 ) -> Result<JObject<'local>, jni::errors::Error> {
     Ok(match attachment {
+        Attachment::FrameGraph(graph) => {
+            let classes = CLASSES
+                .get()
+                .ok_or(jni::errors::Error::NullPtr("classes"))?;
+            let handle = Box::into_raw(Box::new(graph));
+            match env.new_object(
+                &classes.graph,
+                jni_sig!("(J)V"),
+                &[JValue::Long(handle as jlong)],
+            ) {
+                Ok(object) => object,
+                Err(error) => {
+                    #[allow(unsafe_code)]
+                    // SAFETY: construction failed; no Java owner took this handle.
+                    drop(unsafe { Box::from_raw(handle) });
+                    return Err(error);
+                }
+            }
+        }
         Attachment::Bytes(bytes) => env.byte_array_from_slice(&bytes)?.into(),
         Attachment::Arrow(data) => {
             let classes = CLASSES
@@ -369,6 +412,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_init<'caller>(
     _class: JClass<'caller>,
     message: JClass<'caller>,
     arrow: JClass<'caller>,
+    graph: JClass<'caller>,
     error: JClass<'caller>,
     log: JClass<'caller>,
 ) {
@@ -376,6 +420,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_init<'caller>(
         let classes = Classes {
             message: env.new_global_ref(&message)?,
             arrow: env.new_global_ref(&arrow)?,
+            graph: env.new_global_ref(&graph)?,
             error: env.new_global_ref(&error)?,
         };
         // A second load of the library in the same class loader finds them
@@ -400,10 +445,14 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
         let info = serde_json::json!({
             "contract": CONTRACT_VERSION,
             "test_ops": cfg!(feature = "test-ops"),
+            "request_state_version": sdm_contract::ops::REQUEST_STATE_VERSION,
             "providers": sdm_host::providers(),
             "error_codes": ErrorCode::ALL.map(ErrorCode::as_str),
             // Each data type's name on the client's wire, by the contract's
             // name of it: what a schema holds a described column's type as.
+            "dtype_names": sdm_host::dtype_names()
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>(),
             "wire_names": sdm_host::wire_names()
                 .into_iter()
                 .collect::<std::collections::BTreeMap<_, _>>(),
@@ -644,10 +693,12 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_start<'caller>(
     ids: JIntArray<'caller>,
     bytes: JObjectArray<'caller, JByteArray<'caller>>,
     streams: JLongArray<'caller>,
+    graphs: JLongArray<'caller>,
 ) -> jlong {
     entry(&mut unowned, |env| {
         let message = env.convert_byte_array(&message)?;
-        let (attachments, unreadable) = attachments_from_java(env, &ids, &bytes, &streams)?;
+        let (attachments, unreadable) =
+            attachments_from_java(env, &ids, &bytes, &streams, &graphs)?;
         let run = HostRun::start_reading(&default_root(), &message, attachments, &unreadable)
             .map_err(Failure::Core)?;
         Ok(Box::into_raw(Box::new(run)) as jlong)
@@ -681,11 +732,13 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_reply<'caller>(
     ids: JIntArray<'caller>,
     bytes: JObjectArray<'caller, JByteArray<'caller>>,
     streams: JLongArray<'caller>,
+    graphs: JLongArray<'caller>,
 ) {
     entry(&mut unowned, |env| {
         let run = run_of(run)?;
         let message = env.convert_byte_array(&message)?;
-        let (attachments, unreadable) = attachments_from_java(env, &ids, &bytes, &streams)?;
+        let (attachments, unreadable) =
+            attachments_from_java(env, &ids, &bytes, &streams, &graphs)?;
         run.reply_reading(&message, attachments, &unreadable)
             .map_err(Failure::Core)
     });
@@ -828,6 +881,36 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_releaseArrow<'cal
         if arrow != 0 {
             // SAFETY: as for `arrow_of`; this is the handle's one release.
             drop(unsafe { Box::from_raw(arrow as *mut ArrowData) });
+        }
+        Ok(())
+    });
+}
+
+/// Make a temporary lease while Java holds the original owner against close.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_retainFrameGraph<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    graph: jlong,
+) -> jlong {
+    entry(&mut unowned, |_env| {
+        Ok(Box::into_raw(Box::new(graph_of(graph)?.clone())) as jlong)
+    })
+}
+
+/// Release one graph owner or temporary lease, exactly once.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_releaseFrameGraph<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    graph: jlong,
+) {
+    entry(&mut unowned, |_env| {
+        if graph != 0 {
+            // SAFETY: graph_of's ownership contract; this is this handle's only release.
+            drop(unsafe { Box::from_raw(graph as *mut FrameGraph) });
         }
         Ok(())
     });

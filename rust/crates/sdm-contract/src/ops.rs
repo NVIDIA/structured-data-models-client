@@ -36,7 +36,64 @@ use crate::types::ColumnType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    FrameSession(crate::frame_session::FrameSessionOperation),
+    DescribeFrameTables(crate::frames::DescribeFrameTables),
+    PrepareFrameGraph(crate::frames::PrepareFrameGraph),
+    MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
+    TabularArrow(crate::tabular_arrow::ArrowTabular),
+    ReadResultItems(crate::result::ReadResultItems),
+    ReadRequestSplit(crate::split::ReadRequestSplit),
+    MergeResults(crate::result::MergeResults),
+    PlanResultMerge(crate::direct::DirectInput),
+    PrepareTabularFit(crate::session::SessionFitInput),
+    AcceptTabularSession(crate::session::SessionAcceptInput),
+    CheckTabularSessionQuestion(crate::direct::DirectInput),
+    CheckTabularSessionReply(crate::direct::DirectInput),
+    PrepareTabularScore(crate::session::SessionScoreInput),
+    SendTabularSession(crate::session::SessionSendInput),
+    CountTabularSessionOverlap(crate::session::SessionOverlapInput),
+    CloseTabularSession(crate::direct::DirectInput),
+    ExpandTabularKeys(crate::direct::DirectInput),
+    FilterTabularRows(crate::direct::DirectInput),
+    DecideTabularContext(crate::direct::DirectInput),
+    SampleTabularRows(crate::direct::DirectInput),
+    ObserveTabularMembership(crate::direct::DirectInput),
+    DecideTabularTask(crate::direct::DirectInput),
+    OrderSampledTabularRows(crate::direct::DirectInput),
+    SelectTabularRows(crate::direct::DirectInput),
+    CheckTabularCap(crate::direct::DirectInput),
+    CheckDirectShape(crate::direct::DirectInput),
+    CheckDirectCell(crate::direct::DirectInput),
+    CheckColumn(crate::direct::DirectInput),
+    CheckDirectOption(crate::direct::DirectInput),
+    CheckDirectResponseField(crate::direct::DirectInput),
+    RestoreDirectResponse(crate::direct::DirectInput),
+    ObserveDirectOutputs(crate::direct::DirectInput),
+    LayoutNativeDirect(crate::direct::DirectInput),
+    ObserveDirectDtype(crate::direct::DirectInput),
+    ObserveDirectSchema(crate::direct::DirectInput),
+    AssembleFrameSchema(crate::direct::DirectInput),
+    CheckDirectPreparation(crate::direct::DirectInput),
+    ResolveDirectDtype(crate::direct::DirectInput),
+    ResolveObservedTabular(crate::direct::DirectInput),
+    InspectObservedKeys(crate::direct::DirectFrames),
+    EncodeDirectColumn(crate::direct::DirectColumnInput),
+    EncodeTabularTable(crate::direct::DirectColumnInput),
+    InferDirectColumn(crate::direct::DirectColumnInput),
+    InferDirectTimeStart(crate::direct::DirectColumnInput),
+    BindDirect(crate::direct::DirectInput),
+    CheckDirectRows(crate::direct::DirectInput),
+    InterpretDirectJson(crate::direct::DirectInput),
+    SelectDirectMember(crate::direct::DirectInput),
+    AttributeDirectRow(crate::direct::DirectInput),
+    PrepareDirect(crate::direct::DirectFrames),
+    InspectDirectPair(crate::direct::DirectFrames),
+    ResolveTabular(crate::direct::DirectFrames),
+    EncodeTabular(crate::direct::DirectFrames),
+    DecodeDirectResponse(crate::direct::DecodeDirectResponseInput),
+    LayoutDirect(crate::direct::LayoutDirect),
+
     DescribeSource(DescribeSource),
     EditSchema(EditSchema),
     Materialize(Materialize),
@@ -51,6 +108,7 @@ pub enum Operation {
 /// What an attachment a message names holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AttachmentKind {
+    FrameGraph,
     /// Bytes, such as the UTF-8 JSON of an input-sized field or a model
     /// body.
     Bytes,
@@ -62,7 +120,64 @@ impl Operation {
     /// The operation's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
+            Operation::TabularArrow(_) => "tabular_arrow",
+            Operation::PlanResultMerge(_) => "plan_result_merge",
+            Operation::ReadResultItems(_) => "read_result_items",
+            Operation::ReadRequestSplit(_) => "read_request_split",
+            Operation::MergeResults(_) => "merge_results",
             Operation::ValidateQuery(_) => "validate_query",
+            Operation::FrameSession(_) => "frame_session",
+            Operation::DescribeFrameTables(_) => "describe_frame_tables",
+            Operation::PrepareFrameGraph(_) => "prepare_frame_graph",
+            Operation::MaterializeFrames(_) => "materialize_frames",
+            Operation::PrepareTabularFit(_) => "prepare_tabular_fit",
+            Operation::AcceptTabularSession(_) => "accept_tabular_session",
+            Operation::CheckTabularSessionQuestion(_) => "check_tabular_session_question",
+            Operation::CheckTabularSessionReply(_) => "check_tabular_session_reply",
+            Operation::PrepareTabularScore(_) => "prepare_tabular_score",
+            Operation::SendTabularSession(_) => "send_tabular_session",
+            Operation::CountTabularSessionOverlap(_) => "count_tabular_session_overlap",
+            Operation::CloseTabularSession(_) => "close_tabular_session",
+            Operation::ExpandTabularKeys(_) => "expand_tabular_keys",
+            Operation::FilterTabularRows(_) => "filter_tabular_rows",
+            Operation::DecideTabularContext(_) => "decide_tabular_context",
+            Operation::SampleTabularRows(_) => "sample_tabular_rows",
+            Operation::ObserveTabularMembership(_) => "observe_tabular_membership",
+            Operation::DecideTabularTask(_) => "decide_tabular_task",
+            Operation::OrderSampledTabularRows(_) => "order_sampled_tabular_rows",
+            Operation::SelectTabularRows(_) => "select_tabular_rows",
+            Operation::CheckTabularCap(_) => "check_tabular_cap",
+            Operation::CheckDirectShape(_) => "check_direct_shape",
+            Operation::CheckDirectCell(_) => "check_direct_cell",
+            Operation::CheckColumn(_) => "check_column",
+            Operation::CheckDirectOption(_) => "check_direct_option",
+            Operation::CheckDirectResponseField(_) => "check_direct_response_field",
+            Operation::RestoreDirectResponse(_) => "restore_direct_response",
+            Operation::ObserveDirectOutputs(_) => "observe_direct_outputs",
+            Operation::LayoutNativeDirect(_) => "layout_native_direct",
+            Operation::ObserveDirectDtype(_) => "observe_direct_dtype",
+            Operation::ObserveDirectSchema(_) => "observe_direct_schema",
+            Operation::AssembleFrameSchema(_) => "assemble_frame_schema",
+            Operation::CheckDirectPreparation(_) => "check_direct_preparation",
+            Operation::ResolveDirectDtype(_) => "resolve_direct_dtype",
+            Operation::ResolveObservedTabular(_) => "resolve_observed_tabular",
+            Operation::InspectObservedKeys(_) => "inspect_observed_keys",
+            Operation::EncodeDirectColumn(_) => "encode_direct_column",
+            Operation::EncodeTabularTable(_) => "encode_tabular_table",
+            Operation::InferDirectColumn(_) => "infer_direct_column",
+            Operation::InferDirectTimeStart(_) => "infer_direct_time_start",
+            Operation::BindDirect(_) => "bind_direct",
+            Operation::CheckDirectRows(_) => "check_direct_rows",
+            Operation::InterpretDirectJson(_) => "interpret_direct_json",
+            Operation::SelectDirectMember(_) => "select_direct_member",
+            Operation::AttributeDirectRow(_) => "attribute_direct_row",
+            Operation::PrepareDirect(_) => "prepare_direct",
+            Operation::InspectDirectPair(_) => "inspect_direct_pair",
+            Operation::ResolveTabular(_) => "resolve_tabular",
+            Operation::EncodeTabular(_) => "encode_tabular",
+            Operation::DecodeDirectResponse(_) => "decode_direct_response",
+            Operation::LayoutDirect(_) => "layout_direct",
+
             Operation::DescribeSource(_) => "describe_source",
             Operation::EditSchema(_) => "edit_schema",
             Operation::Materialize(_) => "materialize",
@@ -77,9 +192,151 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::ReadResultItems(v) => vec![(v.input, Bytes), (v.table, Arrow)],
+            Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
+            Operation::MergeResults(v) => {
+                let mut named = vec![(v.input, Bytes)];
+                named.extend(v.tables.iter().map(|id| (*id, Arrow)));
+                named
+            }
+            Operation::TabularArrow(v) => {
+                use crate::tabular_arrow::ArrowTabular::*;
+                match v {
+                    Describe { input, table } | Materialize { input, table } => {
+                        vec![(*input, Bytes), (*table, Arrow)]
+                    }
+                    MaterializePredict {
+                        input,
+                        table,
+                        predict,
+                    } => vec![(*input, Bytes), (*table, Arrow), (*predict, Arrow)],
+                    Prepare {
+                        input,
+                        context,
+                        predict,
+                    }
+                    | Predict {
+                        input,
+                        context,
+                        predict,
+                    }
+                    | Fit {
+                        input,
+                        context,
+                        predict,
+                    } => vec![(*input, Bytes), (*context, Arrow), (*predict, Arrow)],
+                    Score { input, predict } => vec![(*input, Bytes), (*predict, Arrow)],
+                    Close { input } => vec![(*input, Bytes)],
+                }
+            }
+            Operation::FrameSession(v) => {
+                use crate::frame_session::FrameSessionOperation as F;
+                match v {
+                    F::Fit { input, payloads } => std::iter::once((*input, Bytes))
+                        .chain(payloads.iter().map(|id| (*id, Bytes)))
+                        .collect(),
+                    F::Predict {
+                        input,
+                        payloads,
+                        pinned,
+                    } => std::iter::once((*input, Bytes))
+                        .chain(payloads.iter().map(|id| (*id, Bytes)))
+                        .chain(std::iter::once((*pinned, Bytes)))
+                        .collect(),
+                    F::Close { input } => vec![(*input, Bytes)],
+                }
+            }
+            Operation::DescribeFrameTables(v) => {
+                let mut ids = vec![(v.names, Bytes)];
+                ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
+                ids
+            }
+            Operation::PrepareFrameGraph(v) => {
+                let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
+                ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
+                ids
+            }
+            Operation::MaterializeFrames(v) => {
+                let mut ids = vec![
+                    (v.graph, AttachmentKind::FrameGraph),
+                    (v.input, Bytes),
+                    (v.indices, Arrow),
+                ];
+                ids.extend(v.values.map(|id| (id, Bytes)));
+                ids
+            }
+            Operation::EncodeDirectColumn(v)
+            | Operation::EncodeTabularTable(v)
+            | Operation::InferDirectColumn(v)
+            | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
+            Operation::PrepareTabularFit(v) => {
+                vec![(v.input, Bytes), (v.context, Bytes), (v.holdout, Bytes)]
+            }
+            Operation::AcceptTabularSession(v) => {
+                vec![(v.input, Bytes), (v.observed, Bytes)]
+            }
+            Operation::PrepareTabularScore(v) => {
+                vec![(v.input, Bytes), (v.predict, Bytes)]
+            }
+            Operation::SendTabularSession(v) => {
+                vec![(v.input, Bytes), (v.payload, Bytes)]
+            }
+            Operation::CountTabularSessionOverlap(v) => {
+                vec![(v.input, Bytes), (v.predict, Bytes), (v.pinned_keys, Bytes)]
+            }
+            Operation::CheckTabularSessionQuestion(v)
+            | Operation::CheckTabularSessionReply(v)
+            | Operation::CloseTabularSession(v)
+            | Operation::ExpandTabularKeys(v)
+            | Operation::FilterTabularRows(v)
+            | Operation::DecideTabularContext(v)
+            | Operation::SampleTabularRows(v)
+            | Operation::ObserveTabularMembership(v)
+            | Operation::DecideTabularTask(v)
+            | Operation::OrderSampledTabularRows(v)
+            | Operation::SelectTabularRows(v)
+            | Operation::CheckTabularCap(v)
+            | Operation::CheckDirectShape(v)
+            | Operation::CheckDirectCell(v)
+            | Operation::PlanResultMerge(v)
+            | Operation::CheckColumn(v)
+            | Operation::CheckDirectOption(v)
+            | Operation::CheckDirectResponseField(v)
+            | Operation::RestoreDirectResponse(v)
+            | Operation::ObserveDirectOutputs(v)
+            | Operation::ObserveDirectDtype(v)
+            | Operation::ObserveDirectSchema(v)
+            | Operation::AssembleFrameSchema(v)
+            | Operation::CheckDirectPreparation(v)
+            | Operation::ResolveDirectDtype(v)
+            | Operation::ResolveObservedTabular(v)
+            | Operation::BindDirect(v)
+            | Operation::CheckDirectRows(v)
+            | Operation::InterpretDirectJson(v)
+            | Operation::SelectDirectMember(v)
+            | Operation::AttributeDirectRow(v) => vec![(v.input, Bytes)],
+            Operation::PrepareDirect(v)
+            | Operation::InspectObservedKeys(v)
+            | Operation::InspectDirectPair(v)
+            | Operation::ResolveTabular(v)
+            | Operation::EncodeTabular(v) => {
+                vec![(v.input, Bytes), (v.context, Arrow), (v.predict, Arrow)]
+            }
+            Operation::LayoutNativeDirect(v) => vec![(v.input, Bytes)],
+            Operation::DecodeDirectResponse(v) => {
+                vec![(v.input, Bytes), (v.payload, Bytes), (v.response, Bytes)]
+            }
+            Operation::LayoutDirect(v) => {
+                vec![(v.input, Bytes), (v.payload, Bytes), (v.response, Bytes)]
+            }
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => vec![(d.source, Bytes)],
-            Operation::EditSchema(e) => vec![(e.schema, Bytes), (e.edit, Bytes)],
+            Operation::EditSchema(e) => {
+                let mut attachments = vec![(e.schema, Bytes), (e.edit, Bytes)];
+                attachments.extend(e.context.map(|id| (id, Bytes)));
+                attachments.extend(e.frame.map(|id| (id, Arrow)));
+                attachments
+            }
             Operation::Materialize(m) => {
                 let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
                 named.extend(m.indices.map(|id| (id, Arrow)));
@@ -90,6 +347,10 @@ impl Operation {
             }
             Operation::Predict(p) => {
                 let mut named = Vec::new();
+                if let Some(direct) = &p.direct {
+                    named.push((direct.input, Bytes));
+                    named.extend(direct.payload.map(|id| (id, Bytes)));
+                }
                 if let Some(state) = &p.state {
                     named.push((state.payload, Bytes));
                     named.push((state.query, Bytes));
@@ -132,6 +393,14 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    ResultItems(crate::result::ResultItems),
+    RequestSplit(crate::split::RequestSplit),
+    PreparedFrameGraph(crate::frames::PreparedFrameGraph),
+    DirectValue(crate::direct::DirectValue),
+    DecodedDirectResponse(crate::direct::DecodedDirectResponse),
+    /// The host must retain native response owners for this reply.
+    NativeDirectResponse,
+    PreparedDirectCall(crate::direct::native_response::PreparedDirectCall),
     ValidateQuery(QueryValidation),
     DescribeSource(DescribedSource),
     EditSchema(SchemaEdited),
@@ -140,6 +409,18 @@ pub enum OperationResult {
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
     Test(TestResult),
+}
+
+/// A standalone column's declared meaning checked without a fabricated schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckColumn {
+    pub name: String,
+    pub dtype: Option<String>,
+    pub stype: Given<String>,
+    /// Declarations check the public semantic-type whitelist before dtype compatibility.
+    /// Consistency checks only inspect compatibility, preserving incomplete declarations.
+    pub validate_stype: bool,
 }
 
 // --- validate_query -------------------------------------------------------------
@@ -574,6 +855,22 @@ pub struct EditSchema {
     pub schema: AttachmentId,
     /// A bytes attachment of a [`SchemaEdit`] as JSON.
     pub edit: AttachmentId,
+    /// Optional explicit frame provenance and fresh native observations.
+    /// Absent means source-table semantics; no catalog facts are fabricated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<AttachmentId>,
+    /// Whole edited table for fresh Rust key observations, only with frame context.
+    /// Alternative to explicit native key counts; never combined with them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame: Option<AttachmentId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SchemaEditContext {
+    Frames {
+        key_counts: std::collections::BTreeMap<String, crate::frames::FrameKeyCount>,
+    },
 }
 
 /// `edit_schema`'s result.
@@ -636,7 +933,8 @@ pub struct HeldColumn {
     pub name: String,
     /// The column's data type as the host names it, on the client's wire
     /// ([`Dtype::wire_name`]).
-    pub dtype: String,
+    /// None means the caller has not declared a dtype.
+    pub dtype: Option<String>,
     pub stype: Stype,
     /// What the column meant before the schema joined on it, as the host
     /// holds it ([`DescribedColumn::stype_before_key`]).
@@ -689,6 +987,8 @@ pub struct SourceFacts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "edit", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SchemaEdit {
+    /// Validate current meanings and links, restoring key roles without declaring meanings.
+    Check {},
     /// A table's primary key set (`schema[table].primary_key = key`), its
     /// columns in order, or cleared (`null`).
     PrimaryKey {
@@ -1122,6 +1422,10 @@ pub struct Materialized {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct QueryFacts {
+    /// Resolved identifiers for an ordinary column-to-column question.
+    /// Hosts must not recover these by splitting the canonical query text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub columns: Option<Box<QueryColumns>>,
     /// The table whose rows are the entities.
     pub entity_table: String,
     pub problem_type: Option<crate::pql::ProblemType>,
@@ -1136,6 +1440,14 @@ pub struct QueryFacts {
     /// each question's text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryColumns {
+    pub entity: ColumnRef,
+    pub target: ColumnRef,
+    pub target_stype: Stype,
 }
 
 /// The version of [`RequestState`]'s format this build writes and reads
@@ -1341,6 +1653,9 @@ pub struct HeldRanking {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predict {
+    /// A direct request, mutually exclusive with gathered state/held inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<crate::direct::DirectModelInput>,
     /// The request state `materialize` answered, as the host held it since;
     /// absent where the host holds a request the core did not
     /// materialize, which [`Predict::held`] gives instead. A start naming
@@ -1451,6 +1766,9 @@ pub struct Predicted {
     /// Contract v27 adds, after those, `embeddings` (list of float64, an
     /// answer's embedding in the order written, null where it has none;
     /// T2.11).
+    /// Native result tables also retain scalar `sdm.answer_type` and
+    /// `sdm.text_ids` schema metadata for lossless generic result merging.
+    /// Ranking tables need only `sdm.text_ids` because they hold no prediction column.
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.
     pub model: String,
@@ -1483,6 +1801,210 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "PlanResultMerge.input")]
+    pub plan_result_merge_input: crate::result::PlanResultMerge,
+    #[schemars(rename = "DirectValue.plan_result_merge")]
+    pub plan_result_merge_output: crate::result::ResultMergePlan,
+    #[schemars(rename = "MergeResults.input")]
+    pub merge_results_input: crate::result::MergeInput,
+    #[schemars(rename = "ReadResultItems.input")]
+    pub read_result_items_input: crate::result::ResultPart,
+    pub tabular_arrow_request: crate::tabular_arrow::ArrowRequest,
+    pub tabular_arrow_prediction: crate::tabular_arrow::ArrowPrediction,
+    pub tabular_arrow_fit: crate::tabular_arrow::ArrowFit,
+    pub tabular_arrow_score: crate::tabular_arrow::ArrowScore,
+    pub tabular_arrow_materialize: crate::tabular_arrow::ArrowMaterialize,
+    pub tabular_arrow_description: crate::tabular_arrow::ArrowDescription,
+    pub tabular_arrow_session: crate::tabular_arrow::ArrowSession,
+
+    #[schemars(rename = "SelectTabularRows.input")]
+    pub select_tabular_rows_input: crate::tabular::SelectTabularRows,
+    #[schemars(rename = "DirectValue.select_tabular_rows")]
+    pub select_tabular_rows_output: crate::tabular::SelectedTabularRows,
+    #[schemars(rename = "CheckTabularCap.input")]
+    pub check_tabular_cap_input: crate::tabular::CheckTabularCap,
+    #[schemars(rename = "DirectValue.check_tabular_cap")]
+    pub check_tabular_cap_output: crate::tabular::CheckedTabularCap,
+    #[schemars(rename = "ObserveTabularMembership.input")]
+    pub observe_tabular_membership_input: crate::tabular::ObserveTabularMembership,
+    #[schemars(rename = "DirectValue.observe_tabular_membership")]
+    pub observe_tabular_membership_output: crate::tabular::ObservedTabularMembership,
+    #[schemars(rename = "DecideTabularTask.input")]
+    pub decide_tabular_task_input: crate::tabular::DecideTabularTask,
+    #[schemars(rename = "DirectValue.decide_tabular_task")]
+    pub decide_tabular_task_output: crate::tabular::TabularTaskDecision,
+    #[schemars(rename = "OrderSampledTabularRows.input")]
+    pub order_sampled_tabular_rows_input: crate::tabular::OrderSampledTabularRows,
+    #[schemars(rename = "DirectValue.order_sampled_tabular_rows")]
+    pub order_sampled_tabular_rows_output: crate::tabular::OrderedSampledTabularRows,
+
+    #[schemars(rename = "ExpandTabularKeys.input")]
+    pub expand_tabular_keys_input: crate::tabular::ExpandTabularKeys,
+    #[schemars(rename = "DirectValue.expand_tabular_keys")]
+    pub expand_tabular_keys_output: crate::tabular::ExpandedTabularKeys,
+    #[schemars(rename = "FilterTabularRows.input")]
+    pub filter_tabular_rows_input: crate::tabular::FilterTabularRows,
+    #[schemars(rename = "DirectValue.filter_tabular_rows")]
+    pub filter_tabular_rows_output: crate::tabular::FilteredTabularRows,
+    #[schemars(rename = "DecideTabularContext.input")]
+    pub decide_tabular_context_input: crate::tabular::DecideTabularContext,
+    #[schemars(rename = "DirectValue.decide_tabular_context")]
+    pub decide_tabular_context_output: crate::tabular::TabularContextDecision,
+    #[schemars(rename = "SampleTabularRows.input")]
+    pub sample_tabular_rows_input: crate::tabular::SampleTabularRows,
+    #[schemars(rename = "DirectValue.sample_tabular_rows")]
+    pub sample_tabular_rows_output: crate::tabular::SampledTabularRows,
+
+    #[schemars(rename = "DirectValue.meaning")]
+    pub directvalue_meaning: crate::direct::schema::MeaningResult,
+    #[schemars(rename = "ObserveDirectOutputs.input")]
+    pub observedirectoutputs_input: crate::direct::native_response::NativeOutputQuery,
+    #[schemars(rename = "RestoreDirectResponse.input")]
+    pub restoredirectresponse_input: crate::direct::native_response::RestorationObservation,
+    #[schemars(rename = "CheckDirectResponseField.input")]
+    pub checkdirectresponsefield_input: crate::direct::native_response::NativeResponseField,
+    #[schemars(rename = "DirectValue.checked_response_field")]
+    pub directvalue_checked_response_field: crate::direct::native_response::CheckedResponseField,
+    #[schemars(rename = "PreparedDirectCall.value")]
+    pub prepareddirectcall_value: crate::direct::native_response::NativeDirectCall,
+    #[schemars(rename = "LayoutNativeDirect.input")]
+    pub layoutnativedirect_input: crate::direct::native_response::NativeLayoutInput,
+    #[schemars(rename = "DirectValue.native_layout")]
+    pub directvalue_native_layout: crate::direct::native_response::NativeLayoutResult,
+
+    #[schemars(rename = "CheckDirectCell.input")]
+    pub checkdirectcell_input: crate::direct::cell::DirectCellInput,
+    #[schemars(rename = "CheckColumn.input")]
+    pub checkcolumn_input: CheckColumn,
+    #[schemars(rename = "CheckDirectOption.input")]
+    pub checkdirectoption_input: crate::direct::DirectOptionObservation,
+    #[schemars(rename = "ObserveDirectDtype.input")]
+    pub observedirectdtype_input: crate::direct::dtype::DtypeObservation,
+    #[schemars(rename = "AssembleFrameSchema.input")]
+    pub assembleframeschema_input: crate::frames::AssembleFrameSchema,
+    #[schemars(rename = "FrameTables.names")]
+    pub frame_tables_names: Vec<String>,
+    #[schemars(rename = "MaterializeFrames.input")]
+    pub materialize_frames_input: crate::frames::FrameCall,
+    #[schemars(rename = "ObserveDirectSchema.input")]
+    pub observedirectschema_input: crate::direct::schema::SchemaObservation,
+    #[schemars(rename = "DirectValue.observed_schema")]
+    pub directvalue_observed_schema: crate::direct::schema::ObservedSchema,
+    #[schemars(rename = "CheckDirectPreparation.input")]
+    pub checkdirectpreparation_input: crate::direct::schema::PreparationObservation,
+    #[schemars(rename = "ResolveDirectDtype.input")]
+    pub resolvedirectdtype_input: crate::direct::dtype::DtypeResolutionObservation,
+    #[schemars(rename = "DirectValue.dtype_resolution")]
+    pub directvalue_dtype_resolution: crate::direct::dtype::DtypeResolution,
+    #[schemars(rename = "DirectValue.dtype_declarations")]
+    pub directvalue_dtype_declarations: crate::direct::DirectDtypeDeclarations,
+    #[schemars(rename = "ResolveObservedTabular.input")]
+    pub resolveobservedtabular_input: crate::direct::ObservedTabularInput,
+    #[schemars(rename = "InspectObservedKeys.input")]
+    pub inspectobservedkeys_input: crate::direct::ObservedKeyPair,
+    #[schemars(rename = "EncodeDirectColumn.input")]
+    pub encodedirectcolumn_input: crate::direct::DirectColumnEncoding,
+    #[schemars(rename = "InferDirectColumn.input")]
+    pub inferdirectcolumn_input: crate::direct::DirectHeader,
+    #[schemars(rename = "InferDirectTimeStart.input")]
+    pub inferdirecttimestart_input: crate::direct::DirectHeader,
+    #[schemars(rename = "DirectValue.time_start")]
+    pub directvalue_time_start: crate::direct::schema::TimeStart,
+    #[schemars(rename = "DirectValue.encoded_column")]
+    pub directvalue_encoded_column: crate::direct::EncodedDirectColumn,
+    #[schemars(rename = "DirectValue.dtype_finding")]
+    pub directvalue_dtype_finding: crate::direct::dtype::DtypeFinding,
+    #[schemars(rename = "DirectValue.checked_cell")]
+    pub directvalue_checked_cell: crate::direct::cell::CheckedDirectCell,
+    #[schemars(rename = "CheckDirectShape.input")]
+    pub checkdirectshape_input: crate::direct::DirectShape,
+    #[schemars(rename = "PrepareDirect.input")]
+    pub preparedirect_input: crate::direct::DirectPreparation,
+    #[schemars(rename = "DirectValue.description")]
+    pub directvalue_description: crate::direct::DirectDescription,
+    #[schemars(rename = "BindDirect.input")]
+    pub binddirect_input: crate::direct::DirectCallFacts,
+    #[schemars(rename = "DirectValue.bound")]
+    pub directvalue_bound: crate::direct::BoundDirectCall,
+    #[schemars(rename = "FrameSession.input")]
+    pub frame_session_input: crate::frame_session::FrameSessionInput,
+    #[schemars(rename = "FrameSession.state")]
+    pub frame_session_state: crate::frame_session::FrameSessionState,
+    #[schemars(rename = "InspectDirectPair.input")]
+    pub inspectdirectpair_input: crate::direct::TabularInput,
+    #[schemars(rename = "ResolveTabular.input")]
+    pub resolvetabular_input: crate::direct::TabularInput,
+    #[schemars(rename = "DirectValue.resolved_tabular")]
+    pub directvalue_resolved_tabular: crate::direct::ResolvedTabular,
+    #[schemars(rename = "EncodeTabular.input")]
+    pub encodetabular_input: crate::direct::TabularEncoding,
+    #[schemars(rename = "EncodeTabularTable.input")]
+    pub encodetabulartable_input: crate::direct::TabularTableEncoding,
+    #[schemars(rename = "DirectValue.encoded_table")]
+    pub directvalue_encoded_table: crate::direct::EncodedTabularTable,
+    #[schemars(rename = "TabularSession.state")]
+    pub tabularsession_state: crate::session::TabularSessionState,
+    #[schemars(rename = "CountTabularSessionOverlap.input")]
+    pub count_tabular_session_overlap_input: crate::session::CountTabularSessionOverlap,
+    #[schemars(rename = "DirectValue.session_overlap")]
+    pub directvalue_session_overlap: crate::session::TabularSessionOverlap,
+    #[schemars(rename = "DirectValue.session_id_selection")]
+    pub directvalue_session_id_selection: crate::session::SessionIdSelection,
+    #[schemars(rename = "DirectValue.session_question_difference")]
+    pub directvalue_session_question_difference: crate::session::SessionQuestionDifference,
+    #[schemars(rename = "DirectValue.session_reply")]
+    pub directvalue_session_reply: crate::session::SessionTransportReply,
+    #[schemars(rename = "DirectValue.session_keys")]
+    pub directvalue_session_keys: crate::session::SessionKeys,
+    #[schemars(rename = "DirectValue.prepared_score")]
+    pub directvalue_prepared_score: crate::session::PreparedTabularScore,
+    #[schemars(rename = "DirectValue.prepared_fit")]
+    pub directvalue_prepared_fit: crate::session::PreparedTabularFit,
+    #[schemars(rename = "SendTabularSession.input")]
+    pub send_tabular_session_input: crate::session::SendTabularSession,
+    #[schemars(rename = "PrepareTabularScore.input")]
+    pub prepare_tabular_score_input: crate::session::PrepareTabularScore,
+    #[schemars(rename = "CheckTabularSessionReply.input")]
+    pub check_tabular_session_reply_input: crate::session::SessionIdObservation,
+    #[schemars(rename = "CheckTabularSessionQuestion.input")]
+    pub check_tabular_session_question_input: crate::session::CheckTabularSessionQuestion,
+    #[schemars(rename = "AcceptTabularSession.input")]
+    pub accept_tabular_session_input: crate::session::AcceptTabularSession,
+    #[schemars(rename = "PrepareTabularFit.input")]
+    pub prepare_tabular_fit_input: crate::session::PrepareTabularFit,
+    #[schemars(rename = "CloseTabularSession.input")]
+    pub closetabularsession_input: crate::session::TabularSessionState,
+    #[schemars(rename = "DirectValue.session_state")]
+    pub directvalue_session_state: crate::session::TabularSessionState,
+    #[schemars(rename = "DirectValue.encoded")]
+    pub directvalue_encoded: crate::direct::EncodedDirectBody,
+    #[schemars(rename = "Predict.direct.input")]
+    pub predict_direct_input: crate::direct::DirectPrediction,
+    #[schemars(rename = "DecodedDirectResponse.value")]
+    pub decodeddirectresponse_value: crate::direct::DirectResponseData,
+    #[schemars(rename = "DirectResponseData.rows")]
+    pub directresponsedata_rows: Vec<crate::direct::DecodedDirectRow>,
+    #[schemars(rename = "CheckDirectRows.input")]
+    pub checkdirectrows_input: crate::direct::DirectRowsInput,
+    #[schemars(rename = "DirectValue.checked_rows")]
+    pub directvalue_checked_rows: crate::direct::CheckedDirectRows,
+    #[schemars(rename = "InterpretDirectJson.input")]
+    pub interpretdirectjson_input: crate::direct::DirectJsonInput,
+    #[schemars(rename = "DirectValue.interpreted")]
+    pub directvalue_interpreted: crate::direct::InterpretedDirectRow,
+    #[schemars(rename = "SelectDirectMember.input")]
+    pub selectdirectmember_input: crate::direct::DirectMemberInput,
+    #[schemars(rename = "DirectValue.member")]
+    pub directvalue_member: crate::direct::SelectedDirectMember,
+    #[schemars(rename = "AttributeDirectRow.input")]
+    pub attributedirectrow_input: crate::direct::DirectAttributionInput,
+    #[schemars(rename = "DirectValue.attributed")]
+    pub directvalue_attributed: crate::direct::AttributedDirectRow,
+    #[schemars(rename = "DecodeDirectResponse.input")]
+    pub decodedirectresponse_input: crate::direct::DirectDecodeInput,
+    #[schemars(rename = "LayoutDirect.input")]
+    pub layoutdirect_input: crate::direct::DirectLayoutInput,
+
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]
@@ -1495,6 +2017,8 @@ pub struct Attachments {
     pub edit_schema_schema: HeldSchema,
     #[schemars(rename = "EditSchema.edit")]
     pub edit_schema_edit: SchemaEdit,
+    #[schemars(rename = "EditSchema.context")]
+    pub edit_schema_context: SchemaEditContext,
     #[schemars(rename = "SchemaEdited.schema")]
     pub schema_edited_schema: HeldSchema,
     #[schemars(rename = "Materialize.schema")]

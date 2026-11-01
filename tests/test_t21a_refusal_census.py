@@ -151,6 +151,7 @@ def _copy(tmp_path: Path) -> Path:
             '--',
             'rust/crates',
             'packages/structured-data-models-client/src',
+            'packages/structured-data-models-client/tests',
             'contract',
         ],
         capture_output=True,
@@ -228,7 +229,7 @@ def test_a_site_with_no_probe_fails_by_name(
 
 
 def test_the_first_duckdb_run_probed_every_site_on_both_routes() -> None:
-    r"""Exit: the first run is on DuckDB; every site the code has now was
+    r"""Exit: the first run is on DuckDB; every warehouse-applicable site was
     probed there on both routes, each hit is keyed by rule or by site and
     code with its count of real sources, and SQLite and Postgres are
     reported unmeasured, never as zero hits."""
@@ -239,7 +240,14 @@ def test_the_first_duckdb_run_probed_every_site_on_both_routes() -> None:
     for probe in evidence['probes']:
         assert set(probe['outcomes']) >= {'python-core', 'reference'}, probe
         probed.setdefault(probe['site'], probe)
-    assert sites <= set(probed), sorted(sites - set(probed))
+    inventory = json.loads((ROOT / 'contract/refusal-census.json').read_text())
+    applicable = {
+        probe['site']
+        for probe in inventory['probes']
+        if 'duckdb' in probe.get('databases', ['duckdb', 'sqlite', 'postgres'])
+    }
+    assert applicable <= sites
+    assert applicable == set(probed), sorted(applicable ^ set(probed))
     for hit in evidence['hits']:
         assert hit['site'] in sites, hit
         assert hit.get('rule') or hit.get('code'), hit

@@ -241,10 +241,12 @@ def test_a_session_scoring_call_still_sends_only_what_the_contract_allows():
     }
 
 
-def test_the_adapter_reads_the_answer_against_the_whole_request():
+def test_the_adapter_reads_the_answer_against_the_whole_request(monkeypatch):
     """The pinned half names the task and schema. Without them an adapter
     cannot tell a forecast's repeated rows from a duplicate answer, nor say
     which column an id stands for."""
+    # This observer specifically exercises the retained Python adapter.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     schema = schema_for(list(range(1, 21)))
     seen: list[dict] = []
 

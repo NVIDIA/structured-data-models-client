@@ -710,6 +710,8 @@ impl From<WarningCode> for Code {
 }
 
 warning_codes! {
+    FrameSchema = "FRAME_SCHEMA",
+    BinaryTargetAsQuantity = "BINARY_TARGET_AS_QUANTITY",
     KeyNoValue = "KEY_NO_VALUE",
     KeyRepeats = "KEY_REPEATS",
     KeyDeclined = "KEY_DECLINED",
@@ -747,6 +749,85 @@ warning_codes! {
 }
 
 sentences! {
+    DirectColumnNames = "direct_column_names", E::InvalidRequest;
+    DirectConstantClass = "direct_constant_class", W::FrameSchema;
+    DirectNativeConstantClass = "direct_native_constant_class", W::FrameSchema;
+    DirectConstantRegression = "direct_constant_regression", W::FrameSchema;
+    DirectNativeConstantRegression = "direct_native_constant_regression", W::FrameSchema;
+    DirectDuplicateColumns = "direct_duplicate_columns", E::InvalidRequest;
+    DirectEmpty = "direct_empty", E::InvalidRequest;
+    DirectExtra = "direct_extra", E::InvalidRequest;
+    DirectFloatPrecision = "direct_float_precision", E::InvalidRequest;
+    DirectFrame = "direct_frame", E::InvalidRequest;
+    DirectNativeTableEntryName = "direct_native_table_entry_name", E::InvalidRequest;
+    DirectNativeNameEmpty = "direct_native_name_empty", E::InvalidRequest;
+    DirectNativeNameCharacters = "direct_native_name_characters", E::InvalidRequest;
+    DirectNativeSchemaColumns = "direct_native_schema_columns", E::InvalidRequest;
+    DirectNativeRelated = "direct_native_related", E::UnsupportedRequest;
+    DirectNativeMultilabel = "direct_native_multilabel", E::UnsupportedRequest;
+    DirectNativeTargetMissing = "direct_native_target_missing", E::InvalidRequest;
+    DirectNativeTargetScored = "direct_native_target_scored", E::InvalidRequest;
+    DirectNativeExtra = "direct_native_extra", E::InvalidRequest;
+    DirectNativeDuplicateColumns = "direct_native_duplicate_columns", E::InvalidRequest;
+    DirectNativeColumnNames = "direct_native_column_names", E::InvalidRequest;
+    DirectNativeMissing = "direct_native_missing", E::InvalidRequest;
+
+    DirectKnownTarget = "direct_known_target", E::InvalidRequest;
+    DirectMissing = "direct_missing", E::InvalidRequest;
+    DirectNativeIdMismatch = "direct_native_id_mismatch", E::InvalidResponse;
+    DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
+    DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
+    DirectOptionInteger = "direct_option_integer", E::InvalidRequest;
+    DirectOptionCycle = "direct_option_cycle", E::InvalidRequest;
+    DirectOptionDepth = "direct_option_depth", E::InvalidRequest;
+    DirectRelated = "direct_related", E::UnsupportedRequest;
+    DirectSchemaColumns = "direct_schema_columns", E::InvalidRequest;
+    DirectSchemaMissing = "direct_schema_missing", E::InvalidRequest;
+    DirectScored = "direct_scored", E::InvalidRequest;
+    DirectTargetMissing = "direct_target_missing", E::InvalidRequest;
+    DirectTargetScored = "direct_target_scored", E::InvalidRequest;
+    DirectContextLimit = "direct_context_limit", E::UnsupportedRequest;
+    TabularMissingRowIndex = "tabular_missing_row_index", E::InvalidResponse;
+    DirectMultilabel = "direct_multilabel", E::UnsupportedRequest;
+    DirectRelationalFrames = "direct_relational_frames", E::UnsupportedRequest;
+    DirectNameEmpty = "direct_name_empty", E::InvalidRequest;
+    DirectNameCharacters = "direct_name_characters", E::InvalidRequest;
+    DirectTask = "direct_task", E::InvalidRequest;
+    DirectOverlap = "direct_overlap", W::FrameSchema;
+    DirectNativeMissingKey = "direct_native_missing_key", W::FrameSchema;
+    DirectKeyRepeated = "direct_key_repeated", W::KeyRepeats;
+    DirectKeyMissing = "direct_key_missing", E::InvalidRequest;
+    DirectKeyMissingPart = "direct_key_missing_part", E::InvalidRequest;
+    DirectKeyNotUnique = "direct_key_not_unique", E::InvalidRequest;
+    DirectKeyComposite = "direct_key_composite", W::KeyRepeats;
+    DirectKeyNoComposite = "direct_key_no_composite", W::KeyRepeats;
+    DirectCategoricalPopulation = "direct_categorical_population", W::FrameSchema;
+    DirectDatesAsText = "direct_dates_as_text", W::FrameSchema;
+    DirectTextCategorical = "direct_text_categorical", W::FrameSchema;
+    ArrowTabularInput = "arrow_tabular_input", E::InvalidRequest;
+    DirectUnfinished = "direct_unfinished", E::UnsupportedRequest;
+    DirectUnknownModel = "direct_unknown_model", E::UnknownModel;
+    DirectWireFraction = "direct_wire_fraction", E::InvalidRequest;
+    DirectWireNonFinite = "direct_wire_non_finite", E::InvalidRequest;
+    DirectWireRange = "direct_wire_range", E::InvalidRequest;
+    DirectNativeFraction = "direct_native_fraction", E::InvalidRequest;
+    DirectNativeNonFinite = "direct_native_non_finite", E::InvalidRequest;
+    DirectNativeRange = "direct_native_range", E::InvalidRequest;
+    DirectNativeIntegerRange = "direct_native_integer_range", E::InvalidRequest;
+    DirectNativeIntegralPrecision = "direct_native_integral_precision", E::InvalidRequest;
+    DirectNativeDecimalMagnitude = "direct_native_decimal_magnitude", E::InvalidRequest;
+    DirectNativePrecision = "direct_native_precision", E::InvalidRequest;
+    DirectNativeBytes = "direct_native_bytes", E::UnsupportedRequest;
+    DirectNativeContainer = "direct_native_container", E::UnsupportedRequest;
+    TabularIdMismatch = "tabular_id_mismatch", E::InvalidResponse;
+    TabularRowBounds = "tabular_row_bounds", E::InvalidResponse;
+    TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
+    TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
+    RequestSplitInvalid = "request_split_invalid", E::InvalidRequest;
+    ResultMergeEmpty = "result_merge_empty", E::InternalError;
+    ResultMergeModels = "result_merge_models", E::InternalError;
+    ResultMergeOutputs = "result_merge_outputs", E::InternalError;
+    ResultMergeCandidateType = "result_merge_candidate_type", E::InternalError;
     Internal = "internal", E::InternalError;
     ProviderFailed = "provider_failed", E::ProviderError;
     TransportFailed = "transport_failed", E::TransportError;
@@ -760,6 +841,7 @@ sentences! {
     InvalidMessage = "invalid_message", E::InvalidMessage;
     UnknownModel = "unknown_model", E::UnknownModel;
     MissingExtra = "missing_extra", E::MissingExtra;
+    FrameSessionInput = "frame_session_input", E::InvalidRequest;
     SessionsUnsupported = "sessions_unsupported", E::SessionsUnsupported;
     RelationNoPart = "relation_no_part", E::InvalidRequest, rule "relation";
     RelationTooManyParts = "relation_too_many_parts", E::UnsupportedRequest, rule "relation";
@@ -836,6 +918,7 @@ sentences! {
     ColumnsLeftOut = "columns_left_out", W::ColumnsLeftOut;
     TimeValuesUnread = "time_values_unread", W::TimeValuesUnread;
     DatesReadDayFirst = "dates_read_day_first", W::DatesReadDayFirst;
+    BinaryTargetAsQuantity = "binary_target_as_quantity", W::BinaryTargetAsQuantity;
     KeyCandidatesTied = "key_candidates_tied", W::KeyCandidatesTied;
     LinkCannotJoinNotTheKey = "link_cannot_join_not_the_key", W::LinkCannotJoin;
     LinkCannotJoinNoKey = "link_cannot_join_no_key", W::LinkCannotJoin;
@@ -917,6 +1000,7 @@ sentences! {
     ContextConstantQuestion = "context_constant_question", W::ContextConstant;
     ContextConstantAnswer = "context_constant_answer", W::ContextConstant;
     OutputsAbsent = "outputs_absent", W::OutputsAbsent;
+    DirectOutputsAbsent = "direct_outputs_absent", W::OutputsAbsent;
     StepsUnexplained = "steps_unexplained", W::StepsUnexplained;
     ExplanationOneEntity = "explanation_one_entity", E::UnsupportedRequest;
     ExplanationFastMode = "explanation_fast_mode", E::UnsupportedRequest;
@@ -972,6 +1056,10 @@ sentences! {
     SamplerStateUnread = "sampler_state_unread", E::InvalidRequest;
     TimeConstantOffset = "time_constant_offset", E::InvalidRequest;
     TimeConstantPast = "time_constant_past", E::InvalidRequest;
+    FrameRowsDropped = "frame_rows_dropped", W::FrameSchema;
+    FrameTimeUnread = "frame_time_unread", E::InvalidRequest;
+    FrameTimeEmpty = "frame_time_empty", E::InvalidRequest;
+    FrameTimeOrder = "frame_time_order", E::InvalidRequest;
     TimeColumnNotATime = "time_column_not_a_time", E::InvalidRequest;
     OptionsWithoutValues = "options_without_values", E::InvalidRequest;
     CompositeKeyFloat = "composite_key_float", E::InvalidRequest;
@@ -997,6 +1085,10 @@ sentences! {
     HeldBySeveralRowsOne = "held_by_several_rows_one", E::InvalidRequest;
     HeldBySeveralRows = "held_by_several_rows", E::InvalidRequest;
     HeldBySeveralRowsMany = "held_by_several_rows_many", E::InvalidRequest;
+    FrameNativeCaller = "frame_native_caller", E::InvalidRequest;
+    FrameTaskReferences = "frame_task_references", E::InvalidRequest;
+    FrameKeyMissingParts = "frame_key_missing_parts", E::InvalidRequest;
+    FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
     NotInTable = "not_in_table", E::InvalidRequest;
     SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;
     Unresolved = "unresolved", E::InvalidRequest;
@@ -1055,6 +1147,7 @@ sentences! {
     ValueNotAtScale = "value_not_at_scale", E::ProviderSchemaMismatch;
     TextNotUtf8 = "text_not_utf8", E::ValueOutOfRange, rule "text_not_utf8";
     UnsupportedTypeUnread = "unsupported_type_unread", E::UnsupportedType;
+    LargeTextMaterialize = "large_text_materialize", E::UnsupportedType;
     AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
     InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
     PartForecastStep = "part_forecast_step", Code::Part;

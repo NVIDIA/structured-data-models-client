@@ -1,0 +1,32 @@
+{
+  "unique_integer": [
+    8,
+    5,
+    1
+  ],
+  "masked_nulls": [
+    8,
+    1,
+    5
+  ],
+  "monotonic_ties": [
+    8,
+    1,
+    5
+  ],
+  "date_unique": [
+    8,
+    5,
+    1
+  ],
+  "arrow_ties": [
+    8,
+    1,
+    5
+  ],
+  "multi": [
+    8,
+    1,
+    5
+  ]
+}

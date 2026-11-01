@@ -15,7 +15,7 @@ import java.util.Optional;
  * autocommit, else a savepoint inside the caller's), so a failed read leaves the connection
  * usable.
  */
-public final class PostgresSource implements Source {
+public final class PostgresSource implements JdbcSource {
   private final Connection connection;
   private final String schema;
 

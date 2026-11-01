@@ -1091,3 +1091,23 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
     assert_eq!(small.time_column, None);
     assert!(small.time.unconfirmed.is_empty());
 }
+
+#[test]
+fn large_physical_text_is_described_and_large_binary_is_left_out() {
+    let text: ArrayRef = Arc::new(arrow_array::LargeStringArray::from(vec!["no date"; 4]));
+    let bytes: ArrayRef = Arc::new(arrow_array::LargeBinaryArray::from(vec![
+        b"blob".as_slice();
+        4
+    ]));
+    let table = of(vec![("description", text), ("blob", bytes)]).unwrap();
+    let column = table.column("description").unwrap();
+    assert_eq!(column.dtype, sdm_contract::ops::Dtype::String);
+    assert_eq!(column.received, sdm_contract::ColumnType::LargeUtf8);
+    assert_eq!(
+        table.left_out,
+        [LeftOut {
+            name: "blob".into(),
+            dtype: sdm_contract::ops::Dtype::Binary
+        }]
+    );
+}

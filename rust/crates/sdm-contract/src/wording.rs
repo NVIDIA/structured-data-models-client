@@ -241,6 +241,216 @@ pub struct DatabaseNames {
 pub fn template(sentence: Sentence) -> Template {
     use Sentence as S;
     match sentence {
+        S::DirectNativeSchemaColumns => {
+            said(r#"schema does not describe context column(s) {host.direct_columns!r}"#)
+        }
+        S::DirectNativeTableEntryName => {
+            said(r#"table names must be non-empty strings; got {host.direct_name!r}"#)
+        }
+        S::DirectNativeNameEmpty => {
+            said(r#"The name {host.direct_name!r} must be a non-empty string."#)
+        }
+        S::DirectNativeNameCharacters => said(
+            r#"The name {host.direct_name!r} contains one or more invalid characters: {host.direct_characters!r}."#,
+        ),
+        S::DirectNativeConstantRegression => said(
+            r#"every context row has the same {host.direct_target}, so nothing in the context distinguishes one answer from another, so the answer cannot say much. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectNativeConstantClass => said(
+            r#"every context row has the same {host.direct_target}, so a classification needs at least two classes to learn from, and the answer will be that one class at probability 1.0. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectNativeRelated => said(
+            r#"related_tables {host.direct_tables!r} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
+        ),
+        S::DirectNativeMultilabel => said(
+            r#"{host.direct_target!r} holds a list per row, which is a multi-label target. These models predict one value per row, and the contract has no form for a set of labels, so this cannot be asked or answered"#,
+        ),
+        S::DirectNativeTargetMissing => said(
+            r#"context has no target column {host.direct_target!r}; it has {host.direct_columns!r}"#,
+        ),
+        S::DirectNativeTargetScored => said(
+            r#"predict carries the target column {host.direct_target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{host.direct_target!r}])"#,
+        ),
+        S::DirectNativeExtra => said(
+            r#"predict has column(s) {host.direct_columns!r} that context does not; the model is shown context first, so it cannot score a feature it has never been given"#,
+        ),
+        S::DirectNativeDuplicateColumns => said(
+            r#"table {host.direct_table!r} has duplicate column name(s) {host.direct_columns!r}"#,
+        ),
+        S::DirectNativeColumnNames => said(
+            r#"table {host.direct_table!r} column names must be strings; got {host.direct_columns!r}"#,
+        ),
+        S::DirectNativeMissing => said(
+            r#"predict is missing column(s) {host.direct_columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
+        ),
+        S::DirectColumnNames => {
+            said(r#"table {table!r} column names must be strings; got {columns!r}"#)
+        }
+        S::DirectConstantClass => said(
+            r#"every context row has the same {target}, so a classification needs at least two classes to learn from, and the answer will be that one class at probability 1.0. If the rows being scored are the ones that differ, score fewer of them; if {target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectConstantRegression => said(
+            r#"every context row has the same {target}, so nothing in the context distinguishes one answer from another, so the answer cannot say much. If the rows being scored are the ones that differ, score fewer of them; if {target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectDuplicateColumns => {
+            said(r#"table {table!r} has duplicate column name(s) {columns!r}"#)
+        }
+        S::DirectEmpty => said(
+            r#"context has no rows, so there is nothing for the model to learn the answer from"#,
+        ),
+        S::DirectExtra => said(
+            r#"predict has column(s) {columns!r} that context does not; the model is shown context first, so it cannot score a feature it has never been given"#,
+        ),
+        S::DirectFloatPrecision => said(
+            r#"value {value!r} cannot be sent as {dtype} without losing precision, because it is outside the range a {dtype} represents exactly; give the column the same integer dtype in every frame, or convert it to strings"#,
+        ),
+        S::DirectFrame => {
+            said(r#"{parameter} must be a {host.direct_frame}, got {native_type}{hint}"#)
+        }
+        S::DirectKnownTarget => {
+            said(r#"context must contain at least one row with a known target"#)
+        }
+        S::DirectMissing => said(
+            r#"predict is missing column(s) {columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
+        ),
+        S::DirectNativeIdMismatch => said(
+            r#"the response pairs row_index {index} with id {host.direct_response_id!r}, and this batch asked about {host.direct_response_key!r} there"#,
+        ),
+        S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
+        S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
+        S::DirectOptionCycle => {
+            said(r#"this value refers back to itself, so it cannot be sent as JSON"#)
+        }
+        S::DirectOptionDepth => said(
+            r#"this value nests more than {limit} levels deep, or refers back to itself, so it cannot be sent as JSON"#,
+        ),
+        S::DirectOptionInteger => said(
+            r#"value {digits} cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one"#,
+        ),
+        S::DirectRelated => said(
+            r#"related_tables {tables!r} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
+        ),
+        S::DirectSchemaColumns => said(r#"schema does not describe context column(s) {columns!r}"#),
+        S::DirectSchemaMissing => said(r#"{name}"#),
+        S::DirectScored => said(
+            r#"the rows being scored hold {arriving!r} in column {column!r}, and the schema declares it {dtype!r} meaning {stype!r}, which {arriving!r} cannot mean. Sent, the column would be described as both at once and answered with numbers that are wrong without saying so. Convert it before scoring: predict[{column!r}] = pd.to_numeric(predict[{column!r}]) or say what the column really is with schema[{table!r}][{column!r}].stype = ..."#,
+        ),
+        S::DirectTargetMissing => {
+            said(r#"context has no target column {target!r}; it has {columns!r}"#)
+        }
+        S::DirectTargetScored => said(
+            r#"predict carries the target column {target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{target!r}])"#,
+        ),
+        S::DirectContextLimit => said(
+            r#"this request carries {context_rows:,} context rows and {model} reads at most {context_rows_max:,}. A request built directly is sent as it was given, so choose the rows you want as context, or gather it with materialize(), which keeps the context under the cap and says how"#,
+        ),
+        S::TabularMissingRowIndex => said(
+            r#"kumo-tabular returned a response that does not match the contract: PredictionItem response is missing required field 'row_index'"#,
+        ),
+        S::DirectMultilabel => said(
+            r#"{target!r} holds a list per row, which is a multi-label target. These models predict one value per row, and the contract has no form for a set of labels, so this cannot be asked or answered"#,
+        ),
+        S::DirectRelationalFrames => said(
+            r#"a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form"#,
+        ),
+        S::DirectNameEmpty => said(r#"The name {name!r} must be a non-empty string."#),
+        S::DirectNameCharacters => {
+            said(r#"The name {name!r} contains one or more invalid characters: {characters!r}."#)
+        }
+        S::DirectTask => said(
+            r#"task must be one of ['classification', 'binary_classification', 'multiclass_classification', 'regression', 'forecasting', 'temporal_link_prediction', 'ranking'], got {host.direct_task!r}"#,
+        ),
+        S::DirectOverlap => said(
+            r#"{shown} of the {rows} rows being scored are also in context, carrying the {target!r} being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."#,
+        ),
+        S::DirectTextCategorical => said(
+            r#"kumo-tabular cannot read a text column, so {columns!c} travel(s) as categorical instead. "#,
+        ),
+        S::ArrowTabularInput => said(r#"{reason}"#),
+        S::DirectUnfinished => said(r#"the partial direct request requires {family}"#),
+        S::DirectUnknownModel => said(
+            r#"Unknown model {model!r}; this client can send: {known_models!r}. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."#,
+        ),
+        S::DirectNativeMissingKey => said(
+            r#"{table}.{column} identifies a row, but {count:,} row(s) have no value for it. Those rows cannot be scored and the model will not see them; fill or drop them, or name a different primary key."#,
+        ),
+        S::DirectDatesAsText => said(
+            r#"{table}.{column} holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame[{column!r}] = pd.to_datetime(frame[{column!r}]{host.direct_date_arguments}), or set schema[{table!r}][{column!r}].stype = 'timestamp' afterwards."#,
+        ),
+        S::DirectKeyRepeated => said(
+            r#"{table}.{column} identifies a row {count:,} time(s) it has already been used, e.g. {host.direct_key_example!r}. Those rows are indistinguishable to the model. Name a different primary key if this column is a foreign key rather than an identifier."#,
+        ),
+        S::DirectKeyMissing => said(
+            r#"{table}.{column} has {count:,} row(s) with no value, in {column!r}, so those rows cannot be identified; fill or drop them before using it as a primary key"#,
+        ),
+        S::DirectKeyMissingPart => said(
+            r#"{table}.{column} has {count:,} row(s) with no value in part of it, so those rows cannot be identified; fill or drop them before using it as a primary key"#,
+        ),
+        S::DirectKeyNotUnique => said(
+            r#"{table}.{column} is not unique enough to identify a row: {count:,} of {rows:,} rows repeat a value already used, e.g. {host.direct_key_example!r}"#,
+        ),
+        S::DirectKeyComposite => said(
+            r#"{table}.{column} identifies a row {count:,} time(s) it has already been used, e.g. {host.direct_key_example!r}. Those rows are indistinguishable to the model. {column!r} is unique together with {host.direct_key_companions}, which is what a composite key looks like; pass that as the primary key if so."#,
+        ),
+        S::DirectKeyNoComposite => said(
+            r#"{table}.{column} identifies a row {count:,} time(s) it has already been used, e.g. {host.direct_key_example!r}. Those rows are indistinguishable to the model. They differ only by {distinguishing!l}, which a primary key cannot be made of, so there is no composite key to name here: keep one row per {column!r} if the model should see one, or name a different primary key."#,
+        ),
+        S::DirectCategoricalPopulation => said(
+            r#"{table}.{column} holds {distinct} distinct values in the {present} rows that have one, so the rows ran out before the values did and the count is a measure of the frame rather than of the column. It is read as categorical here because {distinct} is at most 64; on more rows the same column could pass that and be read as text, which the models treat differently. If this frame is a sample, say what the column is with schema[{table!r}][{column!r}].stype = 'categorical' (or 'text'), so that it does not change under a larger one."#,
+        ),
+        S::DirectNativeFraction => said(
+            r#"value {host.direct_cell!r} cannot be sent as {dtype} without losing its fractional part"#,
+        ),
+        S::DirectNativeNonFinite => said(
+            r#"value {host.direct_cell!r} is not JSON-representable; replace non-finite numbers with a finite value or a null"#,
+        ),
+        S::DirectNativeRange => said(
+            r#"value {host.direct_cell!r} is outside the range {dtype} represents; send the column as strings to keep it exact"#,
+        ),
+        S::DirectNativeIntegerRange => said(
+            r#"value {host.direct_cell!r} is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
+        ),
+        S::DirectNativeIntegralPrecision => said(
+            r#"value {host.direct_cell!r} cannot be sent as {dtype} without losing precision, because it is outside the range a {dtype} represents exactly; give the column the same integer dtype in every frame, or convert it to strings"#,
+        ),
+        S::DirectNativeDecimalMagnitude => said(
+            r#"value {host.direct_cell!r} is too large for {dtype} to represent; send the column as strings to keep it exact"#,
+        ),
+        S::DirectNativePrecision => said(
+            r#"value {host.direct_cell!r} cannot be sent as {dtype} without losing precision; send the column as strings to keep it exact"#,
+        ),
+        S::DirectNativeBytes => said(
+            r#"column {column!r} holds raw bytes ({native_type}), and the contract has no cell that carries them. Decode the column to text, or leave it out of the schema"#,
+        ),
+        S::DirectNativeContainer => said(
+            r#"column {column!r} holds {shape} ({native_type}), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row"#,
+        ),
+        S::DirectWireFraction => {
+            said(r#"value {value!r} cannot be sent as {dtype} without losing its fractional part"#)
+        }
+        S::DirectWireNonFinite => said(
+            r#"value {value} is not JSON-representable; replace non-finite numbers with a finite value or a null"#,
+        ),
+        S::DirectWireRange => said(
+            r#"value {value!r} is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
+        ),
+        S::TabularIdMismatch => said(
+            r#"the response pairs row_index {index} with id {id!r}, and this batch asked about {expected!r} there"#,
+        ),
+        S::TabularRowBounds => {
+            said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
+        }
+        S::TabularRowRepeated => said(r#"the response answers row {index} more than once"#),
+        S::TabularRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
+        S::RequestSplitInvalid => said("cannot inspect request data: {reason}"),
+        S::ResultMergeEmpty => said("no parts to merge"),
+        S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
+        S::ResultMergeOutputs => said(
+            "these parts were asked for different outputs ({outputs}), so they are not slices of one request",
+        ),
+        S::ResultMergeCandidateType => {
+            said("result candidate type {type_name} is not supported by the shared merge")
+        }
         S::Internal => said(r#"the core failed; this is a defect, not a problem with the request"#),
         S::ProviderFailed => said(r#"the data source failed"#),
         S::TransportFailed => said(
@@ -256,6 +466,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::InvalidMessage => said(r#"the host sent a message the core cannot read"#),
         S::UnknownModel => said(r#"the model named does not exist"#),
         S::MissingExtra => said(r#"an optional dependency this call needs is not installed"#),
+        S::FrameSessionInput => said(r#"{reason}"#),
         S::SessionsUnsupported => said(r#"the model endpoint does not support sessions"#),
         S::RelationNoPart => said(
             r#"the core asked the data source for a {request} of a relation named by no part, which no source reads"#,
@@ -393,6 +604,9 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::KeyMissingValuesColumn => said(
             r#"{table}.{column} has {missing:,} row(s) with no value, in {column!r}, so those rows cannot be identified; fill or drop them before using it as a primary key. {advice:skip_key_check()}"#,
+        ),
+        S::FrameKeyMissingParts => said(
+            r#"the primary key of {table!r}, {columns!l}, has {missing:,} row(s) with no value in {parts!l}; fill or drop those rows before using the key."#,
         ),
         S::KeyMissingValuesColumns => said(
             r#"the primary key of {table!r}, {columns!l}, has {missing:,} row(s) with no value in part of it, so those rows cannot be identified; fill or drop them before using them as a primary key. {advice:skip_key_check()}"#,
@@ -690,7 +904,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::ContextConstantAnswer => said(
             r#"every context row has the same answer, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."#,
         ),
-        S::OutputsAbsent => said(
+        S::OutputsAbsent | S::DirectOutputsAbsent => said(
             r#"{model} answered without {absent!r}, which this request asked for, so no column of {advice:result_frame()} will carry it. The answer to the rest of the request is unaffected."#,
         ),
         S::StepsUnexplained => said(
@@ -844,6 +1058,16 @@ pub fn template(sentence: Sentence) -> Template {
         S::TimeConstantPast => said(
             r#"the query compares with a time past what a timestamp of nanoseconds holds, the years 1677 to 2262"#,
         ),
+        S::FrameRowsDropped => said(r#"The graph was built without some of the rows: {summary}"#),
+        S::FrameTimeUnread => said(
+            r#"{column} contains values that do not read as a date. Convert the column to timestamps using an explicit format; to discard invalid values, use the date parser's errors='coerce' option."#,
+        ),
+        S::FrameTimeEmpty => said(
+            r#"{column}: none of its {rows} values read as a date. Supply timestamps or convert valid dates using an explicit format and timezone."#,
+        ),
+        S::FrameTimeOrder => said(
+            r#"{column} does not say unambiguously which date field is the day and which is the month. Convert it to timestamps using an explicit date format before materializing."#,
+        ),
         S::TimeColumnNotATime => said(
             r#"{table}.{column} is the time column of {table!r}, and it does not mean a timestamp, which a time column must"#,
         ),
@@ -915,6 +1139,15 @@ pub fn template(sentence: Sentence) -> Template {
         S::HeldBySeveralRowsMany => said(
             r#"Cannot score {shown!j} and {more:,} more: more than one row of table '{table}' holds each of these values of '{key}', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row."#,
         ),
+        S::FrameNativeCaller => said(
+            "Cannot use column '{column}' of table '{table}' as row identity: {native_key_reason}{detail}",
+        ),
+        S::FrameTaskReferences => said(
+            "Task references {rows} unresolved row(s) in table '{table}' after graph sanitization{detail}",
+        ),
+        S::FrameNoValidRows => {
+            said("Found no valid rows in table '{table}'; supply valid non-missing {requirements}.")
+        }
         S::NotInTable => said(r#""The primary keys {keys!r} do not exist in the '{table}' table""#),
         S::SubgraphPastTables => said(
             r#"the request's subgraph carries {tables:,} tables, and the endpoint reads at most {limit:,}"#,
@@ -998,6 +1231,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::AnchorAfterData => said(
             r#"Anchor timestamp '{anchor!t}' is after the latest timestamp '{latest!t}' in the data. Please make sure this is intended."#,
         ),
+        S::BinaryTargetAsQuantity => said(
+            r#"{table}.{column} holds two whole numbers, which is how a binary label is usually written, and this is being asked as a regression because that is what the column says it holds. If they are labels, say so on the column: schema[{table!r}][{column!r}].stype = 'categorical'."#,
+        ),
         S::Float32Overflow => owned(
             r#"a value past the range of a 32-bit float was cast to one, as an infinity"#,
             Owner::HostCast,
@@ -1076,6 +1312,9 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::UnsupportedTypeUnread => said(
             r#"column {column!r} holds a value of the Arrow type {arrow_type} that the core cannot read"#,
+        ),
+        S::LargeTextMaterialize => said(
+            r#"column {column!r} retains Arrow LargeUtf8 storage, which can be described but is not supported for materialization; normal host admission narrows text that fits Utf8"#,
         ),
         S::AdmittedPastType => said(
             r#"column {column!r} holds a value of the Arrow type {arrow_type} that {admitted_type}, the type the core takes it as, cannot hold"#,

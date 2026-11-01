@@ -659,7 +659,14 @@ pub fn table(rows: &[Row], text_ids: bool) -> Result<RecordBatch, CoreError> {
     columns.push(Arc::new(Int64Array::from_iter_values(
         order.iter().map(|&i| i64::try_from(i).unwrap_or(i64::MAX)),
     )));
-    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| internal())
+    RecordBatch::try_new(
+        Arc::new(
+            Schema::new(fields)
+                .with_metadata([("sdm.text_ids".to_owned(), text_ids.to_string())].into()),
+        ),
+        columns,
+    )
+    .map_err(|_| internal())
 }
 
 #[cfg(test)]

@@ -864,7 +864,9 @@ fn preview_with(
         });
         firsts.push(if text_time {
             sample.iter().flatten().next().and_then(|v| match v {
-                Value::Text(t) => Some(Scalar::Utf8(t.clone())),
+                // Diagnostic spelling only: keep large padding out of warnings.
+                // Equality/presence still use the original borrowed text.
+                Value::Text(t) => Some(Scalar::Utf8(t.as_str().trim().to_owned())),
                 _ => None,
             })
         } else {
@@ -961,8 +963,8 @@ fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
         | DataType::UInt64
         | DataType::Decimal128(_, 0) => Dtype::Int,
         DataType::Float32 | DataType::Float64 | DataType::Decimal128(_, _) => Dtype::Float,
-        DataType::Utf8 => Dtype::String,
-        DataType::Binary => Dtype::Binary,
+        DataType::Utf8 | DataType::LargeUtf8 => Dtype::String,
+        DataType::Binary | DataType::LargeBinary => Dtype::Binary,
         DataType::Date32 | DataType::Timestamp(_, _) => Dtype::Date,
         DataType::Time64(_) => Dtype::Time,
         DataType::Duration(_) => Dtype::Timedelta,
@@ -1144,10 +1146,13 @@ fn text_holds_categories(sample: &[Option<Value>]) -> bool {
         return false;
     };
     let values: BTreeSet<&str> = first.iter().copied().collect();
-    let parts: BTreeSet<&str> = first
-        .iter()
-        .flat_map(|text| text.split(separator))
-        .collect();
+    let mut parts = BTreeSet::new();
+    for part in first.iter().flat_map(|text| text.split(separator)) {
+        parts.insert(part);
+        if parts.len() > MOST_CATEGORIES {
+            return false;
+        }
+    }
     // `values > 1.5 * parts`, in integers.
     2 * values.len() > 3 * parts.len() && parts.len() <= MOST_CATEGORIES
 }
@@ -1351,6 +1356,60 @@ struct Read<'a> {
     firsts: &'a [Option<Scalar>],
 }
 
+/// Apply the same time-column policy to a complete direct frame. The caller
+/// supplies its native storage observations; no source preview or query runs.
+pub(crate) fn choose_direct(
+    columns: &[InferredColumn],
+    rows: usize,
+    key: &[String],
+    instants: &[Result<Vec<Option<i128>>, TextUnread>],
+    presence: &[Vec<Option<Value>>],
+    firsts: &[Option<Scalar>],
+) -> Result<TimeChoice, CoreError> {
+    choose_time_column(
+        columns,
+        &Read {
+            instants,
+            presence,
+            firsts,
+        },
+        rows,
+        key,
+        None,
+        false,
+    )
+}
+
+/// Reuse time selection for reached native population and start observations.
+/// `whole` holds facts about the caller's complete frame, not a source query.
+pub(crate) fn choose_direct_populations(
+    columns: &[InferredColumn],
+    key: &[String],
+    whole: &WholeTable,
+    row_counts: &[(String, usize)],
+) -> Result<TimeChoice, CoreError> {
+    let instants = vec![Ok(vec![]); columns.len()];
+    let presence = vec![vec![]; columns.len()];
+    let firsts = vec![None; columns.len()];
+    choose_time_column_with_rows(
+        columns,
+        &Read {
+            instants: &instants,
+            presence: &presence,
+            firsts: &firsts,
+        },
+        whole.rows,
+        key,
+        Some(whole),
+        false,
+        Some(row_counts),
+    )
+}
+
+pub(crate) fn earliest_direct_instant(values: impl Iterator<Item = i128>) -> Option<i128> {
+    values.filter(|value| real(*value)).min()
+}
+
 /// The first real day: a value before it, such as 0001-01-01 or
 /// 1900-01-01, stands for no date (`_FIRST_REAL_DAY`, 1901-01-01 UTC), in
 /// nanoseconds since the epoch.
@@ -1508,12 +1567,22 @@ pub fn whole_table(
         let (scalar, start) = match (data_type, lows.first()) {
             (_, Some(None) | None) => (None, None),
             (DataType::Utf8, Some(Some(Value::Text(text)))) => (
-                Some(Scalar::Utf8(text.clone())),
+                Some(Scalar::Utf8(text.as_str().to_owned())),
                 times
                     .read(&[Some(text.as_str())], true)
                     .ok()
                     .and_then(|read| read.first().copied().flatten()),
             ),
+            (DataType::LargeUtf8, Some(Some(Value::Text(text)))) => {
+                let start = times
+                    .read(&[Some(text.as_str())], true)
+                    .ok()
+                    .and_then(|read| read.first().copied().flatten());
+                // A valid timestamp's normalized spelling is bounded by the
+                // approved format list. Never copy a giant invalid example.
+                let scalar = start.map(|_| Scalar::Utf8(text.as_str().trim().to_owned()));
+                (scalar, start)
+            }
             (DataType::Time64(_), _) => {
                 (values::times_of_day(one, low, 1).into_iter().next(), None)
             }
@@ -1590,6 +1659,18 @@ fn choose_time_column(
     whole: Option<&WholeTable>,
     failed: bool,
 ) -> Result<TimeChoice, CoreError> {
+    choose_time_column_with_rows(columns, read, rows, key, whole, failed, None)
+}
+
+fn choose_time_column_with_rows(
+    columns: &[InferredColumn],
+    read: &Read<'_>,
+    rows: usize,
+    key: &[String],
+    whole: Option<&WholeTable>,
+    failed: bool,
+    row_counts: Option<&[(String, usize)]>,
+) -> Result<TimeChoice, CoreError> {
     let candidates = candidates(columns, key);
     if candidates.is_empty() {
         return Ok(TimeChoice::default());
@@ -1609,7 +1690,14 @@ fn choose_time_column(
             refused.push((name.clone(), PassedOver::BirthDate));
             continue;
         }
-        let over = whole.and_then(|w| w.range(name).map(|r| (w.rows, r)));
+        let over = whole.and_then(|w| {
+            w.range(name).map(|r| {
+                let observed_rows = row_counts
+                    .and_then(|counts| counts.iter().find(|(column, _)| column == name))
+                    .map_or(w.rows, |(_, count)| *count);
+                (observed_rows, r)
+            })
+        });
         let why = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over);
         if let Some(why) = &why {
             if !failed {

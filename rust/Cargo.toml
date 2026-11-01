@@ -25,6 +25,7 @@ publish = false
 [workspace.dependencies]
 arrow-array = { version = "58", default-features = false }
 arrow-buffer = "58"
+arrow-cast = { version = "58", default-features = false }
 arrow-data = "58"
 arrow-ipc = { version = "58", default-features = false }
 arrow-pyarrow = "58"

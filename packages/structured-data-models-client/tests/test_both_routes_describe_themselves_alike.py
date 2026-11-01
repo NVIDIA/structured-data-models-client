@@ -47,21 +47,38 @@ def one_table() -> Schema:
 
 def envelope(scored: list[int], known: list[int]) -> dict:
     return {
+        'schema': {
+            'instance_table': {
+                'columns': {
+                    'id': {'dtype': 'int64'},
+                    'v': {'dtype': 'float64'},
+                },
+            },
+            'related_tables': {
+                'e': {'columns': {'id': {'dtype': 'int64'}}},
+            },
+        },
         'task': {
             'kind': 'regression',
             'target': {'column_name': 'a', 'dtype': 'float64'},
         },
         'context': {
             'instance_table': {
+                'format': 'arrays',
                 'columns': ['id', 'v'],
                 'rows': [[i, 1.0] for i in known],
             },
             'related_tables': {
-                'e': {'columns': ['id'], 'rows': [[i] for i in known]}
+                'e': {
+                    'format': 'arrays',
+                    'columns': ['id'],
+                    'rows': [[i] for i in known],
+                }
             },
         },
         'predict': {
             'instance_table': {
+                'format': 'arrays',
                 'columns': ['id'],
                 'rows': [[i] for i in scored],
             }
@@ -70,7 +87,6 @@ def envelope(scored: list[int], known: list[int]) -> dict:
 
 
 def test_the_two_routes_report_the_same_halves_for_the_same_question():
-    pytest.importorskip('sdm_relational_engine')
 
     schema = one_table()
     query = 'PREDICT t.amount FOR EACH t.rid'
@@ -94,7 +110,6 @@ def test_the_two_routes_report_the_same_halves_for_the_same_question():
 @pytest.mark.parametrize('model', ['tabular', 'relational'])
 def test_a_request_agrees_with_its_own_counts(model):
     """The halves and the counts are two readings of one thing."""
-    pytest.importorskip('sdm_relational_engine')
 
     chosen = KumoTabular() if model == 'tabular' else KumoRelational()
     with warnings.catch_warnings():
@@ -109,7 +124,6 @@ def test_a_request_agrees_with_its_own_counts(model):
 
 
 def test_a_relational_request_shows_the_tables_it_carries():
-    pytest.importorskip('sdm_relational_engine')
 
     users = pd.DataFrame({'uid': range(300), 'seg': RNG.choice([*'xy'], 300)})
     events = pd.DataFrame(
@@ -215,6 +229,8 @@ def test_the_halves_are_not_built_until_they_are_read(monkeypatch):
     materialized and sent must not pay to read rows nobody looks at."""
     import sdm_client.request as module
 
+    # This test instruments the legacy private decoder boundary deliberately.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     built: list[str] = []
     real = module._split_from
     monkeypatch.setattr(

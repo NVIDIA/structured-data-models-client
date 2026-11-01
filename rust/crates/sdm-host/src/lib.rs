@@ -13,6 +13,7 @@
 pub mod admission;
 pub mod codec;
 mod extensions;
+mod frames;
 pub mod local_zone;
 pub mod runs;
 pub mod zones;
@@ -27,7 +28,8 @@ pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone
 /// (`CompositionRoot::new`) where it does not take [`default_root`]'s, as
 /// the dev-only test host swaps one in (T2.7).
 pub use sdm_core::{
-    ArrowData, Attachment, Attachments, CompositionRoot, dtype_names, meanings, wire_names,
+    ArrowData, Attachment, Attachments, CompositionRoot, FrameGraph, dtype_names, meanings,
+    wire_names,
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 

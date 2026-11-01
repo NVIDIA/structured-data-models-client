@@ -1039,9 +1039,17 @@ pub enum TextTimes {
     /// Each value on its own, as the reference's engine reads a SQL
     /// source's text time column (`to_datetime(values, unit='ns')`).
     ValueByValue,
-    /// The column by the client's rules (`date-rules.md`, "The client
-    /// rules"), as the reference reads a frame's time column.
+    /// The column uses the core's approved text formats (date-rules.md,
+    /// T1.25b) and normalizes mixed offsets to UTC, like frame conversion.
     ClientRules,
+}
+
+/// Text equality and ordering compatible with the core's in-memory fallback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FallbackTextOrder {
+    /// Exact UTF-8 bytes: no locale, case folding or Unicode normalization.
+    BinaryUtf8,
 }
 
 /// Where a provider's source puts a null among the values it orders, in
@@ -1118,6 +1126,11 @@ pub struct ProviderCapabilities {
     /// the provider's error either way, never answered by the fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<FallbackLimits>,
+    /// Declares compatible text equality/ordering for fallback comparisons.
+    /// Absent, scans and numeric fallbacks still work; a fallback comparing
+    /// text refuses by name instead of assuming the source's collation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_text_order: Option<FallbackTextOrder>,
     /// The provider reads derived relations ([`Relation::columns`],
     /// [`Relation::filter`]; contract v28). Left out, `false`: the core
     /// refuses a derived relation for the provider by name (rule
@@ -1197,7 +1210,8 @@ pub struct ProviderCapabilities {
 pub struct FallbackLimits {
     /// The most rows the fallback reads to answer one request.
     pub max_rows: u64,
-    /// The most bytes of Arrow data it holds to answer one request.
+    /// The most logical Arrow bytes of returned rows and the answer.
+    /// Shared parent capacity and unreferenced dictionary values are excluded.
     pub max_bytes: u64,
 }
 

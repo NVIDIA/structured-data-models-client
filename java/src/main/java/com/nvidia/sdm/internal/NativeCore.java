@@ -19,8 +19,9 @@ import java.util.Map;
  * The native library, {@code sdm-jni}: its entries, and its loading from the JAR at first use
  * (design choice 10). Control messages cross as {@code byte[]}, never as {@code String}; an
  * attachment in is {@code bytes[i]} when it is not null, else the {@code ArrowArrayStream} struct
- * at address {@code streams[i]}, which the library moves out of. Every entry but {@link #release}
- * and {@link #releaseArrow} throws {@link NativeError} for the core's error. Not part of the API.
+ * at address {@code streams[i]}, or a retained graph at {@code graphs[i]}. The library moves
+ * Arrow streams and clones retained graph ownership. Release entries discard their owned handle.
+ * Other entries throw {@link NativeError} for the core's error. Not part of the API.
  *
  * <p>The library is the one in this JAR for the platform the JVM runs on, under {@code
  * com/nvidia/sdm/native/<os>-<arch>/}; the system property {@code sdm.native.library} names
@@ -78,7 +79,8 @@ public final class NativeCore {
       }
       try {
         loadLibrary();
-        init(NativeMessage.class, NativeArrow.class, NativeError.class, NativeLog.class);
+        init(NativeMessage.class, NativeArrow.class, NativeFrameGraph.class,
+            NativeError.class, NativeLog.class);
         info = (Map<String, Object>) Json.read(info0());
         return info;
       } catch (StructuredDataException e) {
@@ -134,7 +136,7 @@ public final class NativeCore {
   }
 
   private static native void init(
-      Class<?> message, Class<?> arrow, Class<?> error, Class<?> log);
+      Class<?> message, Class<?> arrow, Class<?> graph, Class<?> error, Class<?> log);
 
   private static native byte[] info0();
 
@@ -255,20 +257,21 @@ public final class NativeCore {
   public static native void setLogLevel(int level);
 
   /** Starts a run; its handle, which the caller owns and releases once. */
-  public static native long start(byte[] message, int[] ids, byte[][] bytes, long[] streams)
-      throws NativeError;
+  public static native long start(
+      byte[] message, int[] ids, byte[][] bytes, long[] streams, long[] graphs) throws NativeError;
 
   /** The run's next step. */
   public static native NativeMessage next(long run) throws NativeError;
 
   /** Hands the run a reply. */
   public static native void reply(
-      long run, byte[] message, int[] ids, byte[][] bytes, long[] streams) throws NativeError;
+      long run, byte[] message, int[] ids, byte[][] bytes, long[] streams, long[] graphs)
+      throws NativeError;
 
   /** Cancels the run. */
   public static native void cancel(long run) throws NativeError;
 
-  /** Takes an attachment the run made: {@code byte[]}, a {@link NativeArrow}, or null. */
+  /** Takes an attachment the run made: bytes, Arrow, a retained frame graph, or null. */
   public static native Object takeAttachment(long run, int id) throws NativeError;
 
   /** The warnings given since the last call, or null. */
@@ -282,6 +285,12 @@ public final class NativeCore {
 
   /** Exports an Arrow handle's data into the empty stream struct at {@code address}. */
   static native void exportArrow(long arrow, long address);
+
+  /** Retains a frame graph while its original handle is protected against release. */
+  static native long retainFrameGraph(long graph);
+
+  /** Releases a retained frame graph handle. */
+  static native void releaseFrameGraph(long graph);
 
   /** Releases an Arrow handle. */
   static native void releaseArrow(long arrow);

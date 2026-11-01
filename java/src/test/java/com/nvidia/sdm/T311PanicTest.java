@@ -64,6 +64,10 @@ class T311PanicTest {
         command.add(java);
         command.addAll(Arrays.asList(T311Names.FLAGS));
         command.add("-Dsdm.repo=" + T311Names.root());
+        String nativeLibrary = System.getProperty("sdm.native.library");
+        if (nativeLibrary != null && !nativeLibrary.isBlank()) {
+            command.add("-Dsdm.native.library=" + Path.of(nativeLibrary).toAbsolutePath());
+        }
         command.add("-cp");
         command.add(classPath());
         command.add(T311Probe.class.getName());
