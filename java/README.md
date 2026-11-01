@@ -11,6 +11,14 @@ It describes the tables of a DuckDB, SQLite, Postgres or Databricks database thr
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
+## Read semantic predictions
+
+`result.items()` returns immutable `PredictionItem` values in endpoint answer order, matching Python's `PredictionResult.items`.
+Ranking `prediction()` contains candidate values; `rankings()` contains candidate/score mappings, so callers do not parse JSON or resolve positions.
+Probability and quantile mappings, item metadata and explanations retain their keys and values.
+`result.read(allocator)` remains the raw native Arrow layout for efficient column access, including its bookkeeping and encoded carriers.
+The semantic view is decoded only when requested and is not cached alongside a second copy of the rows.
+
 ## Inspect request data
 
 `request.context()` and `request.predict()` return a `RequestSplit` for either model.
@@ -187,6 +195,7 @@ The API mirrors Python's with Java names and plain data:
 | `Request.context_rows`, `predict_rows`, `payloads`, ... | `Request.contextRows()`, `predictRows()`, `payloads()`, `nothingToScore()`, `entityTable()`, ... |
 | `SDMClient(url, api_key, timeout=, max_retries=)`, `capabilities(model)`, `predict(request, model=, outputs=)` | `SdmClient.connect(url[, ClientOptions])`, `capabilities(model)`, `predict(request, model[, outputs])` |
 | `SDMClient.for_databricks_serving(endpoint, workspace_client=, timeout=)` | `SdmClient.forDatabricksServing(DatabricksServing.of(endpoint))`, or `DatabricksServing.of(workspaceClient, endpoint[, maxRequestBytes])` with the official SDK's unified authentication; `timeout(Duration)` bounds the call |
+| `PredictionResult.items` | `PredictionResult.items()` returns typed immutable `PredictionItem` values, including restored ranking outputs |
 | `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
 
 The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks's (`com.databricks:databricks-jdbc`); the JAR ships none.

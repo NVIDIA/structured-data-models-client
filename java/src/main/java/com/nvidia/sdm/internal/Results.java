@@ -58,6 +58,29 @@ public final class Results {
       List<String> outputs,
       List<Long> unscoredCandidates) {}
 
+  public record ItemField(String name, String encoding) {}
+  public record ItemSegment(int table, List<ItemField> fields) {}
+  public record Items(List<ItemSegment> segments) {}
+
+  private static Items items(Map<String, Object> result) {
+    List<ItemSegment> segments = new ArrayList<>();
+    for (Object value : list(result.get("segments"))) {
+      Map<String, Object> segment = map(value);
+      List<ItemField> fields = new ArrayList<>();
+      java.util.Set<String> names = new java.util.HashSet<>();
+      for (Object raw : list(segment.get("fields"))) {
+        Map<String, Object> field = map(raw);
+        String name = text(field, "name"), encoding = text(field, "encoding");
+        if (!names.add(name) || !java.util.Set.of("native", "value", "mapping", "mappings", "candidate_list", "candidate_rankings").contains(encoding))
+          throw new IllegalArgumentException("invalid projected item field");
+        fields.add(new ItemField(name, encoding));
+      }
+      segments.add(new ItemSegment(count(segment, "table"), List.copyOf(fields)));
+    }
+    if (segments.isEmpty()) throw new IllegalArgumentException("item projection has no segments");
+    return new Items(List.copyOf(segments));
+  }
+
   /** Read-only request data attachments; null IDs denote unselected tables. */
   public record Split(Integer instance, List<SplitTable> relatedTables) {}
   public record SplitTable(String name, Integer data) {}
@@ -78,6 +101,7 @@ public final class Results {
         throw new IllegalArgumentException("another operation than the one started");
       }
       return switch (op) {
+        case "result_items" -> items(result);
         case "request_split" -> split(result);
         case "validate_query" -> validated(result);
         case "describe_source" -> described(result);

@@ -194,9 +194,19 @@ def test_python_api_mappings_exist_on_installed_public_surface():
     for case in manifest()['scenarios']:
         for reference in case['apis']['python']:
             cls, method = reference.split('.')
-            assert callable(getattr(getattr(sdm_client, cls), method)), (
-                reference
-            )
+            if cls == 'PredictionResult' and method in {
+                'items',
+                'metadata',
+                'explanation',
+            }:
+                result = sdm_client.PredictionResult(
+                    model='kumo-relational', request_id='inspection', items=[]
+                )
+                assert hasattr(result, method), reference
+            else:
+                assert callable(getattr(getattr(sdm_client, cls), method)), (
+                    reference
+                )
 
 
 def test_tripwires_catch_worker_aliases_even_when_worker_catches_error(
@@ -269,6 +279,7 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'provider-contract',
         'large-values',
         'public-serving-refusals',
+        'result-items',
         'request-inspection',
     }
 
@@ -675,3 +686,49 @@ def test_derived_reference_alignment_precedes_identity_proof_without_hiding_chan
             row.get('reason', '').startswith('identity proof failed:')
             for row in report['cells']
         )
+
+
+def test_snowflake_platform_probe_requires_exact_command_and_driver_origin():
+    pytest.importorskip('snowflake.connector')
+    code = """
+import json, subprocess
+from routes import LegacyGuard
+with LegacyGuard({}) as guard:
+    import snowflake.connector
+assert guard.report['unobserved_subprocesses'] == []
+assert [item['command'] for item in guard.report['observed_subprocesses']] == [['uname', '-p']]
+with LegacyGuard({}) as outside:
+    subprocess.run(['uname', '-p'], check=True, capture_output=True)
+assert outside.report['observed_subprocesses'] == []
+assert outside.report['unobserved_subprocesses'] == ['subprocess.Popen']
+print(json.dumps(guard.report))
+"""
+    ran = subprocess.run(
+        [sys.executable, '-c', code],
+        cwd=HERE,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    observed = json.loads(ran.stdout)['observed_subprocesses']
+    assert (
+        observed[0]['origin']
+        == 'snowflake.connector.description -> platform._Processor.from_subprocess'
+    )
+
+
+def test_snowflake_probe_near_misses_remain_unobserved():
+    from routes import snowflake_platform_probe
+
+    assert not snowflake_platform_probe(
+        'subprocess.Popen', ('uname', ['uname', '-a'], None, None)
+    )
+    assert not snowflake_platform_probe(
+        'subprocess.Popen', ('uname', ['uname', '-p'], '/', None)
+    )
+    assert not snowflake_platform_probe(
+        'subprocess.Popen', ('uname', ['uname', '-p'], None, {})
+    )
+    assert not snowflake_platform_probe(
+        'os.posix_spawn', ('uname', ['uname', '-p'], None, None)
+    )

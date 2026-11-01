@@ -199,7 +199,7 @@ def predict(fitted: Any, request: Any) -> Any:
     table = prediction._table(finished.take(answered.result))
     explained = (table.schema.metadata or {}).get(b'explanation')
     return prediction._result(
-        table.to_pylist(),
+        table,
         model=answered.model,
         request_id=answered.request_id,
         metadata=json.loads(finished.take(answered.metadata)),

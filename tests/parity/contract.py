@@ -162,6 +162,84 @@ def evidence_problem(record, case, phase, live):
         expected_results = expected_lifecycle.count('predict')
         if len(semantic.get('results', [])) != expected_results:
             return 'prediction evidence is incomplete'
+        if live and case.get('supplement'):
+            details = semantic.get('result_details', [])
+            if len(details) != expected_results:
+                return 'missing public result item evidence'
+            fields = {
+                'row_index',
+                'id',
+                'forecast_step',
+                'prediction',
+                'probabilities',
+                'scores',
+                'rankings',
+                'embeddings',
+                'quantiles',
+                'explanation',
+                'metadata',
+            }
+            for detail, result in zip(
+                details, semantic['results'], strict=True
+            ):
+                if (
+                    len(detail.get('items', [])) != len(result.get('rows', []))
+                    or detail.get('outputs') != case['outputs']
+                    or not detail.get('request_id')
+                    or not isinstance(detail.get('metadata'), dict)
+                    or not detail.get('model')
+                    or not all(
+                        set(item) == fields for item in detail.get('items', [])
+                    )
+                ):
+                    return 'incomplete public result item fields'
+                for output in case['outputs']:
+                    if not any(
+                        item.get(output) not in (None, {}, [], ())
+                        for item in detail['items']
+                    ):
+                        return 'requested result output is absent'
+            calls = semantic.get('transport', [])
+            expected_calls = (
+                ['fit', 'score', 'score', 'close']
+                if case['supplement']['kind'] == 'holdout'
+                else ['predict'] * case['supplement']['prediction_calls']
+            )
+            if [call.get('operation') for call in calls] != expected_calls:
+                return 'real transport call evidence is incomplete'
+            if any(
+                call.get('payload', {}).get('output', {}).get('fields')
+                != case['outputs']
+                for call in calls
+                if call['operation'] in {'predict', 'score'}
+            ):
+                return 'requested outputs were not sent to the real endpoint'
+            from supplements import response_groups
+
+            try:
+                response_groups(semantic, case)
+            except (ValueError, KeyError, TypeError):
+                return 'actual response/result correlation is not proven'
+            if case['supplement']['kind'] == 'holdout':
+                from supplements import assert_holdout_payloads
+
+                asked = semantic['request']
+                payloads = asked if isinstance(asked, list) else None
+                count = (
+                    sum(
+                        len(p['context']['instance_table']['rows'])
+                        for p in payloads
+                    )
+                    if payloads
+                    else len(asked['context']['rows'])
+                )
+                try:
+                    assert_holdout_payloads(
+                        payloads, count, semantic.get('holdout_keys', []), calls
+                    )
+                except (AssertionError, KeyError, TypeError, ValueError):
+                    return 'uploaded holdout exclusion is not proven'
+
     if live and case['expected']['status'] == 'supported':
         endpoint = record.get('endpoint', {})
         if record.get('execution') != 'live' or endpoint.get('kind') != 'live':

@@ -474,18 +474,14 @@ def predict(
     answered = results.expect(finished.result, results.Predicted)
     metadata = json.loads(finished.take(answered.metadata))
     if ranking:
-        # The core's rows are ordered by row_index; a ranking's items keep
-        # the order the answers named them in.
-        ranked = sorted(
-            _rows(finished.take(answered.result)),
-            key=lambda row: row['answer_index'],
+        return _ranked(
+            answered, _table(finished.take(answered.result)), metadata, given
         )
-        return _ranked(answered, ranked, metadata, given)
     table = _table(finished.take(answered.result))
     # The result's explanation, on the result's schema (T2.13).
     explained = (table.schema.metadata or {}).get(b'explanation')
     return _result(
-        table.to_pylist(),
+        table,
         model=answered.model,
         request_id=answered.request_id,
         metadata=metadata,
@@ -496,7 +492,7 @@ def predict(
 
 
 def _result(
-    rows: list[dict[str, Any]],
+    table: Any,
     *,
     model: str,
     request_id: str,
@@ -510,52 +506,20 @@ def _result(
     gives them (T2.13)."""
     from sdm_api.generated.tfm_api import PredictionItem
 
+    from sdm_client._rust.result_items import read
     from sdm_client.result import PredictionResult
 
-    # The core's rows are ordered by row_index, as the result's frame is;
-    # its items keep the endpoint's order, as the old route's do.
-    rows = sorted(rows, key=lambda row: row['answer_index'])
+    items = read(
+        table,
+        model=model,
+        request_id=request_id,
+        metadata=metadata,
+        outputs=outputs,
+    )
     result = PredictionResult(
         model=model,
         request_id=request_id,
-        items=[
-            PredictionItem(
-                row_index=row['row_index'],
-                id=_id(row),
-                forecast_step=row.get('forecast_step'),
-                prediction=_as_answered(row),
-                probabilities=None
-                if row.get('probabilities') is None
-                else dict(row['probabilities']),
-                # An item's scores and rankings (T2.8), each mapping given
-                # as the JSON text of the reference's item value: an object,
-                # or the list of its pairs where a key is not text.
-                scores=None
-                if row.get('scores') is None
-                else tuple(row['scores']),
-                rankings=None
-                if row.get('rankings') is None
-                else tuple(_mapping(text) for text in row['rankings']),
-                # Its explanation and own metadata (T2.13), each the JSON
-                # text of a mapping, read by the same reader.
-                explanation=None
-                if row.get('explanation') is None
-                else _mapping(row['explanation']),
-                metadata=None
-                if row.get('metadata') is None
-                else _mapping(row['metadata']),
-                # A regression's quantiles (T2.9), keyed as the endpoint
-                # wrote them, each value a double, read by the same reader;
-                # to_pandas spreads them as quantile_<key>.
-                quantiles=None
-                if row.get('quantiles') is None
-                else _mapping(row['quantiles']),
-                embeddings=None
-                if row.get('embeddings') is None
-                else tuple(row['embeddings']),
-            )
-            for row in rows
-        ],
+        items=[PredictionItem(**item) for item in items],
         metadata=metadata,
         outputs=outputs,
         explanation=_explanation(explanation, by_step),
@@ -567,7 +531,7 @@ def _result(
 
 def _ranked(
     answered: results.Predicted,
-    rows: list[dict[str, Any]],
+    table: Any,
     metadata: dict[str, Any],
     given: dict[int, Any],
 ) -> PredictionResult:
@@ -579,29 +543,21 @@ def _ranked(
     given)."""
     from sdm_api.generated.tfm_api import PredictionItem
 
+    from sdm_client._rust.result_items import read
     from sdm_client.result import PredictionResult
 
     wanted = answered.outputs
-    items = []
-    for row in rows:
-        chosen = [given[at] for at in row['candidates']]
-        items.append(
-            PredictionItem(
-                row_index=row['row_index'],
-                id=_id(row),
-                prediction=chosen if 'prediction' in wanted else None,
-                rankings=(
-                    tuple(
-                        {'candidate': candidate, 'score': score}
-                        for candidate, score in zip(
-                            chosen, row['scores'], strict=True
-                        )
-                    )
-                    if 'rankings' in wanted
-                    else None
-                ),
-            )
+    items = [
+        PredictionItem(**item)
+        for item in read(
+            table,
+            model=answered.model,
+            request_id=answered.request_id,
+            metadata=metadata,
+            outputs=wanted,
+            candidates=given,
         )
+    ]
     return PredictionResult(
         model=answered.model,
         request_id=answered.request_id,
@@ -639,7 +595,7 @@ def _carry_the_answers(error: Exception, by_step: bool) -> None:
     held = getattr(error, 'details', None)
     details = held if isinstance(held, dict) else {}
     details['answered'] = _result(
-        table.to_pylist(),
+        table,
         model=named.get('model', ''),
         request_id=named.get('request_id', ''),
         metadata=json.loads(named.get('metadata', '{}')),

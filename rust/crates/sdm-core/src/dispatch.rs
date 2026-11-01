@@ -68,6 +68,9 @@ pub fn start(
                 crate::direct::value(&asker, &sdm_request::result::plan(&input.parts)?)
             })
         }
+        Operation::ReadResultItems(request) => {
+            Run::new(move |asker| async move { crate::result::items(&asker, request, attachments) })
+        }
         Operation::ReadRequestSplit(request) => {
             Run::new(move |asker| async move { crate::split::read(&asker, request, attachments) })
         }

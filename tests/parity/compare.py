@@ -288,6 +288,11 @@ def assess(
             copy.deepcopy(old.get('semantic')),
             copy.deepcopy(new.get('semantic')),
         )
+        if case.get('supplement') and wanted == 'passed':
+            from supplements import normalize_response_ids
+
+            for semantic in (old_semantic, new_semantic):
+                normalize_response_ids(semantic, case)
         improved_entity_ref = False
         if cell[0] == 'relational.temporal-link' and wanted == 'passed':
             from contract import HERE
@@ -319,6 +324,41 @@ def assess(
                 row.update(
                     status='failed',
                     reason='identity proof failed: ' + str(error),
+                )
+                continue
+        if (
+            case.get('supplement')
+            and cell[2] == 'relational'
+            and wanted == 'passed'
+        ):
+            from contract import HERE
+
+            fixture = json.loads((HERE / case['fixture']).read_text())
+            try:
+                for before, after in zip(
+                    old_semantic['transport'],
+                    new_semantic['transport'],
+                    strict=True,
+                ):
+                    if (
+                        before['operation'] in {'fit', 'predict'}
+                        and difference(
+                            before['payload'],
+                            after['payload'],
+                            {'absolute': 0, 'relative': 0},
+                        )
+                        is not None
+                    ):
+                        before['payload'] = canonical(
+                            [before['payload']], fixture
+                        )[0]
+                        after['payload'] = canonical(
+                            [after['payload']], fixture
+                        )[0]
+            except (IdentityError, KeyError, TypeError) as error:
+                row.update(
+                    status='failed',
+                    reason='transport identity proof failed: ' + str(error),
                 )
                 continue
         exact = {'absolute': 0, 'relative': 0}

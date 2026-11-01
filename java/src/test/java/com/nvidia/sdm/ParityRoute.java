@@ -17,6 +17,14 @@ final class ParityRoute implements AutoCloseable {
   private final Set<String> workers = ConcurrentHashMap.newKeySet();
   private Map<String, Object> current;
   private Map<String, Integer> calls;
+  private List<Map<String, Object>> transport;
+  private Integer bodyId;
+  private String operation;
+  private Map<String, Object> lastCall;
+
+  synchronized void capture(List<Map<String, Object>> target) {
+    transport = target;
+  }
 
   ParityRoute() {
     recording.enable("jdk.ProcessStart").withStackTrace();
@@ -25,6 +33,63 @@ final class ParityRoute implements AutoCloseable {
     workers.add(ProcessHandle.current().pid() + ":" + Thread.currentThread().getId());
     Trace.install(
         new Trace() {
+          @Override
+          public void stepped(Map<String, Object> step) {
+            synchronized (ParityRoute.this) {
+              if (transport == null || !"call_model".equals(step.get("step"))) return;
+              Object endpoint = step.get("endpoint");
+              String kind =
+                  endpoint instanceof Map<?, ?> value
+                      ? value.keySet().iterator().next().toString()
+                      : String.valueOf(endpoint);
+              operation =
+                  switch (kind) {
+                    case "predict" -> "predict";
+                    case "create_session" -> "fit";
+                    case "session_predict" -> "score";
+                    case "delete_session" -> "close";
+                    default -> throw new IllegalStateException("unknown endpoint operation");
+                  };
+              bodyId = ((Number) step.get("body")).intValue();
+            }
+          }
+
+          @Override
+          public void taken(int id, Object value, boolean arrow) {
+            synchronized (ParityRoute.this) {
+              if (transport == null || arrow || !Objects.equals(bodyId, id)) return;
+              var call = new LinkedHashMap<String, Object>();
+              call.put("operation", operation);
+              byte[] bytes = (byte[]) value;
+              try {
+                call.put(
+                    "payload", bytes.length == 0 ? null : com.nvidia.sdm.internal.Json.read(bytes));
+              } catch (Exception error) {
+                throw new IllegalStateException("invalid model request JSON", error);
+              }
+              transport.add(call);
+              lastCall = call;
+              bodyId = null;
+            }
+          }
+
+          @Override
+          public void modelAnswered(byte[] response) {
+            synchronized (ParityRoute.this) {
+              if (transport == null || lastCall == null) return;
+              if (Set.of("predict", "score").contains(lastCall.get("operation"))) {
+                try {
+                  lastCall.put(
+                      "response_id",
+                      ParityRunner.map(com.nvidia.sdm.internal.Json.read(response)).get("id"));
+                } catch (Exception error) {
+                  throw new IllegalStateException("invalid model response JSON", error);
+                }
+              }
+              lastCall = null;
+            }
+          }
+
           @Override
           public void started(byte[] message, Map<Integer, Object> attachments) {
             synchronized (ParityRoute.this) {
@@ -39,6 +104,9 @@ final class ParityRoute implements AutoCloseable {
 
   synchronized void begin(Map<String, Object> record) {
     current = record;
+    transport = null;
+    bodyId = null;
+    lastCall = null;
     calls = new LinkedHashMap<>();
   }
 

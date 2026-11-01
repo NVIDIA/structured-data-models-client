@@ -178,7 +178,7 @@ public final class SdmClient implements AutoCloseable {
         new Host.Call(null, this::call, request.materialized().held()))) {
       Results.Predicted value = (Results.Predicted) Results.expect(finished.result(), "predict");
       return new PredictionResult(value.model(), value.requestId(), read(finished.bytes(value.metadata())),
-          value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()));
+          value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()), request.materialized().candidateValues());
     }
   }
 
@@ -221,7 +221,12 @@ public final class SdmClient implements AutoCloseable {
   public FittedModel fit(Request request, String model) { return fit(request, model, List.of()); }
 
   /** Upload examples, excluding these entity keys from the pinned context. */
-  public synchronized FittedModel fit(Request request, String model, List<?> holdout) {
+  public FittedModel fit(Request request, String model, List<?> holdout) {
+    return fit(request, model, holdout, null);
+  }
+
+  /** Upload examples with the requested outputs retained for subsequent session predictions. */
+  public synchronized FittedModel fit(Request request, String model, List<?> holdout, List<String> outputs) {
     requireOpen();
     Objects.requireNonNull(request, "request");
     Objects.requireNonNull(model, "model");
@@ -229,7 +234,7 @@ public final class SdmClient implements AutoCloseable {
     if (!request.direct()) {
       if (serving != null) throw new StructuredDataException("this transport does not support sessions",
           "SESSIONS_UNSUPPORTED", Map.of(), null);
-      FittedModel fitted = RelationalSessions.fit(this, request, model, holdout);
+      FittedModel fitted = RelationalSessions.fit(this, request, model, holdout, outputs);
       sessions.add(fitted);
       return fitted;
     }
@@ -240,7 +245,7 @@ public final class SdmClient implements AutoCloseable {
       Map<String, Object> part = ArrowTabular.key(key);
       keys.add(List.of(part));
     }
-    Map<String, Object> input = Map.of("prediction", predictionInput(request, model, null),
+    Map<String, Object> input = Map.of("prediction", predictionInput(request, model, outputs),
         "holdout", Map.of("rows", keys));
     try (Host.Finished finished = ArrowTabular.run("fit", input,
         Map.of("context", request.contextData(), "predict", request.predictData()), tabularTransport())) {

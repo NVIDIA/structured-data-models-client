@@ -31,21 +31,36 @@ public final class PredictionResult {
   private final List<String> outputs;
   private final byte[] rows;
   private final List<Object> unscoredCandidates;
+  private record CandidateOwner(long start, long end, Map<Long, Object> values) {}
+  private final List<CandidateOwner> candidateOwners;
 
   PredictionResult(
       String model, String requestId, Object metadata, List<String> outputs, byte[] rows) {
     this(model, requestId, metadata, outputs, rows, List.of());
   }
 
-  @SuppressWarnings("unchecked")
   PredictionResult(String model, String requestId, Object metadata, List<String> outputs,
       byte[] rows, List<Object> unscoredCandidates) {
+    this(model, requestId, metadata, outputs, rows, unscoredCandidates, List.of());
+  }
+
+  PredictionResult(String model, String requestId, Object metadata, List<String> outputs,
+      byte[] rows, List<Object> unscoredCandidates, Map<Long, Object> candidates) {
+    this(model, requestId, metadata, outputs, rows, unscoredCandidates,
+        candidates.isEmpty() ? List.of() : List.of(new CandidateOwner(0, Long.MAX_VALUE,
+            java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(candidates)))));
+  }
+
+  @SuppressWarnings("unchecked")
+  private PredictionResult(String model, String requestId, Object metadata, List<String> outputs,
+      byte[] rows, List<Object> unscoredCandidates, List<CandidateOwner> owners) {
     this.model = model;
     this.requestId = requestId;
     this.metadata = metadata instanceof Map<?, ?> map
         ? com.nvidia.sdm.internal.DirectOptions.snapshot((Map<String, ?>) map) : Map.of();
     this.outputs = List.copyOf(outputs);
     this.rows = rows;
+    this.candidateOwners = List.copyOf(owners);
     this.unscoredCandidates = java.util.Collections.unmodifiableList(new ArrayList<>(unscoredCandidates));
   }
 
@@ -53,11 +68,20 @@ public final class PredictionResult {
   public static PredictionResult merge(List<PredictionResult> parts) {
     java.util.Objects.requireNonNull(parts, "parts");
     if (parts.size() == 1) return java.util.Objects.requireNonNull(parts.get(0));
+    List<CandidateOwner> owners = new ArrayList<>();
+    long ownerOffset = 0;
     List<Object> descriptions = new ArrayList<>();
     List<Object> candidates = new ArrayList<>();
     Map<Integer, byte[]> tables = new java.util.LinkedHashMap<>();
     try {
       for (PredictionResult part : parts) {
+        long count = part.rows();
+        for (CandidateOwner owner : part.candidateOwners) {
+          long end = Math.min(owner.end(), count);
+          if (owner.start() < end) owners.add(new CandidateOwner(
+              Math.addExact(ownerOffset, owner.start()), Math.addExact(ownerOffset, end), owner.values()));
+        }
+        ownerOffset = Math.addExact(ownerOffset, count);
         Map<String, Object> description = new java.util.LinkedHashMap<>();
         description.put("model", part.model()); description.put("request_id", part.requestId());
         description.put("outputs", part.outputs());
@@ -81,7 +105,7 @@ public final class PredictionResult {
       try { metadata = Json.read(finished.bytes(result.metadata())); }
       catch (Json.JsonException error) { throw new IllegalStateException("invalid merged metadata", error); }
       return new PredictionResult(result.model(), result.requestId(), metadata, result.outputs(),
-          finished.arrow(result.result()), result.unscoredCandidates().stream().map(i -> candidates.get(Math.toIntExact(i))).toList());
+          finished.arrow(result.result()), result.unscoredCandidates().stream().map(i -> candidates.get(Math.toIntExact(i))).toList(), owners);
     }
   }
 
@@ -115,6 +139,74 @@ public final class PredictionResult {
    */
   public ArrowReader read(BufferAllocator allocator) {
     return ArrowData.reader(rows, allocator);
+  }
+
+  /** Semantic answers in endpoint answer order, with original ranking candidates restored. */
+  public List<PredictionItem> items() {
+    Map<String, Object> descriptor = new java.util.LinkedHashMap<>();
+    descriptor.put("model", model); descriptor.put("request_id", requestId);
+    descriptor.put("outputs", outputs); descriptor.put("unscored_candidates", List.of());
+    try { descriptor.put("metadata", new String(Json.write(metadata), StandardCharsets.UTF_8)); }
+    catch (Json.JsonException error) { throw com.nvidia.sdm.internal.ItemValues.invalid("result metadata cannot be encoded"); }
+    var operation = Map.<String, Object>of("op", "read_result_items", "input", 1, "table", 2);
+    try (var finished = com.nvidia.sdm.internal.ArrowFrames.run(operation,
+        Map.of(1, com.nvidia.sdm.internal.Host.attachment(descriptor)), Map.of(2, rows),
+        com.nvidia.sdm.internal.Host.Call.none())) {
+      var projected = (com.nvidia.sdm.internal.Results.Items) com.nvidia.sdm.internal.Results.expect(finished.result(), "result_items");
+      List<PredictionItem> items = new ArrayList<>();
+      long ordinal = 0;
+      for (var segment : projected.segments()) {
+        try (ArrowReader reader = finished.arrowReader(segment.table(), ArrowData.allocator())) {
+          var root = reader.getVectorSchemaRoot();
+          if (!root.getSchema().getFields().stream().map(org.apache.arrow.vector.types.pojo.Field::getName).toList()
+              .equals(segment.fields().stream().map(com.nvidia.sdm.internal.Results.ItemField::name).toList()))
+            throw com.nvidia.sdm.internal.ItemValues.invalid("projected item descriptors differ from Arrow columns");
+          while (reader.loadNextBatch()) for (int row = 0; row < root.getRowCount(); row++, ordinal++) {
+            Map<String, Object> fields = new java.util.LinkedHashMap<>();
+            for (int col = 0; col < segment.fields().size(); col++) {
+              var field = segment.fields().get(col);
+              Object value = root.getVector(col).getObject(row);
+              fields.put(field.name(), itemValue(field.encoding(), root.getSchema().getFields().get(col), value, ordinal));
+            }
+            items.add(new PredictionItem(fields));
+          }
+        }
+      }
+      return List.copyOf(items);
+    } catch (IOException error) {
+      throw new StructuredDataException("projected result items cannot be read", "INTERNAL_ERROR", Map.of(), error);
+    }
+  }
+
+  private Object originalCandidate(Object value, long ordinal) {
+    if (!(value instanceof Number number)) throw com.nvidia.sdm.internal.ItemValues.invalid("candidate position is not an integer");
+    long position;
+    try { position = new java.math.BigDecimal(number.toString()).longValueExact(); }
+    catch (ArithmeticException error) { throw com.nvidia.sdm.internal.ItemValues.invalid("candidate position is outside integer range"); }
+    if (position < 0) throw com.nvidia.sdm.internal.ItemValues.invalid("candidate position is negative");
+    for (CandidateOwner owner : candidateOwners)
+      if (ordinal >= owner.start() && ordinal < owner.end() && owner.values().containsKey(position))
+        return owner.values().get(position);
+    throw com.nvidia.sdm.internal.ItemValues.invalid("candidate position has no retained original owner");
+  }
+
+  private Object itemValue(String encoding, org.apache.arrow.vector.types.pojo.Field field, Object raw, long ordinal) {
+    if (raw == null) return null;
+    return switch (encoding) {
+      case "native" -> com.nvidia.sdm.internal.ItemValues.nativeValue(field, raw);
+      case "value" -> com.nvidia.sdm.internal.ItemValues.primitive(raw.toString());
+      case "mapping" -> com.nvidia.sdm.internal.ItemValues.mapping(com.nvidia.sdm.internal.ItemValues.primitive(raw.toString()));
+      case "mappings" -> ((List<?>) com.nvidia.sdm.internal.ItemValues.primitive(raw.toString())).stream()
+          .map(com.nvidia.sdm.internal.ItemValues::mapping).toList();
+      case "candidate_list" -> ((List<?>) raw).stream().map(v -> originalCandidate(v, ordinal)).toList();
+      case "candidate_rankings" -> ((List<?>) raw).stream().map(v -> {
+        if (!(v instanceof Map<?, ?> entry)) throw com.nvidia.sdm.internal.ItemValues.invalid("candidate ranking is not a struct");
+        Map<Object, Object> ranked = new java.util.LinkedHashMap<>();
+        ranked.put("candidate", originalCandidate(entry.get("position"), ordinal)); ranked.put("score", entry.get("score"));
+        return ranked;
+      }).toList();
+      default -> throw com.nvidia.sdm.internal.ItemValues.invalid("unknown projected item encoding");
+    };
   }
 
   /** How many rows the answer holds. */

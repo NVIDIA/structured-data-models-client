@@ -1605,6 +1605,280 @@
           "verdict": "Improvement"
         }
       }
+    },
+    {
+      "id": "outputs.regression.tabular",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "outputs": [
+        "prediction",
+        "quantiles"
+      ],
+      "supplement": {
+        "kind": "outputs",
+        "prediction_calls": 1
+      }
+    },
+    {
+      "id": "outputs.regression.batched",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "rows_per_call": 1
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "outputs": [
+        "prediction",
+        "quantiles"
+      ],
+      "supplement": {
+        "kind": "batch",
+        "prediction_calls": 2
+      }
+    },
+    {
+      "id": "outputs.binary",
+      "task": "binary",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory"
+      ],
+      "pql": "PREDICT users.flag FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "outputs": [
+        "prediction",
+        "probabilities"
+      ],
+      "supplement": {
+        "kind": "outputs",
+        "prediction_calls": 1
+      }
+    },
+    {
+      "id": "lifecycle.holdout",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "fit-predict-close",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict",
+          "PredictionResult.items",
+          "PredictionResult.metadata",
+          "PredictionResult.explanation"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "outputs": [
+        "prediction"
+      ],
+      "supplement": {
+        "kind": "holdout",
+        "prediction_calls": 1
+      }
     }
   ],
   "input_paths": {
@@ -1890,6 +2164,28 @@
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RequestSplitTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "result-items",
+      "apis": {
+        "python": [
+          "PredictionResult.items",
+          "PredictionResult.to_pandas"
+        ],
+        "java": [
+          "PredictionResult.items",
+          "PredictionResult.read"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_result_items_core.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java"
         ]
       },
       "gate": "local"

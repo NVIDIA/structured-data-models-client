@@ -147,6 +147,7 @@ public final class ParityRunner {
                       artifact,
                       route);
               records.add(record);
+              checkpoint(records, false);
               expectations.add(
                   map(
                       map(effective.get("expected_by_language"))
@@ -165,16 +166,36 @@ public final class ParityRunner {
       }
       route.finish(records);
     }
-    try (BufferedWriter out =
-        Files.newBufferedWriter(Path.of(System.getProperty("sdm.parity.output")))) {
-      for (Map<String, Object> record : records) {
-        out.write(new String(Json.write(record), StandardCharsets.UTF_8));
-        out.newLine();
-      }
-    }
+    checkpoint(records, true);
     if (records.isEmpty()) System.exit(1);
     for (int at = 0; at < records.size(); at++)
       if (!accepted(records.get(at), expectations.get(at))) System.exit(1);
+  }
+
+  static void checkpoint(List<Map<String, Object>> records, boolean finished) throws Exception {
+    Path output = Path.of(System.getProperty("sdm.parity.output")).toAbsolutePath();
+    Path temporary = Files.createTempFile(output.getParent(), "parity-checkpoint-", ".jsonl");
+    try {
+      try (BufferedWriter out = Files.newBufferedWriter(temporary)) {
+        for (var source : records) {
+          var record = new LinkedHashMap<>(source);
+          if (!finished) {
+            record.put("status", "incomplete");
+            record.put("reason", "journey complete; whole-run route observation pending");
+            var pendingRoute = new LinkedHashMap<>(map(record.get("route")));
+            pendingRoute.put("workers", List.of());
+            pendingRoute.put("unobserved_subprocesses", List.of("route-observation-pending"));
+            record.put("route", pendingRoute);
+          }
+          out.write(new String(Json.write(record), StandardCharsets.UTF_8));
+          out.newLine();
+        }
+      }
+      Files.move(
+          temporary, output, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    } finally {
+      Files.deleteIfExists(temporary);
+    }
   }
 
   static boolean accepted(Map<String, Object> record, Map<String, Object> expected) {
@@ -215,7 +236,7 @@ public final class ParityRunner {
     record.put("error", null);
     route.begin(record);
     try {
-      journey(scenario, connector, model, config, fixture, record);
+      journey(scenario, connector, model, config, fixture, record, route);
     } catch (Incomplete missing) {
       record.put("status", "incomplete");
       record.put("reason", missing.getMessage());
@@ -244,7 +265,8 @@ public final class ParityRunner {
       String model,
       Map<String, Object> config,
       Map<String, Object> fixture,
-      Map<String, Object> record)
+      Map<String, Object> record,
+      ParityRoute route)
       throws Exception {
     try (RootAllocator allocator = new RootAllocator();
         Inputs inputs = new Inputs()) {
@@ -303,6 +325,8 @@ public final class ParityRunner {
       var semantic = new LinkedHashMap<String, Object>();
       var lifecycle = new ArrayList<String>();
       var results = new ArrayList<Object>();
+      var rawResults = new ArrayList<Object>();
+      record.put("raw_results", rawResults);
       semantic.put("schema", schema(schema));
       semantic.put("request", null);
       semantic.put("lifecycle", lifecycle);
@@ -386,17 +410,47 @@ public final class ParityRunner {
               endpoint.get("version"),
               "transport",
               endpoint.get("transport")));
+      boolean supplemental = scenario.containsKey("supplement");
+      List<String> outputs =
+          scenario.containsKey("outputs")
+              ? list(scenario.get("outputs")).stream().map(ParityRunner::text).toList()
+              : null;
+      var details = new ArrayList<Object>();
+      var transport = new ArrayList<Map<String, Object>>();
+      if (supplemental) {
+        semantic.put("result_details", details);
+        semantic.put("transport", transport);
+        route.capture(transport);
+      }
+      String before = digest(semantic.get("request"));
+      java.util.function.Consumer<PredictionResult> observe =
+          answer -> {
+            try {
+              rawResults.add(frame(answer, allocator));
+            } catch (Exception error) {
+              throw new IllegalStateException(error);
+            }
+            results.add(ParityResults.frame(answer));
+            if (supplemental) {
+              if (!answer.absent(outputs).isEmpty())
+                throw new IllegalStateException("requested output is absent");
+              details.add(ParityResults.details(answer));
+            }
+          };
       try (SdmClient client = client(endpoint)) {
         String chosen =
             model.equals("tabular") ? SdmClient.KUMO_TABULAR : SdmClient.KUMO_RELATIONAL;
         if ("fit-predict-close".equals(scenario.get("journey"))) {
           record.put("stage", "fit");
-          FittedModel fitted = client.fit(request, chosen, List.of(1L, 2L));
+          List<?> held =
+              supplemental ? List.of(ParityHoldout.key(request, allocator)) : List.of(1L, 2L);
+          if (supplemental) semantic.put("holdout_keys", scalar(held));
+          FittedModel fitted = client.fit(request, chosen, held, outputs);
           lifecycle.add("fit");
           try {
             for (int i = 0; i < 2; i++) {
               record.put("stage", "predict");
-              results.add(frame(fitted.predict(request), allocator));
+              observe.accept(fitted.predict(request));
               lifecycle.add("predict");
             }
           } finally {
@@ -404,10 +458,24 @@ public final class ParityRunner {
             fitted.close();
             lifecycle.add("close");
           }
+          if (supplemental) ParityHoldout.check(request, held, transport);
         } else {
           record.put("stage", "predict");
-          results.add(frame(client.predict(request, chosen), allocator));
+          observe.accept(client.predict(request, chosen, outputs));
           lifecycle.add("predict");
+        }
+      }
+      if (supplemental) {
+        if (!before.equals(digest(requestEvidence(request, allocator))))
+          throw new IllegalStateException("prediction mutated request");
+        if (!"holdout".equals(map(scenario.get("supplement")).get("kind"))) {
+          int count = ((Number) map(scenario.get("supplement")).get("prediction_calls")).intValue();
+          if (transport.size() != count
+              || transport.stream().anyMatch(call -> !"predict".equals(call.get("operation"))))
+            throw new IllegalStateException("unexpected prediction call count");
+          if ("batch".equals(map(scenario.get("supplement")).get("kind"))
+              && request.payloads().size() != count)
+            throw new IllegalStateException("batch payload count differs");
         }
       }
       record.put("status", "passed");
