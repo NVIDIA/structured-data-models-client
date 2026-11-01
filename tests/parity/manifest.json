@@ -374,7 +374,7 @@
         "snowflake",
         "snowflake-semantic"
       ],
-      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.id",
+      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 1 FOR EACH users.id",
       "fixture": "fixtures/shop.json",
       "options": {
         "indices": [
@@ -419,7 +419,7 @@
       "variants": {
         "snowflake-semantic": {
           "fixture": "fixtures/shop-snowflake-semantic.json",
-          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.ID",
+          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 1 FOR EACH users.ID",
           "preparation": {
             "users.CLASS": "string",
             "users.FLAG": "boolean-from-0-or-1",
@@ -1068,7 +1068,7 @@
         "snowflake",
         "snowflake-semantic"
       ],
-      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.id",
+      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 1 FOR EACH users.id",
       "fixture": "fixtures/shop.json",
       "options": {
         "indices": [
@@ -1116,7 +1116,7 @@
       "variants": {
         "snowflake-semantic": {
           "fixture": "fixtures/shop-snowflake-semantic.json",
-          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.ID",
+          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 1 FOR EACH users.ID",
           "preparation": {
             "users.CLASS": "string",
             "users.FLAG": "boolean-from-0-or-1",
