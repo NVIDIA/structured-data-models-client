@@ -26,7 +26,6 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
       RUSTUP_TOOLCHAIN: '1.97.0'
-      PARITY_DIR: ${{ runner.temp }}/parity
       PARITY_RUNNER_LABELS: ${{ vars.PARITY_RUNNER_LABELS }}
       SDM_T136_LIVE_ENDPOINT: ${{ vars.PARITY_GIANT_ENDPOINT }}
       PARITY_GIANT_MODEL_VERSION: ${{ vars.PARITY_GIANT_MODEL_VERSION }}
@@ -38,9 +37,11 @@ jobs:
           persist-credentials: false
       - name: Require dedicated live configuration
         env:
+          PARITY_DIR: ${{ runner.temp }}/parity
           PARITY_CONFIG: ${{ secrets.PARITY_CONFIG_JSON }}
         run: |
           set -euo pipefail
+          echo "PARITY_DIR=$PARITY_DIR" >> "$GITHUB_ENV"
           mkdir -p "$PARITY_DIR/evidence"
           if [ -z "$PARITY_CONFIG" ]; then
             echo '::error::Dedicated parity-live configuration is missing; coverage is incomplete.'
