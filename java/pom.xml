@@ -159,6 +159,13 @@
       <scope>provided</scope>
     </dependency>
 
+    <dependency>
+      <groupId>net.snowflake</groupId>
+      <artifactId>snowflake-jdbc</artifactId>
+      <version>4.4.0</version>
+      <scope>provided</scope>
+    </dependency>
+
     <!-- The tests' logger, so a test can see the core's events reach SLF4J. -->
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -264,7 +271,7 @@
             </goals>
             <configuration>
               <includeScope>test</includeScope>
-              <includeArtifactIds>duckdb_jdbc,sqlite-jdbc,postgresql,databricks-jdbc</includeArtifactIds>
+              <includeArtifactIds>duckdb_jdbc,sqlite-jdbc,postgresql,databricks-jdbc,snowflake-jdbc</includeArtifactIds>
               <outputDirectory>${project.build.directory}/jdbc</outputDirectory>
             </configuration>
           </execution>

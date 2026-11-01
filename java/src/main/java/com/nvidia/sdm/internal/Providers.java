@@ -5,14 +5,15 @@
 package com.nvidia.sdm.internal;
 
 import com.nvidia.sdm.DatabricksSource;
-import com.nvidia.sdm.DuckDbSource;
-import com.nvidia.sdm.PostgresSource;
-import com.nvidia.sdm.SqliteSource;
-import com.nvidia.sdm.Source;
 import com.nvidia.sdm.DatabricksSparkSource;
-import com.nvidia.sdm.internal.jdbc.SparkProvider;
+import com.nvidia.sdm.DuckDbSource;
 import com.nvidia.sdm.JdbcSource;
+import com.nvidia.sdm.PostgresSource;
+import com.nvidia.sdm.SnowflakeSource;
+import com.nvidia.sdm.Source;
+import com.nvidia.sdm.SqliteSource;
 import com.nvidia.sdm.internal.jdbc.JdbcProvider;
+import com.nvidia.sdm.internal.jdbc.SparkProvider;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,6 +42,9 @@ public final class Providers {
     if (source instanceof DatabricksSparkSource spark && spark.semanticModel().isPresent()) {
       held.put("semantic_model", fields -> source);
     }
+    if (source instanceof SnowflakeSource snowflake && snowflake.semanticModel().isPresent()) {
+      held.put("semantic_model", fields -> source);
+    }
     return Map.copyOf(held);
   }
 
@@ -50,10 +54,17 @@ public final class Providers {
       choice.put("provider", "sql");
       choice.put("dialect", "databricks");
       if (spark.catalog().isPresent() || spark.schema().isPresent()) {
-        choice.put("namespace", Arrays.asList(spark.catalog().orElse(null), spark.schema().orElse(null)));
+        choice.put(
+            "namespace", Arrays.asList(spark.catalog().orElse(null), spark.schema().orElse(null)));
       }
-      if (spark.semanticModel().isPresent()) choice.put("view", Map.of("name", spark.semanticModel().orElseThrow(),
-          "trust_expressions", spark.trustExpressions()));
+      if (spark.semanticModel().isPresent())
+        choice.put(
+            "view",
+            Map.of(
+                "name",
+                spark.semanticModel().orElseThrow(),
+                "trust_expressions",
+                spark.trustExpressions()));
       return new Chosen(choice, new SparkProvider(spark.session()));
     }
     JdbcProvider.Driver driver;
@@ -65,6 +76,8 @@ public final class Providers {
       driver = JdbcProvider.Driver.POSTGRES;
     } else if (source instanceof DatabricksSource) {
       driver = JdbcProvider.Driver.DATABRICKS;
+    } else if (source instanceof SnowflakeSource) {
+      driver = JdbcProvider.Driver.SNOWFLAKE;
     } else {
       throw new IllegalArgumentException("a source of no known kind");
     }
@@ -88,8 +101,28 @@ public final class Providers {
           Arrays.asList(databricks.catalog().orElse(null), databricks.schema().orElse(null)));
     }
     if (source instanceof DatabricksSource databricks && databricks.semanticModel().isPresent()) {
-      choice.put("view", Map.of("name", databricks.semanticModel().orElseThrow(),
-          "trust_expressions", databricks.trustExpressions()));
+      choice.put(
+          "view",
+          Map.of(
+              "name",
+              databricks.semanticModel().orElseThrow(),
+              "trust_expressions",
+              databricks.trustExpressions()));
+    }
+    if (source instanceof SnowflakeSource snowflake) {
+      if (snowflake.database().isPresent() || snowflake.schema().isPresent()) {
+        choice.put(
+            "namespace",
+            Arrays.asList(snowflake.database().orElse(null), snowflake.schema().orElse(null)));
+      }
+      if (snowflake.semanticModel().isPresent())
+        choice.put(
+            "view",
+            Map.of(
+                "name",
+                snowflake.semanticModel().orElseThrow(),
+                "trust_expressions",
+                snowflake.trustExpressions()));
     }
     return new Chosen(choice, new JdbcProvider(((JdbcSource) source).connection(), driver));
   }

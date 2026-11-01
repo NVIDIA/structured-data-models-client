@@ -295,23 +295,26 @@ public final class ParityRunner {
       record.put("stage", "schema");
       Schema schema;
       var keys = map(fixture.get("primary_keys"));
+      String userKey = text(keys.get("users"));
+      String targetColumn = fixtureColumn(fixture, "users", "value");
+      String eventTime = fixtureColumn(fixture, "events", "event_time");
       boolean fullSchema = "pql-relational-schema".equals(scenario.get("entry"));
       if (model.equals("tabular") && !fullSchema)
         schema =
             Schema.fromData(Map.of("users", inputs.tables.get("users")))
-                .withPrimaryKey("users", "id");
+                .withPrimaryKey("users", userKey);
       else {
         if (inputs.source == null || fullSchema) schema = Schema.fromData(inputs.tables);
         else {
           var options = FromSourceOptions.builder();
           inputs.names.forEach(options::table);
           keys.forEach((table, key) -> options.primaryKey(table, text(key)));
-          options.timeColumn("events", "event_time");
+          options.timeColumn("events", eventTime);
           schema = Schema.fromSource(inputs.source, options.build());
         }
         for (var key : keys.entrySet())
           schema = schema.withPrimaryKey(key.getKey(), text(key.getValue()));
-        schema = schema.withTimeColumn("events", "event_time");
+        schema = schema.withTimeColumn("events", eventTime);
         var links = new ArrayList<Relationship>();
         for (Object link : list(fixture.get("links"))) {
           var names = list(link);
@@ -321,7 +324,7 @@ public final class ParityRunner {
         }
         schema = schema.withRelationships(links);
       }
-      schema = schema.withStype("users", "value", "numerical");
+      schema = schema.withStype("users", targetColumn, "numerical");
       var semantic = new LinkedHashMap<String, Object>();
       var lifecycle = new ArrayList<String>();
       var results = new ArrayList<Object>();
@@ -338,7 +341,7 @@ public final class ParityRunner {
         Table context = inputs.tables.get("users");
         Map<String, Object> contextRows = frame(context);
         var columns = new ArrayList<>(list(contextRows.get("columns")));
-        int target = columns.indexOf("value");
+        int target = columns.indexOf(targetColumn);
         columns.remove(target);
         var scoring = new ArrayList<Object>();
         for (Object row : list(contextRows.get("rows")).subList(0, 2)) {
@@ -352,7 +355,7 @@ public final class ParityRunner {
               new Request(
                   context,
                   values,
-                  "value",
+                  targetColumn,
                   "regression",
                   RequestOptions.builder().schema(schema).entityTable("users").build());
         }
@@ -693,6 +696,14 @@ public final class ParityRunner {
     return output;
   }
 
+  static String fixtureColumn(Map<String, Object> fixture, String table, String name) {
+    return list(map(map(fixture.get("tables")).get(table)).get("columns")).stream()
+        .map(ParityRunner::text)
+        .filter(column -> column.equalsIgnoreCase(name))
+        .findFirst()
+        .orElse(name);
+  }
+
   static Table table(Map<String, Object> fixture, RootAllocator allocator) {
     List<Object> columns = list(fixture.get("columns")), rows = list(fixture.get("rows"));
     var vectors = new ArrayList<FieldVector>();
@@ -706,7 +717,7 @@ public final class ParityRunner {
             break;
           }
         FieldVector vector =
-            name.equals("event_time")
+            name.equalsIgnoreCase("event_time")
                 ? new TimeStampMicroVector(name, allocator)
                 : first instanceof Boolean
                     ? new BitVector(name, allocator)
@@ -744,7 +755,9 @@ public final class ParityRunner {
       Map<String, Object> expected = map(entry.getValue()), seen = frame(actual.get(name));
       var normalized = new LinkedHashMap<>(expected);
       var rows = new ArrayList<Object>();
-      int time = list(expected.get("columns")).indexOf("event_time");
+      int time =
+          list(expected.get("columns"))
+              .indexOf(fixtureColumn(fixture, entry.getKey(), "event_time"));
       for (Object row : list(expected.get("rows"))) {
         var values = new ArrayList<>(list(row));
         if (time >= 0) values.set(time, scalar(fixtureTime(values.get(time))));
@@ -893,10 +906,18 @@ public final class ParityRunner {
               case "duckdb" -> DuckDbSource.of(connection);
               case "sqlite" -> SqliteSource.of(connection);
               case "postgres", "lakebase" -> PostgresSource.of(connection, text(ns.get("schema")));
+              case "snowflake", "snowflake-semantic" ->
+                  SnowflakeSource.of(connection, text(ns.get("database")), text(ns.get("schema")));
               case "databricks-sql", "databricks-metric" ->
                   DatabricksSource.of(connection, text(ns.get("catalog")), text(ns.get("schema")));
               default -> throw new Incomplete("connector has no Java public adapter");
             };
+        if (connector.equals("snowflake-semantic"))
+          source =
+              ((SnowflakeSource) source)
+                  .semanticModel(
+                      text(settings.get("view")),
+                      Boolean.TRUE.equals(settings.get("trust_expressions")));
         if (connector.equals("databricks-metric"))
           source =
               ((DatabricksSource) source)
@@ -917,7 +938,20 @@ public final class ParityRunner {
         var rows = new ArrayList<Object>();
         for (Object raw : list(value.get("rows"))) {
           var row = new ArrayList<>(list(raw));
-          int category = columns.indexOf("class"), flag = columns.indexOf("flag");
+          int category = columns.indexOf(fixtureColumn(fixture, name, "class")),
+              flag = columns.indexOf(fixtureColumn(fixture, name, "flag"));
+          var declared = list(list(map(map(fixture.get("tables")).get(name)).get("rows")).get(0));
+          for (int col = 0; col < row.size(); col++) {
+            if (row.get(col) instanceof java.math.BigDecimal decimal) {
+              Object expected = declared.get(col);
+              if (expected instanceof Byte
+                  || expected instanceof Short
+                  || expected instanceof Integer
+                  || expected instanceof Long) row.set(col, decimal.longValueExact());
+              else if (expected instanceof Float || expected instanceof Double)
+                row.set(col, decimal.doubleValue());
+            }
+          }
           if (category >= 0 && row.get(category) != null)
             row.set(category, text(row.get(category)));
           if (flag >= 0 && row.get(flag) instanceof Number number) {
@@ -947,7 +981,7 @@ public final class ParityRunner {
           String name = text(columns.get(col));
           Object first = list(rows.get(0)).get(col);
           String type =
-              name.equals("event_time")
+              name.equalsIgnoreCase("event_time")
                   ? (sqlite ? "TEXT" : "TIMESTAMP")
                   : first instanceof Boolean
                       ? "BOOLEAN"

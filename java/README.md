@@ -255,3 +255,17 @@ The opt-in `ParityRunnerTest` reads the shared [parity manifest](../tests/parity
 It records raw reader output, materialized requests, model results and Rust operation witnesses; local mode cannot certify live model parity.
 The test-only `parity-connect-pom.xml` resolves Databricks Connect for `sdm.parity.connect.classpath`, without adding it to the published client.
 The caller supplies private connection/endpoint configuration and a build provenance sidecar; missing configuration stays incomplete.
+
+### Snowflake
+
+`SnowflakeSource.of(connection, database, schema)` uses a caller-owned JDBC connection.
+Either namespace argument may be null to use its current value.
+Use `.semanticModel(name, false)` for an existing semantic view; Rust interprets its schema and writes sampling SQL.
+The caller supplies `net.snowflake:snowflake-jdbc:4.4.0` and authentication.
+No connection settings are changed, and closing schemas or requests does not close the connection.
+
+`Readers.readTable(source, name, allocator)` and `Readers.readQuery(source, sql, allocator)` return owned Arrow tables usable with Tabular or Relational `Schema.fromData`.
+Raw Snowflake `NUMBER` columns retain their declared decimal precision and scale, including integers beyond 64 bits and fractions that Python's connector converts to doubles.
+Rust applies the existing warehouse numeric conversion rules when these values enter source-backed Relational sampling.
+Timestamp values retain their precision; zoned timestamps carry the connection's current session timezone, read without changing it.
+`TIME` retains nanoseconds, improving on the Python connector's microsecond truncation.

@@ -164,9 +164,9 @@ class ReadersTest {
     }
   }
 
-  @Test void ordinaryJavaWorksWithoutSparkRuntime() throws Exception {
+  @Test void ordinaryJavaWorksWithoutSparkOrSnowflakeRuntime() throws Exception {
     String classpath = java.util.Arrays.stream(System.getProperty("java.class.path").split(java.io.File.pathSeparator))
-        .filter(entry -> !entry.contains("/org/apache/spark/") && !entry.contains("/org/scala-lang/"))
+        .filter(entry -> !entry.contains("/org/apache/spark/") && !entry.contains("/org/scala-lang/") && !entry.contains("/net/snowflake/"))
         .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
     Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
         "--add-opens=java.base/java.nio=ALL-UNNAMED", "-cp", classpath, NoSpark.class.getName()).redirectErrorStream(true).start();

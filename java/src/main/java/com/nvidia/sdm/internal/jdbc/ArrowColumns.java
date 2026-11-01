@@ -25,12 +25,13 @@ import org.apache.arrow.vector.IntervalMonthDayNanoVector;
 import org.apache.arrow.vector.NullVector;
 import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TimeMicroVector;
-import org.apache.arrow.vector.TimeStampMicroTZVector;
-import org.apache.arrow.vector.TimeStampMicroVector;
+import org.apache.arrow.vector.TimeStampVector;
+import org.apache.arrow.vector.TimeNanoVector;
 import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.complex.FixedSizeListVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
@@ -57,8 +58,10 @@ public final class ArrowColumns {
   public static final ArrowType INT32 = new ArrowType.Int(32, true);
   public static final ArrowType INT64 = new ArrowType.Int(64, true);
   public static final ArrowType BOOL = ArrowType.Bool.INSTANCE;
-  public static final ArrowType FLOAT32 = new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE);
-  public static final ArrowType FLOAT64 = new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE);
+  public static final ArrowType FLOAT32 =
+      new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE);
+  public static final ArrowType FLOAT64 =
+      new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE);
   public static final ArrowType UTF8 = ArrowType.Utf8.INSTANCE;
   public static final ArrowType BINARY = ArrowType.Binary.INSTANCE;
   public static final ArrowType DATE32 = new ArrowType.Date(DateUnit.DAY);
@@ -66,7 +69,8 @@ public final class ArrowColumns {
   public static final ArrowType TIMESTAMP_US_UTC =
       new ArrowType.Timestamp(TimeUnit.MICROSECOND, "UTC");
   public static final ArrowType TIME64_US = new ArrowType.Time(TimeUnit.MICROSECOND, 64);
-  public static final ArrowType MONTH_DAY_NANO = new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO);
+  public static final ArrowType MONTH_DAY_NANO =
+      new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO);
   public static final ArrowType NULL = ArrowType.Null.INSTANCE;
 
   /** A decimal of {@code precision} and {@code scale}: 128 bits to 38 digits, 256 beyond. */
@@ -116,7 +120,8 @@ public final class ArrowColumns {
       structure.allocateNew();
       for (FieldVector child : structure.getChildrenFromFields()) {
         List<Object> members = new ArrayList<>();
-        for (Object value : values) members.add(value == null ? null : ((Map<?, ?>) value).get(child.getName()));
+        for (Object value : values)
+          members.add(value == null ? null : ((Map<?, ?>) value).get(child.getName()));
         fill(child, members);
       }
       for (int row = 0; row < rows; row++) {
@@ -124,6 +129,28 @@ public final class ArrowColumns {
         else structure.setIndexDefined(row);
       }
       structure.setValueCount(rows);
+      return;
+    }
+    if (vector instanceof FixedSizeListVector list) {
+      list.setInitialCapacity(Math.max(rows, 1));
+      list.allocateNew();
+      int width = list.getListSize();
+      List<Object> elements = new ArrayList<>();
+      for (int row = 0; row < rows; row++) {
+        Object value = values.get(row);
+        if (value == null) {
+          list.setNull(row);
+          for (int item = 0; item < width; item++) elements.add(null);
+        } else {
+          List<?> items = (List<?>) value;
+          if (items.size() != width)
+            throw new IllegalArgumentException("fixed-size Arrow list width mismatch");
+          list.setNotNull(row);
+          elements.addAll(items);
+        }
+      }
+      fill(list.getDataVector(), elements);
+      list.setValueCount(rows);
       return;
     }
     if (vector instanceof ListVector list) {
@@ -164,9 +191,9 @@ public final class ArrowColumns {
       v.setSafe(at, (byte[]) value);
     } else if (vector instanceof DateDayVector v) {
       v.setSafe(at, ((Number) value).intValue());
-    } else if (vector instanceof TimeStampMicroTZVector v) {
+    } else if (vector instanceof TimeStampVector v) {
       v.setSafe(at, ((Number) value).longValue());
-    } else if (vector instanceof TimeStampMicroVector v) {
+    } else if (vector instanceof TimeNanoVector v) {
       v.setSafe(at, ((Number) value).longValue());
     } else if (vector instanceof TimeMicroVector v) {
       v.setSafe(at, ((Number) value).longValue());

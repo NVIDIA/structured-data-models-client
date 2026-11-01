@@ -32,6 +32,9 @@ public final class Readers {
       else if (source instanceof DatabricksSource databricks) {
         catalog = databricks.catalog().orElse(null);
         schema = databricks.schema().orElse(null);
+      } else if (source instanceof SnowflakeSource snowflake) {
+        catalog = snowflake.database().orElse(null);
+        schema = snowflake.schema().orElse(null);
       } else if (source instanceof DatabricksSparkSource spark) {
         catalog = spark.catalog().orElse(null);
         schema = spark.schema().orElse(null);
