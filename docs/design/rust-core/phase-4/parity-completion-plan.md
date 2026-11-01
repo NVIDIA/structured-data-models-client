@@ -59,6 +59,10 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - Next: permanent parity machinery and paired endpoint runs.
   The real endpoint matrix and remaining scope reconciliation are still pending.
 
+The API audit also found that Java cannot inspect a Tabular request's retained context/prediction tables.
+Close this with a small request split view for both models, using shared Rust conversion and batch-ID handling; returning an empty value for Relational would conceal its data.
+Review its exact type/ownership contract before implementation and add it to permanent API coverage.
+
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
 Java Databricks Connect access and source operations are verified; paired real-model Spark acceptance remains pending.
 

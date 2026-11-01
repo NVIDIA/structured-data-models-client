@@ -1,0 +1,626 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""Run one installed public Python journey; credentials stay in private config."""
+
+import argparse
+import contextlib
+import datetime
+import functools
+import hashlib
+import importlib
+import json
+import math
+import pickle
+import subprocess
+import tempfile
+import zipfile
+from decimal import Decimal
+from pathlib import Path
+
+from routes import LegacyGuard
+
+from contract import (
+    BASELINE,
+    HERE,
+    digest,
+    effective_case,
+    fixture_hash,
+    manifest,
+)
+
+
+class Incomplete(Exception):
+    pass
+
+
+def scalar(value):
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, Decimal):
+        if value.is_finite() and value == value.to_integral_value():
+            return int(value)
+        if value.is_finite() and Decimal.from_float(float(value)) == value:
+            return float(value)
+        return {'decimal': str(value)}
+    if isinstance(value, float):
+        return value if math.isfinite(value) else {'float': str(value)}
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): scalar(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [scalar(v) for v in value]
+    if hasattr(value, 'item'):
+        return scalar(value.item())
+    raise TypeError(f'unsupported observation scalar: {type(value).__name__}')
+
+
+def reader_schema(data):
+    import pyarrow as pa
+
+    def logical(dtype):
+        if pa.types.is_large_string(dtype):
+            return 'string'
+        if pa.types.is_large_binary(dtype):
+            return 'binary'
+        return str(dtype)
+
+    return [
+        [field.name, logical(field.type)]
+        for field in pa.Schema.from_pandas(data, preserve_index=False)
+    ]
+
+
+def frame(data):
+    return {
+        'columns': list(data.columns),
+        'rows': [
+            [scalar(v) for v in row]
+            for row in data.itertuples(index=False, name=None)
+        ],
+    }
+
+
+@functools.lru_cache
+def artifact(commit, phase, provenance=None):
+    import sdm_client
+
+    package = Path(sdm_client.__file__).resolve().parent
+    # Hash the installed source, not a claimed checkout path or version string.
+    sha = hashlib.sha256()
+    for path in sorted(package.rglob('*.py')):
+        sha.update(str(path.relative_to(package)).encode())
+        sha.update(path.read_bytes())
+    out = {'commit': commit, 'package_hash': sha.hexdigest()}
+    if phase == 'candidate':
+        from sdm_client import _native
+
+        out.update(
+            native_hash=hashlib.sha256(
+                Path(_native.__file__).read_bytes()
+            ).hexdigest(),
+            contract=_native.CONTRACT_VERSION,
+        )
+    if phase == 'baseline':
+
+        def git(*args):
+            return subprocess.check_output(
+                ['git', '-C', str(package), *args], text=True
+            ).strip()
+
+        if git('rev-parse', 'HEAD') != BASELINE or git(
+            'status', '--porcelain', '--', str(package)
+        ):
+            raise Incomplete(
+                'frozen Python source is not the clean reference commit'
+            )
+        source_root = (
+            Path(git('rev-parse', '--show-toplevel'))
+            / 'packages/structured-data-models-client/src/sdm_client'
+        )
+        if package != source_root:
+            raise Incomplete('baseline must import the verified frozen source')
+    else:
+        if provenance is None:
+            raise Incomplete('candidate requires verified wheel provenance')
+        path = Path(provenance)
+        identity = json.loads(path.read_text())
+        if (
+            identity.get('commit') != commit
+            or identity.get('tree_clean') is not True
+            or identity.get('features') != []
+        ):
+            raise Incomplete(
+                'candidate provenance is not the requested clean production build'
+            )
+        wheel = path.parent / identity['wheel']
+        if hashlib.sha256(wheel.read_bytes()).hexdigest() != identity.get(
+            'sha256'
+        ) or out['native_hash'] != identity.get('native_sha256'):
+            raise Incomplete('wheel/native artifact identity mismatch')
+        wheel_python = hashlib.sha256()
+        with zipfile.ZipFile(wheel) as archive:
+            for name in sorted(
+                name
+                for name in archive.namelist()
+                if name.startswith('sdm_client/') and name.endswith('.py')
+            ):
+                wheel_python.update(name.removeprefix('sdm_client/').encode())
+                wheel_python.update(archive.read(name))
+        if wheel_python.hexdigest() != out['package_hash']:
+            raise Incomplete('installed Python differs from the verified wheel')
+    return out
+
+
+def tables_of(fixture):
+    import pandas as pd
+
+    tables = {
+        name: pd.DataFrame(table['rows'], columns=table['columns'])
+        for name, table in fixture['tables'].items()
+    }
+    time_column = fixture['tables']['events']['columns'][3]
+    tables['events'][time_column] = pd.to_datetime(
+        tables['events'][time_column]
+    )
+    return tables
+
+
+def source_tables(stack, connector, config, fixture):
+    """Remote fixtures are pre-provisioned; this runner never changes them."""
+    import sdm_connectors as sources
+
+    tables = tables_of(fixture)
+    if connector == 'memory':
+        return None, tables, None
+    if connector in ('csv', 'parquet', 'zip', 's3-csv', 's3-parquet'):
+        from sdm_connectors import read
+
+        settings = config.get('sources', {}).get(connector, {})
+        if connector.startswith('s3-'):
+            paths = settings.get('paths')
+            if not paths:
+                raise Incomplete('missing configured S3 fixture paths')
+            tables = {name: read(path) for name, path in paths.items()}
+        else:
+            directory = Path(stack.enter_context(tempfile.TemporaryDirectory()))
+            for name, table in tables.items():
+                path = directory / (
+                    name
+                    + (
+                        '.parquet'
+                        if connector == 'parquet'
+                        else '.csv.zip'
+                        if connector == 'zip'
+                        else '.csv'
+                    )
+                )
+                if connector == 'parquet':
+                    table.to_parquet(path, index=False)
+                else:
+                    table.to_csv(path, index=False)
+                tables[name] = read(path)
+        return None, tables, None
+    settings = config.get('sources', {}).get(connector, {})
+    if connector == 'duckdb':
+        connection = importlib.import_module('duckdb').connect()
+        source_class = sources.DuckDBSource
+    elif connector == 'sqlite':
+        connection = importlib.import_module(
+            'adbc_driver_sqlite.dbapi'
+        ).connect()
+        source_class = sources.SQLiteSource
+    else:
+        drivers = {
+            'postgres': ('psycopg', sources.PostgresSource),
+            'lakebase': ('psycopg', sources.PostgresSource),
+            'databricks-sql': ('databricks.sql', sources.DatabricksSource),
+            'databricks-metric': ('databricks.sql', sources.DatabricksSource),
+            'snowflake': ('snowflake.connector', sources.SnowflakeSource),
+            'snowflake-semantic': (
+                'snowflake.connector',
+                sources.SnowflakeSource,
+            ),
+        }
+        if not settings.get('snapshot'):
+            raise Incomplete('missing verified source snapshot configuration')
+        if connector == 'databricks-spark':
+            from databricks.connect import DatabricksSession
+
+            builder = DatabricksSession.builder
+            connect = settings.get('connect', {})
+            if connect.get('profile'):
+                builder = builder.profile(connect['profile'])
+            if connect.get('cluster_id'):
+                builder = builder.clusterId(connect['cluster_id'])
+            connection = builder.getOrCreate()
+            source_class = sources.DatabricksSource
+        else:
+            driver, source_class = drivers[connector]
+            connection = importlib.import_module(driver).connect(
+                **settings.get('connect', {})
+            )
+    if hasattr(connection, 'close'):
+        stack.callback(connection.close)
+    if connector in ('duckdb', 'sqlite'):
+        for name, table in tables.items():
+            if connector == 'sqlite':
+                types = {
+                    'id': 'INTEGER',
+                    'event': 'INTEGER',
+                    'item': 'INTEGER',
+                    'value': 'DOUBLE',
+                    'feature': 'DOUBLE',
+                    'price': 'DOUBLE',
+                    'class': 'TEXT',
+                    'flag': 'INTEGER',
+                    'event_time': 'TIMESTAMP',
+                }
+                with connection.cursor() as cursor:
+                    columns = ', '.join(
+                        '"' + column + '" ' + types[column]
+                        for column in table.columns
+                    )
+                    cursor.execute(f'CREATE TABLE "{name}" ({columns})')
+                    cursor.executemany(
+                        f'INSERT INTO "{name}" VALUES ('
+                        + ','.join('?' for _ in table.columns)
+                        + ')',
+                        frame(table)['rows'],
+                    )
+                connection.commit()
+            else:
+                connection.register('fixture_input', table)
+                connection.execute(
+                    f'CREATE TABLE "{name}" AS SELECT * FROM fixture_input'
+                )
+                connection.unregister('fixture_input')
+    source = source_class(connection, **settings.get('source', {}))
+    if connector in ('databricks-metric', 'snowflake-semantic'):
+        source = source.semantic_model(
+            settings['view'],
+            trust_expressions=settings.get('trust_expressions', False),
+        )
+    return source, tables, connection
+
+
+def check_snapshot(tables, fixture):
+    # Independent source reads must agree with the fixture, including row
+    # order normalized by the explicit primary key, before claiming its hash.
+    for name, expected in tables_of(fixture).items():
+        if name not in tables:
+            raise Incomplete('fixture table missing: ' + name)
+        key = fixture['primary_keys'][name]
+        actual = tables[name].sort_values(key).reset_index(drop=True)
+        wanted = expected.sort_values(key).reset_index(drop=True)
+        if frame(actual) != frame(wanted):
+            raise Incomplete(
+                'source values differ from shared fixture: ' + name
+            )
+
+
+def request_observation(request):
+    if request.payloads is not None:
+        return scalar(request.payloads)
+    return {
+        'context': frame(request.context.instance_table),
+        'predict': frame(request.predict.instance_table),
+        'target': request.task.target.column_name,
+        'task': request.task.kind,
+    }
+
+
+def journey(case, connector, model, config, mode, record):
+    from sdm_client import (
+        KumoRelational,
+        KumoTabular,
+        PredictiveQuery,
+        Request,
+        Schema,
+        SDMClient,
+    )
+    from sdm_connectors import read_table
+
+    fixture = json.loads((HERE / case['fixture']).read_text())
+    user_key, target, category, flag = fixture['tables']['users']['columns']
+    time_column = fixture['tables']['events']['columns'][3]
+    chosen = KumoRelational() if model == 'relational' else KumoTabular()
+    with contextlib.ExitStack() as stack:
+        record['stage'] = 'source'
+        source, tables, connection = source_tables(
+            stack, connector, config, fixture
+        )
+        mappings = (
+            config.get('sources', {})
+            .get(connector, {})
+            .get('tables', {name: name for name in tables})
+        )
+        if connection is not None:
+            if connector == 'databricks-spark':
+                namespace = config['sources'][connector].get('source', {})
+
+                def qualified(actual):
+                    parts = [
+                        namespace.get('catalog'),
+                        namespace.get('schema'),
+                        actual,
+                    ]
+                    return '.'.join(
+                        '`' + part.replace('`', '``') + '`'
+                        for part in parts
+                        if part
+                    )
+
+                tables = {
+                    name: connection.table(qualified(actual)).toPandas()
+                    for name, actual in mappings.items()
+                }
+            else:
+                tables = {
+                    name: read_table(connection, table=actual)
+                    for name, actual in mappings.items()
+                }
+        record['reader'] = {
+            name: {
+                'schema': reader_schema(table),
+                'raw_schema': [
+                    [str(column), str(dtype)]
+                    for column, dtype in table.dtypes.items()
+                ],
+                'data': frame(table),
+            }
+            for name, table in tables.items()
+        }
+        if not tables['users'][flag].isin([False, True, 0, 1]).all():
+            raise Incomplete('fixture flag has values other than boolean/0/1')
+        tables['users'][category] = tables['users'][category].astype(str)
+        tables['users'][flag] = tables['users'][flag].astype(bool)
+        if time_column in tables.get('events', {}):
+            tables['events'][time_column] = __import__('pandas').to_datetime(
+                tables['events'][time_column]
+            )
+        check_snapshot(tables, fixture)
+        tables = {
+            name: table.sort_values(fixture['primary_keys'][name]).reset_index(
+                drop=True
+            )
+            for name, table in tables.items()
+        }
+        record['source_snapshot'] = digest(fixture)
+        record['stage'] = 'schema'
+        keys = fixture['primary_keys']
+        if model == 'tabular' and case['entry'] != 'pql-relational-schema':
+            schema = Schema.from_data(
+                {'users': tables['users']}, primary_keys={'users': user_key}
+            )
+        elif source is None or model == 'tabular':
+            schema = Schema.from_data(
+                tables, primary_keys=keys, time_columns={'events': time_column}
+            )
+        else:
+            schema = Schema.from_source(
+                source,
+                mappings,
+                primary_keys=keys,
+                time_columns={'events': time_column},
+            )
+        schema['users'][target].stype = 'numerical'
+        # These links are explicit fixture facts, independent of catalog FK
+        # enforcement and name-guessing differences across connectors.
+        if model == 'relational' or case['entry'] == 'pql-relational-schema':
+            from sdm_client import Relationship
+
+            schema.relationships = [
+                Relationship(*link[0].split('.'), *link[1].split('.'))
+                for link in fixture['links']
+            ]
+        semantic = {
+            'schema': {
+                name: {
+                    'primary_key': scalar(table.primary_key),
+                    'time_column': table.time_column,
+                    'columns': [
+                        [col, table[col].dtype, table[col].stype]
+                        for col in table
+                    ],
+                }
+                for name, table in schema.tables.items()
+            },
+            'lifecycle': [],
+            'results': [],
+            'request': None,
+        }
+        record['semantic'] = semantic
+        record['stage'] = 'materialize'
+        if case['entry'] == 'direct':
+            context = tables['users']
+            prediction = context.iloc[:2].drop(columns=[target])
+            request = Request(
+                context,
+                prediction,
+                target=target,
+                task='regression',
+                schema=schema,
+            )
+            semantic['request'] = request_observation(request)
+        else:
+            options = dict(case['options'])
+            if model == 'tabular':
+                options.pop('random_seed', None)
+            request = PredictiveQuery(case['pql'], schema).materialize(
+                model=chosen, **options
+            )
+            semantic['request'] = request_observation(request)
+        semantic['lifecycle'].append('materialize')
+        if case['journey'] == 'restore-predict':
+            record['stage'] = 'restore'
+            request = pickle.loads(pickle.dumps(request))
+            semantic['lifecycle'].append('restore')
+            semantic['request'] = request_observation(request)
+        if mode == 'local':
+            record['status'] = 'passed'
+            return
+        endpoint = (
+            config.get('endpoints_by_case', {})
+            .get(case['id'], {})
+            .get(model, config.get('endpoints', {}).get(model))
+        )
+        if (
+            not endpoint
+            or endpoint.get('kind') != 'live'
+            or not endpoint.get('version')
+        ):
+            raise Incomplete(
+                'live endpoint/model-version configuration missing'
+            )
+        record['endpoint'] = {
+            key: endpoint[key] for key in ('kind', 'version', 'transport')
+        }
+        record['endpoint']['model'] = endpoint.get('model', 'kumo-' + model)
+        if endpoint['transport'] == 'databricks':
+            client = SDMClient.for_databricks_serving(**endpoint['client'])
+        elif endpoint['transport'] in ('nim', 'private-bridge'):
+            client = SDMClient(**endpoint['client'])
+        else:
+            raise Incomplete('unsupported public endpoint transport')
+        stack.callback(client.close)
+        if case['journey'] == 'fit-predict-close':
+            record['stage'] = 'fit'
+            fitted = client.fit(request, model=chosen, holdout=[1, 2])
+            semantic['lifecycle'].append('fit')
+            try:
+                for _ in range(2):
+                    record['stage'] = 'predict'
+                    semantic['results'].append(
+                        frame(fitted.predict(request).to_pandas())
+                    )
+                    semantic['lifecycle'].append('predict')
+            finally:
+                record['stage'] = 'close'
+                fitted.close()
+                semantic['lifecycle'].append('close')
+        else:
+            record['stage'] = 'predict'
+            semantic['results'].append(
+                frame(client.predict(request, model=chosen).to_pandas())
+            )
+            semantic['lifecycle'].append('predict')
+        record['status'] = 'passed'
+
+
+def run(case, connector, model, config, phase, mode, commit, provenance=None):
+    record = {
+        'version': 1,
+        'case': case['id'],
+        'connector': connector,
+        'model': model,
+        'language': 'python',
+        'phase': phase,
+        'status': 'incomplete',
+        'execution': mode,
+        'fixture_hash': fixture_hash(case),
+        'artifact': artifact(commit, phase, provenance),
+        'source_snapshot': None,
+        'endpoint': None,
+        'semantic': None,
+        'error': None,
+        'route': None,
+    }
+    guard = LegacyGuard() if phase == 'candidate' else contextlib.nullcontext()
+    try:
+        with guard:
+            journey(case, connector, model, config, mode, record)
+    except ImportError:
+        record['status'] = 'incomplete'
+        record['reason'] = (
+            'optional connector or runtime dependency is unavailable'
+        )
+    except Incomplete as error:
+        record['status'] = 'incomplete'
+        record['reason'] = str(error)
+    except Exception as error:
+        record['status'] = 'refused' if hasattr(error, 'code') else 'failed'
+        fields = getattr(error, 'details', {}) or {}
+        record['error'] = {
+            'stage': record.get('stage', 'setup'),
+            'code': getattr(error, 'code', type(error).__name__),
+            'rule': fields.get('rule') if isinstance(fields, dict) else None,
+        }
+        # Exception text may contain source credentials or raw data; never log it.
+    finally:
+        if phase == 'candidate':
+            record['route'] = guard.report
+    record.pop('stage', None)
+    return record
+
+
+def expected_outcome(case, record):
+    expected = case['expected']
+    if record['phase'] == 'candidate':
+        expected = case.get('expected_by_language', {}).get('python', expected)
+    if expected['status'] == 'supported':
+        return record['status'] == 'passed'
+    return record['status'] == expected.get('outcome', 'refused') and (
+        record.get('error')
+        == {key: expected[key] for key in ('stage', 'code', 'rule')}
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--manifest', type=Path, default=HERE / 'manifest.json')
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument(
+        '--phase', choices=['baseline', 'candidate'], required=True
+    )
+    parser.add_argument('--mode', choices=['local', 'live'], default='local')
+    parser.add_argument('--case', action='append')
+    parser.add_argument('--connector', action='append')
+    parser.add_argument(
+        '--model', choices=['relational', 'tabular'], action='append'
+    )
+    parser.add_argument('--commit', required=True)
+    parser.add_argument('--provenance', type=Path)
+    args = parser.parse_args()
+    data = manifest(args.manifest)
+    if args.phase == 'baseline' and args.commit != BASELINE:
+        parser.error('baseline must identify the frozen reference commit')
+    config = json.loads(args.config.read_text()) if args.config else {}
+    results = []
+    with args.out.open('w') as output:
+        for case in data['scenarios']:
+            if args.case and case['id'] not in args.case:
+                continue
+            for connector in case['connectors']:
+                if args.connector and connector not in args.connector:
+                    continue
+                for model in case['models']:
+                    if args.model and model not in args.model:
+                        continue
+                    record = run(
+                        effective_case(case, connector),
+                        connector,
+                        model,
+                        config,
+                        args.phase,
+                        args.mode,
+                        args.commit,
+                        str(args.provenance) if args.provenance else None,
+                    )
+                    output.write(
+                        json.dumps(record, sort_keys=True, allow_nan=False)
+                        + '\n'
+                    )
+                    output.flush()
+                    results.append(
+                        expected_outcome(
+                            effective_case(case, connector), record
+                        )
+                    )
+    return 0 if results and all(results) else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

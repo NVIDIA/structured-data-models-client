@@ -1,0 +1,1872 @@
+{
+  "version": 1,
+  "languages": [
+    "python",
+    "java"
+  ],
+  "models": [
+    "relational",
+    "tabular"
+  ],
+  "connectors": [
+    "memory",
+    "sqlite",
+    "duckdb",
+    "postgres",
+    "lakebase",
+    "databricks-sql",
+    "databricks-spark",
+    "databricks-metric",
+    "snowflake",
+    "snowflake-semantic",
+    "csv",
+    "parquet",
+    "s3-csv",
+    "s3-parquet",
+    "zip"
+  ],
+  "deferrals": [
+    {
+      "language": "java",
+      "connectors": [
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "reason": "Java Snowflake is explicitly deferred."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "node.regression",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "node.binary",
+      "task": "binary",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": "PREDICT users.flag FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.FLAG FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "node.multiclass",
+      "task": "multiclass",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": "PREDICT users.class FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.CLASS FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "relational.aggregate",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "relational.condition",
+      "task": "condition",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "relational.foreign-key",
+      "task": "foreign-key",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT events.item FOR EACH events.event",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT events.ITEM FOR EACH events.EVENT",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "relational.ranking",
+      "task": "ranking",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT LIST_DISTINCT(events.item, 0, 30, days) RANK TOP 2 FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "candidates": [
+          0,
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT LIST_DISTINCT(events.ITEM, 0, 30, days) RANK TOP 2 FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "relational.forecast",
+      "task": "forecast",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "direct.regression",
+      "task": "regression",
+      "entry": "direct",
+      "journey": "predict",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": null,
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": null,
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "lifecycle.fitted",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "fit-predict-close",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "persistence.request",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "restore-predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "relational.temporal-link",
+      "task": "temporal-link",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT LIST_DISTINCT(events.item, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT LIST_DISTINCT(events.ITEM, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.tabular.aggregate",
+      "task": "aggregate",
+      "entry": "pql-relational-schema",
+      "journey": "refusal",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.tabular.condition",
+      "task": "condition",
+      "entry": "pql-relational-schema",
+      "journey": "refusal",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.tabular.foreign-key",
+      "task": "foreign-key",
+      "entry": "pql-relational-schema",
+      "journey": "refusal",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT events.item FOR EACH events.event",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT events.ITEM FOR EACH events.EVENT",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.tabular.ranking",
+      "task": "ranking",
+      "entry": "pql-relational-schema",
+      "journey": "refusal",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT LIST_DISTINCT(events.item, 0, 30, days) RANK TOP 2 FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "candidates": [
+          0,
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT LIST_DISTINCT(events.ITEM, 0, 30, days) RANK TOP 2 FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.tabular.forecast",
+      "task": "forecast",
+      "entry": "pql-relational-schema",
+      "journey": "refusal",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.tabular.temporal-link",
+      "task": "temporal-link",
+      "entry": "pql-relational-schema",
+      "journey": "refusal",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT LIST_DISTINCT(events.item, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "materialize",
+        "code": "INVALID_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "exact",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT LIST_DISTINCT(events.ITEM, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "persistence.tabular-read",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "restore-predict",
+      "models": [
+        "tabular"
+      ],
+      "connectors": [
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      }
+    },
+    {
+      "id": "refusal.source-persistence",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "restore-predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "outcome": "failed",
+        "stage": "restore",
+        "code": "TypeError",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [
+        "named-source-persistence-refusal"
+      ],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        }
+      },
+      "expected_by_language": {
+        "java": {
+          "status": "refused",
+          "stage": "restore",
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": null,
+          "verdict": "Improvement"
+        }
+      }
+    }
+  ],
+  "input_paths": {
+    "frames": {
+      "python": [
+        "Schema.from_data"
+      ],
+      "java": [
+        "Schema.fromData"
+      ]
+    },
+    "warehouse-relational": {
+      "python": [
+        "Schema.from_source"
+      ],
+      "java": [
+        "Schema.fromSource"
+      ]
+    },
+    "warehouse-tabular": {
+      "python": [
+        "sdm_connectors.read_table",
+        "Schema.from_data"
+      ],
+      "java": [
+        "Readers.readTable",
+        "Schema.fromData"
+      ]
+    },
+    "files": {
+      "python": [
+        "sdm_connectors.read",
+        "Schema.from_data"
+      ],
+      "java": [
+        "Readers.read",
+        "Schema.fromData"
+      ]
+    }
+  },
+  "api_contracts": [
+    {
+      "id": "schema-edits",
+      "apis": {
+        "python": [
+          "Schema.check_consistent",
+          "Schema.relationships",
+          "Table.primary_key",
+          "Table.time_column",
+          "Column.stype"
+        ],
+        "java": [
+          "Schema.checkConsistent",
+          "Schema.withRelationships",
+          "Schema.withPrimaryKey",
+          "Schema.withTimeColumn",
+          "Schema.withStype"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py",
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java",
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "direct-dtypes-options",
+      "apis": {
+        "python": [
+          "Request",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "SDMClient.fit"
+        ],
+        "java": [
+          "Request",
+          "MaterializeOptions",
+          "SdmClient.predict",
+          "SdmClient.fit"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_tabular_direct_core.py",
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "readiness-discovery",
+      "apis": {
+        "python": [
+          "SDMClient.health_ready",
+          "SDMClient.models"
+        ],
+        "java": [
+          "SdmClient.healthReady",
+          "SdmClient.models"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_transport_socket.py::test_a_proper_models_body_still_reads",
+          "packages/structured-data-models-client/tests/test_transport_socket.py::test_health_ready_wraps_unreachable_host"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "results-merge",
+      "apis": {
+        "python": [
+          "PredictionResult.merge",
+          "PredictionResult.unscored_candidates",
+          "PredictionResult.to_pandas"
+        ],
+        "java": [
+          "PredictionResult.merge",
+          "PredictionResult.unscoredCandidates",
+          "PredictionResult.read"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_result_merge_core.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "persistence",
+      "apis": {
+        "python": [
+          "Schema",
+          "Request"
+        ],
+        "java": [
+          "Schema.writeTo",
+          "Schema.readFrom",
+          "Request.writeTo",
+          "Request.readFrom"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_copy_and_pickle_preserve_origin_and_edit_isolation",
+          "tests/test_t32_request_pickle.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "readers",
+      "apis": {
+        "python": [
+          "sdm_connectors.read",
+          "sdm_connectors.read_table"
+        ],
+        "java": [
+          "Readers.read",
+          "Readers.readTable",
+          "Readers.readQuery"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-connectors/tests/test_reader.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java",
+          "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "provider-contract",
+      "apis": {
+        "python": [],
+        "java": [],
+        "rust": [
+          "ProviderCapabilities",
+          "FallbackLimits"
+        ]
+      },
+      "tests": {
+        "rust": [
+          "rust/crates/sdm-core/tests/fallback.rs",
+          "rust/crates/sdm-core/tests/materialize.rs"
+        ],
+        "java": []
+      },
+      "gate": "native",
+      "note": "Public Rust host-provider obligations shared by language bindings, not an invented Python provider API."
+    },
+    {
+      "id": "large-values",
+      "apis": {
+        "python": [
+          "Schema.from_source",
+          "PredictiveQuery.materialize"
+        ],
+        "java": [
+          "Schema.fromSource",
+          "PredictiveQuery.materialize"
+        ]
+      },
+      "tests": {
+        "python": [
+          "contract/tests/test_t136_host2_values.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/DuckDbLargeValueTest.java"
+        ],
+        "rust": [
+          "rust/crates/sdm-host/tests/admission.rs"
+        ]
+      },
+      "gate": "large-memory",
+      "note": "Synthetic capacity tests run locally; actual greater-than-2GiB journeys require the protected resource gate."
+    },
+    {
+      "id": "public-serving-refusals",
+      "apis": {
+        "python": [
+          "SDMClient.for_databricks_serving"
+        ],
+        "java": [
+          "SdmClient.forDatabricksServing"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_databricks_serving.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Public Databricks session refusal remains distinct from real-model private-bridge lifecycle tests."
+    }
+  ],
+  "public_api_snapshot_sha256": "341df3535133e5a5d5ae015c31aba471b9e4d58a32f9b0e55bb8a03cf715b2e4"
+}

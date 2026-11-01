@@ -139,7 +139,7 @@ def convert(
     def encoded(checked: dict[str, Any]) -> dict[str, Any]:
         result = checked['value']
         if not isinstance(result, dict):
-            raise RuntimeError(
+            raise RuntimeError(  # noqa: TRY004 - malformed native response, not caller input.
                 'the native cell conversion has no encoded value'
             )
         return result
