@@ -230,3 +230,10 @@ Request request = PredictiveQuery.parse("PREDICT data.price FOR EACH data.id")
 
 `Schema.fromData` accepts named Arrow tables; Tabular requires one unrelated table.
 Warehouse-backed schemas retain their existing Relational workflow.
+
+## Installed-client parity checks
+
+The opt-in `ParityRunnerTest` reads the shared [parity manifest](../tests/parity/README.md) and launches a JVM using the built client JAR and its recorded native artifact.
+It records raw reader output, materialized requests, model results and Rust operation witnesses; local mode cannot certify live model parity.
+The test-only `parity-connect-pom.xml` resolves Databricks Connect for `sdm.parity.connect.classpath`, without adding it to the published client.
+The caller supplies private connection/endpoint configuration and a build provenance sidecar; missing configuration stays incomplete.
