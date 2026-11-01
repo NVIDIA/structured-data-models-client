@@ -26,5 +26,6 @@ All three must pass on the same workflow commit; the existing release gate there
 Missing access, skipped required cells, failed runners or incomplete comparisons fail the workflow.
 Private bridges are identified separately and cannot establish public Databricks session support.
 
-**Setup is still pending:** no dedicated CI credentials or approved runner have been provided yet.
+The `parity-live` environment is created and restricted to the `main` and `rust-core-phase-4` branches.
+**Access setup is still pending:** the environment has no secrets and the repository has no registered runners; dedicated CI credentials and an approved high-memory runner are still needed.
 Local endpoint validation can proceed meanwhile; the scheduled workflow is not claimed to be operational.
