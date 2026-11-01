@@ -56,12 +56,18 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - Java DuckDB streaming landed (`22abbf6e1`), retaining result/statement ownership until the Arrow stream closes without whole-result byte-array serialization.
   Java regression results: 310 passed, 14 explicitly skipped; both source reviews passed.
   An actual >2 GiB binary column was omitted through materialization and prediction using a local model stub; live-model acceptance remains pending.
-- Next: permanent parity machinery and paired endpoint runs.
-  The real endpoint matrix and remaining scope reconciliation are still pending.
+- Permanent parity machinery landed (`af727a749`): shared fixtures, Python/Java runners, exact comparisons, legacy-route checks, API coverage and CI/release gates.
+  Frozen Python completed all 285 required baseline cells; observations are retained for candidate comparison.
+- Shared request inspection landed through `fc5dec307`, with [reviewed boundaries](request-split.md), contract 55 and native decoding for both languages.
+  Python integration passed 133 tests; Java production API tests passed 200, with 15 explicit optional/provider skips.
+  The comparator passed 30 tests, including rejection of wide-integer precision loss.
+- Live validation is underway using immutable production artifacts from `6b7875900`; subsequent commits change tests/comparison only.
+  All 124 completed Python memory/local/file/S3 cells compare successfully against the frozen client.
+  Exact nullable entity-reference integer preservation is reported as an improvement; lossless timestamp-unit differences require identical values.
+  Raw evidence is preserved, and private model bridges remain explicitly labeled.
 
-The API audit also found that Java cannot inspect a Tabular request's retained context/prediction tables.
-Close this with a small request split view for both models, using shared Rust conversion and batch-ID handling; returning an empty value for Relational would conceal its data.
-Review its exact type/ownership contract before implementation and add it to permanent API coverage.
+**Still required:** finish Python/Java remote comparisons, actual-model large-value tests, remaining lifecycle/API acceptance checks and the final evidence matrix.
+Dedicated CI access is also pending; [the scheduled workflow is not yet operational](parity-ci.md).
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
 Java Databricks Connect access and source operations are verified; paired real-model Spark acceptance remains pending.
