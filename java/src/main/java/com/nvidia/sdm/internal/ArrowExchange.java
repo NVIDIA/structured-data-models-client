@@ -34,11 +34,15 @@ public final class ArrowExchange {
       stream = ArrowArrayStream.allocateNew(allocator);
       Data.exportArrayStream(allocator, reader, stream);
       return stream;
-    } catch (UnsupportedOperationException e) {
+    } catch (RuntimeException | Error failure) {
+      // Export has not transferred ownership to the caller. The driver-backed reader may
+      // still own a result and cursor even if allocating the C stream itself failed.
+      try { reader.close(); } catch (Throwable close) { failure.addSuppressed(close); }
       if (stream != null) {
-        stream.close();
+        try { stream.close(); } catch (Throwable close) { failure.addSuppressed(close); }
       }
-      throw flagMissing(e);
+      if (failure instanceof UnsupportedOperationException) throw flagMissing(failure);
+      throw failure;
     }
   }
 

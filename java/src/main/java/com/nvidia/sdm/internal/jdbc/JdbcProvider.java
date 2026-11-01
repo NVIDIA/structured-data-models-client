@@ -206,11 +206,23 @@ public final class JdbcProvider implements Host.Provider {
     if (driver == Driver.POSTGRES) {
       return postgres(List.of(new Planned(sql, Map.of(), null)), Map.of(), allocator);
     }
+    if (driver == Driver.DUCKDB) {
+      Statement statement = connection.createStatement();
+      ResultSet rows = null;
+      try {
+        statement.setEscapeProcessing(false);
+        rows = statement.executeQuery(sql);
+        return DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS, rows, statement);
+      } catch (Exception | Error failure) {
+        closeAfterFailure(failure, rows, statement);
+        throw failure;
+      }
+    }
     try (Statement statement = connection.createStatement()) {
       statement.setEscapeProcessing(false);
       try (ResultSet rows = statement.executeQuery(sql)) {
         return switch (driver) {
-          case DUCKDB -> DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS);
+          case DUCKDB -> throw new IllegalStateException("DuckDB is handled above");
           case SQLITE -> built(ConversionTable.sqlite(rows), allocator);
           case DATABRICKS -> built(ConversionTable.databricks(rows), allocator);
           case POSTGRES -> throw new IllegalStateException("Postgres is handled above");
@@ -251,32 +263,40 @@ public final class JdbcProvider implements Host.Provider {
       BufferAllocator allocator)
       throws Exception {
     Trace trace = Trace.installed();
-    try (Connection cursor = DuckDb.duplicate(connection)) {
-      if (trace != null) {
-        trace.cursor(0);
-      }
+    Connection cursor = DuckDb.duplicate(connection);
+    Statement statement = null;
+    ResultSet rows = null;
+    ArrowReader answer = null;
+    try {
+      if (trace != null) trace.cursor(0);
       for (Map.Entry<String, Integer> relation : relations.entrySet()) {
         keySets.bind(cursor, relation.getKey(), keys.get(relation.getValue()), allocator);
       }
-      try (Statement statement = cursor.createStatement()) {
-        for (int at = 0; at < planned.size() - 1; at++) {
-          run(statement, planned.get(at).text(), trace);
-        }
-        String last = planned.get(planned.size() - 1).text();
-        if (trace != null) {
-          trace.statement(0, last);
-        }
-        try (ResultSet rows = statement.executeQuery(last)) {
-          List<Map<String, Object>> types = types(rows, trace);
-          return answered(
-              DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS), types, allocator, trace);
-        } catch (SQLException e) {
-          if (trace != null) {
-            trace.statementFailed(e.getClass().getName());
-          }
-          throw e;
-        }
+      statement = cursor.createStatement();
+      for (int at = 0; at < planned.size() - 1; at++) {
+        run(statement, planned.get(at).text(), trace);
       }
+      String last = planned.get(planned.size() - 1).text();
+      if (trace != null) trace.statement(0, last);
+      rows = statement.executeQuery(last);
+      List<Map<String, Object>> types = types(rows, trace);
+      answer = DuckDb.arrow(rows, allocator, DUCKDB_BATCH_ROWS, rows, statement, cursor);
+      return answered(answer, types, allocator, trace);
+    } catch (Exception | Error failure) {
+      if (trace != null && failure instanceof SQLException) {
+        trace.statementFailed(failure.getClass().getName());
+      }
+      if (answer == null) closeAfterFailure(failure, rows, statement, cursor);
+      else closeAfterFailure(failure, answer);
+      throw failure;
+    }
+  }
+
+  /** Close every acquired resource while preserving the operation's original failure. */
+  private static void closeAfterFailure(Throwable failure, AutoCloseable... resources) {
+    for (AutoCloseable resource : resources) {
+      if (resource == null) continue;
+      try { resource.close(); } catch (Throwable error) { failure.addSuppressed(error); }
     }
   }
 

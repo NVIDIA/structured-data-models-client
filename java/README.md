@@ -182,6 +182,8 @@ The API mirrors Python's with Java names and plain data:
 
 The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks's (`com.databricks:databricks-jdbc`); the JAR ships none.
 What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type, as Python's provider types them through psycopg's registry, every value read in text as psycopg reads it; Databricks's by type, as the Databricks SQL connector gives Python's provider its Arrow.
+DuckDB provider results stream directly into Rust; the reader owns its statement and duplicate cursor until consumption finishes, while the caller connection stays open.
+For a single value larger than 2 GiB, enable DuckDB's `arrow_large_buffer_size` setting before describing the source, as in Python.
 The model transport sends the core's call as the bytes the core wrote, over `java.net.http`, retrying a transient failure (429, 502, 503, 504, a dropped connection) as Python's transport does.
 
 Every error is a `StructuredDataException`, as every Python error is a `StructuredDataError`: `code()` is the contract's error code to branch on (`INVALID_REQUEST`, `UNSUPPORTED_REQUEST`, `INTERNAL_ERROR`, ...), and `details()` holds the structured fields the core gave.
@@ -213,6 +215,8 @@ cargo build --manifest-path rust/Cargo.toml -p sdm-jni --features test-ops
 cp rust/target/debug/libsdm_jni.so java/target/natives/linux-x86_64/
 mvn -f java/pom.xml verify
 ```
+
+The resource-heavy `DuckDbLargeValueTest` is opt-in with `-Dsdm.test.giant=true`; it needs roughly 9 GiB of available memory and verifies description, automatic binary-column omission, and prediction with a value larger than 2 GiB.
 
 The contract cases run on the Java host through `contract/runners/run_java.py` (`--database duckdb|sqlite|postgres` for the S1 cases), which hands `contract/runners/java/ContractRunner.java` the calls to make and writes the observations the comparator judges; `mvn package` copies the JDBC drivers it opens the databases with into `target/jdbc`.
 
