@@ -4,7 +4,8 @@
 
 # Branch/worktree cleanup proposal
 
-**No branches, worktrees or caches were deleted by this audit.**
+**Historical pre-cleanup audit.**
+The owner subsequently authorized cleanup; see [completed batches and recovery records](cleanup-result.md).
 Snapshot: 2026-11-01, before pushing the new Phase 5 planning branch.
 Remote listings were checked directly, not inferred from stale remote-tracking refs.
 
