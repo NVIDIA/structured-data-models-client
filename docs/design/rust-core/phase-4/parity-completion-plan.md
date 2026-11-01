@@ -61,16 +61,22 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - Shared request inspection landed through `fc5dec307`, with [reviewed boundaries](request-split.md), contract 55 and native decoding for both languages.
   Python integration passed 133 tests; Java production API tests passed 200, with 15 explicit optional/provider skips.
   The comparator passed 30 tests, including rejection of wide-integer precision loss.
-- Live validation is underway using immutable production artifacts from `6b7875900`; subsequent commits change tests/comparison only.
-  All 124 completed Python memory/local/file/S3 cells compare successfully against the frozen client.
+- Initial live validation completed using immutable production artifacts from `6b7875900`.
+  All 285 Python cells compare successfully against the frozen client; Java completed all 239 applicable journeys, with result comparisons exposing a public result-access gap.
   Exact nullable entity-reference integer preservation is reported as an improvement; lossless timestamp-unit differences require identical values.
   Raw evidence is preserved, and private model bridges remain explicitly labeled.
+- The reviewed result-access fix is implemented in candidate `419cfe687`: Rust projects semantic result items for Python and Java, including ranking candidates and mixed merged results.
+  Its production Python wheel passed 144 focused result/direct/session tests.
+  Final live comparisons must use this corrected candidate; the earlier sweep does not certify it.
+  Additional coverage checks explicit outputs, batching and actual fitted-session holdout payloads.
+- Frozen Python and the initial candidate both passed the actual-model >2 GiB omitted-binary journey.
+  Java actual-model large-value validation remains pending.
 
-**Still required:** finish Python/Java remote comparisons, actual-model large-value tests, remaining lifecycle/API acceptance checks and the final evidence matrix.
+**Still required:** verify the final result-access artifacts against the live matrix, finish Java actual-model large-value validation and supplemental lifecycle/API checks, integrate reviewed fixes and publish the final evidence matrix.
 Dedicated CI access is also pending; [the scheduled workflow is not yet operational](parity-ci.md).
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
-Java Databricks Connect access and source operations are verified; paired real-model Spark acceptance remains pending.
+Java Databricks Connect completed its real-model Spark journeys; final result comparisons remain pending with the corrected result-access artifact.
 
 ## Final E2E matrix
 
