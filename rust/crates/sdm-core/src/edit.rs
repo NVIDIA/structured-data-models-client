@@ -131,7 +131,14 @@ pub(crate) async fn run(
             "frame edit provides both Arrow data and native counts",
         ));
     }
-    let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
+    let read = if matches!(
+        &context,
+        Some(sdm_contract::ops::SchemaEditContext::Frames { .. })
+    ) {
+        sdm_schema::held::read_frame(held, true)?
+    } else {
+        sdm_schema::held::read(held, &BTreeMap::new(), true)?
+    };
     let mut edited =
         sdm_schema::edit::edit(read.description.clone(), &edit, &supports, &read.types)?;
     if let Some(sdm_contract::ops::SchemaEditContext::Frames { key_counts }) = context

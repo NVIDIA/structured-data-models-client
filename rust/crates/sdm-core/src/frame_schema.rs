@@ -149,7 +149,7 @@ pub(crate) fn describe(
         for warning in warnings {
             asker.warn(warning);
         }
-        let read = sdm_schema::held::read(held, &BTreeMap::new(), false)?;
+        let read = sdm_schema::held::read_frame(held, false)?;
         tables.extend(read.description.tables);
         choices.push(time);
     }

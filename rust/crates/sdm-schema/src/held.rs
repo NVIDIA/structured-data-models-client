@@ -278,6 +278,15 @@ pub fn read(
     found: &BTreeMap<ColumnAt, SourceFacts>,
     by_type: bool,
 ) -> Result<Read, CoreError> {
+    read_with_frame_widths(held, found, by_type, false)
+}
+
+fn read_with_frame_widths(
+    held: HeldSchema,
+    found: &BTreeMap<ColumnAt, SourceFacts>,
+    by_type: bool,
+    frame_widths: bool,
+) -> Result<Read, CoreError> {
     let mut tables = Vec::with_capacity(held.tables.len());
     let mut unfacted = BTreeSet::new();
     let mut missing_dtypes = BTreeSet::new();
@@ -330,7 +339,11 @@ pub fn read(
             if column.dtype.as_deref().and_then(named_dtype).is_none() {
                 types.unknown.insert(at.clone());
             }
-            let dtype = held_dtype(column, &facts);
+            let dtype = if frame_widths && column.dtype.as_deref() == Some("float32") {
+                Dtype::Float32
+            } else {
+                held_dtype(column, &facts)
+            };
             if dtype != facts.dtype && !unfacted.contains(&at) {
                 retyped.insert(at, facts.dtype);
             }
@@ -363,6 +376,12 @@ pub fn read(
         retyped,
         types,
     })
+}
+
+/// Read native frame metadata without applying warehouse float-width canonicalization.
+/// PQL checks still use `types` and their existing logical aliases.
+pub fn read_frame(held: HeldSchema, by_type: bool) -> Result<Read, CoreError> {
+    read_with_frame_widths(held, &BTreeMap::new(), by_type, true)
 }
 
 /// `description` as a host holds it: each column's data type by its wire

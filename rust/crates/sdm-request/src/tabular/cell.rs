@@ -16,6 +16,37 @@ fn canonical_integer(digits: &str) -> bool {
         && digits != "-0"
 }
 
+/// Shared refusal policy for native cells and declared Arrow column shapes.
+pub fn admit_shape(
+    column: &str,
+    dtype: Dtype,
+    shape: CellShape,
+    native_type: &str,
+) -> Result<(), CoreError> {
+    if shape == CellShape::Scalar {
+        return Ok(());
+    }
+    Err(CoreError::new(
+        if shape == CellShape::Bytes {
+            Sentence::DirectNativeBytes
+        } else {
+            Sentence::DirectNativeContainer
+        },
+        "a native cell cannot be represented",
+    )
+    .with_field("dtype", Detail::text(dtype.wire_name()))
+    .with_field("column", Detail::text(column))
+    .with_field("native_type", Detail::text(native_type))
+    .with_field(
+        "shape",
+        Detail::text(if shape == CellShape::Mapping {
+            "a mapping"
+        } else {
+            "a container"
+        }),
+    ))
+}
+
 pub fn check(input: DirectCellInput) -> Result<CheckedDirectCell, CoreError> {
     let dtype = input.identity.dtype;
     let integer = matches!(dtype, Dtype::Int32 | Dtype::Int64);
@@ -32,23 +63,7 @@ pub fn check(input: DirectCellInput) -> Result<CheckedDirectCell, CoreError> {
     };
     let value = match input.observation {
         CellObservation::ScalarAdmission { shape, native_type } => {
-            if shape != CellShape::Scalar {
-                return Err(error(if shape == CellShape::Bytes {
-                    Sentence::DirectNativeBytes
-                } else {
-                    Sentence::DirectNativeContainer
-                })
-                .with_field("column", Detail::text(&input.identity.column))
-                .with_field("native_type", Detail::text(native_type))
-                .with_field(
-                    "shape",
-                    Detail::text(if shape == CellShape::Mapping {
-                        "a mapping"
-                    } else {
-                        "a container"
-                    }),
-                ));
-            }
+            admit_shape(&input.identity.column, dtype, shape, &native_type)?;
             None
         }
         CellObservation::Missingness { missing } => missing.then_some(Scalar::Null),

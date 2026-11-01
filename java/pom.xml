@@ -39,11 +39,10 @@
     <slf4j.version>2.0.17</slf4j.version>
     <junit.version>5.13.4</junit.version>
     <databricks.sdk.version>0.170.0</databricks.sdk.version>
-    <!-- The JDBC drivers the providers are tested with (T3.12): DuckDB at
-         the reference's version (1.5.6), SQLite's and Postgres's current
-         releases. None ships with the JAR: a source is built from the
-         caller's own java.sql.Connection. -->
-    <duckdb.version>1.5.6.0</duckdb.version>
+    <!-- Tested JDBC drivers. DuckDB 2 preserves zoned Parquet nanoseconds.
+         None ships with the JAR: a source is built from the caller's own
+         java.sql.Connection. -->
+    <duckdb.version>2.0.0.0</duckdb.version>
     <sqlite.version>3.53.4.0</sqlite.version>
     <postgresql.version>42.7.14</postgresql.version>
     <databricks.jdbc.version>3.4.2</databricks.jdbc.version>

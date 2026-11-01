@@ -72,6 +72,21 @@ pub(crate) fn normalize(data: ArrowData) -> Result<ArrowData, CoreError> {
                 owner: StorageOwner::Arrow,
                 floats: None,
             },
+            DataType::List(_)
+            | DataType::LargeList(_)
+            | DataType::FixedSizeList(_, _)
+            | DataType::ListView(_)
+            | DataType::LargeListView(_) => {
+                // A declared nested type is unsupported even when all rows are null.
+                // Reuse native admission policy without fabricating a cell observation.
+                sdm_request::tabular::cell::admit_shape(
+                    field.name(),
+                    sdm_contract::ops::Dtype::String,
+                    sdm_contract::direct::cell::CellShape::Container,
+                    "Arrow list",
+                )?;
+                unreachable!("nested shape admission always refuses")
+            }
             _ => return Err(invalid("unsupported Arrow column type")),
         };
         fields.push(

@@ -231,3 +231,28 @@ fn explicitly_missing_dtype_survives_reads_and_edits_with_or_without_source_fact
         assert!(json["tables"][0]["columns"][0]["dtype"].is_null());
     }
 }
+
+#[test]
+fn frame_float_width_preserves_original_source_facts_and_unfacted_columns() {
+    for source_dtype in [
+        None,
+        Some(Dtype::Float),
+        Some(Dtype::Float64),
+        Some(Dtype::Float32),
+    ] {
+        let mut input = schema();
+        let column = &mut input.tables[0].columns[0];
+        column.dtype = Some("float32".into());
+        column.stype = Stype::Numerical;
+        column.source = source_dtype.map(|dtype| facts(dtype, ColumnType::Float64));
+        let original_source = column.source.clone();
+        let read = held::read_frame(input, true).unwrap();
+        assert_eq!(read.description.tables[0].columns[0].dtype, Dtype::Float32);
+        let answer = read.hold(&read.description);
+        assert_eq!(
+            answer.tables[0].columns[0].dtype.as_deref(),
+            Some("float32")
+        );
+        assert_eq!(answer.tables[0].columns[0].source, original_source);
+    }
+}

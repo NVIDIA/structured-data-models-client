@@ -19,6 +19,24 @@ import org.junit.jupiter.api.io.TempDir;
 class ReadersTest {
   @TempDir Path directory;
 
+  @Test void parquetPreservesTimezoneNanosecondsAndNulls() throws Exception {
+    // Fixed PyArrow24 fixture: timestamp[ns, America/Los_Angeles], exact ticks
+    // 1710064800987654321 and null. Do not generate via the reader's engine.
+    Path path = directory.resolve("timezone.parquet");
+    try (var input = getClass().getResourceAsStream("/parquet-timezone-ns.parquet")) {
+      assertNotNull(input);
+      Files.copy(input, path);
+    }
+    try (RootAllocator allocator = new RootAllocator(); Table rows = Readers.read(path, allocator);
+        var column = rows.getVectorCopy(0)) {
+      var type = (org.apache.arrow.vector.types.pojo.ArrowType.Timestamp) column.getField().getType();
+      assertEquals(org.apache.arrow.vector.types.TimeUnit.NANOSECOND, type.getUnit());
+      assertNotNull(type.getTimezone());
+      assertEquals(1710064800987654321L, ((org.apache.arrow.vector.TimeStampVector) column).get(0));
+      assertTrue(column.isNull(1));
+    }
+  }
+
   @Test void jdbcReadsUseTheCallerConnectionAndKeepItOpen() throws Exception {
     for (String url : List.of("jdbc:duckdb:", "jdbc:sqlite::memory:")) {
       try (var connection = DriverManager.getConnection(url); var statement = connection.createStatement();

@@ -157,3 +157,155 @@ fn dates_and_dictionaries_describe_and_prepare_the_same_graph() {
         Some(Attachment::FrameGraph(_))
     ));
 }
+
+#[test]
+fn nested_columns_are_unsupported_even_when_empty_or_all_null() {
+    use arrow_array::{ListArray, types::Int64Type};
+    use sdm_contract::{ErrorCode, Sentence};
+
+    let cases = [
+        vec![Some(vec![Some(1), Some(2)])],
+        vec![None, Some(vec![]), Some(vec![Some(1), None])],
+        vec![None, None],
+        vec![],
+    ];
+    for values in cases {
+        let array = ListArray::from_iter_primitive::<Int64Type, _, _>(values);
+        let mut described = run(
+            Operation::DescribeFrameTables(DescribeFrameTables {
+                names: AttachmentId(1),
+                tables: vec![AttachmentId(2)],
+            }),
+            [
+                (AttachmentId(1), bytes(&vec!["users"])),
+                (
+                    AttachmentId(2),
+                    Attachment::Arrow(table(vec![("sequence", Arc::new(array))])),
+                ),
+            ]
+            .into(),
+        );
+        let error = described.next().unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(error.sentence, Sentence::DirectNativeContainer);
+        assert_eq!(
+            error.fields["column"],
+            sdm_contract::Detail::text("sequence")
+        );
+    }
+}
+
+#[test]
+fn frame_float32_survives_description_assembly_and_edits_without_changing_source_aliases() {
+    use sdm_contract::direct::{
+        DirectInput,
+        schema::{ObservedColumn, SchemaObservation},
+    };
+    use sdm_contract::frames::AssembleFrameSchema;
+    use sdm_contract::ops::{Dtype, EditSchema, SchemaEdit, SchemaEditContext, Stype};
+    use std::collections::BTreeMap;
+
+    fn answer(run: &mut Run) -> HeldSchema {
+        let id = match run.next().unwrap() {
+            Step::Done {
+                result: OperationResult::DirectValue(value),
+            } => value.value,
+            Step::Done {
+                result: OperationResult::EditSchema(value),
+            } => value.schema,
+            other => panic!("unexpected schema answer: {other:?}"),
+        };
+        let Some(Attachment::Bytes(value)) = run.take_attachment(id) else {
+            panic!("schema absent")
+        };
+        serde_json::from_slice(&value).unwrap()
+    }
+    let data = table(vec![
+        ("id", Arc::new(Int64Array::from(vec![1, 2]))),
+        (
+            "single",
+            Arc::new(arrow_array::Float32Array::from(vec![Some(1.25), None])),
+        ),
+    ]);
+    let mut described = run(
+        Operation::DescribeFrameTables(DescribeFrameTables {
+            names: AttachmentId(1),
+            tables: vec![AttachmentId(2)],
+        }),
+        [
+            (AttachmentId(1), bytes(&vec!["users"])),
+            (AttachmentId(2), Attachment::Arrow(data)),
+        ]
+        .into(),
+    );
+    let held = answer(&mut described);
+    assert_eq!(held.tables[0].columns[1].dtype.as_deref(), Some("float32"));
+    let input = AssembleFrameSchema {
+        schema: held,
+        times: vec![SchemaObservation::TimeChoice {
+            columns: vec![
+                ObservedColumn {
+                    name: "id".into(),
+                    dtype: Dtype::Int64,
+                    stype: Stype::Id,
+                    untyped: false,
+                },
+                ObservedColumn {
+                    name: "single".into(),
+                    dtype: Dtype::Float32,
+                    stype: Stype::Numerical,
+                    untyped: false,
+                },
+            ],
+            primary_key: Some("id".into()),
+            rows: 2,
+            populations: vec![],
+            starts: None,
+        }],
+        key_counts: BTreeMap::new(),
+        primary_keys: BTreeMap::new(),
+        time_columns: BTreeMap::new(),
+        relationships: Some(vec![]),
+    };
+    let mut assembled = run(
+        Operation::AssembleFrameSchema(DirectInput {
+            input: AttachmentId(1),
+        }),
+        [(AttachmentId(1), bytes(&input))].into(),
+    );
+    let mut held = answer(&mut assembled);
+    assert_eq!(held.tables[0].columns[1].dtype.as_deref(), Some("float32"));
+    // Python frame schemas discard catalog provenance; later edits must still keep width.
+    for column in &mut held.tables[0].columns {
+        column.source = None;
+    }
+    for frames in [true, false] {
+        let mut attached: Attachments = [
+            (AttachmentId(1), bytes(&held)),
+            (AttachmentId(2), bytes(&SchemaEdit::Check {})),
+        ]
+        .into();
+        if frames {
+            attached.insert(
+                AttachmentId(3),
+                bytes(&SchemaEditContext::Frames {
+                    key_counts: BTreeMap::new(),
+                }),
+            );
+        }
+        let mut edited = run(
+            Operation::EditSchema(EditSchema {
+                schema: AttachmentId(1),
+                edit: AttachmentId(2),
+                context: frames.then_some(AttachmentId(3)),
+                frame: None,
+            }),
+            attached,
+        );
+        let result = answer(&mut edited);
+        assert_eq!(
+            result.tables[0].columns[1].dtype.as_deref(),
+            Some(if frames { "float32" } else { "float64" })
+        );
+    }
+}

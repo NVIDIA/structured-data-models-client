@@ -999,7 +999,7 @@ pub(crate) fn assemble_frame_schema(
     asker: &Asker,
     input: sdm_contract::frames::AssembleFrameSchema,
 ) -> Result<OperationResult, CoreError> {
-    let read = sdm_schema::held::read(input.schema, &BTreeMap::new(), false)?;
+    let read = sdm_schema::held::read_frame(input.schema, false)?;
     let choices = input
         .times
         .into_iter()
