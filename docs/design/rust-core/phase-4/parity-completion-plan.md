@@ -65,12 +65,18 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
   All 285 Python cells compare successfully against the frozen client; Java completed all 239 applicable journeys, with result comparisons exposing a public result-access gap.
   Exact nullable entity-reference integer preservation is reported as an improvement; lossless timestamp-unit differences require identical values.
   Raw evidence is preserved, and private model bridges remain explicitly labeled.
-- The reviewed result-access fix is implemented in candidate `419cfe687`: Rust projects semantic result items for Python and Java, including ranking candidates and mixed merged results.
-  Its production Python wheel passed 144 focused result/direct/session tests.
-  Final live comparisons must use this corrected candidate; the earlier sweep does not certify it.
-  Additional coverage checks explicit outputs, batching and actual fitted-session holdout payloads.
-- Frozen Python and the initial candidate both passed the actual-model >2 GiB omitted-binary journey.
+- The reviewed result-access fix and Java fitted-output option landed in `7f7c19f95`: Rust projects semantic result items for Python and Java, including ranking candidates and mixed merged results.
+  Matching production artifacts are built from that commit.
+  Python passed 272 API checks with no skips and 144 focused result/direct/session tests; Java passed 208 public API tests with 15 explicit optional/provider skips.
+  Final live comparisons are running against 291 frozen Python baseline cases, with 245 applicable Java cases.
+  Additional coverage checks explicit outputs, batching and actual fitted-session holdout payloads; two holdout cases per language are refreshing session-handle evidence without repeating other completed calls.
+- Frozen Python and the final `7f7c19f95` Python candidate both passed the actual-model >2 GiB omitted-binary journey.
   Java actual-model large-value validation remains pending.
+- The protected live workflow now requires sequential actual-model large-value tests for all three clients, with exactly one passed test each and no skips.
+  Dedicated CI configuration remains pending; this is implemented enforcement, not a claim of an operational scheduled run.
+
+**Current access blocker:** the AWS `kumo` login expired during final validation; its refresh is requested.
+S3 cells remain pending while other connectors continue, and completed evidence is retained.
 
 **Still required:** verify the final result-access artifacts against the live matrix, finish Java actual-model large-value validation and supplemental lifecycle/API checks, integrate reviewed fixes and publish the final evidence matrix.
 Dedicated CI access is also pending; [the scheduled workflow is not yet operational](parity-ci.md).
