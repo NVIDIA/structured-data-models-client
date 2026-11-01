@@ -59,6 +59,7 @@ TARGETS = {
         '_check_time_column',
     ),
     'sdm_client.client': ('_held_back', '_ranked', '_by_step'),
+    'sdm_client.request': ('_split_from',),
     'predictive_query': ('validate',),
 }
 

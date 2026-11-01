@@ -47,21 +47,38 @@ def one_table() -> Schema:
 
 def envelope(scored: list[int], known: list[int]) -> dict:
     return {
+        'schema': {
+            'instance_table': {
+                'columns': {
+                    'id': {'dtype': 'int64'},
+                    'v': {'dtype': 'float64'},
+                },
+            },
+            'related_tables': {
+                'e': {'columns': {'id': {'dtype': 'int64'}}},
+            },
+        },
         'task': {
             'kind': 'regression',
             'target': {'column_name': 'a', 'dtype': 'float64'},
         },
         'context': {
             'instance_table': {
+                'format': 'arrays',
                 'columns': ['id', 'v'],
                 'rows': [[i, 1.0] for i in known],
             },
             'related_tables': {
-                'e': {'columns': ['id'], 'rows': [[i] for i in known]}
+                'e': {
+                    'format': 'arrays',
+                    'columns': ['id'],
+                    'rows': [[i] for i in known],
+                }
             },
         },
         'predict': {
             'instance_table': {
+                'format': 'arrays',
                 'columns': ['id'],
                 'rows': [[i] for i in scored],
             }
@@ -215,6 +232,8 @@ def test_the_halves_are_not_built_until_they_are_read(monkeypatch):
     materialized and sent must not pay to read rows nobody looks at."""
     import sdm_client.request as module
 
+    # This test instruments the legacy private decoder boundary deliberately.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     built: list[str] = []
     real = module._split_from
     monkeypatch.setattr(
