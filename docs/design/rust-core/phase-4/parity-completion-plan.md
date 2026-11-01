@@ -6,6 +6,8 @@
 
 **Completed locally: original parity scope and Java Snowflake follow-up are implemented, reviewed and tested.**
 The parity checks are permanent product-test infrastructure, retained after the merge into `main`.
+The [type follow-up](type-parity-status.md) adds 210 completed comparisons.
+The [acceptance map](acceptance-map.md) distinguishes these completed initiatives from the original slice/switch gates, which are not yet fully established.
 
 | Completed scope | Evidence |
 |---|---|
@@ -70,7 +72,7 @@ Steps 1 and 2 can run in parallel; agree any shared contract changes first.
 Use small regressions for boundary/type decisions, then consolidate endpoint testing after implementation.
 Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requires a specific reviewed fix.
 
-### Implementation checkpoint
+### Historical implementation checkpoints
 
 - Delivered Java warehouse candidate/ranking/forecast handling and model defaults (`f04b23144`).
 - Implemented Rust-resolved in-memory queries, frame schema edits and fresh Arrow/pandas key observations, plus Java direct options and Tabular task overrides (`7895f4fd4`, `9aaeb732e`).
@@ -106,7 +108,7 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - The reviewed result-access fix and Java fitted-output option landed in `7f7c19f95`: Rust projects semantic result items for Python and Java, including ranking candidates and mixed merged results.
   Matching production artifacts are built from that commit.
   Python passed 272 API checks with no skips and 144 focused result/direct/session tests; Java passed 208 public API tests with 15 explicit optional/provider skips.
-  Final live comparisons are running against 291 frozen Python baseline cases, with 245 applicable Java cases.
+  At this checkpoint, final live comparisons were running against 291 frozen Python baseline cases, with 245 applicable Java cases; their completion is recorded above.
   All 29 memory comparisons pass in both languages, including explicit outputs, batching and actual fitted-session holdout payloads and session handles.
   All non-S3 cells compare successfully: 269 Python and 223 Java.
   Java CSV/ZIP fixtures now match the frozen client's timestamp text, guarded against truncating non-midnight values; only the affected 22 journeys were rerun.

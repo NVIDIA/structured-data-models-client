@@ -4,6 +4,9 @@
 
 # Python route audit
 
+**Historical audit at `cb64d1cca`; not current open-work status.**
+See the [reconciled findings](coverage-audit.md) and [acceptance map](acceptance-map.md).
+
 Audited source: `/home/awadaskar/code/sdmc-p4-core`, baseline `cb64d1cca` plus documentation-only audit work.
 This is code-trace evidence; no runtime suite was executed by this reviewer.
 Paths below are relative to `packages/structured-data-models-client/src/sdm_client/` unless qualified.

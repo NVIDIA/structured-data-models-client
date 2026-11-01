@@ -4,6 +4,9 @@
 
 # Java/Python API and coverage audit
 
+**Historical audit at `cb64d1cca`; not current open-work status.**
+See the [reconciled findings](coverage-audit.md) and [acceptance map](acceptance-map.md).
+
 Source baseline: `cb64d1cca`, inspected in `sdmc-p4-core`.
 This is source analysis plus inspection of existing test reports; no new tests or builds ran for this audit.
 Paths below are relative to that checkout.

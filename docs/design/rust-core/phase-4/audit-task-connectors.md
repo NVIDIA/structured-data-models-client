@@ -4,6 +4,9 @@
 
 # Task, connector and original Phase 4 scope audit
 
+**Historical audit at `cb64d1cca`; not current open-work status.**
+See the [reconciled findings](coverage-audit.md) and [acceptance map](acceptance-map.md).
+
 Audit baseline: `cb64d1cca`, source inspection only; no builds or test execution by this reviewer.
 Paths below are relative to `/home/awadaskar/code/sdmc-p4-core`.
 
