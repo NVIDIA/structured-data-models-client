@@ -27,6 +27,9 @@ public interface Trace {
   /** An attachment the host took from the run: bytes, or an Arrow IPC stream's bytes. */
   default void taken(int id, Object value, boolean arrow) {}
 
+  /** The model transport returned these response bytes, before native decoding. */
+  default void modelAnswered(byte[] response) {}
+
   /** The run finished with {@code result}. */
   default void done(Map<String, Object> result) {}
 

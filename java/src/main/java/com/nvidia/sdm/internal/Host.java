@@ -588,6 +588,7 @@ public final class Host {
     Refused refused = null;
     try {
       byte[] answer = model.call(step.get("endpoint"), body);
+      if (trace != null) trace.modelAnswered(answer);
       attached.put(1, answer);
       outcome = response(200);
     } catch (TransportFailed failed) {

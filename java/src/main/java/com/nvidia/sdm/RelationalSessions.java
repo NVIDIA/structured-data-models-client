@@ -66,7 +66,7 @@ final class RelationalSessions {
     return Host.run(op, attachments, new Host.Call(null, client.tabularTransport(), Map.of()));
   }
 
-  static FittedModel fit(SdmClient client, Request request, String model, List<?> holdout) {
+  static FittedModel fit(SdmClient client, Request request, String model, List<?> holdout, List<String> outputs) {
     requireRequest(request);
     List<Object> keys = new ArrayList<>();
     for (Object key : holdout) {
@@ -74,7 +74,7 @@ final class RelationalSessions {
       keys.add(parts.stream().map(ArrowTabular::key).toList());
     }
     Map<String, Object> input = new LinkedHashMap<>();
-    input.put("action", "fit"); input.put("model", model); input.put("outputs", null);
+    input.put("action", "fit"); input.put("model", model); input.put("outputs", outputs);
     input.put("question", question(request)); input.put("holdout", Map.of("rows", keys));
     input.put("windowed", request.targetMovesWithTime()); input.put("request_id", SdmClient.requestId());
     input.put("inference_asked", request.inferenceAsked());
