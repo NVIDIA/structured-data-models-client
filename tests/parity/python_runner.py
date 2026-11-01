@@ -320,7 +320,7 @@ def journey(case, connector, model, config, mode, record):
         Schema,
         SDMClient,
     )
-    from sdm_connectors import read_table
+    from sdm_connectors import quote_ident, read_table
 
     fixture = json.loads((HERE / case['fixture']).read_text())
     user_key, target, category, flag = fixture['tables']['users']['columns']
@@ -358,7 +358,14 @@ def journey(case, connector, model, config, mode, record):
                 }
             else:
                 tables = {
-                    name: read_table(connection, table=actual)
+                    name: read_table(
+                        connection,
+                        query='SELECT * FROM '
+                        + quote_ident(
+                            actual,
+                            '`' if connector.startswith('databricks') else '"',
+                        ),
+                    )
                     for name, actual in mappings.items()
                 }
         record['reader'] = {

@@ -74,3 +74,6 @@ Candidate provenance must match the installed wheel, native library, source comm
 
 The current manifest requires exact numeric equality.
 Any future model tolerance must name prediction columns explicitly while keeping identities, timestamps and inputs exact.
+
+SQL fixture inspection uses public `read_table(query=...)` with explicitly quoted table identifiers so case-sensitive fixture names survive unchanged.
+The separate reader API gate retains ordinary `table=` coverage; source-backed schema construction still receives bare table names.
