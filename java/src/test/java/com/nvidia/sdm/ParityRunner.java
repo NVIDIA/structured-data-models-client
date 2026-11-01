@@ -794,6 +794,22 @@ public final class ParityRunner {
                 Readers.read(
                     URI.create(text(entry.getValue())), ReadOptions.builder().build(), allocator));
         } else {
+          if (!connector.equals("parquet")) {
+            // pandas.to_csv renders this shared all-midnight fixture as date-only strings.
+            // Assert the fixture assumption rather than silently truncate future time values.
+            for (Object description : descriptions.values()) {
+              var data = map(description);
+              int time = list(data.get("columns")).indexOf("event_time");
+              if (time >= 0)
+                for (Object row : list(data.get("rows"))) {
+                  Object value = list(row).get(time);
+                  if (value != null
+                      && !LocalDateTime.parse(text(value)).toLocalTime().equals(LocalTime.MIDNIGHT))
+                    throw new IllegalStateException(
+                        "CSV parity fixture requires midnight event_time values");
+                }
+            }
+          }
           temporary = Files.createTempDirectory("sdm-parity-");
           try (Connection connection = DriverManager.getConnection("jdbc:duckdb:")) {
             create(connection, fixture, false);
@@ -807,7 +823,9 @@ public final class ParityRunner {
                         + "\" TO '"
                         + path.toString().replace("'", "''")
                         + "' (FORMAT "
-                        + (connector.equals("parquet") ? "PARQUET" : "CSV, HEADER true")
+                        + (connector.equals("parquet")
+                            ? "PARQUET"
+                            : "CSV, HEADER true, TIMESTAMPFORMAT '%Y-%m-%d'")
                         + ")");
               }
               if (connector.equals("zip")) {
