@@ -27,5 +27,6 @@ Missing access, skipped required cells, failed runners or incomplete comparisons
 Private bridges are identified separately and cannot establish public Databricks session support.
 
 The `parity-live` environment is created and restricted to the `main` and `rust-core-phase-4` branches.
+GitHub accepted [the corrected workflow](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41264242411) and reached its required-configuration check; that run stopped because dedicated credentials are absent.
 **Access setup is still pending:** the environment has no secrets and the repository has no registered runners; dedicated CI credentials and an approved high-memory runner are still needed.
 Local endpoint validation can proceed meanwhile; the scheduled workflow is not claimed to be operational.
