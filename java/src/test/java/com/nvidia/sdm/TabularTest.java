@@ -51,6 +51,7 @@ class TabularTest {
   static final class Endpoint implements AutoCloseable {
     final HttpServer server;
     final List<Map<String, Object>> calls = new ArrayList<>();
+    final List<Integer> deleteBodySizes = new ArrayList<>();
     int creates;
     int deletes;
     boolean failDelete;
@@ -62,6 +63,7 @@ class TabularTest {
         try {
           String path = exchange.getRequestURI().getPath();
           if (exchange.getRequestMethod().equals("DELETE")) {
+            deleteBodySizes.add(exchange.getRequestBody().readAllBytes().length);
             deletes++;
             if (failDelete || deleteFailuresRemaining-- > 0) { exchange.sendResponseHeaders(400, -1); return; }
             exchange.sendResponseHeaders(204, -1); return;

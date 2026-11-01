@@ -22,6 +22,7 @@ class ParitySupplementTest {
           client,
           SdmClient.KUMO_TABULAR,
           allocator);
+      assertEquals(List.of(0), endpoint.deleteBodySizes);
     }
   }
 
@@ -81,6 +82,11 @@ class ParitySupplementTest {
         }
       }
       ParityHoldout.check(request, held, calls);
+      assertNull(calls.get(3).get("payload"), "DELETE sends no native sentinel body");
+      Object sessionId = calls.get(0).get("session_id");
+      assertInstanceOf(String.class, sessionId);
+      assertFalse(sessionId.toString().isEmpty());
+      assertTrue(calls.stream().allMatch(call -> sessionId.equals(call.get("session_id"))));
       assertEquals(before, ParityRunner.digest(ParityRunner.requestEvidence(request, allocator)));
       route.end(record);
     }

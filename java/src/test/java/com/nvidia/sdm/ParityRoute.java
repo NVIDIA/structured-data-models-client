@@ -20,6 +20,7 @@ final class ParityRoute implements AutoCloseable {
   private List<Map<String, Object>> transport;
   private Integer bodyId;
   private String operation;
+  private Object sessionId;
   private Map<String, Object> lastCall;
 
   synchronized void capture(List<Map<String, Object>> target) {
@@ -50,6 +51,10 @@ final class ParityRoute implements AutoCloseable {
                     case "delete_session" -> "close";
                     default -> throw new IllegalStateException("unknown endpoint operation");
                   };
+              sessionId =
+                  endpoint instanceof Map<?, ?> fields
+                      ? ParityRunner.map(fields.get(kind)).get("session_id")
+                      : null;
               bodyId = ((Number) step.get("body")).intValue();
             }
           }
@@ -60,10 +65,16 @@ final class ParityRoute implements AutoCloseable {
               if (transport == null || arrow || !Objects.equals(bodyId, id)) return;
               var call = new LinkedHashMap<String, Object>();
               call.put("operation", operation);
+              if (sessionId != null) call.put("session_id", sessionId);
               byte[] bytes = (byte[]) value;
+              // Trace sees the native sentinel before transport; HTTP DELETE sends no body.
+              // ParitySupplementTest checks the actual server-received byte count.
               try {
                 call.put(
-                    "payload", bytes.length == 0 ? null : com.nvidia.sdm.internal.Json.read(bytes));
+                    "payload",
+                    bytes.length == 0 || "close".equals(operation)
+                        ? null
+                        : com.nvidia.sdm.internal.Json.read(bytes));
               } catch (Exception error) {
                 throw new IllegalStateException("invalid model request JSON", error);
               }
@@ -77,11 +88,12 @@ final class ParityRoute implements AutoCloseable {
           public void modelAnswered(byte[] response) {
             synchronized (ParityRoute.this) {
               if (transport == null || lastCall == null) return;
-              if (Set.of("predict", "score").contains(lastCall.get("operation"))) {
+              if (Set.of("fit", "predict", "score").contains(lastCall.get("operation"))) {
                 try {
-                  lastCall.put(
-                      "response_id",
-                      ParityRunner.map(com.nvidia.sdm.internal.Json.read(response)).get("id"));
+                  var responseBody = ParityRunner.map(com.nvidia.sdm.internal.Json.read(response));
+                  if ("fit".equals(lastCall.get("operation")))
+                    lastCall.put("session_id", responseBody.get("session_id"));
+                  else lastCall.put("response_id", responseBody.get("id"));
                 } catch (Exception error) {
                   throw new IllegalStateException("invalid model response JSON", error);
                 }
