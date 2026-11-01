@@ -238,7 +238,7 @@ pub(crate) fn prepare(
         let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {
             return Err(internal("frame table is not Arrow"));
         };
-        let data = crate::frame_schema::logical(data)?;
+        let data = crate::arrow_logical::logical(data)?;
         let table = graph
             .table(&name)
             .ok_or_else(|| internal("frame table is absent from schema"))?;

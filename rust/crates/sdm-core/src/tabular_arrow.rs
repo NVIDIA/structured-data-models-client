@@ -27,6 +27,7 @@ fn invalid(message: &str) -> CoreError {
 /// Normalize physical Arrow types into the shared typed-column representation.
 /// All metadata is derived here from Arrow itself, never a claimed Python origin.
 pub(crate) fn normalize(data: ArrowData) -> Result<ArrowData, CoreError> {
+    let data = crate::arrow_logical::logical(data)?;
     let mut fields = Vec::new();
     let mut types = Vec::new();
     for field in data.schema.fields() {
@@ -1011,4 +1012,43 @@ fn entity_keys(
     entity: &str,
 ) -> Result<sdm_contract::session::SessionKeys, CoreError> {
     tabular::session::encoded_keys(&encoded_column(data, entity)?, &[entity.to_owned()])
+}
+
+#[cfg(test)]
+mod date_tests {
+    use super::*;
+    use arrow_array::{Array, Date32Array, Date64Array, Int64Array};
+
+    #[test]
+    fn dates_normalize_to_exact_timestamp_storage_for_tabular() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("day", DataType::Date32, true),
+            Field::new("millisecond", DataType::Date64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Date32Array::from(vec![Some(-1), Some(19782), None])),
+                Arc::new(Date64Array::from(vec![Some(-1), Some(1709164800123), None])),
+            ],
+        )
+        .unwrap();
+        let actual = normalize(ArrowData::new(schema, vec![batch])).unwrap();
+        for (index, unit, expected) in [
+            (0, TimestampUnit::Seconds, [-86400, 1709164800]),
+            (1, TimestampUnit::Milliseconds, [-1, 1709164800123]),
+        ] {
+            let storage: DirectStorage =
+                serde_json::from_str(&actual.schema.field(index).metadata()[DIRECT_STORAGE_KEY])
+                    .unwrap();
+            assert_eq!(storage, DirectStorage::Timestamp { unit, zone: None });
+            let values = actual.batches[0]
+                .column(index)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            assert_eq!(&values.values()[..2], &expected);
+            assert!(values.is_null(2));
+        }
+    }
 }

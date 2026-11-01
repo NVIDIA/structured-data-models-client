@@ -153,7 +153,7 @@ pub(crate) async fn run(
         if !shape.primary_key.is_empty() {
             let observed;
             let count = if let Some(frame) = frame {
-                let frame = crate::frame_schema::logical(frame)?;
+                let frame = crate::arrow_logical::logical(frame)?;
                 observed = sdm_schema::keys::count_frame(
                     &frame.schema,
                     &frame.batches,

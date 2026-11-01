@@ -31,6 +31,7 @@ mod result;
 pub mod run;
 mod session;
 mod subgraph;
+mod arrow_logical;
 mod tabular_arrow;
 mod tabular_selection;
 #[cfg(feature = "test-ops")]
