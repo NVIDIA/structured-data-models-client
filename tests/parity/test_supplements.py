@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""Supplemental evidence must prove exclusions across the sampled graph."""
+
+import copy
+
+import pytest
+from supplements import assert_holdout_payloads
+
+
+def test_uploaded_holdout_checks_related_rows_and_removed_entity():
+    original = {
+        'schema': {
+            'relationships': [
+                {'source_columns': ['entity'], 'target_table': 'users'}
+            ]
+        },
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id', 'entity'],
+                'rows': [[0, 10], [1, 20]],
+            },
+            'related_tables': {
+                'users': {
+                    'columns': ['instance_id', 'id'],
+                    'rows': [[0, 10], [1, 20]],
+                }
+            },
+        },
+    }
+    fitted = copy.deepcopy(original)
+    fitted['context']['instance_table']['rows'] = [[1, 20]]
+    fitted['context']['related_tables']['users']['rows'] = [[1, 20]]
+    calls = [
+        {'operation': 'fit', 'payload': fitted},
+        {'operation': 'score', 'payload': {}},
+        {'operation': 'score', 'payload': {}},
+        {'operation': 'close', 'payload': None},
+    ]
+    assert_holdout_payloads([original], 2, [10], calls)
+    leaked = copy.deepcopy(calls)
+    leaked[0]['payload']['context']['related_tables']['users']['rows'].append(
+        [0, 10]
+    )
+    with pytest.raises(AssertionError):
+        assert_holdout_payloads([original], 2, [10], leaked)
+    wrong = copy.deepcopy(calls)
+    wrong[0]['payload']['context']['instance_table']['rows'] = [[0, 10]]
+    with pytest.raises(AssertionError):
+        assert_holdout_payloads([original], 2, [10], wrong)
+    with pytest.raises(AssertionError):
+        assert_holdout_payloads([original], 2, [], calls)
+
+
+def test_response_ids_require_ordered_real_call_correlation_before_normalizing():
+    from supplements import normalize_response_ids, response_groups
+
+    case = {'supplement': {'kind': 'batch'}}
+    original = {
+        'transport': [
+            {'operation': 'predict', 'response_id': 'a'},
+            {'operation': 'predict', 'response_id': 'b'},
+        ],
+        'result_details': [
+            {
+                'request_id': 'a',
+                'items': [{'id': 'a'}],
+                'metadata': {
+                    'batches': 2,
+                    'batch_request_ids': ['a', 'b'],
+                    'unknown': {'token': 'a'},
+                },
+            }
+        ],
+    }
+    normalized = copy.deepcopy(original)
+    normalize_response_ids(normalized, case)
+    assert normalized['result_details'][0]['request_id'] == 'call:0'
+    assert normalized['result_details'][0]['metadata']['batch_request_ids'] == [
+        'call:0',
+        'call:1',
+    ]
+    assert normalized['result_details'][0]['metadata']['unknown'] == {
+        'token': 'a'
+    }
+    assert normalized['result_details'][0]['items'] == [{'id': 'a'}]
+    wrong = copy.deepcopy(original)
+    wrong['result_details'][0]['metadata']['batch_request_ids'].reverse()
+    with pytest.raises(ValueError, match='ordered'):
+        response_groups(wrong, case)
+    wrong = copy.deepcopy(original)
+    wrong['transport'][1]['response_id'] = 'a'
+    with pytest.raises(ValueError, match='repeated'):
+        response_groups(wrong, case)
+    wrong = copy.deepcopy(original)
+    wrong['result_details'][0]['request_id'] = 'b'
+    with pytest.raises(ValueError, match='first actual'):
+        response_groups(wrong, case)
+
+
+def test_fitted_predictions_have_separate_response_groups():
+    from supplements import response_groups
+
+    semantic = {
+        'transport': [
+            {'operation': 'fit'},
+            {'operation': 'score', 'response_id': 'a'},
+            {'operation': 'score', 'response_id': 'b'},
+            {'operation': 'close'},
+        ],
+        'result_details': [
+            {'request_id': 'a', 'metadata': {}},
+            {'request_id': 'b', 'metadata': {}},
+        ],
+    }
+    assert response_groups(semantic, {'supplement': {'kind': 'holdout'}})[
+        1
+    ] == [['a'], ['b']]
+    semantic['result_details'][1]['request_id'] = 'a'
+    with pytest.raises(ValueError, match='first actual'):
+        response_groups(semantic, {'supplement': {'kind': 'holdout'}})

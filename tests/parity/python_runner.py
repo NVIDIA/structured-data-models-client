@@ -5,6 +5,7 @@
 
 import argparse
 import contextlib
+import copy
 import datetime
 import functools
 import hashlib
@@ -503,27 +504,74 @@ def journey(case, connector, model, config, mode, record):
         else:
             raise Incomplete('unsupported public endpoint transport')
         stack.callback(client.close)
+        supplemental = case.get('supplement')
+        before = (
+            copy.deepcopy(request_observation(request))
+            if supplemental
+            else None
+        )
+        if supplemental:
+            from supplements import (
+                assert_holdout,
+                holdout_key,
+                observe_transport,
+                result_details,
+            )
+
+            semantic['result_details'] = []
+            semantic['transport'] = []
+            stack.enter_context(
+                observe_transport(
+                    endpoint['client']['url'], semantic['transport']
+                )
+            )
+
+        def record_result(answer):
+            semantic['results'].append(frame(answer.to_pandas()))
+            if supplemental:
+                assert not answer.absent(case['outputs']), (
+                    'requested output is absent'
+                )
+                semantic['result_details'].append(
+                    result_details(answer, scalar)
+                )
+
+        outputs = {'outputs': case['outputs']} if 'outputs' in case else {}
         if case['journey'] == 'fit-predict-close':
+            held = [holdout_key(request)] if supplemental else [1, 2]
+            if supplemental:
+                semantic['holdout_keys'] = scalar(held)
             record['stage'] = 'fit'
-            fitted = client.fit(request, model=chosen, holdout=[1, 2])
+            fitted = client.fit(request, model=chosen, holdout=held, **outputs)
             semantic['lifecycle'].append('fit')
             try:
                 for _ in range(2):
                     record['stage'] = 'predict'
-                    semantic['results'].append(
-                        frame(fitted.predict(request).to_pandas())
-                    )
+                    record_result(fitted.predict(request))
                     semantic['lifecycle'].append('predict')
             finally:
                 record['stage'] = 'close'
                 fitted.close()
                 semantic['lifecycle'].append('close')
+            if supplemental:
+                assert_holdout(request, held, semantic['transport'])
         else:
             record['stage'] = 'predict'
-            semantic['results'].append(
-                frame(client.predict(request, model=chosen).to_pandas())
-            )
+            record_result(client.predict(request, model=chosen, **outputs))
             semantic['lifecycle'].append('predict')
+            if supplemental:
+                assert [
+                    call['operation'] for call in semantic['transport']
+                ] == ['predict'] * supplemental['prediction_calls']
+                if supplemental['kind'] == 'batch':
+                    assert (
+                        len(request.payloads)
+                        == supplemental['prediction_calls']
+                    )
+        if supplemental:
+            assert request_observation(request) == before, (
+                'prediction mutated the request'
+            )
         record['status'] = 'passed'
 
 

@@ -140,6 +140,15 @@
                 "type": "string",
                 "minLength": 1
               }
+            },
+            "result_details": {
+              "type": "array"
+            },
+            "transport": {
+              "type": "array"
+            },
+            "holdout_keys": {
+              "type": "array"
             }
           },
           "required": [
@@ -282,6 +291,9 @@
     },
     "reader": {
       "type": "object"
+    },
+    "raw_results": {
+      "type": "array"
     }
   },
   "required": [

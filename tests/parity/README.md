@@ -77,3 +77,7 @@ Any future model tolerance must name prediction columns explicitly while keeping
 
 SQL fixture inspection uses public `read_table(query=...)` with explicitly quoted table identifiers so case-sensitive fixture names survive unchanged.
 The separate reader API gate retains ordinary `table=` coverage; source-backed schema construction still receives bare table names.
+
+Six memory-only supplemental cells verify requested prediction/quantile/probability outputs, two-call batching and fitted holdout removal from instance and related rows.
+They retain public result items, metadata and explanations alongside actual HTTP request bodies and response IDs.
+Only response IDs whose result and ordered-batch correlations are proven become per-call labels for comparison; all other metadata and entity IDs remain exact.

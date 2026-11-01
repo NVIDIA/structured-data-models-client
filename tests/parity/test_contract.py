@@ -194,9 +194,19 @@ def test_python_api_mappings_exist_on_installed_public_surface():
     for case in manifest()['scenarios']:
         for reference in case['apis']['python']:
             cls, method = reference.split('.')
-            assert callable(getattr(getattr(sdm_client, cls), method)), (
-                reference
-            )
+            if cls == 'PredictionResult' and method in {
+                'items',
+                'metadata',
+                'explanation',
+            }:
+                result = sdm_client.PredictionResult(
+                    model='kumo-relational', request_id='inspection', items=[]
+                )
+                assert hasattr(result, method), reference
+            else:
+                assert callable(getattr(getattr(sdm_client, cls), method)), (
+                    reference
+                )
 
 
 def test_tripwires_catch_worker_aliases_even_when_worker_catches_error(
