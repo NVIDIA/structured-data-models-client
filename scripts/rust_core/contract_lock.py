@@ -28,6 +28,8 @@ current version has an entry, is checked by ``cargo test -p sdm-contract
 --test schema_lock``. Run from anywhere in the repository; CI checks out
 every branch so the merge base is there; ``--base`` names another base, and
 the root Python test runs with ``--no-base``, since its checkout is shallow.
+``--prune-working`` retains merged entries and only the newest working entry,
+without changing schema files or hashes; it requires a verified base.
 With no base to read, which entries are merged is not known: each but the
 newest is taken as merged, so only the hashes are checked, and a phase's
 working entry beside the merged ones passes (T2.1b: version 26 beside 25).
@@ -169,6 +171,28 @@ def check(
     return problems
 
 
+def prune_working(current: str, base: Iterable[tuple[str, str]]) -> str:
+    """Keep immutable merged lines and the newest working entry, without rehashing."""
+    now = parse_lock(current)
+    merged: set[int] = set()
+    for commit, text in base:
+        for version, entry in parse_lock(text).items():
+            if now.get(version) != entry:
+                raise ValueError(
+                    f'version {version}, merged at {commit[:12]}, was removed or rewritten'
+                )
+            merged.add(version)
+    working = set(now) - merged
+    keep = merged | ({max(working)} if working else set())
+    return ''.join(
+        line
+        for line in current.splitlines(keepends=True)
+        if not line.strip()
+        or line.lstrip().startswith('#')
+        or int(line.split()[0]) in keep
+    )
+
+
 def _git(*args: str) -> str:
     return subprocess.run(
         ['git', '-C', str(REPO_ROOT), *args],
@@ -200,15 +224,24 @@ def main(argv: list[str] | None = None) -> int:
         action='store_true',
         help='check the hashes only, each entry but the newest taken as merged (a shallow checkout)',
     )
+    parser.add_argument(
+        '--prune-working',
+        action='store_true',
+        help='retain merged entries and only the newest working entry; preserve schema files',
+    )
     args = parser.parse_args(argv)
+    if args.prune_working and args.no_base:
+        parser.error('--prune-working requires a verified merge base')
 
     failed = False
     for lock in LOCKS:
-        failed |= _check_lock(lock, args.base, args.no_base)
+        failed |= _check_lock(lock, args.base, args.no_base, args.prune_working)
     return 1 if failed else 0
 
 
-def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
+def _check_lock(
+    lock: Path, base: str, no_base: bool, prune: bool = False
+) -> bool:
     """Checks one lock; whether it failed."""
     base_locks: list[tuple[str, str]] = []
     path = REPO_ROOT / lock
@@ -242,6 +275,13 @@ def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
         path = REPO_ROOT / SCHEMA_DIR / name
         return path.read_bytes() if path.is_file() else None
 
+    original = current
+    if prune:
+        try:
+            current = prune_working(current, base_locks)
+        except ValueError as error:
+            print(f'{lock.name}: {error}', file=sys.stderr)
+            return True
     problems = check(current, base_locks, read_schema)
     if not current and not problems:
         problems = [f'{lock} is missing']
@@ -249,6 +289,8 @@ def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
         print(f'{lock.name}: {problem}', file=sys.stderr)
     if problems:
         return True
+    if prune and current != original:
+        path.write_text(current, encoding='utf-8')
     merged = set(parse_lock(base_locks[0][1])) if base_locks else set()
     entries = parse_lock(current)
     print(

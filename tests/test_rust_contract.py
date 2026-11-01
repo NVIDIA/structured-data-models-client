@@ -248,3 +248,31 @@ def test_the_hash_ignores_doc_comments_and_keeps_a_property_named_description() 
     data = json.loads(json.dumps(schema))
     data['enum'] = [{'description': 'other'}]
     assert digest(data) != locked
+
+
+def test_pruning_preserves_merged_lines_and_only_newest_working() -> None:
+    lock = _lock_module()
+    schemas = {
+        f'sdm-contract-{n}.json': json.dumps({'v': n}).encode()
+        for n in range(1, 5)
+    }
+    lines = {
+        n: f'{n} sha256:{lock.digest(schemas[f"sdm-contract-{n}.json"])} sdm-contract-{n}.json\n'
+        for n in range(1, 5)
+    }
+    base = [('a' * 40, lines[1] + lines[2])]
+    current = '# retained header\n' + ''.join(lines.values())
+    pruned = lock.prune_working(current, base)
+    assert pruned == '# retained header\n' + lines[1] + lines[2] + lines[4]
+    assert lock.check(pruned, base, schemas.get) == []
+    assert lock.prune_working(pruned, base) == pruned
+    for bad in (
+        current.replace(lines[1], ''),
+        current.replace('1 sha256:', '1 sha256:bad'),
+    ):
+        try:
+            lock.prune_working(bad, base)
+        except ValueError as error:
+            assert 'removed or rewritten' in str(error)
+        else:
+            raise AssertionError('pruning must refuse changed merged entries')
