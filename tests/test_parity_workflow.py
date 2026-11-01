@@ -75,3 +75,81 @@ def test_release_requires_success_for_exact_commit(tmp_path, conclusion):
     assert actual[actual.index('--commit') + 1] == 'exact-release-commit'
     assert actual[actual.index('--branch') + 1] == 'main'
     assert actual[actual.index('--status') + 1] == 'completed'
+
+
+def test_giant_acceptance_is_mandatory_sequential_and_private():
+    job = workflow('parity-live.yml')['jobs']['parity']
+    assert 'PARITY_RUNNER_LABELS' in job['runs-on']
+    setup = next(
+        step
+        for step in job['steps']
+        if step.get('name') == 'Require dedicated live configuration'
+    )
+    assert '24 * 1024 * 1024' in setup['run']
+    giant = next(
+        step
+        for step in job['steps']
+        if step.get('name')
+        == 'Validate giant values against the real model sequentially'
+    )
+    assert 'if' not in giant and 'continue-on-error' not in giant
+    script = giant['run']
+    assert (
+        script.index("('baseline',")
+        < script.index("('python',")
+        < script.index("('java',")
+    )
+    assert 'for language, command in commands:' in script
+    assert 'subprocess.run(command, stdout=log' in script
+    assert (
+        "if any(report['status'] != 'passed' for report in reports):" in script
+    )
+    assert "'evidence/giant.json'" in script
+    assert "root / ('giant-' + language + '.log')" in script
+    assert giant['env']['SDM_T136_BIG'] == '1'
+
+
+@pytest.mark.parametrize(
+    'case_xml, expected',
+    [
+        ('<testcase/>', 'passed'),
+        ('<testcase><skipped/></testcase>', 'failed'),
+        ('<testcase><failure/></testcase>', 'failed'),
+        ('<testcase><error/></testcase>', 'failed'),
+        ('', 'failed'),
+        ('<testcase/><testcase/>', 'failed'),
+    ],
+)
+def test_giant_reports_require_exactly_one_passed_case(
+    tmp_path, case_xml, expected
+):
+    import json
+
+    step = next(
+        step
+        for step in workflow('parity-live.yml')['jobs']['parity']['steps']
+        if step.get('name')
+        == 'Validate giant values against the real model sequentially'
+    )
+    script = step['run'].split("<<'PYGIANT'\n", 1)[1].rsplit('PYGIANT', 1)[0]
+    # Exercise the actual workflow report parser with a successful fake process.
+    start = script.rfind('\n', 0, script.index("counts = {'tests'")) + 1
+    end = script.rfind('\n', 0, script.index("(root / 'evidence/giant.json')"))
+    import textwrap
+
+    parser = textwrap.dedent(script[start:end])
+    report = tmp_path / 'result.xml'
+    report.write_text('<testsuite>' + case_xml + '</testsuite>')
+    import types
+    import xml.etree.ElementTree as ET
+
+    context = {
+        'report': report,
+        'ET': ET,
+        'completed': types.SimpleNamespace(returncode=0),
+        'reports': [],
+        'language': 'candidate',
+    }
+    exec(parser, context)
+    assert context['reports'][0]['status'] == expected
+    assert 'testcase' not in json.dumps(context['reports'])
