@@ -19,14 +19,21 @@ class DuckDbLargeValueTest {
       statement.execute("SET threads=2");
       statement.execute("SET memory_limit='10GB'");
       statement.execute("SET arrow_large_buffer_size=true");
-      statement.execute("CREATE TABLE users AS SELECT 1::BIGINT id, 1.0::DOUBLE y, "
-          + "repeat('a', 2147483664)::BLOB payload");
-      statement.execute("INSERT INTO users VALUES (2, 2.0, NULL), (3, 3.0, NULL)");
-      Schema schema = Schema.fromSource(DuckDbSource.of(connection))
-          .withPrimaryKey("users", "id");
-      Request request = PredictiveQuery.parse("PREDICT users.y FOR EACH users.id")
-          .materialize(schema, MaterializeOptions.builder().indices(1L).build());
-      assertTrue(schema.table("users").columns().stream().noneMatch(c -> c.name().equals("payload")));
+      // Same shop, query and indices as contract/tools/host2_values_record.py.
+      // The previous three-row numeric toy target inferred classification and the live
+      // model rejected that task independently of the provider's large-value support.
+      statement.execute("CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20+i)::INTEGER AS age, "
+          + "['US','DE','IN'][1+i%3] AS country FROM range(8) t(i)");
+      statement.execute("CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i%8)::BIGINT AS user_id, "
+          + "(10+i*1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01'+to_days((i*7)::INTEGER) AS ts FROM range(80) t(i)");
+      statement.execute("ALTER TABLE users ADD COLUMN f BLOB");
+      statement.execute("UPDATE users SET f='a'");
+      statement.execute("UPDATE users SET f=repeat('a',2147483664)::BLOB WHERE user_id=3");
+      Schema schema = Schema.fromSource(DuckDbSource.of(connection));
+      Request request = PredictiveQuery.parse("PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id")
+          .materialize(schema, MaterializeOptions.builder().indices(0L,1L,2L,3L,4L,5L,6L,7L)
+              .anchorTime(java.time.LocalDate.of(2024,3,1)).build());
+      assertTrue(schema.table("users").columns().stream().noneMatch(c -> c.name().equals("f")));
       String serving = System.getProperty("sdm.test.giant.endpoint");
       if (serving != null) {
         assertFalse(serving.isBlank(), "sdm.test.giant.endpoint must name a serving endpoint");
@@ -46,7 +53,7 @@ class DuckDbLargeValueTest {
 
   private static void assertPrediction(SdmClient client, Request request) throws Exception {
     PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
-    assertEquals(1, result.rows());
+    assertEquals(8, result.rows());
     try (var allocator = new org.apache.arrow.memory.RootAllocator();
         var reader = result.read(allocator)) {
       long rows = 0;
@@ -60,7 +67,7 @@ class DuckDbLargeValueTest {
         }
         rows += root.getRowCount();
       }
-      assertEquals(1, rows);
+      assertEquals(8, rows);
     }
   }
 }
