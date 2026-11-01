@@ -74,6 +74,11 @@ def test_response_ids_require_ordered_real_call_correlation_before_normalizing()
             }
         ],
     }
+    original['request'] = [{'metadata': {'part': 0}}, {'metadata': {'part': 1}}]
+    for index, call in enumerate(original['transport']):
+        call['payload'] = {
+            'metadata': {'part': index, 'request_id': f'sdm-{index:012x}'}
+        }
     normalized = copy.deepcopy(original)
     normalize_response_ids(normalized, case)
     assert normalized['result_details'][0]['request_id'] == 'call:0'
@@ -120,3 +125,72 @@ def test_fitted_predictions_have_separate_response_groups():
     semantic['result_details'][1]['request_id'] = 'a'
     with pytest.raises(ValueError, match='first actual'):
         response_groups(semantic, {'supplement': {'kind': 'holdout'}})
+
+
+def test_request_nonces_bind_exact_body_metadata_and_never_share_response_ids():
+    from supplements import request_ids
+
+    case = {'supplement': {'kind': 'batch'}}
+    semantic = {
+        'request': [{'metadata': {'part': 0}}, {'metadata': {'part': 1}}],
+        'transport': [
+            {
+                'operation': 'predict',
+                'payload': {
+                    'metadata': {
+                        'part': index,
+                        'request_id': f'sdm-{index:012x}',
+                    }
+                },
+            }
+            for index in range(2)
+        ],
+    }
+    assert len(request_ids(semantic, case)) == 2
+    wrong = copy.deepcopy(semantic)
+    wrong['transport'][1]['payload']['metadata']['request_id'] = (
+        'sdm-000000000000'
+    )
+    with pytest.raises(ValueError, match='reused'):
+        request_ids(wrong, case)
+    wrong = copy.deepcopy(semantic)
+    wrong['transport'][1]['payload']['metadata']['part'] = 0
+    with pytest.raises(ValueError, match='source request'):
+        request_ids(wrong, case)
+    wrong = copy.deepcopy(semantic)
+    wrong['transport'][0]['payload']['metadata']['request_id'] = 'pred_response'
+    with pytest.raises(ValueError, match='invalid generated'):
+        request_ids(wrong, case)
+
+
+def test_session_proof_requires_actual_handle_and_unchanged_pinned_schema():
+    from supplements import session_proof
+
+    schema = {'instance_table': {'columns': {'id': {'dtype': 'int64'}}}}
+    semantic = {
+        'request': [{'schema': schema}],
+        'transport': [
+            {
+                'operation': 'fit',
+                'session_id': 'actual',
+                'payload': {'schema': schema},
+            },
+            {'operation': 'score', 'session_id': 'actual', 'payload': {}},
+            {'operation': 'score', 'session_id': 'actual', 'payload': {}},
+            {'operation': 'close', 'session_id': 'actual', 'payload': None},
+        ],
+    }
+    case = {'supplement': {'kind': 'holdout'}}
+    session_proof(semantic, case)
+    wrong = copy.deepcopy(semantic)
+    wrong['transport'][1]['session_id'] = 'other'
+    with pytest.raises(ValueError, match='actual fitted session'):
+        session_proof(wrong, case)
+    wrong = copy.deepcopy(semantic)
+    wrong['transport'][0]['payload']['schema'] = {}
+    with pytest.raises(ValueError, match='pinned schema differs'):
+        session_proof(wrong, case)
+    wrong = copy.deepcopy(semantic)
+    wrong['transport'][1]['payload']['schema'] = schema
+    with pytest.raises(ValueError, match='redeclares'):
+        session_proof(wrong, case)

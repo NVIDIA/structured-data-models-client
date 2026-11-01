@@ -444,6 +444,22 @@ def test_identity_mapping_is_bijective_and_does_not_hide_feature_edge_or_order_c
     with pytest.raises(IdentityError, match='bijective'):
         canonical(duplicated, fixture)
 
+    from identity import canonical_scoring_payload
+
+    old_score = {'predict': old[0]['context']}
+    new_score = {'predict': new[0]['context']}
+    assert canonical_scoring_payload(
+        old_score, old[0]['schema'], fixture
+    ) == canonical_scoring_payload(new_score, new[0]['schema'], fixture)
+    with pytest.raises(IdentityError, match='edge'):
+        canonical_scoring_payload(
+            {'predict': corrupted[0]['context']}, new[0]['schema'], fixture
+        )
+    with pytest.raises(IdentityError, match='redeclares'):
+        canonical_scoring_payload(
+            {'schema': new[0]['schema'], **new_score}, new[0]['schema'], fixture
+        )
+
 
 def test_manifest_rejects_nonzero_unscoped_model_tolerance(tmp_path):
     data = manifest()

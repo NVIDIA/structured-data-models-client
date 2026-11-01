@@ -6,8 +6,9 @@
 import contextlib
 import dataclasses
 import json
+import re
 from unittest.mock import patch
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 
 @contextlib.contextmanager
@@ -39,10 +40,16 @@ def observe_transport(url, calls):
                 'operation': operation,
                 'payload': json.loads(request.body) if request.body else None,
             }
+            if operation in {'score', 'close'}:
+                call['session_id'] = unquote(
+                    parsed.path.split('/v1/sessions/', 1)[1].split('/', 1)[0]
+                )
             calls.append(call)
         response = original(session, request, **kwargs)
         if call is not None and operation in {'predict', 'score'}:
             call['response_id'] = response.json().get('id')
+        elif call is not None and operation == 'fit':
+            call['session_id'] = response.json().get('session_id')
         return response
 
     with patch.object(requests.Session, 'send', send):
@@ -171,9 +178,96 @@ def response_groups(semantic, case):
     return ids, groups
 
 
+def request_ids(semantic, case):
+    """Bind each generated request nonce to its actual body and source metadata."""
+    asked = semantic['request']
+    originals = (
+        [item.get('metadata', {}) for item in asked]
+        if isinstance(asked, list)
+        else [{}]
+    )
+    if any('request_id' in metadata for metadata in originals):
+        raise ValueError('supplement request already carries a generated nonce')
+    calls = [
+        call
+        for call in semantic['transport']
+        if call['operation'] in {'predict', 'fit', 'score'}
+    ]
+    if case['supplement']['kind'] == 'batch':
+        if len(originals) != len(calls):
+            raise ValueError('batch request metadata groups differ')
+        expected = originals
+    else:
+        if len(originals) != 1:
+            raise ValueError('non-batched request metadata groups differ')
+        expected = originals * len(calls)
+    ids = []
+    for call, source in zip(calls, expected, strict=True):
+        metadata = call['payload'].get('metadata', {})
+        nonce = metadata.get('request_id')
+        if (
+            not isinstance(nonce, str)
+            or re.fullmatch(r'sdm-[0-9a-f]{12}', nonce) is None
+        ):
+            raise ValueError('missing or invalid generated request ID')
+        if {
+            key: value for key, value in metadata.items() if key != 'request_id'
+        } != source:
+            raise ValueError(
+                'outgoing request metadata does not match its source request'
+            )
+        ids.append(nonce)
+    if len(set(ids)) != len(ids):
+        raise ValueError('generated request ID reused across calls')
+    return calls
+
+
+def session_proof(semantic, case):
+    if case['supplement']['kind'] != 'holdout':
+        return
+    calls = semantic['transport']
+    if [call['operation'] for call in calls] != [
+        'fit',
+        'score',
+        'score',
+        'close',
+    ]:
+        raise ValueError('fitted session lifecycle is incomplete')
+    handle = calls[0].get('session_id')
+    if (
+        not isinstance(handle, str)
+        or not handle
+        or any(call.get('session_id') != handle for call in calls)
+    ):
+        raise ValueError('scoring/close do not name the actual fitted session')
+    requested = semantic['request']
+    if isinstance(requested, list):
+        if len(requested) != 1 or calls[0]['payload'].get(
+            'schema'
+        ) != requested[0].get('schema'):
+            raise ValueError(
+                'actual pinned schema differs from the source request'
+            )
+    if any(
+        'schema' in call['payload']
+        for call in calls
+        if call['operation'] == 'score'
+    ):
+        raise ValueError(
+            'scoring request unexpectedly redeclares pinned schema'
+        )
+
+
 def normalize_response_ids(semantic, case):
     ids, groups = response_groups(semantic, case)
+    generated = request_ids(semantic, case)
+    session_proof(semantic, case)
     names = {value: f'call:{index}' for index, value in enumerate(ids)}
+    if case['supplement']['kind'] == 'holdout':
+        for call in semantic['transport']:
+            call['session_id'] = 'session:0'
+    for index, call in enumerate(generated):
+        call['payload']['metadata']['request_id'] = f'request:{index}'
     for call in semantic['transport']:
         if call['operation'] in {'predict', 'score'}:
             call['response_id'] = names[call['response_id']]

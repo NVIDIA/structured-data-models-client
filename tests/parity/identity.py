@@ -182,3 +182,14 @@ def canonical(payloads, fixture):
                     for column in link['target_columns']
                 ]
     return out
+
+
+def canonical_scoring_payload(payload, pinned_schema, fixture):
+    """Inspect a scoring body only with the verified actual pinned schema."""
+    if 'schema' in payload:
+        raise IdentityError(
+            'scoring request unexpectedly redeclares pinned schema'
+        )
+    result = canonical([{**payload, 'schema': pinned_schema}], fixture)[0]
+    del result['schema']
+    return result

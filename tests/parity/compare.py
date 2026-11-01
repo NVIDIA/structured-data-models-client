@@ -10,7 +10,7 @@ import operator
 import re
 from pathlib import Path
 
-from identity import IdentityError, canonical
+from identity import IdentityError, canonical, canonical_scoring_payload
 
 from contract import (
     cells,
@@ -355,6 +355,29 @@ def assess(
                         after['payload'] = canonical(
                             [after['payload']], fixture
                         )[0]
+                    elif (
+                        before['operation'] == 'score'
+                        and difference(
+                            before['payload'],
+                            after['payload'],
+                            {'absolute': 0, 'relative': 0},
+                        )
+                        is not None
+                    ):
+                        before['payload'] = canonical_scoring_payload(
+                            before['payload'],
+                            old['semantic']['transport'][0]['payload'][
+                                'schema'
+                            ],
+                            fixture,
+                        )
+                        after['payload'] = canonical_scoring_payload(
+                            after['payload'],
+                            new['semantic']['transport'][0]['payload'][
+                                'schema'
+                            ],
+                            fixture,
+                        )
             except (IdentityError, KeyError, TypeError) as error:
                 row.update(
                     status='failed',

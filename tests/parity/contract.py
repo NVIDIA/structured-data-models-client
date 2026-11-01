@@ -214,10 +214,12 @@ def evidence_problem(record, case, phase, live):
                 if call['operation'] in {'predict', 'score'}
             ):
                 return 'requested outputs were not sent to the real endpoint'
-            from supplements import response_groups
+            from supplements import request_ids, response_groups, session_proof
 
             try:
                 response_groups(semantic, case)
+                request_ids(semantic, case)
+                session_proof(semantic, case)
             except (ValueError, KeyError, TypeError):
                 return 'actual response/result correlation is not proven'
             if case['supplement']['kind'] == 'holdout':

@@ -80,4 +80,6 @@ The separate reader API gate retains ordinary `table=` coverage; source-backed s
 
 Six memory-only supplemental cells verify requested prediction/quantile/probability outputs, two-call batching and fitted holdout removal from instance and related rows.
 They retain public result items, metadata and explanations alongside actual HTTP request bodies and response IDs.
-Only response IDs whose result and ordered-batch correlations are proven become per-call labels for comparison; all other metadata and entity IDs remain exact.
+Only generated request nonces, response IDs and session handles with proven request metadata, response grouping and actual session correlations become per-call labels for comparison.
+All other metadata and entity IDs remain exact.
+Session scoring uses the existing graph identity proof only with the actual captured fit schema, verified unchanged from the original request.
