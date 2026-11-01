@@ -65,6 +65,60 @@ def difference(left, right, tolerance, path='$'):
     return None if left == right else path
 
 
+def equivalent_snowflake_reader_integers(old, new, connector):
+    """Prove lossless signed integer encodings without changing recorded evidence."""
+    if connector not in ('snowflake', 'snowflake-semantic'):
+        return False
+    if old['data']['columns'] != new['data']['columns']:
+        return False
+    if len(old['schema']) != len(new['schema']):
+        return False
+    if len(old['data']['rows']) != len(new['data']['rows']):
+        return False
+    if difference(old['data'], new['data'], {'absolute': 0, 'relative': 0}):
+        return False
+
+    def bounds(dtype):
+        integer = re.fullmatch(r'int(8|16|32|64)', dtype)
+        if integer:
+            limit = 2 ** (int(integer[1]) - 1)
+            return -limit, limit - 1
+        decimal = re.fullmatch(
+            r'decimal128\(([1-9]|[12][0-9]|3[0-8]), 0\)', dtype
+        )
+        if decimal:
+            limit = 10 ** int(decimal[1]) - 1
+            return -limit, limit
+        return None
+
+    normalized = False
+    for before, after in zip(old['schema'], new['schema'], strict=True):
+        if before[0] != after[0] or before[1] == after[1]:
+            continue
+        if not (before[1].startswith('int') or after[1].startswith('int')):
+            continue
+        left, right = bounds(before[1]), bounds(after[1])
+        if left is None or right is None:
+            continue
+        at = old['data']['columns'].index(before[0])
+        for a, b in zip(old['data']['rows'], new['data']['rows'], strict=True):
+            x, y = a[at], b[at]
+            if x is None and y is None:
+                continue
+            if (
+                type(x) is not int
+                or type(y) is not int
+                or x != y
+                or not left[0] <= x <= left[1]
+                or not right[0] <= y <= right[1]
+            ):
+                break
+        else:
+            after[1] = before[1]
+            normalized = True
+    return normalized
+
+
 def equivalent_reader_time_units(old, new):
     """Normalize only exact timestamp values with compatible declared resolutions."""
     exact = {'absolute': 0, 'relative': 0}
@@ -416,7 +470,14 @@ def assess(
             return values
 
         old_readers, new_readers = readers(old), readers(new)
+        integer_encoding = False
         for name in old_readers.keys() & new_readers.keys():
+            # Prove original row order, before the existing fixture-key ordering.
+            raw_old = copy.deepcopy(old['reader'][name])
+            raw_new = copy.deepcopy(new['reader'][name])
+            if equivalent_snowflake_reader_integers(raw_old, raw_new, cell[1]):
+                new_readers[name]['schema'] = raw_new['schema']
+                integer_encoding = True
             equivalent_reader_time_units(old_readers[name], new_readers[name])
         changed = changed or difference(
             old_readers, new_readers, exact, '$.reader'
@@ -440,6 +501,8 @@ def assess(
             if changed
             else 'Exact nullable integer storage for declared temporal entity reference'
             if improved_entity_ref
+            else 'Lossless Snowflake signed integer / scale-zero Decimal128 reader encoding'
+            if integer_encoding
             else 'matching evidence',
         )
     scoped = [

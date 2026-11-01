@@ -748,3 +748,36 @@ def test_snowflake_probe_near_misses_remain_unobserved():
     assert not snowflake_platform_probe(
         'os.posix_spawn', ('uname', ['uname', '-p'], None, None)
     )
+
+
+def test_snowflake_reader_integer_encoding_requires_lossless_ordered_values():
+    from compare import equivalent_snowflake_reader_integers
+
+    def reading(dtype, values):
+        return {
+            'schema': [['id', dtype]],
+            'data': {'columns': ['id'], 'rows': [[v] for v in values]},
+        }
+
+    for connector in ('snowflake', 'snowflake-semantic'):
+        for dtype in ('int16', 'int64', 'decimal128(38, 0)'):
+            old, new = (
+                reading('int8', [1, None, 127]),
+                reading(dtype, [1, None, 127]),
+            )
+            assert equivalent_snowflake_reader_integers(old, new, connector)
+            assert old == new
+    for dtype, before, after, connector in (
+        ('decimal128(38, 0)', [1], [2], 'snowflake'),
+        ('decimal128(38, 0)', [128], [128], 'snowflake'),
+        ('decimal128(1, 0)', [10], [10], 'snowflake'),
+        ('decimal128(38, 1)', [1], [1], 'snowflake'),
+        ('decimal128(38, 0)', [1.0], [1.0], 'snowflake'),
+        ('decimal128(38, 0)', [True], [True], 'snowflake'),
+        ('decimal128(38, 0)', [1, None], [None, 1], 'snowflake'),
+        ('decimal128(38, 0)', [1, 2], [2, 1], 'snowflake'),
+        ('decimal128(38, 0)', [1], [1], 'postgres'),
+    ):
+        old, new = reading('int8', before), reading(dtype, after)
+        assert not equivalent_snowflake_reader_integers(old, new, connector)
+        assert new['schema'][0][1] == dtype
