@@ -469,3 +469,209 @@ def test_runner_accepts_only_explicit_expected_failure():
         {'expected': {'status': 'supported'}},
         {'phase': 'candidate', 'status': 'refused'},
     )
+
+
+def test_zero_tolerance_never_rounds_mixed_numeric_values():
+    exact = {'absolute': 0, 'relative': 0}
+    assert difference(2**53 + 1, float(2**53), exact) is not None
+    assert difference(1.0, 1.0000000000000002, exact) is not None
+    assert difference(2, 2.0, exact) is None
+
+
+def test_reader_timestamp_units_require_identical_values_and_exact_precision():
+    from compare import equivalent_reader_time_units
+
+    def reading(unit, value='2024-01-01T00:00:00.123456', zone=''):
+        return {
+            'schema': [['time', f'timestamp[{unit}{zone}]']],
+            'data': {'columns': ['time'], 'rows': [[value]]},
+        }
+
+    old, new = reading('us'), reading('ns')
+    equivalent_reader_time_units(old, new)
+    assert old == new
+    for new in (
+        reading('ns', '2024-01-01T00:00:00.123457'),
+        reading('ns', zone=', tz=UTC'),
+    ):
+        old = reading('us')
+        equivalent_reader_time_units(old, new)
+        assert old != new
+    old = reading('us', '2024-01-01T00:00:00.123456789')
+    new = reading('ns', '2024-01-01T00:00:00.123456789')
+    equivalent_reader_time_units(old, new)
+    assert old != new
+
+
+def test_equal_raw_requests_do_not_need_fixture_identity_rewriting(monkeypatch):
+    import compare
+
+    data = one()
+    data['scenarios'][0]['comparison'] = 'fixture-source-identity'
+    old, new = paired(data)
+    for record in [*old.values(), *new.values()]:
+        record['semantic']['request'] = {'already': 'identical'}
+
+    def unexpected(*args):
+        raise AssertionError('identical raw requests need no identity rewrite')
+
+    monkeypatch.setattr(compare, 'canonical', unexpected)
+    assert assess(data, old, new)['goal_complete']
+
+
+def test_temporal_entity_ref_improvement_is_exact_and_role_bound():
+    from compare import equivalent_derived_entity_refs
+
+    name = '__kumo_entity_ref_0'
+    fixture = {'primary_keys': {'items': 'id'}}
+
+    def payload(dtype, value):
+        table = {'columns': [name], 'rows': [[value], [None]]}
+        return {
+            'task': {
+                'kind': 'temporal_link_prediction',
+                'entity_table_names': ['items'],
+            },
+            'schema': {
+                'instance_table': {
+                    'columns': {name: {'dtype': dtype, 'stype': 'ID'}}
+                },
+                'relationships': [
+                    {
+                        'source_columns': [name],
+                        'target_columns': ['id'],
+                        'target_table': 'items',
+                    }
+                ],
+            },
+            'context': {'instance_table': copy.deepcopy(table)},
+            'predict': {'instance_table': copy.deepcopy(table)},
+        }
+
+    old, new = payload('float64', 2.0), payload('int64', 2)
+    equivalent_derived_entity_refs([old], [new], fixture)
+    assert old == new
+    for value, integer in [(1.5, 1), (float(2**53), 2**53 + 1), (True, 1)]:
+        old, new = payload('float64', value), payload('int64', integer)
+        equivalent_derived_entity_refs([old], [new], fixture)
+        assert (
+            old['schema']['instance_table']['columns'][name]['dtype']
+            == 'float64'
+        )
+    old, new = payload('float64', 2.0), payload('int64', 2)
+    for record in (old, new):
+        record['schema']['relationships'][0]['source_table'] = 'ordinary_source'
+    equivalent_derived_entity_refs([old], [new], fixture)
+    assert (
+        old['schema']['instance_table']['columns'][name]['dtype'] == 'float64'
+    )
+    old, new = payload('float64', 2.0), payload('int64', 2)
+    new['predict']['instance_table']['rows'][1][0] = 0
+    equivalent_derived_entity_refs([old], [new], fixture)
+    assert (
+        old['schema']['instance_table']['columns'][name]['dtype'] == 'float64'
+    )
+
+
+def test_derived_reference_alignment_precedes_identity_proof_without_hiding_changes(
+    monkeypatch,
+):
+    import compare
+
+    data = one()
+    case = data['scenarios'][0]
+    case['id'] = 'relational.temporal-link'
+    case['comparison'] = 'fixture-source-identity'
+    fixture = json.loads((HERE / case['fixture']).read_text())
+    name = '__kumo_entity_ref_0'
+    user = fixture['tables']['users']
+    columns = user['columns']
+    values = user['rows'][0]
+    kinds = ['int64', 'float64', 'string', 'bool']
+    related = {
+        'columns': {
+            'instance_id': {'dtype': 'int64'},
+            **{
+                column: {'dtype': dtype}
+                for column, dtype in zip(columns, kinds, strict=True)
+            },
+        },
+        'primary_key': ['instance_id', 'id'],
+    }
+
+    def payload(dtype, value):
+        half = {
+            'instance_table': {
+                'columns': ['instance_id', name],
+                'rows': [[0, value], [1, None]],
+            },
+            'related_tables': {
+                'users': {
+                    'columns': ['instance_id', *columns],
+                    'rows': [[0, *values]],
+                }
+            },
+        }
+        return {
+            'task': {
+                'kind': 'temporal_link_prediction',
+                'entity_table_names': ['items'],
+            },
+            'schema': {
+                'instance_table': {
+                    'columns': {name: {'dtype': dtype, 'stype': 'ID'}}
+                },
+                'related_tables': {'users': copy.deepcopy(related)},
+                'relationships': [
+                    {
+                        'source_columns': [name],
+                        'target_columns': ['item'],
+                        'target_table': 'items',
+                    }
+                ],
+            },
+            'context': copy.deepcopy(half),
+            'predict': copy.deepcopy(half),
+        }
+
+    old, new = paired(data)
+    for record in old.values():
+        record['semantic']['request'] = [payload('float64', 2.0)]
+        record['endpoint']['transport'] = 'private-bridge'
+    for record in new.values():
+        record['semantic']['request'] = [payload('int64', 2)]
+        record['endpoint']['transport'] = 'private-bridge'
+    raw_before = copy.deepcopy((old, new))
+    calls = []
+    canonical = compare.canonical
+
+    def observed(*args):
+        calls.append(True)
+        return canonical(*args)
+
+    monkeypatch.setattr(compare, 'canonical', observed)
+    report = assess(data, old, new)
+    assert report['goal_complete']
+    assert not calls
+    assert all(
+        row['verdict'] == 'Improvement (private bridge)'
+        for row in report['cells']
+    )
+    assert (old, new) == raw_before
+    # A changed source identity or feature must still invoke the original proof
+    # and fail, even though the derived nullable reference itself is equivalent.
+    for column in ('id', 'value'):
+        changed = copy.deepcopy(new)
+        record = next(iter(changed.values()))
+        table = record['semantic']['request'][0]['context']['related_tables'][
+            'users'
+        ]
+        table['rows'][0][table['columns'].index(column)] = 999
+        calls.clear()
+        report = assess(data, old, changed)
+        assert calls
+        assert not report['goal_complete']
+        assert any(
+            row.get('reason', '').startswith('identity proof failed:')
+            for row in report['cells']
+        )
