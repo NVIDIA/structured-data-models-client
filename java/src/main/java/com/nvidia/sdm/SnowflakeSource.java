@@ -12,10 +12,10 @@ import java.util.Optional;
  * Tables in a Snowflake database and schema, read through a warehouse with the Snowflake JDBC
  * driver ({@code net.snowflake:snowflake-jdbc}), as Python's {@code SnowflakeSource} reads them
  * through the Snowflake connector: the database and the schema it is given, each defaulting to the
- * connection's current one. The core writes every statement; the library runs them on the
- * connection and never closes it.
+ * connection's current one. The core plans catalog and sampling statements; the Java host
+ * executes them and reads JDBC conversion metadata without closing the connection.
  *
- * <p>Authentication is the connection's: the caller opens it with a token of its own.
+ * <p>The caller opens and authenticates the connection.
  */
 public final class SnowflakeSource implements JdbcSource {
   private final Connection connection;

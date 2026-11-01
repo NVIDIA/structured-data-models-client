@@ -546,11 +546,16 @@ def matrix(report):
         '| Case / connector | Python Relational | Python Tabular | Java Relational | Java Tabular |',
         '|---|---|---|---|---|',
     ]
+    if report.get('history_note'):
+        lines[4:4] = [report['history_note'], '']
     for case, connector in sorted({key[:2] for key in indexed}):
         values = [
             label(
                 indexed.get((case, connector, model, language), {}),
                 report['coverage_mode'],
+            )
+            + indexed.get((case, connector, model, language), {}).get(
+                'build_label', ''
             )
             for language in ('python', 'java')
             for model in ('relational', 'tabular')

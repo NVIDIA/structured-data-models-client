@@ -2046,21 +2046,29 @@
       "apis": {
         "python": [
           "sdm_connectors.read",
-          "sdm_connectors.read_table"
+          "sdm_connectors.read_table",
+          "sdm_connectors.SnowflakeSource",
+          "SnowflakeSource.semantic_model"
         ],
         "java": [
           "Readers.read",
           "Readers.readTable",
-          "Readers.readQuery"
+          "Readers.readQuery",
+          "SnowflakeSource.of",
+          "SnowflakeSource.semanticModel"
         ]
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-connectors/tests/test_reader.py"
+          "packages/structured-data-models-connectors/tests/test_reader.py",
+          "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake",
+          "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_trusts_only_built_in_functions_by_default",
+          "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java",
-          "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java"
+          "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java",
+          "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java"
         ]
       },
       "gate": "local"

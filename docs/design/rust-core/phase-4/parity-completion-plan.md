@@ -4,18 +4,25 @@
 
 # Phase 4 parity completion plan
 
-**Approved and active: implement known gaps first, then run the real endpoint matrix and fix discrepancies.**
-This document is the persistent goal’s implementation and acceptance reference.
+**Completed locally: original parity scope and Java Snowflake follow-up are implemented, reviewed and tested.**
 The parity checks are permanent product-test infrastructure, retained after the merge into `main`.
 
-**Completed original scope:** [the generated matrix](parity-matrix.md) records all 536 required comparisons passing: 291 Python and 245 Java, including S3.
-Its 46 deferred Java Snowflake cells describe the previous scope, not a claim that Snowflake is implemented.
-All implementation and reviewed test fixes are integrated; the owner explicitly deferred dedicated CI access until later, so local real-endpoint verification closes this milestone.
-The protected workflow and release checks remain implemented; [CI deployment](parity-ci.md) still needs dedicated credentials and a suitable runner.
+| Completed scope | Evidence |
+|---|---|
+| Original implementation | 536 real-endpoint comparisons passed: 291 Python and 245 Java, including S3, on `7f7c19f95` |
+| Java Snowflake | All 46 ordinary-table and semantic-view comparisons passed on `3ec35527d`, covering Relational and Tabular |
+| Regression checks | One real-model Databricks SQL neighbor passed; focused Java suite: 31 passed, one existing optional S3 skip; parity harness: 38 passed |
+| Review | Independent architecture/type and final implementation reviews completed; shared Rust SQL and policy remain unchanged |
 
-**Approved follow-up:** implement Java Snowflake for Relational and Tabular, then verify the 46 ordinary-table and semantic-view cases against the existing frozen Python evidence.
-Relational should reuse shared Rust warehouse policy through a caller-owned JDBC connection; Tabular should read one table into Arrow and retain its in-memory API.
-Review connector/type boundaries before implementation, preserve existing verified evidence, and run focused regressions plus actual Snowflake-to-model journeys after the implementation.
+[The generated matrix](parity-matrix.md) identifies the tested build in every cell.
+It preserves the original results and adds the affected follow-up results; it is historical evidence, not a claim that all 582 cells were rerun on the new Java build.
+The strict single-build release gate is unchanged.
+Dedicated CI credentials and runner deployment remain [explicitly deferred by the owner](parity-ci.md).
+
+Java exposes `SnowflakeSource.of(connection)` and `semanticModel(...)` for Relational, and single-table `Readers.readTable/readQuery` into Arrow for Tabular.
+Raw Java reads preserve exact decimals and nanosecond TIME values; these improve precision over Python's fractional-number/time conversion.
+The parity comparator accepts integer representation differences only when every ordered value/null is identical and fits both declared types.
+No float precision loss is waived.
 
 ### Java Snowflake boundary plan
 
@@ -110,15 +117,15 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 
 AWS access was refreshed and all 44 final S3 cases passed; completed evidence is retained.
 
-**Still required for the follow-up:** implement and validate Java Snowflake for both models, including semantic-view input where frozen Python supports it.
+**Follow-up complete:** Java Snowflake supports both models and semantic views; all 46 formerly deferred cells now have live evidence.
 Dedicated CI access is deferred by the owner; [the scheduled workflow is not yet operational](parity-ci.md).
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
-Java Databricks Connect completed its real-model Spark journeys; final result comparisons remain pending with the corrected result-access artifact.
+Java Databricks Connect completed its real-model Spark journeys and final result comparisons.
 
 ## Final E2E matrix
 
-- **Inputs:** memory, SQLite, DuckDB, PostgreSQL/Lakebase, Databricks SQL/Spark/metric views, Python Snowflake/semantic views, and supported file/S3 ingestion.
+- **Inputs:** memory, SQLite, DuckDB, PostgreSQL/Lakebase, Databricks SQL/Spark/metric views, Snowflake/semantic views in both languages, and supported file/S3 ingestion.
 - **Tasks:** node regression, binary/multiclass, temporal aggregates/conditions, foreign-key classification, direct temporal links, candidate ranking and forecasts; verify old refusals for model-incompatible tasks.
 - **Journeys:** schema/read → materialize → predict; fit → repeated predict → close where supported; requested outputs, batching, holdout/leakage and representative failure/cleanup behavior.
 - **Comparison:** same source snapshot, query/options and model version for frozen Python/new Python/Java; compare identities, context/labels, task/options, result schema/meaning and deterministic answers, with justified tolerances for nondeterministic model outputs.
@@ -134,7 +141,7 @@ Remove or isolate production legacy-selection overrides only after supported pat
 The frozen Python client already provides Spark-session sources, CSV/Parquet reads from local files/S3, database `read_table`, model listing, readiness checks, result merging, and schema pickle round trips.
 These capabilities are in scope for equivalent Java support; exact persistence coverage must be checked per object, not inferred as support for serializing connections or live sessions.
 Java equivalents need not read Python pickle bytes or use identical method names.
-Java Snowflake was deferred in the original milestone and is now the approved next implementation scope.
+Java Snowflake was deferred in the original milestone and is now implemented and verified.
 
 Frozen-runtime probes also confirmed pickle round trips for direct requests and materialized Tabular and in-memory Relational requests, not just schemas.
 Prediction after restore remains an E2E acceptance case.
