@@ -1893,6 +1893,28 @@
         ]
       },
       "gate": "local"
+    },
+    {
+      "id": "result-items",
+      "apis": {
+        "python": [
+          "PredictionResult.items",
+          "PredictionResult.to_pandas"
+        ],
+        "java": [
+          "PredictionResult.items",
+          "PredictionResult.read"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_result_items_core.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java"
+        ]
+      },
+      "gate": "local"
     }
   ],
   "public_api_snapshot_sha256": "341df3535133e5a5d5ae015c31aba471b9e4d58a32f9b0e55bb8a03cf715b2e4"
