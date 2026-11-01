@@ -37,6 +37,7 @@ __all__ = [
     'Described',
     'Diagnostic',
     'DirectValue',
+    'RequestSplitData',
     'DecodedDirectResponse',
     'NativeDirectResponse',
     'PreparedDirectCall',
@@ -527,6 +528,29 @@ class DirectValue:
 
 
 @dataclasses.dataclass(frozen=True)
+class RequestSplitData:
+    """Arrow attachments for one inspected request half, in table order."""
+
+    instance: int | None
+    related: tuple[tuple[str, int | None], ...]
+
+
+def _request_split(read: dict[str, Any]) -> RequestSplitData:
+    related = []
+    names: set[str] = set()
+    for value in _list(read['related_tables'], 'related_tables'):
+        entry = _fields(value, 'related table', ('name', 'data'))
+        name = _text(entry['name'], 'name')
+        if not name or name in names:
+            raise CodecError('related table names are empty or repeated')
+        names.add(name)
+        related.append((name, _maybe(entry['data'], _int, 'data')))
+    return RequestSplitData(
+        _maybe(read['instance'], _int, 'instance'), tuple(related)
+    )
+
+
+@dataclasses.dataclass(frozen=True)
 class PreparedDirectCall:
     """An unsent logical direct call with retained native inference options."""
 
@@ -570,6 +594,7 @@ class PreparedFrameGraph:
 
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
+    'request_split': (('instance', 'related_tables'), (), _request_split),
     'prepared_frame_graph': (
         ('graph',),
         (),
@@ -626,6 +651,7 @@ def decode(
     | PreparedDirectCall
     | DecodedDirectResponse
     | NativeDirectResponse
+    | RequestSplitData
 ):
     r"""The result a ``done`` step carries, decoded once.
 
@@ -655,6 +681,7 @@ def decode(
         | PreparedDirectCall
         | DecodedDirectResponse
         | NativeDirectResponse
+        | RequestSplitData
     ) = build(read)
     return built
 
@@ -671,6 +698,7 @@ _T = TypeVar(
     DecodedDirectResponse,
     NativeDirectResponse,
     PreparedDirectCall,
+    RequestSplitData,
 )
 
 

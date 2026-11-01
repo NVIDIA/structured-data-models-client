@@ -271,6 +271,9 @@ PATHS = (
 #: S0: validation in ``PredictiveQuery.materialize``, accepting or refusing.
 S0 = ('query.validate/accept/any', 'query.validate/refuse/any')
 
+#: Gathered request data is inspected by the shared native decoder.
+REQUEST_INSPECTION = ('request.inspect/attributes/any',)
+
 #: ``Schema.from_source`` over a DuckDB source with no tables named: every
 #: table, and the keys its catalog declares, routed together (T1.11b).
 FROM_SOURCE_DUCKDB = (
@@ -472,6 +475,7 @@ WAREHOUSE_SESSION_ROUTES = tuple(
 CORE_ROUTED = frozenset(
     (
         *S0,
+        *REQUEST_INSPECTION,
         'result.merge/merge/any',
         *CAPABILITIES,
         *FRAME_ROUTES,
