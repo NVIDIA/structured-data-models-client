@@ -63,4 +63,19 @@ class ParityHarnessTest {
     assertEquals("incomplete", record.get("status"));
     assertEquals("native operation witness missing for a required phase", record.get("reason"));
   }
+
+  @Test
+  void expectedOutcomesDoNotAllowArbitraryRefusals() {
+    var error = new java.util.LinkedHashMap<String, Object>();
+    error.put("stage", "restore");
+    error.put("code", "UNSUPPORTED_REQUEST");
+    error.put("rule", null);
+    Map<String, Object> record = Map.of("status", "refused", "error", error);
+    assertFalse(ParityRunner.accepted(record, Map.of("status", "supported")));
+    var expected = new java.util.LinkedHashMap<>(error);
+    expected.put("status", "refused");
+    assertTrue(ParityRunner.accepted(record, expected));
+    expected.put("stage", "predict");
+    assertFalse(ParityRunner.accepted(record, expected));
+  }
 }

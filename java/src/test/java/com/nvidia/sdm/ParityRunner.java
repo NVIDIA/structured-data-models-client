@@ -118,6 +118,7 @@ public final class ParityRunner {
                 : read(Path.of(System.getProperty("sdm.parity.config")));
     Map<String, Object> artifact = artifact();
     var records = new ArrayList<Map<String, Object>>();
+    var expectations = new ArrayList<Map<String, Object>>();
     try (ParityRoute route = new ParityRoute()) {
       for (Object item : list(data.get("scenarios"))) {
         Map<String, Object> scenario = map(item);
@@ -146,6 +147,10 @@ public final class ParityRunner {
                       artifact,
                       route);
               records.add(record);
+              expectations.add(
+                  map(
+                      map(effective.get("expected_by_language"))
+                          .getOrDefault("java", effective.get("expected"))));
               System.out.println(
                   "parity "
                       + scenario.get("id")
@@ -167,9 +172,20 @@ public final class ParityRunner {
         out.newLine();
       }
     }
-    if (records.isEmpty()
-        || records.stream().anyMatch(r -> !Set.of("passed", "refused").contains(r.get("status"))))
-      System.exit(1);
+    if (records.isEmpty()) System.exit(1);
+    for (int at = 0; at < records.size(); at++)
+      if (!accepted(records.get(at), expectations.get(at))) System.exit(1);
+  }
+
+  static boolean accepted(Map<String, Object> record, Map<String, Object> expected) {
+    Object wanted =
+        expected.getOrDefault(
+            "outcome", "refused".equals(expected.get("status")) ? "refused" : "passed");
+    if (!Objects.equals(record.get("status"), wanted)) return false;
+    if (!"refused".equals(expected.get("status"))) return true;
+    Map<String, Object> error = map(record.get("error"));
+    return List.of("stage", "code", "rule").stream()
+        .allMatch(name -> Objects.equals(error.get(name), expected.get(name)));
   }
 
   static Map<String, Object> run(
