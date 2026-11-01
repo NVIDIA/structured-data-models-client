@@ -26,11 +26,13 @@ Python/Java retain native conversion, credentials, connections, HTTP and present
 |---|---|
 | Remove `_routing.py`, `SDM_CORE_ROUTES` and old computation branches | Public behavior and supported model/type limits |
 | Extract host helpers before deleting legacy modules | Native code still imports Tabular input helpers, request IDs/error presentation, limits and the `EngineTables` holder from those modules |
-| Remove old engine and Python PQL runtime dependencies | Drop `structured-data-models-relational-engine` and `structured-data-models-pql`; keep Rust `sdm-pql` and necessary data-only pickle compatibility shims |
+| Remove obsolete runtime dependencies from the new client | Replace use of the old engine/Python parser with shared Rust; preserve extras/import/pickle compatibility where required. Retiring their separately published distributions is a distinct release decision |
 | Retire migration-only tooling selectively | Keep public regressions, PQL conformance, frozen reference and permanent `tests/parity`; move required build/release tools first |
 
 **Exit:** clean-installed clients work without `sdm_relational_engine` or `predictive_query`; old routing is unavailable and public/persistence regressions pass.
-The superseded external-parser proposal stays superseded.
+This does not delete historical PyPI releases or remove relational/PQL features.
+Standalone consumers of the old distributions and compatibility shims must be reviewed before deciding whether to stop publishing those distributions.
+The current implementation keeps Rust `sdm-pql`; possible adoption of a separate language/engine library is a future integration decision, not a prerequisite for Phase 5 cleanup.
 
 ## 2. Close verification by auditing first
 
