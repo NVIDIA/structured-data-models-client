@@ -6,8 +6,11 @@
 import contextlib
 import importlib
 import os
+import platform
+import shutil
 import sys
 import threading
+from pathlib import Path
 from unittest.mock import patch
 
 _ACTIVE = None
@@ -74,6 +77,42 @@ def owner(name):
         return getattr(importlib.import_module(module), attr)
 
 
+def snowflake_platform_probe(event, args):
+    """Recognize only the observed driver's stdlib hardware-name probe."""
+    if event != 'subprocess.Popen' or len(args) != 4:
+        return False
+    executable, command, cwd, env = args
+    if (
+        executable != 'uname'
+        or command != ['uname', '-p']
+        or cwd is not None
+        or env is not None
+    ):
+        return False
+    program = shutil.which('uname')
+    if program is None or Path(program).resolve() != Path('/usr/bin/uname'):
+        return False
+    description = sys.modules.get('snowflake.connector.description')
+    if description is None:
+        return False
+    origin = getattr(description, '__file__', None)
+    if not origin:
+        return False
+    stdlib = platform._Processor.from_subprocess.__code__
+    saw_stdlib = saw_driver = False
+    frame = sys._getframe(1)
+    while frame is not None:
+        saw_stdlib |= frame.f_code is stdlib
+        saw_driver |= (
+            frame.f_code.co_name == '<module>'
+            and frame.f_globals is description.__dict__
+            and Path(frame.f_code.co_filename).resolve()
+            == Path(origin).resolve()
+        )
+        frame = frame.f_back
+    return saw_stdlib and saw_driver
+
+
 class LegacyGuard(contextlib.AbstractContextManager):
     def __init__(self, targets=None, *, raise_caught=True):
         self.targets = TARGETS if targets is None else targets
@@ -83,6 +122,7 @@ class LegacyGuard(contextlib.AbstractContextManager):
             'workers': [],
             'legacy_hits': [],
             'unobserved_subprocesses': [],
+            'observed_subprocesses': [],
         }
         self.stack = contextlib.ExitStack()
         self.codes = {}
@@ -131,6 +171,15 @@ class LegacyGuard(contextlib.AbstractContextManager):
             'os.posix_spawn',
             'os.posix_spawnp',
         ):
+            if snowflake_platform_probe(event, args):
+                self.report['observed_subprocesses'].append(
+                    {
+                        'pid': 'not-yet-spawned',
+                        'command': ['uname', '-p'],
+                        'origin': 'snowflake.connector.description -> platform._Processor.from_subprocess',
+                    }
+                )
+                return
             # Do not retain arguments: they may include credentials. A child
             # without its own observation cannot establish route coverage.
             self.report['unobserved_subprocesses'].append(event)
