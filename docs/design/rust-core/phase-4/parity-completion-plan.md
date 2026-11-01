@@ -8,9 +8,14 @@
 This document is the persistent goal’s implementation and acceptance reference.
 The parity checks are permanent product-test infrastructure, retained after the merge into `main`.
 
-**Current validation:** [the generated matrix](parity-matrix.md) records 492 passing comparisons: 269 Python and 223 Java.
-The remaining 44 S3 cells need refreshed AWS access; 46 Java Snowflake cells are explicitly deferred.
-All implementation and reviewed test fixes are integrated; operational CI still needs the dedicated credentials and runner described in [CI setup](parity-ci.md).
+**Completed original scope:** [the generated matrix](parity-matrix.md) records all 536 required comparisons passing: 291 Python and 245 Java, including S3.
+Its 46 deferred Java Snowflake cells describe the previous scope, not a claim that Snowflake is implemented.
+All implementation and reviewed test fixes are integrated; the owner explicitly deferred dedicated CI access until later, so local real-endpoint verification closes this milestone.
+The protected workflow and release checks remain implemented; [CI deployment](parity-ci.md) still needs dedicated credentials and a suitable runner.
+
+**Approved follow-up:** implement Java Snowflake for Relational and Tabular, then verify the 46 ordinary-table and semantic-view cases against the existing frozen Python evidence.
+Relational should reuse shared Rust warehouse policy through a caller-owned JDBC connection; Tabular should read one table into Arrow and retain its in-memory API.
+Review connector/type boundaries before implementation, preserve existing verified evidence, and run focused regressions plus actual Snowflake-to-model journeys after the implementation.
 
 ## Acceptance: what “done” means
 
@@ -18,7 +23,7 @@ Use frozen Python `rust-core-reference` (`43e55f4f5`) as the common baseline for
 Java lacking an API today does not mean the old client never supported the capability.
 Rows are **connector/input × prediction/task × lifecycle**; columns are **Python Relational | Python Tabular | Java Relational | Java Tabular**.
 Each completed cell must say **Parity**, **Improvement** (with a documented reason), or **Parity, never supported** (verified against the old client).
-An untested, blocked or failing cell stays incomplete; Java Snowflake stays visibly deferred, never relabeled as parity.
+An untested, blocked or failing cell stays incomplete; the follow-up must replace Java Snowflake's historical deferral with actual evidence, never relabel it as parity without testing.
 Preserve the approved single-table Tabular API: source reads become in-memory rows, not `Schema.from_source` support.
 
 ## Implementation order
@@ -81,12 +86,10 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 - The protected live workflow now requires sequential actual-model large-value tests for all three clients, with exactly one passed test each and no skips.
   Dedicated CI configuration remains pending; this is implemented enforcement, not a claim of an operational scheduled run.
 
-**Current access blocker:** the AWS `kumo` login expired during final validation; its refresh is requested.
-S3 cells remain pending while other connectors continue, and completed evidence is retained.
+AWS access was refreshed and all 44 final S3 cases passed; completed evidence is retained.
 
-**Still required:** run the 22 S3 cases per language after AWS login is refreshed and complete dedicated CI access setup.
-The generated matrix deliberately keeps those S3 cells incomplete.
-Dedicated CI access is also pending; [the scheduled workflow is not yet operational](parity-ci.md).
+**Still required for the follow-up:** implement and validate Java Snowflake for both models, including semantic-view input where frozen Python supports it.
+Dedicated CI access is deferred by the owner; [the scheduled workflow is not yet operational](parity-ci.md).
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
 Java Databricks Connect completed its real-model Spark journeys; final result comparisons remain pending with the corrected result-access artifact.
@@ -109,7 +112,7 @@ Remove or isolate production legacy-selection overrides only after supported pat
 The frozen Python client already provides Spark-session sources, CSV/Parquet reads from local files/S3, database `read_table`, model listing, readiness checks, result merging, and schema pickle round trips.
 These capabilities are in scope for equivalent Java support; exact persistence coverage must be checked per object, not inferred as support for serializing connections or live sessions.
 Java equivalents need not read Python pickle bytes or use identical method names.
-Only Java Snowflake remains explicitly deferred.
+Java Snowflake was deferred in the original milestone and is now the approved next implementation scope.
 
 Frozen-runtime probes also confirmed pickle round trips for direct requests and materialized Tabular and in-memory Relational requests, not just schemas.
 Prediction after restore remains an E2E acceptance case.

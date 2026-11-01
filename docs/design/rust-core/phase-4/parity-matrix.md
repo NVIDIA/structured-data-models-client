@@ -13,8 +13,8 @@
 | direct.regression / memory | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
 | direct.regression / parquet | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
 | direct.regression / postgres | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
-| direct.regression / s3-csv | not applicable | incomplete | not applicable | incomplete |
-| direct.regression / s3-parquet | not applicable | incomplete | not applicable | incomplete |
+| direct.regression / s3-csv | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
+| direct.regression / s3-parquet | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
 | direct.regression / snowflake | not applicable | Parity (private bridge) | not applicable | deferred |
 | direct.regression / snowflake-semantic | not applicable | Parity (private bridge) | not applicable | deferred |
 | direct.regression / sqlite | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
@@ -28,8 +28,8 @@
 | lifecycle.fitted / memory | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | lifecycle.fitted / parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | lifecycle.fitted / postgres | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
-| lifecycle.fitted / s3-csv | incomplete | incomplete | incomplete | incomplete |
-| lifecycle.fitted / s3-parquet | incomplete | incomplete | incomplete | incomplete |
+| lifecycle.fitted / s3-csv | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
+| lifecycle.fitted / s3-parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | lifecycle.fitted / snowflake | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | lifecycle.fitted / snowflake-semantic | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | lifecycle.fitted / sqlite | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
@@ -44,8 +44,8 @@
 | node.binary / memory | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.binary / parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.binary / postgres | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
-| node.binary / s3-csv | incomplete | incomplete | incomplete | incomplete |
-| node.binary / s3-parquet | incomplete | incomplete | incomplete | incomplete |
+| node.binary / s3-csv | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
+| node.binary / s3-parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.binary / snowflake | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | node.binary / snowflake-semantic | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | node.binary / sqlite | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
@@ -59,8 +59,8 @@
 | node.multiclass / memory | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.multiclass / parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.multiclass / postgres | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
-| node.multiclass / s3-csv | incomplete | incomplete | incomplete | incomplete |
-| node.multiclass / s3-parquet | incomplete | incomplete | incomplete | incomplete |
+| node.multiclass / s3-csv | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
+| node.multiclass / s3-parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.multiclass / snowflake | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | node.multiclass / snowflake-semantic | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | node.multiclass / sqlite | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
@@ -74,8 +74,8 @@
 | node.regression / memory | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.regression / parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.regression / postgres | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
-| node.regression / s3-csv | incomplete | incomplete | incomplete | incomplete |
-| node.regression / s3-parquet | incomplete | incomplete | incomplete | incomplete |
+| node.regression / s3-csv | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
+| node.regression / s3-parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | node.regression / snowflake | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | node.regression / snowflake-semantic | Parity (private bridge) | Parity (private bridge) | deferred | deferred |
 | node.regression / sqlite | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
@@ -86,8 +86,8 @@
 | persistence.request / csv | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | persistence.request / memory | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | persistence.request / parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
-| persistence.request / s3-csv | incomplete | incomplete | incomplete | incomplete |
-| persistence.request / s3-parquet | incomplete | incomplete | incomplete | incomplete |
+| persistence.request / s3-csv | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
+| persistence.request / s3-parquet | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | persistence.request / zip | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) | Parity (private bridge) |
 | persistence.tabular-read / databricks-metric | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
 | persistence.tabular-read / databricks-spark | not applicable | Parity (private bridge) | not applicable | Parity (private bridge) |
