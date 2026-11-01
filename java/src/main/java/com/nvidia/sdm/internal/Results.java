@@ -58,6 +58,19 @@ public final class Results {
       List<String> outputs,
       List<Long> unscoredCandidates) {}
 
+  /** Read-only request data attachments; null IDs denote unselected tables. */
+  public record Split(Integer instance, List<SplitTable> relatedTables) {}
+  public record SplitTable(String name, Integer data) {}
+
+  private static Split split(Map<String, Object> result) {
+    List<SplitTable> related = new ArrayList<>();
+    for (Object value : list(result.get("related_tables"))) {
+      Map<String, Object> table = map(value);
+      related.add(new SplitTable(text(table, "name"), table.get("data") == null ? null : count(table, "data")));
+    }
+    return new Split(result.get("instance") == null ? null : count(result, "instance"), List.copyOf(related));
+  }
+
   /** {@code result}, the result of {@code op}, decoded. */
   public static Object expect(Map<String, Object> result, String op) {
     try {
@@ -65,6 +78,7 @@ public final class Results {
         throw new IllegalArgumentException("another operation than the one started");
       }
       return switch (op) {
+        case "request_split" -> split(result);
         case "validate_query" -> validated(result);
         case "describe_source" -> described(result);
         case "edit_schema" -> new Edited(count(result, "schema"), map(result.get("declared")));

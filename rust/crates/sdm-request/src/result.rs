@@ -294,7 +294,7 @@ mod tests {
         let one = descriptor(vec![C::Unsupported {
             type_name: "custom".into(),
         }]);
-        assert!(plan(&[one.clone()]).unwrap().single);
+        assert!(plan(std::slice::from_ref(&one)).unwrap().single);
         let mut second = descriptor(vec![]);
         second.model = "other".into();
         second.outputs = vec![];

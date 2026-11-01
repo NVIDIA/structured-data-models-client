@@ -829,6 +829,15 @@ const OTHER: &[(&str, &str)] = &[
         "normalized Arrow result tables",
     ),
     ("Operation/edit_schema.frame", "Arrow, with its schema"),
+    (
+        "Operation/read_request_split.payloads",
+        "encoded endpoint payloads inspected without modification",
+    ),
+    (
+        "OperationResult/request_split.instance",
+        "inspected instance Arrow table",
+    ),
+    ("RelatedTable.data", "inspected related Arrow table"),
     ("Operation/fit.payloads", "encoded endpoint payloads"),
     ("Operation/predict.payloads", "encoded endpoint payloads"),
     ("Operation/predict.pinned", "encoded pinned context"),

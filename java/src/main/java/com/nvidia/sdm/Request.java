@@ -80,6 +80,12 @@ public final class Request {
     this.facts = null;
   }
 
+  /** The held context rows and related tables; inspection never samples again. */
+  public RequestSplit context() { return new RequestSplit(this, "context"); }
+
+  /** The held prediction rows and related tables; each reader is independently owned. */
+  public RequestSplit predict() { return new RequestSplit(this, "predict"); }
+
   boolean direct() { return direct != null; }
   Map<String, Object> directInput() { return direct; }
   byte[] contextData() { return contextData; }

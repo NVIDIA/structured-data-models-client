@@ -11,6 +11,14 @@ It describes the tables of a DuckDB, SQLite, Postgres or Databricks database thr
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
+## Inspect request data
+
+`request.context()` and `request.predict()` return a `RequestSplit` for either model.
+Use `split.read(allocator)` for instance rows, `split.relatedTables()` for names and `split.readRelated(name, allocator)` for one related table.
+Each returned Arrow reader is caller-owned and independent; close it before its allocator.
+Inspection uses the held request, never resamples or contacts its source, and leaves prediction payloads unchanged.
+Direct Tabular keeps its original Arrow types; gathered data uses the wire's declared types, including exact nullable int64 values and microsecond timestamps.
+
 ## Save and restore in-memory objects
 
 `Schema.writeTo(OutputStream)` / `Schema.readFrom(InputStream)` and the same methods on `Request` save owned snapshots.
@@ -175,6 +183,7 @@ The API mirrors Python's with Java names and plain data:
 | `schema[t].primary_key = k`, `.time_column = c`, `schema[t][c].stype = s`, `del schema[t][c]`, `schema.relationships = [...]` | `withPrimaryKey`, `withoutPrimaryKey`, `withTimeColumn`, `withoutTimeColumn`, `withStype`, `withoutColumn`, `withRelationships`, `withRelationship`: each a new schema, checked and made by the core; a schema never changes, so `snapshot()` is the schema itself |
 | `schema.tables`, `schema[t]`, `check_consistent()` | `tables()`, `table(name)`, `relationships()`, `checkConsistent()`; `Table` and `Column` |
 | `PredictiveQuery(text, schema).materialize(indices=, anchor_time=, **options)` | `PredictiveQuery.parse(text).materialize(schema, MaterializeOptions)`; an option is a name and a plain value (`option("num_neighbors", List.of(8, 8))`), as a keyword argument |
+| `Request.context`, `predict` and their instance/related tables | `context()`, `predict()` return `RequestSplit`: `read(allocator)`, `relatedTables()`, `readRelated(name, allocator)` |
 | `Request.context_rows`, `predict_rows`, `payloads`, ... | `Request.contextRows()`, `predictRows()`, `payloads()`, `nothingToScore()`, `entityTable()`, ... |
 | `SDMClient(url, api_key, timeout=, max_retries=)`, `capabilities(model)`, `predict(request, model=, outputs=)` | `SdmClient.connect(url[, ClientOptions])`, `capabilities(model)`, `predict(request, model[, outputs])` |
 | `SDMClient.for_databricks_serving(endpoint, workspace_client=, timeout=)` | `SdmClient.forDatabricksServing(DatabricksServing.of(endpoint))`, or `DatabricksServing.of(workspaceClient, endpoint[, maxRequestBytes])` with the official SDK's unified authentication; `timeout(Duration)` bounds the call |

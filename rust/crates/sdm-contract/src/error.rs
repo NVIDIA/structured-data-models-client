@@ -823,6 +823,7 @@ sentences! {
     TabularRowBounds = "tabular_row_bounds", E::InvalidResponse;
     TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
     TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
+    RequestSplitInvalid = "request_split_invalid", E::InvalidRequest;
     ResultMergeEmpty = "result_merge_empty", E::InternalError;
     ResultMergeModels = "result_merge_models", E::InternalError;
     ResultMergeOutputs = "result_merge_outputs", E::InternalError;

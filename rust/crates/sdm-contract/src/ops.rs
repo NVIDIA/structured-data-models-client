@@ -42,6 +42,7 @@ pub enum Operation {
     MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
     TabularArrow(crate::tabular_arrow::ArrowTabular),
+    ReadRequestSplit(crate::split::ReadRequestSplit),
     MergeResults(crate::result::MergeResults),
     PlanResultMerge(crate::direct::DirectInput),
     PrepareTabularFit(crate::session::SessionFitInput),
@@ -120,6 +121,7 @@ impl Operation {
         match self {
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::PlanResultMerge(_) => "plan_result_merge",
+            Operation::ReadRequestSplit(_) => "read_request_split",
             Operation::MergeResults(_) => "merge_results",
             Operation::ValidateQuery(_) => "validate_query",
             Operation::FrameSession(_) => "frame_session",
@@ -188,6 +190,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
             Operation::MergeResults(v) => {
                 let mut named = vec![(v.input, Bytes)];
                 named.extend(v.tables.iter().map(|id| (*id, Arrow)));
@@ -387,6 +390,7 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    RequestSplit(crate::split::RequestSplit),
     PreparedFrameGraph(crate::frames::PreparedFrameGraph),
     DirectValue(crate::direct::DirectValue),
     DecodedDirectResponse(crate::direct::DecodedDirectResponse),

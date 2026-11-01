@@ -217,6 +217,18 @@ public final class Host {
       }
     }
 
+    /** Takes an independent zero-copy reader; closing this run does not close the reader. */
+    public ArrowReader arrowReader(int id, org.apache.arrow.memory.BufferAllocator allocator) {
+      Object taken = take(id);
+      if (!(taken instanceof NativeArrow arrow)) {
+        closeUnexpected(taken);
+        throw internal("the core's result names an Arrow attachment it did not give");
+      }
+      try (arrow) {
+        return arrow.reader(allocator);
+      }
+    }
+
     /** Takes ownership of a retained relational graph independently of this finished run. */
     public NativeFrameGraph graph(int id) {
       Object taken = take(id);

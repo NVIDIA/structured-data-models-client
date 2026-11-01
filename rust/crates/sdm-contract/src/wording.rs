@@ -442,6 +442,7 @@ pub fn template(sentence: Sentence) -> Template {
         }
         S::TabularRowRepeated => said(r#"the response answers row {index} more than once"#),
         S::TabularRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
+        S::RequestSplitInvalid => said("cannot inspect request data: {reason}"),
         S::ResultMergeEmpty => said("no parts to merge"),
         S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
         S::ResultMergeOutputs => said(
