@@ -1866,6 +1866,33 @@
       },
       "gate": "local",
       "note": "Public Databricks session refusal remains distinct from real-model private-bridge lifecycle tests."
+    },
+    {
+      "id": "request-inspection",
+      "apis": {
+        "python": [
+          "Request.context",
+          "Request.predict",
+          "Split.instance_table",
+          "Split.related_tables"
+        ],
+        "java": [
+          "Request.context",
+          "Request.predict",
+          "RequestSplit.read",
+          "RequestSplit.relatedTables",
+          "RequestSplit.readRelated"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_request_split_core.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RequestSplitTest.java"
+        ]
+      },
+      "gate": "local"
     }
   ],
   "public_api_snapshot_sha256": "341df3535133e5a5d5ae015c31aba471b9e4d58a32f9b0e55bb8a03cf715b2e4"
