@@ -448,6 +448,7 @@ def journey(case, connector, model, config, mode, record):
                 prediction,
                 target=target,
                 task='regression',
+                entity_table='users',
                 schema=schema,
             )
             semantic['request'] = request_observation(request)
