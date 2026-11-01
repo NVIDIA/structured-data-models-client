@@ -47,7 +47,11 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
   Java regression results: 299 passed, 14 explicitly skipped; both independent source reviews passed.
   Real S3 CSV/ZIP reads and a real Databricks Spark source journey passed with temporary fixtures cleaned up.
   The Spark journey used a local model stub, so it does not count as real-model parity.
-- Next: persistence, remaining provider obligations and permanent parity machinery.
+- Rust provider fixes landed (`2d4021249`): client date rules, declared fallback/recovery, explicit text-order compatibility and slice-aware byte limits.
+  Validation passed 132 Rust tests, 50 installed Python regressions, contract checks and Clippy.
+  Actual >2 GiB Python/DuckDB probes passed: binary is omitted through prediction; text describes then refuses materialization by name (local model stub).
+  Java large-value transport still needs verification; Python evidence does not establish that cell.
+- Next: persistence, Java large-value transport and permanent parity machinery.
   The real endpoint matrix and remaining scope reconciliation are still pending.
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
