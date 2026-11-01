@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import operator
+import re
 from pathlib import Path
 
 from identity import IdentityError, canonical
@@ -28,6 +29,8 @@ def difference(left, right, tolerance, path='$'):
         if left == right:
             return None
         if isinstance(left, int) and isinstance(right, int):
+            return path
+        if tolerance['absolute'] == 0 and tolerance['relative'] == 0:
             return path
         return (
             None
@@ -60,6 +63,126 @@ def difference(left, right, tolerance, path='$'):
                 return found
         return None
     return None if left == right else path
+
+
+def equivalent_reader_time_units(old, new):
+    """Normalize only exact timestamp values with compatible declared resolutions."""
+    exact = {'absolute': 0, 'relative': 0}
+    if difference(old['data'], new['data'], exact) is not None:
+        return
+    if len(old['schema']) != len(new['schema']):
+        return
+    for before, after in zip(old['schema'], new['schema'], strict=True):
+        if before[0] != after[0] or before[1] == after[1]:
+            continue
+        a = re.fullmatch(r'timestamp\[(s|ms|us|ns)(, tz=[^]]+)?\]', before[1])
+        b = re.fullmatch(r'timestamp\[(s|ms|us|ns)(, tz=[^]]+)?\]', after[1])
+        if not a or not b or a[2] != b[2]:
+            continue
+        digits = min(
+            {'s': 0, 'ms': 3, 'us': 6, 'ns': 9}[a[1]],
+            {'s': 0, 'ms': 3, 'us': 6, 'ns': 9}[b[1]],
+        )
+        at = old['data']['columns'].index(before[0])
+        for row in old['data']['rows']:
+            value = row[at]
+            if value is None:
+                continue
+            match = (
+                re.fullmatch(
+                    r'[+-]?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.(\d{1,9}))?(?:Z|[+-]\d{2}:\d{2})?',
+                    value,
+                )
+                if isinstance(value, str)
+                else None
+            )
+            if not match or any(c != '0' for c in (match[1] or '')[digits:]):
+                break
+        else:
+            # Caller compares all other schema fields and every original value.
+            after[1] = before[1]
+
+
+def equivalent_derived_entity_refs(old_payloads, new_payloads, fixture):
+    """Accept exact nullable integer storage only for declared temporal-link references."""
+    if (
+        not isinstance(old_payloads, list)
+        or not isinstance(new_payloads, list)
+        or len(old_payloads) != len(new_payloads)
+    ):
+        return False
+    improved = False
+    for old, new in zip(old_payloads, new_payloads, strict=True):
+        task = old.get('task', {})
+        if (
+            task != new.get('task')
+            or task.get('kind') != 'temporal_link_prediction'
+        ):
+            continue
+        entities = task.get('entity_table_names', [])
+        old_schema, new_schema = old.get('schema', {}), new.get('schema', {})
+        links = old_schema.get('relationships', [])
+        if links != new_schema.get('relationships', []):
+            continue
+        a = old_schema.get('instance_table', {}).get('columns', {})
+        b = new_schema.get('instance_table', {}).get('columns', {})
+        for index, target in enumerate(entities):
+            name = f'__kumo_entity_ref_{index}'
+            before, after = a.get(name, {}), b.get(name, {})
+            if (
+                before.get('dtype') != 'float64'
+                or after.get('dtype') != 'int64'
+            ):
+                continue
+            if (
+                before.get('stype') != 'ID'
+                or {**before, 'dtype': 'int64'} != after
+            ):
+                continue
+            matching = [
+                link
+                for link in links
+                if not link.get('source_table')
+                and link.get('source_columns') == [name]
+            ]
+            if (
+                len(matching) != 1
+                or matching[0].get('target_table') != target
+                or matching[0].get('target_columns')
+                != [fixture['primary_keys'].get(target)]
+            ):
+                continue
+            valid = True
+            observed = False
+            for half in ('context', 'predict'):
+                left = old.get(half, {}).get('instance_table', {})
+                right = new.get(half, {}).get('instance_table', {})
+                if (
+                    left.get('columns') != right.get('columns')
+                    or len(left.get('rows', [])) != len(right.get('rows', []))
+                    or name not in left.get('columns', [])
+                ):
+                    valid = False
+                    break
+                at = left['columns'].index(name)
+                for row, other in zip(left['rows'], right['rows'], strict=True):
+                    x, y = row[at], other[at]
+                    if x is None and y is None:
+                        continue
+                    observed = True
+                    if (
+                        type(x) is not float
+                        or type(y) is not int
+                        or not math.isfinite(x)
+                        or not x.is_integer()
+                        or int(x) != y
+                    ):
+                        valid = False
+                        break
+            if valid and observed:
+                before['dtype'] = 'int64'
+                improved = True
+    return improved
 
 
 def assess(
@@ -165,10 +288,24 @@ def assess(
             copy.deepcopy(old.get('semantic')),
             copy.deepcopy(new.get('semantic')),
         )
+        improved_entity_ref = False
+        if cell[0] == 'relational.temporal-link' and wanted == 'passed':
+            from contract import HERE
+
+            fixture = json.loads((HERE / case['fixture']).read_text())
+            improved_entity_ref = equivalent_derived_entity_refs(
+                old_semantic['request'], new_semantic['request'], fixture
+            )
         if (
             cell[2] == 'relational'
             and case.get('comparison') == 'fixture-source-identity'
             and wanted == 'passed'
+            and difference(
+                old_semantic['request'],
+                new_semantic['request'],
+                {'absolute': 0, 'relative': 0},
+            )
+            is not None
         ):
             from contract import HERE
 
@@ -209,22 +346,37 @@ def assess(
                 data = copy.deepcopy(reading['data'])
                 at = data['columns'].index(fixture['primary_keys'][name])
                 data['rows'].sort(key=operator.itemgetter(at))
-                values[name] = {'schema': reading['schema'], 'data': data}
+                values[name] = {
+                    'schema': copy.deepcopy(reading['schema']),
+                    'data': data,
+                }
             return values
 
+        old_readers, new_readers = readers(old), readers(new)
+        for name in old_readers.keys() & new_readers.keys():
+            equivalent_reader_time_units(old_readers[name], new_readers[name])
         changed = changed or difference(
-            readers(old), readers(new), exact, '$.reader'
+            old_readers, new_readers, exact, '$.reader'
         )
 
         row.update(
             status='failed' if changed else 'passed',
-            verdict=expected.get('verdict', 'Parity never supported')
+            verdict=(
+                'Improvement (private bridge)'
+                if (new.get('endpoint') or {}).get('transport')
+                == 'private-bridge'
+                else 'Improvement'
+            )
+            if improved_entity_ref and not changed
+            else expected.get('verdict', 'Parity never supported')
             if expected['status'] == 'refused'
             else 'Parity (private bridge)'
             if (new.get('endpoint') or {}).get('transport') == 'private-bridge'
             else 'Parity',
             reason=f'difference at {changed}'
             if changed
+            else 'Exact nullable integer storage for declared temporal entity reference'
+            if improved_entity_ref
             else 'matching evidence',
         )
     scoped = [
