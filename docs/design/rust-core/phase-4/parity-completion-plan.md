@@ -17,6 +17,28 @@ The protected workflow and release checks remain implemented; [CI deployment](pa
 Relational should reuse shared Rust warehouse policy through a caller-owned JDBC connection; Tabular should read one table into Arrow and retain its in-memory API.
 Review connector/type boundaries before implementation, preserve existing verified evidence, and run focused regressions plus actual Snowflake-to-model journeys after the implementation.
 
+### Java Snowflake boundary plan
+
+```text
+Relational: SnowflakeSource → Rust plans catalog/sampling SQL
+                            → Java executes JDBC and returns Arrow
+                            → Rust builds the model request → predict or fit/predict/close
+
+Tabular:    Readers.readTable/readQuery → Java JDBC → Arrow table
+                                     → existing Tabular materialize/predict or fit/predict/close
+```
+
+| Boundary | Decision |
+|---|---|
+| Public API | `SnowflakeSource.of(connection[, database, schema])`, plus the existing `semanticModel(name, trustExpressions)` pattern; the caller owns authentication and the connection |
+| Java host | Execute statements, bind values, preserve SQL error details, and convert JDBC results to owned Arrow batches without losing numeric or timestamp meaning |
+| Shared Rust | Reuse existing Snowflake catalog, namespace, semantic-view, sampling and session policy; no parallel Java policy or unrelated warehouse SQL changes |
+| Type check before coding | Probe the actual driver against Python Arrow for exact numbers, nulls, DATE/TIME, NTZ/LTZ/TZ and metadata statements; review any gap before choosing a conversion |
+| Acceptance | Focused type/ownership regressions, independent reviews, then all 46 former Snowflake deferral cells against real sources/models; preserve the preceding 536 results and rerun only affected neighbors |
+
+The JDBC driver is optional for consumers who do not use Snowflake.
+No connection or session settings are changed behind the caller's back.
+
 ## Acceptance: what “done” means
 
 Use frozen Python `rust-core-reference` (`43e55f4f5`) as the common baseline for **both languages**.
