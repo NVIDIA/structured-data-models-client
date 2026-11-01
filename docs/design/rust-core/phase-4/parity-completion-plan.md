@@ -69,16 +69,17 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
   Matching production artifacts are built from that commit.
   Python passed 272 API checks with no skips and 144 focused result/direct/session tests; Java passed 208 public API tests with 15 explicit optional/provider skips.
   Final live comparisons are running against 291 frozen Python baseline cases, with 245 applicable Java cases.
-  Additional coverage checks explicit outputs, batching and actual fitted-session holdout payloads; two holdout cases per language are refreshing session-handle evidence without repeating other completed calls.
+  All 29 memory comparisons pass in both languages, including explicit outputs, batching and actual fitted-session holdout payloads and session handles.
+  Python's first 200 completed cells compare successfully; the remaining 91 are explicitly unverified, including 22 awaiting S3 access.
 - Frozen Python and the final `7f7c19f95` Python candidate both passed the actual-model >2 GiB omitted-binary journey.
-  Java actual-model large-value validation remains pending.
+  Java also passed the same shop task with a >2 GiB binary value and eight finite real-model predictions; the earlier toy task's model refusal is preserved separately.
 - The protected live workflow now requires sequential actual-model large-value tests for all three clients, with exactly one passed test each and no skips.
   Dedicated CI configuration remains pending; this is implemented enforcement, not a claim of an operational scheduled run.
 
 **Current access blocker:** the AWS `kumo` login expired during final validation; its refresh is requested.
 S3 cells remain pending while other connectors continue, and completed evidence is retained.
 
-**Still required:** verify the final result-access artifacts against the live matrix, finish Java actual-model large-value validation and supplemental lifecycle/API checks, integrate reviewed fixes and publish the final evidence matrix.
+**Still required:** finish the remote and S3 comparisons on final artifacts and publish the final evidence matrix.
 Dedicated CI access is also pending; [the scheduled workflow is not yet operational](parity-ci.md).
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
