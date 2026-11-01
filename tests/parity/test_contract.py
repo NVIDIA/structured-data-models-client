@@ -41,7 +41,7 @@ def one():
 
 def observation(case, phase='candidate', language='python'):
     fixture = json.loads((HERE / case['fixture']).read_text())
-    return {
+    record = {
         'version': 1,
         'case': case['id'],
         'connector': 'memory',
@@ -86,6 +86,18 @@ def observation(case, phase='candidate', language='python'):
             'unobserved_subprocesses': [],
         },
     }
+
+    if case.get('input_mode') == 'raw-reader':
+        record['semantic']['wire_calls'] = [
+            {
+                'operation': 'predict',
+                'payload': {
+                    'metadata': {'request_id': 'sdm-000000000001'},
+                    'value': 1,
+                },
+            }
+        ]
+    return record
 
 
 def paired(data):
@@ -484,6 +496,7 @@ def test_runner_accepts_only_explicit_expected_failure():
     }
     record = {
         'phase': 'baseline',
+        'model': 'relational',
         'status': 'failed',
         'error': {'stage': 'restore', 'code': 'TypeError', 'rule': None},
     }
@@ -494,7 +507,7 @@ def test_runner_accepts_only_explicit_expected_failure():
     assert not expected_outcome(case, record)
     assert not expected_outcome(
         {'expected': {'status': 'supported'}},
-        {'phase': 'candidate', 'status': 'refused'},
+        {'phase': 'candidate', 'model': 'relational', 'status': 'refused'},
     )
 
 
@@ -781,3 +794,489 @@ def test_snowflake_reader_integer_encoding_requires_lossless_ordered_values():
         old, new = reading('int8', before), reading(dtype, after)
         assert not equivalent_snowflake_reader_integers(old, new, connector)
         assert new['schema'][0][1] == dtype
+
+
+@pytest.mark.parametrize('outcome', ['passed', 'refused'])
+def test_raw_reader_identity_uses_equal_observations_and_rejects_changed_rows(
+    monkeypatch,
+    outcome,
+):
+    import compare
+
+    data = one()
+    case = data['scenarios'][0]
+    case['input_mode'] = 'raw-reader'
+    case['comparison'] = 'fixture-source-identity'
+    if outcome == 'refused':
+        case['expected'] = {
+            'status': 'refused',
+            'stage': 'predict',
+            'code': 'UNSUPPORTED_DTYPE',
+            'rule': None,
+        }
+    old, new = paired(data)
+    for record in [*old.values(), *new.values()]:
+        record['status'] = outcome
+        if outcome == 'refused':
+            record['error'] = {
+                'stage': 'predict',
+                'code': 'UNSUPPORTED_DTYPE',
+                'rule': None,
+            }
+        record['reader']['users']['data']['rows'][0][2] = 0
+        record['semantic']['request'] = [
+            {'tag': 'old' if record['phase'] == 'baseline' else 'new'}
+        ]
+    captured = []
+
+    def checked(payload, fixture):
+        captured.append(copy.deepcopy(fixture))
+        assert fixture['tables']['users']['rows'][0][2] == 0
+        return ['proven equivalent identity']
+
+    monkeypatch.setattr(compare, 'canonical', checked)
+    before = copy.deepcopy((old, new))
+    assert assess(data, old, new)['goal_complete']
+    assert captured
+    assert (old, new) == before
+    for record in new.values():
+        record['reader']['users']['data']['rows'][0][1] = 999.0
+    captured.clear()
+    report = assess(data, old, new)
+    assert not report['goal_complete']
+    assert not captured
+    assert all(
+        row['reason'] == 'raw reader rows differ before identity proof'
+        for row in report['cells']
+    )
+
+
+def test_model_expectations_do_not_leak_across_models_or_into_baseline():
+    from contract import expectation
+
+    supported = {'status': 'supported'}
+    refused = {
+        'status': 'refused',
+        'stage': 'predict',
+        'code': 'UNSUPPORTED_DTYPE',
+        'rule': None,
+    }
+    improved = {
+        'status': 'refused',
+        'stage': 'schema',
+        'code': 'UNSUPPORTED_REQUEST',
+        'rule': None,
+    }
+    case = {
+        'expected': supported,
+        'expected_by_model': {'tabular': refused},
+        'expected_by_language': {'java': improved},
+    }
+    assert expectation(case, 'relational') == supported
+    assert expectation(case, 'tabular') == refused
+    assert expectation(case, 'tabular', 'python') == refused
+    assert expectation(case, 'tabular', 'java') == improved
+    assert expectation(case, 'relational') == supported
+
+
+def test_model_supported_override_and_endpoint_refusals_require_live_evidence():
+    data = one()
+    case = data['scenarios'][0]
+    case['expected'] = {
+        'status': 'refused',
+        'stage': 'schema',
+        'code': 'UNSUPPORTED_REQUEST',
+        'rule': None,
+    }
+    case['expected_by_model'] = {'relational': {'status': 'supported'}}
+    old, new = paired(data)
+    assert assess(data, old, new)['goal_complete']
+    next(iter(new.values()))['execution'] = 'local'
+    assert not assess(data, old, new)['goal_complete']
+
+    case['expected_by_model']['relational'] = {
+        'status': 'refused',
+        'stage': 'predict',
+        'code': 'UNSUPPORTED_DTYPE',
+        'rule': None,
+    }
+    old, new = paired(data)
+    for record in [*old.values(), *new.values()]:
+        record['status'] = 'refused'
+        record['error'] = {
+            'stage': 'predict',
+            'code': 'UNSUPPORTED_DTYPE',
+            'rule': None,
+        }
+    assert assess(data, old, new)['goal_complete']
+    next(iter(new.values()))['endpoint'] = None
+    assert not assess(data, old, new)['goal_complete']
+
+
+def test_source_identity_conversion_proofs_are_typed_and_exact():
+    from identity import same
+
+    assert same(None, {'float': 'nan'}, 'float64')
+    assert not same(None, {'float': 'inf'}, 'float64')
+    assert not same(None, {'float': 'nan'}, 'string')
+    assert same('9007199254740993', 9007199254740993, 'int64')
+    assert not same('9007199254740992', 9007199254740993, 'int64')
+    assert not same('01', 1, 'int64')
+    assert not same(str(2**63), 2**63, 'int64')
+    assert not same('1', 1, 'string')
+    assert same(15.123456, {'decimal': '15.123456'}, 'float64')
+    assert not same(15.123457, {'decimal': '15.123456'}, 'float64')
+    assert not same(float('inf'), {'decimal': '1e999'}, 'float64')
+    assert not same(15.123456, {'decimal': '15.123456'}, 'string')
+    assert same(
+        '2024-03-10T10:00:00.987654321Z',
+        '2024-03-10T03:00:00.987654321-07:00',
+        'timestamp[ns]',
+    )
+    assert not same(
+        '2024-03-10T10:00:00.987654321Z',
+        '2024-03-10T10:00:00.987654320Z',
+        'timestamp[ns]',
+    )
+
+
+def test_tokenized_text_is_not_an_identity_anchor_but_stays_exact_payload_data():
+    from identity import IdentityError, canonical
+
+    fixture = {
+        'primary_keys': {'users': 'id'},
+        'links': [],
+        'tables': {
+            'users': {
+                'columns': ['id', 'score', 'description'],
+                'rows': [[7, 1.25, 'Original sentence.'], [8, 2.5, None]],
+            }
+        },
+    }
+    payload = [
+        {
+            'schema': {
+                'related_tables': {
+                    'users': {
+                        'primary_key': ['instance_id', '__node_id'],
+                        'columns': {
+                            'instance_id': {'dtype': 'int64'},
+                            '__node_id': {'dtype': 'int64'},
+                            'score': {'dtype': 'float64'},
+                            'description': {'dtype': 'stringlist'},
+                        },
+                    }
+                }
+            },
+            'context': {
+                'related_tables': {
+                    'users': {
+                        'columns': [
+                            'instance_id',
+                            '__node_id',
+                            'score',
+                            'description',
+                        ],
+                        'rows': [
+                            [0, 0, 1.25, ['original', 'sentence']],
+                            [0, 1, 2.5, []],
+                        ],
+                    }
+                }
+            },
+        }
+    ]
+    original = canonical(payload, fixture)
+    changed = copy.deepcopy(payload)
+    changed[0]['context']['related_tables']['users']['rows'][0][3] = ['changed']
+    assert canonical(changed, fixture) != original
+    ambiguous = copy.deepcopy(fixture)
+    ambiguous['tables']['users']['rows'][1][1] = 1.25
+    ambiguous['tables']['users']['rows'][1][2] = 'Different text.'
+    with pytest.raises(IdentityError, match='not uniquely'):
+        canonical(payload, ambiguous)
+
+
+def test_timestamp_source_identity_uses_only_the_declared_wire_precision():
+    from identity import same
+
+    assert same(
+        '2024-03-10T10:00:00.987654Z',
+        '2024-03-10T03:00:00.987654321-07:00',
+        'timestamp[us]',
+    )
+    assert not same(
+        '2024-03-10T10:00:00.987654Z',
+        '2024-03-10T10:00:00.987653999Z',
+        'timestamp[us]',
+    )
+    assert not same(
+        '2024-03-10T10:00:00.987654Z',
+        '2024-03-10T10:00:00.987654321Z',
+        'timestamp[ns]',
+    )
+
+
+def test_raw_observation_equivalence_is_slot_typed_exact_and_detached():
+    import copy
+
+    from compare import difference, equivalent_raw_observations
+
+    fixture = {
+        'primary_keys': {'users': 'id'},
+        'tables': {
+            'users': {
+                'columns': ['id', 'number', 'empty', 'fraction', 'time'],
+                'types': {'time': 'timestamp[ns,America/Los_Angeles]'},
+                'rows': [
+                    [
+                        1,
+                        None,
+                        None,
+                        '1.123456',
+                        '2024-03-10T03:00:00.987654321-07:00',
+                    ]
+                ],
+            }
+        },
+    }
+    frame = {
+        'columns': fixture['tables']['users']['columns'],
+        'rows': [
+            [
+                1,
+                {'float': 'nan'},
+                None,
+                {'decimal': '1.123456'},
+                '2024-03-10T03:00:00.987654321-07:00',
+            ]
+        ],
+    }
+    old = {
+        'reader': {
+            'users': {
+                'schema': [
+                    ['id', 'int64'],
+                    ['number', 'double'],
+                    ['empty', 'null'],
+                    ['fraction', 'decimal128(7, 6)'],
+                    ['time', 'timestamp[ns, tz=America/Los_Angeles]'],
+                ],
+                'raw_schema': [['preserved', 'original']],
+                'data': frame,
+            }
+        },
+        'semantic': {
+            'request': {
+                'context': copy.deepcopy(frame),
+                'predict': copy.deepcopy(frame),
+                'target': 'value',
+                'task': 'regression',
+            },
+            'results': [{'float': 'nan'}],
+        },
+    }
+    new = copy.deepcopy(old)
+    new['reader']['users']['schema'][2][1] = 'string'
+    new['reader']['users']['schema'][3][1] = 'decimal128(20, 6)'
+    for data in [
+        new['reader']['users']['data'],
+        *[new['semantic']['request'][x] for x in ('context', 'predict')],
+    ]:
+        data['rows'][0][1] = None
+        data['rows'][0][4] = 1710064800987654321
+    untouched = copy.deepcopy((old, new))
+    a, b = copy.deepcopy((old, new))
+    equivalent_raw_observations(a, b, fixture)
+    assert difference(a, b, {'absolute': 0, 'relative': 0}) is None
+    assert (old, new) == untouched
+    assert a['reader']['users']['raw_schema'] == [['preserved', 'original']]
+    assert a['semantic']['results'] == [{'float': 'nan'}]
+
+    for mutation in (
+        'nonnull',
+        'tick',
+        'scale',
+        'precision',
+        'key',
+        'zone',
+        'infinity',
+    ):
+        a, b = copy.deepcopy((old, new))
+        declared = copy.deepcopy(fixture)
+        if mutation == 'nonnull':
+            declared['tables']['users']['rows'][0][1] = 2.0
+        elif mutation == 'tick':
+            b['reader']['users']['data']['rows'][0][4] += 1
+        elif mutation == 'scale':
+            b['reader']['users']['schema'][3][1] = 'decimal128(20, 5)'
+        elif mutation == 'precision':
+            a['reader']['users']['schema'][3][1] = 'decimal128(6, 6)'
+        elif mutation == 'key':
+            b['reader']['users']['data']['rows'][0][0] = 2
+        elif mutation == 'zone':
+            b['reader']['users']['schema'][4][1] = 'timestamp[ns, tz=Not/AZone]'
+        else:
+            a['reader']['users']['data']['rows'][0][1] = {'float': 'inf'}
+        equivalent_raw_observations(a, b, declared)
+        assert difference(a, b, {'absolute': 0, 'relative': 0}) is not None, (
+            mutation
+        )
+
+
+def test_decimal_improvement_requires_exact_old_cast_and_closer_new_rounding():
+    from decimal import Decimal
+
+    import pyarrow as pa
+    from identity import equivalent_legacy_decimal_cast
+
+    exact = Decimal('21.123456')
+    legacy = (
+        pa.array([exact], type=pa.decimal128(20, 6))
+        .cast(pa.float64())[0]
+        .as_py()
+    )
+    nearest = float(exact)
+    assert legacy != nearest
+    fixture = {
+        'primary_keys': {'users': 'id'},
+        'tables': {
+            'users': {
+                'columns': ['id', 'fraction'],
+                'types': {'fraction': 'decimal128(20,6)'},
+                'rows': [[21, str(exact)], [22, None]],
+            }
+        },
+    }
+
+    def payload(value):
+        table = {
+            'columns': ['instance_id', 'id', 'fraction'],
+            'rows': [[0, 21, value], [0, 22, None]],
+        }
+        return [
+            {
+                'schema': {
+                    'related_tables': {
+                        'users': {
+                            'primary_key': ['instance_id', 'id'],
+                            'columns': {'fraction': {'dtype': 'float64'}},
+                        }
+                    }
+                },
+                'context': {'related_tables': {'users': copy.deepcopy(table)}},
+                'predict': {'related_tables': {'users': copy.deepcopy(table)}},
+            }
+        ]
+
+    old, new = payload(legacy), payload(nearest)
+    assert equivalent_legacy_decimal_cast(old, new, fixture)
+    assert old == new
+    for wrong_old, wrong_new in [
+        (nearest, legacy),
+        (legacy, nearest + 1e-12),
+        (legacy - 1e-12, nearest),
+    ]:
+        old, new = payload(wrong_old), payload(wrong_new)
+        before = copy.deepcopy(old)
+        assert not equivalent_legacy_decimal_cast(old, new, fixture)
+        assert old == before
+    old, new = payload(legacy), payload(nearest)
+    new[0]['predict']['related_tables']['users']['rows'][0][1] = 22
+    assert not equivalent_legacy_decimal_cast(old, new, fixture)
+
+
+def test_timezone_display_labels_require_exact_instants_and_keep_raw_metadata():
+    from compare import equivalent_raw_observations
+
+    fixture = {
+        'primary_keys': {'users': 'id'},
+        'tables': {
+            'users': {
+                'columns': ['id', 'time'],
+                'types': {'time': 'timestamp[ns,America/Los_Angeles]'},
+                'rows': [[1, '2024-03-10T03:00:00.987654321-07:00']],
+            }
+        },
+    }
+    old = {
+        'reader': {
+            'users': {
+                'schema': [
+                    ['id', 'int64'],
+                    ['time', 'timestamp[ns, tz=America/Los_Angeles]'],
+                ],
+                'raw_schema': [['time', 'original']],
+                'data': {
+                    'columns': ['id', 'time'],
+                    'rows': [[1, '2024-03-10T03:00:00.987654321-07:00']],
+                },
+            }
+        }
+    }
+    new = copy.deepcopy(old)
+    new['reader']['users']['schema'][1][1] = 'timestamp[ns, tz=Etc/UTC]'
+    new['reader']['users']['data']['rows'][0][1] = 1710064800987654321
+    notes = equivalent_raw_observations(old, new, fixture)
+    assert old == new
+    assert 'timezone display label differs; exact instants preserved' in notes
+    assert old['reader']['users']['raw_schema'] == [['time', 'original']]
+
+
+def test_date_inspection_and_list_null_proofs_do_not_erase_times_or_numbers():
+    from compare import equivalent_raw_observations
+
+    fixture = {
+        'primary_keys': {'users': 'id'},
+        'tables': {
+            'users': {
+                'columns': ['id', 'date', 'sequence'],
+                'types': {'date': 'date32', 'sequence': 'list<float64>'},
+                'rows': [[1, '1969-12-31', [3.0, None]]],
+            }
+        },
+    }
+    frame = {
+        'columns': ['id', 'date', 'sequence'],
+        'rows': [[1, '1969-12-31', [3.0, {'float': 'nan'}]]],
+    }
+    old = {
+        'reader': {
+            'users': {
+                'schema': [
+                    ['id', 'int64'],
+                    ['date', 'date32[day]'],
+                    ['sequence', 'list<item: double>'],
+                ],
+                'data': frame,
+            }
+        },
+        'semantic': {
+            'request': {
+                'context': copy.deepcopy(frame),
+                'predict': copy.deepcopy(frame),
+                'target': 'label',
+                'task': 'regression',
+            }
+        },
+    }
+    new = copy.deepcopy(old)
+    new['reader']['users']['data']['rows'][0][2][1] = None
+    for half in ['context', 'predict']:
+        new['semantic']['request'][half]['rows'][0][1] = '1969-12-31T00:00:00'
+        new['semantic']['request'][half]['rows'][0][2][1] = None
+    a, b = copy.deepcopy((old, new))
+    equivalent_raw_observations(a, b, fixture)
+    assert a == b
+    for mutation in ['hour', 'number', 'unexpected_nan']:
+        a, b = copy.deepcopy((old, new))
+        if mutation == 'hour':
+            b['semantic']['request']['context']['rows'][0][1] = (
+                '1969-12-31T12:00:00'
+            )
+        elif mutation == 'number':
+            b['reader']['users']['data']['rows'][0][2][1] = 7.0
+        else:
+            a['reader']['users']['data']['rows'][0][2][0] = {'float': 'nan'}
+        equivalent_raw_observations(a, b, fixture)
+        assert a != b

@@ -194,3 +194,58 @@ def test_session_proof_requires_actual_handle_and_unchanged_pinned_schema():
     wrong['transport'][1]['payload']['schema'] = schema
     with pytest.raises(ValueError, match='redeclares'):
         session_proof(wrong, case)
+
+
+def test_actual_input_capture_includes_refused_requests_without_normalizing_data():
+    from supplements import wire_inputs
+
+    record = {
+        'status': 'refused',
+        'error': {'stage': 'predict'},
+        'semantic': {
+            'request': {
+                'context': {},
+                'predict': {},
+                'target': 'label',
+                'task': 'regression',
+            },
+            'wire_calls': [
+                {
+                    'operation': 'predict',
+                    'payload': {
+                        'metadata': {'request_id': 'sdm-000000000001'},
+                        'context': {'value': 2.5},
+                    },
+                    'response_id': None,
+                }
+            ],
+        },
+    }
+    original = copy.deepcopy(record)
+    case = {'journey': 'predict'}
+    calls = wire_inputs(record, case)
+    assert calls == [
+        {
+            'operation': 'predict',
+            'payload': {
+                'metadata': {'request_id': 'request:0'},
+                'context': {'value': 2.5},
+            },
+        }
+    ]
+    assert record == original
+    for missing in ('wire_calls',):
+        wrong = copy.deepcopy(record)
+        wrong['semantic'].pop(missing)
+        with pytest.raises(ValueError):
+            wire_inputs(wrong, case)
+    wrong = copy.deepcopy(record)
+    wrong['semantic']['wire_calls'][0]['payload']['metadata']['caller_data'] = (
+        'unproven'
+    )
+    with pytest.raises(ValueError, match='source request'):
+        wire_inputs(wrong, case)
+    wrong = copy.deepcopy(record)
+    wrong['error']['stage'] = 'schema'
+    with pytest.raises(ValueError, match='before'):
+        wire_inputs(wrong, case)

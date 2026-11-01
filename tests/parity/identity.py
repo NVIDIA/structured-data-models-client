@@ -10,6 +10,9 @@ are refused, never guessed. Raw envelopes stay in the observation.
 
 import copy
 import datetime
+import math
+import re
+from decimal import Decimal, InvalidOperation
 
 
 class IdentityError(ValueError):
@@ -17,23 +20,65 @@ class IdentityError(ValueError):
 
 
 def same(value, expected, dtype):
+    # These are source-identity proofs, never payload/result normalization.
+    if value is None and expected == {'float': 'nan'}:
+        return dtype in {'float32', 'float64'}
+    if dtype == 'int64' and isinstance(value, str) and type(expected) is int:
+        return -(2**63) <= expected < 2**63 and value == str(expected)
+    if (
+        dtype == 'float64'
+        and type(value) is float
+        and isinstance(expected, dict)
+        and set(expected) == {'decimal'}
+    ):
+        try:
+            rounded = float(Decimal(expected['decimal']))
+        except (ValueError, TypeError, InvalidOperation, OverflowError):
+            return False
+        return (
+            math.isfinite(value) and math.isfinite(rounded) and value == rounded
+        )
+    if dtype == 'stringlist' and expected is None and value == []:
+        return True
+    if dtype == 'stringlist' and isinstance(expected, str):
+        # Tokenization is not a stable source identity. Other fields or the
+        # original key must still identify exactly one row. The complete token
+        # list remains in the canonical payload for exact old/new comparison.
+        return isinstance(value, list) and all(
+            isinstance(token, str) for token in value
+        )
     if (
         dtype.startswith('timestamp')
         and isinstance(value, str)
         and isinstance(expected, str)
     ):
 
-        def instant(text):
+        def instant(text, source=False):
             parsed = datetime.datetime.fromisoformat(
                 text.replace('Z', '+00:00')
             )
+            fraction = re.search(r'[T ]\d{2}:\d{2}:\d{2}[.,](\d+)', text)
+            remainder = Decimal('0.' + fraction[1]) if fraction else Decimal(0)
+            if source:
+                digits = {
+                    'timestamp[s]': 0,
+                    'timestamp[ms]': 3,
+                    'timestamp[us]': 6,
+                    'timestamp[ns]': 9,
+                }.get(dtype)
+                if digits is not None:
+                    # Compare the source instant at the declared wire precision.
+                    scale = 10**digits
+                    remainder = Decimal(int(remainder * scale)) / scale
+            parsed = parsed.replace(microsecond=0)
             return (
                 parsed.replace(tzinfo=datetime.timezone.utc)
                 if parsed.tzinfo is None
-                else parsed
+                else parsed,
+                remainder,
             )
 
-        return instant(value) == instant(expected)
+        return instant(value) == instant(expected, source=True)
     return (
         type(value) is type(expected)
         and value == expected
@@ -193,3 +238,86 @@ def canonical_scoring_payload(payload, pinned_schema, fixture):
     result = canonical([{**payload, 'schema': pinned_schema}], fixture)[0]
     del result['schema']
     return result
+
+
+def equivalent_legacy_decimal_cast(old_payloads, new_payloads, fixture):
+    """Prove the frozen Arrow decimal cast bug against exact source decimals.
+
+    Only the caller's named DuckDB decimal-feature case uses this policy.
+    Replace proven old rounding on copies; never change results or source rows.
+    """
+    from decimal import localcontext
+
+    source = fixture['tables']['users']
+    if source.get('types', {}).get('fraction') != 'decimal128(20,6)':
+        return False
+    key = fixture['primary_keys']['users']
+    key_at, at = (source['columns'].index(c) for c in (key, 'fraction'))
+    values = {row[key_at]: row[at] for row in source['rows']}
+    if len(values) != len(source['rows']) or len(old_payloads) != len(
+        new_payloads
+    ):
+        return False
+    changes = []
+    with localcontext() as context:
+        context.prec = 80
+        for old, new in zip(old_payloads, new_payloads, strict=True):
+            for payload in (old, new):
+                schema = payload['schema']['related_tables']['users']
+                if (
+                    schema['primary_key'] != ['instance_id', key]
+                    or schema['columns']['fraction']['dtype'] != 'float64'
+                ):
+                    return False
+            for half in ('context', 'predict'):
+                a = old[half]['related_tables']['users']
+                b = new[half]['related_tables']['users']
+                if len(a['rows']) != len(b['rows']):
+                    return False
+                ai, bi = (t['columns'].index('fraction') for t in (a, b))
+                ak, bk = (t['columns'].index(key) for t in (a, b))
+                ax, bx = (t['columns'].index('instance_id') for t in (a, b))
+                for row, other in zip(a['rows'], b['rows'], strict=True):
+                    identity = row[ak]
+                    if (
+                        type(identity) is not int
+                        or type(other[bk]) is not int
+                        or type(row[ax]) is not int
+                        or type(other[bx]) is not int
+                        or identity not in values
+                        or identity != other[bk]
+                        or row[ax] != other[bx]
+                    ):
+                        return False
+                    value = values[identity]
+                    if value is None:
+                        if row[ai] is not None or other[bi] is not None:
+                            return False
+                        continue
+                    if (
+                        type(row[ai]) is not float
+                        or type(other[bi]) is not float
+                    ):
+                        return False
+                    exact = Decimal(value)
+                    coefficient = exact.scaleb(6)
+                    if (
+                        not exact.is_finite()
+                        or coefficient != coefficient.to_integral_value()
+                        or abs(coefficient) >= 10**20
+                    ):
+                        return False
+                    # Frozen PyArrow24 decimal128->double: scale by multiplication.
+                    legacy = float(int(coefficient)) * 1e-6
+                    nearest = float(exact)
+                    if row[ai] != legacy or other[bi] != nearest:
+                        return False
+                    if legacy != nearest:
+                        if abs(Decimal.from_float(nearest) - exact) >= abs(
+                            Decimal.from_float(legacy) - exact
+                        ):
+                            return False
+                        changes.append((row, ai, nearest))
+    for row, at, nearest in changes:
+        row[at] = nearest
+    return bool(changes)

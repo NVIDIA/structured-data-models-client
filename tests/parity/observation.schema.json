@@ -149,6 +149,45 @@
             },
             "holdout_keys": {
               "type": "array"
+            },
+            "wire_calls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operation",
+                  "payload"
+                ],
+                "properties": {
+                  "operation": {
+                    "enum": [
+                      "predict",
+                      "fit",
+                      "score",
+                      "close"
+                    ]
+                  },
+                  "payload": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "response_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "session_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
             }
           },
           "required": [

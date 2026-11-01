@@ -199,6 +199,7 @@ The API mirrors Python's with Java names and plain data:
 | `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
 
 The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks's (`com.databricks:databricks-jdbc`); the JAR ships none.
+Use DuckDB JDBC `2.0.0.0`, the version tested here, to preserve timezone-aware Parquet nanoseconds; `1.5.6.0` truncates them to microseconds.
 What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type, as Python's provider types them through psycopg's registry, every value read in text as psycopg reads it; Databricks's by type, as the Databricks SQL connector gives Python's provider its Arrow.
 DuckDB provider results stream directly into Rust; the reader owns its statement and duplicate cursor until consumption finishes, while the caller connection stays open.
 For a single value larger than 2 GiB, enable DuckDB's `arrow_large_buffer_size` setting before describing the source, as in Python.

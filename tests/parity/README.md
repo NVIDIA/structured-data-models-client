@@ -83,3 +83,14 @@ They retain public result items, metadata and explanations alongside actual HTTP
 Only generated request nonces, response IDs and session handles with proven request metadata, response grouping and actual session correlations become per-call labels for comparison.
 All other metadata and entity IDs remain exact.
 Session scoring uses the existing graph identity proof only with the actual captured fit schema, verified unchanged from the original request.
+
+New scenarios may set `input_mode: raw-reader` to pass public reader tables directly into frame schemas in both languages.
+This bypasses fixture casts, sorting and Java Arrow reconstruction, and uses the read tables for Relational too.
+Targeted provider cases additionally set `schema_input: source` to exercise warehouse materialization; their inspection reads remain unchanged.
+Snapshot verification may inspect sorted copies, but must never replace the model input.
+Existing scenarios retain their prepared-input behavior and historical evidence.
+The raw-reader mode is being validated under [the type parity plan](../../docs/design/rust-core/phase-4/type-parity-plan.md); its presence alone is not passing live evidence.
+
+`expected_by_model` records verified model-specific refusals, independently of candidate-only `expected_by_language` improvements.
+Supported predictions and endpoint-stage refusals both require live endpoint identity.
+Typed fixture declarations describe data before source creation; they never repair reader output.

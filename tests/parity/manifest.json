@@ -1870,6 +1870,986 @@
         "kind": "holdout",
         "prediction_calls": 1
       }
+    },
+    {
+      "id": "types.text-null.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-text-null.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "predict",
+        "code": "PAYLOAD_TOO_LARGE",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.text-null.declared",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-text-null.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "predict",
+        "code": "PAYLOAD_TOO_LARGE",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "semantic_types": {
+        "users.description": "text"
+      },
+      "expected_by_model": {
+        "relational": {
+          "status": "refused",
+          "stage": "predict",
+          "code": "UNSUPPORTED_DTYPE",
+          "rule": null
+        }
+      }
+    },
+    {
+      "id": "types.text.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-text.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "predict",
+        "code": "PAYLOAD_TOO_LARGE",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.null.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-null.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.text-short.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-text-short.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.text-short.declared",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-text-short.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "semantic_types": {
+        "users.description": "text"
+      },
+      "expected_by_model": {
+        "relational": {
+          "status": "refused",
+          "stage": "predict",
+          "code": "UNSUPPORTED_DTYPE",
+          "rule": null
+        }
+      }
+    },
+    {
+      "id": "types.tags.declared",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-tags.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "schema",
+        "code": "UNSUPPORTED_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "semantic_types": {
+        "users.tags": "multicategorical"
+      },
+      "variants": {
+        "parquet": {
+          "source_encoding": "arrow-native-parquet"
+        }
+      }
+    },
+    {
+      "id": "types.sequence.declared",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-sequence.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "refused",
+        "stage": "schema",
+        "code": "UNSUPPORTED_REQUEST",
+        "rule": null
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "semantic_types": {
+        "users.sequence": "sequence"
+      },
+      "variants": {
+        "parquet": {
+          "source_encoding": "arrow-native-parquet"
+        }
+      }
+    },
+    {
+      "id": "types.numeric.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-numeric.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.temporal.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "duckdb",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-temporal.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "variants": {
+        "duckdb": {
+          "fixture": "fixtures/shop-temporal-micro.json"
+        }
+      },
+      "expected_by_model": {
+        "tabular": {
+          "status": "refused",
+          "stage": "predict",
+          "code": "UNSUPPORTED_DTYPE",
+          "rule": null
+        }
+      }
+    },
+    {
+      "id": "reader.raw.regression",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic",
+        "csv",
+        "parquet",
+        "s3-csv",
+        "s3-parquet",
+        "zip"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/shop-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID"
+        }
+      },
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.null.session",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "fit-predict-close",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-null.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "SDMClient.fit",
+          "FittedModel.close"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict",
+          "SdmClient.fit",
+          "FittedModel.close"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.text-short.session",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "fit-predict-close",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-text-short.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict",
+          "SDMClient.fit",
+          "FittedModel.close"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict",
+          "SdmClient.fit",
+          "FittedModel.close"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader"
+    },
+    {
+      "id": "types.null.provider",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "duckdb"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-null.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "schema_input": "source"
+    },
+    {
+      "id": "types.numeric.provider",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "duckdb"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-numeric.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "schema_input": "source"
+    },
+    {
+      "id": "types.temporal.provider",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "duckdb"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-temporal.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "variants": {
+        "duckdb": {
+          "fixture": "fixtures/shop-temporal-micro.json"
+        }
+      },
+      "schema_input": "source"
+    },
+    {
+      "id": "types.date.inferred",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational",
+        "tabular"
+      ],
+      "connectors": [
+        "memory",
+        "parquet"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id",
+      "fixture": "fixtures/shop-date.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "baseline": {
+        "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+        "evidence": null
+      },
+      "differences": [],
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "input_mode": "raw-reader",
+      "expected_by_model": {
+        "tabular": {
+          "status": "refused",
+          "stage": "predict",
+          "code": "UNSUPPORTED_DTYPE",
+          "rule": null
+        }
+      }
     }
   ],
   "input_paths": {

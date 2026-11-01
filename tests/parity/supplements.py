@@ -46,9 +46,13 @@ def observe_transport(url, calls):
                 )
             calls.append(call)
         response = original(session, request, **kwargs)
-        if call is not None and operation in {'predict', 'score'}:
+        if (
+            response.ok
+            and call is not None
+            and operation in {'predict', 'score'}
+        ):
             call['response_id'] = response.json().get('id')
-        elif call is not None and operation == 'fit':
+        elif response.ok and call is not None and operation == 'fit':
             call['session_id'] = response.json().get('session_id')
         return response
 
@@ -181,6 +185,10 @@ def response_groups(semantic, case):
 def request_ids(semantic, case):
     """Bind each generated request nonce to its actual body and source metadata."""
     asked = semantic['request']
+    if isinstance(asked, list) and any(
+        not isinstance(item, dict) for item in asked
+    ):
+        raise ValueError('request metadata lacks a payload object')
     originals = (
         [item.get('metadata', {}) for item in asked]
         if isinstance(asked, list)
@@ -277,3 +285,51 @@ def normalize_response_ids(semantic, case):
             result['metadata']['batch_request_ids'] = [
                 names[value] for value in group
             ]
+
+
+def wire_inputs(record, case):
+    """Validate raw-reader model calls and return detached, nonce-normalized inputs."""
+    import copy
+
+    semantic = record.get('semantic') or {}
+    calls = semantic.get('wire_calls', [])
+    error_stage = (record.get('error') or {}).get('stage')
+    if record.get('status') != 'passed' and error_stage in {
+        'source',
+        'schema',
+        'materialize',
+    }:
+        if calls:
+            raise ValueError('model called before the recorded input refusal')
+        return []
+    fitted = case['journey'] == 'fit-predict-close'
+    expected = ['fit', 'score', 'score', 'close'] if fitted else ['predict']
+    if record.get('status') != 'passed' and fitted:
+        if error_stage != 'fit':
+            raise ValueError('unverified partial fitted-call journey')
+        expected = ['fit']
+    if (
+        not calls
+        or any(not isinstance(c, dict) for c in calls)
+        or [c.get('operation') for c in calls] != expected
+    ):
+        raise ValueError('actual model call sequence is incomplete')
+    if any(
+        not isinstance(c.get('payload'), dict)
+        for c in calls
+        if c['operation'] != 'close'
+    ):
+        raise ValueError('model input payload is not an object')
+    proof_case = {'supplement': {'kind': 'holdout' if fitted else 'outputs'}}
+    observed = copy.deepcopy(semantic)
+    observed['transport'] = observed['wire_calls']
+    generated = request_ids(observed, proof_case)
+    if fitted and record.get('status') == 'passed':
+        session_proof(observed, proof_case)
+    for index, call in enumerate(generated):
+        call['payload']['metadata']['request_id'] = f'request:{index}'
+    # Responses are not input fields. Session IDs have been correlated above.
+    return [
+        {'operation': call['operation'], 'payload': call['payload']}
+        for call in observed['transport']
+    ]

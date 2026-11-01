@@ -26,6 +26,11 @@ def manifest(path=HERE / 'manifest.json'):
     ids = [case['id'] for case in data['scenarios']]
     assert len(ids) == len(set(ids)), 'duplicate case IDs'
     for case in data['scenarios']:
+        assert case.get('input_mode', 'prepared') in {
+            'prepared',
+            'raw-reader',
+        }, 'unknown input preparation mode'
+        assert case.get('schema_input', 'frame') in {'frame', 'source'}
         for field in (
             'task',
             'entry',
@@ -42,8 +47,14 @@ def manifest(path=HERE / 'manifest.json'):
         assert set(case['models']) <= set(data['models'])
         assert set(case['connectors']) <= set(data['connectors'])
         assert case['expected']['status'] in ('supported', 'refused')
-        if case['expected']['status'] == 'refused':
-            assert set(('stage', 'code', 'rule')) <= set(case['expected'])
+        assert set(case.get('expected_by_model', {})) <= set(case['models'])
+        for expected in [
+            case['expected'],
+            *case.get('expected_by_model', {}).values(),
+        ]:
+            assert expected['status'] in ('supported', 'refused')
+            if expected['status'] == 'refused':
+                assert set(('stage', 'code', 'rule')) <= set(expected)
         assert (
             case['tolerance']['absolute'] == 0
             and case['tolerance']['relative'] == 0
@@ -76,6 +87,14 @@ def effective_case(case, connector):
     active = {key: value for key, value in case.items() if key != 'variants'}
     active.update(case.get('variants', {}).get(connector, {}))
     return active
+
+
+def expectation(case, model, language=None):
+    """Model capabilities are explicit; candidate language exceptions stay separate."""
+    expected = case.get('expected_by_model', {}).get(model, case['expected'])
+    if language is not None:
+        expected = case.get('expected_by_language', {}).get(language, expected)
+    return expected
 
 
 def fixture_hash(case, root=HERE):
@@ -242,8 +261,24 @@ def evidence_problem(record, case, phase, live):
                 except (AssertionError, KeyError, TypeError, ValueError):
                     return 'uploaded holdout exclusion is not proven'
 
-    if live and case['expected']['status'] == 'supported':
-        endpoint = record.get('endpoint', {})
+    if live and case.get('input_mode') == 'raw-reader':
+        from supplements import wire_inputs
+
+        try:
+            wire_inputs(record, case)
+        except (ValueError, KeyError, TypeError):
+            return 'actual model input capture is missing or invalid'
+
+    expected = expectation(
+        case,
+        record['model'],
+        record['language'] if phase == 'candidate' else None,
+    )
+    if live and (
+        expected['status'] == 'supported'
+        or expected.get('stage') in {'fit', 'predict', 'close'}
+    ):
+        endpoint = record.get('endpoint') or {}
         if record.get('execution') != 'live' or endpoint.get('kind') != 'live':
             return 'local/stub evidence cannot certify live parity'
         if (

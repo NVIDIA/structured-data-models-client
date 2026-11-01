@@ -67,7 +67,10 @@ public final class ParityRunner {
 
   static Object canonical(Object value) {
     if (value instanceof Map<?, ?> source) {
-      var out = new TreeMap<String, Object>();
+      var out =
+          new TreeMap<String, Object>(
+              (left, right) ->
+                  Arrays.compare(left.codePoints().toArray(), right.codePoints().toArray()));
       source.forEach((k, v) -> out.put(k.toString(), canonical(v)));
       return out;
     }
@@ -77,7 +80,15 @@ public final class ParityRunner {
   }
 
   static String digest(Object value) throws Exception {
-    return hash(Json.write(canonical(value)));
+    // Match Python json.dumps(sort_keys=True, ensure_ascii=True) exactly.
+    String json = new String(Json.write(canonical(value)), StandardCharsets.UTF_8);
+    var ascii = new StringBuilder();
+    for (int at = 0; at < json.length(); at++) {
+      char unit = json.charAt(at);
+      if (unit >= 0x7f) ascii.append(String.format("\\u%04x", (int) unit));
+      else ascii.append(unit);
+    }
+    return hash(ascii.toString().getBytes(StandardCharsets.UTF_8));
   }
 
   static boolean selected(String name, Object value) {
@@ -151,7 +162,10 @@ public final class ParityRunner {
               expectations.add(
                   map(
                       map(effective.get("expected_by_language"))
-                          .getOrDefault("java", effective.get("expected"))));
+                          .getOrDefault(
+                              "java",
+                              map(effective.get("expected_by_model"))
+                                  .getOrDefault(model, effective.get("expected")))));
               System.out.println(
                   "parity "
                       + scenario.get("id")
@@ -271,7 +285,12 @@ public final class ParityRunner {
     try (RootAllocator allocator = new RootAllocator();
         Inputs inputs = new Inputs()) {
       record.put("stage", "source");
-      inputs.open(connector, config, fixture, allocator);
+      var scopedSources = new LinkedHashMap<>(map(config.get("sources")));
+      scopedSources.putAll(
+          map(map(config.get("fixture_sources")).get(text(scenario.get("fixture")))));
+      var scopedConfig = new LinkedHashMap<>(config);
+      scopedConfig.put("sources", scopedSources);
+      inputs.open(connector, scopedConfig, fixture, allocator);
       var readerEvidence = new LinkedHashMap<String, Object>();
       inputs.tables.forEach(
           (name, value) ->
@@ -280,17 +299,18 @@ public final class ParityRunner {
                   Map.of(
                       "schema",
                       value.getSchema().getFields().stream()
-                          .map(field -> List.of(field.getName(), arrowType(field.getType())))
+                          .map(field -> List.of(field.getName(), arrowType(field)))
                           .toList(),
                       "raw_schema",
                       value.getSchema().getFields().stream()
-                          .map(field -> List.of(field.getName(), field.getType().toString()))
+                          .map(field -> List.of(field.getName(), field.toString()))
                           .toList(),
                       "data",
                       frame(value))));
       record.put("reader", readerEvidence);
-      inputs.restoreFixtureTypes(allocator, fixture);
-      verify(inputs.tables, fixture);
+      boolean rawReader = "raw-reader".equals(scenario.get("input_mode"));
+      if (!rawReader) inputs.restoreFixtureTypes(allocator, fixture);
+      verify(inputs.tables, fixture, rawReader);
       record.put("source_snapshot", digest(fixture));
       record.put("stage", "schema");
       Schema schema;
@@ -304,7 +324,10 @@ public final class ParityRunner {
             Schema.fromData(Map.of("users", inputs.tables.get("users")))
                 .withPrimaryKey("users", userKey);
       else {
-        if (inputs.source == null || fullSchema) schema = Schema.fromData(inputs.tables);
+        if (inputs.source == null
+            || fullSchema
+            || (rawReader && !"source".equals(scenario.get("schema_input"))))
+          schema = Schema.fromData(inputs.tables);
         else {
           var options = FromSourceOptions.builder();
           inputs.names.forEach(options::table);
@@ -325,6 +348,11 @@ public final class ParityRunner {
         schema = schema.withRelationships(links);
       }
       schema = schema.withStype("users", targetColumn, "numerical");
+      if (scenario.containsKey("semantic_types"))
+        for (var declared : map(scenario.get("semantic_types")).entrySet()) {
+          String[] name = declared.getKey().split("\\.", 2);
+          schema = schema.withStype(name[0], name[1], text(declared.getValue()));
+        }
       var semantic = new LinkedHashMap<String, Object>();
       var lifecycle = new ArrayList<String>();
       var results = new ArrayList<Object>();
@@ -423,6 +451,11 @@ public final class ParityRunner {
       if (supplemental) {
         semantic.put("result_details", details);
         semantic.put("transport", transport);
+        route.capture(transport);
+      } else if (rawReader) {
+        // Retain actual outgoing bodies even when the endpoint refuses prediction.
+        // Successful fit responses retain the handle needed to prove session ownership.
+        semantic.put("wire_calls", transport);
         route.capture(transport);
       }
       String before = digest(semantic.get("request"));
@@ -584,6 +617,23 @@ public final class ParityRunner {
     throw new Incomplete("unsupported public endpoint transport");
   }
 
+  static String arrowType(Field field) {
+    ArrowType type = field.getType();
+    if (type instanceof ArrowType.List
+        || type instanceof ArrowType.LargeList
+        || type instanceof ArrowType.FixedSizeList) {
+      if (field.getChildren().size() != 1)
+        throw new IllegalArgumentException("list evidence requires one child field");
+      Field child = field.getChildren().get(0);
+      String nested =
+          "item: " + arrowType(child) + (child.isNullable() ? "" : " not null");
+      if (type instanceof ArrowType.FixedSizeList fixed)
+        return "fixed_size_list<" + nested + ">[" + fixed.getListSize() + "]";
+      return (type instanceof ArrowType.LargeList ? "large_list<" : "list<") + nested + ">";
+    }
+    return arrowType(type);
+  }
+
   static String arrowType(ArrowType type) {
     if (type instanceof ArrowType.Int value)
       return (value.getIsSigned() ? "int" : "uint") + value.getBitWidth();
@@ -628,6 +678,16 @@ public final class ParityRunner {
   }
 
   static Object scalar(Object value) {
+    if (value instanceof java.math.BigDecimal decimal) {
+      try {
+        return decimal.toBigIntegerExact();
+      } catch (ArithmeticException fractional) {
+        double converted = decimal.doubleValue();
+        if (Double.isFinite(converted)
+            && new java.math.BigDecimal(converted).compareTo(decimal) == 0) return converted;
+        return Map.of("decimal", decimal.toPlainString());
+      }
+    }
     if (value == null || value instanceof Boolean || value instanceof Number) {
       if (value instanceof Double d && !Double.isFinite(d))
         return Map.of("float", d.isNaN() ? "nan" : d > 0 ? "inf" : "-inf");
@@ -652,7 +712,13 @@ public final class ParityRunner {
       for (int col = 0; col < columns.size(); col++) {
         var reader = table.getReader(col);
         reader.setPosition(row);
-        values.add(scalar(reader.readObject()));
+        Object value = reader.readObject();
+        var type = table.getSchema().getFields().get(col).getType();
+        if (value != null
+            && type instanceof ArrowType.Date date
+            && date.getUnit() == org.apache.arrow.vector.types.DateUnit.DAY)
+          value = java.time.LocalDate.ofEpochDay(((Number) value).longValue()).toString();
+        values.add(scalar(value));
       }
       rows.add(values);
     }
@@ -704,6 +770,41 @@ public final class ParityRunner {
         .orElse(name);
   }
 
+  static Field fixtureField(String name, String type) {
+    ArrowType arrow;
+    if (type.startsWith("decimal128(")) {
+      String[] parts = type.substring(11, type.length() - 1).split(",");
+      arrow = new ArrowType.Decimal(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), 128);
+    } else if (type.startsWith("timestamp[")) {
+      String[] parts = type.substring(10, type.length() - 1).split(",", 2);
+      var unit =
+          switch (parts[0]) {
+            case "s" -> org.apache.arrow.vector.types.TimeUnit.SECOND;
+            case "ms" -> org.apache.arrow.vector.types.TimeUnit.MILLISECOND;
+            case "us" -> org.apache.arrow.vector.types.TimeUnit.MICROSECOND;
+            case "ns" -> org.apache.arrow.vector.types.TimeUnit.NANOSECOND;
+            default -> throw new IllegalArgumentException("unknown fixture time unit");
+          };
+      arrow = new ArrowType.Timestamp(unit, parts.length == 2 ? parts[1] : null);
+    } else {
+      arrow =
+          switch (type) {
+            case "date32" -> new ArrowType.Date(org.apache.arrow.vector.types.DateUnit.DAY);
+            case "int16" -> new ArrowType.Int(16, true);
+            case "int64" -> new ArrowType.Int(64, true);
+            case "float32" ->
+                new ArrowType.FloatingPoint(
+                    org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE);
+            case "float64" ->
+                new ArrowType.FloatingPoint(
+                    org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE);
+            case "string" -> ArrowType.Utf8.INSTANCE;
+            default -> throw new IllegalArgumentException("unknown fixture type: " + type);
+          };
+    }
+    return new Field(name, FieldType.nullable(arrow), null);
+  }
+
   static Table table(Map<String, Object> fixture, RootAllocator allocator) {
     List<Object> columns = list(fixture.get("columns")), rows = list(fixture.get("rows"));
     var vectors = new ArrayList<FieldVector>();
@@ -716,24 +817,95 @@ public final class ParityRunner {
             first = list(row).get(col);
             break;
           }
+        String declared = text(map(fixture.get("types")).get(name));
+        if (declared != null && declared.startsWith("list<")) {
+          ArrowType childType =
+              switch (declared) {
+                case "list<string>" -> ArrowType.Utf8.INSTANCE;
+                case "list<float64>" ->
+                    new ArrowType.FloatingPoint(
+                        org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE);
+                case "list<int64>" -> new ArrowType.Int(64, true);
+                default ->
+                    throw new IllegalArgumentException(
+                        "unsupported fixture list type: " + declared);
+              };
+          var field =
+              new Field(
+                  name,
+                  FieldType.nullable(ArrowType.List.INSTANCE),
+                  List.of(new Field("item", FieldType.nullable(childType), null)));
+          var vector = (org.apache.arrow.vector.complex.ListVector) field.createVector(allocator);
+          vectors.add(vector);
+          vector.allocateNew();
+          FieldVector child = vector.getDataVector();
+          int count = 0;
+          for (int at = 0; at < rows.size(); at++) {
+            Object value = list(rows.get(at)).get(col);
+            if (value == null) {
+              vector.setNull(at);
+              continue;
+            }
+            var elements = list(value);
+            int offset = vector.startNewValue(at);
+            for (int element = 0; element < elements.size(); element++) {
+              Object item = elements.get(element);
+              int position = offset + element;
+              if (item == null) child.setNull(position);
+              else if (child instanceof VarCharVector v)
+                v.setSafe(position, text(item).getBytes(StandardCharsets.UTF_8));
+              else if (child instanceof Float8Vector v)
+                v.setSafe(position, ((Number) item).doubleValue());
+              else ((BigIntVector) child).setSafe(position, ((Number) item).longValue());
+            }
+            vector.endValue(at, elements.size());
+            count = offset + elements.size();
+          }
+          child.setValueCount(count);
+          vector.setValueCount(rows.size());
+          continue;
+        }
         FieldVector vector =
-            name.equalsIgnoreCase("event_time")
-                ? new TimeStampMicroVector(name, allocator)
-                : first instanceof Boolean
-                    ? new BitVector(name, allocator)
-                    : first instanceof Float
-                            || first instanceof Double
-                            || first instanceof java.math.BigDecimal
-                        ? new Float8Vector(name, allocator)
-                        : first instanceof Number
-                            ? new BigIntVector(name, allocator)
-                            : new VarCharVector(name, allocator);
+            declared != null
+                ? fixtureField(name, declared).createVector(allocator)
+                : name.equalsIgnoreCase("event_time")
+                    ? new TimeStampMicroVector(name, allocator)
+                    : first instanceof Boolean
+                        ? new BitVector(name, allocator)
+                        : first instanceof Float
+                                || first instanceof Double
+                                || first instanceof java.math.BigDecimal
+                            ? new Float8Vector(name, allocator)
+                            : first instanceof Number
+                                ? new BigIntVector(name, allocator)
+                                : new VarCharVector(name, allocator);
         vectors.add(vector);
         vector.allocateNew();
         for (int at = 0; at < rows.size(); at++) {
           Object value = list(rows.get(at)).get(col);
           if (value == null) continue;
-          if (vector instanceof TimeStampMicroVector v)
+          if (declared != null && vector instanceof TimeStampVector v) {
+            Instant instant = OffsetDateTime.parse(text(value)).toInstant();
+            var unit = ((ArrowType.Timestamp) vector.getField().getType()).getUnit();
+            long factor =
+                switch (unit) {
+                  case SECOND -> 1L;
+                  case MILLISECOND -> 1000L;
+                  case MICROSECOND -> 1000000L;
+                  case NANOSECOND -> 1000000000L;
+                };
+            v.setSafe(
+                at,
+                Math.addExact(
+                    Math.multiplyExact(instant.getEpochSecond(), factor),
+                    instant.getNano() / (1000000000L / factor)));
+          } else if (vector instanceof DateDayVector v)
+            v.setSafe(at, Math.toIntExact(java.time.LocalDate.parse(text(value)).toEpochDay()));
+          else if (vector instanceof DecimalVector v)
+            v.setSafe(at, new java.math.BigDecimal(text(value)));
+          else if (vector instanceof SmallIntVector v) v.setSafe(at, ((Number) value).intValue());
+          else if (vector instanceof Float4Vector v) v.setSafe(at, ((Number) value).floatValue());
+          else if (vector instanceof TimeStampMicroVector v)
             v.setSafe(at, fixtureTime(value).toInstant(ZoneOffset.UTC).toEpochMilli() * 1000);
           else if (vector instanceof BitVector v) v.setSafe(at, (Boolean) value ? 1 : 0);
           else if (vector instanceof Float8Vector v) v.setSafe(at, ((Number) value).doubleValue());
@@ -748,25 +920,54 @@ public final class ParityRunner {
     }
   }
 
-  static void verify(Map<String, Table> actual, Map<String, Object> fixture) throws Exception {
+  static void verify(Map<String, Table> actual, Map<String, Object> fixture, boolean rawReader)
+      throws Exception {
     for (var entry : map(fixture.get("tables")).entrySet()) {
       String name = entry.getKey();
       if (!actual.containsKey(name)) throw new Incomplete("fixture table missing: " + name);
       Map<String, Object> expected = map(entry.getValue()), seen = frame(actual.get(name));
-      var normalized = new LinkedHashMap<>(expected);
-      var rows = new ArrayList<Object>();
-      int time =
-          list(expected.get("columns"))
-              .indexOf(fixtureColumn(fixture, entry.getKey(), "event_time"));
-      for (Object row : list(expected.get("rows"))) {
-        var values = new ArrayList<>(list(row));
-        if (time >= 0) values.set(time, scalar(fixtureTime(values.get(time))));
-        rows.add(values);
+      Map<String, Object> normalized;
+      // Construct an independent expected fixture, never replace reader output.
+      try (RootAllocator allocator = new RootAllocator();
+          Table reference = table(expected, allocator)) {
+        normalized = frame(reference);
       }
-      normalized.put("rows", rows);
       int key = list(expected.get("columns")).indexOf(map(fixture.get("primary_keys")).get(name));
       var ordered = new ArrayList<>(list(seen.get("rows")));
       ordered.sort(Comparator.comparingLong(row -> ((Number) list(row).get(key)).longValue()));
+      if (rawReader) {
+        // Only detached verification observations are adjusted. The reader's
+        // Arrow table and captured reader evidence remain unchanged.
+        var wantedRows = list(normalized.get("rows"));
+        var columns = list(seen.get("columns"));
+        for (int row = 0; row < Math.min(ordered.size(), wantedRows.size()); row++) {
+          var values = new ArrayList<>(list(ordered.get(row)));
+          var wanted = list(wantedRows.get(row));
+          for (int col = 0; col < columns.size(); col++) {
+            Object value = values.get(col), target = wanted.get(col);
+            String column = text(columns.get(col));
+            if (column.equalsIgnoreCase("class")
+                && value instanceof Number
+                && text(value).equals(target)) values.set(col, target);
+            else if (column.equalsIgnoreCase("flag")
+                && value instanceof Number number
+                && target instanceof Boolean flag
+                && new java.math.BigDecimal(number.toString())
+                        .compareTo(java.math.BigDecimal.valueOf(flag ? 1 : 0))
+                    == 0) values.set(col, target);
+            else if (column.equalsIgnoreCase("event_time")
+                && value instanceof String date
+                && target instanceof String timestamp) {
+              var parsed =
+                  date.length() == 10
+                      ? LocalDate.parse(date).atStartOfDay()
+                      : LocalDateTime.parse(date);
+              if (parsed.equals(LocalDateTime.parse(timestamp))) values.set(col, target);
+            }
+          }
+          ordered.set(row, values);
+        }
+      }
       if (!digest(normalized)
           .equals(digest(Map.of("columns", seen.get("columns"), "rows", ordered))))
         throw new Incomplete("source values differ from shared fixture: " + name);
@@ -798,14 +999,18 @@ public final class ParityRunner {
         return;
       }
       if (Set.of("csv", "parquet", "zip", "s3-csv", "s3-parquet").contains(connector)) {
-        if (connector.startsWith("s3-")) {
+        if (connector.startsWith("s3-") || !map(settings.get("paths")).isEmpty()) {
           var paths = map(settings.get("paths"));
           if (paths.isEmpty()) throw new Incomplete("missing configured S3 fixture paths");
           for (var entry : paths.entrySet())
             tables.put(
                 entry.getKey(),
                 Readers.read(
-                    URI.create(text(entry.getValue())), ReadOptions.builder().build(), allocator));
+                    URI.create(text(entry.getValue())).getScheme() == null
+                        ? Path.of(text(entry.getValue())).toUri()
+                        : URI.create(text(entry.getValue())),
+                    ReadOptions.builder().build(),
+                    allocator));
         } else {
           if (!connector.equals("parquet")) {
             // pandas.to_csv renders this shared all-midnight fixture as date-only strings.
@@ -979,7 +1184,15 @@ public final class ParityRunner {
         var fields = new ArrayList<String>();
         for (int col = 0; col < columns.size(); col++) {
           String name = text(columns.get(col));
-          Object first = list(rows.get(0)).get(col);
+          Object first = null;
+          for (Object row : rows) {
+            Object candidate = list(row).get(col);
+            if (candidate != null) {
+              first = candidate;
+              break;
+            }
+          }
+          String declared = text(map(data.get("types")).get(name));
           String type =
               name.equalsIgnoreCase("event_time")
                   ? (sqlite ? "TEXT" : "TIMESTAMP")
@@ -990,6 +1203,29 @@ public final class ParityRunner {
                               || first instanceof java.math.BigDecimal
                           ? "DOUBLE"
                           : first instanceof Number ? "BIGINT" : "VARCHAR";
+          if (declared != null) {
+            if (sqlite) throw new IllegalArgumentException("typed fixture requires DuckDB");
+            if (declared.startsWith("decimal128(")) type = "DECIMAL" + declared.substring(10);
+            else if (declared.startsWith("timestamp["))
+              type =
+                  declared.contains(",")
+                      ? "TIMESTAMPTZ"
+                      : declared.startsWith("timestamp[ns") ? "TIMESTAMP_NS" : "TIMESTAMP";
+            else
+              type =
+                  switch (declared) {
+                    case "date32" -> "DATE";
+                    case "string" -> "VARCHAR";
+                    case "int16" -> "SMALLINT";
+                    case "int64" -> "BIGINT";
+                    case "float32" -> "FLOAT";
+                    case "float64" -> "DOUBLE";
+                    case "list<string>" -> "VARCHAR[]";
+                    case "list<float64>" -> "DOUBLE[]";
+                    case "list<int64>" -> "BIGINT[]";
+                    default -> throw new IllegalArgumentException("unknown fixture SQL type");
+                  };
+          }
           fields.add("\"" + name + "\" " + type);
         }
         try (Statement sql = connection.createStatement()) {
@@ -1004,9 +1240,25 @@ public final class ParityRunner {
                     + ")")) {
           for (Object row : rows) {
             var values = list(row);
-            for (int col = 0; col < values.size(); col++)
-              insert.setObject(col + 1, values.get(col));
-            insert.executeUpdate();
+            var arrays = new ArrayList<java.sql.Array>();
+            try {
+              for (int col = 0; col < values.size(); col++) {
+                Object value = values.get(col);
+                if (value instanceof List<?> elements) {
+                  String declared = text(map(data.get("types")).get(text(columns.get(col))));
+                  String base =
+                      declared.equals("list<string>")
+                          ? "VARCHAR"
+                          : declared.equals("list<float64>") ? "DOUBLE" : "BIGINT";
+                  var array = connection.createArrayOf(base, elements.toArray());
+                  arrays.add(array);
+                  insert.setArray(col + 1, array);
+                } else insert.setObject(col + 1, value);
+              }
+              insert.executeUpdate();
+            } finally {
+              for (var array : arrays) array.free();
+            }
           }
         }
       }

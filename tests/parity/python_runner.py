@@ -26,6 +26,7 @@ from contract import (
     HERE,
     digest,
     effective_case,
+    expectation,
     fixture_hash,
     manifest,
 )
@@ -36,6 +37,10 @@ class Incomplete(Exception):
 
 
 def scalar(value):
+    import pandas as pd
+
+    if value is pd.NA or value is pd.NaT:
+        return None
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, Decimal):
@@ -52,6 +57,8 @@ def scalar(value):
         return {str(k): scalar(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [scalar(v) for v in value]
+    if hasattr(value, 'tolist') and getattr(value, 'ndim', 0) > 0:
+        return scalar(value.tolist())
     if hasattr(value, 'item'):
         return scalar(value.item())
     raise TypeError(f'unsupported observation scalar: {type(value).__name__}')
@@ -61,6 +68,18 @@ def reader_schema(data):
     import pyarrow as pa
 
     def logical(dtype):
+        if (
+            pa.types.is_list(dtype)
+            or pa.types.is_large_list(dtype)
+            or pa.types.is_fixed_size_list(dtype)
+        ):
+            child = logical(dtype.value_type) + (
+                '' if dtype.value_field.nullable else ' not null'
+            )
+            if pa.types.is_fixed_size_list(dtype):
+                return f'fixed_size_list<item: {child}>[{dtype.list_size}]'
+            kind = 'large_list' if pa.types.is_large_list(dtype) else 'list'
+            return f'{kind}<item: {child}>'
         if pa.types.is_large_string(dtype):
             return 'string'
         if pa.types.is_large_binary(dtype):
@@ -161,6 +180,42 @@ def tables_of(fixture):
         name: pd.DataFrame(table['rows'], columns=table['columns'])
         for name, table in fixture['tables'].items()
     }
+    # Explicit source types are applied only while constructing the fixture,
+    # never to values returned by a public reader.
+    import pyarrow as pa
+
+    for name, table in fixture['tables'].items():
+        for column, spec in table.get('types', {}).items():
+            values = [
+                row[table['columns'].index(column)] for row in table['rows']
+            ]
+            if spec.startswith('list<'):
+                dtype = pa.list_(pa.type_for_alias(spec[5:-1]))
+            elif spec.startswith('decimal128('):
+                precision, scale = map(int, spec[11:-1].split(','))
+                dtype = pa.decimal128(precision, scale)
+                values = [
+                    None if v is None else Decimal(str(v)) for v in values
+                ]
+            elif spec.startswith('timestamp['):
+                parts = spec[10:-1].split(',', 1)
+                dtype = pa.timestamp(
+                    parts[0], tz=parts[1] if len(parts) == 2 else None
+                )
+                values = [
+                    None if v is None else pd.Timestamp(v) for v in values
+                ]
+            elif spec == 'date32':
+                dtype = pa.date32()
+                values = [
+                    datetime.date.fromisoformat(v) if v is not None else None
+                    for v in values
+                ]
+            else:
+                dtype = pa.type_for_alias(spec)
+            tables[name][column] = pd.Series(
+                pd.arrays.ArrowExtensionArray(pa.array(values, type=dtype))
+            )
     time_column = fixture['tables']['events']['columns'][3]
     tables['events'][time_column] = pd.to_datetime(
         tables['events'][time_column]
@@ -179,7 +234,7 @@ def source_tables(stack, connector, config, fixture):
         from sdm_connectors import read
 
         settings = config.get('sources', {}).get(connector, {})
-        if connector.startswith('s3-'):
+        if connector.startswith('s3-') or settings.get('paths'):
             paths = settings.get('paths')
             if not paths:
                 raise Incomplete('missing configured S3 fixture paths')
@@ -198,7 +253,22 @@ def source_tables(stack, connector, config, fixture):
                     )
                 )
                 if connector == 'parquet':
-                    table.to_parquet(path, index=False)
+                    import pyarrow as pa
+                    import pyarrow.parquet as pq
+
+                    # Provision a language-neutral file before the public read.
+                    # Pandas list-extension metadata is not portable to its own
+                    # numpy-nullable reader; the Arrow schema retains the type.
+                    if any(
+                        spec.startswith('list<')
+                        for spec in fixture['tables'][name]
+                        .get('types', {})
+                        .values()
+                    ):
+                        data = pa.Table.from_pandas(table, preserve_index=False)
+                        pq.write_table(data.replace_schema_metadata(None), path)
+                    else:
+                        table.to_parquet(path, index=False)
                 else:
                     table.to_csv(path, index=False)
                 tables[name] = read(path)
@@ -286,7 +356,22 @@ def source_tables(stack, connector, config, fixture):
     return source, tables, connection
 
 
-def check_snapshot(tables, fixture):
+def fixture_nulls(value, declared):
+    """Canonicalize only fixture-declared missing slots in detached evidence."""
+    if declared is None and (value is None or value == {'float': 'nan'}):
+        return None
+    if (
+        isinstance(declared, list)
+        and isinstance(value, list)
+        and len(value) == len(declared)
+    ):
+        return [
+            fixture_nulls(v, d) for v, d in zip(value, declared, strict=True)
+        ]
+    return value
+
+
+def check_snapshot(tables, fixture, *, raw_reader=False):
     # Independent source reads must agree with the fixture, including row
     # order normalized by the explicit primary key, before claiming its hash.
     for name, expected in tables_of(fixture).items():
@@ -295,7 +380,51 @@ def check_snapshot(tables, fixture):
         key = fixture['primary_keys'][name]
         actual = tables[name].sort_values(key).reset_index(drop=True)
         wanted = expected.sort_values(key).reset_index(drop=True)
-        if frame(actual) != frame(wanted):
+        observed, reference = frame(actual), frame(wanted)
+        if raw_reader and observed['columns'] == reference['columns']:
+            # Source identity proof only: these detached observations are not
+            # passed to the schema or model, and raw reader evidence is retained.
+            import pandas as pd
+
+            source = fixture['tables'][name]
+            key_at = source['columns'].index(key)
+            declared_rows = {r[key_at]: r for r in source['rows']}
+            for row, expected_row in zip(
+                observed['rows'], reference['rows'], strict=True
+            ):
+                declared = declared_rows[expected_row[key_at]]
+                for at in range(len(row)):
+                    row[at] = fixture_nulls(row[at], declared[at])
+                    expected_row[at] = fixture_nulls(
+                        expected_row[at], declared[at]
+                    )
+                for at, (value, expected) in enumerate(
+                    zip(row, expected_row, strict=True)
+                ):
+                    column = observed['columns'][at]
+                    if (
+                        column.lower() == 'class'
+                        and isinstance(value, int)
+                        and not isinstance(value, bool)
+                    ):
+                        if str(value) == expected:
+                            row[at] = expected
+                    elif (
+                        column.lower() == 'flag'
+                        and type(value) is int
+                        and value in (0, 1)
+                    ):
+                        if type(expected) is bool and bool(value) == expected:
+                            row[at] = expected
+                    elif (
+                        column.lower() == 'event_time'
+                        or source.get('types', {})
+                        .get(column, '')
+                        .startswith('timestamp[')
+                    ) and isinstance(value, str):
+                        if pd.Timestamp(value) == pd.Timestamp(expected):
+                            row[at] = expected
+        if observed != reference:
             raise Incomplete(
                 'source values differ from shared fixture: ' + name
             )
@@ -334,7 +463,14 @@ def journey(case, connector, model, config, mode, record):
     from sdm_connectors import quote_ident, read_table
 
     fixture = json.loads((HERE / case['fixture']).read_text())
-    user_key, target, category, flag = fixture['tables']['users']['columns']
+    config = {
+        **config,
+        'sources': {
+            **config.get('sources', {}),
+            **config.get('fixture_sources', {}).get(case['fixture'], {}),
+        },
+    }
+    user_key, target, category, flag = fixture['tables']['users']['columns'][:4]
     time_column = fixture['tables']['events']['columns'][3]
     chosen = KumoRelational() if model == 'relational' else KumoTabular()
     with contextlib.ExitStack() as stack:
@@ -390,21 +526,27 @@ def journey(case, connector, model, config, mode, record):
             }
             for name, table in tables.items()
         }
-        if not tables['users'][flag].isin([False, True, 0, 1]).all():
-            raise Incomplete('fixture flag has values other than boolean/0/1')
-        tables['users'][category] = tables['users'][category].astype(str)
-        tables['users'][flag] = tables['users'][flag].astype(bool)
-        if time_column in tables.get('events', {}):
-            tables['events'][time_column] = __import__('pandas').to_datetime(
-                tables['events'][time_column]
-            )
-        check_snapshot(tables, fixture)
-        tables = {
-            name: table.sort_values(fixture['primary_keys'][name]).reset_index(
-                drop=True
-            )
-            for name, table in tables.items()
-        }
+        if case.get('input_mode') != 'raw-reader':
+            if not tables['users'][flag].isin([False, True, 0, 1]).all():
+                raise Incomplete(
+                    'fixture flag has values other than boolean/0/1'
+                )
+            tables['users'][category] = tables['users'][category].astype(str)
+            tables['users'][flag] = tables['users'][flag].astype(bool)
+            if time_column in tables.get('events', {}):
+                tables['events'][time_column] = __import__(
+                    'pandas'
+                ).to_datetime(tables['events'][time_column])
+            check_snapshot(tables, fixture)
+            tables = {
+                name: table.sort_values(
+                    fixture['primary_keys'][name]
+                ).reset_index(drop=True)
+                for name, table in tables.items()
+            }
+        else:
+            # Verification reads values but must not replace the reader's tables.
+            check_snapshot(tables, fixture, raw_reader=True)
         record['source_snapshot'] = digest(fixture)
         record['stage'] = 'schema'
         keys = fixture['primary_keys']
@@ -412,7 +554,14 @@ def journey(case, connector, model, config, mode, record):
             schema = Schema.from_data(
                 {'users': tables['users']}, primary_keys={'users': user_key}
             )
-        elif source is None or model == 'tabular':
+        elif (
+            source is None
+            or model == 'tabular'
+            or (
+                case.get('input_mode') == 'raw-reader'
+                and case.get('schema_input') != 'source'
+            )
+        ):
             schema = Schema.from_data(
                 tables, primary_keys=keys, time_columns={'events': time_column}
             )
@@ -424,6 +573,9 @@ def journey(case, connector, model, config, mode, record):
                 time_columns={'events': time_column},
             )
         schema['users'][target].stype = 'numerical'
+        for qualified, stype in case.get('semantic_types', {}).items():
+            table_name, column = qualified.split('.', 1)
+            schema[table_name][column].stype = stype
         # These links are explicit fixture facts, independent of catalog FK
         # enforcement and name-guessing differences across connectors.
         if model == 'relational' or case['entry'] == 'pql-relational-schema':
@@ -526,6 +678,16 @@ def journey(case, connector, model, config, mode, record):
                 )
             )
 
+        if case.get('input_mode') == 'raw-reader' and not supplemental:
+            from supplements import observe_transport
+
+            semantic['wire_calls'] = []
+            stack.enter_context(
+                observe_transport(
+                    endpoint['client']['url'], semantic['wire_calls']
+                )
+            )
+
         def record_result(answer):
             semantic['results'].append(frame(answer.to_pandas()))
             if supplemental:
@@ -622,9 +784,11 @@ def run(case, connector, model, config, phase, mode, commit, provenance=None):
 
 
 def expected_outcome(case, record):
-    expected = case['expected']
-    if record['phase'] == 'candidate':
-        expected = case.get('expected_by_language', {}).get('python', expected)
+    expected = expectation(
+        case,
+        record['model'],
+        'python' if record['phase'] == 'candidate' else None,
+    )
     if expected['status'] == 'supported':
         return record['status'] == 'passed'
     return record['status'] == expected.get('outcome', 'refused') and (
