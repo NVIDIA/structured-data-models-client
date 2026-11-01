@@ -8,6 +8,10 @@
 This document is the persistent goal’s implementation and acceptance reference.
 The parity checks are permanent product-test infrastructure, retained after the merge into `main`.
 
+**Current validation:** [the generated matrix](parity-matrix.md) records 492 passing comparisons: 269 Python and 223 Java.
+The remaining 44 S3 cells need refreshed AWS access; 46 Java Snowflake cells are explicitly deferred.
+All implementation and reviewed test fixes are integrated; operational CI still needs the dedicated credentials and runner described in [CI setup](parity-ci.md).
+
 ## Acceptance: what “done” means
 
 Use frozen Python `rust-core-reference` (`43e55f4f5`) as the common baseline for **both languages**.
@@ -70,7 +74,8 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
   Python passed 272 API checks with no skips and 144 focused result/direct/session tests; Java passed 208 public API tests with 15 explicit optional/provider skips.
   Final live comparisons are running against 291 frozen Python baseline cases, with 245 applicable Java cases.
   All 29 memory comparisons pass in both languages, including explicit outputs, batching and actual fitted-session holdout payloads and session handles.
-  Python's first 200 completed cells compare successfully; the remaining 91 are explicitly unverified, including 22 awaiting S3 access.
+  All non-S3 cells compare successfully: 269 Python and 223 Java.
+  Java CSV/ZIP fixtures now match the frozen client's timestamp text, guarded against truncating non-midnight values; only the affected 22 journeys were rerun.
 - Frozen Python and the final `7f7c19f95` Python candidate both passed the actual-model >2 GiB omitted-binary journey.
   Java also passed the same shop task with a >2 GiB binary value and eight finite real-model predictions; the earlier toy task's model refusal is preserved separately.
 - The protected live workflow now requires sequential actual-model large-value tests for all three clients, with exactly one passed test each and no skips.
@@ -79,7 +84,8 @@ Keep warehouse sampling SQL unchanged unless a reproduced correctness gap requir
 **Current access blocker:** the AWS `kumo` login expired during final validation; its refresh is requested.
 S3 cells remain pending while other connectors continue, and completed evidence is retained.
 
-**Still required:** finish the remote and S3 comparisons on final artifacts and publish the final evidence matrix.
+**Still required:** run the 22 S3 cases per language after AWS login is refreshed and complete dedicated CI access setup.
+The generated matrix deliberately keeps those S3 cells incomplete.
 Dedicated CI access is also pending; [the scheduled workflow is not yet operational](parity-ci.md).
 
 Access preflight verified Databricks SQL, Lakebase, Snowflake, an existing S3 fixture and readiness of the three model endpoints.
