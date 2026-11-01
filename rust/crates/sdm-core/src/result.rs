@@ -326,6 +326,49 @@ fn written(answer: Answer) -> Answer {
         Answer::Written(v) => v,
     })
 }
+pub(crate) fn items(
+    asker: &Asker,
+    request: sdm_contract::result::ReadResultItems,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    let input: ResultPart = take_json(&mut attached, request.input)?;
+    let Some(Attachment::Arrow(data)) = attached.remove(&request.table) else {
+        return Err(internal("item projection lacks normalized Arrow result"));
+    };
+    let empty_ranking = data.schema.field_with_name("candidates").is_ok();
+    let (mut part, positions) = decode(&input, &data.schema, &data.batches)?;
+    let rows = std::mem::take(&mut part.rows);
+    let mut groups: Vec<(bool, Vec<Row>, CandidatePositions)> = Vec::new();
+    for (row, positions) in rows.into_iter().zip(positions) {
+        let ranked = positions.is_some();
+        if groups.last().is_none_or(|group| group.0 != ranked) {
+            groups.push((ranked, Vec::new(), Vec::new()));
+        }
+        let group = groups.last_mut().unwrap();
+        group.1.push(row);
+        group.2.push(positions);
+    }
+    if groups.is_empty() {
+        groups.push((empty_ranking, Vec::new(), Vec::new()));
+    }
+    let mut segments = Vec::new();
+    for (ranking, rows, positions) in groups {
+        part.rows = rows;
+        let projected = sdm_request::items::project(&part, &positions, ranking, &input.outputs)?;
+        let table = asker.attach(Attachment::Arrow(crate::run::ArrowData::new(
+            projected.table.schema(),
+            vec![projected.table],
+        )))?;
+        segments.push(sdm_contract::result::ResultItemSegment {
+            table,
+            fields: projected.fields,
+        });
+    }
+    Ok(OperationResult::ResultItems(
+        sdm_contract::result::ResultItems { segments },
+    ))
+}
+
 pub(crate) fn merge(
     asker: &Asker,
     request: MergeResults,

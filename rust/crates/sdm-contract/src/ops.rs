@@ -42,6 +42,7 @@ pub enum Operation {
     MaterializeFrames(crate::frames::MaterializeFrames),
     ValidateQuery(ValidateQuery),
     TabularArrow(crate::tabular_arrow::ArrowTabular),
+    ReadResultItems(crate::result::ReadResultItems),
     ReadRequestSplit(crate::split::ReadRequestSplit),
     MergeResults(crate::result::MergeResults),
     PlanResultMerge(crate::direct::DirectInput),
@@ -121,6 +122,7 @@ impl Operation {
         match self {
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::PlanResultMerge(_) => "plan_result_merge",
+            Operation::ReadResultItems(_) => "read_result_items",
             Operation::ReadRequestSplit(_) => "read_request_split",
             Operation::MergeResults(_) => "merge_results",
             Operation::ValidateQuery(_) => "validate_query",
@@ -190,6 +192,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::ReadResultItems(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
             Operation::MergeResults(v) => {
                 let mut named = vec![(v.input, Bytes)];
@@ -390,6 +393,7 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    ResultItems(crate::result::ResultItems),
     RequestSplit(crate::split::RequestSplit),
     PreparedFrameGraph(crate::frames::PreparedFrameGraph),
     DirectValue(crate::direct::DirectValue),
@@ -1803,6 +1807,8 @@ pub struct Attachments {
     pub plan_result_merge_output: crate::result::ResultMergePlan,
     #[schemars(rename = "MergeResults.input")]
     pub merge_results_input: crate::result::MergeInput,
+    #[schemars(rename = "ReadResultItems.input")]
+    pub read_result_items_input: crate::result::ResultPart,
     pub tabular_arrow_request: crate::tabular_arrow::ArrowRequest,
     pub tabular_arrow_prediction: crate::tabular_arrow::ArrowPrediction,
     pub tabular_arrow_fit: crate::tabular_arrow::ArrowFit,

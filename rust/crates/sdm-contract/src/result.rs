@@ -108,3 +108,42 @@ pub struct ResultMergePlan {
     pub names_rows: bool,
     pub names_step: bool,
 }
+
+/// Read semantic items from the normalized Arrow result, without another model call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReadResultItems {
+    pub input: AttachmentId,
+    pub table: AttachmentId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemEncoding {
+    Native,
+    Value,
+    Mapping,
+    Mappings,
+    CandidateList,
+    CandidateRankings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ItemField {
+    pub name: String,
+    pub encoding: ItemEncoding,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResultItems {
+    pub segments: Vec<ResultItemSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResultItemSegment {
+    pub table: AttachmentId,
+    pub fields: Vec<ItemField>,
+}

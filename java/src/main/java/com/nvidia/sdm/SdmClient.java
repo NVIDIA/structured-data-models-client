@@ -178,7 +178,7 @@ public final class SdmClient implements AutoCloseable {
         new Host.Call(null, this::call, request.materialized().held()))) {
       Results.Predicted value = (Results.Predicted) Results.expect(finished.result(), "predict");
       return new PredictionResult(value.model(), value.requestId(), read(finished.bytes(value.metadata())),
-          value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()));
+          value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()), request.materialized().candidateValues());
     }
   }
 

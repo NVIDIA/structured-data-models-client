@@ -96,21 +96,28 @@ public final class MaterializedRequest {
   public List<byte[]> payloads() { return List.copyOf(payloads); }
   public boolean inParts() { return state.containsKey("forecast") || state.containsKey("ranking"); }
 
-  /** Host rendering only: the core names candidates by their positions. */
-  public Map<String, java.util.function.Function<Map<String, Object>, Object>> held() {
+  /** Original candidate values owned by the retained request, indexed by core positions. */
+  public Map<Long, Object> candidateValues() {
     if (!(state.get("ranking") instanceof Map<?, ?> ranking)) return Map.of();
-    Map<Integer, Object> values = new LinkedHashMap<>();
+    Map<Long, Object> values = new LinkedHashMap<>();
     List<Map<?, ?>> named = new ArrayList<>();
     named.add(ranking);
     for (Object part : (List<?>) ranking.get("parts")) named.add((Map<?, ?>) part);
     for (Map<?, ?> part : named) {
       try {
-        values.put(((Number) part.get("candidate")).intValue(),
+        values.put(((Number) part.get("candidate")).longValue(),
             Json.read(((String) part.get("value")).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
       } catch (Json.JsonException e) { throw new IllegalStateException("invalid core candidate", e); }
     }
+    return java.util.Collections.unmodifiableMap(values);
+  }
+
+  /** Host rendering only: the core names candidates by their positions. */
+  public Map<String, java.util.function.Function<Map<String, Object>, Object>> held() {
+    Map<Long, Object> values = candidateValues();
+    if (values.isEmpty()) return Map.of();
     return Map.of("candidates", fields -> ((List<?>) fields.get("candidates")).stream()
-        .map(position -> values.get(((Number) position).intValue())).toList());
+        .map(position -> values.get(((Number) position).longValue())).toList());
   }
 
   @SuppressWarnings("unchecked")

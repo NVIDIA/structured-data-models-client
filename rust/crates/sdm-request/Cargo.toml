@@ -15,13 +15,14 @@ publish.workspace = true
 [dependencies]
 indexmap.workspace = true
 arrow-array.workspace = true
+arrow-select.workspace = true
+serde_json.workspace = true
 arrow-schema.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-engine = { path = "../sdm-engine" }
 sdm-wire = { path = "../sdm-wire" }
 
 [dev-dependencies]
-serde_json.workspace = true
 # The schema check, to hold the payload the producer builds to the
 # definition the contract's lock holds (T1.22); not the test-only
 # operations, which `sdm-core`'s match would then need too (M2, T2.1b).
