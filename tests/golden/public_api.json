@@ -397,7 +397,7 @@
       },
       "__version__": {
         "kind": "str",
-        "value": "1.0.0"
+        "value": "2.0.0rc1"
       }
     }
   },
@@ -555,7 +555,7 @@
       },
       "__version__": {
         "kind": "str",
-        "value": "1.0.0"
+        "value": "2.0.0rc1"
       },
       "quote_ident": {
         "kind": "callable",

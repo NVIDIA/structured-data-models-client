@@ -7,6 +7,9 @@ these packages. The three Python distributions and Java library share one versio
 
 ## Unreleased
 
+Release candidate versions are `2.0.0rc1` for Python and Java and `2.0.0-rc.1` for Rust.
+The public API snapshot records this version update; publication remains pending.
+
 ### Added
 
 - Every `sdm_connectors` source says its kind and its namespace in one way:
@@ -37,6 +40,10 @@ these packages. The three Python distributions and Java library share one versio
   Native Windows ARM64 is deferred pending upstream Arrow dependencies.
 
 ### Changed
+
+- Sampled Tabular context uses stable Rust index ordering, including duplicate labels and mixed numeric labels.
+  Equal labels retain sampled order; mixed numbers compare by their represented values.
+  Context order and predictions can differ from platform-specific NumPy ordering; sampled membership and warehouse sampling are unchanged.
 
 - Requests, sampling and result assembly run through Rust for both languages.
   Local Python model execution uses the same prepared requests and responses.

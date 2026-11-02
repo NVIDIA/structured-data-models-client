@@ -3563,7 +3563,7 @@
       "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate."
     }
   ],
-  "public_api_snapshot_sha256": "12d022ec41bded424698b753b64847feaa5441f43225a616085871d35fc1a593",
+  "public_api_snapshot_sha256": "73a05cddb755f97bc1e97ae58bdf21bd00498ff6e7a93ceae5b1f400b2fe63e4",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {

@@ -10,6 +10,8 @@ import types
 
 import pytest
 
+from sdm_connectors import __version__
+from sdm_connectors._databricks_partner import databricks_product_version
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -518,7 +520,9 @@ def test_postgres_reads_the_standard_environment_variables(monkeypatch):
 # --- Databricks partner identifier and query tag ----------------------------
 
 #: What Databricks requires on every connection structured-data-models-client opens.
-PARTNER = 'nvidia_structured-data-models-client/1.0.0'
+PARTNER = 'nvidia_structured-data-models-client/' + databricks_product_version(
+    __version__
+)
 PURPOSE = 'structured_data_models_client_purpose'
 SAMPLING = 'structured_data_models_client_purpose:sampling'
 
@@ -731,7 +735,8 @@ def test_the_identifier_names_the_installed_release():
 
     assert (
         partner_identifier()
-        == f'nvidia_structured-data-models-client/{sdm_connectors.__version__}'
+        == 'nvidia_structured-data-models-client/'
+        + databricks_product_version(sdm_connectors.__version__)
     )
 
 
