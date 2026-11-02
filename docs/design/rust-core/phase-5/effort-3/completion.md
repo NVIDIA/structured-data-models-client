@@ -13,7 +13,7 @@
 | Python artifact | Clean Linux x86 install verified against native hash, contract 57 and all three RC package versions; retired runtimes absent; this local glibc 2.34 wheel is not shipping manylinux2014 proof |
 | Final CI | [Run 41506491000](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41506491000), source `ba74849b0`; platform build/load and full test results pending |
 | Ordering improvement | Approved stable ties and exact numeric values; 407 focused Python tests, Rust checks, independent review and two installed live Tabular journeys passed |
-| Generated semantics | 12 Tabular and eight Relational cases added to existing suites; all 38 tests including fixed examples passed; review pending |
+| Generated semantics | 12 Tabular and eight Relational cases added to existing suites; all 38 tests including fixed examples passed; independent oracle review approved |
 | Managed runtime | DBR16.4 run `433052042758045` is active, checking Spark/null strings and Arrow-backed strings through predict and sessions |
 | Historical coverage | Retained tests and genuine 21-profile Databricks sweep mapped in [verification.md](../verification.md); unchanged warehouse paths do not need wholesale replay |
 | Performance | Ordering benchmark improved at 10,000 context rows in the measured cases; session preparation is about 15% slower than the earlier Rust build, with similar memory; owner disposition pending |
