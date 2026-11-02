@@ -18,7 +18,6 @@ from sdm_client import (
     PredictiveQuery,
     Schema,
     SDMClient,
-    _routing,
 )
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.keys import _named_by, keys_in
@@ -28,8 +27,7 @@ SESSIONS = URL + '/v1/sessions'
 
 
 @pytest.fixture(params=['duckdb', 'sqlite'])
-def warehouse(request, monkeypatch):
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+def warehouse(request):
     connection = (
         duckdb.connect() if request.param == 'duckdb' else sqlite.connect()
     )
@@ -246,16 +244,3 @@ def test_fit_refusal_retains_column_advice(warehouse, requests_mock):
             client.fit(request, model=KumoRelational())
     assert 'events.feature' in str(raised.value)
     assert "stype = 'categorical'" in str(raised.value)
-
-
-@pytest.mark.parametrize('backend', list(_routing.WAREHOUSE_SESSIONS))
-def test_session_route_can_be_selected_independently(backend, monkeypatch):
-    from types import SimpleNamespace
-
-    source = SimpleNamespace(kind=backend)
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    assert not _routing.on_the_core(source, _routing.WAREHOUSE_SESSIONS)
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT, ','.join(_routing.WAREHOUSE_SESSIONS[backend])
-    )
-    assert _routing.on_the_core(source, _routing.WAREHOUSE_SESSIONS)

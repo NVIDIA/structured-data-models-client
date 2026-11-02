@@ -11,7 +11,7 @@
 #
 # The line: emulation is copying a library's incidental behavior, such as a
 # codec or a repr. Porting an algorithm the reference itself defines is a
-# port, with a row in docs/design/rust-core/phase-1/dependencies.md, not an
+# port subject to the crate boundaries in rust/README.md, not an
 # entry here: DateOffset arithmetic in sdm-pql's dor.rs, str.isspace
 # in syntax.rs, the query[:-1] quirk in visitor.rs, and T1.25's
 # sdm-engine::time::text_shapes.

@@ -1257,12 +1257,6 @@ SKIP_TOKENS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ('--ig' + 'nore', re.compile(r'--ig' + r'nore(?:-glob)?[=\s]')),
     ('collect_ig' + 'nore', re.compile(r'\bcollect_ig' + r'nore(?:_glob)?\b')),
 )
-# In Python only: a bare call of the skip function, however pytest or the
-# function was imported or aliased. Rust's iterator method of that name is
-# not a skip, so Rust files are not held to it.
-PYTHON_SKIP_TOKENS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    (_S + '(', re.compile(r'\b' + _S + r'\(')),
-)
 CLIENT_TESTS = Path('packages/structured-data-models-client')
 CI_FILE = Path('.github/workflows/ci.yml')
 _CI_JOB = re.compile(r'^  ([A-Za-z0-9_-]+):\s*$')
@@ -1339,7 +1333,22 @@ def skip_scope(root: Path) -> list[Path]:
 
 
 def find_skips(text: str, python: bool = False) -> Iterable[tuple[int, str]]:
-    tokens = SKIP_TOKENS + (PYTHON_SKIP_TOKENS if python else ())
+    # Optional local prerequisites/platforms may skip. Required CI jobs
+    # enforce availability through their service guards and test ledger.
+    optional = {
+        'mark.' + _S,
+        'pytest.' + _S,
+        _S + 'if',
+        'importor' + _S,
+        'unittest.' + _S,
+        _S.capitalize() + 'Test',
+        _S + 'Test',
+    }
+    tokens = tuple(
+        (token, pattern)
+        for token, pattern in SKIP_TOKENS
+        if not python or token not in optional
+    )
     for token, pattern in tokens:
         for match in pattern.finditer(text):
             yield text.count('\n', 0, match.start()) + 1, token
@@ -1383,8 +1392,8 @@ def check_skips(root: Path) -> list[str]:
             continue
         for line, token in find_skips(text, python=path.suffix == '.py'):
             problems.append(
-                f'{path.relative_to(root)}:{line}: `{token}`; nothing in the Rust '
-                'core\'s scope is skipped or ignored (design, "Workspace rules")'
+                f'{path.relative_to(root)}:{line}: `{token}`; Rust '
+                'core checks must not suppress failures or deselect required tests'
             )
     ci = root / CI_FILE
     if not ci.is_file():

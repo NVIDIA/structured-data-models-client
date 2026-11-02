@@ -39,10 +39,6 @@ requires_relational = pytest.mark.skipif(
     not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
 )
 
-pytest.importorskip(
-    'sdm_relational_engine', reason='needs the [relational] extra'
-)
-
 
 N_USERS = 40
 

@@ -10,13 +10,8 @@ import warnings
 import pandas as pd
 import pytest
 
-from sdm_client import KumoRelational, PredictiveQuery, Schema, _routing
+from sdm_client import KumoRelational, PredictiveQuery, Schema
 from sdm_client.errors import StructuredDataError
-
-
-@pytest.fixture(autouse=True)
-def frame_routes(monkeypatch):
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.FRAME_ROUTES))
 
 
 def materialize(query):
@@ -62,29 +57,37 @@ def test_materializer_snapshot_does_not_alias_input_buffers():
     )
 
 
-def test_static_payload_matches_old_client(monkeypatch):
-    data = schema()
-    first = materialize(
-        PredictiveQuery('PREDICT users.value FOR EACH users.id', data)
+def test_static_payload_omits_the_no_anchor_sentinel():
+    payload = materialize(
+        PredictiveQuery('PREDICT users.value FOR EACH users.id', schema())
+    )[0]
+    assert payload['task'] == {
+        'kind': 'regression',
+        'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+        'entity_table_names': ['users'],
+    }
+    scoring = payload['predict']['instance_table']
+    assert scoring['columns'] == ['instance_id', '__kumo_entity_ref_0']
+    assert scoring['rows'] == [[20, 1], [21, 2]]
+    context = payload['context']['instance_table']
+    assert context['columns'] == [
+        'instance_id',
+        '__kumo_entity_ref_0',
+        'TARGET',
+    ]
+    assert sorted((row[1], row[2]) for row in context['rows']) == [
+        (key, float(key - 1)) for key in range(3, 21)
+    ]
+    assert 'anchor_time_column' not in payload['task']
+    assert (
+        '__kumo_anchor_time'
+        not in payload['schema']['instance_table']['columns']
     )
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    old = materialize(
-        PredictiveQuery('PREDICT users.value FOR EACH users.id', data)
-    )
-    # The old local sampler overflows Timestamp.min when it floors to seconds
-    # and multiplies back to nanoseconds, inventing a timestamp in 2262.
-    # Rust correctly leaves the no-anchor sentinel out of the request.
-    assert 'anchor_time_column' not in first[0]['task']
-    for payload in old:
-        payload['task'].pop('anchor_time_column')
-        payload['schema']['instance_table']['columns'].pop('__kumo_anchor_time')
-        for side in ('context', 'predict'):
-            table = payload[side]['instance_table']
-            position = table['columns'].index('__kumo_anchor_time')
-            table['columns'].pop(position)
-            for row in table['rows']:
-                assert row.pop(position) == '2262-04-11T23:47:16.709551Z'
-    assert first == old
+    for side in ('context', 'predict'):
+        assert (
+            '__kumo_anchor_time'
+            not in payload[side]['instance_table']['columns']
+        )
 
 
 def test_temporal_frame_materialization():
@@ -230,7 +233,7 @@ def test_float_link_identifiers_keep_source_precision():
     assert any(set(group) == {'16777216.0', '16777217.0'} for group in targets)
 
 
-def test_link_prediction_old_and_core_present_the_same_rankings(monkeypatch):
+def test_link_prediction_preserves_rankings_and_row_identity(monkeypatch):
     from sdm_client import SDMClient
 
     class Transport:
@@ -279,10 +282,16 @@ def test_link_prediction_old_and_core_present_the_same_rankings(monkeypatch):
     client = SDMClient('http://127.0.0.1:9', 'none')
     transport = Transport()
     monkeypatch.setattr(client, '_transport', transport)
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    old = client.predict(request, model=KumoRelational())
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.FRAME_ROUTES))
-    core = client.predict(request, model=KumoRelational())
-    assert core.items == old.items
-    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
-    assert len(transport.sent) == 2
+    result = client.predict(request, model=KumoRelational())
+    assert [(item.row_index, item.id) for item in result.items] == [
+        (1, 2),
+        (0, 1),
+    ]
+    frame = result.to_pandas()
+    assert frame['row_index'].tolist() == [0, 1]
+    assert frame['id'].tolist() == [1, 2]
+    assert frame['rankings'].tolist() == [
+        [{'item': '2', 'score': 0.7}],
+        [{'item': '3', 'score': 0.9}, {'item': '1', 'score': 0.4}],
+    ]
+    assert len(transport.sent) == 1

@@ -168,6 +168,22 @@ def test_a_refused_start_quotes_nothing_it_was_given() -> None:
         assert CANARY not in written
 
 
+def test_unsupported_contract_is_refused_before_a_run_exists() -> None:
+    start, attachments = messages.validate(
+        'PREDICT users.age FOR EACH users.id'
+    )
+    message = json.loads(start)
+    message['contract'] = _native.CONTRACT_VERSION + 1
+    with pytest.raises(_native.CoreError) as raised:
+        _native.Run.start(json.dumps(message).encode(), attachments)
+    assert raised.value.code == 'INVALID_MESSAGE'
+    error = json.loads(raised.value.control)['error']
+    assert error['fields']['contract'] == {
+        't': 'u32',
+        'v': str(message['contract']),
+    }
+
+
 def test_an_attachment_is_bytes_or_arrow() -> None:
     start, _ = messages.validate('PREDICT users.age FOR EACH users.id')
     for wrong in ['text', 12, bytearray(b'x'), [b'x']]:
@@ -350,6 +366,9 @@ def _getenv_shim(directory: pathlib.Path) -> pathlib.Path:
     return library
 
 
+@pytest.mark.skipif(
+    sys.platform == 'win32', reason='POSIX getenv/signal instrumentation'
+)
 def test_importing_the_module_changes_nothing_in_the_process(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -385,3 +404,47 @@ def test_importing_the_module_changes_nothing_in_the_process(
     assert [
         name for name in found['read_natively'] if not name.startswith(loader)
     ] == []
+
+
+@pytest.mark.skipif(
+    sys.platform != 'win32', reason='Windows process observations'
+)
+def test_windows_import_preserves_process_state(tmp_path: pathlib.Path) -> None:
+    """Observe native threads/environment and Python handlers on Windows.
+
+    Native getenv-read interception remains a POSIX-only check above.
+    """
+    script = textwrap.dedent(
+        """
+        import json, logging, os, signal, threading
+        import psutil
+        import sdm_client
+
+        process = psutil.Process()
+        def state():
+            handlers = {'': [id(h) for h in logging.getLogger().handlers]}
+            for name, logger in logging.Logger.manager.loggerDict.items():
+                handlers[name] = [id(h) for h in getattr(logger, 'handlers', [])]
+            return {
+                'threads': sorted(t.name for t in threading.enumerate()),
+                'native_threads': process.num_threads(),
+                'environment': process.environ(),
+                'handlers': handlers,
+                'signals': {str(s): repr(signal.getsignal(s))
+                            for s in signal.valid_signals()},
+            }
+        before = state()
+        import sdm_client._native
+        after = state()
+        print(json.dumps([key for key in before if before[key] != after[key]]))
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, '-I', '-c', script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == []

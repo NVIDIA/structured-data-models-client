@@ -8,7 +8,7 @@
 //! parameter of the hash, not a truncation of a longer digest, so the
 //! eight-byte digest is computed as such. Ported from the RFC's reference
 //! code (its Appendix C) rather than taken as a crate, since the shipped
-//! tree needs this one use (`phase-1/dependencies.md`'s rule; T2.3).
+//! tree needs this one use (see the crate boundaries in `rust/README.md`).
 
 /// The initialization vector, SHA-512's.
 const IV: [u64; 8] = [

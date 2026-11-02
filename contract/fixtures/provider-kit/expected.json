@@ -249,9 +249,10 @@
     },
     {
       "id": "fallback.repeated-key",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer",
-      "same_as": "repeated-key.region",
-      "capabilities": {"withhold": ["repeated_key"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
+      "exit": "Text comparisons refuse fallback when the provider has not declared compatible text ordering",
+      "request_of": "repeated-key.region",
+      "capabilities": {"withhold": ["repeated_key"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}},
+      "error": {"code": "INVALID_REQUEST", "kind": "invalid_request", "retryable": false, "fields": {"field": "fallback_text_order", "request": "repeated_key"}}
     },
     {
       "id": "fallback.preview",

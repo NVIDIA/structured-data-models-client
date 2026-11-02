@@ -5,9 +5,7 @@
 
 """Record the public surface of every public package.
 
-``docs/reference/stability.md`` names them. ``predictive_query`` is installed
-but not public, and ``sdm_relational_engine`` is reached through
-``sdm_client``, so neither is recorded.
+``docs/reference/stability.md`` defines the public compatibility surface.
 
 Exported names, their signatures, the values of constants, and enum members.
 Compared on every run; ``--write`` re-records after an intended change.
@@ -58,8 +56,6 @@ FIRST_PARTY_ROOTS = frozenset(
         'sdm_api',
         'sdm_client',
         'sdm_connectors',
-        'predictive_query',
-        'sdm_relational_engine',
     }
 )
 

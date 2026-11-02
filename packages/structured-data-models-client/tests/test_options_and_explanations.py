@@ -28,10 +28,10 @@ from sdm_client import (
     KumoTabular,
     PredictiveQuery,
     Relationship,
+    Request,
     Schema,
 )
 from sdm_client.adapters.relational import RelationalAdapter
-from sdm_client.adapters.tabular import _key_named_by
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 RNG = np.random.default_rng(11)
@@ -48,6 +48,8 @@ def graph(*, null_times: int = 0, duplicate_keys: int = 0) -> Schema:
         {
             'uid': [*range(600 - duplicate_keys), *range(duplicate_keys)],
             'seg': RNG.choice(list('xy'), 600),
+            'private': range(600),
+            'retained': [i % 7 for i in range(600)],
         }
     )
     events = pd.DataFrame(
@@ -88,7 +90,6 @@ def wire_columns(request, table: str = 'events') -> dict:
 def test_a_column_the_caller_excluded_does_not_reach_the_model():
     """It was accepted, checked against the options this route takes, and then
     the query's own answer was sent in its place."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = graph()
     request = gather(schema, exclude_cols_dict={'events': ['secret']})
@@ -99,13 +100,11 @@ def test_a_column_the_caller_excluded_does_not_reach_the_model():
 
 
 def test_a_column_nobody_excluded_still_reaches_the_model():
-    pytest.importorskip('sdm_relational_engine')
 
     assert 'secret' in wire_columns(gather(graph()))
 
 
 def test_excluding_one_column_keeps_the_rest():
-    pytest.importorskip('sdm_relational_engine')
 
     request = gather(graph(), exclude_cols_dict={'events': ['secret']})
     assert {'amt', 'ts'} <= set(wire_columns(request))
@@ -115,29 +114,28 @@ def test_the_caller_and_the_query_are_both_honoured():
     """Merged rather than replaced: the query excludes columns for reasons of
     its own, the target among them, and a caller's list must not stand in for
     that."""
-    from sdm_client.materializers.relational import _columns_to_leave_out
-
-    class Query:
-        @staticmethod
-        def get_exclude_cols_dict():
-            return {'events': ['target'], 'users': ['private']}
-
-    merged = _columns_to_leave_out(
-        Query(), {'exclude_cols_dict': {'events': ['secret']}}
+    request = PredictiveQuery(
+        'PREDICT users.seg FOR EACH users.uid', graph()
+    ).materialize(
+        indices=[1, 2],
+        model=KumoRelational(),
+        exclude_cols_dict={'events': ['secret'], 'users': ['private']},
     )
-    assert sorted(merged['events']) == ['secret', 'target']
-    assert merged['users'] == ['private']
+    assert 'private' not in wire_columns(request, 'users')
+    assert 'retained' in wire_columns(request, 'users')
+    assert 'secret' not in wire_columns(request, 'events')
+    assert 'seg' not in wire_columns(request, 'users')
 
 
 def test_no_exclusions_at_all_is_still_the_query_s_own():
-    from sdm_client.materializers.relational import _columns_to_leave_out
-
-    class Query:
-        @staticmethod
-        def get_exclude_cols_dict():
-            return {'events': ['target']}
-
-    assert _columns_to_leave_out(Query(), {}) == {'events': ['target']}
+    request = PredictiveQuery(
+        'PREDICT users.seg FOR EACH users.uid', graph()
+    ).materialize(
+        indices=[1, 2],
+        model=KumoRelational(),
+    )
+    assert 'seg' not in wire_columns(request, 'users')
+    assert 'secret' in wire_columns(request, 'events')
 
 
 # --- what the graph was built without --------------------------------------
@@ -146,7 +144,6 @@ def test_no_exclusions_at_all_is_still_the_query_s_own():
 def test_rows_dropped_for_a_missing_time_are_reported():
     """The count and the reason were worked out either way and shown only when
     something else had already failed."""
-    pytest.importorskip('sdm_relational_engine')
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -164,7 +161,6 @@ def test_rows_dropped_for_a_missing_time_are_reported():
 def test_rows_dropped_for_a_repeated_key_are_reported():
     """Inference tolerates a nearly-unique key, and the rows it tolerates are
     the ones the engine then drops."""
-    pytest.importorskip('sdm_relational_engine')
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -180,7 +176,6 @@ def test_rows_dropped_for_a_repeated_key_are_reported():
 
 
 def test_a_graph_that_lost_nothing_says_nothing():
-    pytest.importorskip('sdm_relational_engine')
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -233,7 +228,6 @@ def refusal(message: str, status: int = 422) -> NimRequestError:
 
 def _counted_refusal():
     """The explained cardinality refusal the three checks below are about."""
-    pytest.importorskip('sdm_relational_engine')
     return RelationalAdapter().explain_error(
         refusal('categorical cardinality 120 exceeds limit 100.'),
         counted_payload(),
@@ -279,27 +273,59 @@ def test_an_unrelated_error_is_returned_untouched():
 # --- a key above the basic plane -------------------------------------------
 
 
-@pytest.mark.parametrize(
-    'key',
-    ['\U0001f600key', 'plain', 'ünïcøde', '\U0001f600\U0001f601', '3'],
-    ids=['emoji', 'ascii', 'latin1', 'two emoji', 'digits'],
-)
-def test_a_key_survives_the_json_the_endpoint_sends(key):
-    """JSON writes a character above U+FFFF as a surrogate pair, and reading it
-    as a Python literal takes the halves apart so they never recombine."""
-    assert _key_named_by(json.dumps([key])) == key
+@pytest.mark.parametrize('key', ['😀key', 'plain', 'ünïcøde', '😀😁', '3'])
+@pytest.mark.parametrize('render', [json.dumps, repr], ids=['json', 'python'])
+def test_a_key_survives_the_endpoint_rendering(key, render):
+    """The public result preserves the scored key across endpoint ID spellings."""
+    from test_tabular_direct_core import Endpoint, client
 
-
-def test_a_key_survives_the_python_rendering_too():
-    """The other wording an endpoint may answer with."""
-    assert _key_named_by(repr(['\U0001f600key'])) == '\U0001f600key'
+    request = Request(
+        pd.DataFrame(
+            {'row_id': ['a', 'b'], 'feature': [1, 2], 'target': [0, 1]}
+        ),
+        pd.DataFrame({'row_id': [key], 'feature': [3]}),
+        target='target',
+        task='classification',
+    )
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-tabular',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [
+                {'row_index': 0, 'id': render([key]), 'prediction': 0}
+            ],
+        }
+    )
+    result = client(endpoint).predict(request, model=KumoTabular()).to_pandas()
+    assert result['id'].tolist() == [key]
+    assert result['row_index'].tolist() == [0]
 
 
 @pytest.mark.parametrize(
     'rendered', ['hello', '[1, 2]', '[]', '{"a": 1}', 'x' * 2000]
 )
-def test_something_that_is_not_one_key_is_left_alone(rendered):
-    assert _key_named_by(rendered) is None
+def test_a_service_identifier_is_aligned_by_row_index(rendered):
+    from test_tabular_direct_core import Endpoint, client
+
+    request = Request(
+        pd.DataFrame(
+            {'row_id': ['a', 'b'], 'feature': [1, 2], 'target': [0, 1]}
+        ),
+        pd.DataFrame({'row_id': ['scored'], 'feature': [3]}),
+        target='target',
+        task='classification',
+    )
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-tabular',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [{'row_index': 0, 'id': rendered, 'prediction': 0}],
+        }
+    )
+    result = client(endpoint).predict(request, model=KumoTabular()).to_pandas()
+    assert result['id'].tolist() == ['scored']
 
 
 # --- a label with more classes than the threshold --------------------------
@@ -378,37 +404,52 @@ def test_a_payload_with_nothing_over_the_limit_is_left_alone():
 # --- an override is held to the limits the query was -----------------------
 
 
+def ranked(**options):
+    users = pd.DataFrame({'uid': range(40), 'value': range(40)})
+    items = pd.DataFrame({'iid': range(30), 'price': range(30)})
+    events = pd.DataFrame(
+        {
+            'eid': range(1200),
+            'uid': [i % 40 for i in range(1200)],
+            'iid': [i % 30 for i in range(1200)],
+            'ts': pd.date_range('2023-01-01', periods=1200, freq='h'),
+        }
+    )
+    schema = Schema.from_data(
+        {'users': users, 'items': items, 'events': events},
+        primary_keys={'users': 'uid', 'items': 'iid', 'events': 'eid'},
+        time_columns={'events': 'ts'},
+        relationships=[
+            Relationship('events', 'uid', 'users', 'uid'),
+            Relationship('events', 'iid', 'items', 'iid'),
+        ],
+    )
+    return PredictiveQuery(
+        'PREDICT LIST_DISTINCT(events.iid, 0, 30, days) RANK TOP 7 '
+        'FOR EACH users.uid',
+        schema,
+    ).materialize(
+        indices=[1],
+        candidates=list(range(8)),
+        num_context_samples=20,
+        **options,
+    )
+
+
 @pytest.mark.parametrize('given', [0, -1, 21, 999, 1.5, True, 'five'])
 def test_a_top_k_the_model_cannot_rank_is_refused(given):
-    """`TOP K` written in the query is checked; passed as an option it went
-    straight to the task, so an override could put a number in a request that
-    the same number written in the query would have been refused for."""
-    from sdm_client.materializers.relational import _candidates_to_rank
-
-    class Query:
-        top_k = 5
-
-    with pytest.raises(StructuredDataError):
-        _candidates_to_rank(Query(), {'top_k': given})
+    with pytest.raises(StructuredDataError) as raised:
+        ranked(top_k=given)
+    assert 'top_k' in str(raised.value)
 
 
 @pytest.mark.parametrize('given', [1, 5, 20])
 def test_a_top_k_the_model_can_rank_is_used(given):
-    from sdm_client.materializers.relational import _candidates_to_rank
-
-    class Query:
-        top_k = 5
-
-    assert _candidates_to_rank(Query(), {'top_k': given}) == given
+    assert ranked(top_k=given)._decomposition.top == given
 
 
 def test_no_override_leaves_the_query_s_own():
-    from sdm_client.materializers.relational import _candidates_to_rank
-
-    class Query:
-        top_k = 7
-
-    assert _candidates_to_rank(Query(), {}) == 7
+    assert ranked()._decomposition.top == 7
 
 
 @pytest.mark.parametrize(
@@ -438,31 +479,22 @@ def test_an_exclusion_that_is_not_a_mapping_of_names_is_refused(given):
     """It reached the engine and raised `AttributeError` from inside the guard
     that turns engine failures into client errors, so a bad argument came back
     as an internal failure."""
-    from sdm_client.materializers.relational import _columns_to_leave_out
-
-    class Query:
-        @staticmethod
-        def get_exclude_cols_dict():
-            return {}
-
     with pytest.raises(StructuredDataError) as raised:
-        _columns_to_leave_out(Query(), {'exclude_cols_dict': given})
+        gather(graph(), exclude_cols_dict=given)
     assert raised.value.code == 'INVALID_REQUEST'
 
 
 @pytest.mark.parametrize('given', [None, {}])
 def test_nothing_to_exclude_is_allowed(given):
-    """Absent and explicitly nothing both mean nothing."""
-    from sdm_client.materializers.relational import _columns_to_leave_out
-
-    class Query:
-        @staticmethod
-        def get_exclude_cols_dict():
-            return {'events': ['target']}
-
-    assert _columns_to_leave_out(Query(), {'exclude_cols_dict': given}) == {
-        'events': ['target']
-    }
+    request = PredictiveQuery(
+        'PREDICT users.seg FOR EACH users.uid', graph()
+    ).materialize(
+        indices=[1, 2],
+        model=KumoRelational(),
+        exclude_cols_dict=given,
+    )
+    assert 'seg' not in wire_columns(request, 'users')
+    assert 'secret' in wire_columns(request, 'events')
 
 
 def test_the_refusal_names_a_target_and_not_the_first_text_column():

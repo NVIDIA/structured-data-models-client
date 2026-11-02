@@ -189,7 +189,7 @@ def test_s2_loading_reuses_the_guarded_python_live_loader_and_always_closes_it(
             or (lambda: events.append('unguard'))
         ),
     )
-    monkeypatch.setattr(run_java, '_capture_run', lambda: capture)
+    monkeypatch.setattr(run_java, '_live_guard', lambda: capture)
     with pytest.raises(RuntimeError, match='caller failure'):
         with run_java.loaded(given, {}, 'databricks-sql') as how:
             assert how['properties']['ConnSchema'] == 'schema'

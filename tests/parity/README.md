@@ -1,6 +1,6 @@
 # Public client parity
 
-This harness compares installed Python and Java clients against frozen Python `43e55f4f5` using the same data, options and model version.
+This harness validates installed Python and Java clients against the maintained contract and compares their behavior on the same data, options and model version.
 Local checks never certify live prediction parity.
 
 | File | Purpose |
@@ -10,7 +10,7 @@ Local checks never certify live prediction parity.
 | `observation.schema.json` | JSONL record contract; one record per case/connector/model/language |
 | `python_runner.py` | Public Python calls, including source verification and cleanup |
 | `routes.py` | Legacy-policy traps around setup, calls, cleanup and worker threads |
-| `compare.py` | Frozen-reference comparison and generated evidence matrix |
+| `compare.py` | Current-contract validation, cross-language comparison and generated evidence matrix |
 
 ## Credential-free contract checks
 
@@ -29,7 +29,7 @@ python tests/parity/api_contracts.py --language rust --gate native --run --out r
 ```
 
 Use an installed candidate Python client with its test extras, JDK/Maven and the pinned Rust toolchain.
-Java behavior tests use the existing `scripts/rust_core/coverage.py --junit-run` command and its fresh Surefire reports; local Postgres is required for its database cases.
+Java behavior tests use the existing `tests/parity/check_junit.py --run` command and its fresh Surefire reports; local Postgres is required for its database cases.
 CI reuses its built wheel/native artifacts and existing Python, Java and Cargo jobs.
 The separate compatibility job needs no native compilation, endpoint or private credentials.
 
@@ -43,16 +43,19 @@ Do not mark a capability passed just because its tests exist.
 Run all applicable Python cells by omitting filters, or repeat `--case`, `--connector` and `--model` to select a scope:
 
 ```sh
-BASELINE_PYTHON tests/parity/python_runner.py --phase baseline --commit 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1 --mode live --config PRIVATE_CONFIG --out baseline.jsonl
 CANDIDATE_PYTHON tests/parity/python_runner.py --phase candidate --commit CANDIDATE_COMMIT --provenance WHEEL_PROVENANCE.json --mode live --config PRIVATE_CONFIG --out python.jsonl
 ```
 
 The Java runner emits the same schema with `language=java`; concatenate its records with `python.jsonl` before comparison.
-The frozen Python observation is reused for Java, rather than comparing Java only to the new Python implementation.
+Python records must pass artifact, route, lifecycle and outcome checks; Java records must also agree with their actual Python peers.
+Explicit manifest differences in refusal behavior are reported as language differences, never agreement.
 
 ```sh
-python tests/parity/compare.py --baseline baseline.jsonl --candidate candidates.jsonl --candidate-commit CANDIDATE_COMMIT --out report.json --matrix matrix.md
+python tests/parity/compare.py --comparison current-clients --candidate candidates.jsonl --candidate-commit CANDIDATE_COMMIT --out report.json --matrix matrix.md
 ```
+
+Historical old-client comparison is an effort 3 investigation, using the preserved reference and recipes.
+The optional `--comparison historical --baseline baseline.jsonl` mode keeps that distinction explicit; routine CI installs only current clients.
 
 `--local` compares local materialization evidence only.
 Comparison filters also accept repeated `--case`, `--connector`, `--model` and `--language`.
@@ -117,7 +120,7 @@ This bypasses fixture casts, sorting and Java Arrow reconstruction, and uses the
 Targeted provider cases additionally set `schema_input: source` to exercise warehouse materialization; their inspection reads remain unchanged.
 Snapshot verification may inspect sorted copies, but must never replace the model input.
 Existing scenarios retain their prepared-input behavior and historical evidence.
-The raw-reader mode is being validated under [the type parity plan](../../docs/design/rust-core/phase-4/type-parity-plan.md); its presence alone is not passing live evidence.
+Raw-reader coverage is tracked in the [verification tracker](../../docs/design/rust-core/phase-5/verification.md) and the compatibility ledger; the mode’s presence alone is not passing live evidence.
 
 `expected_by_model` records verified model-specific refusals, independently of candidate-only `expected_by_language` improvements.
 Supported predictions and endpoint-stage refusals both require live endpoint identity.

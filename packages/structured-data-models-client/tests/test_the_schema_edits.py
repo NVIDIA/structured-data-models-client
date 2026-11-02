@@ -2,25 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""A core-built schema's edits, made by the core (T1.24b, decision E67).
-
-An edit to a schema ``Schema.from_source`` described on the core (a key or
-time column set or cleared, a column's meaning, a column left out, the
-relationships replaced or edited as a list) is passed by the setter the
-assignment runs to the core's ``edit_schema``, which checks and makes it
-as the reference's setters do, and the answer is stored on the objects. A
-refusal is raised at the assignment, as the reference raises it, and the
-schema is left as it was. Against the old route, where the relational
-engine is installed (CI's ``engine`` job), each sequence of edits leaves
-the public schema the same, each column's ``stype_declared`` and what it
-meant before the schema joined on it included, and refuses the same step
-with the same class and code; everywhere, every edit is shown to reach the
-core, and a setter that skips it fails here (seeded).
-"""
+"""Public schema edits reach Rust and preserve state on refusal."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import warnings
 from collections.abc import Callable
@@ -29,7 +14,6 @@ from typing import Any
 
 import duckdb
 import pytest
-from predictive_query.schema.typing import Stype
 from sdm_connectors import DuckDBSource
 
 from sdm_client import (
@@ -37,22 +21,12 @@ from sdm_client import (
     Relationship,
     Schema,
     StructuredDataError,
-    _routing,
 )
 from sdm_client._rust import edits as on_the_core
 from sdm_client._rust import run as runs
 from sdm_client.schema import _described_on_the_core
 
 ROOT = Path(__file__).resolve().parents[3]
-CORE = ','.join(
-    dict.fromkeys(
-        _routing.FROM_SOURCE_DUCKDB
-        + _routing.FROM_SOURCE_DUCKDB_TABLES
-        + _routing.MATERIALIZE_DUCKDB
-    )
-)
-ENGINE = importlib.util.find_spec('sdm_relational_engine') is not None
-
 SETUP = (
     'CREATE TABLE users (user_id BIGINT PRIMARY KEY, age BIGINT, '
     'country VARCHAR, signup TIMESTAMP, seen TIMESTAMP)',
@@ -66,23 +40,14 @@ SETUP = (
 )
 
 
-@pytest.fixture(autouse=True)
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-
-
-def _schema(route: str, monkeypatch: pytest.MonkeyPatch) -> Schema:
-    if route == 'core':
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    else:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
+def _schema() -> Schema:
     connection = duckdb.connect()
     for statement in SETUP:
         connection.execute(statement)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(connection))
-    assert _described_on_the_core(schema) == (route == 'core')
+    assert _described_on_the_core(schema)
     return schema
 
 
@@ -141,7 +106,7 @@ SEQUENCES: dict[str, list[Edit]] = {
         lambda s: setattr(s['orders']['user_id'], 'stype', 'categorical'),
         lambda s: setattr(s, 'relationships', []),
         lambda s: setattr(s['orders']['user_id'], 'stype', 'ID'),
-        lambda s: setattr(s['users']['country'], 'stype', Stype.text),
+        lambda s: setattr(s['users']['country'], 'stype', 'text'),
         lambda s: setattr(s['orders']['note'], 'stype', 'text'),
     ],
     'left out': [
@@ -231,25 +196,66 @@ def started(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 @pytest.mark.parametrize('name', sorted(SEQUENCES))
-def test_each_edit_is_made_by_the_core_as_the_old_route_makes_it(
+def test_each_edit_reaches_the_core_and_updates_the_schema(
     name: str, monkeypatch: pytest.MonkeyPatch, started: list[str]
 ) -> None:
-    core = _walk(_schema('core', monkeypatch), SEQUENCES[name])
+    schema = _schema()
+    started.clear()
+    core = _walk(schema, SEQUENCES[name])
     # Every step reached the core, refused or not.
     assert started.count('edit_schema') == len(SEQUENCES[name])
     if name == 'refused':
         assert all(isinstance(outcome, tuple) for outcome, _ in core)
     else:
         assert not any(isinstance(outcome, tuple) for outcome, _ in core)
-    if ENGINE:
-        old = _walk(_schema('old', monkeypatch), SEQUENCES[name])
-        assert core == old
+    states = [state for _, state in core]
+    if name == 'keys':
+        assert [
+            state['tables']['users']['primary_key'] for state in states
+        ] == [
+            'age',
+            None,
+            ('user_id',),
+            ('user_id', 'age'),
+            'user_id',
+        ]
+    elif name == 'time columns':
+        assert [
+            state['tables']['users']['time_column'] for state in states
+        ] == [
+            None,
+            'seen',
+            'country',
+            None,
+            'signup',
+        ]
+    elif name == 'relationships':
+        # Re-inserting an existing relationship does not duplicate it.
+        assert [len(state['links']) for state in states] == [
+            0,
+            1,
+            2,
+            1,
+            1,
+            0,
+            0,
+        ]
+    elif name == 'left out':
+        assert 'note' not in schema['orders']
+        assert 'user_id' not in schema['orders']
+        assert 'seen' not in schema['users']
+    elif name == 'meanings':
+        assert schema['users']['age'].stype == 'categorical'
+        assert schema['users']['country'].stype == 'text'
+        assert schema['orders']['note'].stype == 'text'
+        assert schema['orders']['user_id'].stype == 'ID'
+        assert schema.relationships == []
 
 
-def test_a_refusal_is_the_reference_s_at_the_assignment(
+def test_a_refusal_names_the_field_at_assignment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    schema = _schema('core', monkeypatch)
+    schema = _schema()
     with pytest.raises(StructuredDataError) as refused:
         schema['users'].primary_key = 'nope'
     assert refused.value.code == 'INVALID_REQUEST'
@@ -259,29 +265,27 @@ def test_a_refusal_is_the_reference_s_at_the_assignment(
     assert refused.value.details['field'] == 'stype'
 
 
-def test_a_meaning_given_as_a_stype_is_kept_as_given(
+def test_declared_semantic_types_survive_relationship_edits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    schema = _schema('core', monkeypatch)
-    schema['users']['country'].stype = Stype.text
-    assert schema['users']['country'].stype is Stype.text
-    schema['orders']['user_id'].stype = Stype.categorical
-    assert schema['orders']['user_id']._stype_before_key is Stype.categorical
+    schema = _schema()
+    schema['users']['country'].stype = 'text'
+    assert schema['users']['country'].stype == 'text'
+    schema['orders']['user_id'].stype = 'categorical'
+    assert schema['orders']['user_id']._stype_before_key == 'categorical'
     schema.relationships = []
-    assert schema['orders']['user_id'].stype is Stype.categorical
+    assert schema['orders']['user_id'].stype == 'categorical'
 
 
-# The old route only where the relational engine is installed.
-@pytest.mark.parametrize('route', ('core', 'old') if ENGINE else ('core',))
 def test_a_key_and_a_time_column_given_as_numpy_text_are_kept_as_given(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # A name given as ``np.str_``, a ``str`` subclass, is the object each
     # table holds after the edit, on the core as the reference's setters
     # keep it (T1.24b's review, taken at T1.27).
     import numpy as np
 
-    schema = _schema(route, monkeypatch)
+    schema = _schema()
     schema['orders'].time_column = np.str_('ts')
     assert type(schema['orders'].time_column) is np.str_
     schema['users'].time_column = np.str_('seen')
@@ -296,27 +300,27 @@ def test_a_key_and_a_time_column_given_as_numpy_text_are_kept_as_given(
 def test_a_setter_that_skips_the_core_fails_here(
     monkeypatch: pytest.MonkeyPatch, started: list[str]
 ) -> None:
-    # Seeded: the glue answering "not mine" for a column leaves the edit
-    # to the Python rules, which the count of edit_schema runs catches.
+    # Seeded: suppressing the native edit must fail the operation-count check.
     monkeypatch.setattr(on_the_core, 'column', lambda *_: False)
-    schema = _schema('core', monkeypatch)
+    schema = _schema()
+    started.clear()
     schema['users']['age'].stype = 'categorical'
     assert started.count('edit_schema') == 0
     with pytest.raises(AssertionError):
-        test_each_edit_is_made_by_the_core_as_the_old_route_makes_it(
+        test_each_edit_reaches_the_core_and_updates_the_schema(
             'meanings', monkeypatch, started
         )
 
 
-def test_a_schema_changed_by_hand_is_edited_and_sampled_as_the_old_route_does(
+def test_manual_schema_changes_can_be_edited_and_materialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # T3.16: the schema is plain data, each column with what the source said
     # of it, so a column retyped by hand or a table pointed at another source
     # table is no longer refused (`schema_edited`): the edit is made and the
     # schema sampled as the old route makes and samples them.
-    def outcome(route: str, change: Edit) -> Any:
-        schema = _schema(route, monkeypatch)
+    def outcome(change: Edit) -> Any:
+        schema = _schema()
         change(schema)
         try:
             schema['users']['country'].stype = 'text'
@@ -339,13 +343,11 @@ def test_a_schema_changed_by_hand_is_edited_and_sampled_as_the_old_route_does(
         lambda s: setattr(s['users']['age'], 'dtype', 'float64'),
         lambda s: setattr(s['orders'], 'source_name', 'users'),
     ):
-        core = outcome('core', change)
+        core = outcome(change)
         assert 'schema_edited' not in repr(core)
-        if ENGINE:
-            assert core == outcome('old', change)
 
 
-def test_a_schema_of_frames_never_reaches_the_core(
+def test_frame_schema_edits_reach_the_core(
     started: list[str],
 ) -> None:
     import pandas as pd
@@ -361,7 +363,7 @@ def test_a_schema_of_frames_never_reaches_the_core(
     frames['users']['age'].stype = 'categorical'
     frames['users'].primary_key = 'user_id'
     frames.relationships = []
-    assert started == []
+    assert started.count('edit_schema') >= 3
 
 
 #: Edits naming a column by a value no name is, and cannot be looked up:
@@ -381,20 +383,16 @@ UNHASHABLE: dict[str, Edit] = {
 
 
 @pytest.mark.parametrize('field', sorted(UNHASHABLE))
-def test_a_value_no_name_is_is_refused_by_name_where_the_reference_crashes(
+def test_invalid_names_are_refused_without_mutating_the_schema(
     field: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    schema = _schema('core', monkeypatch)
+    schema = _schema()
     before = _projection(schema)
     with pytest.raises(StructuredDataError) as refused:
         UNHASHABLE[field](schema)
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details['field'] == field
     assert _projection(schema) == before
-    if ENGINE:
-        old = _schema('old', monkeypatch)
-        with pytest.raises(TypeError, match='unhashable'):
-            UNHASHABLE[field](old)
 
 
 def test_a_key_named_on_a_link_s_foreign_key_is_refused_at_materialize(
@@ -404,9 +402,8 @@ def test_a_key_named_on_a_link_s_foreign_key_is_refused_at_materialize(
     # refuses a link whose foreign key is its own table's key
     # (Graph._edge_error); the core's consistency check now does too.
     query = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-    for route in ('core', 'old') if ENGINE else ('core',):
-        schema = _schema(route, monkeypatch)
-        schema['orders'].primary_key = 'user_id'
-        with pytest.raises(StructuredDataError) as refused:
-            PredictiveQuery(query, schema).materialize(indices=[0, 1])
-        assert refused.value.code == 'INVALID_REQUEST', route
+    schema = _schema()
+    schema['orders'].primary_key = 'user_id'
+    with pytest.raises(StructuredDataError) as refused:
+        PredictiveQuery(query, schema).materialize(indices=[0, 1])
+    assert refused.value.code == 'INVALID_REQUEST'

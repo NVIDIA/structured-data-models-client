@@ -21,7 +21,6 @@ Concretely, the public surface is:
 | `sdm_api` | Everything in `sdm_api.__all__`: the wire vocabulary |
 | `sdm_connectors` | Everything in `sdm_connectors.__all__` |
 | `sdm_connectors.databricks` | Everything in `sdm_connectors.databricks.__all__`: `warehouse` and `lakebase` |
-| `sdm_relational_engine` | Reached through `sdm_client`. Import it directly at your own risk |
 
 Not public, and free to change in any release:
 
@@ -31,9 +30,8 @@ Not public, and free to change in any release:
   re-export, including `sdm_client.core.transport`,
   `sdm_client.adapters`, `sdm_client.materializers` and `sdm_client.wire`.
   Their contents are implementation details, however stable they look.
-- The `predictive_query` package, which the `structured-data-models-pql` distribution installs.
-  `structured-data-models-client` depends on it to parse and validate PQL, but it is not a
-  supported API. Write PQL with `sdm_client.PredictiveQuery`.
+- Internal Rust query/schema modules and their Python adapters.
+  Write PQL with `sdm_client.PredictiveQuery`; parsing and validation use the shared Rust core.
 - How a `FittedModel` is constructed. `SDMClient.fit()` returns one, and
   calling the class yourself raises `TypeError`.
 - The exact text of an exception or warning message. Branch on the exception
@@ -76,7 +74,7 @@ The maintained matrix must distinguish supported behavior, local checks and live
 ## What a version number means
 
 [Semantic versioning](https://semver.org) applies to the public surface above
-and all five distributions together. They share one version and are released
+and all three distributions together. They share one version and are released
 together, so `structured-data-models-client==1.2.0` always means `structured-data-models-api==1.2.0`.
 
 | Bump | Means |
@@ -94,15 +92,9 @@ request that was previously sent. The changelog identifies the change.
 **The contract starts at the first published release.** These promises begin at
 1.0.0; they do not apply to anything earlier.
 
-This distinction matters. Before that release, this document made
-`predictive_query` public, along with `sdm_client.ModelSpec`,
-`sdm_client.RuntimeContract`, the model handles' `spec` attribute,
-`Request.decomposition` and the arguments `FittedModel` was constructed with.
-The first release takes all of them off the public surface with no deprecation
-period, which the rule below would otherwise forbid. There is no period to
-serve: nobody can be holding names that were never published, and warning about
-them from the first release would be deprecating something that was never
-available. Everything after 1.0.0 gets the full treatment.
+The exported API snapshots and the compatibility ledger define the supported surface.
+Internal adapters, model specifications and query implementation details are not public APIs unless explicitly exported and documented.
+After 1.0.0, public removals follow the deprecation policy below.
 
 ## Deprecation
 

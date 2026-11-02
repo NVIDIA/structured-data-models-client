@@ -28,6 +28,7 @@ which ``sdm-testkit``'s key binders implement too; both run the vector.
 from __future__ import annotations
 
 import contextlib
+import copy
 import hashlib
 import json
 import math
@@ -265,7 +266,7 @@ TYPE_MAP: dict[str, dict[str, str]] = {
 #: The live write guard (KO3-51): a check every statement the loader
 #: writes with on a live warehouse passes before it runs, raising for a
 #: write outside the one test schema; the live runs set it
-#: (``scripts/live/capture_run.py``), and offline it is ``None``.
+#: (``scripts/live/runner_guard.py``), and offline it is ``None``.
 WRITE_GUARD: Callable[[str], None] | None = None
 #: The live write guard's case-setup scope (its ``setup``), set with
 #: :data:`WRITE_GUARD`: a case's warehouse setup runs within it, where
@@ -1952,3 +1953,66 @@ def non_native(database: str) -> list[str]:
     return sorted(
         name for name, entry in TYPE_MAP.items() if f'{database}_value' in entry
     )
+
+
+STORED_DTYPES = {
+    'canonical': 'string',
+    'digits': 'string',
+    'iso': 'string',
+    'json': 'string',
+}
+
+
+class UnmappedColumn(Exception):
+    r"""A column whose type the type map does not place on a database."""
+
+
+def stored_schema(
+    schema: Any,
+    case: dict[str, Any],
+    bases: dict[str, list[str]],
+    database: str,
+) -> Any:
+    """Project a case schema into the fixture database's stored types."""
+    if database == 'duckdb':
+        return schema
+    import duckdb
+
+    spec = case.get('input') or {}
+    out = copy.deepcopy(schema)
+    connection = duckdb.connect()
+    try:
+        for statement in [
+            *bases.get(spec.get('base'), []),
+            *(spec.get('setup') or []),
+        ]:
+            connection.execute(statement)
+        for table in (out or {}).get('tables') or []:
+            for column in table.get('columns') or []:
+                where = f'{table.get("name")}.{column.get("name")}'
+                try:
+                    kind = (
+                        connection.execute(
+                            f'SELECT {quote(column["name"])} FROM '
+                            f'{quote(table["name"])} LIMIT 0'
+                        )
+                        .to_arrow_table()
+                        .schema.field(0)
+                        .type
+                    )
+                    entry = TYPE_MAP[family(kind)]
+                except Exception:  # noqa: BLE001 - named below
+                    raise UnmappedColumn(
+                        f'{where}: its type is not in the type map'
+                    ) from None
+                stored = entry.get(f'{database}_value')
+                if stored is None:
+                    continue
+                if stored not in STORED_DTYPES:
+                    raise UnmappedColumn(
+                        f'{where}: no dtype for the stored form {stored}'
+                    )
+                column['dtype'] = STORED_DTYPES[stored]
+    finally:
+        connection.close()
+    return out

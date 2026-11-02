@@ -78,7 +78,6 @@ from sdm_client import (
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 from sdm_client._rust import codec, errors
 from sdm_client._rust import run as run_module
@@ -93,11 +92,6 @@ PANIC = 'SENTINEL-panic-9b52'
 SENTINELS = (DATA, DSN, PANIC)
 CREDENTIAL = f'postgresql://sdm:{DSN}@db.invalid:5432/sales'
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
 
 
 def _shop() -> list[str]:
@@ -224,7 +218,7 @@ def _endpoint() -> Any:
     name = 'scripted_endpoint'
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(
-            name, ROOT / 'contract/runners/scripted_endpoint.py'
+            name, ROOT / 'tests/support/scripted_endpoint.py'
         )
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
@@ -433,11 +427,6 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
     }
 
 
-@pytest.fixture(autouse=True)
-def _core_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-
-
 @pytest.mark.parametrize('name', list(_scenarios()))
 def test_no_sentinel_reaches_anything_written(
     name: str,
@@ -584,14 +573,11 @@ def test_a_leaky_formatter_is_caught(
     assert any(found == sentinel for _, found in seen.leaks()), seen.leaks()
 
 
-def test_an_endpoint_echoing_our_data_is_shown_verbatim_as_on_the_old_route(
+def test_endpoint_error_text_is_preserved_without_added_credentials(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    r"""The owner-accepted exception (decision E47): an endpoint that echoes
-    a value of our request in its refusal has that text shown, verbatim, as
-    the old route shows it. It is the endpoint's text, not ours: nothing of
-    our side (the credential in the URL) is added, and nothing is chained."""
+    """Endpoint error content survives; the client adds no credentials."""
     echoing = json.dumps(
         {
             'code': 'UNSUPPORTED_FEATURE',
@@ -599,29 +585,16 @@ def test_an_endpoint_echoing_our_data_is_shown_verbatim_as_on_the_old_route(
             'invalid_params': [{'name': 'country', 'reason': DATA}],
         }
     ).encode()
-    shown = {}
     with _answering(echoing, 422) as url:
-        for route, routes in (
-            ('core', CORE),
-            (
-                'old',
-                ','.join(
-                    _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
-                ),
-            ),
-        ):
-            monkeypatch.setenv(_routing.ENVIRONMENT, routes)
-            with pytest.raises(NimRequestError) as raised:
-                _predict(url)
-            shown[route] = raised.value
-    core, old = shown['core'], shown['old']
+        with pytest.raises(NimRequestError) as raised:
+            _predict(url)
+    core = raised.value
     assert DATA in str(core)
-    assert (str(core), core.code, core.status_code, core.details) == (
-        str(old),
-        old.code,
-        old.status_code,
-        old.details,
-    )
+    assert core.code == 'UNSUPPORTED_FEATURE'
+    assert core.status_code == 422
+    assert core.details['invalid_params'] == [
+        {'name': 'country', 'reason': DATA}
+    ]
     assert core.__cause__ is None and core.__context__ is None
     formatted = ''.join(traceback.format_exception(core))
     assert DSN not in formatted + repr(core.details)
@@ -658,20 +631,11 @@ def test_the_client_s_own_explanation_names_schema_columns_never_values(
     assert error.__cause__ is None and error.__context__ is None
 
 
-def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
+def test_endpoint_credential_echo_does_not_leak_through_other_channels(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    r"""As on the old route, an endpoint that echoes our credential (the
-    Authorization header made of the URL's userinfo, and the password) in
-    its own refusal has it shown: the core route's refusal is the old
-    route's exactly (E47; a scrub of such echoes was tried in fix rounds 3
-    and 4 and removed by change of method). Our own code adds nothing: the
-    credential is nowhere in the exception but where the endpoint's text
-    puts it, nothing is chained, and, on the core route, the canary's
-    watchers (the core's error, every log record at DEBUG, every warning,
-    stderr and stdout) find the credential, its token and the endpoint's
-    sentinel written nowhere else."""
+    """Endpoint-authored credential echoes survive only in the returned error."""
     echoing = json.dumps(
         {
             'code': 'UNAUTHORIZED',
@@ -679,43 +643,25 @@ def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
             'seen': {'header': '{AUTH}', 'password': DSN},
         }
     ).encode()
-    shown = {}
-    watched: dict[str, _Seen] = {}
     with _answering(echoing, 401) as url:
-        for route, routes in (
-            ('core', CORE),
-            (
-                'old',
-                ','.join(
-                    _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
-                ),
-            ),
-        ):
-            monkeypatch.setenv(_routing.ENVIRONMENT, routes)
-            with _watching(monkeypatch, capfd) as seen:
-                with pytest.raises(NimRequestError) as raised:
-                    _predict(url)
-            shown[route] = raised.value
-            watched[route] = seen
-    for route, seen in watched.items():
-        # Not vacuous: the watchers saw the journey's own warning (the
-        # missing indices) on both routes.
-        assert any(where == 'warning' for where, _ in seen.texts), route
-        written = [
-            where
-            for where, text in seen.texts
-            for echoed in (DSN, _BASIC_TOKEN, ENDPOINT)
-            if echoed in text
-        ]
-        assert written == [], route
-    core, old = shown['core'], shown['old']
-    assert (str(core), repr(core), core.code, core.status_code) == (
-        str(old),
-        repr(old),
-        old.code,
-        old.status_code,
-    )
-    assert core.details == old.details
+        with _watching(monkeypatch, capfd) as seen:
+            with pytest.raises(NimRequestError) as raised:
+                _predict(url)
+    core = raised.value
+    assert core.code == 'UNAUTHORIZED'
+    assert core.status_code == 401
+    assert core.details['seen'] == {
+        'header': f'Basic {_BASIC_TOKEN}',
+        'password': DSN,
+    }
+    assert any(where == 'warning' for where, _ in seen.texts)
+    written = [
+        where
+        for where, text in seen.texts
+        for echoed in (DSN, _BASIC_TOKEN, ENDPOINT)
+        if echoed in text
+    ]
+    assert written == []
     assert DSN in str(core) and _BASIC_TOKEN in str(core)
     assert ENDPOINT in str(core)
     assert core.__cause__ is None and core.__context__ is None

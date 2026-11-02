@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Two distributions installed together must not pin one package differently.
 
-The five are released as a set and a caller installs several at once, so a pin
+The three are released as a set and a caller installs several at once, so a pin
 only one of them carries makes the set unsatisfiable. `pip` reports it as
 `ResolutionImpossible` at install time, which is late and reads as the user's
 problem. It happened: the query language moved to ANTLR 4.13.2 and the engine's
@@ -28,10 +28,8 @@ else:  # These packages support 3.10, where tomllib is not in the stdlib.
 _ROOT = Path(__file__).resolve().parents[3]
 _PACKAGES = (
     'structured-data-models-api',
-    'structured-data-models-pql',
     'structured-data-models-client',
     'structured-data-models-connectors',
-    'structured-data-models-relational-engine',
 )
 _REQUIREMENT = re.compile(r'^([A-Za-z0-9._-]+)\s*(?:\[[^\]]*\])?\s*(.*)$')
 
@@ -44,14 +42,6 @@ def _requirements(package: str) -> list[str]:
     for extra in project.get('optional-dependencies', {}).values():
         found.extend(extra)
 
-    # The engine declares its runtime dependencies in setup.py, which is where
-    # the pin that broke this went unnoticed.
-    setup = directory / 'setup.py'
-    if setup.exists():
-        text = setup.read_text()
-        block = re.search(r'install_requires=\[(.*?)\]', text, re.DOTALL)
-        if block:
-            found.extend(re.findall(r"['\"]([^'\"]+)['\"]", block.group(1)))
     return found
 
 

@@ -47,11 +47,13 @@ def _test(test: str, attached: Any = None, **fields: Any) -> Any:
 
 
 def _sentence_of(code: str) -> str:
-    r"""The first sentence of the core's table of ``code``."""
+    """A generic sentence usable without public API host context."""
     return next(
         name
         for name, entry in errors.table().sentences.items()
-        if entry['code'] == code and entry['kind'] == 'error'
+        if entry['code'] == code
+        and entry['kind'] == 'error'
+        and '{host.' not in entry['template']
     )
 
 

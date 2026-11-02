@@ -16,10 +16,6 @@
 //! that differ within float64's precision stay numerical, and a decimal of
 //! scale 0, which the reference reads as int64, is counted as it is.
 //!
-//! Gating: `contract/tests/t214b-pending.json`'s `pending` names
-//! `stype:rust-unit` while the fix is not in; a pending test must still
-//! fail (strict), and once it passes it fails, naming itself, until it is
-//! taken out.
 
 use std::sync::Arc;
 
@@ -100,41 +96,11 @@ fn scaled(step: i128) -> Vec<i128> {
         .collect()
 }
 
-/// The pending file, read as the other vector tests read theirs.
-const PENDING: &str = include_str!("../../../../contract/tests/t214b-pending.json");
-
-fn pending(name: &str) -> bool {
-    let gating: serde_json::Value = serde_json::from_str(PENDING).unwrap();
-    let listed = |list: &str| {
-        gating[list]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|key| key.as_str() == Some(name))
-    };
-    assert!(listed("authored"), "{name} is not among the authored keys");
-    listed("pending")
-}
-
-/// Runs `check`: it must pass, or, while `name` is pending, fail.
-fn held(name: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome.is_ok(), pending(name)) {
-        (true, true) => {
-            panic!("{name} passes now: take it out of contract/tests/t214b-pending.json's pending")
-        }
-        (false, false) => std::panic::resume_unwind(outcome.unwrap_err()),
-        _ => {}
-    }
-}
-
 #[test]
 fn a_scaled_decimal_that_differs_only_past_float64_is_categorical() {
     // The rides-along fix: the 80 values are one float64 to the
     // reference, so the column is categorical, as the case's line has it.
-    held("stype:rust-unit", || {
-        assert_eq!(stype_of_d(scaled(1), 38, 18), Stype::Categorical);
-    });
+    assert_eq!(stype_of_d(scaled(1), 38, 18), Stype::Categorical);
 }
 
 #[test]

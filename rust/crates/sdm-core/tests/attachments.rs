@@ -25,6 +25,8 @@ use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
 const READ: &[&str] = &[
+    "CheckColumn.input",
+    "PlanResultMerge.input",
     "AssembleFrameSchema.input",
     "ResolveDirectDtype.input",
     "ResolveObservedTabular.input",

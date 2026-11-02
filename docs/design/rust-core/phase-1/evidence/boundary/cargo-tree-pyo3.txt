@@ -1,3 +1,0 @@
-error: package ID specification `pyo3` did not match any packages
-
-help: a package with a similar name exists: `atoi`

@@ -9,13 +9,13 @@ a failure on call 2).
 
 Each request a served endpoint receives is a call, numbered from zero in
 the order received. Every call is answered by the one rule
-(``contract/runners/scripted_endpoint.py``'s ``answer``), as one call is
+(``tests/support/scripted_endpoint.py``'s ``answer``), as one call is
 today, but the chosen call, which is answered ``500`` with
 ``{"error": "scripted_failure", "call": <its number>}``: a status the
 client's transport does not retry (``_RETRY_STATUS``), so the failed call is
 the one numbered. An endpoint told to fail no call answers as today.
 
-The requests are the shared vectors' (``contract/scripted-endpoint.json``),
+The requests are the shared vectors' (``tests/fixtures/scripted-endpoint.json``),
 so each answer is the one the rule gives that request alone. The Rust
 endpoint (``sdm-testkit``'s ``endpoint``) is the implementer's to give the
 same numbering and failure, with a test of its own, since the pure-Rust
@@ -41,9 +41,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 VECTORS = {
     v['name']: v
-    for v in json.loads((ROOT / 'contract/scripted-endpoint.json').read_text())[
-        'vectors'
-    ]
+    for v in json.loads(
+        (ROOT / 'tests/fixtures/scripted-endpoint.json').read_text()
+    )['vectors']
 }
 
 
@@ -68,7 +68,7 @@ def _module() -> ModuleType:
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(
-        name, ROOT / 'contract/runners/scripted_endpoint.py'
+        name, ROOT / 'tests/support/scripted_endpoint.py'
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -27,9 +27,6 @@ The converter's version-1 fixture, ``contract/tests/t33-capture-v1``, is
 recorded once by ``contract/tests/t33_capture_v1_record.py`` from the
 writer, and never again: a later version reads it through the converter.
 
-Each test listed in ``contract/tests/t33-pending.json``'s ``pending`` (as
-``py:<function name>``) failed when written and is held to failing
-(``t33_gate.py``) until the implementer takes it out.
 """
 
 from __future__ import annotations
@@ -74,23 +71,6 @@ def _captures() -> ModuleType:
     return _load('captures', ROOT / 'contract/runners/captures.py')
 
 
-def _gate() -> ModuleType:
-    key = 't33_gate'
-    if key not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            key, Path(__file__).with_name('t33_gate.py')
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        sys.modules[key] = module
-    return sys.modules[key]
-
-
-#: Runs a test through the gate: it must pass, or fail while pending.
-pending = _gate().gated
-
-
 def _bytes(path: Path) -> bytes:
     r"""Everything written at ``path``, a file or every file under it."""
     if path.is_file():
@@ -114,7 +94,6 @@ def _clear(monkeypatch: pytest.MonkeyPatch, captures: ModuleType) -> None:
 # --- exit 1: a private name in a capture fails the write ---------------------
 
 
-@pending
 def test_t33_the_private_variables_cover_every_warehouse() -> None:
     r"""Brief, "Threat model": the owner's Snowflake env file (KO3-24) and the
     Databricks names are private; catalogs, schemas, hosts and users each
@@ -128,7 +107,6 @@ def test_t33_the_private_variables_cover_every_warehouse() -> None:
     assert set(captures.PLACEHOLDERS) <= set(captures.PRIVATE)
 
 
-@pending
 def test_t33_a_private_name_fails_the_write(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -172,7 +150,6 @@ def test_t33_a_private_name_fails_the_write(
     assert refused >= len(set(KO3_24) - set(captures.PLACEHOLDERS)) > 0
 
 
-@pending
 def test_t33_placeholders_are_put_in_before_anything_is_written(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -246,7 +223,6 @@ def _same(back: dict[str, Any], expected: dict[str, Any]) -> None:
             assert back[key] == value, key
 
 
-@pending
 def test_t33_the_converter_reads_a_version_1_capture() -> None:
     r"""Exit 4: the converter reads the committed version-1 fixture, whatever
     the current version is, into the content it was recorded from."""
@@ -261,7 +237,6 @@ def test_t33_the_converter_reads_a_version_1_capture() -> None:
     _same(back, recorder.content())
 
 
-@pending
 def test_t33_a_capture_of_an_unknown_version_is_refused_by_name(
     tmp_path: Path,
 ) -> None:

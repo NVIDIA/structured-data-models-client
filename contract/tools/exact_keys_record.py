@@ -3,57 +3,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's answers to T2.21's Postgres vectors into
-``contract/exact-key-vectors.json``.
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``), from this repository's root, with
-``SDM_POSTGRES_TEST_DSN`` naming a Postgres 17 server the recorder may
-create databases on::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/exact_keys_record.py
-
-Written by T2.21's test author from the mid-phase design check's
-reproduction: a key column of Postgres's unconstrained ``numeric`` (the one
-type the Postgres provider hands over as exact text, marked
-``sdm:exact_number``, which the contract loader does not make), holding 20
-ids from 2**53 (9007199254740992), where a double tells 2**53 and 2**53 + 1
-apart no more. ``users(user_id numeric, age double precision)`` and
-``orders(order_id bigint, user_id numeric, price double precision, ts
-timestamp)``, each user with three orders. Each vector names how the key is
-made the key:
-
-- ``pk.given``: the reproduction, the key given to ``Schema.from_source``
-  (``primary_keys={'users': 'user_id'}``), asked ``PREDICT users.age FOR
-  EACH users.user_id`` for 2**53 + 1;
-- ``fk.given``: both keys and the link from ``orders.user_id`` given,
-  asked ``PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id``;
-- ``fk.edited``: both keys given and no link (``relationships=[]``), the
-  link then set on the schema (``schema.relationships = [...]``), asked
-  the same;
-- ``pk.catalog`` and ``fk.catalog``, the controls: the same tables with the
-  key and the link declared in SQL (``PRIMARY KEY``, ``REFERENCES``),
-  nothing given, asked each question.
-
-For each the reference's public answer is kept, as
-``postgres_regressions_record.py`` keeps it (whose helpers this uses):
-the outcome (result, stage, exception class and ``StructuredDataError``
-code), the public schema (``run_python``'s projection), the digest of the
-request's payloads with ``metadata.request_id`` left out, the anchor times
-they carry, and each key column's Postgres type by name (``format_type``).
-``observe`` is imported by ``contract/tests/test_t221_exact_keys.py``, so
-python-core is observed by the same code, forced onto the core's Postgres
-routes.
-"""
+"""Exact-key PostgreSQL fixtures exercised through the installed public client."""
 
 from __future__ import annotations
 
 import copy
 import importlib.util
-import json
-import os
-import platform
-import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -175,16 +130,12 @@ def _relationships(links: list[dict[str, str]]) -> list[Any]:
     return [Relationship(**link) for link in links]
 
 
-def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
-    r"""The public answer to ``vector`` over a new database on ``dsn``'s
-    server: on the core's Postgres routes with ``core``, else on the
-    interpreter's own client (the reference's, when recording)."""
+def observe(vector: dict[str, Any], dsn: str) -> dict[str, Any]:
+    """Run the vector through the public client in a temporary database."""
     import psycopg
 
     regressions = _regressions()
     name, scoped = regressions._database(dsn)
-    previous = os.environ.get('SDM_CORE_ROUTES')
-    os.environ['SDM_CORE_ROUTES'] = ''
     try:
         with psycopg.connect(scoped, autocommit=True) as connection:
             connection.execute(regressions.UTC)
@@ -210,16 +161,6 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
             'payloads': None,
             'postgres': types,
         }
-        if core:
-            from sdm_client import _routing
-
-            os.environ['SDM_CORE_ROUTES'] = ','.join(
-                path
-                for path in _routing.PATHS
-                if path.endswith('/postgres') and path in _routing.CORE_ROUTED
-            )
-        else:
-            os.environ['SDM_CORE_ROUTES'] = ''
         from sdm_client import PredictiveQuery, Schema
         from sdm_connectors import PostgresSource
 
@@ -268,60 +209,4 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
                 }
         return answer
     finally:
-        os.environ.pop('SDM_CORE_ROUTES', None)
-        if previous is not None:
-            os.environ['SDM_CORE_ROUTES'] = previous
         regressions._drop(dsn, name)
-
-
-def main() -> int:
-    import pandas as pd
-    import psycopg
-    import pyarrow as pa
-
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
-    if not dsn:
-        print('SDM_POSTGRES_TEST_DSN names no server', file=sys.stderr)
-        return 1
-    with psycopg.connect(dsn) as connection:
-        server = connection.info.server_version // 10000
-    vectors = []
-    for vector in VECTORS:
-        entry = copy.deepcopy(vector)
-        entry['reference'] = observe(vector, dsn, core=False)
-        vectors.append(entry)
-        print(vector['id'], entry['reference']['outcome'], file=sys.stderr)
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/exact_keys_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'environment': {
-            'python': platform.python_version(),
-            'pandas': pd.__version__,
-            'pyarrow': pa.__version__,
-            'psycopg': psycopg.__version__,
-            'postgres': server,
-        },
-        'register_ref': REGISTER_REF,
-        'vectors': vectors,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    print(f'{len(vectors)} vectors written', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

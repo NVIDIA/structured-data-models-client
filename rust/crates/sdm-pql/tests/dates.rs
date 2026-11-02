@@ -5,7 +5,7 @@
 //! The date reader held to the reference's readings: T0.6's 45 PQL
 //! literals (`rust/testdata/t06-vectors.json`), the generated literals of
 //! `dates.json` (D8's packed dates and long fields, and a grid of D2 to D7
-//! with D4's warning; `dates_record.py`), and the first attempt's
+//! with D4's warning), and the frozen
 //! `padded-years.tsv`, where Linux's `strftime` and macOS's differ only in
 //! D4's warning.
 //!

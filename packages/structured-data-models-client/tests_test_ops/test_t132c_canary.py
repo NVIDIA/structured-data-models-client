@@ -1,43 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The canary test over the nested family's error paths (T1.32c's exit "the
-canary test covers the family's error paths", T1.32a's exits applied to
-this family; decision H17).
-
-Written by the package's independent test author, before the
-implementation. It drives each path of a nested column through the canary
-of ``test_the_canary.py`` (its sentinels, its watch over the core's error,
-``str``, ``repr``, the details, the traceback, every warning, every log
-record at DEBUG, stderr and stdout, and its check that none of them holds a
-sentinel), on the core route, ``Schema.from_source`` then ``materialize``:
-
-- describe: a struct, a map, a list of lists, a list of structs and a
-  fixed-size list holding the data sentinel (the reference fails each
-  unnamed; the core refuses each by name, or describes it, as the package
-  settles and registers it);
-- describe: a list of text and a binary column holding the sentinel, which
-  the reference leaves out with a warning that names the column, never a
-  value;
-- admission: a union holding the sentinel, and an interval holding our
-  number sentinel, refused by name with the column and its type;
-- materialize: a struct and a list on the fact table, which the request's
-  context reads.
-
-The sentinels are the canary's data sentinel and a number of our own,
-``NUMBER``, carried by the nested column's values. Whatever the package
-settles for a path, a refusal or a success, nothing written may hold one.
-A refusal must be the core's (the canary saw the core's error). Which
-refusal it is, ``UNSUPPORTED_REQUEST`` included where an approved register
-entry declares it (P1B-10), is not this test's to judge:
-``contract/tests/test_t132c_nested_types.py`` and ``t132c_nested_types.rs``
-hold each path's outcome to the reference and the register.
-
-Gating (``contract/tests/t132c_gate.py``): a scenario named in
-``t132c-pending.json``'s ``pending["exits"]`` (as ``canary:<scenario>``)
-failed when written. It still runs and must still fail; once it passes it
-fails, naming itself, until it is taken out of the list.
-"""
+"""Native value conversion must not expose planted data through errors or logs."""
 
 from __future__ import annotations
 
@@ -53,7 +17,7 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError, _routing
+from sdm_client import PredictiveQuery, Schema, StructuredDataError
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -70,12 +34,10 @@ def _module(name: str, path: Path) -> Any:
 
 
 C = _module('test_the_canary', HERE / 'test_the_canary.py')
-G = _module('t132c_gate', ROOT / 'contract/tests/t132c_gate.py')
 DATA = C.DATA
 #: Our number sentinel: digits no statement, code or field holds by chance.
 NUMBER = '73400917'
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 
 
 def _with(table: str, expression: str) -> list[str]:
@@ -169,7 +131,6 @@ def _answered(seen: Any, call: Callable[[], Any]) -> StructuredDataError | None:
 
 @pytest.fixture(autouse=True)
 def _core_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     # Our number is a sentinel too, for this file's scenarios.
     monkeypatch.setattr(C, 'SENTINELS', (*C.SENTINELS, NUMBER))
 
@@ -190,7 +151,7 @@ def test_no_sentinel_of_the_nested_family_reaches_anything_written(
                 f'{name}: refused outside the core ({error.code})'
             )
 
-    G.held('exits', f'canary:{name}', check)
+    check()
 
 
 @pytest.mark.parametrize('name', list(SETUPS))

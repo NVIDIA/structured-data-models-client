@@ -15,7 +15,7 @@ when the model answers the core's request with one finite prediction for
 each entity asked about, laid out as the client lays out a result.
 
     scripts/live/rfm_smoke.py [--endpoint NAME] [--profile NAME]
-                              [--route core|old] [--timeout SECONDS]
+                              [--timeout SECONDS]
                               [--dry-run [--show-body]]
 
 The endpoint's name comes from ``--endpoint`` or ``SDM_SMOKE_ENDPOINT``,
@@ -36,8 +36,6 @@ argument errors name no value.
 ``--dry-run`` builds the same request on the core and shows what would be
 sent, answered in process by the scripted endpoint's rule, with no network
 access: it opens no socket and reads no Databricks configuration.
-``--route old`` sends the old route's request instead, as a control; it
-needs the relational engine installed.
 
 Exit status: 0 when the smoke passes, 1 when it fails, 2 for bad usage.
 """
@@ -230,7 +228,6 @@ def parse(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=f'the Databricks CLI profile; default ${PROFILE_VARIABLE}, '
         "then the SDK's own configuration",
     )
-    parser.add_argument('--route', choices=('core', 'old'), default='core')
     parser.add_argument(
         '--timeout',
         type=float,
@@ -315,18 +312,14 @@ def _shop() -> list[str]:
     return statements
 
 
-def build_request(route: str) -> Any:
-    r"""``base.regression``'s request, built on ``route``."""
+def build_request() -> Any:
+    r"""Build the current client's base regression request."""
     import duckdb
     import pandas as pd
-    from sdm_client import PredictiveQuery, Schema, _routing
+    from sdm_client import PredictiveQuery, Schema
     from sdm_connectors import DuckDBSource
 
     case = json.loads(CASE.read_text(encoding='utf-8'))
-    if route == 'core':
-        os.environ[_routing.ENVIRONMENT] = ','.join(case['routes'])
-    else:
-        os.environ[_routing.ENVIRONMENT] = ''
     connection = duckdb.connect()
     for statement in _shop():
         connection.execute(statement)
@@ -348,7 +341,7 @@ class _Recorded:
 
     def __init__(self) -> None:
         spec = importlib.util.spec_from_file_location(
-            'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
+            'scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
         )
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
@@ -485,14 +478,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         case = json.loads(CASE.read_text(encoding='utf-8'))
         indices = case['input']['materialize']['indices']
-        request = build_request(arguments.route)
+        request = build_request()
         if arguments.dry_run:
             transport = _Recorded()
             client = SDMClient.__new__(SDMClient)
             client._start(transport)
             result = client.predict(request, model=KumoRelational())
             [body] = transport.sent
-            say(f'dry run, {arguments.route} route: what would be sent')
+            say('dry run: what would be sent')
             for line in _summary(body):
                 say(f'  {line}')
             if arguments.show_body:
@@ -500,7 +493,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             assert endpoint is not None
             say(
-                f'live smoke, {arguments.route} route: sending to the endpoint '
+                'live smoke: sending to the endpoint '
                 f'from --endpoint or ${ENDPOINT_VARIABLE}'
             )
             with _client(endpoint, profile, arguments.timeout) as client:

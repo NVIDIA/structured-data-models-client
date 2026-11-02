@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from test_tabular_direct_core import Endpoint, client
 
 from sdm_client import PredictiveQuery, Schema
-from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import KumoRelational, KumoTabular
 from sdm_client.schema import Relationship
@@ -27,11 +27,6 @@ ONE_TABLE_QUERY = 'PREDICT users.churn FOR EACH users.user_id'
 TWO_TABLE_QUERY = (
     'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id'
 )
-
-
-def engine_or_skip() -> None:
-    """The relational route builds through the native sampler."""
-    pytest.importorskip('sdm_relational_engine')
 
 
 def one_table(rows: int = 60) -> Schema:
@@ -89,7 +84,6 @@ def spending(rows: int = 60) -> Schema:
 
 
 def test_one_table_can_be_built_for_the_relational_model():
-    engine_or_skip()
     request = PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
         indices=[1, 2, 3], model='kumo-relational'
     )
@@ -111,7 +105,6 @@ def test_a_model_handle_names_the_route_as_well_as_an_id():
 
 
 def test_naming_the_relational_model_by_handle_routes_relationally():
-    engine_or_skip()
     request = PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
         indices=[1, 2, 3], model=KumoRelational()
     )
@@ -129,7 +122,6 @@ def test_one_table_defaults_to_tabular():
 
 
 def test_several_tables_default_to_relational():
-    engine_or_skip()
     request = PredictiveQuery(TWO_TABLE_QUERY, two_tables()).materialize(
         indices=[1, 2, 3]
     )
@@ -203,7 +195,6 @@ def test_sampling_options_are_refused_on_the_tabular_route():
 
 
 def test_sampling_options_are_accepted_when_one_table_goes_relational():
-    engine_or_skip()
     request = PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
         indices=[1, 2, 3], model='kumo-relational', num_neighbors=[8, 4]
     )
@@ -214,26 +205,29 @@ def test_sampling_options_are_accepted_when_one_table_goes_relational():
 
 
 def test_a_relationally_gathered_request_is_refused_by_the_tabular_model():
-    engine_or_skip()
     request = PredictiveQuery(
         'PREDICT users.spend FOR EACH users.user_id', spending()
     ).materialize(indices=[1, 2, 3], model='kumo-relational')
-    adapter = TabularAdapter()
+    endpoint = Endpoint()
     with pytest.raises(StructuredDataError) as error:
-        list(adapter.prediction_plan(request, ('prediction',)))
+        with client(endpoint) as model_client:
+            model_client.predict(request, model='kumo-tabular')
     assert error.value.code == 'UNSUPPORTED_REQUEST'
-    assert 'kumo-relational' in str(error.value)
+    assert not endpoint.calls
+    assert 'kumo-tabular' in str(error.value)
+    assert 'relationships' in str(error.value)
 
 
 def test_a_tabular_request_refused_by_the_relational_model_says_how_to_gather_it():
     request = PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
         indices=[1, 2, 3], model='kumo-tabular'
     )
-    relational = pytest.importorskip('sdm_client.adapters.relational')
-    adapter = relational.RelationalAdapter()
+    endpoint = Endpoint()
     with pytest.raises(StructuredDataError) as error:
-        list(adapter.prediction_plan(request, ('prediction',)))
+        with client(endpoint) as model_client:
+            model_client.predict(request, model='kumo-relational')
     assert error.value.code == 'UNSUPPORTED_REQUEST'
+    assert not endpoint.calls
     assert "model='kumo-relational'" in str(error.value)
 
 
@@ -264,7 +258,6 @@ SELF_QUERY = 'PREDICT employees.left FOR EACH employees.emp_id'
 
 
 def test_one_table_with_a_relationship_defaults_to_relational():
-    engine_or_skip()
     request = PredictiveQuery(SELF_QUERY, self_referencing()).materialize(
         indices=[2, 3]
     )

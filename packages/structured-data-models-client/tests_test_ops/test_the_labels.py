@@ -25,7 +25,6 @@ or retyped evidence, seeded below.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +35,6 @@ import pytest
 from sdm_connectors import DuckDBSource
 
 from sdm_client import PredictiveQuery, Schema
-from sdm_client._routing import FROM_SOURCE_DUCKDB, MATERIALIZE_DUCKDB
 from sdm_client._rust import materialize as bridge
 
 CONTRACT = Path(__file__).resolve().parents[3] / 'contract'
@@ -104,9 +102,6 @@ def _core_examples(
     base = _base(given['base']) if given.get('base') else []
     for statement in base + list(given.get('setup', [])):
         connection.execute(statement)
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', ','.join(FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB)
-    )
     labelled: dict[str, Any] = {}
     real = bridge.run
 
@@ -268,7 +263,6 @@ def test_the_label_check_fails_closed(monkeypatch: Any) -> None:
         'instance_table'
     ]['rows'][0]
     assert problems(left_out, [], core)
-    assert os.environ.get('SDM_CORE_ROUTES')
 
 
 #: Decimal sums whose running total passes 38 digits (or ``i128``) and

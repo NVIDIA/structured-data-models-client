@@ -4,14 +4,14 @@
 
 # The Rust core of sdm-client: the contract, the core and the host layer, the
 # dev-only test host, and the Python and Java bindings over them. The layout and rules
-# are in docs/design/rust-core/phase-1/design.md.
+# are in rust/README.md.
 [workspace]
 resolver = "2"
 members = ["crates/*", "bindings/sdm-py", "bindings/sdm-jni"]
 
 [workspace.package]
 # Released with the client at its version; a guard holds sdm-py's version
-# equal to the other four distributions.
+# equal to the maintained Python distributions.
 version = "1.0.0"
 edition = "2024"
 rust-version = "1.97"

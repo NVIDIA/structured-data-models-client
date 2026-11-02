@@ -46,10 +46,8 @@ the same code.
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import json
-import os
 import re
 import sys
 import warnings
@@ -174,11 +172,8 @@ def said(shown: list[Any]) -> list[list[str]]:
     return found
 
 
-def observe(case: dict[str, Any], database: str, core: bool) -> dict[str, Any]:
-    r"""``case``'s public calls on ``database``: on the core where ``core``
-    (``SDM_CORE_ROUTES`` set to the case's routes there, as
-    ``run_python.py`` sets them for ``python-core``), else on the routes
-    the interpreter's client takes."""
+def observe(case: dict[str, Any], database: str) -> dict[str, Any]:
+    """Exercise current-client public calls against a scripted endpoint or source."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 
     helpers = options()
@@ -186,163 +181,80 @@ def observe(case: dict[str, Any], database: str, core: bool) -> dict[str, Any]:
     given = case['input']
     arguments = run._materialize_arguments(given['materialize'])
     from_source = run._from_source_arguments(given.get('from_source', {}))
-    if core:
-        os.environ['SDM_CORE_ROUTES'] = ','.join(run.routes_on(case, database))
-    else:
-        os.environ['SDM_CORE_ROUTES'] = ''
     observed: dict[str, Any] = {
         'outcome': None,
         'message': None,
         'details': None,
         'warnings': [],
     }
+    connection, cleanup, _ = run._open(case, run.load_bases(), database)
+    stage = 'from_source'
     try:
-        connection, cleanup, _ = run._open(case, run.load_bases(), database)
-        stage = 'from_source'
-        try:
-            with (
-                helpers.endpoint().serve(
-                    fail_call=given.get('fail_call'),
-                    probabilities=given.get('probabilities', False),
-                    quantiles=given.get('quantiles', False),
-                    explanation=given.get('explanation', False),
-                    item_metadata=given.get('item_metadata', False),
-                ) as (url, _received),
-                warnings.catch_warnings(record=True) as shown,
-            ):
-                warnings.simplefilter('always')
-                try:
-                    schema = Schema.from_source(
-                        run._source(database, connection), **from_source
+        with (
+            helpers.endpoint().serve(
+                fail_call=given.get('fail_call'),
+                probabilities=given.get('probabilities', False),
+                quantiles=given.get('quantiles', False),
+                explanation=given.get('explanation', False),
+                item_metadata=given.get('item_metadata', False),
+            ) as (url, _received),
+            warnings.catch_warnings(record=True) as shown,
+        ):
+            warnings.simplefilter('always')
+            try:
+                schema = Schema.from_source(
+                    run._source(database, connection), **from_source
+                )
+                run._edit(schema, given.get('edits', []))
+                if case['until'] != 'from_source':
+                    stage = 'materialize'
+                    request = PredictiveQuery(given['pql'], schema).materialize(
+                        **arguments
                     )
-                    run._edit(schema, given.get('edits', []))
-                    if case['until'] != 'from_source':
-                        stage = 'materialize'
-                        request = PredictiveQuery(
-                            given['pql'], schema
-                        ).materialize(**arguments)
-                    if case['until'] == 'predict':
-                        stage = 'predict'
-                        with SDMClient(url) as client:
-                            client.predict(request, model=KumoRelational())
-                    observed['outcome'] = run._outcome('success', stage)
-                except Exception as error:  # noqa: BLE001 - the outcome
-                    observed['outcome'] = run._outcome('refusal', stage, error)
-                    details = getattr(error, 'details', None)
-                    details = details if isinstance(details, dict) else {}
-                    observed['details'] = {
-                        str(name): helpers.as_json(value)
-                        for name, value in sorted(details.items())
-                    }
-                    observed['message'] = str(error)
-                observed['warnings'] = said(shown)
-        finally:
-            cleanup()
+                if case['until'] == 'predict':
+                    stage = 'predict'
+                    with SDMClient(url) as client:
+                        client.predict(request, model=KumoRelational())
+                observed['outcome'] = run._outcome('success', stage)
+            except Exception as error:  # noqa: BLE001 - the outcome
+                observed['outcome'] = run._outcome('refusal', stage, error)
+                details = getattr(error, 'details', None)
+                details = details if isinstance(details, dict) else {}
+                observed['details'] = {
+                    str(name): helpers.as_json(value)
+                    for name, value in sorted(details.items())
+                }
+                observed['message'] = str(error)
+            observed['warnings'] = said(shown)
     finally:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+        cleanup()
     return observed
 
 
-def probe(name: str, core: bool) -> dict[str, Any]:
-    r"""FX-4's probe ``name``: ``Schema.from_source`` over the shop base and
-    its statements on DuckDB, on the core's from-source routes where
-    ``core``."""
+def probe(name: str) -> dict[str, Any]:
+    """Exercise current-client public calls against a scripted endpoint or source."""
     from sdm_client import Schema
 
     run = options().runner()
     case = {'id': name, 'input': {'base': 'shop', 'setup': PROBES[name]}}
-    if core:
-        os.environ['SDM_CORE_ROUTES'] = ','.join(FROM_SOURCE_ROUTES)
-    else:
-        os.environ['SDM_CORE_ROUTES'] = ''
     observed: dict[str, Any] = {'outcome': None, 'warnings': []}
+    connection, cleanup, _ = run._open(case, run.load_bases(), 'duckdb')
     try:
-        connection, cleanup, _ = run._open(case, run.load_bases(), 'duckdb')
-        try:
-            with warnings.catch_warnings(record=True) as shown:
-                warnings.simplefilter('always')
-                try:
-                    Schema.from_source(run._source('duckdb', connection))
-                    observed['outcome'] = run._outcome('success', 'from_source')
-                except Exception as error:  # noqa: BLE001 - the outcome
-                    observed['outcome'] = run._outcome(
-                        'refusal', 'from_source', error
-                    )
-                observed['warnings'] = said(shown)
-        finally:
-            cleanup()
+        with warnings.catch_warnings(record=True) as shown:
+            warnings.simplefilter('always')
+            try:
+                Schema.from_source(run._source('duckdb', connection))
+                observed['outcome'] = run._outcome('success', 'from_source')
+            except Exception as error:  # noqa: BLE001 - the outcome
+                observed['outcome'] = run._outcome(
+                    'refusal', 'from_source', error
+                )
+            observed['warnings'] = said(shown)
     finally:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+        cleanup()
     return observed
 
 
 def load() -> dict[str, Any]:
     r"""The vector file, as committed."""
     return json.loads(OUT.read_text(encoding='utf-8'))
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--reference', type=Path, required=True)
-    parser.add_argument(
-        '--database', nargs='+', choices=DATABASES, default=list(DATABASES)
-    )
-    arguments = parser.parse_args(argv)
-    run = options().runner()
-    guard = run._Guard(arguments.reference)
-    guard.check('before the first case')
-    run._require_reference_client(arguments.reference)
-    commit = run._git(arguments.reference)
-    if not commit['clean']:
-        print('the reference checkout is not clean', file=sys.stderr)
-        return 1
-    if OUT.exists():
-        document = load()
-        if document['reference'] != commit['sha']:
-            print('the vectors are of another reference', file=sys.stderr)
-            return 1
-    else:
-        document = {
-            'format': FORMAT,
-            'about': (
-                "What the reference says for T2.14b's wording cases (KO2-32's "
-                'G15, M4, FX-1 and FX-4, the generic refusal the core route '
-                'gives where the reference words one, and a one-class binary '
-                "target), by case key, recorded from the reference's public "
-                "calls: the outcome, a refusal's message and details, and "
-                "every warning by class and text; and, under probes, FX-4's "
-                'from_source warnings over a column whose whole-table MIN is '
-                'an infinity. contract/tests/test_t214b_wording.py holds '
-                'python-core to them, observed by the same code.'
-            ),
-            'recorded_by': 'contract/tools/wording_record.py',
-            'reference': commit['sha'],
-            'vectors': {},
-            'probes': {},
-        }
-    loaded = run.load_cases([CASES / f'{case_id}.json' for case_id in CASE_IDS])
-    for case, digest in loaded:
-        for database in arguments.database:
-            if database not in run.case_databases(case):
-                continue
-            key = run.case_key(case['id'], database)
-            observed = observe(case, database, core=False)
-            document['vectors'][key] = {'case': digest, **observed}
-            print(f'{key}: {observed["outcome"]["result"]}', file=sys.stderr)
-    if 'duckdb' in arguments.database:
-        for name in PROBES:
-            document['probes'][name] = {
-                'setup': PROBES[name],
-                **probe(name, core=False),
-            }
-    guard.check('after the last case')
-    document['vectors'] = dict(sorted(document['vectors'].items()))
-    OUT.write_text(
-        json.dumps(document, indent=1, ensure_ascii=False) + '\n',
-        encoding='utf-8',
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

@@ -2,31 +2,19 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The core picks every refusal's and warning's sentence, and this host
-fills it (T3.17, the Phase 3 structure design's fix B, invariant 8).
+"""Registered diagnostic templates and specific public refusal messages.
 
-The core sets a sentence, from one closed list, on every error and warning
-it gives; each sentence has one shared template, which the binding exports
-(``_native.templates()``), and each advice a template names one spelling in
-this host (``errors.ADVICE``). This host chooses no sentence: it fills the
-core's with its values, as the old client wrote them, and its advice, as
-Python is written. A refusal with no sentence is a bug: the generic
-sentence is gone, and the census's probes on the core route show none.
-
-Each public call runs on the core route, every core route forced, and is
-held to the old client's words.
+Historical whole-census comparisons remain archived for final acceptance.
+These permanent checks cover template rendering and named public refusals.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import string
-import sys
-import tempfile
 import warnings
-from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +28,24 @@ from sdm_client import (
     Schema,
     StructuredDataError,
     _native,
-    _routing,
 )
 from sdm_client._rust import errors
 
-ROOT = Path(__file__).resolve().parents[3]
-#: Every path this build can run on the core, forced.
-CORE = ','.join(sorted(_routing.CORE_ROUTED))
+RANK = (
+    'PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 '
+    'FOR EACH users.user_id'
+)
+
+
+@contextmanager
+def _ranking_source():
+    fixture = Path(__file__).with_name('data') / 'ranking-shop.json'
+    with duckdb.connect() as connection:
+        for statement in json.loads(fixture.read_text())['statements']:
+            connection.execute(statement)
+        yield DuckDBSource(connection)
+
+
 #: The sentences a refusal said before T3.17 when no template of the
 #: host's matched it: a code's sentence, naming nothing of the refusal.
 GENERIC = frozenset(
@@ -59,12 +58,6 @@ GENERIC = frozenset(
         'the configuration of this call is not one the core accepts',
     }
 )
-
-
-@pytest.fixture
-def core(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    yield
 
 
 def _table() -> dict[str, Any]:
@@ -300,7 +293,11 @@ def test_columns_left_out_of_one_table_are_one_warning() -> None:
 def test_unscored_candidates_are_named_as_the_caller_gave_them() -> None:
     # The core names the candidates by position; only the host holds what
     # the caller gave, which it fills in as a host value.
-    from sdm_client.client import _SCORE_THE_UNSCORED
+    remedy = (
+        'Gather a wider context with num_context_samples if other entities in '
+        'the data answer differently, or ask over a table of (entity, '
+        'candidate) pairs, which scores every candidate from its features.'
+    )
 
     given = {1: 'gold', 2: 'silver', 3: 'bronze'}
 
@@ -317,21 +314,20 @@ def test_unscored_candidates_are_named_as_the_caller_gave_them() -> None:
         'answer only, nearly always because no entity in it linked to the '
         'candidate in the window, and a classification needs two to learn '
         'from. No call was sent for them, so each row ranks only the rest, '
-        "and the result's unscored_candidates names them. "
-        + _SCORE_THE_UNSCORED,
+        "and the result's unscored_candidates names them. " + remedy,
         "[CANDIDATES_UNSCORED] candidate 'silver' is left out of this "
         'ranking, unscored: the context sampled for it holds one answer only, '
         'nearly always because no entity in it linked to the candidate in the '
         'window, and a classification needs two to learn from. No call was '
         "sent for it, so each row ranks only the rest, and the result's "
-        'unscored_candidates names it. ' + _SCORE_THE_UNSCORED,
+        'unscored_candidates names it. ' + remedy,
     ]
 
 
 # --- the public calls -----------------------------------------------------------
 
 
-def test_a_key_check_s_advice_is_python(core: None) -> None:
+def test_a_key_check_s_advice_is_python() -> None:
     connection = duckdb.connect()
     connection.execute('CREATE TABLE users (user_id INTEGER, name VARCHAR)')
     connection.execute("INSERT INTO users VALUES (1, 'a'), (1, 'b'), (2, 'c')")
@@ -371,9 +367,7 @@ def _shop() -> DuckDBSource:
     return DuckDBSource(connection)
 
 
-def test_a_schema_edit_s_advice_is_python_and_notices_group(
-    core: None,
-) -> None:
+def test_a_schema_edit_s_advice_is_python_and_notices_group() -> None:
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         Schema.from_source(_shop())
@@ -398,9 +392,9 @@ def test_a_schema_edit_s_advice_is_python_and_notices_group(
     ]
 
 
-def test_a_primary_key_linked_as_a_foreign_key_is_said_as_the_old_client_says_it(
-    core: None,
-) -> None:
+def test_a_primary_key_linked_as_a_foreign_key_is_said_as_the_old_client_says_it() -> (
+    None
+):
     # M15 of T3.16's review: the old client's engine refuses it
     # (`Graph._edge_error`), and the core said only its code's sentence.
     connection = duckdb.connect()
@@ -430,187 +424,6 @@ def test_a_primary_key_linked_as_a_foreign_key_is_said_as_the_old_client_says_it
         'a foreign key. Remove either the primary key or the link before '
         'proceeding.'
     )
-
-
-def _census() -> Any:
-    name = 'refusal_census'
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(
-        name, ROOT / 'contract/tools/refusal_census.py'
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_no_refusal_on_the_census_s_core_route_says_a_generic_sentence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    census = _census()
-    decoded: list[StructuredDataError] = []
-    reading = errors.error_from_core
-
-    def recording(*args: Any, **kwargs: Any) -> StructuredDataError:
-        error = reading(*args, **kwargs)
-        decoded.append(error)
-        return error
-
-    monkeypatch.setattr(errors, 'error_from_core', recording)
-    routes = census._routes()
-    probes = [
-        probe
-        for probe in census.probes(ROOT)
-        if 'duckdb' in probe.get('databases', census.DATABASES)
-    ]
-    with tempfile.TemporaryDirectory(prefix='sdm-t317-') as scratch:
-        cases = Path(scratch)
-        for number, probe in enumerate(probes):
-            (cases / f'{number}.json').write_text(
-                json.dumps(
-                    {
-                        'case': census._case(probe, number, routes),
-                        'options': probe.get('options', {}),
-                        'model': probe.get('model', 'KumoRelational'),
-                    }
-                )
-            )
-        census.route(cases, cases / 'out.json', 'duckdb', core=True)
-    assert len(decoded) >= 15
-    for error in decoded:
-        said = str(error).split('] ', 1)[1]
-        assert said not in GENERIC, (error.code, error.details)
-        assert error._sentence in _sentences(), error.code
-
-
-#: The old client's words for each census probe on DuckDB, recorded once
-#: from the reference checkout by ``contract/tools/census_words_record.py``
-#: (one line a probe: its site, outcome and message), so the comparison
-#: runs wherever the suite does (T3.17 review r2, P1).
-WORDS = ROOT / 'contract/census-words/duckdb.jsonl'
-#: Each census probe whose refusal, in a sentence of the core's, the core
-#: route says in other words than the reference's, with the register entry
-#: that records why: each one where the reference refuses otherwise, by
-#: another code or class or by failing, so its words cannot be the core's.
-#: Every other probe both routes refuse says the reference's words.
-DIFFERS: dict[str, str] = {
-    'rule:column_type': 'P1B-2: a rule the core does not hold yet, where '
-    'the reference refuses in its own words',
-    'rule:text_time_zones': 'DT-11: mixed offsets refused by name',
-    'rule:seed_size': 'RS-7: a seed past the range refused by name where the '
-    'reference fails INTERNAL_ERROR',
-    'rule:target_type': 'P1B-3: a rule the core does not hold yet',
-    'rule:text_time': "DT-12: the provider's error where the reference "
-    'fails INTERNAL_ERROR',
-    'rule:text_time_order': "DT-12: the provider's error where the "
-    'reference fails INTERNAL_ERROR',
-    'rule:wire_dtype': 'HOST-2: an interval refused by name where the '
-    'reference fails unnamed',
-    'rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1': (
-        'HOST-2: an interval refused by name where the reference fails unnamed'
-    ),
-    'rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::'
-    'unsupported_type#1': 'HOST-2: an interval refused by name where the '
-    'reference fails unnamed',
-    'rust/crates/sdm-host/src/admission.rs::admitted_field::admission::'
-    'unsupported#1': 'P1B-51: a list of intervals refused by name where the '
-    'reference fails unnamed',
-    'rust/crates/sdm-host/src/admission.rs::convert_type::admission::'
-    'unsupported#2': 'P1B-47: a struct holding an interval refused by name '
-    'where the reference fails unnamed',
-}
-
-
-def _routed(census: Any, probes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    r"""Each probe's outcome with its words, on the core route."""
-    routes = census._routes()
-    with tempfile.TemporaryDirectory(prefix='sdm-t317-') as scratch:
-        cases = Path(scratch)
-        for number, probe in enumerate(probes):
-            (cases / f'{number}.json').write_text(
-                json.dumps(
-                    {
-                        'case': census._case(probe, number, routes),
-                        'options': probe.get('options', {}),
-                        'model': probe.get('model', 'KumoRelational'),
-                    }
-                )
-            )
-        out = cases / 'out.json'
-        census.route(cases, out, 'duckdb', core=True)
-        found: list[dict[str, Any]] = json.loads(out.read_text())
-        return found
-
-
-def _finite_validator_words(message: str) -> str:
-    # This one recorded probe used Pydantic2.13; the installed library may
-    # be a later2.x release. Its documentation minor version is metadata,
-    # while the path and all actual diagnostic words remain strict.
-    return re.sub(
-        r'(https://errors\.pydantic\.dev/2\.)[0-9]+(/v/finite_number)(?=\s|$)',
-        r'\1<minor>\2',
-        message,
-    )
-
-
-def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_difference(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Every census probe on DuckDB, on the core route and as the old client
-    # answered it (the recording):
-    # where both refuse, the core route says the old client's words, unless
-    # the probe's difference is registered; and no refusal says the defect
-    # a sentence with fields missing would (T3.17 review r1, P2-1).
-    census = _census()
-    monkeypatch.setenv(census.MESSAGES, '1')
-    probes = [
-        probe
-        for probe in census.probes(ROOT)
-        if 'duckdb' in probe.get('databases', census.DATABASES)
-    ]
-    core = _routed(census, probes)
-    recorded = {
-        line['site']: line
-        for line in map(
-            json.loads, WORDS.read_text(encoding='utf-8').splitlines()
-        )
-    }
-    # The recording holds every probe, and only the probes.
-    assert set(recorded) == {probe['site'] for probe in probes}
-    old = [recorded[probe['site']] for probe in probes]
-    defect = errors.DEFECT.split('{sentence!r}')[1]
-    differs = {}
-
-    def words(outcome: dict[str, Any]) -> str:
-        # The message without its code's prefix: the code is the census's
-        # to compare, the words are this test's.
-        said = outcome['message']
-        return said.split('] ', 1)[1] if said.startswith('[') else said
-
-    for probe, mine, theirs in zip(probes, core, old, strict=True):
-        assert defect not in mine.get('message', ''), (probe['site'], mine)
-        if mine['result'] != 'refusal' or theirs['result'] != 'refusal':
-            continue
-        # Only the core's sentences are this package's: a refusal the host
-        # raises itself says its own words.
-        if mine['sentence'] is None:
-            continue
-        my_words, their_words = words(mine), words(theirs)
-        if probe['site'] == (
-            'packages/structured-data-models-client/src/sdm_client/'
-            '_rust/codec.py::attachment#1'
-        ):
-            my_words = _finite_validator_words(my_words)
-            their_words = _finite_validator_words(their_words)
-        if my_words != their_words:
-            differs[probe['site']] = (my_words, their_words)
-    assert {
-        site: said for site, said in differs.items() if site not in DIFFERS
-    } == {}
-    # Each registered difference is still one.
-    assert set(DIFFERS) <= set(differs)
 
 
 # --- T3.17 fix 1: values only this host holds, and the old client's words ---
@@ -675,9 +488,7 @@ def test_a_candidate_is_named_as_the_caller_gave_it_never_by_its_position() -> (
     )
 
 
-def test_a_source_with_no_table_is_named_as_the_caller_gave_it(
-    core: None,
-) -> None:
+def test_a_source_with_no_table_is_named_as_the_caller_gave_it() -> None:
     source = DuckDBSource(duckdb.connect())
     with pytest.raises(StructuredDataError) as raised:
         Schema.from_source(source)
@@ -702,9 +513,7 @@ def _users() -> Schema:
         return Schema.from_source(DuckDBSource(connection))
 
 
-def test_the_context_size_refused_is_named_as_the_caller_gave_it(
-    core: None,
-) -> None:
+def test_the_context_size_refused_is_named_as_the_caller_gave_it() -> None:
     # The old client's words, with the value as given, however large
     # (review r1, P1-2 and P1-3).
     query = PredictiveQuery(
@@ -727,7 +536,6 @@ def test_the_context_size_refused_is_named_as_the_caller_gave_it(
 def test_no_shared_template_spells_a_python_value() -> None:
     # A value a host writes in its own language is its advice or its own
     # library's words, never the shared template's (review r1, P1-4).
-    import re
 
     for name, entry in _sentences().items():
         if entry['owner'] != 'shared':
@@ -763,23 +571,19 @@ def test_several_reserved_columns_are_said_as_the_old_client_says_them() -> (
     )
 
 
-def test_a_ranking_s_candidates_are_refused_in_the_old_client_s_words(
-    core: None,
-) -> None:
+def test_a_ranking_s_candidates_are_refused_in_the_old_client_s_words() -> None:
     # Through the public calls, as the old client says each (review r1,
     # P1-1): the candidate as given and the question as written are the
     # values only the host holds, which the core's sentences name.
-    sys.path.insert(0, str(ROOT / 'contract/tools'))
-    import ranking_record
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with ranking_record.source({}) as source:
+        with _ranking_source() as source:
             schema = Schema.from_source(source)
             said = []
             for candidates, text in (
-                ([1.5], ranking_record.RANK),
-                (["a'b"], ranking_record.RANK),
+                ([1.5], RANK),
+                (["a'b"], RANK),
                 (
                     [1, 2],
                     'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id',
@@ -861,15 +665,12 @@ def _buys() -> Schema:
         )
 
 
-def test_a_forecast_s_and_a_ranking_s_refusal_name_their_part_as_the_old_client(
-    core: None,
-) -> None:
+def test_a_forecast_s_and_a_ranking_s_refusal_name_their_part_as_the_old_client() -> (
+    None
+):
     # Through the public calls, word for word as the old client says them,
     # each refusal and its part the core's sentences.
     import pandas as pd
-
-    sys.path.insert(0, str(ROOT / 'contract/tools'))
-    import ranking_record
 
     said = []
     schema = _buys()
@@ -891,10 +692,10 @@ def test_a_forecast_s_and_a_ranking_s_refusal_name_their_part_as_the_old_client(
         said.append(str(raised.value))
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with ranking_record.source({}) as source:
+        with _ranking_source() as source:
             ranked = Schema.from_source(source)
             with pytest.raises(StructuredDataError) as raised:
-                PredictiveQuery(ranking_record.RANK, ranked).materialize(
+                PredictiveQuery(RANK, ranked).materialize(
                     indices=[1],
                     candidates=[1, 2],
                     anchor_time=pd.Timestamp('1900-01-01'),
@@ -918,31 +719,63 @@ def test_a_forecast_s_and_a_ranking_s_refusal_name_their_part_as_the_old_client(
     ]
 
 
-def test_finite_validator_comparison_ignores_only_its_documentation_minor_version() -> (
-    None
+@pytest.mark.parametrize(
+    ('case', 'specific'),
+    [
+        ('missing-column', 'users.ghost'),
+        ('incompatible-type', 'users.age'),
+        ('negative-seed', 'random_seed'),
+        ('context-size', 'num_context_samples'),
+    ],
+)
+def test_public_refusals_have_registered_specific_diagnostics(
+    case, specific, monkeypatch
 ):
-    recorded = (
-        '1 validation error for RegressionInferenceConfig\nnum_estimators\n'
-        '  Input should be a finite number [type=finite_number, input_value=inf, input_type=float]\n'
-        '    For further information visit https://errors.pydantic.dev/2.13/v/finite_number'
+    from test_schema_source_selection import (
+        _described,
+        _hand_built,
+        _shop,
+        materialize,
     )
-    installed = recorded.replace('/2.13/', '/2.14/')
-    assert _finite_validator_words(recorded) == _finite_validator_words(
-        installed
-    )
-    for changed in [
-        installed.replace('/v/finite_number', '/v/int_type'),
-        installed.replace('finite number', 'whole number'),
-        installed.replace(
-            'RegressionInferenceConfig', 'ClassificationInferenceConfig'
-        ),
-        installed.replace('num_estimators', 'other'),
-        installed.replace('input_value=inf', 'input_value=nan'),
-        installed.replace('input_type=float', 'input_type=float64'),
-        installed.replace('/2.14/', '/3.14/'),
-    ]:
-        assert _finite_validator_words(recorded) != _finite_validator_words(
-            changed
-        )
-    other = 'https://errors.pydantic.dev/2.13/v/int_type'
-    assert _finite_validator_words(other) == other
+
+    from sdm_client import Column
+
+    decoded = []
+    original = errors.error_from_core
+
+    def record(*args, **kwargs):
+        error = original(*args, **kwargs)
+        decoded.append(error)
+        return error
+
+    monkeypatch.setattr(errors, 'error_from_core', record)
+    with pytest.raises(StructuredDataError) as raised:
+        if case == 'missing-column':
+            materialize(
+                _hand_built(
+                    _shop(), ghost=Column('ghost', 'float64', 'numerical')
+                )
+            )
+        elif case == 'incompatible-type':
+            schema = _described(_shop())
+            schema['users']['age'].dtype = 'string'
+            schema['users']['age'].stype = 'categorical'
+            materialize(schema)
+        else:
+            query = PredictiveQuery(
+                'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id',
+                _users(),
+            )
+            options = (
+                {'random_seed': -1}
+                if case == 'negative-seed'
+                else {'num_context_samples': -1}
+            )
+            query.materialize(indices=[1], **options)
+    assert decoded
+    assert specific in str(raised.value)
+    assert raised.value.code == 'INVALID_REQUEST'
+    for error in decoded:
+        assert error._sentence in _sentences()
+        assert str(error).split('] ', 1)[-1] not in GENERIC
+        assert errors.DEFECT.split('{sentence!r}')[1] not in str(error)

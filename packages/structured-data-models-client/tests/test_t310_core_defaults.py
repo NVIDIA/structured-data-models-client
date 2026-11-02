@@ -2,11 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The Phase 3 switch uses the core without a test routing override."""
+"""Public warehouse journeys load the native client without retired packages."""
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import textwrap
@@ -14,73 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from sdm_client import _routing
-
 ROOT = Path(__file__).resolve().parents[3]
-
-
-@pytest.mark.parametrize(
-    'paths',
-    [
-        _routing.S0,
-        _routing.CAPABILITIES,
-        _routing.FRAME_SCHEMA,
-        _routing.FRAME_MATERIALIZE,
-        _routing.FRAME_PREDICT,
-        _routing.FRAME_SESSIONS,
-        _routing.DIRECT_CONSUMERS,
-        _routing.TABULAR_MATERIALIZERS,
-        _routing.TABULAR_SESSIONS,
-        _routing.WAREHOUSE_SESSION_ROUTES,
-        _routing.FROM_SOURCE_DUCKDB,
-        _routing.MATERIALIZE_DUCKDB,
-        _routing.PREDICT_DUCKDB,
-        _routing.FROM_SOURCE_SQLITE,
-        _routing.MATERIALIZE_SQLITE,
-        _routing.PREDICT_SQLITE,
-        _routing.FROM_SOURCE_POSTGRES,
-        _routing.MATERIALIZE_POSTGRES,
-        _routing.PREDICT_POSTGRES,
-        _routing.FROM_SOURCE_DATABRICKS_SQL,
-        _routing.MATERIALIZE_DATABRICKS_SPARK,
-        _routing.PREDICT_DATABRICKS_SPARK,
-        _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW,
-        _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW,
-        _routing.PREDICT_DATABRICKS_METRIC_VIEW,
-        _routing.FROM_SOURCE_SNOWFLAKE,
-        _routing.MATERIALIZE_SNOWFLAKE,
-        _routing.PREDICT_SNOWFLAKE,
-        _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW,
-        _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW,
-        _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW,
-    ],
-)
-def test_covered_calls_default_to_the_core(
-    paths: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    assert _routing.route(paths) == 'core'
-
-
-def test_an_explicit_override_can_select_old_then_restore_defaults(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    assert _routing.route(_routing.S0) == 'core'
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    assert _routing.route(_routing.S0) == 'old'
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.S0))
-    assert _routing.route(_routing.S0) == 'core'
-    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'old'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
-    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'core'
-
-
-def test_warehouse_fit_uses_shared_session_rules(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    assert _routing.route(('client.fit/regression/duckdb',)) == 'core'
 
 
 @pytest.mark.parametrize('backend', ['duckdb', 'sqlite'])
@@ -120,7 +53,7 @@ def test_public_source_flow_defaults_to_core_without_old_packages(
     cursor.close()
 
     spec = importlib.util.spec_from_file_location(
-        'scripted_endpoint', {str(ROOT / 'contract/runners/scripted_endpoint.py')!r}
+        'scripted_endpoint', {str(ROOT / 'tests/support/scripted_endpoint.py')!r}
     )
     endpoint = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = endpoint
@@ -143,14 +76,8 @@ def test_public_source_flow_defaults_to_core_without_old_packages(
     assert not any(name in sys.modules for name in OLD)
     print('core-default-ok')
     """
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key != _routing.ENVIRONMENT
-    }
     done = subprocess.run(
         [sys.executable, '-c', textwrap.dedent(script)],
-        env=environment,
         cwd=tmp_path,
         capture_output=True,
         text=True,

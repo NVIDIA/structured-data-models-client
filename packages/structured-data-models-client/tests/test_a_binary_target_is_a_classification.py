@@ -16,9 +16,9 @@ from decimal import Decimal
 
 import pandas as pd
 import pytest
+from test_adapter_and_result import envelope as public_envelope
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMWarning
-from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers.tabular import _holds_two_whole_numbers
 
@@ -169,9 +169,7 @@ class TestTheCallerHasTheLastWord:
 class TestTheWireStillSaysWhatItSaid:
     @staticmethod
     def _payload(request):
-        return next(
-            iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-        )
+        return public_envelope(request)
 
     def test_the_target_dtype_is_untouched_by_the_task_it_implies(self):
         """Only the task kind moves. The column is described as it always was."""
@@ -256,7 +254,6 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
         )
 
     def test_a_relational_query_still_materializes_without_one(self):
-        pytest.importorskip('sdm_relational_engine')
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             request = self.query(self.graph()).materialize(
@@ -265,7 +262,6 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
         assert request.task.kind == 'regression'
 
     def test_passing_one_is_refused_and_says_why(self):
-        pytest.importorskip('sdm_relational_engine')
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             with pytest.raises(StructuredDataError) as raised:
@@ -300,7 +296,6 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
         reach, so they went on accepting the argument and dropping it, the
         very thing the refusal was added to stop.
         """
-        pytest.importorskip('sdm_relational_engine')
         schema = self.graph(with_items=True)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
@@ -323,9 +318,7 @@ class TestTheContextIsWhatDecides:
 
     @staticmethod
     def sent_context_values(request, column='churn'):
-        payload = next(
-            iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-        )
+        payload = public_envelope(request)
         table = payload['context']['instance_table']
         index = table['columns'].index(column)
         return sorted({row[index] for row in table['rows']})
@@ -507,7 +500,6 @@ class TestBothRoutesSayWhatTheyDecided:
 
     @staticmethod
     def graph():
-        pytest.importorskip('sdm_relational_engine')
         frame = pd.DataFrame(
             {
                 'mid': range(60),

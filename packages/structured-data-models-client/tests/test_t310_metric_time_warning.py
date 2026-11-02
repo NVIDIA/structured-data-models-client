@@ -18,7 +18,7 @@ import pyarrow as pa
 import pytest
 from sdm_connectors import DatabricksSource
 
-from sdm_client import Schema, SDMWarning, _routing
+from sdm_client import Schema, SDMWarning
 from sdm_client._rust import providers
 
 _VIEW = """
@@ -164,7 +164,6 @@ class _MetricProvider:
 
 
 def _metric_source(monkeypatch: pytest.MonkeyPatch) -> Any:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     monkeypatch.setattr(providers, 'DatabricksSqlProvider', _MetricProvider)
     return DatabricksSource(
         _Connection(), catalog='cat', schema='shop'

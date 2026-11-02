@@ -10,12 +10,11 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 import pytest
-import yaml
 from sdm_connectors import DuckDBSource
 
 from sdm_client import PredictiveQuery, Schema
 
-ROOT = Path(__file__).resolve().parents[3]
+FIXTURE = Path(__file__).with_name('data') / 'diamond.json'
 
 
 @pytest.mark.parametrize(
@@ -25,27 +24,18 @@ ROOT = Path(__file__).resolve().parents[3]
         ('orders', 'addresses', 'customers'),
     ],
 )
-def test_original_diamond_keeps_every_reached_customer_link(names, monkeypatch):
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
-    case = json.loads(
-        (ROOT / 'contract/cases/s1/shape.diamond-from-source.json').read_text()
-    )
-    bases = yaml.safe_load((ROOT / 'contract/bases.yaml').read_text())['bases']
+def test_original_diamond_keeps_every_reached_customer_link(names):
+    case = json.loads(FIXTURE.read_text())
     connection = duckdb.connect()
     try:
-        for statement in [
-            *bases[case['input']['base']],
-            *case['input']['setup'],
-        ]:
+        for statement in case['statements']:
             connection.execute(statement)
         schema = Schema.from_source(
             DuckDBSource(connection), tables={name: name for name in names}
         )
-        arguments = dict(case['input']['materialize'])
+        arguments = dict(case['materialize'])
         arguments['anchor_time'] = pd.Timestamp(arguments['anchor_time'])
-        request = PredictiveQuery(case['input']['pql'], schema).materialize(
-            **arguments
-        )
+        request = PredictiveQuery(case['pql'], schema).materialize(**arguments)
         assert len(request.payloads) == 1
         payload = request.payloads[0]
         reached = 0

@@ -18,8 +18,7 @@
 //! form, for the observation's `driver` section (T1.11e). [`edits`] makes
 //! the user's edits to the description the host's own `describe_source`
 //! answered, which is the schema its `materialize` samples (T1.21d).
-//! [`pre_given`] reads a case written before contract 23, for
-//! `sdm-contract-run --pre-given-specs` alone. [`sqlite`] is its SQLite
+//! [`sqlite`] is its SQLite
 //! (T2.2): a case's tables loaded by the contract loader, and the dev-only
 //! `rusqlite` provider. [`kit`] runs the provider conformance kit on its
 //! providers (T2.5). [`memory`] is the minimal non-SQL test provider, and
@@ -46,7 +45,6 @@ pub mod layer;
 pub mod memory;
 pub mod observation;
 pub mod plan_b;
-pub mod pre_given;
 pub mod replay;
 pub mod sqlite;
 pub mod values;

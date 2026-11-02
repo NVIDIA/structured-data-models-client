@@ -44,14 +44,8 @@ them.
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
-import platform
-import resource
-import subprocess
 import sys
-import time
 import traceback
 import warnings
 from pathlib import Path
@@ -76,12 +70,6 @@ KINDS = (
     'forecast',
 )
 #: Every DuckDB path of the three calls, forced onto the core.
-CORE_ROUTES = [
-    'schema.from-source/all-tables/duckdb',
-    'schema.from-source/catalog-keys/duckdb',
-    *(f'query.materialize/indices-{kind}/duckdb' for kind in KINDS),
-    *(f'client.predict/{kind}/duckdb' for kind in KINDS),
-]
 
 
 def _sources() -> dict[str, dict[str, Any]]:
@@ -446,16 +434,11 @@ def source(setup: list[Any]) -> Any:
     return connection
 
 
-def answer(setup: list[Any], route: str) -> dict[str, Any]:
-    r"""The public calls over ``shop`` and ``setup`` on ``route``
-    (``reference`` or ``core``), as far as they get."""
-    if route == 'core':
-        os.environ['SDM_CORE_ROUTES'] = ','.join(CORE_ROUTES)
-    else:
-        os.environ['SDM_CORE_ROUTES'] = ''
+def answer(setup: list[Any]) -> dict[str, Any]:
+    """Run the current client over the shop base and additional setup."""
     import pandas as pd
 
-    runners = str(ROOT / 'contract/runners')
+    runners = str(ROOT / 'tests/support')
     if runners not in sys.path:
         sys.path.insert(0, runners)
     from scripted_endpoint import serve
@@ -508,25 +491,6 @@ def answer(setup: list[Any], route: str) -> dict[str, Any]:
         for (name, start), end in zip(starts.items(), ends, strict=True)
     }
     return got
-
-
-def _child(argv: list[str]) -> int:
-    if argv[0] == 'sources':
-        route, names = argv[1], argv[2:]
-        for name in names:
-            got = answer(SOURCES[name]['setup'], route)
-            print(json.dumps({'name': name, **got}), flush=True)
-        return 0
-    route, kind, mode = argv[1:4]
-    start = time.monotonic()
-    got = answer(big_setup(kind, mode), route)
-    got['seconds'] = round(time.monotonic() - start, 1)
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    got['peak_rss_bytes'] = peak * (
-        1 if platform.system() == 'Darwin' else 1024
-    )
-    print(json.dumps(got), flush=True)
-    return 0
 
 
 # --- what DuckDB itself does -----------------------------------------------------
@@ -625,150 +589,3 @@ def duckdb_facts() -> dict[str, Any]:
 
 
 # --- the recorder ------------------------------------------------------------------
-
-
-def _run(python: str, argv: list[str]) -> tuple[list[str], int]:
-    done = subprocess.run(
-        [python, '-I', str(Path(__file__).resolve()), '--child', *argv],
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-        check=False,
-    )
-    if done.returncode != 0:
-        sys.stderr.write(done.stderr[-4000:])
-    return done.stdout.strip().splitlines(), done.returncode
-
-
-def _where(package: Path) -> str:
-    r"""Where a route's ``sdm_client`` is, with no machine's path in it:
-    relative to the checkout it is a source tree of (the one holding
-    ``packages/``), or from the ``site-packages`` it is installed in."""
-    parts = package.parts
-    if 'site-packages' in parts:
-        return '/'.join(parts[parts.index('site-packages') :])
-    for parent in package.parents:
-        if (parent / 'packages').is_dir():
-            return package.relative_to(parent).as_posix()
-    return package.name
-
-
-def _environment(python: str) -> dict[str, str]:
-    lines, _ = _run(python, ['environment'])
-    loaded: dict[str, str] = json.loads(lines[-1])
-    return loaded
-
-
-def main() -> int:
-    if sys.argv[1:2] == ['--child']:
-        if sys.argv[2] == 'environment':
-            import duckdb
-            import pandas as pd
-            import pyarrow as pa
-            import sdm_client
-
-            print(
-                json.dumps(
-                    {
-                        'python': platform.python_version(),
-                        'pandas': pd.__version__,
-                        'pyarrow': pa.__version__,
-                        'duckdb': duckdb.__version__,
-                        'sdm_client': _where(Path(sdm_client.__file__).parent),
-                    }
-                )
-            )
-            return 0
-        return _child(sys.argv[2:])
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--reference-python', default=str(REFERENCE / '.venv/bin/python')
-    )
-    parser.add_argument('--candidate-python', default=sys.executable)
-    parser.add_argument('--big', action='store_true')
-    args = parser.parse_args()
-    reference_commit = subprocess.run(
-        ['git', '-C', str(REFERENCE), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    candidate_commit = subprocess.run(
-        ['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    previous = json.loads(OUT.read_text()) if OUT.exists() else {}
-    pythons = {
-        'reference': args.reference_python,
-        'core': args.candidate_python,
-    }
-    answers: dict[str, dict[str, Any]] = {}
-    for route, python in pythons.items():
-        lines, code = _run(python, ['sources', route, *SOURCES])
-        if code != 0:
-            return code
-        for line in lines:
-            got = json.loads(line)
-            answers.setdefault(got.pop('name'), {})[route] = got
-    vectors = [
-        {
-            'name': name,
-            **spec,
-            'reference': answers[name]['reference'],
-            'core_at_measurement': answers[name]['core'],
-        }
-        for name, spec in SOURCES.items()
-    ]
-    big = previous.get('big')
-    if args.big:
-        big = []
-        for kind in BIG_KINDS:
-            for mode in BIG_MODES:
-                row: dict[str, Any] = {
-                    'name': f'big.{kind}.{mode}',
-                    'bytes': BIG,
-                    'setup': big_setup(kind, mode),
-                }
-                for route, python in pythons.items():
-                    lines, code = _run(python, ['big', route, kind, mode])
-                    if code != 0:
-                        return code
-                    got = json.loads(lines[-1])
-                    key = (
-                        'reference'
-                        if route == 'reference'
-                        else ('core_at_measurement')
-                    )
-                    row[key] = got
-                    print(row['name'], route, got['outcome'], file=sys.stderr)
-                big.append(row)
-    document = {
-        'format': 'sdm-host2-vectors/1',
-        'about': previous.get('about', ''),
-        'recorded': {
-            'by': 'contract/tools/host2_values_record.py',
-            'reference': reference_commit,
-            'candidate': candidate_commit,
-            'environments': {
-                route: _environment(python) for route, python in pythons.items()
-            },
-            'query': PQL,
-            'indices': INDICES,
-            'anchor_time': ANCHOR,
-            'core_routes': CORE_ROUTES,
-        },
-        'duckdb': duckdb_facts(),
-        'vectors': vectors,
-        'big': big,
-        'not_measured': previous.get('not_measured', []),
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    print(f'{len(vectors)} vectors recorded to {OUT}', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

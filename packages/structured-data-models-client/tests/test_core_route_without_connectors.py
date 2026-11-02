@@ -17,7 +17,6 @@ def test_an_in_memory_core_query_runs_without_the_connectors_package() -> None:
     script = textwrap.dedent(
         """
         import importlib.abc
-        import os
         import sys
 
         class Absent(importlib.abc.MetaPathFinder):
@@ -32,9 +31,8 @@ def test_an_in_memory_core_query_runs_without_the_connectors_package() -> None:
         sys.meta_path.insert(0, Absent())
 
         import pandas as pd
-        from sdm_client import KumoTabular, PredictiveQuery, Schema, _routing
+        from sdm_client import KumoTabular, PredictiveQuery, Schema
 
-        os.environ[_routing.ENVIRONMENT] = ','.join(_routing.S0)
         schema = Schema.from_data(
             {'users': pd.DataFrame({'id': [1, 2, 3, 4], 'age': [10.5, 20.5, 30.5, 40.5]})}
         )

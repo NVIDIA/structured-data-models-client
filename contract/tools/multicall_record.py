@@ -54,10 +54,8 @@ so ``python-core`` is observed by the same code.
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import json
-import os
 import sys
 import warnings
 from pathlib import Path
@@ -109,7 +107,7 @@ def runner() -> ModuleType:
 
 def endpoint() -> ModuleType:
     return _module(
-        'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
+        'scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
     )
 
 
@@ -212,24 +210,15 @@ def _raising(client: Any, call: int) -> None:
 def observe(
     case: dict[str, Any],
     database: str,
-    core: bool,
     raise_on_call: int | None = None,
 ) -> dict[str, Any]:
-    r"""``case``'s public calls on ``database``: on the core where ``core``
-    (``SDM_CORE_ROUTES`` set to the case's routes there, as
-    ``run_python.py`` sets them for ``python-core``), else on the routes
-    the interpreter's client takes; with ``raise_on_call``, the client's
-    transport raising ``ValueError`` on that call (:func:`_raising`)."""
+    """Exercise current-client public calls against a scripted endpoint or source."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 
     run = runner()
     given = case['input']
     arguments = run._materialize_arguments(given['materialize'])
     from_source = run._from_source_arguments(given.get('from_source', {}))
-    if core:
-        os.environ['SDM_CORE_ROUTES'] = ','.join(run.routes_on(case, database))
-    else:
-        os.environ['SDM_CORE_ROUTES'] = ''
     observed: dict[str, Any] = {
         'outcome': None,
         'calls': [],
@@ -239,138 +228,55 @@ def observe(
         'opening': None,
         'remedy': None,
     }
+    connection, cleanup, _ = run._open(case, run.load_bases(), database)
+    stage = 'from_source'
     try:
-        connection, cleanup, _ = run._open(case, run.load_bases(), database)
-        stage = 'from_source'
-        try:
-            with (
-                endpoint().serve(fail_call=given.get('fail_call')) as (
-                    url,
-                    received,
-                ),
-                warnings.catch_warnings(),
-            ):
-                warnings.simplefilter('ignore')
-                try:
-                    schema = Schema.from_source(
-                        run._source(database, connection), **from_source
+        with (
+            endpoint().serve(fail_call=given.get('fail_call')) as (
+                url,
+                received,
+            ),
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter('ignore')
+            try:
+                schema = Schema.from_source(
+                    run._source(database, connection), **from_source
+                )
+                run._edit(schema, given.get('edits', []))
+                if case['until'] != 'from_source':
+                    stage = 'materialize'
+                    request = PredictiveQuery(given['pql'], schema).materialize(
+                        **arguments
                     )
-                    run._edit(schema, given.get('edits', []))
-                    if case['until'] != 'from_source':
-                        stage = 'materialize'
-                        request = PredictiveQuery(
-                            given['pql'], schema
-                        ).materialize(**arguments)
-                    if case['until'] == 'predict':
-                        stage = 'predict'
-                        with SDMClient(url) as client:
-                            if raise_on_call is not None:
-                                _raising(client, raise_on_call)
-                            result = client.predict(
-                                request, model=KumoRelational()
-                            )
-                        observed['result'] = projection(result)
-                    observed['outcome'] = run._outcome('success', stage)
-                except Exception as error:  # noqa: BLE001 - the outcome
-                    observed['outcome'] = run._outcome('refusal', stage, error)
-                    details = getattr(error, 'details', None)
-                    details = details if isinstance(details, dict) else {}
-                    observed['details'] = {
-                        str(name): _detail(value)
-                        for name, value in sorted(details.items())
-                        if name != 'answered'
-                    }
-                    observed['answered'] = projection(details.get('answered'))
-                    observed['opening'] = opening(str(error))
-                    observed['remedy'] = remedy(str(error))
-                observed['calls'] = [
-                    _rows_sent(body) for _, _, body in received.requests
-                ]
-        finally:
-            cleanup()
+                if case['until'] == 'predict':
+                    stage = 'predict'
+                    with SDMClient(url) as client:
+                        if raise_on_call is not None:
+                            _raising(client, raise_on_call)
+                        result = client.predict(request, model=KumoRelational())
+                    observed['result'] = projection(result)
+                observed['outcome'] = run._outcome('success', stage)
+            except Exception as error:  # noqa: BLE001 - the outcome
+                observed['outcome'] = run._outcome('refusal', stage, error)
+                details = getattr(error, 'details', None)
+                details = details if isinstance(details, dict) else {}
+                observed['details'] = {
+                    str(name): _detail(value)
+                    for name, value in sorted(details.items())
+                    if name != 'answered'
+                }
+                observed['answered'] = projection(details.get('answered'))
+                observed['opening'] = opening(str(error))
+                observed['remedy'] = remedy(str(error))
+            observed['calls'] = [
+                _rows_sent(body) for _, _, body in received.requests
+            ]
     finally:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+        cleanup()
     return observed
 
 
 def load() -> dict[str, Any]:
     r"""The vector file, as committed."""
     return json.loads(OUT.read_text(encoding='utf-8'))
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--reference', type=Path, required=True)
-    parser.add_argument(
-        '--database', nargs='+', choices=DATABASES, default=list(DATABASES)
-    )
-    parser.add_argument(
-        '--raised',
-        action='store_true',
-        help='record only the calls raising an error that is not the '
-        "client's own (RAISED), keeping every other vector",
-    )
-    arguments = parser.parse_args(argv)
-    run = runner()
-    guard = run._Guard(arguments.reference)
-    guard.check('before the first case')
-    run._require_reference_client(arguments.reference)
-    commit = run._git(arguments.reference)
-    if not commit['clean']:
-        print('the reference checkout is not clean', file=sys.stderr)
-        return 1
-    if OUT.exists():
-        document = load()
-        if document['reference'] != commit['sha']:
-            print('the vectors are of another reference', file=sys.stderr)
-            return 1
-    else:
-        document = {
-            'format': FORMAT,
-            'about': (
-                "What T2.8c's multi-call cases (contract/cases/s1/"
-                "multicall.*.json, main's 1fc5a686) give beside their "
-                'observation lines, by case key, recorded from the '
-                "reference's public calls: the rows each call scores, the "
-                'result through to_pandas() (every row, or both ends of a '
-                "long one), and a refusal's details, the answers carried on "
-                'it (details answered), its first sentence and, for a call '
-                'past the 30 MiB body, the remedy the client names. '
-                'contract/tests/test_t28c_multicall.py holds python-core to '
-                'them, observed by the same code (observe).'
-            ),
-            'recorded_by': 'contract/tools/multicall_record.py',
-            'reference': commit['sha'],
-            'vectors': {},
-        }
-    loaded = run.load_cases(
-        [CASES / f'{case_id}.json' for case_id in case_ids()]
-    )
-    digests = {case['id']: digest for case, digest in loaded}
-    cases = {case['id']: case for case, _ in loaded}
-    raised = document.setdefault('raised', {})
-    for database in arguments.database:
-        for case_id in [] if arguments.raised else case_ids():
-            key = run.case_key(case_id, database)
-            observed = observe(cases[case_id], database, core=False)
-            document['vectors'][key] = {'case': digests[case_id], **observed}
-            print(f'{key}: {observed["outcome"]["result"]}', file=sys.stderr)
-        for case_id, call in RAISED.items():
-            key = run.case_key(case_id, database)
-            observed = observe(
-                cases[case_id], database, core=False, raise_on_call=call
-            )
-            raised[key] = {'case': digests[case_id], 'call': call, **observed}
-            print(f'{key} raising: {observed["outcome"]}', file=sys.stderr)
-    guard.check('after the last case')
-    document['vectors'] = dict(sorted(document['vectors'].items()))
-    document['raised'] = dict(sorted(raised.items()))
-    OUT.write_text(
-        json.dumps(document, indent=1, ensure_ascii=False) + '\n',
-        encoding='utf-8',
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

@@ -567,7 +567,6 @@ def test_no_example_trains_anything(path):
 
 @pytest.fixture
 def schema():
-    pytest.importorskip('sdm_relational_engine')
     pd = pytest.importorskip('pandas')
     from sdm_client import Relationship, Schema
 
@@ -600,7 +599,6 @@ def schema():
 
 @pytest.fixture
 def schema_with_text():
-    pytest.importorskip('sdm_relational_engine')
     pd = pytest.importorskip('pandas')
     from sdm_client import Relationship, Schema
 
@@ -1401,7 +1399,6 @@ def test_a_warehouse_reads_the_same_whole_numbers_as_a_category():
     regression of a warehouse and get a multiclass question.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
 
     from sdm_client import Relationship, Schema
     from sdm_connectors import DuckDBSource
@@ -1731,28 +1728,6 @@ BY_CAPABILITY = {
 
 
 @pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
-def test_a_clause_refused_on_one_table_is_the_tabular_profiles_doing(clause):
-    """The sentence under that table: all seven are the profile refusing.
-
-    The reference used to call three of them the grammar's, whatever the
-    model, which the relational reference contradicts by teaching them. Asked
-    of the profiles rather than of a query, because a query on a single table
-    is refused for several reasons at once and the message names one.
-    """
-    from predictive_query.profiles import RELATIONAL, TABULAR
-
-    capability = BY_CAPABILITY[clause]
-    assert getattr(TABULAR.capabilities, capability) is False, (
-        f'the tabular profile allows {capability}, and the reference says '
-        f'{clause} is refused on one table'
-    )
-    assert getattr(RELATIONAL.capabilities, capability) is True, (
-        f'the relational profile refuses {capability} too, and the reference '
-        f'says the relational model takes all seven'
-    )
-
-
-@pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
 def test_a_clause_the_tabular_reference_calls_refused_is(clause, one_table):
     from sdm_client import KumoTabular, PredictiveQuery
     from sdm_client.errors import StructuredDataError
@@ -1954,7 +1929,6 @@ def test_a_source_reads_the_catalogs_own_keys():
     duckdb = pytest.importorskip('duckdb')
     # Schema.from_source needs the engine, which is the extra this very
     # reference says the connector alone does not bring.
-    pytest.importorskip('sdm_relational_engine')
     from sdm_client import Schema
     from sdm_connectors import DuckDBSource
 
@@ -1988,8 +1962,7 @@ def test_describing_a_source_reads_a_thousand_rows_of_it(monkeypatch):
     the default core need not retain the legacy engine's pandas sample cache.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client import Schema, _routing
+    from sdm_client import Schema
     from sdm_client._rust import providers
     from sdm_connectors import DuckDBSource
 
@@ -2004,7 +1977,6 @@ def test_describing_a_source_reads_a_thousand_rows_of_it(monkeypatch):
                 samples.setdefault(table, []).append(result.num_rows)
             return result
 
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     monkeypatch.setattr(providers, 'DuckDBProvider', ObservingDuckDBProvider)
     with duckdb.connect() as connection:
         connection.execute(
@@ -2041,7 +2013,6 @@ def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
     the reference tells a reader to pass ``read_only=True``.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
 
     from sdm_client import Schema
     from sdm_client.errors import StructuredDataError
@@ -2228,7 +2199,6 @@ def test_the_tabular_examples_print_what_the_skill_shows(name):
     ],
 )
 def test_the_relational_examples_print_what_the_skill_shows(name):
-    pytest.importorskip('sdm_relational_engine')
     pytest.importorskip('duckdb')
     assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
 
@@ -2329,16 +2299,16 @@ def test_the_limits_table_is_the_shipped_limits():
 
 
 def spelled_in_the_grammar(token: str) -> set[str]:
-    """Every operator ``token`` covers, as the grammar spells it."""
-    import predictive_query
-
-    body = (
-        Path(predictive_query.__file__).parent / 'grammar' / 'PQLGrammar.g4'
-    ).read_text(encoding='utf-8')
-    at = body.index(f'{token}:')
-    block = body[at : body.index(';', at)]
+    """Read the operator inventory from the maintained Rust lexer."""
+    source = SKILLS.parent / 'rust/crates/sdm-pql/src/lexer.rs'
+    name = {'AGGR': 'AGGRS', 'REL_OP': 'REL_OPS'}[token]
+    body = source.read_text(encoding='utf-8')
+    block = re.search(rf'const {name}: &\[&str\] = &\[(.*?)\];', body, re.S)
+    assert block is not None, f'Rust lexer has no {name} inventory'
     return {
-        name for name in re.findall(r"'([^']+)'", block) if name == name.upper()
+        spelling
+        for spelling in re.findall(r'"([^"]+)"', block.group(1))
+        if spelling == spelling.upper()
     }
 
 

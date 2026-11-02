@@ -20,11 +20,6 @@ text. ``sdm-schema``'s ``tests/t214b_decimal_stype.rs`` holds the inference
 itself to the same column, and ``sdm-testkit``'s rust-host runs the case
 under ``tests/t214b_host.rs``.
 
-Gating: ``t214b-pending.json``'s ``pending`` names, as ``stype:<case key>``,
-the keys whose test failed when written. Each must still fail (strict);
-once one passes it fails, naming itself, until it is taken out. Where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is not
-set, the Postgres key has nothing to hold and returns without asserting.
 """
 
 from __future__ import annotations
@@ -45,7 +40,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 CASES = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t214b-pending.json')
+
 PREFIX = 'stype:'
 CASE_ID = 'decimal.stype-past-float-precision'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
@@ -63,38 +58,6 @@ def runner() -> ModuleType:
 
 
 KEYS = tuple(runner().case_key(CASE_ID, d) for d in DATABASES)
-
-
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert name in gating['authored'], f'{name} is not authored'
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t214b-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and this
-    file's authored keys are the case's key on each database, the
-    inference unit test's, and rust-host's on DuckDB and SQLite
-    (``sdm-testkit``'s ``tests/t214b_host.rs``)."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    mine = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert mine == (
-        {f'{PREFIX}{k}' for k in KEYS}
-        | {f'{PREFIX}rust-unit'}
-        | {f'{PREFIX}rust:{k}' for k in KEYS if not k.endswith('@postgres')}
-    )
 
 
 @functools.cache
@@ -229,4 +192,4 @@ def test_python_core_reads_the_column_as_the_reference_does(
         )
         assert line['public']['schema'] == want['public']['schema']
 
-    held(f'{PREFIX}{case_key}', check)
+    check()

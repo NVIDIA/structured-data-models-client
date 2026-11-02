@@ -1,38 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Record the reference's payload rules for ``test_t128a_payload_rules.py``.
+"""Public regression case builders and endpoint observations.
 
-Run with the reference checkout's interpreter (the reference environment of
-``contract/reference-env.txt``), from this repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python \\
-        packages/structured-data-models-client/tests/t128a_payload_rules_record.py
-
-Each case is a DuckDB source (``contract/bases.yaml``'s ``shop``, changed by
-the case's statements, or one generated from a seed here), a query and the
-arguments of ``PredictiveQuery.materialize``. The reference materializes it,
-and this script keeps what T1.28a's exits compare (``observe``): the task
-(its kind, classes, their order and the positive class), the inference and
-output sections, the metadata's counts, the context's and the predicted
-rows, the instance ids each related table keeps (what the context drop
-takes out), the schema section, and the notices the call gave; or, when
-the reference refuses, the refusal's class and code. A case whose ``call``
-is set is also predicted, against a local endpoint that records the body
-the client sends and refuses it, and the body's ``model``, ``output`` and
-``inference`` are kept. Nothing here is written by hand but the inputs;
-every expected value is the reference's.
-
-``observe`` is imported by the test, so both routes are observed by the
-same code.
+The historical recording CLI is archived outside the maintained repository.
+Existing tests import these helpers; the module does not regenerate expectations.
 """
 
 from __future__ import annotations
 
 import json
 import random
-import subprocess
-import sys
 import threading
 import warnings
 from collections.abc import Iterator
@@ -340,37 +318,6 @@ def padded(length: int) -> list[str]:
     ]
 
 
-def at_the_size_limit() -> int:
-    r"""The longest text whose payload the reference takes: the payload
-    of ``padded(n)`` is linear in ``n``, solved from two sizes and checked
-    on both sides of the limit by ``main``."""
-    from sdm_relational_engine.rfm.inference.payload import (
-        payload_size_bytes,
-    )
-
-    from sdm_client import PredictiveQuery, Schema
-
-    def size(length: int) -> int:
-        import duckdb
-        import pandas as pd
-        from sdm_connectors import DuckDBSource
-
-        connection = duckdb.connect()
-        for statement in padded(length):
-            connection.execute(statement)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            schema = Schema.from_source(DuckDBSource(connection))
-            request = PredictiveQuery(REGRESSION, schema).materialize(
-                indices=[0, 1], anchor_time=pd.Timestamp(ANCHOR)
-            )
-        return payload_size_bytes(request._payloads[0])
-
-    base, step = size(0), size(1000) - size(0)
-    assert step % 1000 == 0, step
-    return (PAYLOAD_LIMIT - base) // (step // 1000)
-
-
 #: The engine's payload limit (``rfm.py``'s ``_MAX_SIZE``).
 PAYLOAD_LIMIT = 30 * 1024 * 1024
 
@@ -631,64 +578,3 @@ def observe(
         else:
             out['call'] = None
     return out
-
-
-def main() -> int:
-    import sdm_relational_engine  # noqa: F401 - the reference's engine
-
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    longest = at_the_size_limit()
-    case(
-        'size.at-the-limit',
-        LIMITS + ' (PD-2: the bytes counted)',
-        REGRESSION,
-        padded(longest),
-        indices=[0, 1],
-        anchor_time=ANCHOR,
-        measure=True,
-    )
-    case(
-        'size.one-past-the-limit',
-        LIMITS + ' (PD-2: the bytes counted)',
-        REGRESSION,
-        padded(longest + 1),
-        indices=[0, 1],
-        anchor_time=ANCHOR,
-        measure=True,
-    )
-    recorded = []
-    for spec in CASES:
-        expected = observe(spec)
-        expected.pop('message', None)
-        expected.pop('rule', None)
-        recorded.append({**spec, 'expected': expected})
-        print(
-            spec['name'],
-            expected['outcome'],
-            expected.get('code'),
-            file=sys.stderr,
-        )
-    OUT.write_text(
-        json.dumps(
-            {
-                'recorded_by': Path(__file__).name,
-                'reference': commit,
-                'cases': recorded,
-            },
-            indent=1,
-        )
-        + '\n',
-        encoding='utf-8',
-    )
-    print(f'{len(recorded)} cases written to {OUT}', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

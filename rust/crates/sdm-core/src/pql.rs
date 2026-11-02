@@ -1252,6 +1252,38 @@ pub(crate) mod conversions {
     };
 }
 
+// Compare string literals using PQL's lexer and decoder, not JSON's escape rules.
+// Original text remains in session state and on the model wire.
+pub(crate) fn canonical_query(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let Ok(tokens) = sdm_pql::lexer::tokenize(&chars) else {
+        return text.to_owned();
+    };
+    let mut lines = vec![0];
+    for (at, ch) in chars.iter().enumerate() {
+        if *ch == '\n' {
+            lines.push(at + 1);
+        }
+    }
+    let mut result = String::new();
+    let mut last = 0;
+    for token in tokens {
+        if token.kind != sdm_pql::lexer::Kind::Str {
+            continue;
+        }
+        let start = lines[token.line - 1] + token.column;
+        let end = start + token.text.chars().count();
+        let inner = &token.text[1..token.text.len() - 1];
+        if let Ok(value) = sdm_pql::escapes::unescape(inner) {
+            result.extend(chars[last..start].iter());
+            result.push_str(&serde_json::to_string(&value).expect("string serialization"));
+            last = end;
+        }
+    }
+    result.extend(chars[last..].iter());
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

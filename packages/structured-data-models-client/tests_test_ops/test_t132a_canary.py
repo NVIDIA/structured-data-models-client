@@ -1,47 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The canary test over the keys family's error paths (T1.32a's exit "the
-canary test covers the family's error paths"; decision H17).
-
-Written by the package's independent test author, before the
-implementation. It drives each error path of the entities' cast to the
-key's type and of the key's own range through the canary of
-``test_the_canary.py`` (its sentinels, its watch over the core's error,
-``str``, ``repr``, the details, the traceback, every warning, every log
-record at DEBUG, stderr and stdout, and its check that none of them holds
-a sentinel), on the core route:
-
-- cast: a text entity no integer key holds, alone and among integers;
-- cast: an integer past an unsigned key's width, and a negative one (the
-  reference's INVALID_REQUEST and INTERNAL_ERROR);
-- range: a ``UBIGINT`` key past int64, planted in the data, the request
-  refused as the reference refuses it (``materialize/int64_range``);
-- lookup: a text entity no row of a text key holds;
-- round 2, each naming its reason: a text entity and a fraction for a
-  DECIMAL(18, 0) key (not_a_number, inexact), an integer a FLOAT key cannot
-  hold exactly and a text entity for a DOUBLE key (inexact,
-  not_a_number), and bytes and a timestamp for a BIGINT key (type).
-
-The sentinels are the canary's data sentinel and a number of our own,
-``NUMBER``, both planted in the data the paths read: two users' countries
-and an order's price (:data:`PLANTED`), the text keys a lookup misses and
-the keys past int64. From KO2-86 (the owner's narrowing of H17 and E79) an
-error may name a value the caller passed in the same call, as the reference
-does (``indices[0] is ...``, the missing keys), so the entities hold no
-sentinel; a value read from the data stays out, so no sentinel may be
-written anywhere.
-
-Each error must be the core's: raised from the core's error (the canary
-watches ``errors.error_from_core``), so a refusal the bridge still makes
-itself, in pandas, fails here until the cast runs in the core. Its code is
-INVALID_REQUEST or INTERNAL_ERROR, never a rule not taken yet.
-
-Gating (``contract/tests/t132a_gate.py``): a scenario named in
-``t132a-pending.json``'s ``pending["exits"]`` (as ``canary:<scenario>``)
-failed when written. It still runs and must still fail; once it passes it
-fails, naming itself, until it is taken out of the list.
-"""
+"""Native value conversion must not expose planted data through errors or logs."""
 
 from __future__ import annotations
 
@@ -57,7 +17,7 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, _routing
+from sdm_client import PredictiveQuery, Schema
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -76,21 +36,7 @@ def _canary() -> Any:
     return sys.modules[name]
 
 
-def _gate() -> Any:
-    name = 't132a_gate'
-    if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            name, ROOT / 'contract/tests/t132a_gate.py'
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-    return sys.modules[name]
-
-
 C = _canary()
-G = _gate()
 DATA = C.DATA
 #: Our number sentinel: digits no statement, code or field holds by chance.
 NUMBER = '73400917'
@@ -108,7 +54,6 @@ PLANTED = [
 ]
 #: An entity no key holds, holding no sentinel.
 NOBODY = 'nobody'
-CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 
 
 def _alter(sql_type: str, using: str) -> list[str]:
@@ -188,7 +133,6 @@ SCENARIOS: dict[str, Callable[[], Any]] = {
 
 @pytest.fixture(autouse=True)
 def _core_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     # Our number is a sentinel too, for this file's scenarios.
     monkeypatch.setattr(C, 'SENTINELS', (*C.SENTINELS, NUMBER))
 
@@ -216,7 +160,7 @@ def test_no_sentinel_of_the_keys_family_reaches_anything_written(
                 error.details,
             )
 
-    G.held('exits', f'canary:{name}', check)
+    check()
 
 
 def test_each_sentinel_is_on_the_path_that_fails(

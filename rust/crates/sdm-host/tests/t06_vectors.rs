@@ -12,8 +12,7 @@
 //! - `DateOffset` answers must equal the reference's.
 //! - Unit conversions, single values and PQL literals repeat the T0.6
 //!   probe's own reading with `jiff` in place of `chrono`, and must equal the
-//!   probe's `chrono` answers; any difference is listed in
-//!   `docs/design/rust-core/phase-1/dependencies.md` and named here.
+//!   probe's `chrono` answers, with explicit exceptions named here.
 
 #![allow(
     clippy::disallowed_methods,

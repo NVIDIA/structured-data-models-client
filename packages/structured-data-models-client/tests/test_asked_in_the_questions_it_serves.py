@@ -76,7 +76,6 @@ def built(query: str, **how) -> object:
 
 
 def test_a_ranking_is_one_question_per_candidate():
-    pytest.importorskip('sdm_relational_engine')
 
     request = built(RANK, indices=[1, 2], candidates=[0, 1, 2, 3])
 
@@ -94,20 +93,13 @@ def test_a_ranking_is_one_question_per_candidate():
     ids=['ranking', 'forecast'],
 )
 def test_more_entities_than_one_call_scores_is_refused_before_gathering(
-    monkeypatch, query, how
+    query, how
 ):
     """A part is one call, which is what makes the fan-out countable. The
     refusal reads the count it was given, so it costs no gathering."""
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client.materializers.relational import RelationalMaterializer
     from sdm_client.models import RELATIONAL_LIMITS
 
     count = RELATIONAL_LIMITS['predict_rows_max'] + 1
-    monkeypatch.setattr(
-        RelationalMaterializer,
-        '_get_model',
-        lambda self: pytest.fail('the engine was reached'),
-    )
     with pytest.raises(StructuredDataError) as refused:
         built(query, indices=[1] * count, **how)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
@@ -118,7 +110,6 @@ def test_more_entities_than_one_call_scores_is_refused_before_gathering(
 def test_a_smaller_batch_lowers_what_a_part_may_ask_for(monkeypatch):
     """`rows_per_call` only goes down, and a part is one call, so asking for a
     smaller one asks for fewer entities rather than for more calls."""
-    pytest.importorskip('sdm_relational_engine')
 
     with pytest.raises(StructuredDataError) as refused:
         built(FORECAST, indices=[1, 2, 3], rows_per_call=2)
@@ -132,7 +123,6 @@ def test_the_whole_decomposed_question_is_held_to_the_memory_ceiling(
     """Each part gathers the whole population with a context of its own, so a
     ranking over 200 candidates holds 200 times what one of them does. Bounding
     each part on its own left the question itself unbounded."""
-    pytest.importorskip('sdm_relational_engine')
     from sdm_client.materializers import relational as materializer
 
     monkeypatch.setattr(materializer, 'MOST_ENTITIES', 5)
@@ -150,7 +140,6 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
     Two steps of two entities, told apart by the step rather than by a row
     number, which each step counts from its own zero.
     """
-    pytest.importorskip('sdm_relational_engine')
     from sdm_client import KumoRelational, SDMClient
 
     class FailsOnTheThirdCall:
@@ -187,7 +176,6 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
 
 @pytest.fixture(scope='module')
 def _forecast_template():
-    pytest.importorskip('sdm_relational_engine')
     return built(FORECAST, indices=[3])
 
 
@@ -220,7 +208,6 @@ def test_each_part_gathers_its_own_context(forecast_request):
 def test_the_candidates_have_to_be_named():
     """There is no ranking task to choose them with, and one call is made per
     candidate, so assuming a set would be assuming the cost too."""
-    pytest.importorskip('sdm_relational_engine')
 
     with pytest.raises(StructuredDataError) as refused:
         built(RANK, indices=[1, 2])
@@ -230,7 +217,6 @@ def test_the_candidates_have_to_be_named():
 
 
 def test_candidates_are_refused_where_nothing_is_ranked():
-    pytest.importorskip('sdm_relational_engine')
 
     with pytest.raises(StructuredDataError) as refused:
         built(
@@ -243,7 +229,6 @@ def test_candidates_are_refused_where_nothing_is_ranked():
 
 
 def test_a_repeated_candidate_is_asked_about_once():
-    pytest.importorskip('sdm_relational_engine')
 
     request = built(RANK, indices=[1], candidates=[1, 1, 2, 2, 2])
 
@@ -253,7 +238,6 @@ def test_a_repeated_candidate_is_asked_about_once():
 def test_too_many_parts_is_refused_before_the_waiting_starts():
     """The cost of this is a call per part, and a caller should meet that as a
     sentence rather than as a wait."""
-    pytest.importorskip('sdm_relational_engine')
 
     with pytest.raises(StructuredDataError) as refused:
         built(RANK, indices=[1], candidates=list(range(500)))
@@ -263,7 +247,6 @@ def test_too_many_parts_is_refused_before_the_waiting_starts():
 
 
 def test_an_ordinary_query_is_not_split():
-    pytest.importorskip('sdm_relational_engine')
 
     request = built(
         'PREDICT COUNT(buys.*, 0, 30, days) FOR EACH users.uid', indices=[1, 2]

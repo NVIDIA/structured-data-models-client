@@ -33,30 +33,16 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError, _routing
+from sdm_client import PredictiveQuery, Schema, StructuredDataError
 
 ROOT = Path(__file__).resolve().parents[3]
-CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 ANCHOR = pd.Timestamp('2024-03-01')
 
 
-@pytest.fixture(autouse=True)
-def _core(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-
-
 def _shop() -> list[str]:
-    lines = (
-        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8').splitlines()
-    )
-    start = lines.index('  shop:') + 1
-    statements = []
-    for line in lines[start:]:
-        if not line.startswith('  - '):
-            break
-        statements.append(line[len('  - ') :])
-    return statements
+    fixture = Path(__file__).with_name('data') / 'shop.json'
+    return json.loads(fixture.read_text())['statements']
 
 
 class _Shop:
@@ -204,25 +190,20 @@ def test_an_error_not_about_the_state_keeps_it(
     assert (ran, _same(made, again)) == (second, True)
 
 
-def test_the_core_s_own_refusal_of_a_start_not_about_the_state_keeps_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_the_core_s_own_refusal_of_a_start_not_about_the_state_keeps_it() -> (
+    None
+):
     # The errors above are refused by the client before a run, or fail a
     # run once it started; this one is the core's refusal of the start
     # itself, with a sound state handed to it: a negative seed, which the
-    # core refuses before it reads the state. The client's own check of
-    # the seed is set aside so the core sees it. A host dropping the state
+    # core refuses before it reads the state. A host dropping the state
     # on any refusal of a start, not on the core's word, fails here.
-    from sdm_client.materializers.relational import RelationalMaterializer
 
     (_, _), (second, again) = _fresh()
     shop = _Shop()
     shop.call(random_seed=7)
     held = dict(shop.state['held'])
-    monkeypatch.setattr(RelationalMaterializer, '_check_shape', lambda *a: None)
     ran, refused = shop.call(random_seed=-1)
-    monkeypatch.undo()
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     assert isinstance(refused, StructuredDataError), refused
     # The core's refusal, before anything was read, worded as the
     # reference words the same seed (python-ref at 6298913c; T2.14b moved

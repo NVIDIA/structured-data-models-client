@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The prediction responses of `contract/response-vectors.json`, which the
+//! The prediction responses of `tests/fixtures/response-vectors.json`, which the
 //! client's bindings read alike (`contract/tests/test_response_vectors.py`):
 //! each body read, or refused naming the field the vector names.
 
@@ -19,8 +19,8 @@ use serde_json::Value;
 
 #[test]
 fn the_reader_reads_each_vector_as_the_bindings_do() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/response-vectors.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../tests/fixtures/response-vectors.json");
     let document: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     assert_eq!(document["format"], "sdm-response-vectors/1");
     let vectors = document["vectors"].as_array().unwrap();

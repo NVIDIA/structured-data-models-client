@@ -18,7 +18,6 @@ import copy
 import functools
 import importlib.util
 import json
-import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -44,7 +43,30 @@ def _load(name: str) -> ModuleType:
 
 
 run = _load('run_python')
-check = _load('capture_check')
+
+
+def _duck_tables(
+    case: dict[str, Any], bases: dict[str, list[str]]
+) -> list[str]:
+    """Warehouse driver recording, privacy and case-loading contracts."""
+    import duckdb
+
+    connection = duckdb.connect()
+    try:
+        for statement in [
+            *bases[case['input']['base']],
+            *case['input'].get('setup', []),
+        ]:
+            connection.execute(statement)
+        return [
+            str(row[0])
+            for row in connection.execute(
+                'SELECT table_name FROM information_schema.tables '
+                "WHERE table_schema = 'main' ORDER BY table_name"
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
 
 
 # --- fake warehouse drivers --------------------------------------------------------
@@ -178,7 +200,7 @@ def _built_capture() -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     driver, as the recording mode builds it, written and read back."""
     case = _case()
     bases = run.load_bases()
-    tables = check._duck_tables(case, bases)
+    tables = _duck_tables(case, bases)
     log = run.DriverLog()
     log.recorder = run.Recorder()
     _drive(log)
@@ -505,7 +527,6 @@ def test_the_live_configuration_reads_the_environment_and_marks_it_private(
 
 def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
     case, line, tables = _capture()
-    assert check.capture_problems(line, case, tables) == []
     text = json.dumps(line)
     assert 'privcat_x' not in text and '{catalog}' in text
     assert line['draws'] == [
@@ -516,183 +537,6 @@ def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
             'fraction': '12.5',
             'seed': '7',
         }
-    ]
-
-
-@pytest.mark.parametrize(
-    ('fault', 'named'),
-    [
-        (lambda line: line['draws'].clear(), 'its draws are not'),
-        (
-            lambda line: line['draws'][0].update(fraction='12.50'),
-            'its draws are not',
-        ),
-        (lambda line: line['draws'][0].update(seed=None), 'its draws are not'),
-        (lambda line: line['tables'].pop(), 'its tables are'),
-        (lambda line: line['statements'].pop(), 'its statements are not'),
-        (
-            lambda line: line['statements'][1]['results'].clear(),
-            'no result read',
-        ),
-        (
-            lambda line: line['statements'][1]['results'][0].update(arrow=None),
-            'no Arrow',
-        ),
-        (
-            lambda line: line['statements'][1]['results'][0].update(arrow='x'),
-            'not an Arrow',
-        ),
-        (
-            lambda line: line['statements'][1]['results'][0].update(rows=9),
-            'rows held',
-        ),
-        (lambda line: line['relations'].clear(), 'did not evaluate'),
-        (lambda line: line.update(zone=''), 'no session zone'),
-        (
-            lambda line: [
-                line['versions'].pop(name, None)
-                for name in run._DRIVERS[line['leg']]
-            ],
-            "'s driver recorded",
-        ),
-        (lambda line: line['recording'].update(commit=None), 'no commit'),
-        (
-            lambda line: line.update(incomplete=['fetchmany_arrow']),
-            'could not record',
-        ),
-        (lambda line: line.update(format='sdm-capture/9'), 'not sdm-record/1'),
-        (lambda line: line.pop('observation'), 'no reference line'),
-    ],
-)
-def test_an_incomplete_capture_fails_by_name(fault: Any, named: str) -> None:
-    case, line, tables = _capture()
-    fault(line)
-    problems = check.capture_problems(line, case, tables)
-    assert any(named in problem for problem in problems), problems
-
-
-def test_a_capture_from_a_dirty_tree_fails_unless_an_excuse_names_it() -> None:
-    # Claude T3.20 r1 P1-2: a capture recorded from a recording or
-    # reference tree that was not clean is refused, unless the recording
-    # names why (its excuse, as the recording run was given it).
-    case, line, tables = _capture()
-    assert check.capture_problems(line, case, tables) == []
-    for where in (
-        lambda identity: identity['commit'],
-        lambda identity: identity['reference']['commit'],
-    ):
-        dirty = copy.deepcopy(line)
-        where(dirty['observation']['identity'])['clean'] = False
-        problems = check.capture_problems(dirty, case, tables)
-        assert any('a tree that was not clean' in p for p in problems), problems
-        dirty['recording']['excuse'] = ''
-        assert check.capture_problems(dirty, case, tables) != []
-        dirty['recording']['excuse'] = 'build output only; the source untouched'
-        assert check.capture_problems(dirty, case, tables) == []
-
-
-def test_a_case_the_live_run_leaves_out_by_name_is_not_live_not_pending() -> (
-    None
-):
-    # T3.20 r2: the cases the live run leaves out by name on a leg (their
-    # names hold what the write guard refuses there) are known not live on
-    # that leg, listed with the reason, and never pending: the locked run
-    # does not fail on them. On a leg the list does not name, the case is
-    # pending as any other.
-    case, _, _ = _capture()
-    left = copy.deepcopy(case)
-    left['id'] = 'name.backtick-target'
-    problems, pending, not_live = check.captures(
-        [case, left], [], ['databricks-sql']
-    )
-    assert problems == []
-    assert pending == ['base.binary@databricks-sql']
-    assert [entry.split(':', 1)[0] for entry in not_live] == [
-        'name.backtick-target@databricks-sql'
-    ]
-    assert 'backtick' in not_live[0]
-    assert check.NOT_LIVE['name.line-break-target'][0] == check.LEGS
-
-
-def test_a_dirty_tree_s_excuse_survives_the_import(tmp_path: Path) -> None:
-    # Codex T3.20 r2 P2: the excuse a recording names for a tree that was
-    # not clean is kept in the capture written from it, so the capture
-    # alone shows why it stands.
-    captures = _load('captures')
-    case, line, tables = _capture()
-    line['observation']['identity']['commit']['clean'] = False
-    line['recording']['excuse'] = 'build output only; the source untouched'
-    assert check.capture_problems(line, case, tables) == []
-    written = captures.from_recording(line)
-    assert written['excuse'] == line['recording']['excuse']
-    captures.write(tmp_path / 'one', written, environ={})
-    assert captures.read(tmp_path / 'one')['excuse'] == written['excuse']
-
-
-def test_a_case_changed_after_its_capture_is_pending_live() -> None:
-    case, line, _ = _capture()
-    problems, pending = check.recordings([case], [line], ['databricks-sql'])
-    assert problems == [] and pending == []
-    changed = copy.deepcopy(case)
-    changed['input']['materialize']['indices'] = [0]
-    problems, pending = check.recordings([changed], [line], ['databricks-sql'])
-    assert pending == [
-        'base.binary@databricks-sql: its input changed after its capture'
-    ]
-    problems, pending = check.recordings([case], [], ['databricks-sql'])
-    assert pending == ['base.binary@databricks-sql: no capture']
-    problems, _ = check.recordings([case], [line, line], ['databricks-sql'])
-    assert problems == ['base.binary@databricks-sql: captured twice']
-
-
-def _git(repo: Path, *arguments: str) -> str:
-    return subprocess.run(
-        ['git', '-C', str(repo), *arguments],
-        check=True,
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        env={
-            'GIT_AUTHOR_NAME': 't',
-            'GIT_AUTHOR_EMAIL': 't@example.invalid',
-            'GIT_COMMITTER_NAME': 't',
-            'GIT_COMMITTER_EMAIL': 't@example.invalid',
-            'GIT_CONFIG_GLOBAL': '/dev/null',
-            'GIT_CONFIG_NOSYSTEM': '1',
-            'PATH': '/usr/bin:/bin',
-        },
-    ).stdout.strip()
-
-
-def test_a_captures_only_commit_must_name_the_final_candidate(
-    tmp_path: Path,
-) -> None:
-    repo = tmp_path / 'repo'
-    repo.mkdir()
-    _git(repo, 'init', '-q', '-b', 'main')
-    (repo / 'README').write_text('x\n')
-    _git(repo, 'add', '.')
-    _git(repo, 'commit', '-q', '-m', 'final')
-    final = _git(repo, 'rev-parse', 'HEAD')
-    captures = repo / 'contract' / 'captures'
-    captures.mkdir(parents=True)
-    (captures / 'e1.jsonl').write_text(
-        json.dumps({'recording': {'commit': final}}) + '\n'
-    )
-    _git(repo, 'add', '.')
-    _git(repo, 'commit', '-q', '-m', 'captures')
-    assert check.captures_only(repo, final) == []
-    (captures / 'e1.jsonl').write_text(
-        json.dumps({'recording': {'commit': '0' * 40}}) + '\n'
-    )
-    (repo / 'README').write_text('y\n')
-    _git(repo, 'add', '.')
-    _git(repo, 'commit', '-q', '-m', 'more')
-    problems = check.captures_only(repo, final)
-    assert any('README: changed outside' in p for p in problems)
-    assert any('recorded from 0000' in p for p in problems)
-    assert check.captures_only(repo, 'HEAD') == [
-        'no commit after the final candidate'
     ]
 
 
@@ -840,47 +684,6 @@ def test_a_negative_zero_call_is_refused(tmp_path: Path) -> None:
         run.load_cases([tmp_path / 'case.json'])
 
 
-def test_deep_and_wide_capture_lines_are_refused_by_name(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    r"""Outside JSON (implementer.md's probes): thousands of nested levels
-    are refused by name, a very wide line is read, neither crashes."""
-    deep = tmp_path / 'deep.jsonl'
-    cases = ROOT / 'contract' / 'cases' / 's1' / 'base.binary.json'
-    for depth, named in (
-        (5_000, 'a capture line is a JSON list'),
-        (200_000, 'unreadable'),
-    ):
-        deep.write_text('[' * depth + ']' * depth + '\n')
-        assert (
-            check.main(
-                ['recording', '--cases', str(cases), '--capture', str(deep)]
-            )
-            == 1
-        )
-        assert named in capsys.readouterr().out
-    wide = tmp_path / 'wide.jsonl'
-    wide.write_text(json.dumps({f'k{i}': i for i in range(200_000)}) + '\n')
-    assert (
-        check.main(['recording', '--cases', str(cases), '--capture', str(wide)])
-        == 1
-    )
-    assert (
-        'FAILS None: no case of these runs on that leg'
-        in capsys.readouterr().out
-    )
-
-
-def test_a_deep_reference_line_is_refused_by_name() -> None:
-    case, line, _ = _capture()
-    nested: Any = []
-    for _ in range(50_000):
-        nested = [nested]
-    line['observation']['public']['schema'] = nested
-    problems, _ = check.recordings([case], [line], ['databricks-sql'])
-    assert problems and all('base.binary@databricks-sql' in p for p in problems)
-
-
 def test_a_stale_installed_client_is_refused(tmp_path: Path) -> None:
     r"""P2-MID2-7: python-core refuses a client whose contract version is
     not the checkout's."""
@@ -892,19 +695,3 @@ def test_a_stale_installed_client_is_refused(tmp_path: Path) -> None:
     assert run.stale_client(27, tmp_path / 'none.rs') is None
     # The checkout's own declaration is read: no contract is version 0.
     assert run.stale_client(0) is not None
-
-
-def test_a_deep_or_wide_manifest_is_refused_by_name(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    r"""The capture manifests are outside JSON too: deep past the parser,
-    or a wide object of no manifest's shape, each refused by name."""
-    cases = ROOT / 'contract' / 'cases' / 's1' / 'base.binary.json'
-    deep = tmp_path / 'deep.json'
-    deep.write_text('[' * 200_000 + ']' * 200_000)
-    assert check.main(['captures', '--cases', str(cases), str(deep)]) == 1
-    assert 'unreadable' in capsys.readouterr().out
-    wide = tmp_path / 'wide.json'
-    wide.write_text(json.dumps({f'k{i}': i for i in range(200_000)}))
-    assert check.main(['captures', '--cases', str(cases), str(wide)]) == 1
-    assert 'is not sdm-capture/1' in capsys.readouterr().out

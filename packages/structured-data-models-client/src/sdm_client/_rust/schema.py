@@ -1,46 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: from T1.24b no host-held rule with a Phase 1 owner is left
-# here (design, "Host-held semantics"; decision E67): the live object's
-# edits are the core's edit_schema, and building today's Schema from the
-# description and converting the call's own values stay the host's. Its
-# routing branch in Schema.from_source is deleted in Phase 5, with the
-# routing seam (decision B-D7). Frozen meanwhile (E50).
+"""Adapt source declarations and Rust schema descriptions to Python objects.
 
-r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
-
-``Schema.from_source`` comes here on the core route, for a DuckDB source or,
-from T2.2, a SQLite one, with tables named or none (T1.24). The core's
-``describe_source`` reads the source through its backend's provider
-(:mod:`.providers`) and infers each table, its
-columns' data and semantic types, its key and its time column, by the
-reference's rules, with the source's declared foreign keys; from T1.21d it
-assembles the schema as the client's ``Schema.from_source`` does after the
-engine has read the source, and says so in the same warnings: the
-relationships inferred by name, the edit stamps settled by them, the key
-columns marked (decision E55). This module builds today's
-:class:`~sdm_client.schema.Schema` from that description and decides
-nothing of it; the run shows the core's warnings as it gives them.
-
-Nothing here imports the relational engine. The proof is the tests':
-an import hook that refuses the engine for the length of the route is a
-test's own, installed in a process of its own, since a hook on
-``sys.meta_path`` is the whole process's and would refuse another
-thread's call on the old route (design, "Routing seam"). The old
-materializer, which a query still takes
-until T1.11c, reads the source itself later; the schema hands it an empty
-store of engine tables (``EngineTables``), which it fills then.
-
-The call's arguments pass through to the core as the contract's
-``SourceSpec``: the tables named beside their source names, the keys, the
-time columns (``None`` clearing one, contract version 13) and the
-relationships given; the core takes or refuses each by name, and this
-module refuses none of its own (decision E61). It converts only its own
-values: a relationship that is not a :class:`~sdm_client.Relationship` is
-refused as the reference refuses it, since the contract cannot carry one.
-The core refuses with ``UNSUPPORTED_REQUEST`` an input whose description
-takes a rule it does not hold yet (register entry P1B-2).
+Rust owns schema inference, relationship policy, validation and warnings.
+This module encodes Python arguments and binds the returned metadata to public
+Schema, SourceTable and Column objects. Providers perform source I/O.
 """
 
 from __future__ import annotations
@@ -201,7 +166,7 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     time column, and the links."""
     from sdm_client._rust.results import SourceFacts
     from sdm_client.core.warnings import SDMWarning
-    from sdm_client.materializers.sources import EngineTables, wire_dtype
+    from sdm_client.materializers.sources import wire_dtype
     from sdm_client.schema import Column, Relationship, SourceTable
 
     built: dict[str, SourceTable] = {}
@@ -278,5 +243,4 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
-    schema._engine_tables = EngineTables()
     return schema

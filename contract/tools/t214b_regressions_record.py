@@ -37,11 +37,9 @@ python-core with the core routes forced):
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import importlib.util
 import json
-import os
 import re
 import sys
 import warnings
@@ -364,77 +362,16 @@ def json_documents(dsn: str) -> dict[str, Any]:
     return out
 
 
-def observe(core: bool, dsn: str | None) -> dict[str, Any]:
-    r"""Every scenario, on the core where ``core`` (each public call's
-    DuckDB or Postgres paths forced, as ``run_python.py`` forces a case's
-    routes); the Postgres one only where ``dsn`` names a server."""
-    if core:
-        from sdm_client import _routing
-
-        os.environ['SDM_CORE_ROUTES'] = ','.join(
-            _routing.FROM_SOURCE_DUCKDB
-            + _routing.MATERIALIZE_DUCKDB
-            + _routing.PREDICT_DUCKDB
-            + _routing.FROM_SOURCE_POSTGRES_TABLES
-            + _routing.MATERIALIZE_POSTGRES
-            + _routing.PREDICT_POSTGRES
-        )
-    else:
-        os.environ['SDM_CORE_ROUTES'] = ''
-    try:
-        return {
-            'candidates': candidates(),
-            'stype': stype(),
-            'where': where(),
-            'json': None if dsn is None else json_documents(dsn),
-        }
-    finally:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+def observe(dsn: str | None) -> dict[str, Any]:
+    """Run current-client regressions, including Postgres when configured."""
+    return {
+        'candidates': candidates(),
+        'stype': stype(),
+        'where': where(),
+        'json': None if dsn is None else json_documents(dsn),
+    }
 
 
 def load() -> dict[str, Any]:
     r"""The vector file, as committed."""
     return json.loads(OUT.read_text(encoding='utf-8'))
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--reference', type=Path, required=True)
-    arguments = parser.parse_args(argv)
-    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
-    if not dsn:
-        print('SDM_POSTGRES_TEST_DSN names no server', file=sys.stderr)
-        return 1
-    run = runner()
-    guard = run._Guard(arguments.reference)
-    guard.check('before the first case')
-    run._require_reference_client(arguments.reference)
-    commit = run._git(arguments.reference)
-    if not commit['clean']:
-        print('the reference checkout is not clean', file=sys.stderr)
-        return 1
-    document = {
-        'format': FORMAT,
-        'about': (
-            "What the reference's public calls give for T2.14b's fix-round "
-            'regressions: repeated and equal temporal ranking candidates, a '
-            "column's meaning set to a number, an aggregation's filter "
-            "reading a double past float32's range, and Postgres json "
-            'documents escaping lone surrogates through predict. '
-            'contract/tests/test_t214b_regressions.py holds python-core to '
-            'them, observed by the same code (observe).'
-        ),
-        'recorded_by': 'contract/tools/t214b_regressions_record.py',
-        'reference': commit['sha'],
-        **observe(core=False, dsn=dsn),
-    }
-    guard.check('after the last case')
-    OUT.write_text(
-        json.dumps(document, indent=1, ensure_ascii=True) + '\n',
-        encoding='utf-8',
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

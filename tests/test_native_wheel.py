@@ -124,3 +124,15 @@ def test_two_builds_into_one_directory_each_leave_a_wheel_and_its_identity(
         assert (
             identity['native_sha256'] == hashlib.sha256(b'native').hexdigest()
         )
+
+
+def test_windows_rustc_executable_flags_are_checked() -> None:
+    script = _script()
+    log = (
+        'Running `"C:\\Program Files\\Rust\\bin\\rustc.exe" '
+        '--crate-name sdm_core -C opt-level=3 -C target-cpu=native`'
+    )
+    flags = script._rustc_flags(log)
+    assert '-C opt-level=3' in flags
+    assert '-C target-cpu=native' in flags
+    assert script.target_cpu_refusal({}, {}, flags)

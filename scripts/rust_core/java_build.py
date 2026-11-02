@@ -3,18 +3,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Builds and tests the Java library locally (T3.11), as CI's Java jobs do.
+r"""Builds and tests the Java library locally, as CI's Java jobs do.
 
     java_build.py verify    the native with the test-only operations, put
                             where Maven packages it (``java/target/natives/
                             <platform>/``), then ``mvn verify``: every Java
                             test, with the runtime flags, loading it as the
-                            JAR does (affected.py's suite for ``java/**``
-                            and ``rust/bindings/sdm-jni/**``)
+                            JAR does
     java_build.py jar       the same, then the JAR, and prints ``JAR``,
                             ``LIB`` and ``NATIVE`` lines, the arguments of
-                            ``contract/runners/run_java.py`` (handoff.py's
-                            Java legs)
+                            ``contract/runners/run_java.py``
 
 The JDK is ``SDM_JAVA_HOME``, else ``JAVA_HOME``; Maven is ``SDM_MAVEN``,
 else ``mvn`` on the path. Either missing exits 2, naming it. Cargo builds

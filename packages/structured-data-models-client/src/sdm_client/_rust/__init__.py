@@ -2,12 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Python host of the Rust core.
+"""Python value conversion, provider I/O and lifecycle adapters for Rust.
 
-Only a core route reaches this package, and only it imports
-``sdm_client._native``: the control-message codec (:mod:`.codec`), the host
-facts a run starts with (:mod:`.facts`), the run loop (:mod:`.run`), the one
-table from the core's error codes to this client's exceptions
-(:mod:`.errors`), and the S0 route (:mod:`.s0`). Importing this package
-imports nothing native; :func:`.run.native` does, when a run starts.
+Importing this package does not load the native extension.
 """
+
+
+class NativeBoundaryError(RuntimeError):
+    """The native extension or a required host representation is unavailable.
+
+    This is a runtime integration failure, distinct from a rejected user request.
+    """

@@ -24,7 +24,6 @@ import pytest
 from sdm_connectors import DatabricksSource, Source
 from sdm_connectors.backends.spark import SparkConnection
 
-from sdm_client import _routing
 from sdm_client._rust import providers
 from sdm_client._rust.providers.databricks import (
     DatabricksProvider,
@@ -359,8 +358,6 @@ def test_the_client_tells_the_databricks_connections_apart() -> None:
         'spark': 'databricks-spark',
         'metric-view': 'databricks-metric-view',
     }
-    # An object that is no source has no route, whatever paths are asked.
-    assert not _routing.on_the_core(object(), _routing.FROM_SOURCE)
     assert isinstance(sources['spark'], Source)
 
 
@@ -387,48 +384,6 @@ def test_the_provider_choice_names_the_dialect_and_the_namespace(
     }
     assert type(provider) is made
     assert provider._connection is source.connection
-
-
-def test_every_databricks_default_is_core_and_each_connection_its_own_route(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sources = _sources()
-    groups = (
-        _routing.FROM_SOURCE,
-        _routing.FROM_SOURCE_TABLES,
-        _routing.MATERIALIZE,
-        _routing.PREDICT,
-    )
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    for paths in groups:
-        assert all(_routing.on_the_core(s, paths) for s in sources.values())
-    assert set(_routing.MATERIALIZE['databricks-sql']) == {
-        f'query.materialize/indices-{kind}/databricks-sql'
-        for kind in (
-            'binary',
-            'multiclass',
-            'regression',
-            'link-prediction',
-            'ranking',
-            'forecast',
-        )
-    }
-    forced = (
-        _routing.FROM_SOURCE_DATABRICKS_SQL
-        + _routing.MATERIALIZE_DATABRICKS_SQL
-        + _routing.PREDICT_DATABRICKS_SQL
-    )
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(forced))
-    for paths in (_routing.FROM_SOURCE, _routing.MATERIALIZE, _routing.PREDICT):
-        assert _routing.on_the_core(sources['warehouse'], paths)
-        assert not _routing.on_the_core(sources['spark'], paths)
-        # A metric view is no table of its warehouse: T3.5 routes it.
-        assert not _routing.on_the_core(sources['metric-view'], paths)
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT, ','.join(_routing.PREDICT_DATABRICKS_SPARK)
-    )
-    assert _routing.on_the_core(sources['spark'], _routing.PREDICT)
-    assert not _routing.on_the_core(sources['warehouse'], _routing.PREDICT)
 
 
 def _error(module: str, name: str, **attributes: Any) -> type[Exception]:

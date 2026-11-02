@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The 29 grammar and date quirks (`tests/pql/quirks.json`): the first
-//! attempt's rows, answered again by the reference (`record_quirks.py`),
+//! historical regression rows with frozen expected answers,
 //! each held through the adapter.
 //!
 //! A query row compares as a corpus case does (`pql_compare`). A date row is

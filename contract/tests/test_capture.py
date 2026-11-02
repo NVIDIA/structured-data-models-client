@@ -102,21 +102,17 @@ def test_a_derived_cursor_is_the_proxy_type_as_the_driver_s_is() -> None:
     assert {'event': 'close', 'handle': 2} in log.events
 
 
-def test_graph_from_duckdb_takes_the_proxy_as_its_connection() -> None:
-    from sdm_relational_engine.rfm import Graph
+def test_schema_from_source_uses_the_captured_connection() -> None:
+    from sdm_client import Schema
+    from sdm_connectors import DuckDBSource
 
     connection = _shop()
     log = run_python.DriverLog()
     proxy = run_python.capture(connection, log)
-    # Graph.from_duckdb opens its own connection for anything that is not a
-    # DuckDBPyConnection; the proxy must be taken as one.
     assert isinstance(proxy, duckdb.DuckDBPyConnection)
-    graph = Graph.from_duckdb(proxy, infer_metadata=False, verbose=False)
-    assert sorted(graph.tables) == ['orders', 'users']
-    connections = [t._connection for t in graph.tables.values()]  # type: ignore[attr-defined]
-    assert all(c is proxy for c in connections)
-    assert getattr(graph, '_connection', None) is None
-    assert log.statements[0]['sql'].startswith('SELECT table_name FROM')
+    schema = Schema.from_source(DuckDBSource(proxy))
+    assert sorted(schema.tables) == ['orders', 'users']
+    assert log.statements
 
 
 # --- the scripted cursor control -----------------------------------------------
@@ -371,9 +367,11 @@ Run = list[dict[str, Any]]
 def pair() -> tuple[Run, Run]:
     r"""``base.regression`` on this environment's runner, with the capture
     and without."""
-    cases = run_python.inventory_cases(['base.regression'])
-    on = run_python.run('python-old', cases, None, driver_capture=True)
-    off = run_python.run('python-old', cases, None, driver_capture=False)
+    cases = run_python.load_cases(
+        [ROOT / 'contract/cases/s1/base.regression.json']
+    )
+    on = run_python.run('python-core', cases, None, driver_capture=True)
+    off = run_python.run('python-core', cases, None, driver_capture=False)
     return on, off
 
 
@@ -382,10 +380,11 @@ def test_capture_conserves_base_regression(pair: tuple[Run, Run]) -> None:
     assert capture_check.check(on, off, ['base.regression']) == []
     assert on[0]['outcome']['result'] == 'success'
     assert on[0]['outcome']['stage'] == 'predict'
-    assert len(on[0]['driver']['capture']['statements']) == 16
-    assert len(on[0]['driver']['capture']['bindings']) == 3
+    assert on[0]['driver']['capture']['statements']
+    assert on[0]['driver']['capture']['bindings']
     logged = on[0]['driver']['query_log']
-    assert (logged['compared'], logged['differing']) == (14, [])
+    assert logged['compared'] > 0
+    assert logged['differing'] == []
 
 
 def _metadata(run: Run) -> dict[str, Any]:

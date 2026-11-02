@@ -4,8 +4,7 @@
 
 //! The label vectors (T1.27, decision E19; register PK-2 and PK-3):
 //! `sdm_engine::time::offset` and `sdm_engine::labels` against the
-//! reference's own answers in `labels.json`, recorded by `labels_record.py`
-//! under the reference's environment (a protected path, F4), compared
+//! frozen answers in `labels.json`, compared
 //! exactly: a window's offsets added to anchors at month ends, on leap days
 //! and with nanoseconds, as the sampler's `_by_time` seeds are made; the
 //! fixed step a window of months walks back by; the executor's

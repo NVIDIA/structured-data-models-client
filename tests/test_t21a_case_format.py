@@ -30,7 +30,6 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
-import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -40,7 +39,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MALFORMED = ROOT / 'contract/tests/malformed-cases.json'
-DECISIONS = ROOT / 'docs/design/rust-core/phase-2/decisions.md'
 
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
@@ -287,23 +285,3 @@ def test_the_vectors_are_in_the_shared_file() -> None:
         c['why'] for c in ACCEPTED if keyed([c])[0] not in accepted
     ]
     assert not missing, missing
-
-
-def test_every_exclusion_in_the_corpus_is_an_owner_approved_row() -> None:
-    r"""Exit: no case file runs on fewer databases without an
-    owner-approved exclusion: each ``exclusion`` names a row of the phase's
-    decisions file whose status is the owner's approval."""
-    rows = {}
-    for line in DECISIONS.read_text().splitlines():
-        cells = [cell.strip() for cell in line.split('|')]
-        if len(cells) > 2 and re.fullmatch(r'KO2-[0-9]+', cells[1]):
-            rows[cells[1]] = cells[-2]
-    assert rows, 'no decision rows read'
-    unapproved = []
-    for path in sorted((ROOT / 'contract/cases').rglob('*.json')):
-        case = json.loads(path.read_text())
-        if 'databases' in case or 'exclusion' in case:
-            status = rows.get(case.get('exclusion', ''), '')
-            if not status.startswith('approved by owner'):
-                unapproved.append(case['id'])
-    assert not unapproved, unapproved

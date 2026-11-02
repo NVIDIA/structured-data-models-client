@@ -9,16 +9,11 @@
 //! An accepted query gives the reference's validated query: its tree, read
 //! into the validated-query format, equals the adapter's, field for field,
 //! and each date literal reads as the reference reads it (`reading`,
-//! recorded by `record_readings.py`). A refused query gives the same errors
+//! preserved in the frozen fixture). A refused query gives the same errors
 //! in count, code and span, unknown-name errors as a multiset, since the
 //! reference orders them from a Python set; messages are not promised. The
 //! date warnings the reference gave are compared by format (D4).
 //!
-//! The cases that differ, and the parts of each that do, are pinned in
-//! `tests/pql/known-differing.json`, empty since T1.6b. Any other
-//! difference fails, and so does a pinned part that agrees, so the list can
-//! only shrink.
-
 #![allow(
     clippy::disallowed_methods,
     reason = "test code: reads the corpus file"
@@ -26,10 +21,10 @@
 
 mod pql_compare;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 
-use pql_compare::{differences, in_comparable_order, profile, query_schema, text};
+use pql_compare::{differences, in_comparable_order, profile, query_schema};
 use sdm_contract::ops::QuerySchema;
 use serde_json::{Value, json};
 
@@ -44,23 +39,6 @@ fn corpus() -> Value {
     read("corpus.json")
 }
 
-/// The pinned differences: each case's id and the parts of it that differ.
-fn known_differing() -> BTreeMap<String, BTreeSet<String>> {
-    read("known-differing.json")["cases"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|case| {
-            let parts = case["parts"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|p| text(p).unwrap())
-                .collect();
-            (text(&case["id"]).unwrap(), parts)
-        })
-        .collect()
-}
 #[test]
 fn unknown_name_errors_compare_as_a_multiset_and_the_rest_in_order() {
     let error = |code: &str, col: u32| (code.to_owned(), json!({"start_col": col}));
@@ -76,7 +54,7 @@ fn unknown_name_errors_compare_as_a_multiset_and_the_rest_in_order() {
 }
 
 #[test]
-fn the_corpus_agrees_with_the_reference() {
+fn the_corpus_matches_frozen_expected_answers() {
     let corpus = corpus();
     let schemas: BTreeMap<&str, QuerySchema> = corpus["schemas"]
         .as_object()
@@ -88,48 +66,14 @@ fn the_corpus_agrees_with_the_reference() {
     assert_eq!(cases.len(), 417, "the corpus holds 417 queries");
     let accepted = cases.iter().filter(|c| c.get("tree").is_some()).count();
     assert_eq!((accepted, cases.len() - accepted), (193, 224));
-    let known = known_differing();
-    let ids: BTreeSet<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
     let mut failures = Vec::new();
-    for id in known.keys() {
-        if !ids.contains(id.as_str()) {
-            failures.push(format!("{id}: pinned as differing, and not in the corpus"));
-        }
-    }
-    let mut differing = 0;
     for case in cases {
         let id = case["id"].as_str().unwrap();
         let schema = &schemas[case["schema"].as_str().unwrap()];
         let found = differences(case, schema, &profile(case["profile"].as_str().unwrap()));
-        if !found.is_empty() {
-            differing += 1;
-        }
-        let pinned = known.get(id).cloned().unwrap_or_default();
-        for (part, how) in &found {
-            let status = if pinned.contains(*part) {
-                "pinned"
-            } else {
-                "NOT PINNED"
-            };
-            println!("  {id}: {part} ({status}): {how}");
-            if !pinned.contains(*part) {
-                failures.push(format!("{id}: {part} differs: {how}"));
-            }
-        }
-        for part in &pinned {
-            if !found.contains_key(part.as_str()) {
-                failures.push(format!(
-                    "{id}: {part} is pinned as differing and now agrees; remove it from \
-                     known-differing.json"
-                ));
-            }
+        for (part, how) in found {
+            failures.push(format!("{id}: {part} differs: {how}"));
         }
     }
-    println!(
-        "PQL corpus: {} of {} queries agree with the reference; {differing} differ, {} pinned",
-        cases.len() - differing,
-        cases.len(),
-        known.len()
-    );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

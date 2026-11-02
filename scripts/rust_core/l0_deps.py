@@ -39,20 +39,9 @@ features, every target platform) and checks:
 - unsafe code: each domain crate and ``sdm-host`` takes the workspace lints,
   which forbid it, and forbids it at its root; the binding and the test
   host deny it;
-- bridge headers (decision F7): each bridge file carries a header naming the
-  phase that deletes it, a shipped file that reads ``SDM_CORE_ROUTES`` is
-  one of the seam's (``ROUTE_READERS``, a narrower list than the bridge
-  files), and every ``Bridge code:`` header names a phase; which task owns
-  a rule a header names is for review, not this check. The parser
-  is not bridge code (E18): nothing is asked of it, and it carries no such
-  header;
-- the bridge freeze (decision E50, ``bridge_freeze.py``), a tripwire for
-  undeclared changes to the core route's Python bridge: each frozen
-  function's fingerprint against the merge base with the base branch
-  (``--base``, else ``SDM_FREEZE_BASE``, else ``origin/`` and the phase
-  branch, ``phases.py``)
-  changes only as ``bridge_changes.json`` declares (from T1.28b the whole
-  check: E56(d) retired its counts and allowances).
+- shipped Python and Rust source must not reference the retired
+  ``SDM_CORE_ROUTES`` switch.
+
 
 ``selftest.py`` holds each rule to a seeded fixture it must fail on.
 
@@ -84,7 +73,6 @@ else:
     import tomli as tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import bridge_freeze  # noqa: E402
 from l0_scan import read_rust, tree_name  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -214,29 +202,7 @@ _TEST_OPS_MODULE = re.compile(
     r'#\[cfg\(feature\s*=\s*"test-ops"\)\]\s*(?:pub\s+)?mod\s+test_ops\s*;'
 )
 
-# The private seam deleted in Phase 5: the only shipped files that may read
-# SDM_CORE_ROUTES (decision B-D7).
-_CLIENT = 'packages/structured-data-models-client/src/sdm_client/'
-ROUTE_READERS = (
-    Path(_CLIENT + '_routing.py'),
-    Path(_CLIENT + '_rust/s0.py'),
-)
-# Bridge files (decision F7), each held to a header naming the phase that
-# deletes it: the seam, and the files that keep a rule of the design's
-# "Host-held semantics" ledger on a core route (T1.11f). Which task owns
-# each rule is the ledger's, held by review, not by this check.
-BRIDGE_FILES = (
-    *ROUTE_READERS,
-    Path(_CLIENT + '_rust/schema.py'),
-    Path(_CLIENT + '_rust/materialize.py'),
-    Path(_CLIENT + '_rust/predict.py'),
-    Path(_CLIENT + 'materializers/relational.py'),
-    Path(_CLIENT + 'client.py'),
-    Path(_CLIENT + 'query.py'),
-)
 SHIPPED_PYTHON = Path('packages/structured-data-models-client/src')
-_BRIDGE_HEADER = re.compile(r'^(?:#|//)\s*Bridge code\b.*', re.M)
-_BRIDGE_PHASE = re.compile(r'deleted in Phase \d+')
 
 
 def cargo_metadata(root: Path) -> dict[str, Any]:
@@ -481,21 +447,6 @@ def check_unsafe(graph: Graph, crates: Crates) -> list[str]:
     return problems
 
 
-def bridge_header(text: str) -> str | None:
-    """The bridge header in a file's leading comments, if any."""
-    head = '\n'.join(text.splitlines()[:15])
-    match = _BRIDGE_HEADER.search(head)
-    if not match:
-        return None
-    # The header may run on over the comment lines that follow it.
-    lines = [match.group(0)]
-    for line in head[match.end() :].splitlines()[1:]:
-        if not line.startswith(('#', '//')) or line.strip() in ('#', '//'):
-            break
-        lines.append(line)
-    return ' '.join(re.sub(r'^(?:#|//)\s*', '', line) for line in lines)
-
-
 def shipped_files(root: Path) -> Iterable[Path]:
     yield from sorted((root / SHIPPED_PYTHON).rglob('*.py'))
     for crates in ('rust/crates', 'rust/bindings'):
@@ -505,41 +456,12 @@ def shipped_files(root: Path) -> Iterable[Path]:
 
 
 def check_bridges(root: Path, parser_root: Path) -> list[str]:
-    problems = []
-    for rel in BRIDGE_FILES:
-        path = root / rel
-        if not path.is_file():
-            problems.append(f'{rel}: a bridge file that does not exist')
-            continue
-        header = bridge_header(path.read_text())
-        if header is None or not _BRIDGE_PHASE.search(header):
-            problems.append(
-                f'{rel}: no header naming the phase that deletes it (F7)'
-            )
-    for path in shipped_files(root):
-        rel = path.relative_to(root)
-        text = path.read_text()
-        header = bridge_header(text)
-        if parser_root in path.parents:
-            if header is not None:
-                problems.append(
-                    f'{rel}: the parser is permanent, not bridge code (E18)'
-                )
-            continue
-        if header is not None and not _BRIDGE_PHASE.search(header):
-            problems.append(
-                f'{rel}: a bridge header without the phase that deletes it'
-            )
-        if (
-            path.suffix == '.py'
-            and 'SDM_CORE_ROUTES' in text
-            and rel not in ROUTE_READERS
-        ):
-            problems.append(
-                f"{rel}: reads SDM_CORE_ROUTES but is not one of the seam's "
-                'ROUTE_READERS'
-            )
-    return problems
+    """Reject the retired route switch in shipped source, without exceptions."""
+    return [
+        f'{path.relative_to(root)}: reads SDM_CORE_ROUTES, which is retired'
+        for path in shipped_files(root)
+        if 'SDM_CORE_ROUTES' in path.read_text()
+    ]
 
 
 def run_checks(metadata: dict[str, Any], root: Path) -> dict[str, list[str]]:
@@ -571,13 +493,6 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help='read cargo metadata from this file instead',
     )
-    parser.add_argument(
-        '--base',
-        default=None,
-        help="the branch whose merge base with HEAD holds the bridge freeze's "
-        f'baseline to ratchet against (default: ${bridge_freeze.BASE_ENV}, '
-        f'else {bridge_freeze.BASE_REF})',
-    )
     args = parser.parse_args(argv)
     metadata = (
         json.loads(args.metadata.read_text())
@@ -585,7 +500,6 @@ def main(argv: list[str] | None = None) -> int:
         else cargo_metadata(args.root)
     )
     checks = run_checks(metadata, args.root)
-    checks['freeze'] = bridge_freeze.problems(args.root, args.base)
     failed = False
     for name, problems in checks.items():
         for problem in problems:

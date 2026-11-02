@@ -26,21 +26,15 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, _routing
+from sdm_client import PredictiveQuery, Schema
 from sdm_client._rust import run as _rust_run
 from sdm_client.errors import UnsupportedRequestError
 
-CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 VECTORS = json.loads(
     Path(__file__)
     .with_name('t128w-payload-bytes.json')
     .read_text(encoding='utf-8')
 )
-
-
-@pytest.fixture(autouse=True)
-def _core(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
 
 
 def _core_bytes(

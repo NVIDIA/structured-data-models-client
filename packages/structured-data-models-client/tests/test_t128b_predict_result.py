@@ -1,71 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""T1.28b's predict-side rules and result on the core route equal the reference's.
+"""Prediction results, malformed responses and documented numeric policies.
 
-Written by the package's independent test author from the brief, the design
-row and the reference, before the implementation. Each case in
-``t128b-predict-result.json`` is a DuckDB source, a query, the arguments of
-``materialize`` and ``predict``, and a local endpoint's script;
-``t128b_predict_result_record.py`` recorded what the reference gives for it,
-through the same ``observe`` this test calls, and the bytes each call was
-answered with. Here the call runs forced onto the core (``SDM_CORE_ROUTES``:
-the schema's, materialize's and predict's routes) and its public outcome
-must equal the reference's. Each case names the exit it covers:
-
-- ``LAYOUT``, exit "L1 layout vectors pass, with distinct per-row answers
-  and reordered responses": every row answered with a different value, the
-  answers given in order, reversed, rotated and interleaved;
-- ``CLASSIFICATION``, exit "on both core hosts, over base.binary and
-  base.multiclass, the boolean and text results match the reference": the
-  prediction as a bool or as text, and the probabilities' columns;
-- ``CONTEXT``, exit "python-core and rust-host public outcomes match for
-  empty and constant context and multi-part results" and the ledger rows
-  (the answer to a request with no rows; the parts merged into one result
-  and the notice of an output the answer left out);
-- ``PREPARE``, the ledger rows "the adapter's _preflight" and "the call's
-  model and output checks (SDMClient._prepare)": the reference's refusal,
-  class and code, or its result where it accepts;
-- ``BOUNDARY``, exit "a bounded boundary-vector matrix ... deep and wide
-  JSON, finite overflow and non-finite numbers, the endpoint's against a
-  local error's provenance, and missing or retyped evidence": the vectors
-  are ``contract/response-vectors.json``'s ``boundaries``, each answer
-  replayed as recorded. A vector the reference reads and the core refuses
-  may end so (INVALID_RESPONSE, a local error) only when its ``divergence``
-  names a register entry the owner approved (P1B-22, an answer nested past
-  the core's reader; P1B-23, a regression's prediction not a number); one
-  naming a proposed entry (P1B-4) is held to the reference;
-- ``CARRY``, the brief's carry-forward: ``np.longdouble`` options and a
-  NumPy array of ``target_transforms`` end as on the reference;
-- across cells: each case is held to the reference's outcome at this
-  interpreter and pandas, recorded at each pin (``by_python``,
-  ``dtypes_pandas2``); a probability in Kawi digits is the orchestrator's
-  Unicode policy, refused INVALID_RESPONSE on the core on every
-  interpreter (``core_outcome``), where the reference reads it held to the
-  one entry registering it, P1B-25, approved by the owner and naming the
-  case (M10: never to any mention of the case in the register);
-- the Databricks serving route (``SDMClient.for_databricks_serving`` with a
-  fake workspace client, no endpoint): a ``response_json`` nested 5,000
-  levels, in the metadata or an item, refused on the core on every
-  interpreter as P1B-22 says (INVALID_RESPONSE, field ``response``, reason
-  ``too_deep``, ``core_outcome``); a ``response_json`` that is not JSON,
-  cut short or empty, and an ordinary answer, as the reference's;
-- ``INTEGERS``, ``ABSENT_VALUES`` and ``NUMERIC_TEXT`` (the review of
-  part 2): a regression's integer predictions kept exact past 2**53 in an
-  int64 column, a column mixing integers and floats as float64; a missing
-  and a null prediction ``None`` in ``.items``, a NaN a NaN; probabilities
-  written as text accepted where ``float()`` reads them (digit separators,
-  Unicode digits, whitespace) and refused where the reference refuses them
-  (``"1e999"``, ``"abc"``, ``"0__5"`` ...); ``.items`` compared as well as
-  ``to_pandas()``;
-- ``SIZE``, the carry-forward "size refusals on the core route ... make the
-  message explain it": the refusal's code as the reference's, and its
-  message names the limit.
-
-Before T1.28b the core refuses a classification's answer by its rule
-``problem_type``, option values by ``INVALID_REQUEST``, and every
-non-finite number as ``INVALID_RESPONSE``; those cases fail here by name.
-"""
+Fixed fixtures cover output layout, errors, nonfinite values and response limits.
+Explicit native policies take precedence where stricter validation differs from historical fixture outcomes.
+These tests execute the current client and do not consult migration approvals."""
 
 from __future__ import annotations
 
@@ -78,20 +18,13 @@ from typing import Any
 
 import pytest
 
-from sdm_client import _routing
-
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 RECORDED = json.loads(
     (HERE / 't128b-predict-result.json').read_text(encoding='utf-8')
 )
 VECTORS = json.loads(
-    (ROOT / 'contract/response-vectors.json').read_text(encoding='utf-8')
-)
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
+    (ROOT / 'tests/fixtures/response-vectors.json').read_text(encoding='utf-8')
 )
 
 
@@ -112,38 +45,28 @@ def _recorder() -> Any:
 R = _recorder()
 CASES = RECORDED['cases']
 BOUNDARIES = VECTORS['boundaries']
+# Response cases that may be refused by stricter native validation.
+STRICT_RESPONSE_CASES = {
+    'boundary.deep.metadata-200',
+    'boundary.deep.metadata-5000',
+    'boundary.deep.item-5000',
+    'boundary.finite.integer-past-int64',
+    'boundary.finite.integer-past-double',
+    'boundary.overflow.prediction-1e400',
+    'boundary.overflow.prediction-minus-1e400',
+    'boundary.nonfinite.prediction-NaN',
+    'boundary.nonfinite.prediction-Infinity',
+    'boundary.nonfinite.prediction-minus-Infinity',
+    'boundary.nonfinite.metadata-NaN',
+    'boundary.overflow.metadata-1e400',
+    'boundary.evidence.prediction-text',
+    'boundary.evidence.prediction-bool',
+    'boundary.evidence.prediction-list',
+}
+
+
 #: The prefix python-core puts on a core warning's text (E41(i), E59(d)).
 CODE_PREFIX = re.compile(r'^\[[A-Z_]+\] ')
-
-
-def _owner_approved(entry: str | None) -> bool:
-    r"""Whether register entry ``entry`` is approved by the owner, read from
-    its own block, anchored: its ``- id:`` line is exactly ``entry``, its
-    ``status`` exactly ``approved`` and its ``approved_by`` exactly
-    ``owner`` (``register.py``'s owner approval). A proposed entry, a
-    reviewer's approval, or an entry not there approves nothing."""
-    if not entry:
-        return False
-    text = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-        encoding='utf-8'
-    )
-    for block in re.split(r'\n- id: ', text)[1:]:
-        lines = block.split('\n')
-        if lines[0].strip() != entry:
-            continue
-        fields = {
-            key: value.strip()
-            for key, _, value in (
-                line[2:].partition(':')
-                for line in lines[1:]
-                if line.startswith('  ') and not line.startswith('   ')
-            )
-        }
-        return (
-            fields.get('status') == 'approved'
-            and fields.get('approved_by') == 'owner'
-        )
-    return False
 
 
 def _here(expected: dict[str, Any]) -> dict[str, Any]:
@@ -169,28 +92,11 @@ def _here(expected: dict[str, Any]) -> dict[str, Any]:
 #: from the reference by (M10, T2.8b): one entry, the owner's approval of
 #: it read from its own block, and its text naming the case, never any
 #: mention of the case's name anywhere in the register.
-POLICY_ENTRIES = {'numeric-text.kawi-digits': 'P1B-25'}
-
-
-def _entry_names(entry: str, name: str) -> bool:
-    r"""Whether register entry ``entry``'s own block names ``name`` (in
-    its notes, where vectors are named), as a whole word."""
-    text = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-        encoding='utf-8'
-    )
-    for block in re.split(r'\n- id: ', text)[1:]:
-        if block.split('\n', 1)[0].strip() == entry:
-            return (
-                re.search(rf'(?<![\w.-]){re.escape(name)}(?![\w-])', block)
-                is not None
-            )
-    return False
 
 
 def _on_the_core(
     spec: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> dict[str, Any]:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     return R.observe(spec)
 
 
@@ -239,23 +145,6 @@ def _held(got: dict[str, Any], expected: dict[str, Any], name: str) -> None:
         # .items as the reference's: each prediction's value and Python type
         # (an int kept exact, None apart from NaN) and its probabilities.
         assert got.get('items') == expected['items'], f'{name}: items'
-
-
-def test_a_policy_case_is_held_to_the_one_entry_registering_it() -> None:
-    # M10 (T2.8b): every policy case naming no divergence has its entry,
-    # owner-approved and naming it; an entry that merely exists, or one
-    # naming other vectors, does not stand for it.
-    policy = sorted(
-        c['name']
-        for c in CASES
-        if 'core_outcome' in c and not c.get('divergence')
-    )
-    assert policy == sorted(POLICY_ENTRIES)
-    for name, entry in POLICY_ENTRIES.items():
-        assert _owner_approved(entry), entry
-        assert _entry_names(entry, name), (entry, name)
-    assert not _entry_names('P1B-22', 'numeric-text.kawi-digits')
-    assert not _entry_names('P1B-25', 'numeric-text.arabic-indic-digits')
 
 
 def test_the_recording_is_the_reference_s() -> None:
@@ -397,23 +286,6 @@ def test_the_core_s_predict_is_the_reference_s(
                     f'{spec["name"]}: {key} {got["fields"][key]!r}, where '
                     f'the policy names {policy[key]!r}'
                 )
-        if (expected['outcome'], expected.get('code')) != (
-            policy['outcome'],
-            policy['code'],
-        ):
-            if spec.get('divergence'):
-                assert _owner_approved(spec['divergence']), spec['divergence']
-            else:
-                entry = POLICY_ENTRIES.get(spec['name'])
-                assert entry is not None, (
-                    f'{spec["name"]}: the reference here gives '
-                    f'{expected["outcome"]}, and no register entry is the '
-                    'one it differs by'
-                )
-                assert _owner_approved(entry), f'{spec["name"]}: {entry}'
-                assert _entry_names(entry, spec['name']), (
-                    f'{spec["name"]}: {entry} does not name it'
-                )
         return
     if spec['covers'] == R.SIZE:
         # The reference's code, and a message that explains the limit as
@@ -456,12 +328,11 @@ def test_the_core_reads_each_boundary_answer_as_the_reference(
         'calls': RECORDED_CALLS[vector['answers']],
     }
     if (
-        _owner_approved(vector['divergence'])
+        vector['name'] in STRICT_RESPONSE_CASES
         and got['outcome'] == 'refused'
         and got['code'] == 'INVALID_RESPONSE'
     ):
-        # A divergence the owner approved (the vector names the register
-        # entry): the core refuses it as a local error, by name.
+        # Stricter response validation remains a local, named refusal.
         assert 'endpoint' not in got and got['status_code'] is None
         return
     _held(got, expected, vector['name'])

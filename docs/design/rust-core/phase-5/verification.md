@@ -16,6 +16,7 @@ Phase 5 removal/packaging changes need an explicit impact assessment before reus
 | Live parity | 582 historical comparisons plus 210 type/raw-reader comparisons; both languages compared directly to frozen Python | **Reuse candidate:** retain unchanged cells under the recorded review rule; rerun routes affected by runtime removal |
 | Performance | Actual Phase 3 measurements and accepted costs; narrower Phase 4 ordering/session measurements | **Reconcile first:** apply exact accepted dispositions, benchmark new/affected paths; no blanket 10% target reset |
 | Engine-free packaging | Existing clean wheel/JAR checks still include the pre-removal dependency layout | **Must run after changes:** clean install without old engine/Python PQL, public API and frozen pickle compatibility, supported native platforms |
+| Historical refusal wording census | Frozen receipts, difference registry and original comparison tests preserved in the effort 2 archive | **Effort 3 applicability/reconciliation:** permanent template/public-refusal tests do not prove the final candidate matches every historical census probe |
 | Final acceptance | Prior CI and historical artifacts are retained | **Must close:** required final-source CI and final-artifact gates, with approved evidence reuse explicitly recorded |
 
 ## Existing decisions are not new failures
@@ -23,7 +24,7 @@ Phase 5 removal/packaging changes need an explicit impact assessment before reus
 Phase 3 acceptance preserved the raw held-out NO-GO findings (33 IDs / 82 legs); reviewed dispositions left one residual against a threshold of four.
 It did not turn every raw observation green.
 
-[Phase 3 decisions](../phase-3/decisions.md#owner-approved-phase-end-performance-costs-and-evidence-reuse-2026-10-26) accept the measured Databricks ~2× latency, Snowflake 21–32% latency cost, native library ~16 MB versus 9.6 MB, and five small SQLite overhead cases.
+The archived Phase 3 decisions accept the measured Databricks ~2× latency, Snowflake 21–32% latency cost, native library ~16 MB versus 9.6 MB, and five small SQLite overhead cases.
 Separate retained owner answers accept two additional exact SQLite timing rows and omit CPU timing only for one Spark divide-by-zero case, retaining correctness.
 These are scoped dispositions, not acceptance of future regressions.
 Keep raw failures visible beside their approvals.
@@ -32,6 +33,8 @@ The reuse decision requires two independent reviewers to show later changes cann
 Dedicated live-CI infrastructure is deferred; this does not erase the final-source checks or require waiting to run authorized local live tests.
 
 ## Authoritative receipts
+
+Historical Phase 0–4 documents are preserved with SHA-256 checksums under `phase-5/effort-2/deletion-first-historical-designs/docs/design/rust-core/` in the same external archive.
 
 Paths below are relative to `~/.local/share/sdm-orchestration/`; preserve them during disk cleanup.
 

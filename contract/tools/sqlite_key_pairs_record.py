@@ -72,7 +72,6 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
-import platform
 import sqlite3
 import subprocess
 import sys
@@ -404,80 +403,3 @@ def register(answer: dict[str, Any], right: bool | None) -> list[str]:
     if right is False:
         why.append('the reference joins a row to another entity')
     return why
-
-
-def main() -> int:
-    import duckdb
-    import numpy as np
-    import pandas as pd
-    import pyarrow as pa
-
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    with tempfile.TemporaryDirectory(prefix='t22-record-') as tmp:
-        observed = run('python-ref', VECTORS, Path(tmp), reference=reference)
-    vectors = []
-    for vector in VECTORS:
-        observation = observed[vector['id']]
-        answer = R.project(observation, vector)
-        right = joined(observation, vector)
-        why = register(answer, right)
-        entry = {key: copy.deepcopy(value) for key, value in vector.items()}
-        entry['case'] = case_for(vector)
-        entry['sqlite'] = sqlite_holds(vector)
-        entry['reference'] = answer
-        entry['joined'] = right
-        entry['statements'] = R.statements(observation)
-        entry['register'] = {'required': bool(why), 'why': why}
-        vectors.append(entry)
-        outcome = answer['outcome']
-        print(
-            vector['id'],
-            outcome['result'],
-            outcome['stage'],
-            outcome['code'] or '',
-            {'joined': right},
-            '(register)' if why else '',
-            file=sys.stderr,
-        )
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/sqlite_key_pairs_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'database': DATABASE,
-        'environment': {
-            'python': platform.python_version(),
-            'pandas': pd.__version__,
-            'pyarrow': pa.__version__,
-            'numpy': np.__version__,
-            'duckdb': duckdb.__version__,
-            'sqlite': sqlite3.sqlite_version,
-        },
-        'question': R.QUESTION,
-        'register_ref': REGISTER_REF,
-        'payload_exclusions': R.E.exclusions(),
-        'vectors': vectors,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    required = sum(v['register']['required'] for v in vectors)
-    print(
-        f'{len(vectors)} vectors written to {OUT.relative_to(ROOT)}, '
-        f'{required} marked register entry required',
-        file=sys.stderr,
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

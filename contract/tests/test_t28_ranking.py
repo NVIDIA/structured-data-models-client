@@ -58,13 +58,6 @@ vectors ``pd1.*`` hold the core to that refusal; a NaN inside a
 ``rankings`` member an answer carries is given back as it came, never
 ordered.
 
-Gating: ``t28-pending.json``'s ``pending`` names, as ``py:<case key>`` and
-``py:vector:<name>``, the keys whose test failed when written. Each must
-still fail (strict); once one passes it fails, naming itself, until it is
-taken out. ``pending`` stays within ``authored``. Where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
-not set, the Postgres keys have nothing to hold and return without
-asserting; with it set, a missing server fails (H26).
 """
 
 from __future__ import annotations
@@ -78,7 +71,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -90,7 +82,7 @@ RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/tools/ranking_record.py'
 VECTORS = ROOT / 'contract/ranking-vectors.json'
 CASE_DIR = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t28-pending.json')
+
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
 #: Each case and the design row item it proves.
@@ -173,40 +165,6 @@ def on_rust_host(vector: dict[str, Any]) -> bool:
         and 'raise_call' not in vector['script']
         and not vector['predict']
         and 'nan-score' not in vector['name']
-    )
-
-
-def held(name: str, check: Callable[[], None]) -> None:
-    r"""Runs ``check``: it must pass, or, while ``py:<name>`` is pending,
-    fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if f'py:{name}' not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take py:{name} out of '
-        'contract/tests/t28-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    ``authored`` is every case's key on each database and every vector on
-    python-core, and on rust-host each case on DuckDB and SQLite (its
-    Postgres pass replays python-core's fetches, which ``cross-host
-    (postgres)`` holds) and each vector it replays."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    rust_vectors = [v['name'] for v in vectors()['vectors'] if on_rust_host(v)]
-    assert set(gating['authored']) == (
-        {f'py:{k}' for k in CASE_KEYS}
-        | {f'py:vector:{n}' for n in VECTOR_NAMES}
-        | {f'rust:{k}' for k in CASE_KEYS if not k.endswith('@postgres')}
-        | {f'rust:vector:{n}' for n in rust_vectors}
     )
 
 
@@ -697,21 +655,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
                 f'answered {error!r}'
             )
 
-    held(case_key, check)
-
-
-def _routes(database: str = 'duckdb') -> str:
-    from sdm_client import _routing
-
-    return ','.join(
-        dict.fromkeys(
-            [
-                *_routing.FROM_SOURCE[database],
-                *_routing.MATERIALIZE[database],
-                *_routing.PREDICT[database],
-            ]
-        )
-    )
+    check()
 
 
 def _dtypes(dtypes: list[str] | None) -> list[str] | None:
@@ -782,9 +726,8 @@ def test_python_core_answers_each_vector_as_the_reference_does(
     database = spec.get('database', 'duckdb')
     if database == 'postgres' and not _server():
         return
-    monkeypatch.setenv('SDM_CORE_ROUTES', _routes(database))
 
     def check() -> None:
         held_to(recorder().observe(inputs), spec['expected'], name)
 
-    held(f'vector:{name}', check)
+    check()

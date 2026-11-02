@@ -2,20 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""``Schema.from_source`` over a Databricks SQL warehouse, through the
-public API on both routes, the warehouse a fake connection answering the
-old client's recorded statements (``contract/fixtures/databricks``,
-base.binary's): the core route describes the source as the old route does
-(T3.4 fix 1, round 1's P1-1 to P1-3).
+"""Databricks connector regressions using recorded rows and local SQL stubs.
 
-- A source naming its catalog and schema, and one naming its catalog
-  alone, its schema the connection's current one (``DatabricksSource``'s
-  own second example; the old client reads ``current_schema()``).
-- A warehouse whose key and foreign-key reads fail (an older runtime, or
-  missing privileges): the old client carries on with no declared keys
-  (DB/table.py:271-303, :318-352), and so does the core.
-- The schema's tables keep the names the source holds them under, of one
-  part, as the caller's host gives them and takes them back.
+These checks cover schema inference, qualified reads, current session state,
+source changes, error ordering and foreign-key metadata.
+They do not constitute live Databricks or model-endpoint validation.
 """
 
 from __future__ import annotations
@@ -34,7 +25,7 @@ import pyarrow as pa
 import pytest
 from sdm_connectors import DatabricksSource
 
-from sdm_client import Schema, _routing
+from sdm_client import Schema
 
 ROOT = Path(__file__).resolve().parents[3]
 CAPTURE = ROOT / 'contract' / 'fixtures' / 'databricks' / 'capture.json'
@@ -250,44 +241,63 @@ def _projection(schema: Schema) -> dict[str, Any]:
     }
 
 
-def _both(source: Any, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any]:
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DATABRICKS_SQL)
-    )
-    on_the_core = Schema.from_source(source())
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    on_the_old_route = Schema.from_source(source())
-    return on_the_core, on_the_old_route
+def _assert_shop_schema(schema, foreign_key='user_id'):
+    # Explicit expectations for the fixed shop input: constraint lookup
+    # failure still permits key/relationship inference from its values.
+    assert _projection(schema) == {
+        'tables': {
+            'users': {
+                'source_name': 'users',
+                'primary_key': 'user_id',
+                'time_column': None,
+                'columns': [
+                    ['user_id', 'int64', 'ID'],
+                    ['age', 'int64', 'numerical'],
+                    ['country', 'string', 'categorical'],
+                ],
+            },
+            'orders': {
+                'source_name': 'orders',
+                'primary_key': 'order_id',
+                'time_column': 'ts',
+                'columns': [
+                    ['order_id', 'int64', 'ID'],
+                    [foreign_key, 'int64', 'ID'],
+                    ['price', 'float64', 'numerical'],
+                    ['ts', 'timestamp[us]', 'timestamp'],
+                ],
+            },
+        },
+        'links': [['orders', foreign_key, 'users', 'user_id']],
+    }
 
 
 @pytest.mark.parametrize(
     'namespace', [{'catalog': 'main', 'schema': 'shop'}, {'catalog': 'main'}]
 )
-def test_a_warehouse_source_is_described_on_the_core_as_on_the_old_route(
+def test_warehouse_schema_matches_shop(
     namespace: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    core_schema, old_schema = _both(
-        lambda: DatabricksSource(_Connection(), **namespace), monkeypatch
+    core_schema = Schema.from_source(
+        DatabricksSource(_Connection(), **namespace)
     )
-    assert _projection(core_schema) == _projection(old_schema)
     # Each table by the one name the source holds it under, as given.
     assert {t.source_name for t in core_schema.tables.values()} == {
         'orders',
         'users',
     }
-    assert core_schema.relationships
+    _assert_shop_schema(core_schema)
 
 
-def test_failed_key_reads_leave_the_schema_without_declared_keys_as_on_the_old_route(
+def test_failed_constraint_reads_still_infer_shop_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    core_schema, old_schema = _both(
-        lambda: DatabricksSource(
-            _Connection(fail_constraints=True), catalog='main', schema='shop'
-        ),
-        monkeypatch,
+    connection = _Connection(fail_constraints=True)
+    core_schema = Schema.from_source(
+        DatabricksSource(connection, catalog='main', schema='shop')
     )
-    assert _projection(core_schema) == _projection(old_schema)
+    _assert_shop_schema(core_schema)
+    assert any('constraint_type' in sql for sql in connection.asked)
 
 
 class _SessionWordWarehouse(_Warehouse):
@@ -318,17 +328,12 @@ _SessionWordConnection = type(
 )
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_column_named_like_a_session_word_is_read_through_the_table(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""Each read of ``users`` names its columns through the table, so a
     ``user`` column since dropped fails the read rather than reading the
     session user (round 1's Codex P0; ``_quoted_source_name``)."""
-    if route == 'core':
-        monkeypatch.setenv(
-            _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DATABRICKS_SQL)
-        )
     connection = _SessionWordConnection()
     # The preview of ``users`` is not recorded with the column added.
     with pytest.raises(Exception):  # noqa: B017, PT011
@@ -444,7 +449,6 @@ def test_foreign_key_arrow_headers_preserve_non_inferred_relationships(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Real Arrow header validation must not turn available FKs into none."""
-    _route('core', monkeypatch)
     connection = _ArrowHeaderConnection(declared=declared)
     described = Schema.from_source(
         DatabricksSource(connection, catalog='main', schema='shop')
@@ -473,22 +477,6 @@ def test_foreign_key_arrow_headers_preserve_non_inferred_relationships(
     }
 
 
-def test_old_duplicate_headers_fail_at_the_same_arrow_boundary(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The old route swallows the genuine Arrow failure and loses buyer."""
-    _route('old', monkeypatch)
-    connection = _ArrowHeaderConnection()
-    described = Schema.from_source(
-        DatabricksSource(connection, catalog='main', schema='shop')
-    )
-    assert ['orders', 'buyer', 'users', 'user_id'] not in _projection(
-        described
-    )['links']
-    assert connection.fk_headers
-    assert any(len(names) != len(set(names)) for names in connection.fk_headers)
-
-
 @pytest.mark.parametrize(
     'namespace',
     [
@@ -506,54 +494,28 @@ def test_a_declared_foreign_key_is_linked_whatever_namespace_the_source_names(
     table); the parts the source leaves to the connection are read
     (``current_catalog()``, ``current_schema()``), so the link is kept as
     the old client keeps it (round 2's Claude P0-1)."""
-    core_schema, old_schema = _both(
-        lambda: DatabricksSource(_DeclaredKeyConnection(), **namespace),
-        monkeypatch,
+    core_schema = Schema.from_source(
+        DatabricksSource(_DeclaredKeyConnection(), **namespace)
     )
-    assert _projection(core_schema) == _projection(old_schema)
-    assert ['orders', 'buyer', 'users', 'user_id'] in _projection(core_schema)[
-        'links'
-    ]
+    _assert_shop_schema(core_schema, foreign_key='buyer')
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_materialize_after_the_session_moved_reads_where_the_session_says_now(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema described under the session's current schema ``shop`` and
     materialized after the session moved to ``other`` reads ``other``'s
     tables on the core, which keeps no table's location between runs (plan
     B), where the old route reads ``shop``'s, which it kept."""
-    _route(route, monkeypatch)
     connection = _SessionConnection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
     connection.schema = 'other'
     read = _reads(schema, connection)
     assert read, connection.asked
-    assert all(where[:2] == _KEPT[route] for where in read), read
-
-
-def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    if route == 'core':
-        monkeypatch.setenv(
-            _routing.ENVIRONMENT,
-            ','.join(
-                _routing.FROM_SOURCE_DATABRICKS_SQL
-                + _routing.FROM_SOURCE_DATABRICKS_SQL_TABLES
-                + _routing.MATERIALIZE_DATABRICKS_SQL
-            ),
-        )
-    else:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
+    assert all(where[:2] == ('main', 'other') for where in read), read
 
 
 _TABLES = ('orders', 'users', 'new_orders')
-
-#: Where a run reads its tables once the session moved from ``shop`` to
-#: ``other``, by route: the old route reads a table it kept where it kept
-#: it; the core keeps no table's shape or location between runs (the
-#: owner's plan B, 2026-10-24) and reads each where the session says now.
-_KEPT = {'old': ('main', 'shop'), 'core': ('main', 'other')}
 
 
 def _reads(schema: Schema, *connections: Any) -> list[tuple[str, str, str]]:
@@ -585,14 +547,12 @@ def _reads(schema: Schema, *connections: Any) -> list[tuple[str, str, str]]:
     return [read for read in found if read[2] in _TABLES]
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_described_schema_rebuilt_on_another_catalog_reads_that_catalog(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew from a described schema's tables on a source
     naming another catalog reads that catalog's tables, as the old route
     reads a new schema's tables afresh (round 3's P0, Claude's case)."""
-    _route(route, monkeypatch)
     connection = _Connection()
     described = Schema.from_source(DatabricksSource(connection))
     rebuilt = Schema(
@@ -605,13 +565,11 @@ def test_a_described_schema_rebuilt_on_another_catalog_reads_that_catalog(
     assert all(where[:2] == ('other', 'shop') for where in read), read
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_described_schema_rebuilt_on_another_connection_reads_its_session(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew on another connection, whose session's schema is
     ``other``, reads ``other``'s tables (round 3's P0, Claude's case)."""
-    _route(route, monkeypatch)
     described = Schema.from_source(DatabricksSource(_Connection()))
     elsewhere = _Connection()
     elsewhere.schema = 'other'
@@ -625,9 +583,8 @@ def test_a_described_schema_rebuilt_on_another_connection_reads_its_session(
     assert all(where[:2] == ('main', 'other') for where in read), read
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A described table pointed at another source table after the session
     moved to ``other`` is read under ``other``, as the old route reads a
@@ -636,7 +593,6 @@ def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _Connection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
     connection.schema = 'other'
@@ -646,7 +602,7 @@ def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
     assert retargeted, read
     assert all(where[:2] == ('main', 'other') for where in retargeted), read
     kept = [where for where in read if where[2] == 'users']
-    assert all(where[:2] == _KEPT[route] for where in kept), read
+    assert all(where[:2] == ('main', 'other') for where in kept), read
 
 
 class _SessionWarehouse(_Warehouse):
@@ -693,14 +649,12 @@ def _described_under(connection: Any) -> set[str]:
     }
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_schema_mixing_two_descriptions_reads_the_session_it_is_built_in(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built from tables described under ``shop`` and under
     ``other`` is a new schema, read under its source's session, ``third``,
     as the old route reads it (round 3's P0; round 4's P2-1)."""
-    _route(route, monkeypatch)
     at_shop = _SessionConnection()
     under_shop = Schema.from_source(DatabricksSource(at_shop))
     at_other = _SessionConnection()
@@ -721,16 +675,14 @@ def test_a_schema_mixing_two_descriptions_reads_the_session_it_is_built_in(
 
 
 @pytest.mark.parametrize('connections', ['one', 'two'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_table_adopted_in_place_is_read_where_the_receiving_schema_read_it(
-    route: str, connections: str, monkeypatch: pytest.MonkeyPatch
+    connections: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A table assigned into a schema from another schema described under
     another session is read where the receiving schema read its table of
     that name, as the old route reads it (its own reading of the source,
     by source name): on one connection or two (round 4's P0, Claude's
     case)."""
-    _route(route, monkeypatch)
     dev_connection = _SessionConnection()
     dev = Schema.from_source(DatabricksSource(dev_connection))
     if connections == 'one':
@@ -746,9 +698,8 @@ def test_a_table_adopted_in_place_is_read_where_the_receiving_schema_read_it(
     assert all(where[:2] == ('main', 'other') for where in read), read
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema read under ``shop`` that adopts its ``users`` from a later
     reading of the same source under ``other`` reads ``users`` where it
@@ -757,7 +708,6 @@ def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _SessionConnection()
     source = DatabricksSource(connection, catalog='main')
     schema = Schema.from_source(source)
@@ -767,13 +717,12 @@ def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
     schema.check_consistent()
     read = _reads(schema, connection)
     assert read, connection.asked
-    assert all(where[:2] == _KEPT[route] for where in read), read
+    assert all(where[:2] == ('main', 'other') for where in read), read
 
 
 @pytest.mark.parametrize('edit', ['relationship', 'stype'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_an_edit_keeps_each_table_where_it_was_read(
-    route: str, edit: str, monkeypatch: pytest.MonkeyPatch
+    edit: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A schema read under ``shop`` for ``orders`` alone that takes a
     ``users`` read nowhere yet (a schema built anew), then is edited (a
@@ -786,7 +735,6 @@ def test_an_edit_keeps_each_table_where_it_was_read(
     """
     from sdm_client import Relationship
 
-    _route(route, monkeypatch)
     connection = _SessionConnection()
     source = DatabricksSource(connection, catalog='main')
     schema = Schema.from_source(
@@ -814,7 +762,7 @@ def test_an_edit_keeps_each_table_where_it_was_read(
     users_read = [where for where in read if where[2] == 'users']
     assert orders, read
     assert users_read, read
-    assert all(where[:2] == _KEPT[route] for where in orders), read
+    assert all(where[:2] == ('main', 'other') for where in orders), read
     assert all(where[:2] == ('main', 'other') for where in users_read), read
 
 
@@ -898,9 +846,8 @@ def _read_since(connection: Any, mark: int) -> set[tuple[str, str, str]]:
     }
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_rebuilt_schema_keeps_where_its_first_materialize_read_its_tables(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew is read where the session says at its first
     ``materialize``, and there again at the next after the session moved,
@@ -909,7 +856,6 @@ def test_a_rebuilt_schema_keeps_where_its_first_materialize_read_its_tables(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     source = DatabricksSource(connection, catalog='main')
     described = Schema.from_source(source)
@@ -920,14 +866,13 @@ def test_a_rebuilt_schema_keeps_where_its_first_materialize_read_its_tables(
     connection.schema = 'other'
     mark = len(connection.calls)
     second = _materialized(schema)
-    assert {w[:2] for w in _read_since(connection, mark)} == {_KEPT[route]}
+    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'other')}
     assert 'OTHER' not in repr(first.payloads)
-    assert ('OTHER' in repr(second.payloads)) == (route == 'core')
+    assert 'OTHER' in repr(second.payloads)
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A table the described schema never read, added by hand, is read
     where the session says at the first ``materialize`` and there again
@@ -935,7 +880,6 @@ def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     from sdm_client import Relationship
 
     connection = _CompletingConnection()
@@ -957,8 +901,8 @@ def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
     connection.schema = 'other'
     mark = len(connection.calls)
     second = _materialized(schema)
-    assert {w[:2] for w in _read_since(connection, mark)} == {_KEPT[route]}
-    assert ('OTHER' in repr(second.payloads)) == (route == 'core')
+    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'other')}
+    assert 'OTHER' in repr(second.payloads)
 
 
 class _FailingOnceWarehouse(_CompletingWarehouse):
@@ -993,9 +937,8 @@ def _where_read(schema: Schema, connection: Any) -> set[tuple[str, str]]:
     return read
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew whose first ``materialize`` fails after reading
     its tables reads them there again when retried after the session moved,
@@ -1004,7 +947,6 @@ def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _FailingOnceConnection()
     source = DatabricksSource(connection, catalog='main')
     described = Schema.from_source(source)
@@ -1014,12 +956,11 @@ def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
         _materialized(schema)
     assert not connection.fail_once
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {_KEPT[route]}
+    assert _where_read(schema, connection) == {('main', 'other')}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A described table taken out of the schema, an edit made meanwhile,
     then put back, is read where the schema read it, after the session
@@ -1028,7 +969,6 @@ def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
     links = list(schema.relationships)
@@ -1038,13 +978,12 @@ def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
     schema.tables['users'] = users
     schema.relationships = links
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {_KEPT[route]}
+    assert _where_read(schema, connection) == {('main', 'other')}
 
 
 @pytest.mark.parametrize('first', ['original', 'snapshot'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_snapshot_shares_the_tables_its_original_reads_later(
-    route: str, first: str, monkeypatch: pytest.MonkeyPatch
+    first: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A schema and a snapshot of it share the tables either reads after
     the snapshot was taken, as the old route shares its engine reading: a
@@ -1055,7 +994,6 @@ def test_a_snapshot_shares_the_tables_its_original_reads_later(
     """
     from sdm_client import Relationship
 
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     source = DatabricksSource(connection, catalog='main')
     described = Schema.from_source(source)
@@ -1077,7 +1015,7 @@ def test_a_snapshot_shares_the_tables_its_original_reads_later(
     assert _where_read(earlier, connection) == {('main', 'shop')}
     connection.schema = 'other'
     add_users(later)
-    assert _where_read(later, connection) == {_KEPT[route]}
+    assert _where_read(later, connection) == {('main', 'other')}
 
 
 class _ArmedWarehouse(_CompletingWarehouse):
@@ -1136,9 +1074,8 @@ _PHASES = {
         ('after_reading', True),
     ],
 )
-@pytest.mark.parametrize('route', ['core', 'old'])
-def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
-    route: str, phase: str, kept: bool, monkeypatch: pytest.MonkeyPatch
+def test_a_retry_after_an_early_failure_reads_current_schema(
+    phase: str, kept: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A first ``materialize`` failing at the same statement on both routes
     keeps its tables exactly when the old route does: none where it failed
@@ -1148,7 +1085,6 @@ def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     connection.fail_on, connection.fail_with = _PHASES[phase]
@@ -1156,18 +1092,16 @@ def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
         _materialized(schema)
     assert connection.fail_on is None, 'the failure was not reached'
     connection.schema = 'other'
-    expected = _KEPT[route] if kept else ('main', 'other')
+    expected = ('main', 'other') if kept else ('main', 'other')
     assert _where_read(schema, connection) == {expected}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_first_run_in_the_wrong_schema_keeps_nothing_and_the_fixed_retry_runs(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A first ``materialize`` with the session in a schema that holds no
     such table fails and keeps no reading, so a retry once the session is
     fixed reads ``shop`` (round 7's P0 and P1, Claude's wrong session)."""
-    _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     connection.schema = 'missing'
@@ -1177,9 +1111,8 @@ def test_a_first_run_in_the_wrong_schema_keeps_nothing_and_the_fixed_retry_runs(
     assert _where_read(schema, connection) == {('main', 'shop')}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A first ``materialize`` failing at its namespace read leaves the
     schema an engine reading of its own, empty, which a snapshot taken then
@@ -1188,7 +1121,6 @@ def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     connection.fail_on = 'current_schema()'
@@ -1198,12 +1130,11 @@ def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
     snapshot = schema.snapshot()
     assert _where_read(schema, connection) == {('main', 'shop')}
     connection.schema = 'other'
-    assert _where_read(snapshot, connection) == {_KEPT[route]}
+    assert _where_read(snapshot, connection) == {('main', 'other')}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_an_interrupted_first_run_keeps_the_readings_it_made(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A first ``materialize`` interrupted while it samples, after it read
     its tables, keeps where it read them, so a retry after the session
@@ -1211,7 +1142,6 @@ def test_an_interrupted_first_run_keeps_the_readings_it_made(
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
-    _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     connection.fail_on = 'WITH TMP AS'
@@ -1219,7 +1149,7 @@ def test_an_interrupted_first_run_keeps_the_readings_it_made(
     with pytest.raises(KeyboardInterrupt):
         _materialized(schema)
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {_KEPT[route]}
+    assert _where_read(schema, connection) == {('main', 'other')}
 
 
 class _ReservedWarehouse(_CompletingWarehouse):
@@ -1256,9 +1186,8 @@ _ReservedConnection = type(
 
 
 @pytest.mark.parametrize('refusal', ['no_indices', 'reserved_column'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_refused_first_run_reads_nothing_and_leaves_no_engine_reading(
-    route: str, refusal: str, monkeypatch: pytest.MonkeyPatch
+    refusal: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A first ``materialize`` refused before it reads (no entities, a
     column named as a request names its own) reads nothing and leaves the
@@ -1269,7 +1198,6 @@ def test_a_refused_first_run_reads_nothing_and_leaves_no_engine_reading(
 
     from sdm_client import PredictiveQuery
 
-    _route(route, monkeypatch)
     connection = (
         _ReservedConnection()
         if refusal == 'reserved_column'
@@ -1297,9 +1225,8 @@ def test_a_refused_first_run_reads_nothing_and_leaves_no_engine_reading(
     assert _where_read(snapshot, connection) == {('main', 'other')}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
-def test_a_metric_view_read_as_a_table_is_refused_in_the_old_client_s_words(
-    route: str, monkeypatch: pytest.MonkeyPatch
+def test_a_metric_view_read_as_a_table_has_an_actionable_refusal(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A metric view named as a table is refused with the old client's
     words and its advice to read it as a semantic model (round 8's P2)."""
@@ -1320,7 +1247,6 @@ def test_a_metric_view_read_as_a_table_is_refused_in_the_old_client_s_words(
                 )
             return found
 
-    _route(route, monkeypatch)
     connection = type(
         'Connection', (_MetricViews,), {'__module__': 'databricks.sql.client'}
     )()
@@ -1364,9 +1290,8 @@ _RenamedConnection = type(
 
 
 @pytest.mark.parametrize('change', ['fresh_columns', 'retargeted'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_refused_run_over_columns_with_no_facts_reads_nothing(
-    route: str, change: str, monkeypatch: pytest.MonkeyPatch
+    change: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A first ``materialize`` refused for its inputs (no entities) over a
     table whose columns hold no facts of the source (new columns, or the
@@ -1377,7 +1302,6 @@ def test_a_refused_run_over_columns_with_no_facts_reads_nothing(
 
     from sdm_client import PredictiveQuery
 
-    _route(route, monkeypatch)
     connection = _RenamedConnection()
     schema = _rebuilt(connection)
     if change == 'fresh_columns':
@@ -1398,15 +1322,13 @@ def test_a_refused_run_over_columns_with_no_facts_reads_nothing(
     assert _where_read(snapshot, connection) == {('main', 'other')}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_preview_failing_before_the_tables_are_located_keeps_none(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A first ``materialize`` over a table whose columns hold no facts,
     failing at that table's preview (the same statement on both routes),
     keeps no table's location: a retry after the session moved reads
     ``other`` (round 9's P0, Codex)."""
-    _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     _fresh(schema, 'users')
@@ -1418,9 +1340,8 @@ def test_a_preview_failing_before_the_tables_are_located_keeps_none(
     assert _where_read(schema, connection) == {('main', 'other')}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A first ``materialize`` over columns holding no facts, one given a
     meaning its source type does not carry, is refused once the tables are
@@ -1432,7 +1353,6 @@ def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
     """
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     schema = _rebuilt(connection)
     _fresh(schema, 'users')
@@ -1444,13 +1364,12 @@ def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
     schema['users']['age'].dtype = 'int64'
     schema['users']['age'].stype = 'numerical'
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {_KEPT[route]}
+    assert _where_read(schema, connection) == {('main', 'other')}
 
 
 @pytest.mark.parametrize('column', ['__kumo_extra', 'user'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
-    route: str, column: str, monkeypatch: pytest.MonkeyPatch
+    column: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A column added by hand that the source does not hold, one named as
     the sampler reserves (``__kumo_``) or like a session word (``user``), is
@@ -1460,15 +1379,11 @@ def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
     from sdm_client import Column
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     schema = _rebuilt(connection)
     stype = 'numerical' if column.startswith('__') else 'text'
     dtype = 'int64' if column.startswith('__') else 'string'
     schema['users'].columns[column] = Column(column, dtype, stype)
-    if route == 'old':
-        assert _where_read(schema, connection) == {('main', 'shop')}
-        return
     mark = len(connection.calls)
     with pytest.raises(StructuredDataError) as refused:
         _materialized(schema)
@@ -1477,16 +1392,14 @@ def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
 
 
 @pytest.mark.parametrize('dtype', ['int8', 'int128', 'float16', 'float8'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_link_over_a_type_name_the_client_reads_joins_before_the_source_is_read(
-    route: str, dtype: str, monkeypatch: pytest.MonkeyPatch
+    dtype: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A foreign key given by hand a data type name the client reads as a
     number joins its key before the source is read, as the old client reads
     the name, and the run completes (round 10's P1, both reviewers)."""
     from sdm_client import Column
 
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     schema = _rebuilt(connection)
     _fresh(schema, 'orders')
@@ -1623,9 +1536,8 @@ _SIDES = {
 
 
 @pytest.mark.parametrize('case', sorted(_SIDES))
-@pytest.mark.parametrize('route', ['core', 'old'])
-def test_each_refusal_is_made_on_the_old_route_s_side_of_the_reads(
-    route: str, case: str, monkeypatch: pytest.MonkeyPatch
+def test_refusals_preserve_source_read_order(
+    case: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""Each refusal the old route makes before its engine reads the
     source refuses having read nothing, and a retry after the session moved
@@ -1638,7 +1550,6 @@ def test_each_refusal_is_made_on_the_old_route_s_side_of_the_reads(
     """
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _CompletingConnection()
     schema = _rebuilt(connection)
     columns = {
@@ -1668,13 +1579,12 @@ def test_each_refusal_is_made_on_the_old_route_s_side_of_the_reads(
         schema[name].primary_key = keys[name]
     schema.relationships = links
     connection.schema = 'other'
-    where = _KEPT[route] if side == 'after' else ('main', 'other')
+    where = ('main', 'other') if side == 'after' else ('main', 'other')
     assert _where_read(schema, connection) == {where}
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_too_many_entities_are_refused_before_the_source_is_read(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""More entities than one ``materialize`` holds are refused from the
     count alone, before the old route's engine reads anything
@@ -1682,7 +1592,6 @@ def test_too_many_entities_are_refused_before_the_source_is_read(
     from sdm_client.errors import StructuredDataError
     from sdm_client.materializers import relational
 
-    _route(route, monkeypatch)
     monkeypatch.setattr(relational, 'MOST_ENTITIES', 1)
     connection = _CompletingConnection()
     schema = _rebuilt(connection)
@@ -1714,9 +1623,8 @@ _EmptyingConnection = type(
 )
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_an_empty_table_is_refused_before_the_tables_are_kept(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew whose columns all hold their facts reads each
     table it has not kept in full, its preview included, before keeping
@@ -1726,7 +1634,6 @@ def test_an_empty_table_is_refused_before_the_tables_are_kept(
     Codex)."""
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _EmptyingConnection()
     schema = _rebuilt(connection)
     connection.empty = True
@@ -1824,9 +1731,8 @@ _DroppingConnection = type(
 )
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_column_the_source_dropped_is_never_read(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew whose columns all hold their facts, one of them
     since dropped from the source, never reads the dropped column: the old
@@ -1836,18 +1742,14 @@ def test_a_column_the_source_dropped_is_never_read(
     owner's item 1)."""
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _DroppingConnection()
     schema = _rebuilt(connection)
     connection._db.execute('ALTER TABLE users DROP COLUMN age')
     connection.dropped = True
     mark = len(connection.calls)
-    if route == 'old':
-        assert _materialized(schema).payloads
-    else:
-        with pytest.raises(StructuredDataError) as refused:
-            _materialized(schema)
-        _assert_no_such_column(refused.value, 'users', 'age')
+    with pytest.raises(StructuredDataError) as refused:
+        _materialized(schema)
+    _assert_no_such_column(refused.value, 'users', 'age')
     assert not any(
         re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
     )
@@ -1862,7 +1764,6 @@ def test_a_column_dropped_between_two_runs_is_refused_by_name_on_the_second(
     item 1), and the dropped column is never read."""
     from sdm_client.errors import StructuredDataError
 
-    _route('core', monkeypatch)
     connection = _DroppingConnection()
     schema = _rebuilt(connection)
     assert _materialized(schema).payloads
@@ -1910,9 +1811,8 @@ _AddingConnection = type(
 
 
 @pytest.mark.parametrize('named', [False, True], ids=['unnamed', 'named'])
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_column_the_source_gained_is_sent_only_where_the_schema_names_it(
-    route: str, named: bool, monkeypatch: pytest.MonkeyPatch
+    named: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A column the source gained after the schema was described is no
     column of any request the schema does not name it in, on both routes;
@@ -1921,7 +1821,6 @@ def test_a_column_the_source_gained_is_sent_only_where_the_schema_names_it(
     leaves it out of the table it kept (round 13's P0-1, Codex)."""
     from sdm_client import Column
 
-    _route(route, monkeypatch)
     connection = _AddingConnection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
     connection._db.execute(
@@ -1934,7 +1833,7 @@ def test_a_column_the_source_gained_is_sent_only_where_the_schema_names_it(
         )
     request = _materialized(schema)
     users = request.payloads[0]['schema']['related_tables']['users']['columns']
-    sent = named and route == 'core'
+    sent = named
     assert ('plan' in list(users)) == sent
     assert ('NEW_FEATURE' in repr(request.payloads)) == sent
 
@@ -1957,7 +1856,6 @@ def test_a_column_taken_out_of_the_schema_and_put_back_is_sent(
     recording, so the core's run alone is held here)."""
     from sdm_client import Column
 
-    _route('core', monkeypatch)
     connection = _CompletingConnection()
     schema = _rebuilt(connection)
     assert _materialized(schema).payloads
@@ -2026,9 +1924,8 @@ _RepeatedKeyConnection = type(
 )
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_repeated_declared_key_is_refused_as_databricks_enforces_none(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A key Databricks declares, which it does not enforce, is counted
     when the schema is described: a repeated value is refused, naming the
@@ -2036,7 +1933,6 @@ def test_a_repeated_declared_key_is_refused_as_databricks_enforces_none(
     Codex)."""
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _RepeatedKeyConnection()
     with pytest.raises(StructuredDataError) as refused:
         Schema.from_source(DatabricksSource(connection, catalog='main'))
@@ -2045,9 +1941,8 @@ def test_a_repeated_declared_key_is_refused_as_databricks_enforces_none(
     assert 'Databricks does not enforce declared keys' in str(refused.value)
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_repeated_declared_key_left_unchecked_is_read_once_in_the_context(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""With the key check off, a key Databricks declares and does not
     enforce, repeated in the table, is read once per key in the context,
@@ -2057,7 +1952,6 @@ def test_a_repeated_declared_key_left_unchecked_is_read_once_in_the_context(
 
     from sdm_client import PredictiveQuery
 
-    _route(route, monkeypatch)
     connection = _RepeatedKeyConnection()
     schema = Schema.from_source(
         DatabricksSource(connection, catalog='main'), check_keys=False
@@ -2069,9 +1963,8 @@ def test_a_repeated_declared_key_left_unchecked_is_read_once_in_the_context(
     assert request.payloads
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_repeated_declared_key_scored_is_refused_by_name(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""With the key check off, an entity scored by a key Databricks
     declares and does not enforce, which two rows hold, is refused by name,
@@ -2082,7 +1975,6 @@ def test_a_repeated_declared_key_scored_is_refused_by_name(
     from sdm_client import PredictiveQuery
     from sdm_client.errors import StructuredDataError
 
-    _route(route, monkeypatch)
     connection = _RepeatedKeyConnection()
     schema = Schema.from_source(
         DatabricksSource(connection, catalog='main'), check_keys=False

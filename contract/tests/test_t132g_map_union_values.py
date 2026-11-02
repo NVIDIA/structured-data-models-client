@@ -2,54 +2,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.32g part 2c: a map's and a union's values in canonical form.
+"""Map and union observations preserve canonical values from shared vectors.
 
-Written by the package's independent test author, before the change.
-
-    python -m pytest contract/tests/test_t132g_map_union_values.py -q
-
-``compare.py``'s ``sql.result`` rule fails every statement result that
-holds an unencodable value, even against itself, and a map or a union read
-as Arrow is unencodable today (``run_python._arrow_cells``,
-``sdm-testkit``'s ``values``). nested.map and nested.union hold one in
-``from_source`` statement 6, the reference's sample of ``users``, so they
-fail on every pairing of runners whatever the core does. The owner's
-direction: a real canonical form, not a skip.
-
-``contract/t132g-p2c-vectors.json`` spells the form out (its ``about``): a
-map is ``["map", [[key, value], ...]]`` in Arrow's entry order, duplicates
-kept, a null map ``null`` and an empty one ``["map", []]``; a union is
-``["union", type code, member name, cell]``, a null member keeping its
-tag. Each vector, run on DuckDB (``sql``) or built as Arrow (``build``:
-DuckDB writes no duplicate map key and no dense union), must read as the
-vector says through ``run_python.arrow_values`` here and through
-``sdm_testkit::values`` in ``rust/crates/sdm-testkit/tests/
-t132g_map_union_values.rs``, so the two encoders agree through the file.
-
-- the comparator, through ``compare.compare``: a statement result holding
-  maps or unions equals itself, and differs from one with another value,
-  the same entries in another order, or another union member;
-- a value the form does not hold stays unencodable, inside a map or a
-  chosen member too, and a result holding one still fails ``sql.result``
-  (fails closed): an interval was the seed until part 2e gave intervals a
-  form (``contract/t132g-p2e-vectors.json``); DuckDB's ``VARINT``, which
-  it writes as an opaque Arrow extension, is now; a map or a union read
-  as rows (``fetchall``) stays unencodable;
-- ``contract/result-vectors.json``'s map and union vectors take the form;
-- the committed reference's nested.map and nested.union samples hold no
-  unencodable value, so neither fails ``sql.result`` against itself (their
-  reference lines recorded again with the form: an entry naming them on
-  python-ref, the owner's, under the ratchet's reference rule).
-
-Gating (``contract/tests/t132g_gate.py``): a test named in
-``t132g-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
-when written. It still runs and must still fail; once it passes it fails,
-naming itself, until it is taken out of the list.
+The Rust testkit consumes the same vectors; no historical comparator is needed.
 """
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import importlib.util
 import json
@@ -66,8 +25,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / 'contract/t132g-p2c-vectors.json'
 OLD_VECTORS = ROOT / 'contract/result-vectors.json'
-REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
-REGRESSION = ROOT / 'contract/cases/s1/base.regression.json'
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -81,9 +38,7 @@ def _module(name: str, path: Path) -> ModuleType:
     return module
 
 
-G = _module('t132g_gate', ROOT / 'contract/tests/t132g_gate.py')
 run_python = _module('run_python', ROOT / 'contract/runners/run_python.py')
-compare = _module('compare', ROOT / 'scripts/rust_core/compare.py')
 
 
 def _vectors() -> list[dict[str, Any]]:
@@ -225,7 +180,7 @@ def test_the_built_vectors_are_the_arrow_they_say() -> None:
 
 @pytest.mark.parametrize('vector', _vectors(), ids=lambda v: v['name'])
 def test_arrow_reads_maps_and_unions_as_the_vector_says(
-    vector: dict[str, Any], request: pytest.FixtureRequest
+    vector: dict[str, Any],
 ) -> None:
     table, types = _read(vector)
     assert [
@@ -235,7 +190,7 @@ def test_arrow_reads_maps_and_unions_as_the_vector_says(
     def reads() -> None:
         assert run_python.arrow_values(table, types) == vector['values']
 
-    G.held('exits', f'py:{request.node.name}', reads)
+    reads()
 
 
 @pytest.mark.parametrize(
@@ -258,9 +213,7 @@ def test_a_map_or_union_read_as_rows_stays_unencodable(
     assert read['unordered'] != vector['values']['unordered']
 
 
-def test_the_older_vectors_take_the_form(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_the_older_vectors_take_the_form() -> None:
     r"""``contract/result-vectors.json``'s map and union vectors, which
     both encoders are held to as well, spell the same form."""
     older = {
@@ -282,181 +235,4 @@ def test_the_older_vectors_take_the_form(
             == []
         )
 
-    G.held('exits', f'py:{request.node.name}', taken)
-
-
-# --- the comparator ------------------------------------------------------------
-
-
-def _reference_of(case: str) -> dict[str, Any]:
-    for line in REFERENCE.read_text().splitlines():
-        observation: dict[str, Any] = json.loads(line)
-        if observation['case'] == case:
-            return observation
-    raise AssertionError(f'no reference observation of {case}')
-
-
-#: base.regression's from_source statement read as Arrow (to_arrow_table).
-ARROW_READ = 3
-
-
-def _sql_result(table: Any, types: list[str]) -> dict[str, Any]:
-    return {
-        'values': run_python.arrow_values(table, types),
-        'schema': [{'name': f.name, 'type': str(f.type)} for f in table.schema],
-        'rows': table.num_rows,
-    }
-
-
-def _with(observation: dict[str, Any], result: dict[str, Any]) -> None:
-    statement = observation['driver']['capture']['statements'][ARROW_READ]
-    statement['results'][0].update(copy.deepcopy(result))
-
-
-def _compared(tmp: Path, theirs: str, mine: str) -> Any:
-    r"""base.regression's reference against itself as python-old, but for
-    its Arrow read of ``from_source``, which holds ``theirs``' result on
-    the reference and ``mine``'s on python-old (each a query DuckDB runs
-    and reads as Arrow)."""
-
-    def result(sql: str) -> dict[str, Any]:
-        cursor = duckdb.connect().cursor()
-        cursor.execute(sql)
-        types = [str(column[1]) for column in cursor.description]
-        return _sql_result(cursor.to_arrow_table(), types)
-
-    reference = _reference_of('base.regression')
-    observation = copy.deepcopy(reference)
-    observation['identity']['runner'] = 'python-old'
-    observation['identity']['reference'] = None
-    _with(reference, result(theirs))
-    _with(observation, result(mine))
-    paths = []
-    for name, line in (('python-ref', reference), ('python-old', observation)):
-        path = tmp / f'{name}.jsonl'
-        path.write_text(json.dumps(line) + '\n', encoding='utf-8')
-        paths.append(path)
-    return compare.compare([REGRESSION], paths[0], paths[1:])
-
-
-def _sql_result_texts(report: Any) -> list[str]:
-    return [text for rule, text in report.failures if rule == 'sql.result']
-
-
-MAPS = "SELECT MAP {'a': 1, 'b': 2} AS m, [MAP {'k': [1]}, NULL] AS l"
-UNIONS = (
-    'SELECT union_value(i := 1)::UNION(i INTEGER, j INTEGER) AS u, '
-    '[union_value(s := NULL::VARCHAR)::UNION(i INTEGER, s VARCHAR)] AS l'
-)
-
-
-@pytest.mark.parametrize('sql', [MAPS, UNIONS], ids=['maps', 'unions'])
-def test_the_comparator_takes_a_map_or_union_result_as_equal_to_itself(
-    tmp_path: Path, sql: str, request: pytest.FixtureRequest
-) -> None:
-    def equal() -> None:
-        found = _sql_result_texts(_compared(tmp_path, sql, sql))
-        assert found == [], found
-
-    G.held('exits', f'py:{request.node.name}', equal)
-
-
-DIFFERENT = {
-    'another map value': (
-        MAPS,
-        "SELECT MAP {'a': 1, 'b': 3} AS m, [MAP {'k': [1]}, NULL] AS l",
-    ),
-    'another entry order': (
-        MAPS,
-        "SELECT MAP {'b': 2, 'a': 1} AS m, [MAP {'k': [1]}, NULL] AS l",
-    ),
-    'an empty map for a null': (
-        MAPS,
-        "SELECT MAP {'a': 1, 'b': 2} AS m, [MAP {'k': [1]}, MAP {}] AS l",
-    ),
-    'another union member': (
-        UNIONS,
-        'SELECT union_value(j := 1)::UNION(i INTEGER, j INTEGER) AS u, '
-        '[union_value(s := NULL::VARCHAR)::UNION(i INTEGER, s VARCHAR)] AS l',
-    ),
-    'another member for a null': (
-        UNIONS,
-        'SELECT union_value(i := 1)::UNION(i INTEGER, j INTEGER) AS u, '
-        '[union_value(i := NULL::INTEGER)::UNION(i INTEGER, s VARCHAR)] AS l',
-    ),
-    'another union value': (
-        UNIONS,
-        'SELECT union_value(i := 2)::UNION(i INTEGER, j INTEGER) AS u, '
-        '[union_value(s := NULL::VARCHAR)::UNION(i INTEGER, s VARCHAR)] AS l',
-    ),
-}
-
-
-@pytest.mark.parametrize('seed', sorted(DIFFERENT))
-def test_the_comparator_takes_a_different_map_or_union_as_different(
-    tmp_path: Path, seed: str, request: pytest.FixtureRequest
-) -> None:
-    theirs, mine = DIFFERENT[seed]
-
-    def different() -> None:
-        found = _sql_result_texts(_compared(tmp_path, theirs, mine))
-        # The rows differ, not merely a value the form does not hold.
-        assert found, found
-        assert all('canonical form does not hold' not in t for t in found)
-        assert any('rows differ' in t for t in found), found
-
-    G.held('exits', f'py:{request.node.name}', different)
-
-
-#: A value the form does not hold: DuckDB's VARINT, which it writes as an
-#: opaque Arrow extension (an interval was this seed until part 2e).
-UNHELD = {
-    'in a map': "SELECT MAP {'k': 1::VARINT} AS m",
-    'a chosen union member': (
-        'SELECT union_value(v := 1::VARINT)::UNION(n INTEGER, v VARINT) AS u'
-    ),
-    'alone': 'SELECT 1::VARINT AS i',
-}
-
-
-@pytest.mark.parametrize('seed', sorted(UNHELD))
-def test_a_result_holding_an_unencodable_value_still_fails_closed(
-    tmp_path: Path, seed: str
-) -> None:
-    sql = UNHELD[seed]
-    found = _sql_result_texts(_compared(tmp_path, sql, sql))
-    assert any('canonical form does not hold' in t for t in found), found
-
-
-# --- the reference's samples -------------------------------------------------------
-
-
-@pytest.mark.parametrize('case', ['nested.map', 'nested.union'])
-def test_the_reference_s_sample_compares_equal_to_itself(
-    tmp_path: Path, case: str, request: pytest.FixtureRequest
-) -> None:
-    [path] = (ROOT / 'contract/cases').glob(f'*/{case}.json')
-    reference = _reference_of(case)
-    observation = copy.deepcopy(reference)
-    observation['identity']['runner'] = 'python-old'
-    observation['identity']['reference'] = None
-    paths = []
-    for name, line in (('python-ref', reference), ('python-old', observation)):
-        written = tmp_path / f'{name}.jsonl'
-        written.write_text(json.dumps(line) + '\n', encoding='utf-8')
-        paths.append(written)
-
-    def equal() -> None:
-        report = compare.compare([path], paths[0], paths[1:])
-        # Diagnostic cases report rather than fail: both count.
-        said = [t for _, t in report.failures] + list(report.notes)
-        assert not [t for t in said if 'sql.result' in t or 'canonical' in t]
-        unencodable = [
-            name
-            for statement in reference['driver']['capture']['statements']
-            for read in statement['results']
-            for name in read['values']['unencodable']
-        ]
-        assert unencodable == [], unencodable
-
-    G.held('exits', f'py:{request.node.name}', equal)
+    taken()

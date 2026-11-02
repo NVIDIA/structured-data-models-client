@@ -2,19 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The client test claiming ``state.pickle/request/any``
-(``docs/design/rust-core/phase-0/scope-python.yaml``'s ``tests``, read by
-``scripts/rust_core/coverage.py``; T3.2, carried row P2-T2.16-3): what
-pickling a materialized request does, which no contract case can ask, since
-the case format has no pickle step.
-
-A request holds the source it was materialized from, and a source holds an
-open connection, which ``sdm_connectors.Source.__reduce__`` refuses to
-pickle (``TypeError``), as the reference does: a request is moved by its
-payload, never by pickling the object. The request is made on the core's
-routes (``SDM_CORE_ROUTES``, as the held-state tests do), so the test needs
-no relational engine, which the test jobs do not install.
-"""
+"""A materialized warehouse request cannot pickle its open source connection."""
 
 from __future__ import annotations
 
@@ -26,16 +14,9 @@ import pandas as pd
 import pytest
 
 
-def test_a_materialized_request_refuses_pickle_by_its_source(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from sdm_client import PredictiveQuery, Schema, _routing
+def test_a_materialized_request_refuses_pickle_by_its_source() -> None:
+    from sdm_client import PredictiveQuery, Schema
     from sdm_connectors import DuckDBSource
-
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB),
-    )
 
     connection = duckdb.connect()
     connection.execute(

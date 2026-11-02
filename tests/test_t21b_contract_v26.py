@@ -22,7 +22,7 @@ The design's row for T2.1b, each exit with the tests below that prove it:
   (``test_the_core_speaks_*``).
 - **SQL goldens unchanged**: the statements the core renders on the public
   route over the ``shop`` base, recorded at v25 by
-  ``tests/golden/t21b_statements_record.py``, are rendered the same at v26
+  ``scripts/record_sql_statements.py``, are rendered the same at v26
   (``test_the_core_renders_the_v25_statements``).
 - **A dotted source name still reads as one table**: ``orders`` held in a
   DuckDB table named ``a.b``, beside a schema ``a`` holding a table ``b`` of
@@ -365,7 +365,7 @@ def test_the_python_loader_reads_and_refuses_the_v26_vectors() -> None:
 
 
 def _recorder() -> ModuleType:
-    path = ROOT / 'tests/golden/t21b_statements_record.py'
+    path = ROOT / 'scripts/record_sql_statements.py'
     spec = importlib.util.spec_from_file_location('t21b_record', path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -424,7 +424,7 @@ def test_the_dotted_statements_are_the_plain_ones_on_another_name() -> None:
 def test_the_core_renders_the_v25_statements() -> None:
     # SQL goldens unchanged: the statements recorded at v25 are the ones the
     # core renders now. A later package that changes a rendering on purpose
-    # re-records them with tests/golden/t21b_statements_record.py.
+    # re-records them with scripts/record_sql_statements.py.
     golden = json.loads(GOLDEN.read_text(encoding='utf-8'))
     record = _recorder()
     for name, (orders, setup) in record.RUNS.items():

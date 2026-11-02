@@ -1,2 +1,0 @@
-   6623 rule sql.parameters
-   9396 rule sql.text

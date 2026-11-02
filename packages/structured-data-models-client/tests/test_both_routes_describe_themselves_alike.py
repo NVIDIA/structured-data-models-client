@@ -224,37 +224,6 @@ def test_envelopes_that_disagree_on_columns_keep_every_column():
 # --- built when read, not while materializing -------------------------------
 
 
-def test_the_halves_are_not_built_until_they_are_read(monkeypatch):
-    """The adapter sends the envelopes as they are, so a request that is
-    materialized and sent must not pay to read rows nobody looks at."""
-    import sdm_client.request as module
-
-    # This test instruments the legacy private decoder boundary deliberately.
-    monkeypatch.setenv('SDM_CORE_ROUTES', '')
-    built: list[str] = []
-    real = module._split_from
-    monkeypatch.setattr(
-        module,
-        '_split_from',
-        lambda payloads, half: built.append(half) or real(payloads, half),
-    )
-
-    request = Request.materialized(
-        payloads=(envelope([1, 2], [10, 11]),),
-        schema=one_table(),
-        query='PREDICT t.amount FOR EACH t.rid',
-        indices=[1, 2],
-        entity_table='t',
-    )
-
-    assert built == []
-    assert request.context_rows == 2
-    assert built == [], 'counting rows must not build the frames either'
-
-    assert len(request.context.instance_table) == 2
-    assert built == ['context']
-
-
 def test_a_half_reflects_an_edit_that_kept_the_row_count():
     """A count is not a fingerprint. Rows are edited in place as well as
     removed, and a half held between reads would describe the old ones."""
@@ -419,9 +388,9 @@ def test_the_adapters_agree_with_the_request_about_its_route():
     assert request.payloads is None
     assert request.predict_rows == 2
 
-    from sdm_client.adapters.tabular import TabularAdapter
+    from test_adapter_and_result import envelope as sent
 
-    envelope_built = TabularAdapter()._envelope(request, ('prediction',))
+    envelope_built = sent(request)
 
     assert len(envelope_built['predict']['instance_table']['rows']) == 2
 

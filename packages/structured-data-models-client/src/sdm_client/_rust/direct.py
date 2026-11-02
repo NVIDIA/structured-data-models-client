@@ -15,8 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec, results, spec
+from sdm_client._rust import NativeBoundaryError, codec, results, spec
 from sdm_client._rust import predict as prediction
 from sdm_client._rust.direct_io import DirectOperations
 from sdm_client._rust.run import Finished, run
@@ -109,7 +108,7 @@ def _table(frame: pd.DataFrame) -> Any:
             or timestamp
             or decimal
         ):
-            raise RouteError(
+            raise NativeBoundaryError(
                 'this direct column needs native storage observations'
             )
         array = pa.array(
@@ -344,6 +343,10 @@ def construct(
         native = direct_schema.preparation_requires(
             context
         ) or direct_schema.preparation_requires(predict)
+        if native and schema is not None:
+            native = not direct_schema.passive_numeric_preparation(
+                context, predict
+            )
     shape: dict[str, Any] = {
         'task': task,
         'target': target,

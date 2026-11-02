@@ -18,18 +18,13 @@
 //! `arrow.bool8` column, `boolean`, every value and null kept; an untagged
 //! run-end `int8` stays `int8` (the control).
 //!
-//! Gating: `contract/tests/t212-pending.json`'s `pending` names, as
-//! `rust:<test>`, the tests that failed when written; each must still
-//! fail (strict), and the implementer removes each as it passes.
-
 #![allow(
     clippy::disallowed_methods,
     clippy::disallowed_types,
-    reason = "test code: reads the gating list, and Arrow's field metadata is a HashMap"
+    reason = "test code: Arrow's field metadata is a HashMap"
 )]
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
@@ -38,37 +33,9 @@ use arrow_array::{Array, ArrayRef, Int8Array, Int32Array, RecordBatch, RunArray}
 use arrow_schema::{DataType, Field, Schema};
 use sdm_core::ArrowData;
 use sdm_host::{admit, admit_from, admitted_type};
-use serde_json::Value;
 
 const NAME: &str = "ARROW:extension:name";
 const METADATA: &str = "ARROW:extension:metadata";
-
-fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-fn pending(test: &str) -> bool {
-    let text = std::fs::read_to_string(root().join("contract/tests/t212-pending.json")).unwrap();
-    let gating: Value = serde_json::from_str(&text).unwrap();
-    gating["pending"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|t| t == &Value::from(format!("rust:{test}")))
-}
-
-/// Runs `check`; a pending test must fail, any other must pass.
-fn gated(test: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome, pending(test)) {
-        (Ok(()), true) => panic!(
-            "{test} passes now: take rust:{test} out of \
-             contract/tests/t212-pending.json's pending"
-        ),
-        (Err(failure), false) => std::panic::resume_unwind(failure),
-        _ => {}
-    }
-}
 
 /// The values field of a run-end column: `int8`, tagged `arrow.bool8`
 /// (with the spec's empty metadata) when `tagged`.
@@ -128,48 +95,41 @@ fn data(array: ArrayRef) -> ArrowData {
 /// field that holds booleans.
 #[test]
 fn a_bool8_tag_under_run_end_encoding_is_read_as_boolean() {
-    gated(
-        "a_bool8_tag_under_run_end_encoding_is_read_as_boolean",
-        || {
-            let (array, read) = runs(true);
-            let wanted = admitted_type("f", array.data_type()).unwrap();
-            assert_eq!(wanted, DataType::Boolean, "admitted as {wanted}");
-            let data = data(array);
-            for admitted in [admit(&data), admit_from(&data, Some("DuckDB"))] {
-                let admitted = admitted.unwrap();
-                let field = admitted.schema.field(0);
-                assert_eq!(field.data_type(), &DataType::Boolean, "{field:?}");
-                assert!(
-                    !field.metadata().contains_key(NAME),
-                    "the tag is not kept on a boolean: {field:?}"
-                );
-                let column = admitted.batches[0].column(0);
-                let got: Vec<Option<bool>> = column.as_boolean().iter().collect();
-                assert_eq!(got, read);
-            }
-        },
-    );
+    let (array, read) = runs(true);
+    let wanted = admitted_type("f", array.data_type()).unwrap();
+    assert_eq!(wanted, DataType::Boolean, "admitted as {wanted}");
+    let data = data(array);
+    for admitted in [admit(&data), admit_from(&data, Some("DuckDB"))] {
+        let admitted = admitted.unwrap();
+        let field = admitted.schema.field(0);
+        assert_eq!(field.data_type(), &DataType::Boolean, "{field:?}");
+        assert!(
+            !field.metadata().contains_key(NAME),
+            "the tag is not kept on a boolean: {field:?}"
+        );
+        let column = admitted.batches[0].column(0);
+        let got: Vec<Option<bool>> = column.as_boolean().iter().collect();
+        assert_eq!(got, read);
+    }
 }
 
 /// The control: an untagged run-end `int8` column is admitted as `int8`,
 /// its runs decoded.
 #[test]
 fn an_untagged_run_end_int8_stays_int8() {
-    gated("an_untagged_run_end_int8_stays_int8", || {
-        let (array, _) = runs(false);
-        assert_eq!(
-            admitted_type("f", array.data_type()).unwrap(),
-            DataType::Int8
-        );
-        let data = data(array);
-        for admitted in [admit(&data), admit_from(&data, Some("DuckDB"))] {
-            let admitted = admitted.unwrap();
-            let column = admitted.batches[0].column(0);
-            let got: Vec<Option<i8>> = column
-                .as_primitive::<arrow_array::types::Int8Type>()
-                .iter()
-                .collect();
-            assert_eq!(got, vec![Some(0), Some(0), Some(1), None, Some(2), Some(2)]);
-        }
-    });
+    let (array, _) = runs(false);
+    assert_eq!(
+        admitted_type("f", array.data_type()).unwrap(),
+        DataType::Int8
+    );
+    let data = data(array);
+    for admitted in [admit(&data), admit_from(&data, Some("DuckDB"))] {
+        let admitted = admitted.unwrap();
+        let column = admitted.batches[0].column(0);
+        let got: Vec<Option<i8>> = column
+            .as_primitive::<arrow_array::types::Int8Type>()
+            .iter()
+            .collect();
+        assert_eq!(got, vec![Some(0), Some(0), Some(1), None, Some(2), Some(2)]);
+    }
 }

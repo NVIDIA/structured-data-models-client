@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sdm_client._routing import RouteError
+from sdm_client._rust import NativeBoundaryError
 from sdm_client._rust.direct import _call
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
@@ -268,7 +268,7 @@ def _context(
     )
     sampled_index = subset.index
     if has_custom_sorter(subset, sampled_index):
-        raise RouteError(
+        raise NativeBoundaryError(
             'custom Python sorting methods are not supported; use ordinary index labels'
         )
     decimal_context = getcontext()
@@ -309,7 +309,7 @@ def _context(
         if ordering['reason'] == 'integer_to_float_overflow':
             raise OverflowError('int too large to convert to float')
         if ordering['reason'] == 'native_effects_pending':
-            raise RouteError(
+            raise NativeBoundaryError(
                 'this NumPy comparison effect is not yet represented by the core'
             )
         if ordering['reason'] in (
@@ -466,7 +466,7 @@ def _numeric_diagnostics(
         elif kind == 'cast_warning':
             lines = sites.get(pd.__version__)
             if lines is None:
-                raise RouteError(
+                raise NativeBoundaryError(
                     'this numeric warning presentation producer is not represented'
                 )
             stages = ('probe', 'sort', 'multi_probe', 'level_sort')

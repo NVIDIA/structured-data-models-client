@@ -5,10 +5,10 @@
 """Public memory workflows do not depend on the legacy validator/edit rules."""
 
 import pandas as pd
-import predictive_query
 import pytest
 
 from sdm_client import KumoRelational, KumoTabular, PredictiveQuery, Schema
+from sdm_client._rust import edits, s0
 
 
 def frame_schema():
@@ -22,31 +22,46 @@ def frame_schema():
     )
 
 
-def legacy_policy(*args, **kwargs):
-    raise AssertionError('legacy computational policy executed')
+@pytest.fixture
+def resolved_queries(monkeypatch):
+    calls = []
+    validate = s0.validate
+
+    def recorded(*args, **kwargs):
+        calls.append(args[0])
+        return validate(*args, **kwargs)
+
+    monkeypatch.setattr(s0, 'validate', recorded)
+    return calls
 
 
 @pytest.mark.parametrize('model', [KumoRelational(), KumoTabular()])
-def test_memory_pql_uses_rust_resolved_query(monkeypatch, model):
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+def test_memory_pql_uses_rust_resolved_query(resolved_queries, model):
     schema = frame_schema()
-    monkeypatch.setattr(predictive_query, 'validate', legacy_policy)
     request = PredictiveQuery(
         'PREDICT users.value FOR EACH users.id', schema
     ).materialize(indices=[1, 2], model=model)
     assert request.query
+    assert resolved_queries == [request.query]
 
 
 def test_frame_semantic_edit_uses_rust_policy(monkeypatch):
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
     schema = frame_schema()
     column = schema['users']['value']
-    monkeypatch.setattr(type(column), '_check_supports_dtype', legacy_policy)
+    calls = []
+    edit = edits.column
+
+    def recorded(owner, value):
+        calls.append((owner, value))
+        return edit(owner, value)
+
+    monkeypatch.setattr(edits, 'column', recorded)
     column.stype = 'categorical'
     assert column.stype == 'categorical'
+    assert (column, 'categorical') in calls
 
 
-def test_tabular_quoted_identifiers_use_resolved_columns(monkeypatch):
+def test_tabular_quoted_identifiers_use_resolved_columns(resolved_queries):
     schema = Schema.from_data(
         {
             'users': pd.DataFrame(
@@ -58,8 +73,8 @@ def test_tabular_quoted_identifiers_use_resolved_columns(monkeypatch):
         },
         primary_keys={'users': 'id'},
     )
-    monkeypatch.setattr(predictive_query, 'validate', legacy_policy)
     request = PredictiveQuery(
         'PREDICT users.`value with spaces` FOR EACH users.id', schema
     ).materialize(indices=[1, 2], model=KumoTabular())
     assert request.task.target.column_name == 'value with spaces'
+    assert resolved_queries

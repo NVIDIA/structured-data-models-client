@@ -72,17 +72,6 @@ def _on_the_core(
     r"""The scenario through the public calls on SQLite's core routes:
     ``from_source`` (tables named or not), ``materialize`` and
     validation."""
-    from sdm_client import _routing
-
-    routes = (
-        _routing.FROM_SOURCE_SQLITE
-        + _routing.FROM_SOURCE_SQLITE_TABLES
-        + _routing.MATERIALIZE_SQLITE
-        + _routing.S0
-    )
-    # Not vacuous: the build routes each forced path on the core.
-    assert set(routes) <= _routing.CORE_ROUTED
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(dict.fromkeys(routes)))
     if locate_counts is not None:
         from sdm_client import PredictiveQuery
         from sdm_client._rust.providers.sqlite import SqliteProvider

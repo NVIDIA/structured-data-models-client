@@ -74,15 +74,15 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     choice is all a schema built from it keeps of it.
 
     Raises:
-        RouteError: A semantic model whose underlying source has no core provider.
+        NativeBoundaryError: A semantic model whose underlying source has no core provider.
     """
     model = _model_of(source)
     kept = source if model is None else model.source
     choice: dict[str, Any] = {'provider': 'sql'}
     if model is not None and kept.kind not in _BY_KIND:
-        from sdm_client._routing import RouteError
+        from sdm_client._rust import NativeBoundaryError
 
-        raise RouteError(
+        raise NativeBoundaryError(
             f'{source!r} is kept in a {kept.kind} source, which the core '
             'has no provider for'
         )

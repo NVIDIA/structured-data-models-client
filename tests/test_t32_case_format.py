@@ -2,36 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T3.2's case-format exits on the Python loader (the package's test
-author's), beside ``rust/crates/sdm-testkit/tests/t32_case_format.rs``,
-which holds the Rust loader to the same vectors. One test per change:
-
-- ``warehouses``, ``input.view``, ``input.connect`` and
-  ``input.materialize.num_context_samples`` (design choice 1; the dry
-  run's gaps; the S2 test authors' gaps in T3.2's brief): every change of
-  ``contract/tests/t32-case-format-vectors.json`` is taken or refused by
-  ``run_python.load_cases`` as the file lists it;
-- P2-T2.1i-1: ``contract/tests/malformed-cases.json``'s ``refused_texts``
-  (a ``fail_call`` of ``-0``, a ``rows_per_call`` of NaN, Infinity or
-  -Infinity), which the Python loader took and the Rust loader refused,
-  are refused;
-- the dry run's format gaps: every stub case of
-  ``docs/design/rust-core/phase-3/dryrun-plan.yaml`` loads (exit 2's
-  "format" part; the pickled-request kind is claimed by a named client
-  test instead, so its stub carries no ``input.pickle``), and the plan
-  names Java's packages T3.11 to T3.13 (the brief's 2026-10-22 list).
-
-Each test listed in ``contract/tests/t32-pending.json`` failed when written,
-before the implementation, and is held to failing (the ``pending``
-decorator, as T2.10's ``held``) until the implementer takes it out of
-``pending``; ``pending`` stays within
-``authored``, the test author's list.
-"""
+"""Case-loader validation and source timezone fixture requirements."""
 
 from __future__ import annotations
 
 import copy
-import functools
 import importlib.util
 import json
 import re
@@ -46,36 +21,6 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 VECTORS = ROOT / 'contract/tests/t32-case-format-vectors.json'
 MALFORMED = ROOT / 'contract/tests/malformed-cases.json'
-PLAN = ROOT / 'docs/design/rust-core/phase-3/dryrun-plan.yaml'
-PENDING_FILE = ROOT / 'contract/tests/t32-pending.json'
-
-
-def _pending_names(key: str) -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))[key])
-
-
-def pending(test: Any) -> Any:
-    """Holds ``test`` to failing while ``contract/tests/t32-pending.json``
-    lists it, as T2.10's ``held`` does: a pending test passes only by
-    failing, and once it passes it fails, naming itself, until the
-    implementer takes it out of ``pending``."""
-    assert test.__name__ in _pending_names('authored'), test.__name__
-
-    @functools.wraps(test)
-    def held(*arguments: Any, **keywords: Any) -> None:
-        if test.__name__ not in _pending_names('pending'):
-            test(*arguments, **keywords)
-            return
-        try:
-            test(*arguments, **keywords)
-        except Exception:  # noqa: BLE001 - pending: failing, as when written
-            return
-        raise AssertionError(
-            f'{test.__name__} passes now: take it out of '
-            'contract/tests/t32-pending.json pending'
-        )
-
-    return held
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -120,11 +65,6 @@ def _changed(case: Any, change: dict[str, Any]) -> Any:
     return out
 
 
-def test_t32_the_pending_list_only_shrinks() -> None:
-    assert _pending_names('pending') <= _pending_names('authored')
-
-
-@pending
 def test_t32_the_python_loader_takes_and_refuses_the_warehouse_vectors(
     tmp_path: Path,
 ) -> None:
@@ -145,7 +85,6 @@ def test_t32_the_python_loader_takes_and_refuses_the_warehouse_vectors(
     assert not problems, '\n'.join(problems)
 
 
-@pending
 def test_t32_the_python_loader_refuses_the_texts_json_cannot_hold(
     tmp_path: Path,
 ) -> None:
@@ -175,59 +114,6 @@ def test_t32_the_python_loader_refuses_the_texts_json_cannot_hold(
         if _refusal(tmp_path, f'text-{at}', text) is None:
             taken.append(change['why'])
     assert not taken, taken
-
-
-def _stubs() -> list[tuple[str, dict[str, Any]]]:
-    plan = yaml.safe_load(PLAN.read_text(encoding='utf-8'))
-    return [(kind['name'], kind['case']) for kind in plan['kinds']]
-
-
-@pending
-def test_t32_every_dry_run_stub_loads(tmp_path: Path) -> None:
-    r"""Exit 2's format part: each stub case of the dry-run plan is a case
-    the loader takes (the gaps "``databases`` names only three databases",
-    "``input.view`` and ``input.connect`` not case fields" and
-    "``input.pickle``", which a named client test claims instead)."""
-    stubs = _stubs()
-    assert len(stubs) >= 31
-    # Not vacuous: the plan holds the kinds the gaps name.
-    assert any('warehouses' in case for _, case in stubs)
-    assert any('view' in case['input'] for _, case in stubs)
-    assert any('connect' in case['input'] for _, case in stubs)
-    refused = {}
-    for name, case in stubs:
-        problem = _refusal(tmp_path, name, json.dumps(case))
-        if problem is not None:
-            refused[name] = problem
-    assert not refused, '\n'.join(f'{k}: {v}' for k, v in refused.items())
-
-
-@pending
-def test_t32_the_dry_run_plan_names_java_s_packages_as_the_design_does() -> (
-    None
-):
-    r"""The brief's 2026-10-22 list: the plan's Java kinds name T3.11 to
-    T3.13 (the design's Java packages), not T3.10 to T3.12."""
-    text = PLAN.read_text(encoding='utf-8')
-    design = (ROOT / 'docs/design/rust-core/phase-3/design.md').read_text(
-        encoding='utf-8'
-    )
-    for package, what in (
-        ('T3.11', 'Java binding, API and Java S0'),
-        ('T3.12', 'Java S1 through JDBC'),
-        ('T3.13', 'Java on Databricks'),
-    ):
-        assert f'| {package} | {what} |' in design
-    java = {
-        kind['name']: kind['case']['why']
-        for kind in yaml.safe_load(text)['kinds']
-        if kind['name'].startswith('java')
-    }
-    assert {name: why[why.rindex('(') :] for name, why in java.items()} == {
-        'java-s0-validate': '(T3.11)',
-        'java-s1-jdbc-duckdb': '(T3.12)',
-        'java-databricks-sql': '(T3.13)',
-    }
 
 
 #: A statement naming the time zone, in any case and spacing, and the one

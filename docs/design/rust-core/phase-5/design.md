@@ -7,7 +7,8 @@
 **Direction approved; effort 1 implemented and reviewed.**
 Deliver one implementation, clear API/architecture docs, and maintained compatibility checks.
 The [API and compatibility contract effort](effort-1/design.md) is implemented; see its [validation results](effort-1/completion.md).
-Legacy removal and final acceptance follow; merging/publishing require owner approval.
+The [legacy and migration cleanup effort](effort-2/design.md) is now active.
+Final acceptance follows; merging/publishing require owner approval.
 
 ## 1. One implementation, clearly documented
 
@@ -46,7 +47,7 @@ Extend **`tests/parity/manifest.json`**, not a second ledger or testing framewor
 | Missing coverage | Generate required cases from capability declarations, then check scenario coverage; removal needs a recorded decision, not a silently disappearing row |
 | Readable matrix | Generate from contract/results; distinguish promised support from tested coverage and identify artifacts |
 
-Current gaps: Java surface checking, complete API mapping and explicit type inventory; omitted scenarios can hide capabilities.
+Effort 1 added Java surface checks, API mappings, explicit type requirements and checks against disappearing coverage.
 Test type/refusal rules thoroughly in Rust and conversions at host/connector boundaries; representative integration cases do not prove every combination.
 
 | CI tier | Proposed checks |

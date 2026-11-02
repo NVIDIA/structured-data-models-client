@@ -24,8 +24,7 @@ import pytest
 
 from sdm_client import _native
 from sdm_client._rust import facts
-from sdm_client.base import describe
-from sdm_client.models import spec_for
+from sdm_client._rust.capabilities import described
 
 FACTS = Path(facts.__file__)
 
@@ -102,9 +101,9 @@ def test_the_cores_capabilities_are_the_clients() -> None:
     assert known, 'the registry names no model'
     assert set(told) == known
     for name, model in told.items():
-        described = dataclasses.asdict(describe(spec_for(name)))
-        assert set(model) == set(described), name
-        for field, value in described.items():
+        reported = dataclasses.asdict(described(name))
+        assert set(model) == set(reported), name
+        for field, value in reported.items():
             given = model[field]
             assert (
                 tuple(given) if isinstance(value, tuple) else given

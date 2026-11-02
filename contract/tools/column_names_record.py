@@ -53,9 +53,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import os
-import platform
-import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -280,62 +277,3 @@ def run(vector: dict[str, Any]) -> dict[str, Any]:
         cleanup()
     answer['sdm_warnings'] = told
     return answer
-
-
-def main() -> int:
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    if not os.environ.get('SDM_POSTGRES_TEST_DSN'):
-        print('SDM_POSTGRES_TEST_DSN names no server', file=sys.stderr)
-        return 1
-    import duckdb
-    import pandas as pd
-    import psycopg
-    import pyarrow as pa
-
-    with psycopg.connect(os.environ['SDM_POSTGRES_TEST_DSN']) as connection:
-        server = connection.info.server_version // 10000
-    recorded = []
-    for vector in vectors():
-        answer = run(vector)
-        if vector['character'] is not None:
-            # What main does with a name it cannot say; held by its digest,
-            # since the core's answer is held to the twin's.
-            answer['payloads'] = digest(answer['payloads'])
-        recorded.append({**vector, 'reference': answer})
-        print(
-            vector['id'], recorded[-1]['reference']['outcome'], file=sys.stderr
-        )
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/column_names_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'environment': {
-            'python': platform.python_version(),
-            'pandas': pd.__version__,
-            'pyarrow': pa.__version__,
-            'duckdb': duckdb.__version__,
-            'psycopg': psycopg.__version__,
-            'postgres': server,
-        },
-        'twin': TWIN,
-        'vectors': recorded,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    print(f'{len(recorded)} vectors written', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

@@ -9,8 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec, direct, results
+from sdm_client._rust import NativeBoundaryError, codec, direct, results
 from sdm_client._rust.run import run
 
 
@@ -48,7 +47,9 @@ def close(fitted: Any) -> None:
         if not isinstance(endpoint, dict) or set(endpoint) != {
             'delete_session'
         }:
-            raise RouteError('session close received an unexpected endpoint')
+            raise NativeBoundaryError(
+                'session close received an unexpected endpoint'
+            )
         fitted._client._transport.delete_session(
             endpoint['delete_session']['session_id']
         )
@@ -134,7 +135,7 @@ def send(
                 target['session_predict']['session_id'], native
             )
         else:
-            raise RouteError('unexpected session transport endpoint')
+            raise NativeBoundaryError('unexpected session transport endpoint')
         return b'{}'
 
     run(

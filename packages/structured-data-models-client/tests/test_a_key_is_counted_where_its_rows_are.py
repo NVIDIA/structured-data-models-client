@@ -30,7 +30,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 

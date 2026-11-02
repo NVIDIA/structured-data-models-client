@@ -40,13 +40,11 @@ def test_live_guard_wraps_runner_calls_and_is_released_on_failure(
             or (lambda: events.append('uninstall'))
         ),
     )
-    monkeypatch.setattr(run, '_capture_run', lambda: helper)
+    monkeypatch.setattr(run, '_live_guard', lambda: helper)
     monkeypatch.setattr(run, '_sibling', lambda name: loader)
     monkeypatch.setattr(
         run, 'load_cases', lambda paths: [({'id': 'dummy.guard'}, 'digest')]
     )
-    monkeypatch.setattr(run, 'inventory_cases', lambda ids: [])
-    monkeypatch.setattr(run, 'environment_refusal', lambda env: None)
 
     def fail(*args, **kwargs):
         assert events == [('install', 'snowflake', True, True)]
@@ -222,24 +220,8 @@ def test_published_warehouse_observations_agree_without_changing_raw_replay(
     expected['identity']['runner'] = (
         'java'  # the Java runner's existing publication contract
     )
-    spec = importlib.util.spec_from_file_location(
-        't310_publication_compare', ROOT / 'scripts/rust_core/compare.py'
-    )
-    assert spec is not None and spec.loader is not None
-    comparator = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = comparator
-    spec.loader.exec_module(comparator)
     for value in published:
-        report = comparator.Report()
-        comparator._core_agree(
-            report, {'id': raw['case']}, value, expected, host='java'
-        )
-        assert not report.failures
-    changed = copy.deepcopy(published[1])
-    changed['core']['materialized']['value'] = 0.2
-    report = comparator.Report()
-    comparator._core_agree(report, {'id': raw['case']}, published[0], changed)
-    assert report.failures  # meaningful result differences are still compared
+        assert value['core'] == expected['core']
 
     leaked = copy.deepcopy(raw)
     leaked['public']['payloads'][0]['parsed']['text'] = environment['USER']

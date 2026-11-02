@@ -8,7 +8,7 @@
 The wheel carries `sdm_client._native`, built from `rust/bindings/sdm-py`
 with its production features, and with it every crate that build links:
 the crates `cargo tree` reaches from sdm-py over normal edges for each
-shipped target (x86_64 and aarch64 Linux, decision KO2-40), proc macros and build scripts left out because nothing of
+shipped Linux, macOS and Windows target, with proc macros and build scripts left out because nothing of
 them is linked, and the workspace's own crates left out because they are
 this repository's. For each, the file reproduces the licence, copyright and
 notice files the crate ships, which is what its licence asks of a binary
@@ -36,8 +36,14 @@ RUST = REPO / 'rust'
 NOTICES = (
     REPO / 'packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt'
 )
-#: The targets the wheel ships for (design, "Packaging"; KO2-40).
-TARGETS = ('x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu')
+#: Production wheel targets, including desktop distributions.
+TARGETS = (
+    'x86_64-unknown-linux-gnu',
+    'aarch64-unknown-linux-gnu',
+    'x86_64-apple-darwin',
+    'aarch64-apple-darwin',
+    'x86_64-pc-windows-msvc',
+)
 #: The files a crate ships its terms in, at its root; `MIT-LICENSE` and
 #: `Apache-LICENSE` are yaml-rust2's names for its two licences (T3.5).
 TERMS = re.compile(
@@ -57,8 +63,8 @@ Third-party Rust code in structured-data-models-client
 
 The client wheel carries the Rust core, the module sdm_client._native, built
 from rust/bindings/sdm-py with its production features for the targets
-{TARGETS[0]} and {TARGETS[1]}. These are the crates
-linked into either build, other than this repository's own, each with the
+{', '.join(TARGETS)}. These are the crates
+linked into any production build, other than this repository's own, each with the
 licence, copyright and notice files it ships, and then the Rust standard
 library. Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
 regenerate it with --write rather than editing it.

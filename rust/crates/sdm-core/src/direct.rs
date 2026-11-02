@@ -163,11 +163,13 @@ pub(crate) fn schema(held: &HeldSchema) -> Result<sdm_schema::held::Read, CoreEr
     // Preserve the concrete wire width beside the generic language family.
     for table in &mut read.description.tables {
         if let Some(native) = held.tables.iter().find(|native| native.name == table.name) {
+            let mut columns = BTreeMap::new();
+            for column in &native.columns {
+                // Preserve the previous first-match behavior for duplicate names.
+                columns.entry(column.name.as_str()).or_insert(column);
+            }
             for column in &mut table.columns {
-                if let Some(native) = native
-                    .columns
-                    .iter()
-                    .find(|native| native.name == column.name)
+                if let Some(native) = columns.get(column.name.as_str())
                     && let Some(dtype) = &native.dtype
                     && let Ok(dtype) =
                         serde_json::from_value(serde_json::Value::String(dtype.clone()))

@@ -1,55 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Record the reference's predict-side rules and results for T1.28b's tests.
+"""Public regression case builders and endpoint observations.
 
-Run with the reference checkout's interpreter (the reference environment of
-``contract/reference-env.txt``), from this repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python \\
-        packages/structured-data-models-client/tests/t128b_predict_result_record.py
-
-Each case is a DuckDB source (``contract/bases.yaml``'s ``shop``, changed by
-the case's statements, or a seeded one), a query, the arguments of
-``PredictiveQuery.materialize`` and of ``SDMClient.predict``, and the script
-of a local model endpoint (:func:`answer`): a function of the call it
-receives, so a host whose call is the reference's is answered with the
-same bytes. The reference runs it, and this script keeps (:func:`observe`)
-what T1.28b's exits compare: the result through ``to_pandas()`` (columns,
-dtypes, rows), its outputs and metadata, the notices the call gave, the
-number of calls the endpoint received; or, when the reference refuses, the
-refusal's class, code, HTTP status, and for the endpoint's own refusal its
-message and details; and the bytes each call was answered with, which
-``sdm-testkit``'s ``tests/t128b_predict_result.rs`` replays on rust-host.
-
-It writes two files. ``t128b-predict-result.json`` beside it holds the
-cases; the boundary-vector matrix's answers (deep and wide JSON, finite
-overflow and non-finite numbers, the endpoint's against a local error,
-missing or retyped evidence) also go, each with the reference's public
-outcome, into ``contract/response-vectors.json``'s ``boundaries``, beside
-its ``vectors`` (which this script leaves as they are).
-
-The reference's outcome depends, for a few cases, on the interpreter and
-on pandas, so it is recorded at each pin the tests run at too. With
-``--cell``, run by the reference's code (b413e9ad's packages, installed
-from ``git archive``) under another interpreter or pandas, this script
-observes every case and boundary vector again (each boundary answer
-replayed as recorded) and records where that cell differs: a frame's
-dtypes on pandas 2 as ``dtypes_pandas2`` (pandas 3's text column is
-``str``, pandas 2's ``object``), and any other difference as the whole
-outcome under ``by_python`` keyed by the interpreter's version (an answer
-nested 5,000 levels, which Python 3.10's and 3.11's JSON reader cannot
-read; a probability in Kawi digits, which Python before 3.12 does not know
-as digits). Run it after the full recording, under each pin::
-
-    python packages/structured-data-models-client/tests/\
-t128b_predict_result_record.py --cell
-
-Nothing here is written by hand but the inputs, and one case's outcome on
-the core, which is the orchestrator's policy and not the reference's
-(``core_outcome``: Kawi digits refused on every interpreter); every
-expected value is the reference's. ``observe`` and ``answer`` are imported by the test, so both
-routes are observed and answered by the same code.
+The historical recording CLI is archived outside the maintained repository.
+Existing tests import these helpers; the module does not regenerate expectations.
 """
 
 from __future__ import annotations
@@ -59,8 +14,6 @@ import json
 import math
 import random
 import struct
-import subprocess
-import sys
 import threading
 import warnings
 from collections.abc import Callable, Iterator
@@ -71,7 +24,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(__file__).with_name('t128b-predict-result.json')
-VECTORS = ROOT / 'contract/response-vectors.json'
+VECTORS = ROOT / 'tests/fixtures/response-vectors.json'
 
 ANCHOR = '2024-03-01'
 REGRESSION = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
@@ -1252,199 +1205,3 @@ def _shallow(value: Any, depth: int = 0) -> bool:
     if isinstance(value, list):
         return len(value) <= 1000 and all(_shallow(v, depth + 1) for v in value)
     return True
-
-
-def _size_case() -> dict[str, Any]:
-    r"""The payload one byte-step past the limit, from T1.28a's recorder."""
-    sys.path.insert(0, str(Path(__file__).parent))
-    import t128a_payload_rules_record as t128a
-
-    longest = t128a.at_the_size_limit()
-    return {
-        'name': 'size.one-past-the-limit',
-        'covers': SIZE,
-        'query': t128a.REGRESSION,
-        'setup': t128a.padded(longest + 1),
-        'materialize': {'indices': [0, 1], 'anchor_time': ANCHOR},
-        'predict': {},
-        'script': 'order:given',
-        'rust_case': None,
-        'divergence': None,
-    }
-
-
-def main() -> int:
-    import sdm_relational_engine  # noqa: F401 - the reference's engine
-
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    sys.setrecursionlimit(max(sys.getrecursionlimit(), 1000))
-    specs = [*CASES, _size_case()]
-    recorded = []
-    for spec in specs:
-        expected = observe(spec)
-        recorded.append({**spec, 'expected': expected})
-        print(
-            spec['name'],
-            expected['stage'],
-            expected['outcome'],
-            expected.get('class'),
-            expected.get('code'),
-            file=sys.stderr,
-        )
-    # The answers are kept with the boundary vectors; here, each case's
-    # answers but the boundary matrix's, which the vector file holds.
-    cases = []
-    boundaries = []
-    for entry in recorded:
-        if entry['covers'] == BOUNDARY:
-            boundaries.append(
-                {
-                    'name': entry['name'],
-                    'covers': BOUNDARY,
-                    'answers': entry['rust_case'],
-                    'script': entry['script'],
-                    'divergence': entry['divergence'],
-                    'status': entry['expected']['calls'][0]['status'],
-                    'body': entry['expected']['calls'][0]['answer'],
-                    'reference': {
-                        k: v
-                        for k, v in entry['expected'].items()
-                        if k != 'calls'
-                    },
-                }
-            )
-        else:
-            cases.append(entry)
-    OUT.write_text(
-        json.dumps(
-            {
-                'recorded_by': Path(__file__).name,
-                'reference': commit,
-                'cases': cases,
-            },
-            indent=1,
-            allow_nan=False,
-        )
-        + '\n',
-        encoding='utf-8',
-    )
-    document = json.loads(VECTORS.read_text(encoding='utf-8'))
-    document['boundaries_recorded_by'] = (
-        f'packages/structured-data-models-client/tests/{Path(__file__).name} '
-        f'from the reference at {commit}'
-    )
-    document['boundaries_description'] = (
-        "T1.28b's boundary-vector matrix: each a whole answer (status and "
-        "body text) to the call base.regression's request makes on the "
-        "reference, and the reference's public outcome of SDMClient.predict "
-        'given it (the result, or the refusal: class, code, HTTP status, the '
-        "endpoint's own message and details). A vector naming a divergence "
-        'may end otherwise on the core only once that register entry is '
-        'approved.'
-    )
-    document['boundaries'] = boundaries
-    VECTORS.write_text(
-        json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False)
-        + '\n',
-        encoding='utf-8',
-    )
-    print(
-        f'{len(cases)} cases to {OUT}, {len(boundaries)} boundary vectors to '
-        f'{VECTORS}',
-        file=sys.stderr,
-    )
-    return 0
-
-
-def cell() -> int:
-    r"""Record where this interpreter's and pandas' reference outcome
-    differs from the full recording (``--cell``; see the module's text)."""
-    import pandas as pd
-    import sdm_relational_engine  # noqa: F401 - the reference's engine
-
-    python = f'{sys.version_info.major}.{sys.version_info.minor}'
-    pandas2 = int(pd.__version__.split('.')[0]) < 3
-    recorded = json.loads(OUT.read_text(encoding='utf-8'))
-    document = json.loads(VECTORS.read_text(encoding='utf-8'))
-    specs = {spec['name']: spec for spec in CASES}
-    calls = next(
-        c['expected']['calls']
-        for c in recorded['cases']
-        if c['name'] == 'layout.regression.given'
-    )
-    global answer
-    scripted = answer
-
-    def differs(expected: dict[str, Any], got: dict[str, Any]) -> set[str]:
-        # The text of a local error names the endpoint's port; not compared.
-        return {
-            k
-            for k in set(expected) | set(got)
-            if k not in ('message', 'dtypes_pandas2', 'by_python')
-            and expected.get(k) != got.get(k)
-        }
-
-    def keep(expected: dict[str, Any], got: dict[str, Any], name: str) -> None:
-        different = differs(expected, got)
-        if pandas2 and different == {'dtypes'}:
-            expected['dtypes_pandas2'] = got['dtypes']
-            print(name, 'dtypes on pandas 2:', got['dtypes'], file=sys.stderr)
-        elif different:
-            got = {k: v for k, v in got.items() if k != 'message'}
-            expected.setdefault('by_python', {})[python] = got
-            print(
-                name,
-                f'differs on Python {python}:',
-                sorted(different),
-                file=sys.stderr,
-            )
-
-    for entry in recorded['cases']:
-        if entry['name'] not in specs:
-            continue  # the size case: its outcome is held, not compared
-        answer = scripted
-        keep(entry['expected'], observe(specs[entry['name']]), entry['name'])
-    for vector in document['boundaries']:
-        answer = lambda script, body, v=vector: (v['status'], v['body'])  # noqa: E731
-        got = observe(specs[vector['name']])
-        got['calls'] = [
-            {'status': c['status'], 'answer': None, 'output': c['output']}
-            for c in got['calls']
-        ]
-        reference = {
-            **vector['reference'],
-            'calls': [
-                {
-                    'status': vector['status'],
-                    'answer': None,
-                    'output': c['output'],
-                }
-                for c in calls
-            ],
-        }
-        keep(reference, got, vector['name'])
-        reference.pop('calls')
-        for outcome in reference.get('by_python', {}).values():
-            outcome.pop('calls', None)
-        vector['reference'] = reference
-    answer = scripted
-    OUT.write_text(
-        json.dumps(recorded, indent=1, allow_nan=False) + '\n',
-        encoding='utf-8',
-    )
-    VECTORS.write_text(
-        json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False)
-        + '\n',
-        encoding='utf-8',
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(cell() if sys.argv[1:] == ['--cell'] else main())

@@ -29,7 +29,7 @@ runtime's own NumPy, which meets the client's floor of 1.23.5), that the client'
 own floors for NumPy, pandas and pyarrow are met, that the client installed
 is the native wheel from ``wheel_dir`` and its ``sdm_client._native`` loads
 without test-only operations, that the runtime's own packages still import,
-that Spark still answers, that the relational engine imports, and an offline
+that Spark still answers, and an offline
 journey up to ``materialize``. Each line it prints for a caller to parse
 starts with ``SDM_INSTALL_CHECK``; the last also is the notebook's exit
 value, a JSON object whose ``passed`` is true when every check passed.
@@ -183,9 +183,7 @@ def numbers(text):
 FIRST_PARTY = (
     'structured-data-models-client',
     'structured-data-models-api',
-    'structured-data-models-pql',
     'structured-data-models-connectors',
-    'structured-data-models-relational-engine',
 )
 after = {p: installed(p) for p in (*before, *FIRST_PARTY)}
 
@@ -273,16 +271,6 @@ for module, package in RUNTIME_MODULES.items():
 
 if 'spark' in globals():
     check('spark still answers', lambda: spark.range(3).count())
-
-
-def engine_imports():
-    from sdm_relational_engine.rfm import Graph, KumoRelational  # noqa: F401
-
-    return True
-
-
-if 'relational' in dbutils.widgets.get('extras').split(','):
-    check('relational engine imports', engine_imports)
 
 
 def offline_journey():

@@ -2,9 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `sdm_engine::words` against the reference's sampler, from `words.json`,
-//! recorded by `words_record.py` in the reference's environment (a
-//! protected path: never recorded again to pass a dependency bump, F4):
+//! `sdm_engine::words` against frozen sampler vectors in `words.json`:
 //! the lower-casing of every code point the pipeline changes, and the words
 //! `_normalize_text` gives for punctuation, every whitespace code point,
 //! line breaks, long texts and random mixtures of them.

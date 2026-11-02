@@ -29,17 +29,16 @@ Pull requests whose commits are not signed off cannot be merged.
 ```bash
 python3.12 -m venv .venv
 .venv/bin/pip install ruff mypy
-.venv/bin/pip install \
+RUSTUP_TOOLCHAIN=1.97.0 CARGO_BUILD_JOBS=2 .venv/bin/pip install \
   -e './packages/structured-data-models-api[test]' \
-  -e './packages/structured-data-models-pql[test]' \
   -e './packages/structured-data-models-client[test]' \
   -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
 .venv/bin/python -m pytest \
-  packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+  packages/structured-data-models-api/tests \
   packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q
 ```
 
-On the Rust core's epic branch the client carries the core, the native module
+The client carries the core, the native module
 `sdm_client._native`, and builds with maturin: installing it, editable
 included, compiles `rust/bindings/sdm-py` and needs the Rust toolchain
 `rust/rust-toolchain.toml` pins. pip runs that build from the client's
@@ -64,37 +63,32 @@ the results match a serial run's, test by test, in about a third of the time:
 .venv/bin/python -m pytest contract/tests -q -n 4 --dist loadfile
 ```
 
-`tests/` at the root is the cross-package suite: that the five distributions
+The root suite also compiles Java API fixtures.
+Install a JDK and set `JAVA_HOME` to its installation directory before running it.
+The Java library targets Java 17; the local validation environment uses JDK 21.
+The fixture checks use `JAVA_HOME/bin/javac` and `JAVA_HOME/bin/javap`, falling back to PATH when unset.
+
+`tests/` at the root is the cross-package suite: that the three distributions
 agree on a version and a licence, that the recorded public surface and wire
 payloads still match, and that the claims the configuration files make about
 themselves are true.
 
-The relational engine is a native build and is installed and tested on its
-own, from its own directory:
-
-```bash
-.venv/bin/pip install -e './packages/structured-data-models-relational-engine[test]'
-cd packages/structured-data-models-relational-engine && ../../.venv/bin/python -m pytest tests -q
-```
-
 Lint and format with `ruff`. Type-check with `mypy`. Both are blocking in CI,
-over every package including the engine:
+over all maintained packages:
 
 ```bash
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 .venv/bin/mypy packages/structured-data-models-api/src \
-               packages/structured-data-models-pql/src \
                packages/structured-data-models-client/src \
-               packages/structured-data-models-connectors/src \
-               packages/structured-data-models-relational-engine/src
+               packages/structured-data-models-connectors/src
 ```
 
 Two more gates run in CI and are quick to run first:
 
 ```bash
 .venv/bin/python scripts/check_repo_hygiene.py all
-.venv/bin/python scripts/mermaid_notices.py --check
+.venv/bin/python scripts/rust_core/rust_notices.py --check
 ```
 
 Changing anything a caller can observe, such as an exported name, signature,
@@ -122,11 +116,6 @@ SDM_RELATIONAL_URL=http://localhost:8001 \
 .venv/bin/python -m pytest \
   packages/structured-data-models-connectors/tests -m live_warehouse -q
 
-# metric view variants, created and dropped in a schema you may write to,
-# beside the DATABRICKS_* variables the engine's live tests read
-cd packages/structured-data-models-relational-engine && \
-  SDM_MV_TEST_SCHEMA=main.scratch ../../.venv/bin/python -m pytest \
-  tests/backend/databricks/test_live_metric_view_variants.py -m live_warehouse -q
 ```
 
 ## Third-party code
@@ -138,8 +127,8 @@ A new third-party *dependency* is declared in the owning package's
 Third-party code *vendored into the tree* is different: it ships with this
 repository, so it must be recorded in [`NOTICE`](./NOTICE) with its license and
 source, its license text included, and its bytes pinned by digest and asserted
-in CI. Today `mermaid.min.js` is the only such tree. Adding a second is a
-decision to discuss on an issue first, not a detail of a pull request.
+in CI.
+Adding vendored code is a decision to discuss on an issue first.
 
 ## Full text of the DCO
 
@@ -179,3 +168,7 @@ By making a contribution to this project, I certify that:
     maintained indefinitely and may be redistributed consistent with
     this project or the open source license(s) involved.
 ```
+
+Optional local prerequisites or unsupported platforms may produce explicit test skips.
+The CI job responsible for a capability must require its prerequisites and fail when they are unavailable (`SDM_REQUIRE_POSTGRES` and `SDM_REQUIRE_JAVA`).
+Mandatory parity cases are also checked by the maintained test ledger.

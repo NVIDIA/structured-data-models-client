@@ -17,3 +17,6 @@ htmlcov/
 *.so
 target/
 /uv.lock
+
+# Machine-local agent configuration.
+/.claude/settings.local.json

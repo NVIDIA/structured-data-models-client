@@ -25,9 +25,6 @@
 #                    origin/<phase branch>)
 #   GH_REPO          the repository of CI_RUN_ID (default: this clone's
 #                    GitHub origin, through gh)
-#   ENGINE_CACHE     a directory of engine-<tree>-<cpXY>/ wheels from an
-#                    earlier build of the same engine tree, reused as is; a
-#                    fresh build is copied there
 #
 # --build also fills OUT/job.json, through dbx_runs.py spec, which reads the
 # workspace settings from SDM_DBX_WORKSPACE_FOLDER, SDM_DBX_VOLUME_DIR,
@@ -56,11 +53,11 @@ S7=${SHA:0:7}
 WHEEL_COMMIT=${WHEEL_COMMIT:-$SHA}
 [ "${#WHEEL_COMMIT}" -eq 40 ] || { echo 'WHEEL_COMMIT must be a full SHA' >&2; exit 2; }
 TARGET=${SDM_DBX_TARGET:-dbr14.3-x86}
-# The runtime's Python, for the relational engine's wheel.
+# Supported classic x86 runtimes; the client wheel uses the stable Python ABI.
 case $TARGET in
-  dbr14.3-x86) CP=cp310 ;;
-  dbr15.4-x86) CP=cp311 ;;
-  dbr16.4-x86 | dbr17.3-x86) CP=cp312 ;;
+  dbr14.3-x86) ;;
+  dbr15.4-x86) ;;
+  dbr16.4-x86 | dbr17.3-x86) ;;
   *) echo "target $TARGET: no x86_64 classic runtime this script knows" >&2; exit 2 ;;
 esac
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -94,7 +91,6 @@ if [ "$WHEEL_COMMIT" != "$SHA" ]; then
     || { echo "!! WHEEL_COMMIT ${WHEEL_COMMIT:0:12}'s tree differs from ${SHA:0:12}'s" >&2; exit 3; }
   echo "== the CI wheel is ${WHEEL_COMMIT:0:12}'s, the same tree as ${SHA:0:12}"
 fi
-ENGINE_TREE=$(git -C "$REPO" rev-parse "$SHA:packages/structured-data-models-relational-engine")
 if [ -n "$(ls -A "$WHEELS" 2>/dev/null)" ]; then
   echo "!! $WHEELS is not empty: pick it up or use a new OUT; nothing is deleted" >&2
   exit 3
@@ -122,48 +118,29 @@ print("native wheel ok:", w.name, ident["sha256"][:12])
 ' "$WHEELS/native" "$WHEEL_COMMIT"
 step "copy the client wheel beside the others" -- bash -c 'cp "$1"/native/structured_data_models_client-*.whl "$1"/' _ "$WHEELS"
 
-# 3. The three pure-Python siblings, from the clean tree.
-for p in api pql connectors; do
+# 3. The two pure-Python siblings, from the clean tree.
+for p in api connectors; do
   step "build structured-data-models-$p" -- uvx --from build pyproject-build --wheel \
     --outdir "$WHEELS" "$WT/packages/structured-data-models-$p"
 done
 
-# 4. The relational engine for the runtime's Python, manylinux x86_64, in
-#    docker; the siblings are staged where its test environment finds them.
-CACHED=${ENGINE_CACHE:+$ENGINE_CACHE/engine-$ENGINE_TREE-$CP}
-if [ -n "$CACHED" ] && ls "$CACHED"/structured_data_models_relational_engine-*-"$CP"-"$CP"-*x86_64*.whl >/dev/null 2>&1; then
-  step "reuse the engine built from the same tree ($ENGINE_TREE)" -- bash -c 'cp "$1"/*.whl "$2"/' _ "$CACHED" "$WHEELS"
-else
-  step "stage the siblings for the engine's test environment" -- bash -c \
-    'mkdir -p "$1/_sibling_wheels" && cp "$2"/*.whl "$1/_sibling_wheels/"' _ "$WT" "$WHEELS"
-  step "build the engine (docker)" -- bash -c 'cd "$1" && shift && exec "$@"' _ "$WT" \
-    env CIBW_BUILD="$CP-*" CIBW_ARCHS_LINUX=x86_64 \
-    CIBW_ENVIRONMENT_LINUX='PIP_FIND_LINKS=/project/_sibling_wheels PIP_RETRIES=15 PIP_DEFAULT_TIMEOUT=120' \
-    uvx cibuildwheel==4.2.1 --platform linux --output-dir "$WHEELS" packages/structured-data-models-relational-engine
-  if [ -n "$CACHED" ]; then
-    step "keep the engine for a later build of the same tree" -- bash -c \
-      'mkdir -p "$1" && cp "$2"/structured_data_models_relational_engine-*.whl "$1"/' _ "$CACHED" "$WHEELS"
-  fi
-fi
-
-# 5. The set: five distributions at one version, the client native.
+# 4. The set: three distributions at one version, the client native.
 step "check the wheel set" -- python3 -I -c '
 import pathlib, re, sys
-d, cp = pathlib.Path(sys.argv[1]), sys.argv[2]
+d = pathlib.Path(sys.argv[1])
 names = sorted(p.name for p in d.glob("*.whl"))
 versions = {re.match(r"[^-]+-([^-]+)-", n).group(1) for n in names}
-assert len(names) == 5 and len(versions) == 1, names
+assert len(names) == 3 and len(versions) == 1, names
 (v,) = versions
-want = (f"structured_data_models_api-{v}-", f"structured_data_models_pql-{v}-",
+want = (f"structured_data_models_api-{v}-",
         f"structured_data_models_connectors-{v}-",
-        f"structured_data_models_client-{v}-cp310-abi3-",
-        f"structured_data_models_relational_engine-{v}-{cp}-{cp}-")
+        f"structured_data_models_client-{v}-cp310-abi3-")
 for prefix in want:
     assert sum(n.startswith(prefix) for n in names) == 1, (prefix, names)
 print("wheel set ok:", *names, sep="\n  ")
-' "$WHEELS" "$CP"
+' "$WHEELS"
 
-# 6. The one-time run's payload, from the template and SDM_DBX_* settings.
+# 5. The one-time run's payload, from the template and SDM_DBX_* settings.
 step "fill the one-time run payload (not printed)" -- python3 -I "$HERE/dbx_runs.py" spec \
   --template "$HERE/dbr_install_check.job.template.json" --out "$FILLED" \
   --target "$TARGET" --notebook "$NOTEBOOK" --sha "$SHA"

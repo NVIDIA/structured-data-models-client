@@ -45,11 +45,7 @@ the run and dropped after it)::
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
-import json
-import os
-import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -181,65 +177,6 @@ class Database:
             admin.execute(f'DROP DATABASE IF EXISTS {self.name} WITH (FORCE)')
 
 
-def _reference_part(connection: Any) -> dict[str, Any]:
-    import pandas as pd
-    from predictive_query.schema.typing import Dtype
-    from sdm_relational_engine.rfm.backend.postgres.sampler import (
-        PostgresSampler,
-    )
-    from sdm_relational_engine.rfm.backend.postgres.table import (
-        PostgresTable,
-        _frame,
-        _sanitize_postgres_frame,
-    )
-
-    columns: dict[str, Any] = {}
-    for name in COLUMNS:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                'SELECT data_type, udt_name, numeric_scale '
-                'FROM information_schema.columns '
-                "WHERE table_name = %s AND column_name = 'v'",
-                (f't_{name}',),
-            )
-            data_type, udt, scale = cursor.fetchone()
-            cursor.execute(f'SELECT id, v FROM t_{name} ORDER BY id')
-            frame = _frame(cursor)
-        dtype = PostgresTable._to_dtype(data_type, udt, scale)
-        driver = cells(list(frame['v']))
-        if dtype is None or dtype == Dtype.unsupported:
-            read: Any = 'unsupported'
-        else:
-            try:
-                sanitized = _sanitize_postgres_frame(
-                    df=frame.copy(),
-                    dtype_dict={'id': Dtype.int, 'v': dtype},
-                    stype_dict=None,
-                )
-            except Exception as error:  # noqa: BLE001 - the reference's read
-                read = {'raised': type(error).__name__}
-            else:
-                read = cells(
-                    [
-                        None if value is None or value is pd.NA else value
-                        for value in sanitized['v'].astype(object).tolist()
-                    ]
-                )
-        columns[name] = {
-            'dtype': str(dtype),
-            'driver': driver,
-            'reference': read,
-        }
-    seed_times = [
-        [
-            str(PostgresSampler._coerce_id(key, Dtype.int, 'bigint')),
-            PostgresSampler._serialize_time(pd.Timestamp(end, unit='ns')),
-        ]
-        for key, end in SEEDS
-    ]
-    return {'columns': columns, 'seed_times': seed_times}
-
-
 def _arrow_type(field: Any) -> str:
     r"""``field``'s type as ``test_l5_conversion.py`` spells it."""
     import pyarrow as pa
@@ -294,108 +231,3 @@ def admitted(provider: Any, name: str) -> Any:
         .read_all()
         .sort_by('id')
     )
-
-
-def _core_part(connection: Any) -> dict[str, str]:
-    from sdm_client._rust.providers.postgres import PostgresProvider
-
-    out = {}
-    for name in COLUMNS:
-        table = admitted(PostgresProvider(connection), name)
-        out[name] = (
-            table
-            if isinstance(table, str)
-            else _arrow_type(table.schema.field('v'))
-        )
-    return out
-
-
-def _reference_commit() -> str:
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    return next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('--reference', type=Path)
-    given = parser.parse_args(argv)
-    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
-    if not dsn:
-        print('SDM_POSTGRES_TEST_DSN names no server', file=sys.stderr)
-        return 1
-    import sdm_client
-
-    client = Path(sdm_client.__file__).resolve()
-    document = json.loads(OUT.read_text(encoding='utf-8'))
-    section = document.setdefault(SECTION, {})
-    database = Database(dsn)
-    try:
-        with database.connect() as connection:
-            version = connection.execute('SHOW server_version').fetchone()[0]
-            if given.reference is not None:
-                reference = given.reference.resolve()
-                head = subprocess.run(
-                    ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                ).stdout.strip()
-                if head != _reference_commit():
-                    print(f'{reference} is at {head}', file=sys.stderr)
-                    return 1
-                if not client.is_relative_to(reference):
-                    print(f'sdm_client is {client}', file=sys.stderr)
-                    return 1
-                part = _reference_part(connection)
-                section['reference'] = head
-                section['server'] = version.split()[0]
-                section['seed_times'] = {
-                    'seeds': SEEDS,
-                    'reference': part['seed_times'],
-                }
-                columns = section.setdefault('columns', {})
-                for name, column in COLUMNS.items():
-                    columns.setdefault(name, {}).update(
-                        {
-                            'type': column['type'],
-                            'rule': column['rule'],
-                            **part['columns'][name],
-                        }
-                    )
-            else:
-                from sdm_client import _native
-
-                if not hasattr(_native, 'PROVIDERS') or client.is_relative_to(
-                    Path.home() / 'code/sdmc-reference'
-                ):
-                    print('not a candidate client', file=sys.stderr)
-                    return 1
-                for name, kind in _core_part(connection).items():
-                    section.setdefault('columns', {}).setdefault(name, {})[
-                        'arrow'
-                    ] = kind
-        section['setup'] = SETUP
-        section['recorded_by'] = 'contract/tools/postgres_values_record.py'
-        section['about'] = (
-            'The Postgres value rules (T2.14d, MID2 P2-3): for each column, '
-            "its values as the reference's driver reads them (driver) and as "
-            'the reference reads its declared type (reference), each as its '
-            'canonical cell, and the Arrow type the core admits it as '
-            '(arrow); for each seed, the text the reference binds its key '
-            'and time as. Held by tests_test_ops/test_t214d_postgres_values.py.'
-        )
-    finally:
-        database.drop()
-    OUT.write_text(
-        json.dumps(document, indent=1, sort_keys=True) + '\n', encoding='utf-8'
-    )
-    print(f'{SECTION} written', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

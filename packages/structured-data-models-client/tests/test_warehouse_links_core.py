@@ -17,7 +17,6 @@ from sdm_client import (
     PredictiveQuery,
     Schema,
     SDMClient,
-    _routing,
 )
 
 QUERY = (
@@ -26,8 +25,7 @@ QUERY = (
 
 
 @pytest.fixture(params=['duckdb', 'sqlite'])
-def source(request, monkeypatch):
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+def source(request):
     connection = (
         duckdb.connect() if request.param == 'duckdb' else sqlite.connect()
     )

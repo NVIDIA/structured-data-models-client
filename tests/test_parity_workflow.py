@@ -26,7 +26,7 @@ def test_live_credentials_only_on_trusted_refs():
     assert job['environment'] == 'parity-live'
     assert job['if'] == (
         "github.ref == 'refs/heads/main' || "
-        "github.ref == 'refs/heads/rust-core-phase-4'"
+        "github.ref == 'refs/heads/rust-core'"
     )
     assert data['permissions'] == {'contents': 'read'}
     evidence = next(
@@ -94,11 +94,8 @@ def test_giant_acceptance_is_mandatory_sequential_and_private():
     )
     assert 'if' not in giant and 'continue-on-error' not in giant
     script = giant['run']
-    assert (
-        script.index("('baseline',")
-        < script.index("('python',")
-        < script.index("('java',")
-    )
+    assert "('baseline'," not in script
+    assert script.index("('python',") < script.index("('java',")
     assert 'for language, command in commands:' in script
     assert 'subprocess.run(command, stdout=log' in script
     assert (
@@ -153,3 +150,20 @@ def test_giant_reports_require_exactly_one_passed_case(
     exec(parser, context)
     assert context['reports'][0]['status'] == expected
     assert 'testcase' not in json.dumps(context['reports'])
+
+
+def test_live_workflow_validates_current_clients_without_frozen_install():
+    job = workflow('parity-live.yml')['jobs']['parity']
+    scripts = '\n'.join(step.get('run', '') for step in job['steps'])
+    assert '--comparison current-clients' in scripts
+    assert '--phase candidate' in scripts
+    assert '-Dsdm.parity.mode=live' in scripts
+    for retired in (
+        '--phase baseline',
+        '--baseline',
+        'BASELINE_COMMIT',
+        'git worktree add',
+        'structured-data-models-relational-engine',
+        'structured-data-models-pql',
+    ):
+        assert retired not in scripts

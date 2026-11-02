@@ -2,75 +2,23 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.32h (register entry P1B-12): ``Schema.from_source``'s keys and time
-columns of every Python type, on the core route.
-
-Written by the package's independent test author from the design of
-2026-10-13 (revised after Codex's review), section 4's table and section
-6E's plan, before the implementation. It replaces
-``test_the_schema_route.py``'s ``WRONGLY_TYPED``, which pinned the route's
-outcome before the fix. ``contract/given-vectors.json`` holds the values
-JSON can express for every host (``contract/tests/test_t132h_given_vectors.py``
-and ``sdm-testkit``'s ``tests/t132h_given.rs``); this file holds the Python
-host to the values only Python has.
-
-- The host asks one question of each value: can it be written as the
-  contract's type (a key: none, or an ordered list of names; a time
-  column: none, or one name)? It writes ``{"value": ...}`` when it can and
-  ``"unreadable"`` when it cannot; every refusal of a value is the core's.
-  Each row of ``ROWS`` is a value given as the ``orders`` table's key or
-  time column, over ``contract/bases.yaml``'s ``shop``: what the host
-  writes (a spy on ``sdm_client._native.Run.start``), and the core route's
-  answer, exactly: a success's key and time column, or the refusal's class
-  and code and its fields (``kind`` and ``retryable`` aside). A refusal of
-  a value comes after the source is read (a spy on the DuckDB provider
-  counts the fetches before it); the host's own steps (reading an
-  iterable, encoding) come before the run starts, and a value JSON cannot
-  carry (a lone surrogate) is the codec's ``INVALID_REQUEST`` with no
-  fields, before it.
-- The reference (the old route, where the relational engine is
-  installed) answers each row as the table says: its class and code.
-- A generator is read once, before the source is read; ``np.str_`` and a
-  ``str`` subclass are written as plain ``str``; a set is
-  ``"unreadable"``.
-- An iterable whose reading raises: the exception propagates unchanged on
-  both routes, ``KeyboardInterrupt`` included, and on the core route
-  nothing is started. As a time column it is never read.
-- The property: for every value of a fixed, bounded strategy (the leaves
-  and containers of section 6E, two deep, drawn from a seeded generator,
-  as a key and as a time column), the core route answers with a success
-  or a ``StructuredDataError`` coded ``INVALID_REQUEST`` or
-  ``UNSUPPORTED_REQUEST``: never ``INVALID_MESSAGE``, never a raw
-  exception. Hypothesis is not one of the client's test dependencies, so
-  the strategy is drawn by ``random.Random`` with a fixed seed.
-- The ordering promise (section 2): the table first, then the value;
-  every key before any time column; the core takes the tables in name
-  order, not the caller's.
-- The setter and ``Schema.from_source`` refuse the same value alike: the
-  same code and ``rule``, the field each its own (``primary_key`` against
-  ``primary_keys``).
-- Seeds: each of the design's seeds 1 to 6 fails a check here.
-
-Gating (``contract/tests/t132h_gate.py``): a test named in
-``t132h-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
-when written; a row of a decision still the owner's is gated in that
-decision's group (``D3``, ``D4``). It still runs and must still fail; once
-it passes it fails, naming itself, until it is taken out of the list.
+"""Schema key/time inputs across Python scalar and container types.
+Fixed tables specify host encoding, native outcomes and error ordering.
+Iterable tests cover single reads, exceptions and validation-before-I/O;
+seeded properties and mutation controls preserve broad malformed-input coverage.
+All checks execute directly: the historical pending lists are empty.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-import importlib.util
 import json
 import math
 import random
 import re
-import sys
 import warnings
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import duckdb
@@ -79,47 +27,14 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import Schema, StructuredDataError, _routing
+from sdm_client import Schema, StructuredDataError
 from sdm_client._rust.providers.duckdb import DuckDBProvider
-
-ROOT = Path(__file__).resolve().parents[3]
-CORE_ANY = ','.join(
-    dict.fromkeys(
-        _routing.FROM_SOURCE_DUCKDB + _routing.FROM_SOURCE_DUCKDB_TABLES
-    )
-)
-ENGINE = importlib.util.find_spec('sdm_relational_engine') is not None
-
-
-def _module(name: str, path: Path) -> ModuleType:
-    if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(name, path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-    return sys.modules[name]
-
-
-G = _module('t132h_gate', ROOT / 'contract/tests/t132h_gate.py')
-
-
-@pytest.fixture(autouse=True)
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
-    lines = (
-        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8').splitlines()
-    )
-    start = lines.index('  shop:') + 1
-    statements = []
-    for line in lines[start:]:
-        if not line.startswith('  - '):
-            break
-        statements.append(line[len('  - ') :])
-    return statements
+    return json.loads((Path(__file__).parent / 'data/shop.json').read_text())[
+        'statements'
+    ]
 
 
 def _connection() -> Any:
@@ -195,15 +110,9 @@ def observe(
     monkeypatch: pytest.MonkeyPatch,
     spy: Spy,
     arguments: dict[str, Any],
-    *,
-    core: bool = True,
 ) -> dict[str, Any]:
-    r"""``Schema.from_source`` over ``shop`` with ``arguments``, on the core
-    route or the old one: its answer, what the host wrote and fetched."""
-    if core:
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
-    else:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
+    r"""Describe the shop with these arguments; record the result, native
+    input and provider fetches."""
     spy.written.clear()
     spy.events.clear()
     got: dict[str, Any]
@@ -791,29 +700,11 @@ def core_problems(the_row: dict[str, Any], got: dict[str, Any]) -> list[str]:
     return problems
 
 
-def reference_problems(
-    the_row: dict[str, Any], got: dict[str, Any]
-) -> list[str]:
-    want = the_row['reference']
-    if want == REF_OK:
-        return [] if got['outcome'] == 'success' else [f'{got}']
-    if (got.get('class'), got.get('code')) != want:
-        return [f'{got.get("class")} {got.get("code")}, wanted {want}']
-    return []
-
-
-def _gated(the_row: dict[str, Any], name: str) -> tuple[str, str]:
-    if the_row['owner']:
-        return the_row['owner'], f'exits:py:{name}'
-    return 'exits', f'py:{name}'
-
-
 @pytest.mark.parametrize('row_id', _row_ids())
 def test_the_core_route_writes_and_answers_each_value_as_the_table_says(
     row_id: str,
     monkeypatch: pytest.MonkeyPatch,
     spy: Spy,
-    request: pytest.FixtureRequest,
 ) -> None:
     the_row = BY_ID[row_id]
 
@@ -822,25 +713,14 @@ def test_the_core_route_writes_and_answers_each_value_as_the_table_says(
         problems = core_problems(the_row, got)
         assert not problems, problems
 
-    G.held(*_gated(the_row, request.node.name), check)
-
-
-@pytest.mark.parametrize('row_id', _row_ids())
-def test_the_reference_answers_each_value_as_the_table_says(
-    row_id: str, monkeypatch: pytest.MonkeyPatch, spy: Spy
-) -> None:
-    if not ENGINE:
-        return
-    the_row = BY_ID[row_id]
-    got = observe(monkeypatch, spy, the_row['arguments'](), core=False)
-    assert reference_problems(the_row, got) == []
+    check()
 
 
 # --- reading the caller's iterables ---------------------------------------------------
 
 
 def test_a_key_s_iterable_is_read_once(
-    monkeypatch: pytest.MonkeyPatch, spy: Spy, request: pytest.FixtureRequest
+    monkeypatch: pytest.MonkeyPatch, spy: Spy
 ) -> None:
     def check() -> None:
         value = Counted(['order_id'])
@@ -853,16 +733,16 @@ def test_a_key_s_iterable_is_read_once(
         assert got['outcome'] == 'success', got
         assert list(generator) == []
 
-    G.held('exits', f'py:{request.node.name}', check)
+    check()
 
 
 def test_the_iterable_is_read_before_the_run_starts(
-    monkeypatch: pytest.MonkeyPatch, spy: Spy, request: pytest.FixtureRequest
+    monkeypatch: pytest.MonkeyPatch, spy: Spy
 ) -> None:
     # Section 2, step 1: the host's own steps come first, on the core route
     # only (row 8's timing note).
     def check() -> None:
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
+
         spy.events.clear()
         value = Counted(['order_id'], spy)
         with warnings.catch_warnings():
@@ -873,7 +753,7 @@ def test_the_iterable_is_read_before_the_run_starts(
         assert spy.events.count('iter') == 1, spy.events
         assert spy.events.index('iter') < spy.events.index('start'), spy.events
 
-    G.held('exits', f'py:{request.node.name}', check)
+    check()
 
 
 def propagation_problems(
@@ -894,13 +774,7 @@ def propagation_problems(
     return problems
 
 
-def call_raising(
-    error: BaseException, monkeypatch: pytest.MonkeyPatch, spy: Spy, core: bool
-) -> dict[str, Any]:
-    if core:
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
-    else:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
+def call_raising(error: BaseException, spy: Spy) -> dict[str, Any]:
     spy.events.clear()
     value = Raising(error)
     raised: BaseException | None = None
@@ -922,26 +796,20 @@ def call_raising(
         pytest.param(KeyboardInterrupt(), id='keyboard-interrupt'),
     ],
 )
-def test_an_iterable_that_raises_propagates_unchanged_on_both_routes(
+def test_an_iterable_that_raises_propagates_unchanged(
     error: BaseException,
     monkeypatch: pytest.MonkeyPatch,
     spy: Spy,
-    request: pytest.FixtureRequest,
 ) -> None:
     # The design's policy (section 2, item 2): the classifier catches
     # nothing; the caller's exception is the call's, as list(key) lets it
     # out on the reference. On the core route, no run is started.
     def check() -> None:
-        problems = []
-        for core in [True, False] if ENGINE else [True]:
-            seen = call_raising(error, monkeypatch, spy, core)
-            problems.extend(
-                f'{"core" if core else "reference"}: {p}'
-                for p in propagation_problems(error, seen, core)
-            )
+        seen = call_raising(error, spy)
+        problems = propagation_problems(error, seen, True)
         assert not problems, problems
 
-    G.held('exits', f'py:{request.node.name}', check)
+    check()
 
 
 # --- the property ----------------------------------------------------------------------
@@ -1055,7 +923,7 @@ def property_problems(
 
 
 def test_no_value_of_the_strategy_escapes_as_a_raw_error_or_a_host_bug(
-    monkeypatch: pytest.MonkeyPatch, spy: Spy, request: pytest.FixtureRequest
+    monkeypatch: pytest.MonkeyPatch, spy: Spy
 ) -> None:
     def check() -> None:
         problems = []
@@ -1067,7 +935,7 @@ def test_no_value_of_the_strategy_escapes_as_a_raw_error_or_a_host_bug(
                 problems.extend(property_problems(recipe, field, got))
         assert not problems, f'{len(problems)}: {problems[:20]}'
 
-    G.held('exits', f'py:{request.node.name}', check)
+    check()
 
 
 def test_the_strategy_is_bounded_and_reaches_every_kind() -> None:
@@ -1127,7 +995,6 @@ def test_the_core_refuses_in_the_promised_order(
     fields: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
     spy: Spy,
-    request: pytest.FixtureRequest,
 ) -> None:
     def check() -> None:
         got = observe(monkeypatch, spy, arguments)
@@ -1135,7 +1002,7 @@ def test_the_core_refuses_in_the_promised_order(
         assert (got['code'], got['fields']) == ('INVALID_REQUEST', fields), got
         assert got['fetches'] > 0, got
 
-    G.held('exits', f'py:{request.node.name}', check)
+    check()
 
 
 # --- the setter beside Schema.from_source ------------------------------------------------
@@ -1197,10 +1064,9 @@ def test_the_setter_and_from_source_refuse_a_value_alike(
     attribute: str,
     value: Any,
     monkeypatch: pytest.MonkeyPatch,
-    request: pytest.FixtureRequest,
 ) -> None:
     def check() -> None:
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
+
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             schema = Schema.from_source(DuckDBSource(_connection()))
@@ -1220,7 +1086,7 @@ def test_the_setter_and_from_source_refuse_a_value_alike(
         problems = pair_problems(attribute, value, edited, described)
         assert not problems, problems
 
-    G.held('exits', f'py:{request.node.name}', check)
+    check()
 
 
 # --- the seeds ---------------------------------------------------------------------------
@@ -1443,7 +1309,6 @@ def test_d4_the_table_name_is_refused_before_the_source_is_read(
     arguments: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
     spy: Spy,
-    request: pytest.FixtureRequest,
 ) -> None:
     # P1B-74: the host's refusal comes before the source is read, so it
     # wins over the source's own failure (a table named that the source
@@ -1451,7 +1316,7 @@ def test_d4_the_table_name_is_refused_before_the_source_is_read(
     field = next(f for f in ('primary_keys', 'time_columns') if f in arguments)
 
     def check() -> None:
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
+
         spy.events.clear()
         with pytest.raises(StructuredDataError) as refused_by:
             with warnings.catch_warnings():
@@ -1468,4 +1333,4 @@ def test_d4_the_table_name_is_refused_before_the_source_is_read(
         assert D4_MESSAGE in str(error), str(error)
         assert spy.starts == 0, spy.events
 
-    G.held('D4', f'exits:py:{request.node.name}', check)
+    check()

@@ -1,19 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""A date literal at pandas' bounds answers alike on both routes (T1.20 fix 1).
-
-The old validator holds a PQL date literal as a pandas ``Timestamp``. pandas
-2 holds only ``Timestamp.min`` to ``Timestamp.max`` (1677-09-21
-00:12:43.145224193 to 2262-04-11 23:47:16.854775807) and refuses a literal
-outside as a query (``INVALID_REQUEST``); pandas 3 holds any year. The host
-declares pandas 2's range to the core (``date_literal_range``), which then
-refuses such a literal as an unreadable one, so S0 answers it on the core
-route as on the old route, and never as ``INTERNAL_ERROR`` (the shadow
-check's disagreement before the fix).
-
-This suite runs on pandas 2 in CI's ``test`` job on Python 3.10, which
-pandas 3 does not support, and on pandas 3 on every later Python.
+"""PQL date bounds follow the declared pandas compatibility profile.
+Fixed boundary expectations preserve the historical pandas 2/3 distinction.
+The native validator must report query errors, never internal errors.
 """
 
 from __future__ import annotations
@@ -28,12 +18,9 @@ from sdm_client import (
     PredictiveQuery,
     Schema,
     StructuredDataError,
-    _routing,
 )
 from sdm_client._rust import s0
 from sdm_client.query import RELATIONAL
-
-CORE = ','.join(_routing.S0)
 
 #: pandas 2 holds only 1677 to 2262; pandas 3 holds any year.
 PANDAS_3 = int(pd.__version__.split('.')[0]) >= 3
@@ -59,11 +46,6 @@ BOUNDARY = [
 ]
 
 
-@pytest.fixture(autouse=True)
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-
-
 @pytest.fixture
 def validated_on_core(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Each query the core validated."""
@@ -79,7 +61,6 @@ def validated_on_core(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 def _orders_schema() -> Any:
-    # The users/orders schema of test_the_routing_seam.py.
     users = pd.DataFrame({'user_id': [1, 2, 3]})
     orders = pd.DataFrame(
         {
@@ -100,44 +81,31 @@ def _filtered(condition: str) -> str:
     )
 
 
-def _answers(
-    text: str, monkeypatch: pytest.MonkeyPatch
-) -> dict[str, str | None]:
-    r"""Each route's answer to S0's validation of ``text``: ``None`` when
-    accepted, else the code it refuses with."""
+def _answer(text: str) -> str | None:
+    """The current validator accepts the query or returns its public code."""
     schema = _orders_schema()
-    answers: dict[str, str | None] = {}
-    for route in ('old', 'core'):
-        if route == 'core':
-            monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-        else:
-            monkeypatch.setenv(_routing.ENVIRONMENT, '')
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            try:
-                PredictiveQuery(text, schema)._resolve(RELATIONAL)
-                answers[route] = None
-            except StructuredDataError as refused:
-                # Refused as a query, never by a named rule.
-                assert 'rule' not in refused.details, refused.details
-                answers[route] = refused.code
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    return answers
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        try:
+            PredictiveQuery(text, schema)._resolve(RELATIONAL)
+        except StructuredDataError as refused:
+            assert 'rule' not in refused.details, refused.details
+            return refused.code
+    return None
 
 
 @pytest.mark.parametrize(('literal', 'held'), BOUNDARY)
-def test_a_boundary_literal_answers_alike_on_both_routes(
+def test_boundary_literal_respects_host_date_range(
     validated_on_core: list[str],
-    monkeypatch: pytest.MonkeyPatch,
     literal: str,
     held: bool,
 ) -> None:
     text = _filtered(f'orders.ts > {literal}')
-    answers = _answers(text, monkeypatch)
+    answer = _answer(text)
     assert validated_on_core == [text]
-    assert 'INTERNAL_ERROR' not in answers.values(), answers
+    assert answer != 'INTERNAL_ERROR'
     want = None if PANDAS_3 or held else 'INVALID_REQUEST'
-    assert answers == {'old': want, 'core': want}
+    assert answer == want
 
 
 @pytest.mark.parametrize(
@@ -149,26 +117,25 @@ def test_a_boundary_literal_answers_alike_on_both_routes(
         ('2262-04-12, 1600-01-01', False),
     ],
 )
-def test_an_array_answers_alike_on_both_routes(
+def test_date_array_respects_host_date_range(
     validated_on_core: list[str],
-    monkeypatch: pytest.MonkeyPatch,
     array: str,
     held: bool,
 ) -> None:
     text = _filtered(f'orders.ts IN ({array})')
-    answers = _answers(text, monkeypatch)
+    answer = _answer(text)
     assert validated_on_core == [text]
-    assert 'INTERNAL_ERROR' not in answers.values(), answers
+    assert answer != 'INTERNAL_ERROR'
     want = None if PANDAS_3 or held else 'INVALID_REQUEST'
-    assert answers == {'old': want, 'core': want}
+    assert answer == want
 
 
-def test_an_out_of_range_literal_with_an_unknown_column_answers_alike(
-    validated_on_core: list[str], monkeypatch: pytest.MonkeyPatch
+def test_unknown_column_with_out_of_range_date_is_a_query_error(
+    validated_on_core: list[str],
 ) -> None:
     # Refused either way: on pandas 2 by the literal, on pandas 3 by the
-    # column; the same code on both routes.
+    # column; both cases produce a query error.
     text = _filtered('orders.nope > 3 AND orders.ts > 1600-01-01')
-    answers = _answers(text, monkeypatch)
+    answer = _answer(text)
     assert validated_on_core == [text]
-    assert answers == {'old': 'INVALID_REQUEST', 'core': 'INVALID_REQUEST'}
+    assert answer == 'INVALID_REQUEST'

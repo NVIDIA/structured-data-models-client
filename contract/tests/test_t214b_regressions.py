@@ -30,11 +30,6 @@ The Postgres provider's own regressions (a declared numeric's refusal,
 ``json[]`` elements) are in ``tests_test_ops/test_t214b_postgres_regressions.py``,
 and the typed candidate as plain data in ``sdm-request``'s tests.
 
-Gating: ``t214b-pending.json``'s ``pending`` names, as ``regress:<name>``,
-the tests that failed when written. Each must still fail (strict); once
-one passes it fails, naming itself, until it is taken out. Where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
-not set, the Postgres scenario has nothing to hold and returns.
 """
 
 from __future__ import annotations
@@ -52,7 +47,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RECORDER = ROOT / 'contract/tools/t214b_regressions_record.py'
-PENDING = Path(__file__).with_name('t214b-pending.json')
+
 PREFIX = 'regress:'
 
 
@@ -75,32 +70,6 @@ NAMES = (
 )
 
 
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert name in gating['authored'], f'{name} is not authored'
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t214b-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote; this
-    file's authored keys are its scenarios."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    mine = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert mine == {f'{PREFIX}{name}' for name in NAMES}
-
-
 def _dsn() -> str | None:
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
     if not dsn:
@@ -119,7 +88,7 @@ def vectors() -> dict[str, Any]:
 @functools.cache
 def core() -> dict[str, Any]:
     r"""python-core's observation of every scenario, on the core routes."""
-    return recorder().observe(core=True, dsn=_dsn())
+    return recorder().observe(dsn=_dsn())
 
 
 def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
@@ -176,7 +145,7 @@ def test_temporal_candidates_are_asked_as_the_reference_keeps_them(
             f'{json.dumps(want)[:400]}'
         )
 
-    held(f'{PREFIX}candidates:{name}', check)
+    check()
 
 
 def test_a_number_as_a_meaning_is_refused_in_the_reference_s_words() -> None:
@@ -186,7 +155,7 @@ def test_a_number_as_a_meaning_is_refused_in_the_reference_s_words() -> None:
     def check() -> None:
         assert core()['stype'] == vectors()['stype']
 
-    held(f'{PREFIX}stype', check)
+    check()
 
 
 def test_a_filter_reading_a_double_past_float32_warns_as_the_reference() -> (
@@ -199,7 +168,7 @@ def test_a_filter_reading_a_double_past_float32_warns_as_the_reference() -> (
     def check() -> None:
         assert core()['where'] == vectors()['where']
 
-    held(f'{PREFIX}where', check)
+    check()
 
 
 def test_json_documents_escaping_lone_surrogates_are_sent_as_the_reference() -> (
@@ -221,7 +190,7 @@ def test_json_documents_escaping_lone_surrogates_are_sent_as_the_reference() -> 
             'the requests differ from the reference'
         )
 
-    held(f'{PREFIX}json', check)
+    check()
 
 
 # --- FLOAT32_OVERFLOW by the runtime's NumPy (fix 5) --------------------------
@@ -290,12 +259,6 @@ def test_float32_overflow_is_shown_where_the_runtime_s_numpy_warns(
     monkeypatch.setattr(np, '__version__', numpy)
     assert errors.numpy_warns_on_cast_overflow() is shown
     codes = _codes_reported(monkeypatch)
-    from sdm_client import _routing
-
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB),
-    )
     observed = recorder().where()
     assert observed['refusal'] is None, observed
     assert 'FLOAT32_OVERFLOW' in codes, codes

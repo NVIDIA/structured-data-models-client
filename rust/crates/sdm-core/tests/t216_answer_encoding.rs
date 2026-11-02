@@ -2,60 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The core reads a model answer in each encoding the reference's reader
-//! takes (T2.16's test author's, from the whole-phase review's round two,
-//! Codex P2).
-//!
-//! The reference reads an answer's bytes with `json.loads`, which decodes
-//! them in the encoding `json.detect_encoding` finds: UTF-32 or UTF-16 by
-//! their byte order marks, UTF-8 with its mark, or, with no mark, UTF-16 or
-//! UTF-32 of either byte order by where the first four bytes are zero, and
-//! UTF-8 otherwise. Since T2.14b the core reads the bytes the endpoint sent
-//! (`sdm_wire::json::read_answer`), and refused every form but UTF-8 as
-//! `INVALID_RESPONSE` (`field=response`, `reason=not_json`).
-//!
-//! One answer, holding text past ASCII (a character UTF-16 writes as a
-//! surrogate pair among it) and a `NaN` token the reference's reader takes,
-//! is written in each form of [`FORMS`]:
-//!
-//! - `reader.<form>`: `read_answer` reads it as the value it reads the
-//!   UTF-8 text as;
-//! - `run.<form>`: a predict run answered with it is done, with the
-//!   result and the endpoint's metadata it gives for the UTF-8 text.
-//!
-//! An answer holding lone surrogates, which the reference keeps, is read
-//! with each one U+FFFD (register P1B-24, the owner's rule of 2026-10-21),
-//! as a JSON escape and written as itself in UTF-8, UTF-16 and UTF-32
-//! ([`LONE_FORMS`]): `reader.<form>` and `run.<form>` hold it to the UTF-8
-//! text with U+FFFD in each one's place, and nothing else differing; an
-//! escaped surrogate pair beside them is still its one character.
-//!
-//! And bytes no such encoding decodes are still refused ([`refused`]):
-//! `read_answer` refuses them with the category named, and the run ends
-//! `INVALID_RESPONSE`, `field=response`, `reason=not_json`, that
-//! `category`, holding nothing of the answer. Text under four bytes is
-//! decoded as `json.detect_encoding` decodes it.
-//!
-//! The core's decoding is `sdm_wire::json::answer_text`, which
-//! `read_answer` calls first (T2.16's fix).
-//!
-//! The same forms through the public Python calls against a localhost
-//! endpoint are `contract/tests/test_t216_response_encoding.py`.
-//!
-//! Gating: `contract/tests/t216-pending.json`'s `pending` names, as
-//! `rust:reader.<form>` and `rust:run.<form>`, the checks that failed when
-//! written. Each must still fail (strict); once one passes it fails, naming
-//! itself, until it is taken out. Written on the fixes, so none is pending:
-//! on `f133c4b8` every form's but `utf-8` failed, and on `8d17da50` every
-//! lone-surrogate form's.
+//! Response text encodings, malformed byte sequences and native prediction decoding.
 
-#![allow(
-    clippy::disallowed_methods,
-    reason = "test code: reads the gating list"
-)]
-
-use std::collections::BTreeSet;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use sdm_contract::data::AttachmentId;
@@ -70,7 +18,6 @@ use sdm_core::{
 };
 use sdm_wire::json::read_answer;
 
-const PENDING: &str = "contract/tests/t216-pending.json";
 const CANARY: &str = "CANARY-t216";
 
 /// The answer: the payload's two rows answered, the second's prediction a
@@ -232,45 +179,6 @@ fn refused() -> Vec<(&'static str, Vec<u8>, &'static str)> {
     ]
 }
 
-fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-/// The pending file's `list` names of this test, as `rust:` keys.
-fn named(list: &str) -> BTreeSet<String> {
-    let text = std::fs::read_to_string(root().join(PENDING)).unwrap();
-    let document: serde_json::Value = serde_json::from_str(&text).unwrap();
-    document[list]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|n| n.as_str().unwrap().strip_prefix("rust:"))
-        .map(str::to_owned)
-        .collect()
-}
-
-/// Runs `check`; a pending key must fail, any other must pass.
-fn gated(key: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome, named("pending").contains(key)) {
-        (Ok(()), true) => panic!("{key} passes now: take rust:{key} out of {PENDING}'s pending"),
-        (Err(failure), false) => std::panic::resume_unwind(failure),
-        _ => {}
-    }
-}
-
-#[test]
-fn the_pending_list_only_shrinks() {
-    let authored: BTreeSet<String> = FORMS
-        .iter()
-        .map(|(form, _)| *form)
-        .chain(LONE_FORMS)
-        .flat_map(|form| [format!("reader.{form}"), format!("run.{form}")])
-        .collect();
-    assert!(named("pending").is_subset(&named("authored")));
-    assert_eq!(named("authored"), authored);
-}
-
 struct NoZones;
 
 impl Zones for NoZones {
@@ -369,8 +277,12 @@ fn answered(answer: &[u8]) -> (Run, Result<Step, CoreError>) {
 }
 
 /// What a done run gives: the endpoint's metadata as the core wrote it,
-/// and the result's batches as Arrow shows them.
-fn given(answer: &[u8]) -> (Vec<u8>, String) {
+/// and each batch's schema and column values.
+/// Schema equality ignores metadata-map iteration order; column debug values
+/// preserve NaN without requiring floating-point NaN equality.
+type ResultBatch = (arrow_schema::SchemaRef, Vec<String>);
+
+fn given(answer: &[u8]) -> (Vec<u8>, Vec<ResultBatch>) {
     let (mut run, step) = answered(answer);
     let Step::Done {
         result: OperationResult::Predict(predicted),
@@ -384,7 +296,21 @@ fn given(answer: &[u8]) -> (Vec<u8>, String) {
     let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
         panic!("the result is attached");
     };
-    (metadata, format!("{:?}", result.batches))
+    let batches = result
+        .batches
+        .iter()
+        .map(|batch| {
+            (
+                batch.schema(),
+                batch
+                    .columns()
+                    .iter()
+                    .map(|column| format!("{column:?}"))
+                    .collect(),
+            )
+        })
+        .collect();
+    (metadata, batches)
 }
 
 #[test]
@@ -430,10 +356,8 @@ fn the_reader_reads_each_form_as_the_utf_8_text() {
     for (form, write) in FORMS {
         let bytes = write(ANSWER);
         let want = want.clone();
-        gated(&format!("reader.{form}"), move || {
-            let got = read_answer(&bytes).unwrap_or_else(|e| panic!("{form}: refused as {e:?}"));
-            assert_eq!(got, want, "{form}");
-        });
+        let got = read_answer(&bytes).unwrap_or_else(|e| panic!("{form}: refused as {e:?}"));
+        assert_eq!(got, want, "{form}");
     }
 }
 
@@ -443,9 +367,7 @@ fn a_run_answered_in_each_form_gives_what_the_utf_8_text_gives() {
     for (form, write) in FORMS {
         let bytes = write(ANSWER);
         let want = want.clone();
-        gated(&format!("run.{form}"), move || {
-            assert_eq!(given(&bytes), want, "{form}");
-        });
+        assert_eq!(given(&bytes), want, "{form}");
     }
 }
 
@@ -463,10 +385,8 @@ fn the_reader_reads_each_lone_surrogate_as_u_fffd() {
     for form in LONE_FORMS {
         let bytes = lone_bytes(form);
         let want = want.clone();
-        gated(&format!("reader.{form}"), move || {
-            let got = read_answer(&bytes).unwrap_or_else(|e| panic!("{form}: refused as {e:?}"));
-            assert_eq!(got, want, "{form}");
-        });
+        let got = read_answer(&bytes).unwrap_or_else(|e| panic!("{form}: refused as {e:?}"));
+        assert_eq!(got, want, "{form}");
     }
 }
 
@@ -476,9 +396,7 @@ fn a_run_answered_with_lone_surrogates_gives_what_u_fffd_in_their_place_gives() 
     for form in LONE_FORMS {
         let bytes = lone_bytes(form);
         let want = want.clone();
-        gated(&format!("run.{form}"), move || {
-            assert_eq!(given(&bytes), want, "{form}");
-        });
+        assert_eq!(given(&bytes), want, "{form}");
     }
 }
 

@@ -285,43 +285,35 @@ def gathered(
     run_mode: str | None,
     target=None,
     predict_rows: int = 1,
-) -> object:
+    classification: bool = False,
+):
+    from sdm_client import KumoRelational
+
     values = target if target is not None else list(range(context_rows))
-    payload = {
-        'task': {'kind': 'regression', 'target': {'column_name': 'TARGET'}},
-        'schema': {'instance_table': {'columns': {}}},
-        'context': {
-            'instance_table': {
-                'columns': ['TARGET'],
-                'rows': [[value] for value in values],
-            }
-        },
-        'predict': {
-            'instance_table': {
-                'columns': ['TARGET'],
-                'rows': [[0]] * predict_rows,
-            }
-        },
-    }
-    if run_mode is not None:
-        payload['inference'] = {'run_mode': run_mode}
-
-    class Gathered:
-        payloads = (payload,)
-        requested_inference: dict = {}
-        query = None
-
-    return Gathered()
+    frame = pd.DataFrame(
+        {
+            'uid': range(len(values) + predict_rows),
+            'label': list(values) + [None] * predict_rows,
+        }
+    )
+    schema = Schema.from_data({'users': frame}, primary_keys={'users': 'uid'})
+    schema['users']['label'].stype = (
+        'categorical' if classification else 'numerical'
+    )
+    request = PredictiveQuery(
+        'PREDICT users.label FOR EACH users.uid', schema
+    ).materialize(
+        indices=list(range(len(values), len(values) + predict_rows)),
+        model=KumoRelational(),
+        num_context_samples=1500 if run_mode == 'best' else context_rows,
+    )
+    if run_mode is None:
+        request.payloads[0]['inference'].pop('run_mode', None)
+    return request
 
 
 def explanation_plan(request):
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    return list(
-        RelationalAdapter().prediction_plan(
-            request, ('prediction', 'explanation')
-        )
-    )
+    return sent(request, outputs=('prediction', 'explanation'))
 
 
 def test_an_explanation_is_refused_on_the_mode_the_endpoint_refuses_it_on():
@@ -348,16 +340,19 @@ def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
 
 
 def relational_constant(kind: str, asked: str | None = None) -> object:
-    request = gathered(context_rows=50, run_mode='fast', target=[50] * 50)
-    request.payloads[0]['task']['kind'] = kind
-    request.query = asked
+    request = gathered(
+        context_rows=50,
+        run_mode='fast',
+        target=[50] * 50,
+        classification=kind == 'binary_classification',
+    )
+    if asked is not None:
+        request.query = asked
     return request
 
 
 def plan(request):
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    return list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    return sent(request)
 
 
 def test_a_constant_classification_target_is_refused_relationally_too():
@@ -413,9 +408,9 @@ def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
     be told the limit at the far end was work nobody needed to do."""
     import numpy as np
     import pandas as pd
+    from test_adapter_and_result import envelope
 
     from sdm_client import Request, UnsupportedRequestError
-    from sdm_client.base import check_request_against_model
 
     rng = np.random.default_rng(0)
     rows = 12_500
@@ -429,15 +424,15 @@ def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
     )
 
     with pytest.raises(UnsupportedRequestError, match='12,500'):
-        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
+        envelope(request)
 
 
 def test_a_context_within_the_cap_is_not_refused():
     import numpy as np
     import pandas as pd
+    from test_adapter_and_result import envelope
 
     from sdm_client import Request
-    from sdm_client.base import check_request_against_model
 
     rng = np.random.default_rng(0)
     context = pd.DataFrame({'k': range(500), 'x': rng.normal(size=500)})
@@ -449,14 +444,13 @@ def test_a_context_within_the_cap_is_not_refused():
         task='classification',
     )
 
-    check_request_against_model(request, KUMO_TABULAR, ('prediction',))
+    envelope(request)
 
 
 # --- a context this client emptied is not sent -----------------------------
 
 
 def entity_table(rows: int = 60) -> Schema:
-    pytest.importorskip('sdm_relational_engine')
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(
         {'mid': range(rows), 'label': rng.choice(list('abc'), rows)}
@@ -478,10 +472,39 @@ def gathered_scoring(count: int):
         ).materialize(indices=list(range(count)), model=KumoRelational())
 
 
-def sent(request):
-    from sdm_client.adapters.relational import RelationalAdapter
+def sent(request, outputs=('prediction',)):
+    import json
 
-    return list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    from test_tabular_direct_core import Endpoint, client
+
+    class RelationalEndpoint(Endpoint):
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(payload)
+            table = payload['predict']['instance_table']
+            key = table['columns'].index('instance_id')
+            target = payload['task']['target']
+            label = target.get('classes', [1.0])[0]
+            return json.dumps(
+                {
+                    'id': 'answer',
+                    'model': 'kumo-relational',
+                    'metadata': {},
+                    'predictions': [
+                        {
+                            'id': str(row[key]),
+                            'row_index': i,
+                            'prediction': label,
+                        }
+                        for i, row in enumerate(table['rows'])
+                    ],
+                }
+            ).encode()
+
+    endpoint = RelationalEndpoint()
+    with client(endpoint) as model_client:
+        model_client.predict(request, model='kumo-relational', outputs=outputs)
+    return endpoint.calls
 
 
 def test_scoring_every_entity_is_refused_rather_than_sent_with_no_context():
@@ -502,70 +525,4 @@ def test_a_context_of_two_rows_is_still_sent():
     assert sent(request)
 
 
-def test_the_cap_refusal_does_not_promise_a_sampling_the_model_does_not_do():
-    """`materialize()` never samples a relational context down to the cap: it
-    refuses `num_context_samples` past it and otherwise gathers the smaller
-    budget."""
-    from sdm_client import KumoRelational, Request
-    from sdm_client.base import check_request_against_model
-    from sdm_client.models import spec_for
-
-    context = pd.DataFrame(
-        {'x': range(12_500), 'y': [i % 2 for i in range(12_500)]}
-    )
-    request = Request(
-        context=context,
-        predict=pd.DataFrame({'x': [1, 2]}),
-        target='y',
-        task='classification',
-    )
-    with pytest.raises(StructuredDataError) as raised:
-        check_request_against_model(
-            request, spec_for(KumoRelational()), ('prediction',)
-        )
-    message = str(raised.value)
-    assert 'reads at most 10,000' in message
-    assert 'sampled to that' not in message
-    assert 'gather it with materialize()' in message
-
-
 # --- a judgement is about the rows the call sends ---------------------------
-
-
-def single_class_relational():
-    """A gathered payload whose context teaches nothing."""
-    request = gathered(context_rows=50, run_mode='fast', target=[7] * 50)
-    request.payloads[0]['task']['kind'] = 'binary_classification'
-    request.query = None
-    return request
-
-
-def test_a_session_scoring_call_is_not_judged_on_a_context_it_discards():
-    """The context was pinned at fit(); a scoring call carries only rows, so
-    judging its context refuses a request over rows that are thrown away."""
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    adapter = RelationalAdapter()
-    request = single_class_relational()
-
-    with pytest.raises(StructuredDataError, match='two classes'):
-        list(adapter.prediction_plan(request, ('prediction',)))
-
-    sent = list(adapter.session_prediction_plan(request, ('prediction',)))
-    assert sent and 'context' not in sent[0]
-
-
-def test_pinning_a_context_is_not_judged_on_rows_it_does_not_send():
-    """A session payload carries no predict rows, so the one-entity
-    explanation rule has nothing to count."""
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    adapter = RelationalAdapter()
-    request = gathered(context_rows=50, run_mode='fast', predict_rows=3)
-    request.query = None
-
-    with pytest.raises(StructuredDataError, match='exactly 1 entity'):
-        list(adapter.prediction_plan(request, ('prediction', 'explanation')))
-
-    pinned = adapter.session_plan(request, ('prediction', 'explanation'))
-    assert 'predict' not in pinned

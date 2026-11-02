@@ -21,7 +21,7 @@ from psycopg.types.multirange import Multirange
 from psycopg.types.range import Range
 from sdm_connectors import PostgresSource
 
-from sdm_client import PredictiveQuery, Schema, _routing
+from sdm_client import PredictiveQuery, Schema
 from sdm_client._rust.providers.postgres_arrow import rows_arrow
 
 
@@ -101,10 +101,6 @@ def test_materialized_range_feature_does_not_follow_connection_timezone(
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
     if not dsn:
         pytest.fail('needs the local Postgres test service')
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(_routing.FROM_SOURCE_POSTGRES + _routing.MATERIALIZE_POSTGRES),
-    )
     namespace = 't39_utc_' + uuid.uuid4().hex[:12]
     with psycopg.connect(dsn, autocommit=True) as owner:
         owner.execute(

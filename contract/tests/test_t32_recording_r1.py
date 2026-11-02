@@ -14,7 +14,6 @@ r"""The recording mode's round-1 findings (T3.2 fix 5, Codex r1 1 to 3):
 
 from __future__ import annotations
 
-import copy
 import importlib.util
 import sys
 from pathlib import Path
@@ -22,7 +21,6 @@ from types import ModuleType
 from typing import Any
 
 import pyarrow as pa
-import pytest
 
 HERE = Path(__file__).resolve().parent
 
@@ -42,7 +40,7 @@ def _own() -> ModuleType:
 
 
 OWN = _own()
-run, check = OWN.run, OWN.check
+run = OWN.run
 
 
 # --- 1. Snowflake's session time zone ------------------------------------------------
@@ -132,61 +130,3 @@ def test_identical_reads_on_one_spark_session_each_keep_their_result() -> None:
 
 
 # --- 3. completeness holds each statement whole ----------------------------------------
-
-
-def _first(line: dict[str, Any]) -> dict[str, Any]:
-    first: dict[str, Any] = line['observation']['driver']['capture'][
-        'statements'
-    ][0]
-    return first
-
-
-def _lost_read(line: dict[str, Any]) -> None:
-    first = _first(line)
-    first['results'].append(copy.deepcopy(first['results'][0]))
-
-
-def _lost_parameter(line: dict[str, Any]) -> None:
-    _first(line)['parameters'] = [
-        {'name': '0', 'type': 'builtins.int', 'value': '1'}
-    ]
-
-
-def _changed_error(line: dict[str, Any]) -> None:
-    _first(line)['error'] = 'RuntimeError: refused'
-
-
-def _other_columns(line: dict[str, Any]) -> None:
-    for statement, seen in zip(
-        line['statements'],
-        line['observation']['driver']['capture']['statements'],
-        strict=True,
-    ):
-        for result, kept in zip(
-            statement['results'], seen['results'], strict=True
-        ):
-            columns = (kept.get('values') or {}).get('columns')
-            if columns:
-                renamed = [f'{name}_x' for name in columns]
-                for read in (result, kept):
-                    read['values']['columns'] = renamed
-                return
-
-
-@pytest.mark.parametrize(
-    ('fault', 'named'),
-    [
-        (_lost_read, 'its results'),
-        (_lost_parameter, 'its parameters'),
-        (_changed_error, 'its error'),
-        (_other_columns, 'held'),
-    ],
-)
-def test_a_recording_missing_part_of_a_statement_fails(
-    fault: Any, named: str
-) -> None:
-    case, line, tables = OWN._capture()
-    assert check.capture_problems(line, case, tables) == []
-    fault(line)
-    problems = check.capture_problems(line, case, tables)
-    assert any(named in problem for problem in problems), problems

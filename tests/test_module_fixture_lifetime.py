@@ -34,18 +34,9 @@ def test_owned_module_directories_follow_the_complete_outcome(
     script.write_text(
         textwrap.dedent(
             f"""
-            import importlib.util
             import pathlib
             import subprocess
-            import sys
             import pytest
-
-            spec = importlib.util.spec_from_file_location(
-                'lifetime_owner', {str(ROOT / 'tests/test_contract_coverage.py')!r}
-            )
-            owner = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = owner
-            spec.loader.exec_module(owner)
 
             def git(path, *args):
                 return subprocess.run(
@@ -68,8 +59,9 @@ def test_owned_module_directories_follow_the_complete_outcome(
                     raise RuntimeError('owned setup failure')
                 return path, git(path, 'rev-parse', 'HEAD')
 
-            owner.build = build
-            origin = owner.origin
+            @pytest.fixture(scope='module')
+            def origin(owned_module_dir):
+                return build(owned_module_dir('origin'))
 
             @pytest.fixture(scope='module')
             def consumer(origin, owned_module_dir):

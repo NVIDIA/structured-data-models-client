@@ -7,10 +7,9 @@
 import numpy as np
 import pandas as pd
 import pytest
-from test_tabular_pql_core import ROUTES, query
+from test_tabular_pql_core import query
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import tabular_index
+from sdm_client._rust import NativeBoundaryError, tabular_index
 
 
 class CustomSortFrame(pd.DataFrame):
@@ -54,7 +53,6 @@ def materialize(frame, entry, wanted):
 def test_reduced_custom_sorting_is_refused_without_execution(
     monkeypatch, entry, owner
 ):
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
     n, wanted = (81, 40) if entry == 'indices' else (10002, 10000)
     frame = data(n)
     if owner == 'frame_sort':
@@ -82,13 +80,12 @@ def test_reduced_custom_sorting_is_refused_without_execution(
         if owner == 'label'
         else 'custom Python sorting methods'
     )
-    with pytest.raises(RouteError, match=message):
+    with pytest.raises(NativeBoundaryError, match=message):
         materialize(frame, entry, wanted)
 
 
 @pytest.mark.parametrize('entry', ['indices', 'predict'])
 def test_unreduced_context_never_inspects_sorting(monkeypatch, entry):
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
 
     def forbidden(*args):
         raise AssertionError('unused sorting must not be inspected')

@@ -3091,7 +3091,11 @@
       "tests": {
         "python": [
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_copy_and_pickle_preserve_origin_and_edit_isolation",
-          "tests/test_t32_request_pickle.py::test_a_materialized_request_refuses_pickle_by_its_source"
+          "tests/test_t32_request_pickle.py::test_a_materialized_request_refuses_pickle_by_its_source",
+          "packages/structured-data-models-client/tests/test_saved_requests.py::test_saved_fixture_inventory",
+          "packages/structured-data-models-client/tests/test_saved_requests.py::test_saved_request_predicts_without_its_original_runtime",
+          "packages/structured-data-models-client/tests/test_saved_requests.py::test_payloads_restore_missing_native_state",
+          "packages/structured-data-models-client/tests/test_saved_requests.py::test_changed_payloads_take_precedence_over_cached_native_state"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#frameSchemaRestoresDataKeysTimesRelationshipsAndCanPredict",
@@ -3358,8 +3362,7 @@
           "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_dataclass_inference_is_observed_without_iterating_it",
           "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_temporal_session_keeps_anchor_and_holdout_identity",
           "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_multiple_contexts_refused_before_upload",
-          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_fit_refusal_retains_column_advice",
-          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_session_route_can_be_selected_independently"
+          "packages/structured-data-models-client/tests/test_warehouse_sessions_core.py::test_fit_refusal_retains_column_advice"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/WarehouseSessionTest.java#scalarSessionsRemoveHeldEntitiesAndScoreAfterConnectionCloses",
@@ -3520,7 +3523,7 @@
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization",
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_composite_neighbor_identity_is_materialized",
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_float_link_identifiers_keep_source_precision",
-          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_old_and_core_present_the_same_rankings"
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_preserves_rankings_and_row_identity"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#candidateNumbersKeepTheirExactValuesAcrossTheBoundary",
@@ -4983,7 +4986,7 @@
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "api_contracts/persistence",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 2 retains historical request fixtures and requires their installed-runtime prediction and cache-reconstruction tests, without an old-client installation."
     },
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
@@ -5003,7 +5006,7 @@
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "api_contracts/relational-materialization",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 2 replaces the duplicate route comparison with explicit ranking contents, shuffled response attribution and public DataFrame ordering assertions."
     },
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
@@ -5033,7 +5036,7 @@
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "api_contracts/sessions",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Remove the retired route-switch test; warehouse session lifecycle, holdout, changed-question, close and refusal tests remain required on the sole Rust path."
     },
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
@@ -5158,7 +5161,7 @@
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "type_contracts/arrow-admission-and-inference",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 2 removes retired Python approval-registry checks and the empty pending-list check; exhaustive Arrow admission, parameter coverage, inference and refusal expectations remain enforced by the five shared Rust tests."
     },
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
@@ -5169,6 +5172,11 @@
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "type_contracts/semantic-types",
       "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+    },
+    {
+      "base_commit": "a8726c3e5771c2397ab88599af9aa273de7545b6",
+      "record": "api_contracts/sessions",
+      "reason": "Remove the retired route-switch test; warehouse session lifecycle, holdout, changed-question, close and refusal tests remain required on the sole Rust path."
     }
   ],
   "capabilities": [
@@ -6584,7 +6592,7 @@
   "type_contracts": [
     {
       "id": "arrow-admission-and-inference",
-      "boundary": "shared Rust host admission and schema inference, not all model inputs",
+      "boundary": "shared Rust host admission and schema inference, not all model inputs; exhaustive Arrow variants are enforced by the shared Rust admission tests, not historical Python approval registries",
       "vectors": "contract/type-set-vectors.json",
       "required_vectors": [
         "null",
@@ -6700,31 +6708,11 @@
       ],
       "tests": {
         "rust": [
-          "rust/crates/sdm-host/tests/t133_type_set.rs::the_pending_list_only_shrinks",
           "rust/crates/sdm-host/tests/t133_type_set.rs::the_vectors_are_of_the_arrow_schema_the_workspace_locks",
           "rust/crates/sdm-host/tests/t133_type_set.rs::every_variant_of_data_type_has_a_vector_and_no_type_has_two",
           "rust/crates/sdm-host/tests/t133_type_set.rs::each_parameterized_family_has_each_parameter",
           "rust/crates/sdm-host/tests/t133_type_set.rs::each_type_is_admitted_and_inferred_as_its_vector_says",
           "rust/crates/sdm-host/tests/t133_type_set.rs::every_expected_refusal_is_named"
-        ],
-        "python": [
-          "contract/tests/test_t133_type_set.py::test_the_pending_list_only_shrinks",
-          "contract/tests/test_t133_type_set.py::test_the_vectors_are_of_the_arrow_schema_cargo_lock_pins",
-          "contract/tests/test_t133_type_set.py::test_each_variant_has_a_vector_and_no_type_has_two",
-          "contract/tests/test_t133_type_set.py::test_each_vector_has_one_class_and_its_inference",
-          "contract/tests/test_t133_type_set.py::test_the_types_a_review_found_reachable_are_reached",
-          "contract/tests/test_t133_type_set.py::test_ids_are_unique_across_vectors_and_reached_rows",
-          "contract/tests/test_t133_type_set.py::test_every_reachable_row_has_its_witness_and_its_recording",
-          "contract/tests/test_t133_type_set.py::test_each_reached_row_is_a_form_admission_sees",
-          "contract/tests/test_t133_type_set.py::test_every_form_a_session_setting_gives_has_a_row",
-          "contract/tests/test_t133_type_set.py::test_varint_is_a_difference_to_register",
-          "contract/tests/test_t133_type_set.py::test_a_lossless_connection_is_described",
-          "contract/tests/test_t133_type_set.py::test_a_difference_from_the_reference_is_registered",
-          "contract/tests/test_t133_type_set.py::test_a_refusal_of_a_type_the_reference_reads_is_the_owner_s",
-          "contract/tests/test_t133_type_set.py::test_a_new_success_is_the_owner_s",
-          "contract/tests/test_t133_type_set.py::test_every_vector_ref_names_a_vector_and_a_transition",
-          "contract/tests/test_t133_type_set.py::test_host_2_marks_each_type_reference_accepted_or_not",
-          "contract/tests/test_t133_type_set.py::test_each_family_host_2_names_has_its_reference_answer"
         ]
       },
       "evidence_level": "local-boundary",

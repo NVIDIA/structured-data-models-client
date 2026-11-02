@@ -54,13 +54,6 @@ reference's at 6298913c. Each test's one line says what it proves:
   comparator sees the difference, which the implementer registers naming
   the case.
 
-Gating: ``t29-pending.json``'s ``pending`` names, as ``py:<test>[<database>]``,
-the tests that failed when written. Each must still fail (strict); once one
-passes it fails, naming itself, until it is taken out. ``pending`` stays
-within ``authored``. Where ``SDM_POSTGRES_TEST_DSN`` names no server and
-``SDM_REQUIRE_POSTGRES`` is not set, a Postgres leg has nothing to hold and
-returns before it is judged, as T2.3's Postgres tests do; with it set, a
-missing server fails (H26).
 """
 
 from __future__ import annotations
@@ -72,7 +65,6 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -81,7 +73,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-PENDING = Path(__file__).with_name('t29-pending.json')
+
 CASES = ROOT / 'contract/cases/s1'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
@@ -184,33 +176,6 @@ def _module(name: str, path: Path) -> ModuleType:
         sys.modules[name] = module
         spec.loader.exec_module(module)
     return sys.modules[name]
-
-
-def held(name: str, check: Callable[[], None]) -> None:
-    r"""Runs ``check``: it must pass, or, while ``py:<name>`` is pending,
-    fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if f'py:{name}' not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take py:{name} out of '
-        'contract/tests/t29-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only tests the test author wrote, and
-    ``authored`` names each exit test on each database."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    assert {name for name in gating['authored'] if name.startswith('py:')} == {
-        f'py:{test}[{database}]' for test in EXITS for database in DATABASES
-    }
 
 
 def reachable(database: str) -> bool:
@@ -426,7 +391,7 @@ def _the_rule_s_rows(case_id: str) -> str:
     entities 0 and 1 in order, each step after the last, step k answered by
     call k - 1."""
     endpoint = _module(
-        't29_scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
+        't29_scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
     )
     steps = STEPS.get(case_id)
     rows = []
@@ -536,10 +501,7 @@ def test_num_forecasts_as_the_reference(database: str) -> None:
     and 0, -1, 1.5, 10,001, a static target and a condition refused."""
     if not reachable(database):
         return
-    held(
-        f'test_num_forecasts_as_the_reference[{database}]',
-        lambda: as_the_reference(database, NUM_FORECASTS),
-    )
+    (lambda: as_the_reference(database, NUM_FORECASTS))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -551,10 +513,7 @@ def test_lag_timesteps_as_the_reference(database: str) -> None:
     -1, 1.5, 2.0, true and "2" refused ``INVALID_REQUEST``."""
     if not reachable(database):
         return
-    held(
-        f'test_lag_timesteps_as_the_reference[{database}]',
-        lambda: as_the_reference(database, LAG_TIMESTEPS),
-    )
+    (lambda: as_the_reference(database, LAG_TIMESTEPS))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -566,10 +525,7 @@ def test_quantiles_asked_as_the_reference(database: str) -> None:
     them is given back with each absence said, as python-ref says it."""
     if not reachable(database):
         return
-    held(
-        f'test_quantiles_asked_as_the_reference[{database}]',
-        lambda: as_the_reference(database, QUANTILES, result=False),
-    )
+    (lambda: as_the_reference(database, QUANTILES, result=False))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -581,10 +537,7 @@ def test_response_field_for_quantiles_as_the_reference(database: str) -> None:
     own rows, never refused ``response_field``."""
     if not reachable(database):
         return
-    held(
-        f'test_response_field_for_quantiles_as_the_reference[{database}]',
-        lambda: as_the_reference(database, RESPONSE_FIELD),
-    )
+    (lambda: as_the_reference(database, RESPONSE_FIELD))()
 
 
 # --- a lagged average with empty windows (KO2-70) ---------------------------------
@@ -787,7 +740,7 @@ def test_lagged_average_on_its_own_rows(database: str) -> None:
         problems = on_their_own_rows(requests(theirs), requests(mine))
         assert not problems, '\n'.join(problems)
 
-    held(f'test_lagged_average_on_its_own_rows[{database}]', check)
+    check()
 
 
 # --- a lagged condition asked one entity a call (Codex, round 2) ------------------
@@ -853,7 +806,7 @@ def test_lag_dtype_per_call_as_the_reference(database: str) -> None:
         )
         assert lag_dtypes(requests(mine)) == lag_dtypes(requests(theirs))
 
-    held(f'test_lag_dtype_per_call_as_the_reference[{database}]', check)
+    check()
 
 
 #: The exit tests, each run on each database.

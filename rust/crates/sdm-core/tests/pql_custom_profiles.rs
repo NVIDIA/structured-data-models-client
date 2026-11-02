@@ -5,7 +5,7 @@
 //! Capabilities none of the five named profiles has
 //! (`tests/pql/custom-profiles.json`): each capability turned off on its
 //! own, none, and only `temporal` and `static`, in either mode, over probe
-//! queries, each answered by the reference (`record_quirks.py`) and held
+//! queries with frozen expected answers, each held
 //! through the adapter as a corpus case is (`pql_compare`). These reach
 //! capability codes the corpus cannot, since a corpus case names its
 //! profile.

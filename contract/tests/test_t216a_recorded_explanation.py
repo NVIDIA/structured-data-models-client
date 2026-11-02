@@ -2,22 +2,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.16a's exit on ``run_python.py`` (the package's test author's): the
-runner records a result's explanation and its items' metadata, so the
-gate's ``core`` rule compares them across hosts (T2.13's exits; T2.1n
-round 1, P3 3). ``sdm-testkit``'s ``tests/t216a_recorded_explanation.rs``
-holds ``rust-host`` to the same.
+"""Native result observations preserve explanations and per-item metadata.
 
-Where it is recorded: ``core.predicted.result.explanation``, the JSON text
-the core put on the result's Arrow schema metadata under ``explanation``,
-absent where the core gives none; each item's metadata and explanation are
-the result rows' ``metadata`` and ``explanation`` columns.
-
-The values are the reference's, from ``contract/t213-option-vectors.json``
-(``option_record.py``): a forecast's whole explanation
-(``{"by_forecast_step": ...}``) is on the schema metadata only, so
-``explain.forecast`` is the case that tells a recorded explanation from
-the rows' own column.
+Pinned option vectors provide expected values; no old client is installed.
 """
 
 from __future__ import annotations
@@ -38,7 +25,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-COMPARE = ROOT / 'scripts/rust_core/compare.py'
 CASES = ROOT / 'contract/cases/s1'
 VECTORS = ROOT / 'contract/t213-option-vectors.json'
 EXPLAINED = ('explain.answered', 'explain.forecast', 'metadata.items-explained')
@@ -110,7 +96,7 @@ def same(a: Any, b: Any) -> bool:
 @pytest.mark.parametrize('case_id', EXPLAINED)
 def test_the_result_s_explanation_is_recorded(case_id: str) -> None:
     r"""python-core records the explanation the core gave the result, as
-    the JSON text of the reference's."""
+    JSON text matching the pinned expectation."""
     wanted = vectors()[case_id]['explanation']
     assert wanted is not None, case_id  # the vector holds one
     result = observed(case_id)['core']['predicted']['result']
@@ -128,7 +114,7 @@ def test_a_result_with_no_explanation_records_none(case_id: str) -> None:
 
 @pytest.mark.parametrize('case_id', WITH_METADATA)
 def test_each_item_s_metadata_is_recorded(case_id: str) -> None:
-    r"""Each item's metadata, the reference's, in the result rows'
+    r"""Each item's pinned metadata in the result rows'
     ``metadata`` column, row by row."""
     result = observed(case_id)['core']['predicted']['result']
     names = [column['name'] for column in result['columns']]
@@ -151,34 +137,3 @@ def test_the_observation_schema_takes_the_explanation() -> None:
     # Text only: a parsed value is not what the core gave.
     line['core']['predicted']['result']['explanation'] = {'format': 'x'}
     assert list(validate.iter_errors(line))
-
-
-def _rust_host(line: dict[str, Any]) -> dict[str, Any]:
-    other = copy.deepcopy(line)
-    other['identity']['runner'] = 'rust-host'
-    return other
-
-
-@pytest.mark.parametrize('case_id', ['explain.answered', 'explain.forecast'])
-def test_the_core_rule_compares_the_explanation_across_hosts(
-    case_id: str,
-) -> None:
-    r"""The two hosts' explanations differing is a ``core`` difference;
-    the same, none."""
-    compare = _module('t216a_compare', COMPARE)
-    case = json.loads((CASES / f'{case_id}.json').read_text(encoding='utf-8'))
-    python = observed(case_id)
-    agreeing = compare.Report(rules={'core': 'gate'})
-    compare._core_agree(agreeing, case, python, _rust_host(python))
-    assert not agreeing.failures, agreeing.failures
-    rust = _rust_host(python)
-    explained = json.loads(rust['core']['predicted']['result']['explanation'])
-    explained[
-        'by_forecast_step' if 'by_forecast_step' in explained else 'summary'
-    ] = 'another host'
-    rust['core']['predicted']['result']['explanation'] = json.dumps(explained)
-    differing = compare.Report(rules={'core': 'gate'})
-    compare._core_agree(differing, case, python, rust)
-    assert any('core.predicted' in str(f) for f in differing.failures), (
-        differing.failures
-    )

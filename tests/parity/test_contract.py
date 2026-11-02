@@ -259,10 +259,9 @@ def test_pytest_tripwire_wraps_fixture_setup_and_teardown(
     # conftest uses the exact permanent hook, not a hand-written approximation.
     (tmp_path / 'conftest.py').write_text((HERE / 'conftest.py').read_text())
     (tmp_path / 'test_probe.py').write_text("""import pytest
-import predictive_query
 @pytest.fixture
 def data():
-    predictive_query.validate(None)
+    import predictive_query
     return 1
 @pytest.mark.parity_default_routes
 def test_public(data):
@@ -275,7 +274,7 @@ def test_public(data):
         capture_output=True,
     )
     assert ran.returncode != 0
-    assert 'legacy policy executed' in ran.stdout + ran.stderr
+    assert 'retired runtime imported' in ran.stdout + ran.stderr
 
 
 def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
@@ -1286,3 +1285,34 @@ def test_date_inspection_and_list_null_proofs_do_not_erase_times_or_numbers():
             a['reader']['users']['data']['rows'][0][2][0] = {'float': 'nan'}
         equivalent_raw_observations(a, b, fixture)
         assert a != b
+
+
+@pytest.mark.parametrize(
+    'module', ['predictive_query', 'sdm_relational_engine']
+)
+def test_default_guard_blocks_retired_package_imports(module):
+    import importlib
+
+    with LegacyGuard(raise_caught=False) as guard:
+        with pytest.raises(AssertionError, match='retired runtime imported'):
+            importlib.import_module(module)
+    assert guard.report['legacy_hits'] == [module]
+    assert guard.report['installed']
+
+
+@pytest.mark.parametrize(
+    'module', ['predictive_query', 'sdm_relational_engine']
+)
+def test_default_guard_rejects_preloaded_retired_packages(module, monkeypatch):
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, module, types.ModuleType(module))
+    guard = LegacyGuard()
+    with pytest.raises(
+        AssertionError, match='retired runtime already imported'
+    ):
+        with guard:
+            pytest.fail('a preloaded retired package must prevent the journey')
+    assert guard.report['legacy_hits'] == [module]
+    assert not guard.report['installed']

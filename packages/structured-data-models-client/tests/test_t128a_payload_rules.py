@@ -8,9 +8,8 @@ row and the reference, before the implementation. Each case in
 ``t128a-payload-rules.json`` is a DuckDB source, a query and the arguments
 of ``PredictiveQuery.materialize``; ``t128a_payload_rules_record.py``
 recorded what the reference gives for it, through the same ``observe`` this
-test calls. Here the call runs forced onto the core (``SDM_CORE_ROUTES``:
-the schema's, materialize's and, for a case that sends a call, predict's
-routes) and what the case's exit compares must equal the reference's:
+test calls. Public calls use the maintained runtime; the recorded expectations
+remain unchanged:
 
 - exit "classification payload" (cases covering ``CLASSIFICATION``):
   ``base.binary``, ``base.multiclass`` and seeded binary, multiclass,
@@ -58,18 +57,13 @@ from typing import Any
 
 import pytest
 
-from sdm_client import _routing
 from sdm_client._rust import run as _rust_run
 
 HERE = Path(__file__).resolve().parent
 RECORDED = json.loads(
     (HERE / 't128a-payload-rules.json').read_text(encoding='utf-8')
 )
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
+
 
 #: The rules T1.28a lifts: a refusal by one of them is the package not
 #: done yet, never an outcome a case may end with.
@@ -123,7 +117,6 @@ def _on_the_core(
 ) -> tuple[dict[str, Any], list[bytes]]:
     r"""The case observed on the core route, and the payload attachments'
     bytes as the core's runs gave them."""
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     taken: list[bytes] = []
     take = _rust_run.Finished.take
 

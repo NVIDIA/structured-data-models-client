@@ -2,35 +2,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T3.11's CI jobs, read from the workflow (exits 1 and 4, and locked check
-14's CI line, ``java (<jdk>, <platform>, <database or leg>)``).
-
-The brief names the S0 jobs ``java (17, linux-x86_64, s0)``, ``java (21,
-linux-x86_64, s0)``, ``java (21, linux-aarch64, s0)``, ``java (21,
-macos-arm64, s0)`` and ``java (21, macos-x86_64, s0)`` (its "Open
-questions", item 3: ``s0`` for the leg), each on its platform's runner
-(macOS on ``macos-15`` and ``macos-15-intel``, as the engine wheels), and
-JAR-load jobs on the same JDKs and platforms, run where no Rust toolchain
-is: in a container on Linux, and with no Rust set up on macOS.
-A job's name is read with its matrix expanded.
-
-ASSUMED until the implementer relays it: a load job's name holds ``load``
-and its ``(<jdk>, <platform>`` as the S0 jobs spell them.
-
-Gating (``contract/tests/t311_gate.py``): each test named in
-``contract/tests/t311-pending.json``'s ``pending`` failed when written and
-must still fail until the implementer takes it out; once it passes it
-fails, naming itself.
-"""
+"""Java CI exercises supported JDKs, platforms and clean JAR loading."""
 
 from __future__ import annotations
 
-import importlib.util
 import itertools
 import re
-import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import yaml
@@ -54,19 +32,6 @@ RUNNERS = {
 }
 #: A step that sets Rust up.
 RUST = re.compile(r'rust-toolchain|rustup|\bcargo\b|maturin')
-
-
-def _module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-G = _module('t311_gate', ROOT / 'contract/tests/t311_gate.py')
-#: A test held by the gate.
-held = G.gated()
 
 
 def _combinations(
@@ -145,7 +110,6 @@ def _runs_on(job: dict[str, Any], values: dict[str, Any]) -> str:
     return str(label)
 
 
-@held
 def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
     # Exit 1's CI line and exit 4's platforms: one java (<jdk>, <platform>,
     # s0) job each, on its platform's runner.
@@ -169,7 +133,6 @@ def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
     assert legs <= {'s0', 'duckdb', 'sqlite', 'postgres'}, legs
 
 
-@held
 def test_t311_the_jar_load_jobs_run_on_each_jdk_and_platform_without_rust() -> (
     None
 ):
@@ -201,19 +164,14 @@ def test_t311_the_jar_load_jobs_run_on_each_jdk_and_platform_without_rust() -> (
         assert rust == [], (name, rust)
 
 
-def test_t311_a_changed_java_test_is_one_of_the_package_s_own_tests(
-    tmp_path: Path,
-) -> None:
-    # The handoff's own tests (owner, 2026-10-23: lint and the package's own
-    # tests) run the Java library's tests when a Java test source changes:
-    # Maven runs them all, once.
-    sys.path.insert(0, str(ROOT / 'scripts/rust_core'))
-    handoff = _module('t311_handoff', ROOT / 'scripts/rust_core/handoff.py')
-    tests = [
-        'java/src/test/java/com/nvidia/sdm/internal/WordingTest.java',
-        'java/src/test/java/com/nvidia/sdm/internal/RunTest.java',
+def test_each_parser_platform_runs_behavioral_assertions():
+    jobs = [
+        job
+        for name, job, _ in _expanded()
+        if name.startswith('java (') and name.endswith(', s0)')
     ]
-    for path in tests:
-        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / path).write_text('class T {}\n')
-    assert handoff.own_suites(tmp_path, tests) == [handoff.affected.JAVA]
+    assert len(jobs) == len(S0_JOBS)
+    for job in jobs:
+        commands = '\n'.join(str(step.get('run', '')) for step in job['steps'])
+        assert '-Dtest=PredictiveQueryTest test' in commands
+        assert '-Dsdm.natives=' in commands

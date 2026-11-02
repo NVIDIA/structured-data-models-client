@@ -817,71 +817,7 @@ def test_a_warning_its_fields_cannot_fill_names_the_core_s_defect() -> None:
     )
 
 
-#: T2.14b's keys (contract/tests/t214b-pending.json) for the sampler's
-#: warnings in the reference's words (M4), on DuckDB.
-M4_KEYS = (
-    'wording:warned:missing-indices:wording.anchor-after-data',
-    'wording:warned:context-before-data:target.filter.sum',
-    'wording:warned:anchor-after-data:wording.anchor-after-data',
-)
-
-
-def _m4_pending() -> bool:
-    r"""Whether T2.14b's M4 keys are still pending: until they leave, the
-    sampler's three warnings keep E41(i)'s words, pinned below; after,
-    contract/tests/test_t214b_wording.py holds them to the reference's
-    words end to end."""
-    pending = json.loads(
-        (ROOT / 'contract/tests/t214b-pending.json').read_text(encoding='utf-8')
-    )['pending']
-    return all(key in pending for key in M4_KEYS)
-
-
-def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
-    # T1.23 fix 1 moved the sampler's three warnings to the host's table;
-    # their words are E41(i)'s, the core's own before T1.23, not the
-    # reference's: each variant word for word, so a template swapped or
-    # reworded fails (T1.23 fix 2, subagent P3-4). T2.14b (M4) gives them
-    # the reference's words, held end to end by its wording test; these
-    # pins hold only while its keys are pending.
-    m4 = _m4_pending()
-    tail = (
-        ' for optimal database querying; indices on primary and foreign keys '
-        'speed sampling up'
-    )
-    for variant, indices, tables, words in (
-        ('index_table', 1, 1, 'Missing 1 index in 1 table'),
-        ('index_tables', 1, 2, 'Missing 1 index in 2 tables'),
-        ('indices_table', 2, 1, 'Missing 2 indices in 1 table'),
-        ('indices_tables', 3, 2, 'Missing 3 indices in 2 tables'),
-    ):
-        if not m4:
-            break
-        assert _shown(
-            _warning(
-                'missing_' + variant,
-                indices=indices,
-                tables=tables,
-                variant=variant,
-            )
-        ) == [('UserWarning', f'[MISSING_INDICES] {words}{tail}')], variant
-    assert not m4 or _shown(_warning('context_before_data_untimed')) == [
-        (
-            'UserWarning',
-            "[CONTEXT_BEFORE_DATA] the context's anchor time is too early, or "
-            "the aggregation's window too long, for the data to reach back as "
-            'far as the examples need',
-        )
-    ]
-    assert not m4 or _shown(_warning('anchor_after_data')) == [
-        (
-            'UserWarning',
-            '[ANCHOR_AFTER_DATA] the anchor time is after the latest time in '
-            'the data',
-        )
-    ]
-    # T1.26b: a context collected short, in the reference's words; the
-    # host gives it once in a process (sdm-host, decision E52).
+def test_context_coverage_warning_names_limits_and_remedies() -> None:
     assert _shown(
         _warning('context_coverage', examples=1000, candidates=10000)
     ) == [

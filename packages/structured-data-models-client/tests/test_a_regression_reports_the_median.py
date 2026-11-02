@@ -29,8 +29,6 @@ from sdm_client import (
 )
 from sdm_client.errors import StructuredDataError
 
-pytest.importorskip('sdm_relational_engine')
-
 URL = 'http://127.0.0.1:9'
 COUNT = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH people.user_id'
 

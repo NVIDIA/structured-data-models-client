@@ -22,20 +22,21 @@ published on the Releases page at all.
 
 ```bash
 # Everything that needs nothing running.
-python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+python -m pytest packages/structured-data-models-api/tests \
                  packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests \
   -q -m 'not live_nim and not live_warehouse'
 
-# The native engine, from its own directory.
-cd packages/structured-data-models-relational-engine && python -m pytest tests -q && cd -
+# Shared core and bindings (see CONTRIBUTING.md for native test setup).
+cargo test --manifest-path rust/Cargo.toml --workspace --locked
+python -m pytest rust/bindings/sdm-py/tests -q --native-build test-ops
+python tests/parity/check_junit.py --run
 
 ruff check . && ruff format --check .
-mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src \
-     packages/structured-data-models-client/src packages/structured-data-models-connectors/src \
-     packages/structured-data-models-relational-engine/src
+mypy packages/structured-data-models-api/src \
+     packages/structured-data-models-client/src packages/structured-data-models-connectors/src
 mypy packages/structured-data-models-connectors/tests/typing/check_sources.py
 python scripts/check_repo_hygiene.py all
-python scripts/mermaid_notices.py --check
+python scripts/rust_core/rust_notices.py --check
 ```
 
 Then, against running NIMs, because a release should not be the first time
@@ -70,20 +71,16 @@ publishes.
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-That starts the release. `.github/workflows/publish.yml` builds the four
-pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
-(cp310 to cp314 on manylinux_2_28 x86-64 and aarch64, macOS arm64 and x86-64,
-and Windows AMD64, one runner each and every wheel smoke-tested, as set in
-the engine's `[tool.cibuildwheel]`), and then refuses to
-continue unless **all five** are present and agree with the tag. That check is
-not ceremony: `structured-data-models-client[relational]` pins the engine by exact version, so a
-release missing it publishes an extra nobody can install. It then generates the
-SBOM, and takes the release's notes from the changelog's entry for that
-version, refusing a tag that has none: notes that read like a diff are fixable
-afterwards and a distribution on PyPI is not, so both happen before anything is
-uploaded. It attaches every distribution and the SBOM to the GitHub Release for
-the tag, and stops there. **A green workflow means the artifacts are built and
-public, not that anything is on PyPI.**
+That starts the release workflow.
+It requires successful CI and live validation for the tagged commit, then builds the API and connector distributions.
+The client wheels come from that commit's successful CI run: Linux x86-64/aarch64, macOS x86-64/arm64 and Windows AMD64.
+Each client wheel uses CPython's stable ABI from Python 3.10 onward.
+The workflow verifies each wheel's source commit, clean-tree record, production features and digest before assembling the release.
+Expired or missing CI artifacts require rerunning CI; publication does not substitute an untested build.
+
+All three distributions must be present at the tagged version.
+The workflow also generates an SBOM from the exact wheels, reads the version's changelog entry and attaches distributions, build identities and the SBOM to the GitHub Release.
+**A green workflow means the artifacts are built and public, not that anything is on PyPI.**
 
 **Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
 NVIDIA's PyPI organization and this project's OSRB record commits to releasing

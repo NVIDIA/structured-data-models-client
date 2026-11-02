@@ -18,6 +18,7 @@ import pytest
 from sdm_client import (
     KumoRelational,
     KumoTabular,
+    PredictiveQuery,
     Relationship,
     Request,
     Schema,
@@ -25,10 +26,7 @@ from sdm_client import (
     UnknownModelError,
     UnsupportedRequestError,
 )
-from sdm_client.adapters.tabular import TabularAdapter
-from sdm_client.base import check_request_against_model, required_capabilities
 from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 
 
 def context(n: int = 20) -> pd.DataFrame:
@@ -136,27 +134,59 @@ def test_related_tables_make_a_request_relational():
     assert a_relational_request().is_relational
 
 
-def test_required_capabilities_are_switched_on_only_by_what_is_needed():
-    required = required_capabilities(simple_request())
-    assert not required.relationships
-    assert not required.multiple_tables
-    assert not required.forecasting
-    assert not required.link_prediction
+def test_a_single_table_request_needs_no_relational_capabilities():
+    from test_tabular_direct_core import Endpoint, client
+
+    endpoint = Endpoint()
+    result = client(endpoint).predict(simple_request(), model=KumoTabular())
+    assert len(result.items) == 2
+    assert len(endpoint.calls) == 1
 
 
 def test_tabular_refuses_a_relational_request_before_sending_it():
-    request = a_relational_request()
+    from test_tabular_direct_core import Endpoint, client
+
+    endpoint = Endpoint()
     with pytest.raises(UnsupportedRequestError) as error:
-        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
+        client(endpoint).predict(a_relational_request(), model=KumoTabular())
     message = str(error.value)
     assert 'kumo-tabular' in message
     assert 'relationships' in message or 'multiple_tables' in message
+    assert endpoint.calls == []
 
 
-def test_relational_accepts_the_same_relational_request():
-    check_request_against_model(
-        a_relational_request(), KUMO_RELATIONAL, ('prediction',)
+def test_relational_accepts_a_materialized_relational_request():
+    from test_tabular_direct_core import Endpoint, client
+
+    schema = a_relational_request().schema
+    request = PredictiveQuery(
+        'PREDICT instance.churn FOR EACH instance.row_id',
+        schema,
+    ).materialize(
+        indices=[0, 1], model=KumoRelational(), num_context_samples=10
     )
+    table = request.payloads[0]['predict']['instance_table']
+    identity = table['columns'].index('instance_id')
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-relational',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [
+                {
+                    'row_index': i,
+                    'id': str(row[identity]),
+                    'prediction': float(i),
+                }
+                for i, row in enumerate(table['rows'])
+            ],
+        }
+    )
+    assert (
+        len(client(endpoint).predict(request, model=KumoRelational()).items)
+        == 2
+    )
+    assert len(endpoint.calls) == 1
 
 
 def test_related_frames_are_refused_where_they_are_offered():
@@ -169,33 +199,49 @@ def test_related_frames_are_refused_where_they_are_offered():
 
 
 def test_a_task_kind_the_model_does_not_serve_is_refused():
+    from test_tabular_direct_core import Endpoint, client
+
     request = simple_request(task='binary_classification')
+    endpoint = Endpoint()
     with pytest.raises(UnsupportedRequestError) as error:
-        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
-    # Tabular takes only the coarse kind and decides binary itself.
+        client(endpoint).predict(request, model=KumoTabular())
     assert 'binary_classification' in str(error.value)
-    check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
+    assert endpoint.calls == []
+    assert (
+        'binary_classification'
+        in client(endpoint).capabilities(KumoRelational()).tasks
+    )
 
 
 def test_an_output_field_the_model_cannot_produce_is_refused_by_name():
-    request = simple_request()
+    from test_tabular_direct_core import Endpoint, client
+
+    endpoint = Endpoint()
     with pytest.raises(UnsupportedRequestError) as error:
-        check_request_against_model(
-            request, KUMO_TABULAR, ('prediction', 'explanation')
+        client(endpoint).predict(
+            simple_request(),
+            model=KumoTabular(),
+            outputs=('prediction', 'explanation'),
         )
     message = str(error.value)
     assert 'explanation' in message
     assert 'probabilities' in message
+    assert endpoint.calls == []
 
 
-def test_the_default_outputs_follow_the_task_kind():
-    adapter = TabularAdapter()
-    assert adapter.default_output(simple_request()) == (
-        'prediction',
-        'probabilities',
-    )
-    regression = simple_request(task='regression')
-    assert adapter.default_output(regression) == ('prediction',)
+@pytest.mark.parametrize(
+    ('task', 'fields'),
+    [
+        ('classification', ['prediction', 'probabilities']),
+        ('regression', ['prediction']),
+    ],
+)
+def test_the_default_outputs_follow_the_task_kind(task, fields):
+    from test_tabular_direct_core import Endpoint, client
+
+    endpoint = Endpoint()
+    client(endpoint).predict(simple_request(task=task), model=KumoTabular())
+    assert endpoint.calls[0]['output']['fields'] == fields
 
 
 def test_an_unknown_model_id_names_the_contract_change_it_would_need():

@@ -73,14 +73,9 @@ imported by ``contract/tests/test_t132d_empty_null_vectors.py``, so
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
-import platform
 import re
-import subprocess
-import sys
-import tempfile
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -88,7 +83,6 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'contract/empty-null-vectors.json'
 TEMPLATE = ROOT / 'contract/cases/s1/null.feature-all-null.json'
-POLICY = ROOT / 'contract/compare-policy.yaml'
 RUNNER = ROOT / 'contract/runners/run_python.py'
 FORMAT = 'sdm-empty-null-vectors/1'
 #: How a register entry names the vectors it covers, in its ``refs``: this
@@ -596,131 +590,14 @@ def core_source(from_source: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def core_routes(vector: dict[str, Any]) -> list[str]:
-    r"""Every DuckDB route of the three public calls the vector makes, as
-    the candidate's routing names them: ``Schema.from_source``'s with
-    tables named where the vector names them (T1.24), with every table
-    otherwise; ``materialize``'s and ``predict``'s."""
-    from sdm_client import _routing
-
-    named = bool((vector.get('from_source') or {}).get('tables'))
-    return list(
-        (
-            _routing.FROM_SOURCE_DUCKDB_TABLES
-            if named
-            else _routing.FROM_SOURCE_DUCKDB
-        )
-        + _routing.MATERIALIZE_DUCKDB
-        + _routing.PREDICT_DUCKDB
-    )
-
-
-def case_for(vector: dict[str, Any], core: bool = False) -> dict[str, Any]:
-    r"""The vector as a case: ``null.feature-all-null``'s, its setup,
-    question, entities and tables the vector's; with ``core``, forced onto
-    the core's routes (``core_routes``), and otherwise on none (the
-    runner's own choice, as the reference has)."""
-    template = json.loads(TEMPLATE.read_text(encoding='utf-8'))
-    case = copy.deepcopy(template)
-    case['id'] = CASE_PREFIX + vector['id']
-    case['status'] = 'diagnostic'
-    case['routes'] = core_routes(vector) if core else []
-    case['cells'] = []
-    case['input']['setup'] = list(vector['setup'])
-    if not case['input']['setup']:
-        del case['input']['setup']
-    case['input']['pql'] = vector.get('pql', QUESTION)
-    indices = list(vector.get('indices', INDICES))
-    case['input']['materialize']['indices'] = indices
-    case['core']['describe_source']['source'] = core_source(
-        vector.get('from_source')
-    )
-    if 'from_source' in vector:
-        case['input']['from_source'] = copy.deepcopy(vector['from_source'])
-    if indices:
-        case['core']['materialize']['indices'] = core_indices(indices)
-    else:
-        # The case format's core input holds at least one entity: an empty
-        # list is carried to the core by the public call alone.
-        del case['core']['materialize']
-        del case['core']['predict']
-    case['expect'] = {'outcome': 'success', 'stage': 'predict'}
-    case['why'] = f'T1.32d vector {vector["id"]}'
-    case['source'] = 'contract/tools/empty_null_record.py'
-    case.pop('register', None)
-    return case
-
-
-def run(
-    mode: str,
-    vectors: list[dict[str, Any]],
-    directory: Path,
-    *,
-    core: bool = False,
-    reference: Path | None = None,
-    capture: bool = True,
-) -> dict[str, dict[str, Any]]:
-    r"""``vectors`` as cases through ``run_python.py --mode mode``, in this
-    interpreter, from ``directory``, forced onto the core with ``core``:
-    each observation by vector id."""
-    cases = directory / 'cases'
-    cases.mkdir(parents=True, exist_ok=True)
-    for vector in vectors:
-        case = case_for(vector, core)
-        (cases / f'{case["id"]}.json').write_text(
-            json.dumps(case, indent=1), encoding='utf-8'
-        )
-    out = directory / f'{mode}{"" if capture else "-off"}.jsonl'
-    command = [sys.executable, '-I', str(RUNNER), '--mode', mode]
-    if reference is not None:
-        command += ['--reference', str(reference)]
-    if not capture:
-        command.append('--no-capture')
-    command += ['--out', str(out), str(cases)]
-    done = subprocess.run(
-        command, capture_output=True, text=True, cwd=ROOT, check=False
-    )
-    if done.returncode != 0:
-        raise RuntimeError(f'{mode} run failed:\n{done.stdout}\n{done.stderr}')
-    observed = {}
-    for line in out.read_text(encoding='utf-8').splitlines():
-        observation = json.loads(line)
-        observed[observation['case'][len(CASE_PREFIX) :]] = observation
-    return observed
-
-
 # --- the public answer ---------------------------------------------------------
 
 _INTEGER = re.compile(r'-?[0-9]+')
 
 
 def exclusions() -> list[list[str]]:
-    r"""The paths the ``payload`` rule of ``contract/compare-policy.yaml``
-    leaves out of a payload (each value masked, its presence and type
-    kept), read from the policy's text."""
-    paths: list[list[str]] = []
-    block: dict[str, str] = {}
-    lines = POLICY.read_text(encoding='utf-8').splitlines()
-    inside = False
-    for line in lines:
-        if line.startswith('exclusions:'):
-            inside = True
-            continue
-        if inside and line and not line.startswith((' ', '#')):
-            break
-        if not inside:
-            continue
-        stripped = line.strip()
-        if stripped.startswith('- id:'):
-            block = {}
-        if ':' in stripped and not stripped.startswith('#'):
-            key, _, value = stripped.lstrip('- ').partition(':')
-            block[key.strip()] = value.strip()
-            if key.strip() == 'path' and block.get('in') == 'payload':
-                paths.append(
-                    [p.strip() for p in value.strip().strip('[]').split(',')]
-                )
-    return paths
+    """Mask only the random request ID value, preserving its type."""
+    return [['metadata', 'request_id']]
 
 
 def _masked(value: Any, path: list[str]) -> Any:
@@ -933,76 +810,3 @@ def duckdb_holds(vector: dict[str, Any]) -> dict[str, Any]:
         return {'rows': rows, 'f_type': f_type}
     finally:
         connection.close()
-
-
-def main() -> int:
-    import duckdb
-    import numpy as np
-    import pandas as pd
-    import pyarrow as pa
-
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    with tempfile.TemporaryDirectory(prefix='t132d-record-') as tmp:
-        observed = run('python-ref', VECTORS, Path(tmp), reference=reference)
-    vectors = []
-    for vector in VECTORS:
-        answer = project(observed[vector['id']], vector)
-        why = register(answer)
-        entry = {key: copy.deepcopy(value) for key, value in vector.items()}
-        entry['duckdb'] = duckdb_holds(vector)
-        entry['reference'] = answer
-        entry['register'] = {'required': bool(why), 'why': why}
-        vectors.append(entry)
-        outcome = answer['outcome']
-        print(
-            vector['id'],
-            outcome['result'],
-            outcome['stage'],
-            outcome['error'] or '',
-            outcome['code'] or '',
-            answer['warnings'],
-            '(register)' if why else '',
-            file=sys.stderr,
-        )
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/empty_null_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'environment': {
-            'python': platform.python_version(),
-            'pandas': pd.__version__,
-            'pyarrow': pa.__version__,
-            'numpy': np.__version__,
-            'duckdb': duckdb.__version__,
-        },
-        'template': 'contract/cases/s1/null.feature-all-null.json',
-        'question': QUESTION,
-        'indices': INDICES,
-        'register_ref': REGISTER_REF,
-        'payload_exclusions': exclusions(),
-        'vectors': vectors,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    required = sum(v['register']['required'] for v in vectors)
-    print(
-        f'{len(vectors)} vectors written to {OUT.relative_to(ROOT)}, '
-        f'{required} marked register entry required',
-        file=sys.stderr,
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

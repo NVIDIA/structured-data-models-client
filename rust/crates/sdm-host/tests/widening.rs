@@ -326,18 +326,32 @@ fn a_batch_past_the_offset_capacity_splits_between_rows() {
 }
 
 #[test]
-fn a_single_value_past_the_offset_capacity_is_refused_by_name() {
-    let column: ArrayRef = Arc::new(LargeStringArray::from(vec!["ok", "far too long"]));
-    let err = admit_with_capacity(&data(column), 9).unwrap_err();
+fn a_large_string_past_small_offset_capacity_keeps_its_values_and_width() {
+    let column: ArrayRef = Arc::new(LargeStringArray::from(vec![
+        Some("ok"),
+        None,
+        Some("far too long"),
+    ]));
+    let out = admit_with_capacity(&data(column), 9).unwrap();
+    assert_eq!(out.schema.field(0).data_type(), &DataType::LargeUtf8);
+    let values: Vec<Option<&str>> = out
+        .batches
+        .iter()
+        .flat_map(|batch| batch.column(0).as_string::<i64>().iter())
+        .collect();
+    assert_eq!(values, vec![Some("ok"), None, Some("far too long")]);
+}
+
+#[test]
+fn a_view_value_past_the_offset_capacity_is_refused_by_name() {
+    let mut view = StringViewBuilder::new();
+    view.append_value("far too long");
+    let err = admit_with_capacity(&data(Arc::new(view.finish())), 9).unwrap_err();
     assert_eq!(
         (err.kind, err.code),
         (ErrorKind::Unsupported, ErrorCode::ValueOutOfRange)
     );
     assert_eq!(text(&err, "column"), "c");
-    assert_eq!(text(&err, "arrow_type"), DataType::LargeUtf8.to_string());
-    let mut view = StringViewBuilder::new();
-    view.append_value("far too long");
-    let err = admit_with_capacity(&data(Arc::new(view.finish())), 9).unwrap_err();
     assert_eq!(text(&err, "arrow_type"), DataType::Utf8View.to_string());
 }
 

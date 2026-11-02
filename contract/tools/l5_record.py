@@ -37,8 +37,6 @@ Each run writes its part of the file and keeps the other's:
 from __future__ import annotations
 
 import importlib.util
-import json
-import platform
 import sys
 import tempfile
 from pathlib import Path
@@ -201,60 +199,3 @@ def drivers() -> dict[str, dict[str, str]]:
     finally:
         duck.close()
     return out
-
-
-def main() -> int:
-    import pandas as pd
-    import sdm_client
-
-    runner = _module('run_python', ROOT / 'contract/runners/run_python.py')
-    cell = runner._cell(runner._versions())
-    reference = Path(sdm_client.__file__).resolve().is_relative_to(REFERENCE)
-    who, wanted = (
-        ('python-ref', 'ref-pandas3')
-        if reference
-        else ('python-old', 'dbr17-pandas2')
-    )
-    if cell != wanted:
-        print(f'{who} records in {wanted}, not {cell}', file=sys.stderr)
-        return 1
-    document: dict[str, Any] = (
-        json.loads(OUT.read_text(encoding='utf-8'))
-        if OUT.is_file()
-        else {
-            'format': FORMAT,
-            'recorded_by': 'contract/tools/l5_record.py',
-            'presentation': {},
-            'drivers': {},
-            'by': {},
-        }
-    )
-    major = pd.__version__.split('.')[0]
-    document['presentation'][major] = presentation()
-    document['drivers'][cell] = drivers()
-    document['by'][cell] = {
-        'runner': who,
-        'python': platform.python_version(),
-        'pandas': pd.__version__,
-    }
-    if reference:
-        import subprocess
-
-        document['reference'] = subprocess.run(
-            ['git', '-C', str(REFERENCE), 'rev-parse', 'HEAD'],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    OUT.write_text(
-        json.dumps(document, indent=1, sort_keys=True) + '\n', encoding='utf-8'
-    )
-    print(
-        f'{who} in {cell}: presentation[{major}] and drivers written',
-        file=sys.stderr,
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

@@ -20,10 +20,6 @@ route beside the pinned Postgres service.
   the core then makes of the column is its own: the reference fails such a
   column unnamed, ``unsupported data type``.)
 
-Gating: ``contract/tests/t214b-pending.json``'s ``pending`` names, as
-``pg-regress:<name>``, the tests that failed when written; each must still
-fail (strict). Where ``SDM_POSTGRES_TEST_DSN`` names no server and
-``SDM_REQUIRE_POSTGRES`` is not set, there is nothing to hold.
 """
 
 from __future__ import annotations
@@ -40,10 +36,9 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
-from sdm_client import Schema, StructuredDataError, _routing
+from sdm_client import Schema, StructuredDataError
 
 ROOT = Path(__file__).resolve().parents[3]
-PENDING = ROOT / 'contract/tests/t214b-pending.json'
 PREFIX = 'pg-regress:'
 NAMES = ('numeric-names-the-column', 'json-array-elements')
 #: Text no number reads, which an error must never show.
@@ -58,30 +53,6 @@ JSON_ROWS = [
 ]
 
 
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert name in gating['authored'], f'{name} is not authored'
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t214b-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    mine = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert mine == {f'{PREFIX}{name}' for name in NAMES}
-
-
 @pytest.fixture
 def connection(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
@@ -93,12 +64,6 @@ def connection(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         return
     import psycopg
 
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(
-            _routing.FROM_SOURCE_POSTGRES_TABLES + _routing.MATERIALIZE_POSTGRES
-        ),
-    )
     schema = f't214b_{uuid.uuid4().hex[:12]}'
     with psycopg.connect(dsn) as made:
         made.execute(f'CREATE SCHEMA {schema}')
@@ -196,7 +161,7 @@ def test_a_declared_numeric_s_refusal_names_its_column_never_its_cell(
             'nf'
         ), (str(error), error.details)
 
-    held(f'{PREFIX}numeric-names-the-column', check)
+    check()
 
 
 def test_a_json_array_s_elements_reach_the_core_as_json_text(
@@ -250,4 +215,4 @@ def test_a_json_array_s_elements_reach_the_core_as_json_text(
                         assert isinstance(text, str), (key, text)
                         assert json.loads(text) == value, (key, text, value)
 
-    held(f'{PREFIX}json-array-elements', check)
+    check()

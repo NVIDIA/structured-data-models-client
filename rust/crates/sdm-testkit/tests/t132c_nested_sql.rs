@@ -2,76 +2,19 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T1.32c's SQL exits for the nested family on `rust-host`, held from
-//! outside the implementation (the package's independent test author).
-//! Each `nested.*` case of `contract/cases/s1` runs through this host, its
-//! statements executed on DuckDB, through `predict` against the scripted
-//! endpoint:
-//!
-//! - Exit "the DuckDB SQL goldens for the family's own statements, executed
-//!   on DuckDB in CI, as extensions of `sdm-data`'s `tests/duckdb_catalog.rs`
-//!   text pins" (E53(c), T1.30 folded in), and "a seeded SQL change without
-//!   a golden update and an entry fails": every statement the family runs
-//!   (`from_source` and `materialize`) must be pinned, verbatim, as a
-//!   string literal in `rust/crates/sdm-data/tests/*.rs`; a statement whose
-//!   text changed without its pin changing is unpinned and fails. The check
-//!   is shown to fail on a seeded change, on no pins and on no statements.
-//! - Exit "statement counts equal the reference's or are registered,
-//!   cross-checked against DuckDB's query log": per public call, the
-//!   number of statements this host's provider ran equals the `python-ref`
-//!   observation's (`contract/reference/<commit>.jsonl`), unless an
-//!   approved register entry other than P1B-1 lists the case in its
-//!   `cases` (a proposed one excuses nothing: the case stays pending until
-//!   the owner approves it); and the provider's record is complete, its
-//!   count equal to DuckDB's query log with no logged statement differing.
-//! - Exit "`python-core` and `rust-host` agree on `core` fields for the
-//!   family", this host's half: each case's outcome is the `python-ref`
-//!   observation's (`success`, or the refusal's code), or an approved
-//!   entry other than P1B-1 lists the case. The core's
-//!   `UNSUPPORTED_REQUEST` is no exception: it passes where an approved
-//!   entry lists the case (P1B-10's `nested.map` and `nested.struct`).
-//!   `contract/tests/test_t132c_nested_family.py` holds `python-core` the
-//!   same way; the gate's `core` rule compares the two.
-//!
-//! Gating: the tests named in `contract/tests/t132c-pending.json`'s
-//! `pending["exits"]` (as `rust:<test name>`) failed when written, and
-//! must still fail (strict); the implementer removes each as it passes.
+//! Executed SQL for this type family must remain covered by native goldens.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use sdm_testkit::bases;
 use sdm_testkit::case::{self, Case};
-use sdm_testkit::host::{self, Answer, Observed};
-use serde_json::Value;
+use sdm_testkit::host::{self, Observed};
 
 const STAGES: [&str; 2] = ["from_source", "materialize"];
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-fn pending(test: &str) -> bool {
-    let text = std::fs::read_to_string(root().join("contract/tests/t132c-pending.json")).unwrap();
-    let gating: Value = serde_json::from_str(&text).unwrap();
-    gating["pending"]["exits"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|t| t == &Value::from(format!("rust:{test}")))
-}
-
-/// Runs `check`; a pending test must fail, any other must pass.
-fn gated(test: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome, pending(test)) {
-        (Ok(()), true) => panic!(
-            "{test} passes now: take rust:{test} out of \
-             contract/tests/t132c-pending.json's pending[\"exits\"]"
-        ),
-        (Err(failure), false) => std::panic::resume_unwind(failure),
-        _ => {}
-    }
 }
 
 fn nested_cases() -> (Vec<Case>, bases::Bases) {
@@ -115,97 +58,7 @@ fn statements(seen: &Observed) -> BTreeMap<String, Vec<String>> {
     out
 }
 
-/// The python-ref observations, by case.
-fn reference() -> BTreeMap<String, Value> {
-    let env = std::fs::read_to_string(root().join("contract/reference-env.txt")).unwrap();
-    let commit = env
-        .lines()
-        .find_map(|l| l.strip_prefix("reference: "))
-        .unwrap()
-        .trim()
-        .to_owned();
-    let text =
-        std::fs::read_to_string(root().join(format!("contract/reference/{commit}.jsonl"))).unwrap();
-    text.lines()
-        .map(|line| {
-            let o: Value = serde_json::from_str(line).unwrap();
-            (o["case"].as_str().unwrap().to_owned(), o)
-        })
-        .collect()
-}
-
-/// A list field of each approved register entry (a proposed one excuses
-/// nothing), read from the YAML's text entry by entry, in its flow or
-/// block form.
-fn register_lists(field: &str) -> Vec<(String, Vec<String>)> {
-    let text = std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
-    let head = format!("  {field}:");
-    let mut out = Vec::new();
-    for block in text.split("\n- id: ").skip(1) {
-        let id = block.lines().next().unwrap_or_default().trim().to_owned();
-        let status = block
-            .lines()
-            .find_map(|l| l.strip_prefix("  status: "))
-            .unwrap_or_default()
-            .trim();
-        if status != "approved" {
-            continue;
-        }
-        let lines: Vec<&str> = block.lines().collect();
-        let Some(at) = lines.iter().position(|l| l.starts_with(&head)) else {
-            continue;
-        };
-        let mut items = Vec::new();
-        let rest = lines[at][head.len()..].trim();
-        if let Some(flow) = rest.strip_prefix('[') {
-            let mut flow = flow.to_owned();
-            let mut next = at + 1;
-            while !flow.contains(']') && next < lines.len() {
-                flow.push(' ');
-                flow.push_str(lines[next].trim());
-                next += 1;
-            }
-            let inner = flow.split(']').next().unwrap_or_default();
-            items.extend(inner.split(',').map(|r| r.trim().to_owned()));
-        } else {
-            for line in &lines[at + 1..] {
-                match line.strip_prefix("  - ") {
-                    Some(item) => items.push(item.trim().to_owned()),
-                    None => break,
-                }
-            }
-        }
-        let items = items
-            .into_iter()
-            .map(|i| i.trim_matches(|c| c == '\'' || c == '"').to_owned())
-            .filter(|i| !i.is_empty())
-            .collect();
-        out.push((id, items));
-    }
-    out
-}
-
-/// The umbrellas, the placeholder P1B-1 among them: approved by the owner as
-/// E92's Phase 2 class, they excuse no case, even one they list (T1.33).
-const UMBRELLAS: [&str; 4] = ["P1B-1", "P1B-2", "P1B-3", "P1B-4"];
-
-/// The approved entry that lists the case in its `cases`.
-/// P1B-1 does not count: it is the inventory's placeholder, whose own notes
-/// say each case whose outcome changes gets an entry of its own.
-fn registered_case(id: &str) -> Option<String> {
-    register_lists("cases")
-        .into_iter()
-        .find(|(entry, cases)| {
-            !UMBRELLAS.contains(&entry.as_str()) && cases.iter().any(|c| c == id)
-        })
-        .map(|(entry, _)| entry)
-}
-
-// --- the goldens --------------------------------------------------------------
-
-/// Every string literal of a Rust source, its escapes read: `"..."` (with
-/// `\n`, `\t`, `\\`, `\"`, `\'`, `\0` and a line continuation) and raw
-/// `r"..."`, `r#"..."#`; comments and character literals skipped.
+/// Read Rust literals used as exact SQL expectations.
 fn literals(source: &str) -> Vec<String> {
     let s: Vec<char> = source.chars().collect();
     let mut out = Vec::new();
@@ -362,90 +215,17 @@ fn a_seeded_sql_change_without_a_golden_update_fails() {
 
 #[test]
 fn every_statement_the_nested_family_runs_is_pinned_in_sdm_data_s_tests() {
-    gated(
-        "every_statement_the_nested_family_runs_is_pinned_in_sdm_data_s_tests",
-        || {
-            let pinned = pins(&root().join("rust/crates/sdm-data/tests"));
-            let ran = family_statements();
-            let missing: BTreeSet<String> = unpinned(&ran, &pinned)
-                .into_iter()
-                .map(|m| m.split_once(": ").map_or(m.clone(), |(_, s)| s.to_owned()))
-                .collect();
-            assert!(
-                missing.is_empty(),
-                "{} statements of the nested family have no golden pin in \
+    let pinned = pins(&root().join("rust/crates/sdm-data/tests"));
+    let ran = family_statements();
+    let missing: BTreeSet<String> = unpinned(&ran, &pinned)
+        .into_iter()
+        .map(|m| m.split_once(": ").map_or(m.clone(), |(_, s)| s.to_owned()))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "{} statements of the nested family have no golden pin in \
                  rust/crates/sdm-data/tests:\n{}",
-                missing.len(),
-                missing.into_iter().collect::<Vec<_>>().join("\n---\n")
-            );
-        },
+        missing.len(),
+        missing.into_iter().collect::<Vec<_>>().join("\n---\n")
     );
-}
-
-#[test]
-fn statement_counts_equal_the_reference_s_or_are_registered() {
-    gated(
-        "statement_counts_equal_the_reference_s_or_are_registered",
-        || {
-            let reference = reference();
-            let mut problems = Vec::new();
-            for (case, seen) in observed() {
-                // Complete: the provider's record against DuckDB's log.
-                let driver = seen.driver.as_ref().unwrap();
-                let recorded = driver["capture"]["statements"].as_array().unwrap().len();
-                let logged = &driver["query_log"];
-                if logged["statements"].as_u64() != Some(recorded as u64)
-                    || logged["differing"].as_array().is_none_or(|d| !d.is_empty())
-                {
-                    problems.push(format!("{}: the record is not DuckDB's log", case.id));
-                }
-                let ours = statements(&seen);
-                let theirs = &reference[&case.id]["driver"]["capture"]["statements"];
-                for stage in STAGES {
-                    let mine = ours.get(stage).map_or(0, Vec::len);
-                    let want = theirs
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .filter(|s| s["stage"] == stage)
-                        .count();
-                    if mine != want && registered_case(&case.id).is_none() {
-                        problems.push(format!(
-                            "{} {stage}: {mine} statements, the reference {want}",
-                            case.id
-                        ));
-                    }
-                }
-            }
-            assert!(problems.is_empty(), "{}", problems.join("\n"));
-        },
-    );
-}
-
-#[test]
-fn rust_host_answers_each_nested_case_as_python_ref() {
-    gated("rust_host_answers_each_nested_case_as_python_ref", || {
-        let reference = reference();
-        let mut problems = Vec::new();
-        for (case, seen) in observed() {
-            let theirs = &reference[&case.id]["outcome"];
-            let (result, code) = match &seen.answer {
-                Answer::Predicted(_) => ("success", None),
-                Answer::Error { code, .. } => ("refusal", Some(code.clone())),
-                other => {
-                    problems.push(format!("{}: no answer of predict: {other:?}", case.id));
-                    continue;
-                }
-            };
-            let want_result = theirs["result"].as_str().unwrap();
-            let want_code = theirs["code"].as_str().map(str::to_owned);
-            if (result != want_result || code != want_code) && registered_case(&case.id).is_none() {
-                problems.push(format!(
-                    "{}: {result} {code:?}, python-ref {want_result} {want_code:?}",
-                    case.id
-                ));
-            }
-        }
-        assert!(problems.is_empty(), "{}", problems.join("\n"));
-    });
 }

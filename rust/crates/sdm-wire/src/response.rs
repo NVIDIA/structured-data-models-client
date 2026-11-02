@@ -9,7 +9,7 @@
 //! `metadata`, and each item's `id`, `row_index` and `forecast_step`, each
 //! required and typed as the bindings require it, checked in their order.
 //! For those fields a response the bindings refuse is refused here, and
-//! one they read is read (`contract/response-vectors.json` holds the two
+//! one they read is read (`tests/fixtures/response-vectors.json` holds the two
 //! together). A refusal names the field and why, never a value.
 //!
 //! From T1.28b an item's `probabilities` is read as the bindings'

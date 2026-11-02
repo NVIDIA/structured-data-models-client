@@ -41,36 +41,19 @@ from sdm_client import (
     Request,
     Schema,
     StructuredDataError,
-    _routing,
 )
 from sdm_client._rust import providers as _rust_providers
 
 ROOT = Path(__file__).resolve().parents[3]
-CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 ANCHOR = pd.Timestamp('2024-03-01')
 LOSSLESS = 'SET arrow_lossless_conversion = true'
 WIDE = '1000000000000000000000000000000'
 
 
-@pytest.fixture(autouse=True)
-def _core(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-
-
 def _shop() -> list[str]:
-    r"""The ``shop`` base of ``contract/bases.yaml``: the plain list items
-    under its name."""
-    lines = (
-        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8').splitlines()
-    )
-    start = lines.index('  shop:') + 1
-    statements = []
-    for line in lines[start:]:
-        if not line.startswith('  - '):
-            break
-        statements.append(line[len('  - ') :])
-    return statements
+    fixture = Path(__file__).with_name('data') / 'shop.json'
+    return json.loads(fixture.read_text())['statements']
 
 
 def _type_set_witness(row_id: str) -> list[str]:

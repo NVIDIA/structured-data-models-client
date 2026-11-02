@@ -35,8 +35,6 @@ from typing import Any
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
-from sdm_client.errors import StructuredDataError
-
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
 _SCALAR_FIELDS = ('row_index', 'id', 'forecast_step', 'prediction')
@@ -258,67 +256,9 @@ class PredictionResult:
                 request was sent with nothing to score, or if the parts do
                 not describe one request.
         """
-        from sdm_client import _routing
+        from sdm_client._rust.result_merge import merge
 
-        if _routing.route(('result.merge/merge/any',)) == 'core':
-            from sdm_client._rust.result_merge import merge
-
-            return merge(cls, parts)
-        if not parts:
-            raise StructuredDataError(
-                'no parts to merge', code='INTERNAL_ERROR'
-            )
-        if len(parts) == 1:
-            return parts[0]
-        first = parts[0]
-        models = {part.model for part in parts}
-        if len(models) > 1:
-            raise StructuredDataError(
-                f'cannot merge results from different models: {sorted(models)}',
-                code='INTERNAL_ERROR',
-            )
-        items = [item for part in parts for item in part.items]
-        metadata = dict(first.metadata)
-        metadata['batches'] = len(parts)
-        # Each call has its own id in the endpoint's logs, and only the first
-        # would otherwise survive. That is the one you do not have when a
-        # later batch is the one that misbehaved.
-        metadata['batch_request_ids'] = [part.request_id for part in parts]
-        explanation = next(
-            (part.explanation for part in parts if part.explanation), None
-        )
-        # Every part answers one slice of the same request, so they were asked
-        # for the same fields. If they were not, the merged result cannot
-        # honestly claim either set, and an empty one would take its shape from
-        # whichever part happened to be first.
-        shapes = {part.outputs for part in parts}
-        if len(shapes) > 1:
-            raise StructuredDataError(
-                f'these parts were asked for different outputs '
-                f'({sorted(shapes)}), so they are not slices of one request',
-                code='INTERNAL_ERROR',
-            )
-        # Named when any part left it out. Which rows ranked without it is
-        # not recorded, so the union is the most that can be said.
-        unscored: list[Any] = []
-        for part in parts:
-            unscored += [
-                candidate
-                for candidate in part.unscored_candidates
-                if candidate not in unscored
-            ]
-        merged = cls(
-            model=first.model,
-            request_id=first.request_id,
-            items=items,
-            metadata=metadata,
-            explanation=explanation,
-            outputs=first.outputs,
-            unscored_candidates=unscored,
-        )
-        merged._names_its_rows = all(part._names_its_rows for part in parts)
-        merged._names_its_step = any(part._names_its_step for part in parts)
-        return merged
+        return merge(cls, parts)
 
     def __len__(self) -> int:
         return len(self.items)

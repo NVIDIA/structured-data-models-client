@@ -32,14 +32,6 @@ call scores, the result's rows, its explanation, each item's metadata, the
 warnings the exits name, a refusal's message and details), which
 ``python-core`` is observed against by the same code.
 
-Gating: ``t213-pending.json``'s ``pending`` names, as ``py:<case key>``
-(the line), ``py-carried:<case key>`` (the vectors) and ``py-named:<case
-key>`` (a refusal's words), the keys whose test failed when written. Each
-must still fail (strict); once one passes it fails, naming itself, until
-it is taken out. ``pending`` stays within ``authored``. Where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
-not set, the Postgres keys have nothing to hold and return without
-asserting; with it set, a missing server fails (H26).
 """
 
 from __future__ import annotations
@@ -62,9 +54,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/tools/option_record.py'
-ENDPOINT = ROOT / 'contract/runners/scripted_endpoint.py'
+ENDPOINT = ROOT / 'tests/support/scripted_endpoint.py'
 CASES = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t213-pending.json')
+
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
 #: The entity filter cases, by id: the filter's condition, as the
@@ -249,38 +241,6 @@ def key(case_id: str, database: str) -> str:
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 NAMED_KEYS = tuple(key(c, d) for d in DATABASES for c in NAMED)
-
-
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t213-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    ``authored`` is every case's key on each database on python-core, line
-    and vectors, each refusal's words there, and on DuckDB and SQLite on
-    rust-host (its Postgres pass replays python-core's fetches, which
-    ``cross-host (postgres)`` holds)."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    assert set(gating['authored']) == (
-        {f'py:{k}' for k in KEYS_ALL}
-        | {f'py-carried:{k}' for k in KEYS_ALL}
-        | {f'py-named:{k}' for k in NAMED_KEYS}
-        | {f'rust:{k}' for k in KEYS_ALL if not k.endswith('@postgres')}
-    )
 
 
 def test_every_option_case_is_named_here() -> None:
@@ -706,7 +666,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         found = differences(want['public']['result'], line['public']['result'])
         assert not found, f'{case_key}: the result differs: ' + '; '.join(found)
 
-    held(f'py:{case_key}', check)
+    check()
 
 
 @functools.cache
@@ -714,7 +674,7 @@ def core_carried(case_key: str) -> dict[str, Any]:
     r"""python-core's observation of the case, by the recorder's code."""
     case_id, _, database = case_key.partition('@')
     case, _ = cases()[case_id]
-    return recorder().observe(case, database or 'duckdb', core=True)
+    return recorder().observe(case, database or 'duckdb')
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
@@ -761,7 +721,7 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
             f'{want["warnings"]}'
         )
 
-    held(f'py-carried:{case_key}', check)
+    check()
 
 
 @pytest.mark.parametrize('case_key', NAMED_KEYS)
@@ -790,4 +750,4 @@ def test_python_core_names_what_the_reference_names(case_key: str) -> None:
             f'{got["message"]!r:.300}'
         )
 
-    held(f'py-named:{case_key}', check)
+    check()

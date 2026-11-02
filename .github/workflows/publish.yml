@@ -32,8 +32,8 @@
 # `build` has `contents: read` to check the tree out and `actions: read` to ask
 # whether CI passed, and nothing more, so a compromised build dependency cannot
 # publish anything itself. It can still decide what gets published, because it
-# is what produces the distributions, and `engine-wheels` and `assemble` can
-# too, for the same reason; both hold `contents: read` alone. `release` holds
+# is what produces the distributions, and `assemble` can
+# too, for the same reason; it holds `contents: read` alone. `release` holds
 # `contents: write` to create the Release and attach to it, and is the only job
 # behind the protected environment.
 name: publish
@@ -103,6 +103,7 @@ jobs:
       # gate the upload itself. This step makes the common mistake
       # impossible; those settings make the deliberate one hard.
       - name: The tag is on main, and main has passed CI
+        id: candidate-ci
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -122,126 +123,89 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_SHA is on main and its CI passed"
+          run_id=$(gh run list --workflow CI --commit "$GITHUB_SHA" \
+            --branch main --event push --status success \
+            --json databaseId --jq 'first | .databaseId')
+          test -n "$run_id" && test "$run_id" != null
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
 
-      - name: Build the four pure-Python distributions
+      - name: Build the API and connector distributions
         run: |
           python -m pip install --upgrade pip build
-          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors; do
+          for package in structured-data-models-api structured-data-models-connectors; do
             ( cd "packages/$package" && python -m build --outdir "$GITHUB_WORKSPACE/dist" . )
           done
 
-      # The engine's wheels cannot be built here: each is native to the
-      # machine that builds it, and this job is one Linux machine.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: pure-distributions
-          path: dist/
-
-  # The same matrix CI runs, so a tag uploads the set a pull request proved.
-  # Native on every row, which retires the QEMU step that built aarch64 here
-  # and the privileged container image it pulled into the release path.
-  #
-  # The engine is not optional. `structured-data-models-client[relational]` pins it by exact
-  # version, so publishing the other four without it makes that extra
-  # uninstallable for the release it names.
-  engine-wheels:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: linux-x86_64
-            runner: ubuntu-24.04
-            archs: CIBW_ARCHS_LINUX=x86_64
-          - name: linux-aarch64
-            runner: ubuntu-24.04-arm
-            archs: CIBW_ARCHS_LINUX=aarch64
-          - name: macos-arm64
-            runner: macos-15
-            archs: CIBW_ARCHS_MACOS=arm64
-          # macos-13 was retired in December 2025. x86_64 macOS ends with the
-          # macOS 15 image in autumn 2027, and this row ends with it.
-          - name: macos-x86_64
-            runner: macos-15-intel
-            archs: CIBW_ARCHS_MACOS=x86_64
-          - name: windows-amd64
-            runner: windows-2022
-            archs: CIBW_ARCHS_WINDOWS=AMD64
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The engine pins its siblings by exact version, and at this point in a
-      # release those versions exist only as the artifact `build` uploaded.
-      # cibuildwheel's test environment resolves from PyPI unless told
-      # otherwise, so without this the smoke test cannot find them.
+      # Publish the production wheels from the successful CI run of this commit.
+      # Test-only artifacts are deliberately not selected.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: pure-distributions
-          path: _sibling_wheels
-
-      # Only Linux runs in a container, where the engine's
-      # `[tool.cibuildwheel.linux]` already names /project/_sibling_wheels.
-      - name: Point the wheel test environments at the sibling wheels
-        shell: bash
-        run: |
-          echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
-          case "${{ runner.os }}" in
-            Linux) ;;
-            # cibuildwheel layers its own `environment` over the host's, so a
-            # plain variable reaches the build and test environments without
-            # displacing what the engine's pyproject sets per platform.
-            *) echo "PIP_FIND_LINKS=${{ github.workspace }}/_sibling_wheels" >> "$GITHUB_ENV" ;;
-          esac
-
-
-      - uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel
+          path: native-x86_64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          package-dir: packages/structured-data-models-relational-engine
-          output-dir: wheelhouse
-
-      # A wheel built by the wrong compiler passes every other check here, so
-      # the evidence has to come from the wheel. MinGW's runtime travelling
-      # inside one means CMake found GCC where MSVC was intended. Every wheel
-      # is read, and an empty wheelhouse fails rather than reporting nothing
-      # found.
-      - name: No MinGW runtime rode along in a Windows wheel
-        if: runner.os == 'Windows'
-        shell: bash
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-aarch64
+          path: native-aarch64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-macos-aarch64
+          path: native-macos-aarch64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-macos-x86_64
+          path: native-macos-x86_64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-windows-x86_64
+          path: native-windows-x86_64
+      - name: Verify and assemble the production client wheels
         run: |
-          set -euo pipefail
-          shopt -s nullglob
-          wheels=(wheelhouse/*.whl)
-          if [ ${#wheels[@]} -eq 0 ]; then
-            echo "::error::the Windows row produced no wheel to check"
-            exit 1
-          fi
-          for wheel in "${wheels[@]}"; do
-            names=$(unzip -Z1 "$wheel")
-            if printf '%s\n' "$names" \
-              | grep -qiE "lib(gcc_s_seh-1|stdc\+\+-6|winpthread-1)[^/]*\.dll"; then
-              echo "::error::$(basename "$wheel") was built with MinGW, not MSVC"
-              printf '%s\n' "$names" | grep -iE "\.dll$"
-              exit 1
-            fi
-          done
-          echo "${#wheels[@]} Windows wheels, no MinGW runtime in any of them"
+          python scripts/rust_core/native_wheel.py --check-set native-x86_64 native-aarch64
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          platforms = {
+              'native-x86_64': 'manylinux_2_17_x86_64.manylinux2014_x86_64',
+              'native-aarch64': 'manylinux_2_17_aarch64.manylinux2014_aarch64',
+              'native-macos-aarch64': 'macosx_*_arm64',
+              'native-macos-x86_64': 'macosx_*_x86_64',
+              'native-windows-x86_64': 'win_amd64',
+          }
+          import fnmatch
+          for folder, platform in platforms.items():
+              wheels = list(pathlib.Path(folder).glob('*.whl'))
+              assert len(wheels) == 1, (folder, wheels)
+              wheel = wheels[0]
+              assert fnmatch.fnmatch(wheel.name, f'structured_data_models_client-*-cp310-abi3-{platform}.whl')
+              record = json.loads(wheel.with_name(wheel.name + '.json').read_text())
+              assert record['wheel'] == wheel.name
+              assert record['commit'] == os.environ['GITHUB_SHA']
+              assert record['tree_clean'] is True
+              assert record['features'] == [], 'test-only wheel cannot be released'
+              assert record['sha256'] == hashlib.sha256(wheel.read_bytes()).hexdigest()
+          PY
+          cp native-*/*.whl dist/
+          cp native-*/*.whl.json dist/
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: engine-wheels-${{ matrix.name }}
-          path: wheelhouse/
+          name: built-distributions
+          path: dist/
 
-  # Every distribution in one directory, checked as a set. Split out of `build`
-  # only because the engine's wheels now come from five machines; the steps
-  # below are the ones that used to run there, unchanged.
   assemble:
-    needs: [build, engine-wheels]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -253,16 +217,7 @@ jobs:
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: pure-distributions
-          path: dist
-
-      # Every engine row merged into the same directory. A pattern rather than
-      # one step per platform, so adding a row to the matrix above does not
-      # need a matching step here to be published.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: engine-wheels-*
-          merge-multiple: true
+          name: built-distributions
           path: dist
 
       # The tag is the release. If it does not name the version the packages
@@ -283,67 +238,17 @@ jobs:
           built = wheels + sdists
           print('\n'.join(built))
 
-          # All five, every time. The four pure-Python distributions and the
-          # engine are pinned to each other by exact version, so a release
-          # missing one is a release whose extras cannot resolve. Read off the
-          # tree rather than listed here, so adding or renaming one cannot
-          # leave this behind.
+          # Every maintained distribution is required.
           expected = {
               path.parent.name.replace('-', '_')
               for path in pathlib.Path('packages').glob('*/pyproject.toml')
           }
-          if len(expected) != 5:
-              sys.exit(f'expected 5 distributions, found {sorted(expected)}')
+          if len(expected) != 3:
+              sys.exit(f'expected 3 distributions, found {sorted(expected)}')
           present = {name.split('-')[0] for name in wheels}
           missing = expected - present
           if missing:
               sys.exit(f'refusing to publish without {sorted(missing)}')
-
-          # Naming the engine is not the same as building it everywhere. One
-          # wheel satisfies the check above, so a row of `engine-wheels` that
-          # produced a subset would publish an engine installable on fewer
-          # platforms than the release claims, and nothing downstream would
-          # notice. The interpreters are read from the engine's own
-          # `[tool.cibuildwheel] build`; the platforms are the matrix that
-          # built them.
-          import tomllib
-
-          engine = pathlib.Path(
-              'packages/structured-data-models-relational-engine/pyproject.toml'
-          )
-          selector = tomllib.loads(engine.read_text())['tool']['cibuildwheel']
-          interpreters = {
-              part.split('-')[0] for part in selector['build'].split()
-          }
-          platforms = {
-              'manylinux.*_x86_64',
-              'manylinux.*_aarch64',
-              'macosx_.*_arm64',
-              'macosx_.*_x86_64',
-              'win_amd64',
-          }
-          engine_wheels = [
-              name
-              for name in wheels
-              if name.startswith('structured_data_models_relational_engine-')
-          ]
-          absent = sorted(
-              f'{interpreter} {platform}'
-              for interpreter in interpreters
-              for platform in platforms
-              if not any(
-                  re.fullmatch(
-                      rf'.*-{interpreter}-{interpreter}-{platform}\.whl', name
-                  )
-                  for name in engine_wheels
-              )
-          )
-          if absent:
-              sys.exit(f'the engine wheel matrix is incomplete: {absent}')
-          print(
-              f'{len(engine_wheels)} engine wheels, '
-              f'{len(interpreters)} interpreters on {len(platforms)} platforms'
-          )
 
           # Every file, not only the wheels: an sdist carrying a different
           # version passes a wheels-only check and is published anyway.
@@ -358,13 +263,13 @@ jobs:
           built_version = versions.pop()
           if built_version != tag:
               sys.exit(f'tag v{tag} does not match the built version {built_version}')
-          print(f'all five distributions built at {built_version}, matching the tag')
+          print(f'all three distributions built at {built_version}, matching the tag')
           EOF
 
       - name: Nothing malformed reaches the index
         run: |
           python -m pip install --upgrade twine
-          twine check dist/*
+          twine check dist/*.whl dist/*.tar.gz
 
       # The dependency inventory a consumer needs before accepting this into
       # their own supply chain. Attached to the release, not regenerated later
@@ -372,14 +277,13 @@ jobs:
       - name: Software bill of materials
         run: |
           python -m pip install --upgrade cyclonedx-bom
-          # --find-links dist for the same reason as the engine's test env: the
-          # exact sibling pins resolve to the wheels just built, not to whatever
-          # happens to be on PyPI. Without it this describes a previous release,
-          # or fails outright before the first one.
+          # Install these exact wheels before resolving optional driver dependencies.
+          python -m pip install --no-deps dist/*-py3-none-any.whl dist/*manylinux*x86_64.whl
+          version="${GITHUB_REF_NAME#v}"
           python -m pip install --find-links dist \
-            "./packages/structured-data-models-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
+            "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$version"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors','structured-data-models-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
       - name: Take the release notes from the changelog
         run: |
@@ -487,5 +391,5 @@ jobs:
             echo "NVIDIA's network. RELEASING.md says who runs it and what it"
             echo "has to do."
             echo
-            echo "Mark this release Latest once the index has all five."
+            echo "Mark this release Latest once the index has all three distributions."
           } >> "$GITHUB_STEP_SUMMARY"

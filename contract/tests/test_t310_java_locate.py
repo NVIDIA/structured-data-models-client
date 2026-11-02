@@ -2,13 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Java's actual fetch-purpose evidence and truthful warehouse cell claims."""
+"""Java driver captures preserve fetch-purpose boundaries and SQL logs."""
 
 from __future__ import annotations
 
 import base64
-import importlib.util
-import json
 import sys
 from pathlib import Path
 
@@ -18,14 +16,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'contract/runners'))
 import run_java  # noqa: E402
-
-
-def module(name, relative):
-    spec = importlib.util.spec_from_file_location(name, ROOT / relative)
-    loaded = importlib.util.module_from_spec(spec)
-    sys.modules[name] = loaded
-    spec.loader.exec_module(loaded)
-    return loaded
 
 
 def step(*purposes):
@@ -51,7 +41,6 @@ def statement(sql, handle=1):
 
 
 def test_actual_locate_marker_preserves_full_audit_and_filters_only_refresh():
-    compare = module('t310_java_compare', 'scripts/rust_core/compare.py')
     sink = pa.BufferOutputStream()
     table = pa.table({'key': [1]})
     with pa.ipc.new_stream(sink, table.schema) as writer:
@@ -81,11 +70,6 @@ def test_actual_locate_marker_preserves_full_audit_and_filters_only_refresh():
     assert driver['capture']['statements'][0]['purpose'] == 'locate'
     assert driver['capture']['bindings'][0]['purpose'] == 'locate'
     assert 'purpose' not in driver['capture']['statements'][1]
-    assert compare.counts({'driver': driver}) == {
-        'from_source': 0,
-        'materialize': 1,
-        'predict': 0,
-    }
     assert driver['query_log'] == {
         'statements': 2,
         'bindings': 1,
@@ -116,21 +100,3 @@ def test_a_refresh_marker_cannot_leak_to_other_fetches_or_operations(reset):
     capture = run_java.driver_record(events, None)['capture']
     assert capture['statements'][0]['purpose'] == 'locate'
     assert 'purpose' not in capture['statements'][1]
-
-
-def test_java_types_cells_are_witnessed_without_removing_ignored_inputs():
-    coverage = module('t310_java_coverage', 'scripts/rust_core/coverage.py')
-    case = json.loads(
-        (ROOT / 'contract/cases/s2/java.databricks-sql.types.json').read_text()
-    )
-    # The gate enriches the reference with actual typed bindings and rows.
-    tree = coverage._module('ratchet').Tree(ROOT, 'HEAD')
-    report = coverage.Report()
-    captured = coverage.read_captures(tree, report, {case['id']})
-    assert report.problems == []
-    [reference] = captured[case['id']]
-    assert set(case['cells']) <= coverage.observed(case, reference)
-    assert any(
-        ' AS token' in sql and ' AS tags' in sql
-        for sql in case['input']['setup']
-    )

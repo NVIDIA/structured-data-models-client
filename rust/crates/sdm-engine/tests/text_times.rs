@@ -363,9 +363,8 @@ fn an_open_order_in_the_list_is_not_a_refusal_outside_it() {
     assert!(made_outside(&reader, "inference", &example, &core));
 }
 
-/// The differential report (`text-times-differential.json`, recorded by
-/// `text_times_differential.py` from pandas 3.0.6 over the inputs T1.25
-/// recorded) holds the core: each example's answer is the core's, each
+/// The frozen differential report (`text-times-differential.json`, from
+/// pandas 3.0.6) holds the core: each example's answer is the core's, each
 /// reference answer differs from it, and the counts add up.
 #[test]
 fn the_differential_reports_the_core_as_it_reads() {

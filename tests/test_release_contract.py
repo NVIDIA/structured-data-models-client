@@ -648,6 +648,23 @@ class TestPublicSurface:
         values and name nothing. Removing every quoted run read the first as
         naming nothing at all.
         """
+        # A synthetic retired package tests leak detection without installing it.
+        retired = tmp_path / 'predictive_query'
+        retired.mkdir()
+        (retired / '__init__.py').write_text(
+            'from .profiles import Profile\nfrom .api import validate\n'
+        )
+        (retired / 'profiles.py').write_text('class Profile: pass\n')
+        (retired / 'api.py').write_text('def validate(): pass\n')
+        monkeypatch.syspath_prepend(str(tmp_path))
+        for retired_name in (
+            'predictive_query',
+            'predictive_query.profiles',
+            'predictive_query.api',
+        ):
+            monkeypatch.setitem(sys.modules, retired_name, None)
+            del sys.modules[retired_name]
+
         probe = tmp_path / '_leak_probe.py'
         probe.write_text(
             'from __future__ import annotations\n'
@@ -937,110 +954,31 @@ class TestTheRequestBodiesAreContractual:
         assert result.returncode == 0
 
 
-_ENGINE_LICENSE = 'packages/structured-data-models-relational-engine/LICENSE'
-_COMPONENTS = (
-    PACKAGES
-    / 'structured-data-models-relational-engine'
-    / 'src'
-    / 'sdm_relational_engine'
-    / 'rfm'
-    / 'assets'
-    / 'MERMAID_COMPONENTS.json'
-)
-#: Mirrors scripts/mermaid_notices.py, where the reason for each is written.
-_WITHOUT_A_NOTICE = frozenset(
-    {
-        'chevrotain',
-        '@chevrotain/types',
-        '@chevrotain/regexp-to-ast',
-        '@chevrotain/gast',
-        '@chevrotain/utils',
-        '@chevrotain/cst-dts-gen',
-        'robust-predicates',
-    }
-)
-
-
 class TestTheNoticesAreComplete:
-    """What an open-source release has to say about what it ships.
-
-    The licenses of the bundled components ask for their copyright lines to be
-    reproduced where they have one. Naming a component and its license is not
-    that.
-    """
+    """Release artifacts carry the attribution generated for native dependencies."""
 
     def test_the_license_files_carry_what_was_recorded(self):
-        """The attribution is generated, so it cannot drift from its source.
+        result = _run('rust_core/rust_notices.py', '--check')
+        assert result.returncode == 0, result.stdout + result.stderr
 
-        Hand-enumeration of the bundle did not converge: three rounds of it
-        each missed more components, and the ones missed last were reached
-        through other bundles rather than declared.
-        """
-        result = _run('mermaid_notices.py', '--check')
-
-        assert result.returncode == 0, (
-            'The license files no longer carry the attribution rendered from '
-            'MERMAID_COMPONENTS.json. Run `python scripts/mermaid_notices.py '
-            f'--write`.\n{result.stdout}{result.stderr}'
-        )
-
-    def test_every_recorded_component_has_a_notice_or_a_reason(self):
-        """A license name is not a notice, and silence is not either."""
-        recorded = json.loads(_COMPONENTS.read_text())['components']
-        without = {
-            component['name']
-            for component in recorded.values()
-            if not component['notices']
-        }
-
-        assert without <= _WITHOUT_A_NOTICE, (
-            f'{sorted(without - _WITHOUT_A_NOTICE)} are attributed but carry '
-            f'no copyright notice and are not recorded as having none'
-        )
-        assert len(recorded) > 50, (
-            f'only {len(recorded)} components recorded, which is fewer than '
-            f"mermaid's closure reaches; the refresh may have been truncated"
-        )
+    def test_the_root_license_points_to_native_attribution(self):
+        path = 'packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt'
+        assert path in (REPO / 'LICENSE').read_text()
+        assert (REPO / path).is_file()
 
     def test_the_readme_links_every_package_license(self):
         """A reader looking for the terms of one package should not have to
         guess that each directory holds its own copy.
         """
         readme = (REPO / 'README.md').read_text()
-        packages = sorted(p.name for p in PACKAGES.iterdir() if p.is_dir())
+        packages = sorted(
+            p.parent.name for p in PACKAGES.glob('*/pyproject.toml')
+        )
 
         for package in packages:
             link = f'packages/{package}/LICENSE'
             assert link in readme, f'the README does not link {link}'
             assert (REPO / link).is_file(), f'{link} is linked but missing'
-
-    def test_the_engine_license_says_what_the_root_one_says(self):
-        """The engine ships the bundle, so its own copy carries the same
-        notices. They differ only in the path each gives for the bundle.
-        """
-
-        def attribution(path):
-            text = (REPO / path).read_text()
-            text = text[text.index('THIRD-PARTY SOFTWARE BUNDLED') :]
-            # Every line, not the ones that look like notices: a URL or an
-            # "All rights reserved." is part of a notice too, and comparing
-            # only the lines carrying the word let those drift apart.
-            lines = text.splitlines()
-            return [line for line in lines if not line.endswith('.min.js')]
-
-        root = attribution('LICENSE')
-        engine = attribution(_ENGINE_LICENSE)
-        differing = [
-            (a, b) for a, b in zip(root, engine, strict=False) if a != b
-        ]
-
-        assert len(root) == len(engine), (
-            f'the two license files carry {len(root)} and {len(engine)} '
-            f'lines of attribution; they should carry the same'
-        )
-        assert not [pair for pair in differing if not set(pair[0]) <= {'-'}], (
-            f'the two license files disagree: {differing[:3]}'
-        )
 
 
 class TestErrorContract:
@@ -1231,11 +1169,6 @@ class TestDistributionCoherence:
                 'structured-data-models-client: pyarrow>=14.0.1',
                 'structured-data-models-connectors: pandas>=2.2.2',
                 'structured-data-models-connectors: pyarrow',
-                'structured-data-models-pql: numpy>=1.23.5',
-                'structured-data-models-pql: pandas>=2.2.2',
-                'structured-data-models-relational-engine: numpy>=1.23.5',
-                'structured-data-models-relational-engine: pandas>=2.2.2',
-                'structured-data-models-relational-engine: pyarrow>=14.0.1',
             ]
         ), named
         assert not wrong, 'below the supported floor:\n' + '\n'.join(wrong)
@@ -1277,17 +1210,15 @@ class TestDistributionCoherence:
         known = set(_distributions())
         for extra, requirements in client['optional-dependencies'].items():
             for requirement in requirements:
-                name = (
-                    requirement.split('[')[0]
-                    .split('==')[0]
-                    .split('>=')[0]
-                    .strip()
-                )
+                from packaging.requirements import Requirement
+
+                name = Requirement(requirement).name
                 # databricks-sdk is imported by the client's own serving
                 # transport, so the client is the distribution that declares it.
                 assert name in known or name in {
                     'pytest',
                     'pytest-xdist',
+                    'psutil',
                     'requests-mock',
                     'jsonschema',
                     'pyyaml',
@@ -1362,51 +1293,6 @@ class TestConfigurationTellsTheTruth:
             assert baseline <= narrowed or 'select' not in config.get(
                 'lint', {}
             ), f'{name} narrows the shared lint baseline to {narrowed}'
-
-    def test_the_ignore_list_sorts_itself_the_way_its_headings_say(self):
-        """The engine's ignore list is written in two labelled blocks.
-
-        One is rules the shared baseline really does select, so listing them
-        here silences something; the other is a record of rules nothing selects
-        anywhere. An earlier note called the whole list inert, which was wrong
-        """
-        source = (
-            PACKAGES
-            / 'structured-data-models-relational-engine'
-            / 'pyproject.toml'
-        ).read_text()
-        root = tomllib.loads((REPO / 'pyproject.toml').read_text())
-        selected = root['tool']['ruff']['lint']['select']
-        engine = _pyproject('structured-data-models-relational-engine')['tool'][
-            'ruff'
-        ]['lint']
-        effective = list(selected) + list(engine.get('extend-select', []))
-
-        active_block, _, backlog_block = source.partition(
-            '--- Recorded backlog'
-        )
-        _, _, active_block = active_block.partition('--- Active exemptions')
-        assert active_block and backlog_block, (
-            'the ignore list no longer carries both headings this test reads'
-        )
-
-        def listed(block: str) -> set[str]:
-            return {
-                rule
-                for rule in engine.get('ignore', [])
-                if f'"{rule}"' in block
-            }
-
-        for rule in listed(active_block):
-            assert _covered_by(rule, effective), (
-                f'{rule} sits under "Active exemptions" but nothing selects '
-                f'it, so ignoring it silences nothing'
-            )
-        for rule in listed(backlog_block):
-            assert not _covered_by(rule, selected), (
-                f'{rule} sits under "Recorded backlog", which says the shared '
-                f'baseline does not select it, but {selected} does'
-            )
 
     def test_the_tabular_task_kinds_match_what_the_model_declares(self):
         """`TABULAR_TASK_KINDS` restates what `models.py` says, and says so.
@@ -1498,53 +1384,6 @@ class TestConfigurationTellsTheTruth:
         assert not missing, (
             f'the mypy baseline names modules that do not exist: {missing}. '
             f'Delete the entry, or point it at whatever the code became.'
-        )
-
-    def test_the_recorded_style_backlog_is_clean_where_the_note_says_it_is(
-        self,
-    ):
-        """The engine's ignore list records a backlog and names where it is clean.
-
-        That claim used to be wrong in both halves, the rules were not
-        selected anywhere, and the two packages named did not pass clean under
-        them. A comment cannot be wrong for long if a test reads it.
-        """
-        engine = _pyproject('structured-data-models-relational-engine')['tool'][
-            'ruff'
-        ]['lint']
-        root = tomllib.loads((REPO / 'pyproject.toml').read_text())
-        selected = root['tool']['ruff']['lint']['select']
-        backlog = [
-            rule
-            for rule in engine.get('ignore', [])
-            if _linter_of(rule) != 'D' and not _covered_by(rule, selected)
-        ]
-        assert backlog, 'the recorded style backlog vanished; update this test'
-
-        ruff = pathlib.Path(sys.executable).parent / 'ruff'
-        if not ruff.exists():  # pragma: no cover - ruff not installed
-            import pytest
-
-            pytest.skip('ruff is not installed in this environment')
-
-        result = subprocess.run(
-            [
-                str(ruff),
-                'check',
-                '--no-cache',
-                '--quiet',
-                '--select',
-                ','.join(backlog),
-                str(PACKAGES / 'structured-data-models-client' / 'src'),
-                str(PACKAGES / 'structured-data-models-connectors' / 'src'),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, (
-            'structured-data-models-client and structured-data-models-connectors no longer pass clean under the '
-            'style backlog the engine records, so the note beside that ignore '
-            f'list is now wrong:\n{result.stdout}{result.stderr}'
         )
 
 
@@ -1725,42 +1564,3 @@ class TestInterpreterSupportIsStated:
                 f'{project["requires-python"]!r} but does not classify them, so '
                 f'an index reports it unsupported on an interpreter it runs on'
             )
-
-    def test_an_extra_narrower_than_its_parent_says_so(self):
-        """The relational extra does not resolve on every Python the client does.
-
-        That is correct, the engine is a native build with a shorter wheel
-        matrix, but pip's error names a distribution, not a reason. Anything
-        that narrow has to be explained where someone reads it.
-        """
-        client = _pyproject('structured-data-models-client')
-        engine = _pyproject('structured-data-models-relational-engine')
-        if (
-            client['project']['requires-python']
-            == engine['project']['requires-python']
-        ):
-            return
-        source = (
-            PACKAGES / 'structured-data-models-client' / 'pyproject.toml'
-        ).read_text()
-        # The engine's own bound, not a literal: this read `'3.14' in source`
-        # while the engine stopped at 3.13, so once 3.14 became supported the
-        # comment named it for a different reason and the test proved nothing.
-        # What has to be written down is where the extra now stops.
-        bound = engine['project']['requires-python']
-        edge = re.search(r'<\s*(\d+\.\d+)', bound)
-        assert edge is not None, (
-            f'the engine no longer carries an upper bound ({bound!r}), so what '
-            f'this test reads as the edge of the matrix is gone'
-        )
-        assert edge.group(1) in source and 'native build' in source, (
-            f'structured-data-models-client admits interpreters its [relational] extra cannot '
-            f'install on, and its pyproject does not say the extra stops below '
-            f'{edge.group(1)}'
-        )
-        install_doc = (
-            REPO / 'docs' / 'get-started' / 'installation.md'
-        ).read_text()
-        assert 'relational' in install_doc, (
-            'the installation guide does not mention the relational extra'
-        )

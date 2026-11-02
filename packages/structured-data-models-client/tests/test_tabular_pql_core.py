@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Public PQL selection, model bytes and result journeys on both routes."""
+"""Public PQL selection, model bytes and result regression contracts."""
 
 from __future__ import annotations
 
@@ -21,31 +21,46 @@ from tabular_pql_fixtures import (
     indexed_frame,
     label_frame,
 )
-from tabular_pql_reference import reference_case
 
 from sdm_client import KumoTabular, PredictiveQuery, SDMClient
 
-ROUTES = ','.join(
-    (
-        'query.materialize/indices-binary/frames',
-        'query.materialize/indices-multiclass/frames',
-        'query.materialize/indices-regression/frames',
-        'query.materialize/predict-frame/frames',
-        'request.tabular/classification/frames',
-        'request.tabular/regression/frames',
-        'client.predict/tabular/frames',
-    )
-)
+
+def expected_case(group: str, family: str, entrypoint: str) -> dict[str, Any]:
+    """Independent pandas oracle for the public sampling/order contract.
+
+    The fixtures contain valid targets and score only the last entity.
+    A supplied prediction frame keeps all other rows in source order.
+    Limited context uses seed 42, then pandas index ordering, including the
+    installed NumPy runtime's tie ordering. No client helper computes this.
+    Prediction values and output columns are fixed, not candidate recordings.
+    This checks same-runtime ordering and errors, not historical cross-runtime
+    acceptance; those receipts remain preserved separately.
+    """
+    data = (label_frame if group == 'labels' else indexed_frame)(family)
+    context = data.iloc[:-1]
+    try:
+        if entrypoint == 'indices':
+            context = context.sample(
+                n=INDEX_SAMPLE_COUNTS.get(family, 40), random_state=42
+            ).sort_index()
+    except (TypeError, ValueError, OverflowError) as error:
+        return {'error': {'type': type(error).__name__, 'message': str(error)}}
+    return {
+        'context_ids': context['id'].tolist(),
+        'prediction': {
+            'columns': ['row_index', 'id', 'prediction'],
+            'rows': [{'row_index': 0, 'id': len(data) - 1, 'prediction': 0.0}],
+        },
+    }
 
 
 @pytest.mark.parametrize('family', LABEL_FAMILIES)
 @pytest.mark.parametrize('entrypoint', ['indices', 'predict'])
 def test_exact_label_materialization_and_prediction(
-    route: str,
     family: str,
     entrypoint: str,
 ) -> None:
-    reference = reference_case('labels', family, entrypoint)
+    reference = expected_case('labels', family, entrypoint)
     data = label_frame(family)
     arguments = (
         {'indices': [80], 'num_context_samples': 40}
@@ -94,14 +109,6 @@ def test_exact_label_materialization_and_prediction(
         client.close()
 
 
-@pytest.fixture(params=['old', 'core'])
-def route(request: Any, monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', ROUTES if request.param == 'core' else ''
-    )
-    return request.param
-
-
 def frame() -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -145,7 +152,7 @@ class Endpoint:
         pass
 
 
-def test_sampled_context_reaches_model_in_sorted_draw_order(route: str) -> None:
+def test_sampled_context_reaches_model_in_sorted_draw_order() -> None:
     request = query(frame()).materialize(
         indices=[10], num_context_samples=3, task='regression'
     )
@@ -162,7 +169,7 @@ def test_sampled_context_reaches_model_in_sorted_draw_order(route: str) -> None:
     assert len(result.to_pandas()) == 1
 
 
-def test_unreduced_context_retains_candidate_order(route: str) -> None:
+def test_unreduced_context_retains_candidate_order() -> None:
     request = query(frame()).materialize(
         indices=[10], num_context_samples=10, task='regression'
     )
@@ -172,7 +179,7 @@ def test_unreduced_context_retains_candidate_order(route: str) -> None:
     )
 
 
-def test_repeated_keys_expand_every_matching_position(route: str) -> None:
+def test_repeated_keys_expand_every_matching_position() -> None:
     data = frame()
     asked = query(data)
     data.loc[109, 'id'] = 0
@@ -183,9 +190,7 @@ def test_repeated_keys_expand_every_matching_position(route: str) -> None:
     assert request.context.instance_table['id'].tolist() == list(range(2, 10))
 
 
-def test_supplied_frame_excludes_matching_keys_and_unknown_targets(
-    route: str,
-) -> None:
+def test_supplied_frame_excludes_matching_keys_and_unknown_targets() -> None:
     data = frame()
     data.loc[107, 'target'] = float('nan')
     scoring = data.iloc[[10, 0]].drop(columns=['target'])
@@ -203,7 +208,7 @@ def test_supplied_frame_excludes_matching_keys_and_unknown_targets(
     ]
 
 
-def test_missing_key_diagnostic_keeps_repetitions(route: str) -> None:
+def test_missing_key_diagnostic_keeps_repetitions() -> None:
     with pytest.raises(
         Exception, match='2 of the 3 indices are not in data.id:'
     ) as error:
@@ -213,10 +218,10 @@ def test_missing_key_diagnostic_keeps_repetitions(route: str) -> None:
 
 @pytest.mark.parametrize('family', INDEX_FAMILIES)
 @pytest.mark.parametrize('entrypoint', ['indices', 'predict'])
-def test_index_family_matches_frozen_public_context(
-    route: str, family: str, entrypoint: str
+def test_index_family_matches_pandas_context_order(
+    family: str, entrypoint: str
 ) -> None:
-    expected = reference_case('indices', family, entrypoint)
+    expected = expected_case('indices', family, entrypoint)
     data = indexed_frame(family)
     asked = query(data)
     arguments = (
@@ -259,26 +264,7 @@ def test_index_family_matches_frozen_public_context(
     client.close()
 
 
-def test_forced_tabular_frame_routes_do_not_silently_run_legacy_relational(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from sdm_client import KumoRelational
-    from sdm_client._routing import RouteError
-    from sdm_client.materializers.relational import RelationalMaterializer
-
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
-
-    def unexpected(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError('legacy relational materialization was reached')
-
-    monkeypatch.setattr(RelationalMaterializer, 'materialize', unexpected)
-    with pytest.raises(RouteError, match='forces some of'):
-        query(frame()).materialize(
-            indices=[10], num_context_samples=3, model=KumoRelational()
-        )
-
-
-def test_index_take_hook_precedes_target_validity(route: str) -> None:
+def test_index_take_hook_precedes_target_validity() -> None:
     import numpy as np
 
     data = frame()
@@ -310,7 +296,7 @@ def test_index_take_hook_precedes_target_validity(route: str) -> None:
     ]
 
 
-def test_attrs_copy_effect_is_not_moved_after_target_filter(route: str) -> None:
+def test_attrs_copy_effect_is_not_moved_after_target_filter() -> None:
     data = frame()
     scoring = data.iloc[[10]].drop(columns=['target'])
     asked = query(data)
@@ -358,8 +344,6 @@ def test_profile_independent_orders_do_not_read_numpy_producer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from sdm_client._rust import tabular_index
-
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
 
     def unexpected_profile() -> str:
         pytest.fail('this sampled order must not depend on a NumPy producer')
@@ -411,7 +395,6 @@ def test_tied_sort_binds_retained_facts_without_native_rereads(
 ) -> None:
     from sdm_client._rust import tabular_index, tabular_materialize
 
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
     observations = []
     orders = []
     original_facts = tabular_index._facts
@@ -435,7 +418,7 @@ def test_tied_sort_binds_retained_facts_without_native_rereads(
         num_context_samples=40,
         task='regression',
     )
-    expected = reference_case('indices', 'signed_duplicates', 'indices')[
+    expected = expected_case('indices', 'signed_duplicates', 'indices')[
         'context_ids'
     ]
     assert request.context.instance_table['id'].tolist() == expected
@@ -448,7 +431,6 @@ def test_tied_sort_binds_retained_facts_without_native_rereads(
 
 
 def test_sampled_present_nan_is_reconstructed_instead_of_shallow_copied(
-    route: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data = frame().iloc[:4].copy()
@@ -480,14 +462,9 @@ def test_sampled_present_nan_is_reconstructed_instead_of_shallow_copied(
     )
 
 
-def test_supplied_frame_refuses_context_cap_like_same_runtime_reference(
-    route: str,
-) -> None:
+def test_supplied_frame_refuses_context_cap() -> None:
     from sdm_client.errors import StructuredDataError
 
-    expected = reference_case('validation', 'supplied_frame_cap', 'predict')[
-        'error'
-    ]
     data = indexed_frame('range')
     with pytest.raises(StructuredDataError) as caught:
         query(data).materialize(
@@ -495,9 +472,12 @@ def test_supplied_frame_refuses_context_cap_like_same_runtime_reference(
             num_context_samples=40,
             task='regression',
         )
-    assert type(caught.value).__name__ == expected['type']
-    assert caught.value.code == expected['code']
-    assert str(caught.value) == expected['message']
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert str(caught.value) == (
+        '[INVALID_REQUEST] num_context_samples cannot be used with '
+        'predict=<frame>: the schema table is the context. To choose the '
+        'context, build the schema from the rows you want'
+    )
 
 
 def test_legacy_dispatch_does_not_reuse_modern_avx2_or_avx512_profiles(
@@ -561,8 +541,7 @@ def test_required_promotion_mode_is_observed_on_each_call(
 ) -> None:
     from types import SimpleNamespace
 
-    from sdm_client._routing import RouteError
-    from sdm_client._rust import tabular_index
+    from sdm_client._rust import NativeBoundaryError, tabular_index
 
     monkeypatch.setattr(
         tabular_index.importlib,
@@ -588,7 +567,7 @@ def test_required_promotion_mode_is_observed_on_each_call(
     assert tabular_index._comparison_semantics() == 'weak_scalars'
     assert state[0] == 'weak_and_warn'
     state[0] = 'unrepresented'
-    with pytest.raises(RouteError, match='promotion mode'):
+    with pytest.raises(NativeBoundaryError, match='promotion mode'):
         tabular_index._comparison_semantics()
     state[0] = 'weak'
     assert tabular_index._comparison_semantics() == 'weak_scalars'
@@ -597,7 +576,7 @@ def test_required_promotion_mode_is_observed_on_each_call(
 def test_temporal_observation_does_not_invoke_custom_timezone_methods() -> None:
     from datetime import datetime, timedelta, tzinfo
 
-    from sdm_client._routing import RouteError
+    from sdm_client._rust import NativeBoundaryError
     from sdm_client._rust.tabular_temporal import observe
 
     calls: list[str] = []
@@ -612,14 +591,14 @@ def test_temporal_observation_does_not_invoke_custom_timezone_methods() -> None:
             return timedelta(0)
 
     owner = datetime(2020, 1, 1, tzinfo=CustomZone())
-    with pytest.raises(RouteError, match='timezone owner'):
+    with pytest.raises(NativeBoundaryError, match='timezone owner'):
         observe([owner], [False])
     assert calls == []
 
 
 def test_temporal_facts_do_not_admit_numeric_companions() -> None:
-    from sdm_client._routing import RouteError
+    from sdm_client._rust import NativeBoundaryError
     from sdm_client._rust.tabular_temporal import observe
 
-    with pytest.raises(RouteError, match='mixed temporal'):
+    with pytest.raises(NativeBoundaryError, match='mixed temporal'):
         observe([pd.Timestamp('2020-01-01'), np.float32(1)], [False, False])

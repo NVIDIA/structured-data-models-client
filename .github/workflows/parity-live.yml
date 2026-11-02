@@ -18,7 +18,7 @@ concurrency:
 jobs:
   parity:
     # Never expose source/model credentials to pull requests or arbitrary refs.
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rust-core-phase-4'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rust-core'
     runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
     timeout-minutes: 180
     environment: parity-live
@@ -29,7 +29,6 @@ jobs:
       PARITY_RUNNER_LABELS: ${{ vars.PARITY_RUNNER_LABELS }}
       SDM_T136_LIVE_ENDPOINT: ${{ vars.PARITY_GIANT_ENDPOINT }}
       PARITY_GIANT_MODEL_VERSION: ${{ vars.PARITY_GIANT_MODEL_VERSION }}
-      BASELINE_COMMIT: 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,21 +86,8 @@ jobs:
           python -m venv "$PARITY_DIR/candidate"
           "$PARITY_DIR/candidate/bin/pip" install \
             ./packages/structured-data-models-api \
-            ./packages/structured-data-models-pql \
             './packages/structured-data-models-connectors[all,test]' \
             "$PARITY_DIR"/wheels/*.whl databricks-connect==17.3.11 'jsonschema>=4.18'
-      - name: Install isolated frozen Python
-        run: |
-          set -euo pipefail
-          git worktree add --detach "$PARITY_DIR/reference" "$BASELINE_COMMIT"
-          python -m venv "$PARITY_DIR/baseline"
-          "$PARITY_DIR/baseline/bin/pip" install \
-            "$PARITY_DIR/reference/packages/structured-data-models-api" \
-            "$PARITY_DIR/reference/packages/structured-data-models-pql" \
-            "$PARITY_DIR/reference/packages/structured-data-models-connectors[all,test]" \
-            "$PARITY_DIR/reference/packages/structured-data-models-relational-engine" \
-            -e "$PARITY_DIR/reference/packages/structured-data-models-client[relational,test]" \
-            databricks-connect==17.3.11
       - name: Record installed artifact identities
         run: |
           "$PARITY_DIR/candidate/bin/python" - <<'PY'
@@ -115,7 +101,7 @@ jobs:
                       native_hash=hashlib.sha256(native.read_bytes()).hexdigest(), contract=_native.CONTRACT_VERSION)
           (root / 'java-provenance.json').write_text(json.dumps(java))
           PY
-      - name: Run all three public clients against real endpoints
+      - name: Run both public clients against real endpoints
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -127,10 +113,6 @@ jobs:
           # Keep observations from every runner even when an earlier one fails.
           set +e
           runners_ok=0
-          "$PARITY_DIR/baseline/bin/python" tests/parity/python_runner.py \
-            --phase baseline --commit "$BASELINE_COMMIT" --mode live \
-            --config "$PARITY_DIR/config.json" --out "$PARITY_DIR/evidence/baseline.jsonl"
-          if [ "$?" -ne 0 ]; then runners_ok=1; fi
           "$PARITY_DIR/candidate/bin/python" tests/parity/python_runner.py \
             --phase candidate --commit "$GITHUB_SHA" --mode live \
             --provenance "$PARITY_DIR"/wheels/*.whl.json \
@@ -150,7 +132,7 @@ jobs:
           set -e
           cat "$PARITY_DIR/evidence/python.jsonl" "$PARITY_DIR/evidence/java.jsonl" > "$PARITY_DIR/evidence/candidates.jsonl"
           "$PARITY_DIR/candidate/bin/python" tests/parity/compare.py \
-            --baseline "$PARITY_DIR/evidence/baseline.jsonl" \
+            --comparison current-clients \
             --candidate "$PARITY_DIR/evidence/candidates.jsonl" --candidate-commit "$GITHUB_SHA" \
             --out "$PARITY_DIR/evidence/report.json" --matrix "$PARITY_DIR/evidence/matrix.md"
           exit "$runners_ok"
@@ -169,7 +151,6 @@ jobs:
           root = pathlib.Path(os.environ['PARITY_DIR'])
           node = 'contract/tests/test_t136_host2_values.py::test_big_a_value_past_int32_offsets_on_the_core[big.blob.large]'
           commands = [
-              ('baseline', [str(root / 'baseline/bin/python'), '-m', 'pytest', node, '-q', '--junitxml=' + str(root / 'giant-baseline.xml')]),
               ('python', [str(root / 'candidate/bin/python'), '-m', 'pytest', node, '-q', '--junitxml=' + str(root / 'giant-python.xml')]),
               ('java', ['mvn', '-B', '-f', 'java/pom.xml', '-Dtest=DuckDbLargeValueTest',
                         '-Dsdm.test.giant=true', '-Dsdm.test.giant.endpoint=' + os.environ['SDM_T136_LIVE_ENDPOINT'],
@@ -195,7 +176,6 @@ jobs:
                               'status': 'passed' if passed else 'failed'})
               (root / 'evidence/giant.json').write_text(json.dumps({
                   'candidate_commit': os.environ['GITHUB_SHA'],
-                  'baseline_commit': os.environ['BASELINE_COMMIT'],
                   'model_version': os.environ['PARITY_GIANT_MODEL_VERSION'],
                   'results': reports}, indent=2) + '\n')
           if any(report['status'] != 'passed' for report in reports):

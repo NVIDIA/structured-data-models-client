@@ -1,19 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The private routing seam, and S0 on the core route (design, "Routing seam").
-
-Every core path of the Python scope manifest is routed, and covered S0, S1
-and S2 entrypoints default to the core after the Phase 3 switch. ``SDM_CORE_ROUTES`` forces paths onto
-the core for tests, read at every call; a path it names that is unknown or
-has no core route fails the call, and nothing falls back. Under the core
-route, validation in ``materialize()`` is the core's ``validate_query``, and
-a query is accepted or refused as on the old route, with the same code.
+"""Native query validation, missing-runtime errors and date diagnostics.
+Public materialization and validation retain explicit outcomes without
+migration routing switches or a second Python validator.
 """
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import textwrap
@@ -25,25 +19,20 @@ import pandas as pd
 import pytest
 
 from sdm_client import (
-    MissingExtraError,
     PredictiveQuery,
     Request,
     Schema,
     StructuredDataError,
-    _routing,
 )
 from sdm_client._rust import s0
-from sdm_client.query import RELATIONAL, TABULAR
+from sdm_client.query import RELATIONAL
 
 ROOT = Path(__file__).resolve().parents[3]
-MANIFEST = ROOT / 'docs/design/rust-core/phase-0/scope-python.yaml'
-CORE = ','.join(_routing.S0)
 
 
 @pytest.fixture
 def core(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """S0 forced onto the core; the list records each query it validated."""
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    """Record each query validated by Rust."""
     validated: list[str] = []
     real = s0.validate
 
@@ -55,11 +44,6 @@ def core(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return validated
 
 
-@pytest.fixture(autouse=True)
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-
-
 def _users() -> pd.DataFrame:
     return pd.DataFrame({'id': [1, 2, 3, 4], 'age': [10.5, 20.5, 30.5, 40.5]})
 
@@ -68,110 +52,21 @@ ACCEPTED = 'PREDICT users.age FOR EACH users.id'
 REFUSED = 'PREDICT users.nope FOR EACH users.id'
 
 
-def test_every_core_path_of_the_manifest_is_routed_and_covered_defaults_are_core(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    # Read without a YAML library, which the installed-wheel job lacks:
-    # each operation's `- id:` line is followed by its `layer:`, and a
-    # path's ID is operation/mode/backend.
-    text = MANIFEST.read_text(encoding='utf-8')
-    operations, rest = text.split('\npaths:\n')
-    paths = rest.split('\ncells:\n')[0]
-    layer = dict(
-        re.findall(
-            r'^- id: (\S+)\n(?:  .*\n)*?  layer: (\w+)$', operations, re.M
+def test_public_materialize_accepts_valid_query_and_refuses_missing_column() -> (
+    None
+):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(ACCEPTED, {'users': _users()}).materialize(
+            indices=[1, 2]
         )
-    )
-    assert len(layer) == 26
-    ids = re.findall(r'^- id: (\S+)$', paths, re.M)
-    assert len(ids) == 281
-    core = [path for path in ids if layer[path.split('/')[0]] == 'core']
-    assert list(_routing.PATHS) == core
-    assert set(_routing.ROUTES) == set(core)
-    assert {
-        path for path, route in _routing.ROUTES.items() if route == 'core'
-    } == set(_routing.CORE_ROUTED)
-    # S0 and, from T1.11b, a DuckDB source's Schema.from_source with no
-    # tables named (with tables named from T1.24), from T1.11c, materialize
-    # with indices over a DuckDB source's schema, and from T1.11d, predict
-    # of a request materialized over one, have core routes; from T2.2 the
-    # same calls over a SQLite source, from T2.3 over a Postgres one, and
-    # from T3.4 over a Databricks SQL warehouse and a Spark session, and
-    # from T3.5 over a Databricks metric view.
-    # from T3.4 over a Databricks SQL warehouse and a Spark session, and from
-    # T3.6 over a Snowflake source.
-    assert _routing.CORE_ROUTED == set(
-        _routing.S0
-        # From T3.12, a model's capabilities, from the core's table.
-        + _routing.CAPABILITIES
-        + _routing.FRAME_ROUTES
-        + _routing.DIRECT_CONSUMERS
-        + _routing.TABULAR_MATERIALIZERS
-        + _routing.TABULAR_SESSIONS
-        + _routing.WAREHOUSE_SESSION_ROUTES
-        + _routing.FROM_SOURCE_DUCKDB
-        + _routing.FROM_SOURCE_DUCKDB_TABLES
-        + _routing.MATERIALIZE_DUCKDB
-        + _routing.PREDICT_DUCKDB
-        + _routing.FROM_SOURCE_SQLITE
-        + _routing.FROM_SOURCE_SQLITE_TABLES
-        + _routing.MATERIALIZE_SQLITE
-        + _routing.PREDICT_SQLITE
-        + _routing.FROM_SOURCE_POSTGRES
-        + _routing.FROM_SOURCE_POSTGRES_TABLES
-        + _routing.MATERIALIZE_POSTGRES
-        + _routing.PREDICT_POSTGRES
-        + _routing.FROM_SOURCE_DATABRICKS_SQL
-        + _routing.FROM_SOURCE_DATABRICKS_SQL_TABLES
-        + _routing.MATERIALIZE_DATABRICKS_SQL
-        + _routing.PREDICT_DATABRICKS_SQL
-        + _routing.FROM_SOURCE_DATABRICKS_SPARK
-        + _routing.FROM_SOURCE_DATABRICKS_SPARK_TABLES
-        + _routing.MATERIALIZE_DATABRICKS_SPARK
-        + _routing.PREDICT_DATABRICKS_SPARK
-        # From T3.5, a Databricks metric view's, on either connection.
-        + _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
-        + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
-        + _routing.PREDICT_DATABRICKS_METRIC_VIEW
-        + _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
-        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
-        + _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW
-        # From T3.6, over a Snowflake connection or a Snowpark session.
-        + _routing.FROM_SOURCE_SNOWFLAKE
-        + _routing.FROM_SOURCE_SNOWFLAKE_TABLES
-        + _routing.MATERIALIZE_SNOWFLAKE
-        + _routing.PREDICT_SNOWFLAKE
-    )
-    assert set(_routing.CORE_ROUTED) <= set(core)
-    assert _routing.route(_routing.S0) == 'core'
-    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'core'
-    assert _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
-    assert _routing.route(_routing.PREDICT_DUCKDB) == 'core'
-
-
-def test_a_refused_and_an_accepted_query_give_the_old_outcome_on_the_core(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    outcomes = {}
-    for route in ('old', 'core'):
-        if route == 'core':
-            monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            accepted = PredictiveQuery(ACCEPTED, {'users': _users()})
-            request = accepted.materialize(indices=[1, 2])
-            with pytest.raises(StructuredDataError) as refused:
-                PredictiveQuery(REFUSED, {'users': _users()}).materialize(
-                    indices=[1]
-                )
-        outcomes[route] = (
-            type(request),
-            type(refused.value),
-            refused.value.code,
-        )
-    assert outcomes['old'] == outcomes['core']
-    assert outcomes['core'] == (Request, StructuredDataError, 'INVALID_REQUEST')
+        with pytest.raises(StructuredDataError) as refused:
+            PredictiveQuery(REFUSED, {'users': _users()}).materialize(
+                indices=[1]
+            )
+    assert type(request) is Request
+    assert type(refused.value) is StructuredDataError
+    assert refused.value.code == 'INVALID_REQUEST'
 
 
 def test_the_core_route_runs_validation_on_the_core(core: list[str]) -> None:
@@ -186,68 +81,12 @@ def test_the_core_route_runs_validation_on_the_core(core: list[str]) -> None:
     assert 'sdm_client._native' in sys.modules
 
 
-def test_the_route_is_read_at_every_call(
-    core: list[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    query = PredictiveQuery(ACCEPTED, {'users': _users()})
-    query._resolve(TABULAR)
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    query._resolve(TABULAR)
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    query._resolve(TABULAR)
-    assert core == [ACCEPTED, ACCEPTED]
-
-
-@pytest.mark.parametrize(
-    ('setting', 'named'),
-    [
-        ('query.validate/accept/nowhere', 'query.validate/accept/nowhere'),
-        (f'{CORE},nope', 'nope'),
-        # A host path is never routed.
-        ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
-        # Reference pickle migration remains separate from core prediction
-        # and session routing.
-        (
-            'state.pickle/reference-pickle/any',
-            'state.pickle/reference-pickle/any',
-        ),
-    ],
-)
-def test_an_unknown_or_unrouted_forced_path_fails_the_call(
-    monkeypatch: pytest.MonkeyPatch, setting: str, named: str
-) -> None:
-    if named.startswith('state.'):
-        assert named in _routing.ROUTES
-        assert named not in _routing.CORE_ROUTED
-    monkeypatch.setenv(_routing.ENVIRONMENT, setting)
-    with pytest.raises(_routing.RouteError, match=named):
-        query = PredictiveQuery(ACCEPTED, {'users': _users()})
-        query.materialize(indices=[1])
-    assert not isinstance(_routing.RouteError('x'), StructuredDataError)
-
-
-def test_a_call_whose_paths_are_forced_apart_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, _routing.S0[0])
-    with pytest.raises(_routing.RouteError, match='one route'):
-        PredictiveQuery(ACCEPTED, {'users': _users()})._resolve(TABULAR)
-
-
-def _subprocess(script: str, **env: str) -> subprocess.CompletedProcess[str]:
-    import os
-
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key != _routing.ENVIRONMENT
-    }
+def _subprocess(script: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, '-c', textwrap.dedent(script)],
         capture_output=True,
         text=True,
         timeout=300,
-        env={**environment, **env},
     )
 
 
@@ -265,56 +104,25 @@ _BLOCK_NATIVE = """
 """
 
 
-def test_old_paths_never_import_the_native_module() -> None:
-    script = (
-        _BLOCK_NATIVE
-        + """
-    import warnings
-    import pandas as pd
-    from sdm_client import PredictiveQuery, StructuredDataError
-
-    warnings.simplefilter('ignore')
-    users = pd.DataFrame({'id': [1, 2, 3, 4], 'age': [10.5, 20.5, 30.5, 40.5]})
-    PredictiveQuery('PREDICT users.age FOR EACH users.id', {'users': users}
-        ).materialize(indices=[1, 2])
-    try:
-        PredictiveQuery('PREDICT users.nope FOR EACH users.id', {'users': users}
-            ).materialize(indices=[1])
-    except StructuredDataError as refused:
-        assert refused.code == 'INVALID_REQUEST'
-    else:
-        raise AssertionError('accepted')
-    print('sdm_client._native' in sys.modules, 'sdm_client._rust' in sys.modules)
-    """
-    )
-    result = _subprocess(script, **{_routing.ENVIRONMENT: ''})
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.split() == ['False', 'False']
-
-
-@pytest.mark.parametrize('forced', [False, True], ids=['default', 'forced'])
-def test_a_core_route_without_the_native_module_fails_naming_it(
-    forced: bool,
-) -> None:
+def test_missing_native_module_is_reported_without_fallback() -> None:
     script = (
         _BLOCK_NATIVE
         + """
     import warnings
     import pandas as pd
     from sdm_client import PredictiveQuery
-    from sdm_client._routing import RouteError
+    from sdm_client._rust import NativeBoundaryError
 
     warnings.simplefilter('ignore')
     users = pd.DataFrame({'id': [1, 2, 3, 4], 'age': [10.5, 20.5, 30.5, 40.5]})
     try:
         PredictiveQuery('PREDICT users.age FOR EACH users.id', {'users': users}
             ).materialize(indices=[1, 2])
-    except RouteError as missing:
+    except NativeBoundaryError as missing:
         print(missing)
     """
     )
-    settings = {_routing.ENVIRONMENT: CORE} if forced else {}
-    result = _subprocess(script, **settings)
+    result = _subprocess(script)
     assert result.returncode == 0, result.stderr
     assert 'sdm_client._native' in result.stdout
 
@@ -454,70 +262,6 @@ def test_a_packed_date_in_an_array_is_refused_by_name_on_the_core(
     _assert_refused_as_packed(refused.value, '20240101-01-01', text)
 
 
-def test_the_old_route_still_reads_a_packed_date_literal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # T1.6c: python-old is unchanged. Its validator reads every D8 literal
-    # the reference reads and refuses the others as a query, never by the
-    # core's rule (a year-1 literal too, on pandas 2, which cannot hold
-    # it); two of them it materializes. Gathering them takes the
-    # relational engine, an extra the test and installed-wheel jobs lack:
-    # there, materialize must get past validation and reach the gathering,
-    # which then names the missing extra; with the engine (the engine job)
-    # it must return the request.
-    from sdm_client.materializers.relational import RelationalMaterializer
-
-    gathered: list[str] = []
-    real = RelationalMaterializer._gather
-
-    def spy(self: Any, query: Any, *args: Any) -> Any:
-        gathered.append(query.to_string())
-        return real(self, query, *args)
-
-    monkeypatch.setattr(RelationalMaterializer, '_gather', spy)
-    try:
-        # The client's own test for the extra (_get_model): an import.
-        import sdm_relational_engine.rfm  # noqa: F401
-    except ImportError:
-        engine = False
-    else:
-        engine = True
-    schema = _orders_schema()
-    for literal in PACKED_READ:
-        PredictiveQuery(_filtered(f'orders.ts > {literal}'), schema)._resolve(
-            RELATIONAL
-        )
-    refused_as_a_query: tuple[str, ...] = PACKED_REFUSED
-    if PANDAS_3:
-        for literal in PACKED_READ_ON_PANDAS_3:
-            PredictiveQuery(
-                _filtered(f'orders.ts > {literal}'), schema
-            )._resolve(RELATIONAL)
-    else:
-        refused_as_a_query += PACKED_READ_ON_PANDAS_3
-    for literal in refused_as_a_query:
-        with pytest.raises(StructuredDataError) as refused:
-            PredictiveQuery(
-                _filtered(f'orders.ts > {literal}'), schema
-            )._resolve(RELATIONAL)
-        assert refused.value.code == 'INVALID_REQUEST'
-        assert 'rule' not in refused.value.details
-    materialized = ('20240101/00/123456', '2024-01-01 00000:00:00')
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        for literal in materialized:
-            query = PredictiveQuery(_filtered(f'orders.ts > {literal}'), schema)
-            if engine:
-                assert type(query.materialize(indices=[1])) is Request
-            else:
-                with pytest.raises(MissingExtraError) as missing:
-                    query.materialize(indices=[1])
-                assert missing.value.details['extra'] == 'relational'
-    assert len(gathered) == len(materialized)
-    for literal, text in zip(materialized, gathered, strict=True):
-        assert literal in text, text
-
-
 @pytest.mark.parametrize(
     ('literal', 'accepted'),
     [
@@ -532,35 +276,22 @@ def test_the_old_route_still_reads_a_packed_date_literal(
         ('123-4-567', False),
     ],
 )
-def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
+def test_ordinary_date_literals_have_explicit_outcomes(
     core: list[str],
-    monkeypatch: pytest.MonkeyPatch,
     literal: str,
     accepted: bool,
 ) -> None:
-    # T1.6c brief: D1 to D7 and D9 unchanged. Each answers on the core as
-    # on the old route: read and accepted, or (D9) refused as a query,
-    # INVALID_REQUEST with no rule named. On pandas 2 the old route refuses
-    # a date in year 0 or 1 as a query, and so does the core: the host
-    # declares pandas 2's range (date_literal_range) and the core refuses a
-    # literal outside it as unreadable (T1.20 fix 1), never INTERNAL_ERROR.
     text = _filtered(f'orders.ts > {literal}')
-    schema = _orders_schema()
-    answers = []
-    for route in ('core', 'old'):
-        if route == 'old':
-            monkeypatch.setenv(_routing.ENVIRONMENT, '')
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            try:
-                PredictiveQuery(text, schema)._resolve(RELATIONAL)
-                answers.append(None)
-            except StructuredDataError as refused:
-                assert 'rule' not in refused.details, refused.details
-                answers.append(refused.code)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        try:
+            PredictiveQuery(text, _orders_schema())._resolve(RELATIONAL)
+            answer = None
+        except StructuredDataError as refused:
+            assert 'rule' not in refused.details, refused.details
+            answer = refused.code
     assert core == [text]
-    want = [None, None] if accepted else ['INVALID_REQUEST', 'INVALID_REQUEST']
-    assert answers == want
+    assert answer == (None if accepted else 'INVALID_REQUEST')
 
 
 def test_an_earlier_refusal_wins_over_a_packed_date_on_the_core(
@@ -612,15 +343,9 @@ def _shown(text: str, schema: Any) -> tuple[list[str], str | None]:
     return [f'{type(w.message).__name__}: {w.message}' for w in caught], code
 
 
-def test_a_day_first_literal_warns_on_the_core_as_on_the_old_route(
-    core: list[str], monkeypatch: pytest.MonkeyPatch
+def test_day_first_notice_is_preserved_before_later_query_errors(
+    core: list[str],
 ) -> None:
-    # D4. Accepted: the old validator, still run beside the core here (the
-    # shadow check), gives the reference's own warning and the core's is
-    # held back (s0.SHADOWED), so the caller sees what the old route shows.
-    # Refused, after the literal was read (an unknown table, then a literal
-    # that names no date): no shadow check runs, and the core's warning is
-    # shown, once per literal, in the reference's words (register PQL-3).
     accepted = (
         'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024, 0, 30, days) '
         'FOR EACH users.user_id'
@@ -634,72 +359,11 @@ def test_a_day_first_literal_warns_on_the_core_as_on_the_old_route(
     schema = _orders_schema()
     on_core = {text: _shown(text, schema) for text in [accepted, *refused]}
     assert core == [accepted, *refused]
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    on_old = {text: _shown(text, schema) for text in [accepted, *refused]}
     said = (
-        'UserWarning: Parsing dates in %d/%m/%Y format when dayfirst=False '
+        'UserWarning: [DATE_LITERAL_DAY_FIRST] Parsing dates in %d/%m/%Y format when dayfirst=False '
         '(the default) was specified. Pass `dayfirst=True` or specify a '
         'format to silence this warning.'
     )
-    assert on_core[accepted] == on_old[accepted]
-    assert on_core[accepted][1] is None and said in on_core[accepted][0]
+    assert on_core[accepted] == ([said], None)
     for text in refused:
-        (core_shown, core_code), (old_shown, old_code) = (
-            on_core[text],
-            on_old[text],
-        )
-        assert core_code == old_code == 'INVALID_REQUEST', text
-        assert old_shown == [said], text
-        assert core_shown == [
-            said.replace(
-                'UserWarning: ', 'UserWarning: [DATE_LITERAL_DAY_FIRST] '
-            )
-        ], text
-
-
-def test_a_disagreement_with_the_old_validator_is_internal(
-    core: list[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import predictive_query
-
-    def refuses(*_: object) -> Any:
-        class Response:
-            ok = False
-            errors: list[Any] = []
-
-        return None, Response()
-
-    monkeypatch.setattr(predictive_query, 'validate', refuses)
-    with pytest.raises(StructuredDataError) as raised:
-        PredictiveQuery(ACCEPTED, {'users': _users()})._resolve(TABULAR)
-    assert raised.value.code == 'INTERNAL_ERROR'
-    assert core == [ACCEPTED]
-
-
-def test_a_wide_schema_long_query_the_old_client_accepts_passes_on_the_core(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # 5,000 columns and a query past the 64 KB control cap: the query text
-    # and the schema travel as attachments (decision H5).
-    long = 'x' * 70_000
-    columns = {f'c{i}': [0.5, 1.5, 2.5, 3.5] for i in range(5_000)}
-    frame = pd.DataFrame({'id': [1, 2, 3, 4], **columns, long: [1.5, 2, 3, 4]})
-    text = f'PREDICT users.{long} FOR EACH users.id'
-    assert len(text.encode()) > 64 * 1024
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data({'users': frame})
-        old = PredictiveQuery(text, schema).materialize(indices=[1, 2])
-        validated: list[bool] = []
-        real = s0.validate
-
-        def spy(*args: Any) -> Any:
-            answer = real(*args)
-            validated.append(answer[0])
-            return answer
-
-        monkeypatch.setattr(s0, 'validate', spy)
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-        new = PredictiveQuery(text, schema).materialize(indices=[1, 2])
-    assert validated == [True]
-    assert type(old) is type(new) is Request
+        assert on_core[text] == ([said], 'INVALID_REQUEST')
