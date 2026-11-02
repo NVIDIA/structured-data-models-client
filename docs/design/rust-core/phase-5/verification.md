@@ -130,3 +130,8 @@ All three wheels installed into a fresh external Python 3.12 environment; depend
 The installed client completed six fit/close cycles and 30 predictions using a local constant-response transport, not a live model endpoint.
 Evidence: external `phase-5/effort-3/rc-installed-identity.json`, `rc-pure-python/artifacts.json` and `rc-session-smoke.json`.
 This local Linux x86-64 wheel targets glibc 2.34; the required manylinux2014 and other platform artifacts still need CI verification.
+
+Full RC CI `41501690988` was dispatched on `43d94e9bc` with locked Rust dependencies; it is not yet a passing result.
+The installed `64a164bd0` RC wheel passed live in-memory Relational ranking and forecasting against private-bridge model version 28, followed by the selected Python contract checks.
+Evidence: external `phase-5/effort-3/rc-live-ranking-forecast.jsonl` and `rc-live-ranking-forecast-report.json`.
+These two cases close the affected Python journey rerun; they are not a Java comparison or a complete live/runtime matrix.
