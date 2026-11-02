@@ -218,7 +218,7 @@ The core's log events reach SLF4J under the loggers its crates name (`sdm_core`,
 
 ## Build
 
-The natives are built by cargo and copied into `target/natives/<platform>/` before Maven packages the JAR (`<platform>` is `linux-x86_64`, `linux-aarch64`, `macos-aarch64` or `macos-x86_64`):
+The natives are built by cargo and copied into `target/natives/<platform>/` before Maven packages the JAR (`<platform>` is `linux-x86_64`, `linux-aarch64`, `macos-aarch64`, `macos-x86_64` or `windows-x86_64`):
 
 ```
 cargo build --release --manifest-path rust/Cargo.toml -p sdm-jni

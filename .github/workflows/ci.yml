@@ -632,9 +632,15 @@ jobs:
       - name: Install and exercise the wheel
         run: |
           python -m pip install ./packages/structured-data-models-api \
-            './packages/structured-data-models-connectors[sqlite,duckdb]' \
+            './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks,s3]' \
             "$(ls native/*.whl)[test]"
           python -m pip check
+          python - <<'PY'
+          import importlib
+          for module in ('psycopg', 'snowflake.connector', 'databricks.sql', 'databricks.sdk', 's3fs'):
+              importlib.import_module(module)
+              print(f'optional driver imported: {module}')
+          PY
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q --native-build production
           python tests/parity/api_contracts.py --run --group direct-dtypes-options \
             --group results-merge --group sessions --out desktop-api-results.json
