@@ -69,7 +69,7 @@ def assert_materialization(index):
     )
     sampled = data.iloc[:-1].sample(n=40, random_state=42)
     positions = sorted(range(len(sampled)), key=lambda i: key(sampled.index[i]))
-    expected = sampled.iloc[positions]['id'].tolist()
+    expected = sampled['id'].to_numpy()[positions].tolist()
     request = PredictiveQuery(
         'PREDICT data.target FOR EACH data.id', {'data': data}
     ).materialize(indices=[80], num_context_samples=40, task='regression')
@@ -105,7 +105,7 @@ def test_generated_context_matches_independent_row_identity_oracle(seed):
     else:
         draw = candidates.sample(n=size, random_state=42)
         order = sorted(range(size), key=lambda i: key(draw.index[i]))
-        expected = draw.iloc[order]['id'].tolist()
+        expected = draw['id'].to_numpy()[order].tolist()
     request = PredictiveQuery(
         'PREDICT data.target FOR EACH data.id', {'data': data}
     ).materialize(

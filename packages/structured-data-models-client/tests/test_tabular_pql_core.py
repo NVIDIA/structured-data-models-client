@@ -30,14 +30,15 @@ def expected_case(group: str, family: str, entrypoint: str) -> dict[str, Any]:
 
     The fixtures contain valid targets and score only the last entity.
     A supplied prediction frame keeps all other rows in source order.
-    Limited context uses seed 42, then pandas index ordering, including the
-    installed NumPy runtime's tie ordering. No client helper computes this.
+    Limited context uses seed 42, then stable index ordering and represented
+    numeric values rather than platform-specific NumPy promotion. No client helper computes this.
     Prediction values and output columns are fixed, not candidate recordings.
     This checks same-runtime ordering and errors, not historical cross-runtime
     acceptance; those receipts remain preserved separately.
     """
     data = (label_frame if group == 'labels' else indexed_frame)(family)
     context = data.iloc[:-1]
+    context_ids = None
     try:
         if entrypoint == 'indices':
             context = context.sample(
@@ -59,13 +60,17 @@ def expected_case(group: str, family: str, entrypoint: str) -> dict[str, Any]:
                     range(len(context)),
                     key=lambda i: numeric_key(context.index[i]),
                 )
-                context = context.iloc[positions]
+                # DataFrame.iloc can overflow while comparing huge numeric
+                # indexes on pandas 2.3; the oracle needs only row IDs.
+                context_ids = context['id'].to_numpy()[positions].tolist()
             else:
                 context = context.sort_index(kind='stable')
     except (TypeError, ValueError, OverflowError) as error:
         return {'error': {'type': type(error).__name__, 'message': str(error)}}
     return {
-        'context_ids': context['id'].tolist(),
+        'context_ids': (
+            context['id'].tolist() if context_ids is None else context_ids
+        ),
         'prediction': {
             'columns': ['row_index', 'id', 'prediction'],
             'rows': [{'row_index': 0, 'id': len(data) - 1, 'prediction': 0.0}],
