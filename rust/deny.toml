@@ -34,6 +34,7 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
     { id = "RUSTSEC-2026-0368", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
     { id = "RUSTSEC-2026-0369", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
+    { id = "RUSTSEC-2026-0429", reason = "zip 6 is testkit-only via libduckdb-sys 1.10506.0; affected extract is excluded by the required bundled feature; reassess on DuckDB upgrade" },
 ]
 
 [licenses]
