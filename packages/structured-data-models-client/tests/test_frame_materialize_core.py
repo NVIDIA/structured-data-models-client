@@ -295,3 +295,68 @@ def test_link_prediction_preserves_rankings_and_row_identity(monkeypatch):
         [{'item': '3', 'score': 0.9}, {'item': '1', 'score': 0.4}],
     ]
     assert len(transport.sent) == 1
+
+
+@pytest.mark.parametrize('seed', range(8))
+def test_generated_temporal_context_matches_independent_join_sum(seed):
+    import random
+
+    rng = random.Random(seed)
+    count = rng.randrange(8, 18)
+    width = rng.choice([3, 7, 14])
+    keys = list(range(1, count + 1))
+    orders = pd.DataFrame(
+        {
+            'order_id': range(100),
+            'user_id': pd.array(
+                [rng.choice(keys + [None, count + 100]) for _ in range(100)],
+                dtype='Int64',
+            ),
+            'price': [float(rng.randrange(-3, 10)) for _ in range(100)],
+            'time': [
+                pd.Timestamp('2024-01-01')
+                + pd.Timedelta(days=rng.randrange(60))
+                for _ in range(100)
+            ],
+        }
+    )
+    requested = rng.sample(keys, 3)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        data = Schema.from_data(
+            {'users': pd.DataFrame({'user_id': keys}), 'orders': orders},
+            primary_keys={'users': 'user_id', 'orders': 'order_id'},
+            time_columns={'orders': 'time'},
+        )
+        request = PredictiveQuery(
+            f'PREDICT SUM(orders.price, 0, {width}, days) FOR EACH users.user_id',
+            data,
+        ).materialize(
+            indices=requested,
+            model=KumoRelational(),
+            random_seed=seed,
+            num_context_samples=count,
+            anchor_time=pd.Timestamp('2024-02-15'),
+        )
+    payload = request._payloads[0]
+    context = payload['context']['instance_table']
+    columns = context['columns']
+    observed_keys = []
+    for row in context['rows']:
+        entity = row[columns.index('__kumo_entity_ref_0')]
+        anchor = pd.Timestamp(row[columns.index('__kumo_anchor_time')])
+        upper = anchor + pd.Timedelta(days=width)
+        # Independently join source rows and apply the public (start, end] window.
+        expected = sum(
+            record.price
+            for record in orders.itertuples(index=False)
+            if not pd.isna(record.user_id)
+            and record.user_id == entity
+            and anchor < record.time.tz_localize('UTC') <= upper
+        )
+        assert row[columns.index('TARGET')] == expected
+        observed_keys.append(entity)
+    assert sorted(observed_keys) == keys
+    scoring = payload['predict']['instance_table']
+    entity_column = scoring['columns'].index('__kumo_entity_ref_0')
+    assert [row[entity_column] for row in scoring['rows']] == requested
