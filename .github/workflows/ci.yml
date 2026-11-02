@@ -1785,13 +1785,25 @@ jobs:
             runner: ubuntu-latest
             image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
           # The same image index: the runner pulls its arm64 image.
+          - jdk: '17'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            image: mcr.microsoft.com/openjdk/jdk:17-ubuntu@sha256:fadd15520f396beb223d4d2951fff9199b019f1b1304edfb9feca603f0f3f7ee
           - jdk: '21'
             platform: linux-aarch64
             runner: ubuntu-24.04-arm
             image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
+          - jdk: '17'
+            platform: macos-arm64
+            runner: macos-15
+            image: ''
           - jdk: '21'
             platform: macos-arm64
             runner: macos-15
+            image: ''
+          - jdk: '17'
+            platform: macos-x86_64
+            runner: macos-15-intel
             image: ''
           - jdk: '21'
             platform: macos-x86_64
