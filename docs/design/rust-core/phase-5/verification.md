@@ -142,8 +142,9 @@ Commit `79769ad00` implements the approved portable Tabular ordering.
 It passed 407 Python index tests, targeted Rust tests, Clippy and two live Tabular journeys; independent review found no remaining blocker.
 Commit `1661f3388` updates RC-version snapshots and connector assertions; 101 focused checks passed, with two optional skips.
 CI run `41501690988` tests earlier source `43d94e9bc`, so its ordering, lint and RC-expectation failures do not test these fixes.
-The Snowflake subprocess probe passes locally but failed in CI; added diagnostics preserve this unresolved item for the next run.
-A new local release wheel is building from `1661f3388`; final platform validation and the recorded session-performance finding remain open.
+The Snowflake subprocess-probe failure was traced to the runner’s system-tool symlink and repaired without changing client behavior; subsequent CI Python 3.11–3.14 suites passed.
+Shipping RC artifacts now identify source `2e3823fcc`; four platform wheels and the five-native JAR/POM hashes have been checked.
+Final platform validation and the recorded session-performance finding remain open.
 
 ## Retained observation coverage
 
@@ -178,3 +179,9 @@ This is a fresh x86 managed-runtime check; the historical Arm outcome is retaine
 
 Corrected full CI is run `41510270371` on source `2e3823fcc`.
 Its predecessor exposed test/configuration issues now independently reviewed and fixed; it is not a final passing run.
+
+Run `41510270371` exposed two further test-only issues, corrected in `f26f51aa9`: Python 3.10 nanosecond parsing in the evidence comparator, and two external-source checks incorrectly required by the installed API gate.
+The affected Python 3.10 tests pass; the full local comparator suite passed 49 tests and the corrected current-source API gate passed all 400 cases without skips.
+The first local API attempt used the older installed 1.0.0 package and correctly failed its version snapshot; the current-source rerun passes.
+Independent review approved the corrections; external canonical-source checks remain in the maintainer suite, not claimed by installed API evidence.
+The existing CI run continues for platform artifacts; final corrected CI is still required.
