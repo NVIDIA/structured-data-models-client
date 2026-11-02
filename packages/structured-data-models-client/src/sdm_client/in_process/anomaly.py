@@ -145,6 +145,11 @@ class Anomaly:
         key = spec.get('primary_key')
         if not isinstance(key, list) or len(key) < 2:
             return [None] * len(table['rows'])
+        if not set(key) <= set(table['columns']):
+            # The readings need not carry the key: it names the row and is
+            # not a channel, so a caller may leave it out. Then there is no
+            # value to answer under and each answer is matched by position.
+            return [None] * len(table['rows'])
         cells = [values(table, name) for name in key]
         return [
             json.dumps(list(values_of), separators=(',', ':'), default=str)

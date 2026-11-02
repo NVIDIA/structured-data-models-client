@@ -209,12 +209,15 @@ def _meaning(column: Any, dtype: str) -> str:
     r"""What to declare a column as, for a model that reads one meaning.
 
     `coherent_stype` holds a placeholder meaning only where the dtype cannot
-    carry it, and a float can be categorical, so a column the caller never
-    typed stays categorical and this model then refuses it. The readings are
-    numbers and the model reconstructs numbers, so an undeclared meaning
-    follows the dtype here. A meaning the caller did assign is a claim, and is
-    left alone to be refused on its own terms.
+    carry it, and a float can be categorical, so a column with nothing in it
+    to read stays categorical and this model then refuses it. The readings are
+    numbers and the model reconstructs numbers, so there the meaning follows
+    the dtype instead.
+
+    Only that column. `untyped` is the one case where nothing was read and
+    nothing was said, so a meaning carried by a column that holds values is a
+    claim either way, and is left alone to be refused on its own terms.
     """
-    if column.stype_declared:
-        return str(column.stype)
+    if not column.untyped:
+        return coherent_stype(column.stype, dtype, column)
     return MEANING_OF.get(dtype) or coherent_stype(column.stype, dtype, column)

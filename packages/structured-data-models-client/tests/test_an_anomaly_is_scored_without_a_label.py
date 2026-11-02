@@ -169,6 +169,47 @@ def test_readings_are_answered_though_the_schema_was_built_from_nulls(
     assert len(answer) == len(frame)
 
 
+def test_a_meaning_the_caller_gave_a_column_that_holds_values_is_kept(
+    anomaly,
+):
+    """The placeholder rule is for a column with nothing in it to read. A
+    column that holds values and says it is categorical says so on purpose,
+    and this model refuses that rather than reading it as numbers anyway."""
+    from sdm_client import Schema
+
+    frame = readings()[['flow', 'pressure']]
+    schema = Schema.from_data({'instance': frame})
+    schema['instance']['flow'].stype = 'categorical'
+
+    with pytest.raises(StructuredDataError):
+        with SDMClient.in_process(anomaly) as client:
+            client.predict(
+                Request.anomaly(frame, schema=schema, inference=FAST),
+                model=KumoAnomaly(),
+            )
+
+
+def test_readings_that_leave_out_a_composite_key_are_answered(anomaly):
+    """A key names the row and is not a channel, so a caller may leave it
+    out. Then there is no value to answer under and rows match by position."""
+    from sdm_client import Schema
+
+    frame = readings()
+    frame['site'] = 'north'
+    schema = Schema.from_data({'instance': frame})
+    schema['instance'].primary_key = ['reading_id', 'site']
+
+    channels = frame[['flow', 'pressure']]
+    with SDMClient.in_process(anomaly) as client:
+        answer = client.predict(
+            Request.anomaly(channels, schema=schema, inference=FAST),
+            model=KumoAnomaly(),
+        ).to_pandas()
+
+    assert len(answer) == len(frame)
+    assert answer['row_index'].tolist() == list(range(len(frame)))
+
+
 def test_a_column_the_model_cannot_reconstruct_is_refused(anomaly):
     """A reading it cannot reconstruct has no error to score."""
     frame = readings()
