@@ -2,14 +2,16 @@
 <!-- All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Effort 3: verify, build and publish
+# Effort 3: verify and prepare the 2.0 release candidate
 
 **Implementation in progress.**
-Finish Phase 5 with a tested client ready for `main`, then publish Python and Java packages.
+Prepare a tested 2.0.0 release candidate for review.
+**Owner instruction: do not publish anything or create a release yet.**
+Prepare Python `2.0.0rc1` and corresponding Rust/Java RC versions; GitHub Releases is the initial Java destination only after separate publication authorization.
 Keep the current architecture and test tools.
 
 ```text
-Reuse valid results → test gaps → build all platforms → final CI → publish → verify installation
+Reuse valid results → test gaps → build all platforms → final CI → verify local installs → owner review
 ```
 
 ## 1. Finish verification
@@ -41,7 +43,9 @@ Verify invalid options cause no transport call, and accepted options work agains
 
 The current Python path recognizes specific Linux NumPy binaries to reproduce their sorting and comparison behavior.
 That cannot support the promised macOS/Windows PQL paths without more platform-specific implementations.
-Even a unique source index can acquire duplicate labels during sampling.
+Sampling is without replacement: unique source labels remain unique.
+The gap concerns existing duplicate labels and certain NumPy-valued object comparisons; ordinary unique primitive labels already work without a binary profile.
+The old Python client also sorted reduced context by index after sampling; this orders at most 10,000 context rows, not the full source table or scoring rows.
 
 | Case | Current behavior | Recommended shared Rust rule |
 |---|---|---|
@@ -87,19 +91,19 @@ Use current Linux glibc builds; 32-bit, Alpine/musl, PyPy and free-threaded Pyth
 Keep API/connector source archives; explicitly decide whether to add a client source archive, which the current release workflow does not produce.
 Reuse the heavy-job guard and Cargo jobs=2; run large-memory checks sequentially.
 
-## 3. Publish and verify what users receive
+## 3. Prepare artifacts; publication is on hold
 
 | Work | Concrete result |
 |---|---|
-| Fix release instructions | Update `RELEASING.md`: three Python distributions, Java, version/tag steps and recovery after partial publication; remove stale five-package/engine instructions |
-| Publish Python | Extend the existing protected release and owner-run index publishing process to include all five wheels |
-| Publish Java | Add JAR/POM publication, required repository metadata and access; current `publish.yml` publishes no Java package |
-| Verify publication | Install from the actual Python index and Java repository in clean consumers; confirm versions, file hashes, dependencies and native loading |
-| Record completion | Short `completion.md` with final commit, reused/new test results, performance findings, release links and any remaining limits |
+| RC version | Align Python `2.0.0rc1`, Rust/Java prerelease versions, internal pins and artifact checks |
+| Local distribution checks | Verify clean wheel/JAR consumers, source identities, hashes, dependencies and native loading |
+| Release preparation | Keep protected publishing controls; prepare GitHub JAR/POM assets without uploading or tagging |
+| Record readiness | Short `completion.md` with tested commit, reused/new evidence, performance and outstanding limits |
 
-**Resolve before release:** version, Java publishing destination/credentials and protected release approval.
-Report merge readiness before merging/tagging; preserve existing release protections.
-Independent review must confirm the final evidence and artifact set.
+Maven Central is a follow-up option, not required for this RC.
+It needs namespace access, signing, source/Javadoc JARs and publishing configuration.
+Actual index/GitHub publication and published-consumer verification wait for explicit owner authorization.
+Report merge readiness before merging/tagging; no unproven gate may be marked passed.
 
-**Done:** required tests pass, all five Python and Java targets build and load, and Python/Java packages are published and installable.
-Unproven requirements need an explicit owner decision; if publication is blocked, report “validated, publication pending”.
+**Ready for review:** required tests pass, all five Python and Java targets build and load, and local RC artifacts install correctly.
+This is not a claim that the product is released or that publication has been verified.

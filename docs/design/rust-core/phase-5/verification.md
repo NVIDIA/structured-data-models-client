@@ -90,7 +90,7 @@ No new tests were run for this planning audit.
 - Two independent reuse reviews are retained at `phase-5/effort-3/evidence-review-a.md` and `evidence-review-b.md` in the external archive.
   Both support retaining unchanged sampling/SQL proof, while requiring current checks for changed Python dispatch, numeric batching, DuckDB reads, Snowflake connections and long Unicode queries.
   The 582-cell report spans multiple builds; it and the 210-cell type report are historical evidence, not one final-build certificate.
-- Remaining: actual platform CI, bounded affected live checks, original acceptance/performance reconciliation, release version, Java publication destination/access and publication verification.
+- Remaining: actual platform CI, bounded affected live checks, original acceptance/performance reconciliation, RC version alignment and final local artifact verification; publication is explicitly on hold.
 
 Full CI `41490937592` completed with failures on source `418520620`; current fixes are committed in `3b443c78a` and still require final CI.
 The failed run nevertheless verified packaged Java loading and public Arrow `Schema.fromData` on all five required platforms (JDK 21 everywhere; JDK 17 additionally on Linux x86-64 and Windows x86-64).
@@ -114,3 +114,7 @@ Current Python socket retry/timeout and credential-redaction tests passed (61 te
 The independent native-safety review confirms that the deferred sanitizer requirement concerns `sdm-host`; Python/JVM ownership and crash tests are complementary, not sanitizer coverage of those runtimes.
 
 The final candidate is not yet accepted, built across all targets or published.
+
+Owner release direction: prepare a 2.0.0 RC; do not publish or tag.
+Java will initially use GitHub Releases after separate authorization; Maven Central is a follow-up.
+The sorting audit corrected an earlier claim: no-replacement sampling preserves unique source indexes; the unresolved cases involve existing ties and certain numeric object labels.
