@@ -20,6 +20,28 @@ Phase 5 removal/packaging changes need an explicit impact assessment before reus
 | Distribution release | Python and Java build configuration covers five targets; Java JAR/POM release assets are configured, but repository publication is unresolved | **Effort 3:** complete the [distribution matrix](effort-3/design.md), publish Python/Java artifacts and verify clean consumer installs; configured builds are not successful release evidence |
 | Final acceptance | Prior CI and historical artifacts are retained | **Must close:** required final-source CI and final-artifact gates, with approved evidence reuse explicitly recorded |
 
+## Original acceptance requirements: concrete closure work
+
+Audited against archived `migration-plan.md` §6–8 and `phase-4/acceptance-map.md`; the old labels below identify requirements, not extra projects.
+
+| Gate | What remains to close it |
+|---|---|
+| L0: boundaries | Final CI dependency/unsafe scans, Clippy, contract lock and dependency checks; retain reviewed contract-version decisions |
+| L1: algorithms/decoders | Final Rust suites, including retained PQL, contract and YAML/view fuzz tests; decoder fuzz alone does not establish algorithm parity |
+| L2: public contracts | Final maintained API/outcome ledger and refusal tests; explicitly reconcile historical observation fields and approved differences rather than claiming the old corpus was replayed |
+| L3: randomized cases | Carry forward reviewed Phase 3 generated/held-out results for unchanged algorithms; identify new Phase 4 paths not covered by that campaign |
+| L4: SQL/providers | Final SQLite/DuckDB/Postgres golden and provider jobs; previous Postgres jobs used retired selectors, now repaired |
+| L5: conversions | Final runtime/driver jobs, including repaired DBR16.4 Arrow conversion and unresolved NumPy platform ordering |
+| L6: live predictions | Retain identified historical cells; finish affected installed-client journeys, including ranking/forecast, and reconcile the Databricks runtime sweep separately |
+| L7: performance | Preserve exact approved historical costs; measure changed numeric preparation and session paths, with baseline identities and memory scope |
+| L8: artifacts/safety | Final five-platform wheel/JAR acceptance, minimum-system-library checks and explicit sanitizer/crash/leak evidence; Java loading alone cannot establish these |
+
+At source `cc44e8dd8`, the retained contract-decoder property suite (6 tests) and core PQL/view fuzz suites (1 + 5 tests) passed with the pinned toolchain and warm build.
+Logs: external `phase-5/effort-3/current-contract-fuzz.log` and `current-core-fuzz.log`.
+Current CI contains boundary guards and bounded decoder fuzz tests, but this audit found no sanitizer job in the workflow.
+Locate applicable historical safety evidence or execute the missing check; absence from CI does not prove a product defect or waive the requirement.
+Do not rebuild retired migration tooling merely to preserve its command names.
+
 ## Existing decisions are not new failures
 
 Phase 3 acceptance preserved the raw held-out NO-GO findings (33 IDs / 82 legs); reviewed dispositions left one residual against a threshold of four.
