@@ -118,3 +118,9 @@ The final candidate is not yet accepted, built across all targets or published.
 Owner release direction: prepare a 2.0.0 RC; do not publish or tag.
 Java will initially use GitHub Releases after separate authorization; Maven Central is a follow-up.
 The sorting audit corrected an earlier claim: no-replacement sampling preserves unique source indexes; the unresolved cases involve existing ties and certain numeric object labels.
+
+Current session comparison (release wheel `d17422bb9`, same Python/NumPy/pandas/Arrow as archived `9bda54ef1`): three alternating process runs, each with five measured repetitions, found median fit 27.4 ms versus 23.9 ms and scoring 7.3 ms versus 6.4 ms (about +15%).
+Peak process RSS was 134,772 versus 133,704 KiB; this is a process high-water measure, not isolated native allocation.
+The earlier build explicitly forced Rust routing; its default route is Python, so the initial default-route comparison is not a Rust baseline.
+Evidence: external `phase-5/effort-3/session-benchmark-interleaved-core.json` and `session-benchmark-current-environment.json`.
+This local constant-response benchmark excludes network/model time; the timing regression remains unresolved pending attribution, not accepted or hidden by earlier dispositions.
