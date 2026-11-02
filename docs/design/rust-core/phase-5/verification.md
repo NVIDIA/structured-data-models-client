@@ -124,3 +124,9 @@ Peak process RSS was 134,772 versus 133,704 KiB; this is a process high-water me
 The earlier build explicitly forced Rust routing; its default route is Python, so the initial default-route comparison is not a Rust baseline.
 Evidence: external `phase-5/effort-3/session-benchmark-interleaved-core.json` and `session-benchmark-current-environment.json`.
 This local constant-response benchmark excludes network/model time; the timing regression remains unresolved pending attribution, not accepted or hidden by earlier dispositions.
+
+RC artifact check at `64a164bd0`: API/connectors wheels and source archives built as `2.0.0rc1`; the client wheel normalizes Rust `2.0.0-rc.1` to the same Python version.
+All three wheels installed into a fresh external Python 3.12 environment; dependency checks, native SHA/contract 57 checks and absence of retired engine/PQL imports passed.
+The installed client completed six fit/close cycles and 30 predictions using a local constant-response transport, not a live model endpoint.
+Evidence: external `phase-5/effort-3/rc-installed-identity.json`, `rc-pure-python/artifacts.json` and `rc-session-smoke.json`.
+This local Linux x86-64 wheel targets glibc 2.34; the required manylinux2014 and other platform artifacts still need CI verification.
