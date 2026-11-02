@@ -145,6 +145,23 @@ def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
     return bodies
 
 
+#: Models this client builds requests for that the contract's enums do not
+#: name, and the fields those enums reject them in. The contract describes
+#: what a deployment serves, and no deployment serves these: they run in this
+#: process only. Everything else about such a body is still policed, so an
+#: envelope that is wrong in any other way still fails here.
+NOT_IN_THE_CONTRACT = {'kumo-anomaly': ('model', 'task.kind')}
+
+
+def _declared_elsewhere(body: dict[str, Any], error: Any) -> bool:
+    r"""Whether ``error`` is only that the contract has not heard of this
+    model yet, rather than something wrong with the request."""
+    exempt = NOT_IN_THE_CONTRACT.get(body.get('model'))
+    if exempt is None or error.validator != 'enum':
+        return False
+    return '.'.join(str(part) for part in error.path) in exempt
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -210,6 +227,9 @@ def main() -> int:
             {**defs[wanted], '$defs': defs}, format_checker=FormatChecker()
         )
         errors = sorted(validator.iter_errors(body), key=lambda e: list(e.path))
+        errors = [
+            error for error in errors if not _declared_elsewhere(body, error)
+        ]
         if not errors:
             continue
         failed += 1

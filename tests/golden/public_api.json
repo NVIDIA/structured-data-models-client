@@ -116,6 +116,7 @@
       "Explanations",
       "FittedModel",
       "GradientExplanations",
+      "KumoAnomaly",
       "KumoRelational",
       "KumoTabular",
       "MissingExtraError",
@@ -199,6 +200,17 @@
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
         "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
+      },
+      "KumoAnomaly": {
+        "bases": [
+          "sdm_client.models.Model"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "name"
+        ],
+        "public_methods": {},
+        "signature": "()"
       },
       "KumoRelational": {
         "bases": [
@@ -308,6 +320,7 @@
           "target_moves_with_time"
         ],
         "public_methods": {
+          "anomaly": "(readings: 'pd.DataFrame', *, schema: 'Schema | None' = None, entity_table: 'str' = 'instance', inference: 'Mapping[str, Any] | None' = None) -> 'Request'",
           "materialized": "(*, payloads: 'tuple[dict[str, Any], ...]', schema: 'Schema', query: 'str', indices: 'list[Any]', entity_table: 'str | None' = None, windowed: 'bool' = False, requested_inference: 'Mapping[str, Any] | None' = None) -> 'Request'"
         },
         "signature": "(context: 'pd.DataFrame', predict: 'pd.DataFrame', *, target: 'str', task: 'str', related_tables: 'Mapping[str, pd.DataFrame] | None' = None, schema: 'Schema | None' = None, entity_table: 'str' = 'instance', inference: 'Mapping[str, Any] | None' = None, task_options: 'Mapping[str, Any] | None' = None) -> 'None'"
