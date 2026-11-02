@@ -37,6 +37,28 @@ Remove the duplicate Python typing helper after ordinary options reach Rust on e
 Keep NumPy-to-native conversion at Python admission; do not change sampling, SQL or add callbacks.
 Verify invalid options cause no transport call, and accepted options work against the endpoint and local models.
 
+### Cross-platform index ordering: owner decision pending
+
+The current Python path recognizes specific Linux NumPy binaries to reproduce their sorting and comparison behavior.
+That cannot support the promised macOS/Windows PQL paths without more platform-specific implementations.
+Even a unique source index can acquire duplicate labels during sampling.
+
+| Case | Current behavior | Recommended shared Rust rule |
+|---|---|---|
+| Sampled labels `[2, 1, 1]` | Match the installed NumPy sort; unknown binaries are refused | Sort by label, retaining sampled order between equal labels |
+| Object labels containing NumPy numbers | Match that binary's numeric comparison rules | Compare supported numeric values with the same documented rules in both languages |
+| Ordinary unique built-in labels | Already handled without a NumPy binary profile | Preserve their ordering |
+
+```text
+Python/Java values → Rust compares and orders labels → same sampled rows → model
+```
+
+Recommendation: approve deterministic shared ordering as a bounded improvement.
+Ties can change context row order and therefore model output; validate those differences explicitly with live examples.
+This changes neither sampled membership nor warehouse push-down SQL.
+Custom comparison functions remain unsupported.
+Until approved, retain existing ordering and audit the missing platform producers; do not claim full platform support.
+
 ## 2. Build the complete distribution set
 
 “Configured” below means the workflow exists, not that this release has passed.

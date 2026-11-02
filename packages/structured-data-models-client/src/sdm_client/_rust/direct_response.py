@@ -278,13 +278,13 @@ def finish(
 ) -> Any:
     import json
 
-    from sdm_client._rust import results
+    from sdm_client._rust import direct_options, results
     from sdm_client._rust.predict import _adapter
 
     prepared = results.expect(finished.result, results.PreparedDirectCall)
     description = json.loads(finished.take(prepared.value))
     payload = json.loads(finished.take(description['payload']))
-    if 'inference' in payload:
+    if 'inference' in payload and not direct_options.can_encode(options):
         payload['inference'] = options
     # Transport may mutate this payload. The reference consumes that same
     # object only after parsing the complete native response.

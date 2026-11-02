@@ -40,8 +40,9 @@ these packages. The three Python distributions and Java library share one versio
 
 - Requests, sampling and result assembly run through Rust for both languages.
   Local Python model execution uses the same prepared requests and responses.
-- Local model inference options are validated before model execution.
-  Ordinary NumPy scalar options are accepted at Python request admission.
+- Ordinary inference options are validated in Rust before local or remote model
+  execution, including fitted sessions, for both Python and Java.
+  NumPy scalar options are accepted at Python request admission.
 
 ### Fixed
 

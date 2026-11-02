@@ -766,6 +766,7 @@ pub(crate) async fn predict(
         DirectPrediction::DeferredOptions {
             body,
             inference_present,
+            inference,
         } => {
             sdm_request::direct::bound(&body.bound)?;
             if direct.payload != Some(body.payload) {
@@ -779,9 +780,13 @@ pub(crate) async fn predict(
             };
             let payload = crate::predict::payload(&bytes)?;
             tabular::check_body(&payload, &body, &body.bound.outputs)?;
-            let mut payload =
-                tabular::complete_body(payload, &request.request_id, DirectInference::default())?;
-            if inference_present {
+            let unencoded = inference.is_none();
+            let mut payload = tabular::complete_body(
+                payload,
+                &request.request_id,
+                inference.unwrap_or_default(),
+            )?;
+            if inference_present && unencoded {
                 payload.set("inference", Value::Null);
             }
             (body.bound, payload, true)

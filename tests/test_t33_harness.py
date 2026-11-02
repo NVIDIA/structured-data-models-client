@@ -31,7 +31,7 @@ def _runs(job: dict[str, Any]) -> list[str]:
 
 
 def test_t33_the_numeric_spelling_cases_run_on_ci_s_postgres_service() -> None:
-    r"""P2-T2.14c-1: ``test_t214c_numeric_spelling.py`` runs in a job with
+    r"""P2-T2.14c-1: ``test_postgres_source_contracts.py`` runs in a job with
     the Postgres service, and every job with the service requires it
     (``SDM_REQUIRE_POSTGRES``), so a missing server fails, never skips."""
     workflow = _workflow()
@@ -60,7 +60,7 @@ def test_t33_the_numeric_spelling_cases_run_on_ci_s_postgres_service() -> None:
                 **(step.get('env') or {}),
             }.get('SDM_REQUIRE_POSTGRES'), name
     assert any(
-        'test_t214c_numeric_spelling.py' in run
+        'test_postgres_source_contracts.py' in run
         for job in with_service.values()
         for run in _runs(job)
     )
@@ -71,7 +71,7 @@ def test_a_step_scoped_postgres_requirement_cannot_be_missing(
 ) -> None:
     step = {
         'env': {'SDM_REQUIRE_POSTGRES': '1'},
-        'run': 'python -m pytest contract/tests/test_t214c_numeric_spelling.py',
+        'run': 'python -m pytest contract/tests/test_postgres_source_contracts.py',
     }
     workflow = {
         'jobs': {

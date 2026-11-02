@@ -1027,6 +1027,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::HopsPastEndpointUncounted => {
             said(r#"this request samples more hops than the endpoint reads, at most {limit}"#)
         }
+        S::InferenceRunModeInvalid => {
+            said("inference run_mode is text of at most 1024 characters, or null")
+        }
         S::InferenceConfigNotAnObject => {
             said(r#"inference_config is a mapping of option names to values"#)
         }

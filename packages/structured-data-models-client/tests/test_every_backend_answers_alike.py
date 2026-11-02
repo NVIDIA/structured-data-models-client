@@ -187,12 +187,28 @@ def test_a_key_of_several_columns_answers_under_its_values(client_for):
 )
 @pytest.mark.parametrize('operation', ['predict', 'fit', 'session_predict'])
 def test_an_inference_option_is_read_as_the_type_it_is(
-    client_for, inference, code, operation
+    client_for, inference, code, operation, monkeypatch
 ):
     """A boolean spelled ``'no'`` asks for nothing, and a value that cannot
     be read as its type is refused before it is sent."""
     request = asked('churn', 'classification', inference=inference)
     with client_for('kumo-tabular') as client:
+        sent = []
+        for name in (
+            'predict',
+            'predict_body',
+            'create_session',
+            'session_predict',
+        ):
+            original = getattr(client._transport, name, None)
+            if original is None:
+                continue
+
+            def observed(*args, _name=name, _original=original, **kwargs):
+                sent.append(_name)
+                return _original(*args, **kwargs)
+
+            monkeypatch.setattr(client._transport, name, observed)
 
         def run():
             if operation == 'predict':
@@ -212,6 +228,9 @@ def test_an_inference_option_is_read_as_the_type_it_is(
             run()
 
     assert refused.value.code == code
+    assert sent == (
+        ['create_session'] if operation == 'session_predict' else []
+    )
 
 
 def test_a_fault_in_the_client_is_raised_as_itself(client_for, monkeypatch):

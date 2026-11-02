@@ -51,7 +51,7 @@ def test_java_acceptance_remains_once_after_a_successful_download() -> None:
     )
     names = (
         'The S0 cases on the Java host',
-        'compare (java)',
+        'Java parser behavior on this platform',
         "The Java host's acceptance tests",
     )
     previous = download

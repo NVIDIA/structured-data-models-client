@@ -3799,6 +3799,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
     { name = "structured-data-models-api" },
+    { name = "tzdata" },
     { name = "urllib3" },
 ]
 
@@ -3868,6 +3869,7 @@ requires-dist = [
     { name = "structured-data-models-connectors", extras = ["s3"], marker = "extra == 's3'", editable = "packages/structured-data-models-connectors" },
     { name = "structured-data-models-connectors", extras = ["snowflake"], marker = "extra == 'snowflake'", editable = "packages/structured-data-models-connectors" },
     { name = "structured-data-models-connectors", extras = ["sqlite"], marker = "extra == 'sqlite'", editable = "packages/structured-data-models-connectors" },
+    { name = "tzdata", specifier = ">=2024.1" },
     { name = "urllib3", specifier = ">=1.26" },
 ]
 provides-extras = ["all", "databricks", "databricks-serving", "duckdb", "in-process", "lakebase", "postgres", "relational", "s3", "snowflake", "sqlite", "test"]

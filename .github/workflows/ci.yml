@@ -979,27 +979,6 @@ jobs:
 
   # Run tooling-marked tests once, separately from the Python version matrix.
   # Architecture and repository-tool tests share the normal maintained runtime.
-  tooling-contract:
-    name: tooling (contract)
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    needs: [configuration, native-wheel, native-test-ops]
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
-    env:
-      CELL: ref-pandas3
-      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - *contract-wheel
-      - *contract-install
-      - *contract-kit-wheel
-      - *contract-kit-python
-      - name: The checking tools' tests in contract/tests
-        run: python -m pytest contract/tests -q -m tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
-
   tooling-root:
     name: tooling (root)
     runs-on: ubuntu-latest
@@ -1158,7 +1137,7 @@ jobs:
       # key (P2-T2.14c-1).
       - &contract-postgres-vectors
         name: T2.3's Postgres regression and key vectors, T2.21's exact-key vectors and T2.14c's numeric spellings, on the service
-        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py contract/tests/test_t214c_numeric_spelling.py -q
+        run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_t221_exact_keys.py -q
       # T2.14b's Postgres JSON regressions (a document escaping a lone
       # surrogate kept as the reference keeps it), on the service, in the
       # reference cell (T2.14b fix 7).

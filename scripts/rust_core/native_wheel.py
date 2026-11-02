@@ -255,6 +255,8 @@ def _build(
         env=pinned,
         capture_output=True,
         text=True,
+        encoding='utf-8',
+        errors='replace',
         check=False,
     )
     log = build.stdout + build.stderr

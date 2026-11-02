@@ -195,7 +195,9 @@ def test_ci_keeps_fresh_workspace_tests_before_locked_source_observations() -> (
     observe = next(
         i
         for i, step in enumerate(workflow)
-        if str(step.get('run', '')).startswith('cargo run -p sdm-testkit')
+        if str(step.get('run', '')).startswith(
+            'cargo tree -e normal -p sdm-testkit'
+        )
     )
     assert workspace < restore < observe
     assert '--locked' in workflow[observe]['run']

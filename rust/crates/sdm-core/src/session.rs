@@ -243,8 +243,21 @@ pub(crate) async fn send(
             "session send has no body bytes",
         ));
     };
+    let mut payload = crate::predict::payload(&body)?;
+    if let Some(inference) = request.inference {
+        let inference = sdm_request::tabular::typed_inference(inference)?;
+        // Creation pins context; inference fields belong only to scoring calls.
+        if matches!(&request.endpoint, Endpoint::SessionPredict { .. }) {
+            payload.set("inference", inference);
+        }
+    }
+    sdm_request::inference::envelope(&mut payload)?;
     let reply = asker
-        .call_model(request.endpoint, "application/json".into(), body)
+        .call_model(
+            request.endpoint,
+            "application/json".into(),
+            payload.to_bytes(),
+        )
         .await;
     let (status, body) = match reply {
         Reply::Model(ModelResult::Response { status, body, .. })

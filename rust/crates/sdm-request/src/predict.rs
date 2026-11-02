@@ -833,6 +833,7 @@ pub fn body(
     // none (the reference's 26ecdd28: a deployment applies its own defaults
     // to a request that carries none, and the SDM backends refuse any
     // non-empty `inference_config`).
+    crate::inference::envelope(&mut envelope)?;
     match envelope.get("inference") {
         Some(Value::Object(_)) => {
             if let Some(Value::Object(config)) = envelope

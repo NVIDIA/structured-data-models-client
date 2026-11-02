@@ -26,7 +26,6 @@ from typing import Any
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.in_process.answers import QUANTILE_LEVELS, classified, regressed
 from sdm_client.in_process.columns import Context
-from sdm_client.in_process.inference import typed_inference
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
 
@@ -123,10 +122,6 @@ class InProcessBackend:
         self,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        payload = {
-            **payload,
-            'inference': typed_inference(payload.get('inference') or {}),
-        }
         with self._running():
             served, model = self._serving(payload['model'])
             task = payload['task']
@@ -147,10 +142,6 @@ class InProcessBackend:
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Fit the context once, to be scored against until released."""
-        payload = {
-            **payload,
-            'inference': typed_inference(payload.get('inference') or {}),
-        }
         with self._running():
             served, model = self._serving(payload['model'])
             _fields(served, model, payload['task']['kind'], payload)
@@ -173,10 +164,6 @@ class InProcessBackend:
         session_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        payload = {
-            **payload,
-            'inference': typed_inference(payload.get('inference') or {}),
-        }
         with self._running():
             with self._state:
                 session = self._sessions.get(session_id)

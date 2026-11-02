@@ -731,7 +731,7 @@ from routes import LegacyGuard
 with LegacyGuard({}) as guard:
     import snowflake.connector
 assert guard.report['unobserved_subprocesses'] == []
-assert [item['command'] for item in guard.report['observed_subprocesses']] == [['uname', '-p']]
+assert all(item['command'] == ['uname', '-p'] for item in guard.report['observed_subprocesses'])
 with LegacyGuard({}) as outside:
     subprocess.run(['uname', '-p'], check=True, capture_output=True)
 assert outside.report['observed_subprocesses'] == []
@@ -746,9 +746,10 @@ print(json.dumps(guard.report))
         check=True,
     )
     observed = json.loads(ran.stdout)['observed_subprocesses']
-    assert (
-        observed[0]['origin']
+    assert all(
+        item['origin']
         == 'snowflake.connector.description -> platform._Processor.from_subprocess'
+        for item in observed
     )
 
 

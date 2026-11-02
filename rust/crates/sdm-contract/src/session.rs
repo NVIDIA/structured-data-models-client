@@ -225,6 +225,9 @@ pub struct CheckTabularSessionQuestion {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SendTabularSession {
+    /// Typed host observations, separate from the potentially large body.
+    #[serde(default)]
+    pub inference: Option<crate::direct::DirectInference>,
     pub endpoint: crate::run::Endpoint,
     pub payload: AttachmentId,
 }

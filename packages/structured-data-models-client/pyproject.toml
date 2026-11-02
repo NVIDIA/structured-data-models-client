@@ -42,6 +42,8 @@ dependencies = [
     "pandas>=2.2.2",
     "numpy>=1.23.5",
     "pyarrow>=14.0.1",
+    # IANA zones must also be available on Windows and minimal containers.
+    "tzdata>=2024.1",
     # The existing relational validator floor also supplies its error formatter.
     "pydantic>=2.7",
     "requests>=2.28",

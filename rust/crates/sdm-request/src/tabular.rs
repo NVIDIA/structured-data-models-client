@@ -506,12 +506,15 @@ fn option_value(value: PrimitiveOption) -> Result<Value, CoreError> {
     })
 }
 
-fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
+/// Decode and admit ordinary host-observed inference options.
+pub fn typed_inference(inference: DirectInference) -> Result<Value, CoreError> {
     let mut fields = Vec::new();
     for (name, value) in inference.entries {
         fields.push((name, option_value(value)?));
     }
-    Ok(Value::Object(fields))
+    let mut value = Value::Object(fields);
+    crate::inference::normalize(&mut value)?;
+    Ok(value)
 }
 
 /// Resolve adapter schema columns before its warning and fallible body work.
@@ -769,7 +772,7 @@ pub fn complete_body(
     inference: DirectInference,
 ) -> Result<Value, CoreError> {
     payload.set("metadata", object([("request_id", text(request_id))]));
-    let inference = primitive_inference(inference)?;
+    let inference = typed_inference(inference)?;
     if !matches!(&inference,Value::Object(fields) if fields.is_empty()) {
         payload.set("inference", inference);
     }

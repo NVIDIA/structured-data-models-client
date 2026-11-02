@@ -18,6 +18,7 @@ import pytest
 
 from sdm_client import (
     KumoTabular,
+    PredictiveQuery,
     Request,
     Schema,
     SDMClient,
@@ -519,3 +520,24 @@ def test_missing_reply_index_fails_before_native_id_parsing(
             model=KumoTabular(),
         )
     assert parsed == []
+
+
+def test_arrow_backed_strings_materialize_with_nulls_across_arrow_versions():
+    frame = pd.DataFrame(
+        {
+            'id': [1, 2, 3],
+            'text': pd.Series(
+                ['first', None, 'third'], dtype='string[pyarrow]'
+            ),
+            'target': [1.0, 2.0, 3.0],
+        }
+    )
+    schema = Schema.from_data({'items': frame}, primary_keys={'items': 'id'})
+    request = PredictiveQuery(
+        'PREDICT items.target FOR EACH items.id', schema
+    ).materialize(indices=[1])
+    assert request.predict.instance_table['text'].tolist() == ['first']
+    assert request.context.instance_table['text'].isna().tolist() == [
+        True,
+        False,
+    ]

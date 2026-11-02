@@ -70,8 +70,15 @@ No new tests were run for this planning audit.
 
 Current candidate `418520620` is running in full CI `41490937592`.
 Its clean installed wheel passed five memory prediction/session cells, 24 DuckDB cells (including expected refusals), and eight Snowflake/semantic-view cells.
-Eleven additional live option/long-query checks passed; nine invalid-option cases exposed the early-rejection gap described in the Effort 3 design.
+The early-rejection gap is fixed in shared Rust admission (contract 57): all 20 live option/long-query checks now pass, including assertions that invalid options never reach the transport.
+Related local checks passed: 145 Python tests, two Rust admission tests, 22 Rust prediction/session tests, and the Java prediction/fit/session admission regression.
+The Python custom-transport path still preserves exotic non-JSON values; this is not a claim of universal option normalization.
 The wide 5,000-column public journey passed in 14.38 seconds process wall time with 202,016 KiB peak RSS; this is a current measurement, not a complete performance gate.
 Commit `932fabaf9` records an independently reviewed non-applicable ZIP advisory in an excluded test-build code path; local dependency checks pass.
+
+CI exposed additional compatibility and test-configuration gaps.
+The DBR16.4 Arrow string-storage mismatch is reproduced and fixed, with null preservation verified in its exact environment.
+Stale wheel-smoke package references, Windows log decoding, missing timezone data, retired CI selectors and obsolete test expectations are repaired; 447 related checks passed and the final stale assertion passed separately.
+NumPy producer admission remains incomplete across supported Python/platform combinations; the bounded ordering proposal in the design awaits an owner decision.
 
 The final candidate is not yet accepted, built across all targets or published.

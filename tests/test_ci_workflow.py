@@ -62,7 +62,6 @@ TIMEOUT_CEILINGS = {
     'rust-test': 120,
     'test': 60,
     'contract-python-ref-pandas3': 60,
-    'tooling-contract': 90,
     'tooling-root': 90,
 }
 TIMEOUT_CEILING = 60
@@ -1141,8 +1140,8 @@ def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
         r for n, r in _t30_pytest_steps() if n in tooling and _t30_selects(r)
     ]
     covered = [suite for run in runs for suite in sorted(_t30_suites(run))]
-    # Both suites, each once.
-    assert sorted(covered) == ['contract/tests', 'tests'], (covered, runs)
+    # Maintained tooling tests live in the root suite; contract tooling was retired.
+    assert covered == ['tests'], (covered, runs)
     for other, run in _t30_pytest_steps():
         if other not in tooling:
             assert f'not {T30_MARKER}' in run, f'{other} runs them: {run}'

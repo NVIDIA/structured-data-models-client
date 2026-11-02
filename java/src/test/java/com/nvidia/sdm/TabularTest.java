@@ -141,6 +141,34 @@ class TabularTest {
     }
   }
 
+  @Test void inferenceAdmissionIsSharedAcrossPredictionAndSessions() throws Exception {
+    try (RootAllocator allocator = new RootAllocator(); Table context = table(allocator, true, 1, 2, 3);
+        Table scoring = table(allocator, false, 4); Endpoint endpoint = new Endpoint();
+        SdmClient client = SdmClient.connect(endpoint.url())) {
+      Request valid = new Request(context, scoring, "y", "regression",
+          RequestOptions.builder().inference(Map.of("use_prediction_time", "no")).build());
+      client.predict(valid, SdmClient.KUMO_TABULAR);
+      assertEquals(false, ((Map<?, ?>) endpoint.calls.get(0).get("inference")).get("use_prediction_time"));
+      try (FittedModel fitted = client.fit(valid, SdmClient.KUMO_TABULAR)) {
+        for (Map<String, Object> options : List.of(
+            java.util.Collections.<String, Object>singletonMap("use_prediction_time", null),
+            Map.<String, Object>of("run_mode", 7),
+            java.util.Collections.<String, Object>singletonMap("inference_config", null))) {
+          Request invalid = new Request(context, scoring, "y", "regression",
+              RequestOptions.builder().inference(options).build());
+          int before = endpoint.calls.size();
+          assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
+              () -> client.predict(invalid, SdmClient.KUMO_TABULAR)).code());
+          assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
+              () -> client.fit(invalid, SdmClient.KUMO_TABULAR)).code());
+          assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
+              () -> fitted.predict(invalid)).code());
+          assertEquals(before, endpoint.calls.size());
+        }
+      }
+    }
+  }
+
   @Test void fittedHoldoutAndOverlapUseEntityKeys() throws Exception {
     try (RootAllocator allocator = new RootAllocator(); Table context = table(allocator, true, 1, 2, 3);
         Table predict = table(allocator, false, 2); Endpoint endpoint = new Endpoint();

@@ -136,6 +136,8 @@ EXPECTED: dict[str, tuple[str, ...]] = {
     ),
     'test_binding.py': (
         'test_the_build_is_the_one_named',
+        'test_unsupported_contract_is_refused_before_a_run_exists',
+        'test_windows_import_preserves_process_state',
         'test_the_stub_describes_the_module',
         'test_the_contract_version_is_the_contract_crate_s',
         'test_the_error_codes_are_the_contract_s_in_its_order',
@@ -195,7 +197,7 @@ FILES = {
 #: The modules whose origin the guard records inside the test process.
 ORIGINS = ('sdm_client', 'sdm_client._native')
 #: The sibling distributions the client pins, installed from the inputs.
-SIBLINGS = ('structured-data-models-api', 'structured-data-models-pql')
+SIBLINGS = ('structured-data-models-api', 'structured-data-models-connectors')
 #: What the binding's tests take from the tree under test, the inputs: the
 #: files they read as the contract (its version, its error codes) and as
 #: the native module's surface (its stub). The message builder,
@@ -486,13 +488,30 @@ def junit_verdict(
         elif 'error' in kinds:
             counts[name]['errors'] += 1
         elif 'skipped' in kinds:
-            counts[name]['skipped'] += 1
+            skip = case.find('skipped')
+            if (
+                sys.platform != 'win32'
+                and name == 'test_binding.py'
+                and case.get('name')
+                == 'test_windows_import_preserves_process_state'
+                and skip is not None
+                and skip.get('message') == 'Windows process observations'
+            ):
+                counts[name]['inapplicable'] = (
+                    counts[name].get('inapplicable', 0) + 1
+                )
+            else:
+                counts[name]['skipped'] += 1
         else:
             counts[name]['passed'] += 1
     for name, count in counts.items():
         if count['passed'] == 0:
             raise SmokeFailed(f'{report.name}: {name} passed no test')
-        bad = {k: v for k, v in count.items() if k != 'passed' and v}
+        bad = {
+            k: v
+            for k, v in count.items()
+            if k not in {'passed', 'inapplicable'} and v
+        }
         if bad:
             raise SmokeFailed(f'{report.name}: {name} {bad}')
     return counts
@@ -516,9 +535,7 @@ def check_resolved(lane: Lane, versions: dict[str, str]) -> None:
 OWN = {
     'structured-data-models-client',
     'structured-data-models-api',
-    'structured-data-models-pql',
     'structured-data-models-connectors',
-    'structured-data-models-relational-engine',
 }
 
 
@@ -701,7 +718,10 @@ def collection_verdict(
     for nodeid in items:
         name = str(nodeid).split('::', 1)[0].rsplit('/', 1)[-1]
         collected[name] = collected.get(name, 0) + 1
-    passed = {name: count['passed'] for name, count in counts.items()}
+    passed = {
+        name: count['passed'] + count.get('inapplicable', 0)
+        for name, count in counts.items()
+    }
     if not items or collected != passed:
         raise SmokeFailed(
             f'{collection.name}: collected {collected}, passed {passed}'

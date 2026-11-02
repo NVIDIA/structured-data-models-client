@@ -118,8 +118,10 @@ def _table(frame: pd.DataFrame) -> Any:
         )
         if categorical:
             array = array.dictionary_decode()
-            if pa.types.is_large_string(array.type):
-                array = array.cast(pa.string())
+        # Older Arrow may ignore type=string for pandas Arrow-backed strings.
+        # Admit the actual array in the Utf8 storage promised to Rust.
+        if (string or categorical) and pa.types.is_large_string(array.type):
+            array = array.cast(pa.string())
         storage: dict[str, Any]
         if timestamp:
             storage = {
@@ -625,6 +627,11 @@ def predict(
                 'kind': 'deferred_options',
                 'body': body,
                 'inference_present': inference_present,
+                'inference': (
+                    direct_options.encode(observed_options)
+                    if direct_options.can_encode(observed_options)
+                    else None
+                ),
             }
         direct = {'input': 1, 'payload': 2}
     operation = {

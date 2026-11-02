@@ -3010,7 +3010,8 @@
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#snapshotRetainsNullAndValidNanSeparately",
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#snapshotPreparationMeasurement",
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#emptyScoringDoesNotContactModelAndInvalidTasksFailAtConstruction",
-          "java/src/test/java/com/nvidia/sdm/TabularTest.java#dictionaryInputPreservesValuesAndCallerOwnership"
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#dictionaryInputPreservesValuesAndCallerOwnership",
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#inferenceAdmissionIsSharedAcrossPredictionAndSessions"
         ]
       },
       "gate": "local"

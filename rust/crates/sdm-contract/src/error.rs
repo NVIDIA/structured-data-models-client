@@ -1046,6 +1046,7 @@ sentences! {
     NoHopNumNeighbors = "no_hop_num_neighbors", E::InvalidRequest;
     HopsPastEndpoint = "hops_past_endpoint", E::UnsupportedRequest;
     HopsPastEndpointUncounted = "hops_past_endpoint_uncounted", E::UnsupportedRequest;
+    InferenceRunModeInvalid = "inference_run_mode_invalid", E::InvalidRequest;
     InferenceConfigNotAnObject = "inference_config_not_an_object", E::InvalidRequest;
     InferenceOptionUnknown = "inference_option_unknown", E::InvalidRequest;
     InferenceOptionNotABoolean = "inference_option_not_a_boolean", E::InvalidRequest;
