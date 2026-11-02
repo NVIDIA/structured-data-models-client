@@ -186,6 +186,20 @@ def test_windows_java_builds_are_packaged_and_loaded():
     builds = jobs['java-native']['strategy']['matrix']['include']
     loads = jobs['java-load']['strategy']['matrix']['include']
     pom = (ROOT / 'java/pom.xml').read_text()
+    required_loads = {
+        (jdk, platform)
+        for jdk in ['17', '21']
+        for platform in [
+            'linux-x86_64',
+            'linux-aarch64',
+            'macos-x86_64',
+            'macos-arm64',
+            'windows-x86_64',
+        ]
+    }
+    actual_loads = [(row['jdk'], row['platform']) for row in loads]
+    assert set(actual_loads) == required_loads
+    assert len(actual_loads) == len(required_loads)
     assert '<include>*/sdm_jni.dll</include>' in pom
     for arch, runner in [
         ('x86_64', 'windows-latest'),
