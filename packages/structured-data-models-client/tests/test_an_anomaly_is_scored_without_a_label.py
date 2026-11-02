@@ -257,6 +257,40 @@ def test_there_is_no_session_to_pin(anomaly):
     assert 'session' in str(caught.value)
 
 
+def test_the_supervised_constructor_will_not_build_this_question(anomaly):
+    """It takes a context and a target, and nothing reads either here. Built
+    that way the request came back with a whole-row score under a name the
+    caller had asked about, which is a different question answered quietly."""
+    frame = readings()
+
+    with pytest.raises(StructuredDataError) as caught:
+        Request(
+            context=frame,
+            predict=frame.drop(columns=['flow']),
+            target='flow',
+            task='anomaly_detection',
+        )
+    assert 'Request.anomaly' in str(caught.value)
+
+
+def test_readings_that_are_not_what_the_schema_says_are_refused(anomaly):
+    """A schema the caller brought says what a column holds. Readings that
+    hold something else are a different series under that name, and were
+    widened into one rather than refused."""
+    from sdm_client import Schema
+
+    frame = readings()[['flow', 'pressure']]
+    schema = Schema.from_data({'instance': frame})
+    flipped = frame.assign(flow=[True, False] * (len(frame) // 2))
+
+    with pytest.raises(StructuredDataError):
+        with SDMClient.in_process(anomaly) as client:
+            client.predict(
+                Request.anomaly(flipped, schema=schema, inference=FAST),
+                model=KumoAnomaly(),
+            )
+
+
 def test_another_model_is_not_asked_this_question(tabular):
     """`anomaly_detection` is a task only one model here answers."""
     with SDMClient.in_process(tabular) as client:

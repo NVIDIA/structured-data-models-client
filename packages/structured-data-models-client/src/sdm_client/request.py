@@ -390,6 +390,15 @@ class Request:
                 f'task must be one of {list(TASK_KINDS)}, got {task!r}',
                 code='INVALID_REQUEST',
             )
+        if task == 'anomaly_detection':
+            raise StructuredDataError(
+                f'anomaly_detection names no target and learns from no '
+                f'labelled rows, and this builds a request that has both. '
+                f'Asking it here would hand over a context and a target '
+                f'{target!r} that nothing reads, and get back a score for the '
+                f'whole row. Build it with Request.anomaly(readings) instead',
+                code='INVALID_REQUEST',
+            )
         if target in context.columns and _has_container_cells(context[target]):
             # Said here because this is the only place that knows which column
             # is the target. SDM's own `Task.classification` covers "binary,
@@ -590,6 +599,12 @@ class Request:
         readings = _require_frame(readings, 'readings')
         if schema is None:
             schema = Schema.from_data({entity_table: readings})
+        # The same question the supervised path asks of the rows it scores. A
+        # schema the caller brought says what a column holds, and readings
+        # that hold something else are a different series under that name.
+        _check_scored_values_mean_what_the_schema_says(
+            readings, schema, entity_table
+        )
 
         request = cls.__new__(cls)
         request.schema = schema
