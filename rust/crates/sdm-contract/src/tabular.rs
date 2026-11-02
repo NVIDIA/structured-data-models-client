@@ -304,6 +304,9 @@ pub enum NativeMissingOwner {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum NumericComparisonProfile {
+    /// Compare represented numeric values exactly, without producer-specific
+    /// promotion or narrowing. Missing and NaN values remain unordered.
+    Value,
     /// Use common fixed types for mixed scalar owners. A signed integer paired
     /// with an unsigned eight-byte integer compares through binary64, including
     /// its rounding. An unbounded integer that fits signed64 or unsigned64

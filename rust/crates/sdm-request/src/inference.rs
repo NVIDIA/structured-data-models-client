@@ -10,16 +10,15 @@ use sdm_wire::json::Value;
 /// Normalize only the common typed fields, preserving unknown model options.
 /// The caller owns the copied outgoing envelope, never the user's request.
 pub fn normalize(value: &mut Value) -> Result<(), CoreError> {
-    if let Some(mode) = value.get("run_mode") {
-        if !matches!(mode, Value::Null)
-            && !matches!(mode, Value::Text(text) if text.chars().count() <= 1024)
-        {
-            return Err(CoreError::new(
-                Sentence::InferenceRunModeInvalid,
-                "inference run_mode must be text of at most 1024 characters or null",
-            )
-            .with_field("field", Detail::text("run_mode")));
-        }
+    if let Some(mode) = value.get("run_mode")
+        && !matches!(mode, Value::Null)
+        && !matches!(mode, Value::Text(text) if text.chars().count() <= 1024)
+    {
+        return Err(CoreError::new(
+            Sentence::InferenceRunModeInvalid,
+            "inference run_mode must be text of at most 1024 characters or null",
+        )
+        .with_field("field", Detail::text("run_mode")));
     }
     if let Some(given) = value.get("use_prediction_time") {
         let flag = crate::options::lax_boolean("use_prediction_time", given)?;

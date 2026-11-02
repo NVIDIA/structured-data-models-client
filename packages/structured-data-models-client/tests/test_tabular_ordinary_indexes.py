@@ -24,7 +24,9 @@ def expected_case(name):
         context.traps[FloatOperation] = mode == 'trapped'
         try:
             selected = (
-                frame.iloc[:-1].sample(n=wanted, random_state=42).sort_index()
+                frame.iloc[:-1]
+                .sample(n=wanted, random_state=42)
+                .sort_index(kind='stable')
             )
         except FloatOperation as error:
             return {

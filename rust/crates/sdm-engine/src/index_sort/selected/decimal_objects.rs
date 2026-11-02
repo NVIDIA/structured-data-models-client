@@ -257,14 +257,14 @@ pub(super) fn order(
         .enumerate()
         .filter_map(|(i, m)| (!m).then_some(i))
         .collect();
-    let result = object_sort::argsort(present.len(), |left, right| {
+    let mut compare = |left: usize, right: usize| {
         let (left, right) = (present[left], present[right]);
         if relation(keys[left], keys[right], Ordering::Less, policy, diagnostics)
             .map_err(|reason| (reason, left, right))?
         {
-            return Ok(true);
+            return Ok(Ordering::Less);
         }
-        let _ = relation(
+        let greater = relation(
             keys[left],
             keys[right],
             Ordering::Greater,
@@ -272,8 +272,20 @@ pub(super) fn order(
             diagnostics,
         )
         .map_err(|reason| (reason, left, right))?;
-        Ok(false)
-    });
+        Ok(if greater {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        })
+    };
+    let result = if profile == Profile::Stable {
+        let mut order: Vec<_> = (0..present.len()).collect();
+        super::object_stable::sort(&mut order, &mut compare).map(|()| order)
+    } else {
+        object_sort::argsort(present.len(), |left, right| {
+            compare(left, right).map(|order| order == Ordering::Less)
+        })
+    };
     Ok(match result {
         Ok(order) => {
             let mut positions: Vec<_> = order.into_iter().map(|i| present[i]).collect();

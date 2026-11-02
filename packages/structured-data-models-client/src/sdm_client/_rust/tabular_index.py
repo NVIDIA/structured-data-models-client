@@ -434,7 +434,7 @@ def _array(
             result = {
                 'kind': 'scalar_object',
                 'values': atoms,
-                'semantics': _comparison_semantics(),
+                'semantics': 'value',
             }
             overflow = np.geterr()['over']
             if overflow in ('ignore', 'raise', 'warn', 'print'):
@@ -608,7 +608,7 @@ def observe(
 ) -> dict[str, Any]:
     """Observe a sampled subset after reduction, without sorting in Python."""
     context = getcontext() if decimal_context is None else decimal_context
-    return {'index': _facts(index, 'unbound', context)}
+    return {'index': _facts(index, 'stable', context)}
 
 
 def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:

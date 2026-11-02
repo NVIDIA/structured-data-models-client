@@ -255,6 +255,17 @@ fn compare(
     stage: Stage,
     diagnostics: &mut Diagnostics,
 ) -> Result<Option<Ordering>, Error> {
+    if semantics == Semantics::Value {
+        return Ok(match (a.number, b.number) {
+            (Number::Missing, _) | (_, Number::Missing) => None,
+            (Number::Integer(a), Number::Integer(b)) => Some(compare_integer(a, b)),
+            (Number::Floating(a), Number::Floating(b)) => a.partial_cmp(&b),
+            (Number::Integer(a), Number::Floating(b)) => (!b.is_nan()).then(|| integer_float(a, b)),
+            (Number::Floating(a), Number::Integer(b)) => {
+                (!a.is_nan()).then(|| integer_float(b, a).reverse())
+            }
+        });
+    }
     if semantics == Semantics::WeakFixedIntegerPairs {
         for (fixed, unbounded, reversed) in [(a, b, true), (b, a, false)] {
             if let (
@@ -495,6 +506,33 @@ pub(super) fn order(
         .zip(missing)
         .map(|(value, absent)| observe(value, *absent))
         .collect::<Result<Vec<_>, _>>()?;
+    if semantics == Semantics::Value {
+        let mut positions: Vec<_> = (0..values.len()).collect();
+        positions.sort_by(|left, right| {
+            let absent = |i: usize| {
+                missing[i]
+                    || matches!(keys[i].number, Number::Missing)
+                    || matches!(keys[i].number, Number::Floating(value) if value.is_nan())
+            };
+            match (absent(*left), absent(*right)) {
+                (true, true) => Ordering::Equal,
+                (true, false) => Ordering::Greater,
+                (false, true) => Ordering::Less,
+                (false, false) => compare(
+                    keys[*left],
+                    keys[*right],
+                    semantics,
+                    overflow,
+                    sort_stage,
+                    diagnostics,
+                )
+                .expect("value comparison has no producer conversions")
+                .expect("present numeric values have a total order"),
+            }
+        });
+        let unchanged = positions.iter().copied().eq(0..values.len());
+        return Ok(sorted(positions, unchanged));
+    }
     if profile == Profile::Unbound {
         return Ok(Outcome::NeedsProfile);
     }
@@ -621,5 +659,83 @@ mod diagnostic_tests {
         };
         assert!(prints.overflow(Some(Overflow::Print), Stage::Sort).is_err());
         assert!(prints.count_overflow);
+    }
+}
+
+#[cfg(test)]
+mod portable_tests {
+    use super::*;
+
+    fn positions(values: &[Atom], missing: &[bool]) -> Vec<usize> {
+        let answer = order(
+            values,
+            missing,
+            Profile::Stable,
+            Semantics::Value,
+            None,
+            &mut Diagnostics::default(),
+            OrderStage::Rows,
+        )
+        .unwrap();
+        let Outcome::Sorted {
+            positions,
+            numeric_diagnostics,
+            ..
+        } = answer
+        else {
+            panic!("portable numeric values must sort");
+        };
+        assert!(numeric_diagnostics.is_empty());
+        positions
+    }
+
+    #[test]
+    fn portable_numeric_ties_keep_input_order_beyond_quicksort_threshold() {
+        let values: Vec<_> = (0..40)
+            .map(|i| Atom::FixedInteger {
+                signed: true,
+                width: 8,
+                value: (i % 2).to_string(),
+            })
+            .collect();
+        let expected: Vec<_> = (0..40).step_by(2).chain((1..40).step_by(2)).collect();
+        assert_eq!(positions(&values, &[false; 40]), expected);
+    }
+
+    #[test]
+    fn portable_values_do_not_round_large_integers_to_float_ties() {
+        let values = [
+            Atom::FixedInteger {
+                signed: false,
+                width: 8,
+                value: "9007199254740993".into(),
+            },
+            Atom::FixedFloating {
+                width: 8,
+                bits: 9007199254740992_f64.to_bits(),
+            },
+            Atom::Integer {
+                value: "9007199254740992".into(),
+            },
+        ];
+        assert_eq!(positions(&values, &[false; 3]), vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn portable_missing_values_are_last_and_stable() {
+        let values = [
+            Atom::Floating {
+                bits: f64::NAN.to_bits(),
+            },
+            Atom::Integer { value: "2".into() },
+            Atom::Floating {
+                bits: f64::NAN.to_bits(),
+            },
+            Atom::Integer { value: "1".into() },
+        ];
+        assert_eq!(
+            positions(&values, &[true, false, true, false]),
+            vec![3, 1, 0, 2]
+        );
     }
 }

@@ -39,15 +39,15 @@ Remove the duplicate Python typing helper after ordinary options reach Rust on e
 Keep NumPy-to-native conversion at Python admission; do not change sampling, SQL or add callbacks.
 Verify invalid options cause no transport call, and accepted options work against the endpoint and local models.
 
-### Cross-platform index ordering: owner decision pending
+### Cross-platform index ordering: approved
 
-The current Python path recognizes specific Linux NumPy binaries to reproduce their sorting and comparison behavior.
+The previous Python path recognized specific Linux NumPy binaries to reproduce their sorting and comparison behavior.
 That cannot support the promised macOS/Windows PQL paths without more platform-specific implementations.
 Sampling is without replacement: unique source labels remain unique.
 The gap concerns existing duplicate labels and certain NumPy-valued object comparisons; ordinary unique primitive labels already work without a binary profile.
 The old Python client also sorted reduced context by index after sampling; this orders at most 10,000 context rows, not the full source table or scoring rows.
 
-| Case | Current behavior | Recommended shared Rust rule |
+| Case | Previous behavior | Approved shared Rust rule |
 |---|---|---|
 | Sampled labels `[2, 1, 1]` | Match the installed NumPy sort; unknown binaries are refused | Sort by label, retaining sampled order between equal labels |
 | Object labels containing NumPy numbers | Match that binary's numeric comparison rules | Compare supported numeric values with the same documented rules in both languages |
@@ -57,11 +57,14 @@ The old Python client also sorted reduced context by index after sampling; this 
 Python/Java values → Rust compares and orders labels → same sampled rows → model
 ```
 
-Recommendation: approve deterministic shared ordering as a bounded improvement.
+Owner approved deterministic shared ordering as a bounded improvement.
 Ties can change context row order and therefore model output; validate those differences explicitly with live examples.
 This changes neither sampled membership nor warehouse push-down SQL.
 Custom comparison functions remain unsupported.
-Until approved, retain existing ordering and audit the missing platform producers; do not claim full platform support.
+Implemented stable ties and exact represented numeric-value comparisons in Rust.
+Validation: 407 Python index tests, targeted Rust tests and Clippy passed; duplicate-label and mixed-number examples also completed live Tabular predictions.
+Independent review found no remaining blocker; final cross-platform RC validation remains pending.
+Keep legacy contract profiles readable while removing their use from the Python admission path.
 
 ## 2. Build the complete distribution set
 
