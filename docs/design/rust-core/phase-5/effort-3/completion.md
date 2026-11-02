@@ -17,12 +17,12 @@
 | Generated semantics | 12 Tabular and eight Relational cases added to existing suites; all 38 tests including fixed examples passed; independent oracle review approved |
 | Managed runtime | DBR16.4 run `704276691546809` passed: raw Spark and Arrow-backed strings preserved 12 nulls each and completed prediction plus fit/predict/close against Tabular version 2 |
 | Historical coverage | Retained tests and genuine 21-profile Databricks sweep mapped in [verification.md](../verification.md); unchanged warehouse paths do not need wholesale replay |
-| Performance | Ordering benchmark improved at 10,000 context rows in the measured cases; session preparation is about 15% slower than the earlier Rust build, with similar memory; owner disposition pending |
+| Performance | Ordering benchmark improved at 10,000 context rows in the measured cases; session preparation is about 15% slower than the earlier Rust build, with similar memory; owner accepted this measured cost for the RC; optimization remains a follow-up |
 | Publication | Explicitly on hold; no release/tag/upload to package indexes; Java destination will initially be GitHub Releases |
 
 The current clean installed shipping artifact identifies source `2e3823fcc`; the successful managed Databricks run used local artifact `483df0c54`, with identical runtime code.
 Detailed receipts and review findings remain under the external `phase-5/effort-3/` evidence directory.
-Final readiness requires successful affected checks, five-platform artifact verification, the performance decision and final evidence review.
+Final readiness requires successful affected checks, five-platform artifact verification and final evidence review.
 
 CI corrections are confined to tests/configuration: Windows line-ending hashing, a symlink-aware system-tool guard, a pandas-independent numeric oracle, and installation of the Databricks serving test extra.
 Local verification passed 14 ledger checks, three guard checks, 319 ordering checks on the affected dependency stack, and all 402 required API cases without skips.

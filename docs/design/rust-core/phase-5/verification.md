@@ -123,7 +123,10 @@ Current session comparison (release wheel `d17422bb9`, same Python/NumPy/pandas/
 Peak process RSS was 134,772 versus 133,704 KiB; this is a process high-water measure, not isolated native allocation.
 The earlier build explicitly forced Rust routing; its default route is Python, so the initial default-route comparison is not a Rust baseline.
 Evidence: external `phase-5/effort-3/session-benchmark-interleaved-core.json` and `session-benchmark-current-environment.json`.
-This local constant-response benchmark excludes network/model time; the measured overhead remains pending owner disposition, not accepted or hidden by earlier dispositions.
+This local constant-response benchmark excludes network/model time.
+On 2026-11-02 the owner accepted this measured cost for the RC, while explicitly noting it is undesirable.
+Follow-up: reduce repeated host discovery and investigate combining schema validation/result handling calls without dropping validation or moving shared policy back into Python.
+The increase from 291 to 357 Rust calls explains added work, but the timing contribution of each operation has not been isolated.
 
 RC artifact check at `64a164bd0`: API/connectors wheels and source archives built as `2.0.0rc1`; the client wheel normalizes Rust `2.0.0-rc.1` to the same Python version.
 All three wheels installed into a fresh external Python 3.12 environment; dependency checks, native SHA/contract 57 checks and absence of retired engine/PQL imports passed.
