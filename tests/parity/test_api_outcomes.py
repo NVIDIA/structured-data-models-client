@@ -90,3 +90,28 @@ def test_rust_missing_ignored_and_duplicate_results_fail(
             ['rust/crates/sdm-host/tests/admission.rs::held'],
             tmp_path / 'results.json',
         )
+
+
+@pytest.mark.parametrize('changed', [False, True])
+def test_api_ledger_checks_windows_checkout(monkeypatch, changed):
+    from api_contracts import ROOT, validate
+
+    from contract import manifest
+
+    snapshot = ROOT / 'tests/golden/public_api.json'
+    original = Path.read_bytes
+
+    def checkout_bytes(path):
+        value = original(path)
+        if path == snapshot:
+            if changed:
+                value = value.replace(b'"sdm_client"', b'"changed_client"')
+            return value.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
+        return value
+
+    monkeypatch.setattr(Path, 'read_bytes', checkout_bytes)
+    if changed:
+        with pytest.raises(AssertionError, match='public surface changed'):
+            validate(manifest())
+    else:
+        validate(manifest())

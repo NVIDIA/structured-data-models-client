@@ -29,7 +29,9 @@ def groups(data, gate='local', selected=None):
 def validate(data):
     assert (
         hashlib.sha256(
-            (ROOT / 'tests/golden/public_api.json').read_bytes()
+            (ROOT / 'tests/golden/public_api.json')
+            .read_bytes()
+            .replace(b'\r\n', b'\n')
         ).hexdigest()
         == data['public_api_snapshot_sha256']
     ), 'public surface changed: update parity API mappings'
