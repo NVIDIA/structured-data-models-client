@@ -17,7 +17,7 @@ Phase 5 removal/packaging changes need an explicit impact assessment before reus
 | Performance | Actual Phase 3 measurements and accepted costs; narrower Phase 4 ordering/session measurements | **Reconcile first:** apply exact accepted dispositions, benchmark new/affected paths; no blanket 10% target reset |
 | Engine-free packaging | Existing clean wheel/JAR checks still include the pre-removal dependency layout | **Must run after changes:** clean install without old engine/Python PQL, public API and frozen pickle compatibility, supported native platforms |
 | Historical refusal wording census | Frozen receipts, difference registry and original comparison tests preserved in the effort 2 archive | **Effort 3 applicability/reconciliation:** permanent template/public-refusal tests do not prove the final candidate matches every historical census probe |
-| Distribution release | Python CI/release config covers five targets; Java packaging covers four; no Java publication in `publish.yml` | **Effort 3:** complete the [distribution matrix](effort-3/design.md), publish Python/Java artifacts and verify clean consumer installs; configured builds are not successful release evidence |
+| Distribution release | Python and Java build configuration covers five targets; Java JAR/POM release assets are configured, but repository publication is unresolved | **Effort 3:** complete the [distribution matrix](effort-3/design.md), publish Python/Java artifacts and verify clean consumer installs; configured builds are not successful release evidence |
 | Final acceptance | Prior CI and historical artifacts are retained | **Must close:** required final-source CI and final-artifact gates, with approved evidence reuse explicitly recorded |
 
 ## Existing decisions are not new failures
@@ -57,7 +57,7 @@ No new tests were run for this planning audit.
 - Distribution preparation committed as `d13d50c9d`: Windows x86-64 Java build/loading, complete JAR contents, version-derived artifact paths and JAR/POM source/hash checks.
 - Independent review fixes verified: actual DLL fixture packaging, actual JAR license/notice contents and generated attribution including JNI.
 - Focused distribution checks: 69 CI/release/attribution tests passed; final Java CI/artifact suite has 10 passing tests, including corrupted-artifact rejection.
-- Main reconciliation is underway: local model execution stays behind Rust request/result handling; old Python adapters and engine remain removed.
+- Main reconciliation is committed: local model execution stays behind Rust request/result handling; old Python adapters and engine remain removed.
 - New local model suite: 82 passed, no failures; CPU random-weight models, not live-endpoint evidence.
 - Shared Rust fix: transmitted diagnostic queries respect the server's 1024-character limit; original request text is preserved, including Unicode (focused Rust regression passed).
 - API ledger passes with 159 Python and 307 Java symbols; Python-only model runtime applicability is explicit.
@@ -68,7 +68,11 @@ No new tests were run for this planning audit.
   The 582-cell report spans multiple builds; it and the 210-cell type report are historical evidence, not one final-build certificate.
 - Remaining: actual platform CI, bounded affected live checks, original acceptance/performance reconciliation, release version, Java publication destination/access and publication verification.
 
-Current candidate `418520620` is running in full CI `41490937592`.
+Full CI `41490937592` completed with failures on source `418520620`; current fixes are committed in `3b443c78a` and still require final CI.
+The failed run nevertheless verified packaged Java loading and public Arrow `Schema.fromData` on all five required platforms (JDK 21 everywhere; JDK 17 additionally on Linux x86-64 and Windows x86-64).
+Its logs report contract 56, so they do not certify the current contract 57 candidate.
+Python wheel builds passed on both Linux and macOS architectures; Windows failed, and installed/runtime acceptance was not green.
+Job metadata, artifact identities and seven Java load logs are retained at `phase-5/effort-3/ci-41490937592-platform-audit/` in the external archive.
 Its clean installed wheel passed five memory prediction/session cells, 24 DuckDB cells (including expected refusals), and eight Snowflake/semantic-view cells.
 The early-rejection gap is fixed in shared Rust admission (contract 57): all 20 live option/long-query checks now pass, including assertions that invalid options never reach the transport.
 Related local checks passed: 145 Python tests, two Rust admission tests, 22 Rust prediction/session tests, and the Java prediction/fit/session admission regression.

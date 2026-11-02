@@ -69,7 +69,7 @@ Until approved, retain existing ordering and audit the missing platform producer
 | Linux ARM64 | Configured | Configured | Verify final builds |
 | macOS Intel x86-64 | Configured | Configured | Verify final builds |
 | macOS Apple ARM64 | Configured | Configured | Verify final builds |
-| Windows Intel/AMD x86-64 | Configured | Missing | Add Java native build/loading |
+| Windows Intel/AMD x86-64 | Configured | Configured | Verify final builds |
 | Windows ARM64 | Deferred by owner | Deferred by owner | Wait for upstream Arrow dependencies |
 
 **Files to change:** `.github/workflows/ci.yml`, `.github/workflows/publish.yml`, `scripts/rust_core/java_build.py`, Java native loading and `java/pom.xml`.
