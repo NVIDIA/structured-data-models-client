@@ -4,11 +4,12 @@
 
 # Phase 5: make `rust-core` ready for `main`
 
-**Direction approved; effort 1 implemented and reviewed.**
+**Efforts 1 and 2 complete; effort 3 planned for review.**
 Deliver one implementation, clear API/architecture docs, and maintained compatibility checks.
 The [API and compatibility contract effort](effort-1/design.md) is implemented; see its [validation results](effort-1/completion.md).
-The [legacy and migration cleanup effort](effort-2/design.md) is now active.
-Final acceptance follows; merging/publishing require owner approval.
+The [legacy and migration cleanup effort](effort-2/design.md) is complete; see its [validation results](effort-2/completion.md).
+The [final acceptance effort](effort-3/design.md) reconciles existing evidence, closes remaining gaps and validates the final candidate.
+Effort 3 also builds and publishes the five-platform Python and Java distribution matrix through the protected release process.
 
 ## 1. One implementation, clearly documented
 

@@ -32,6 +32,18 @@
     </license>
   </licenses>
 
+  <scm>
+    <connection>scm:git:https://github.com/NVIDIA/structured-data-models-client.git</connection>
+    <url>https://github.com/NVIDIA/structured-data-models-client</url>
+  </scm>
+  <developers>
+    <developer>
+      <name>NVIDIA</name>
+      <organization>NVIDIA</organization>
+      <organizationUrl>https://www.nvidia.com</organizationUrl>
+    </developer>
+  </developers>
+
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>17</maven.compiler.release>
@@ -188,7 +200,18 @@
         <includes>
           <include>*/libsdm_jni.so</include>
           <include>*/libsdm_jni.dylib</include>
+          <include>*/sdm_jni.dll</include>
         </includes>
+      </resource>
+      <resource>
+        <directory>${project.basedir}/..</directory>
+        <targetPath>META-INF</targetPath>
+        <includes><include>LICENSE</include><include>NOTICE</include></includes>
+      </resource>
+      <resource>
+        <directory>${project.basedir}/../packages/structured-data-models-client</directory>
+        <targetPath>META-INF</targetPath>
+        <includes><include>THIRD-PARTY-NOTICES-RUST.txt</include></includes>
       </resource>
     </resources>
     <plugins>
@@ -337,12 +360,13 @@
                 <configuration>
                   <rules>
                     <requireFilesExist>
-                      <message>The JAR needs the native library of every platform: linux-x86_64, linux-aarch64, macos-aarch64 and macos-x86_64</message>
+                      <message>The JAR needs the native library of every platform: linux-x86_64, linux-aarch64, macos-aarch64, macos-x86_64 and windows-x86_64</message>
                       <files>
                         <file>${sdm.natives}/linux-x86_64/libsdm_jni.so</file>
                         <file>${sdm.natives}/linux-aarch64/libsdm_jni.so</file>
                         <file>${sdm.natives}/macos-aarch64/libsdm_jni.dylib</file>
                         <file>${sdm.natives}/macos-x86_64/libsdm_jni.dylib</file>
+                        <file>${sdm.natives}/windows-x86_64/sdm_jni.dll</file>
                       </files>
                     </requireFilesExist>
                   </rules>

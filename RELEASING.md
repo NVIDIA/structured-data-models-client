@@ -1,6 +1,6 @@
 # Releasing
 
-Five distributions, one version, published together. A release is a tag, then
+Three Python distributions, one version, published together. A release is a tag, then
 an approval, then a publish. The tag builds everything. The `pypi` environment
 has required reviewers, so the job that creates the GitHub Release and attaches
 those distributions waits for one. Publishing them to PyPI is a third step,
@@ -47,9 +47,20 @@ SDM_TABULAR_URL=... SDM_RELATIONAL_URL=... \
   python -m pytest packages/structured-data-models-client/tests -m live_nim -q
 ```
 
+## Java artifacts
+
+The same successful CI run supplies the Java JAR and POM.
+The release workflow checks their source commit, version and SHA-256 hashes before attaching them to the GitHub Release.
+The JAR must contain Linux and macOS x86-64/ARM64 libraries plus Windows x86-64.
+Windows ARM64 is deferred for both languages because required Arrow binaries are not published upstream.
+
+Attaching a JAR is not Maven repository publication.
+The Java repository destination and release credentials remain to be configured before the first Java release; install the published coordinates in a clean consumer before marking Java publication complete.
+Keep the JAR, POM, Rust workspace and three Python distribution versions aligned.
+
 ## Bumping the version
 
-One literal per distribution, in `_version.py`. All five must match, and
+One literal per distribution, in `_version.py`. All three must match, and
 `tests/test_release_contract.py` fails if they do not.
 
 ```bash
@@ -103,9 +114,8 @@ against the distribution name parsed from each filename, and each id is checked
 against the name it should carry before anything is sent, so a renamed or
 reassigned id fails early rather than being trusted. Every project that has
 something left to publish is validated and dry-run to a terminal state before
-*any* of them publishes, because the five distributions pin each other by exact
-version and a client live without its engine is worse than a release that never
-started. Kitmaker batches are sequential and not atomic, and a published file
+*any* of them publishes, because the three distributions pin each other by exact
+version and an incomplete release can leave the client uninstallable. Kitmaker batches are sequential and not atomic, and a published file
 cannot be recalled.
 
 The GitHub Release is created behind the protected `pypi` environment, because
@@ -138,7 +148,7 @@ what you want.
 ### If the publish fails partway
 
 The summary the publish writes is the record to read before doing anything
-else. It names each of the five projects. For any whose upload was requested it says
+else. It names each of the three projects. For any whose upload was requested it says
 what **PyPI** holds for this version, not what Portal reported: Portal's batches
 are not atomic, so a failure can follow files that already published, and a
 refusal is not proof that nothing did. Only the index knows. The other states
@@ -194,7 +204,7 @@ Two states it refuses to guess at, both needing a hand:
 
 ## After
 
-Check the five projects on pypi.org and confirm each shows NVIDIA organization
+Check the three projects on pypi.org and confirm each shows NVIDIA organization
 ownership. Portal reporting that a release completed is not the same as the
 package being installable, so install it the way a user would.
 

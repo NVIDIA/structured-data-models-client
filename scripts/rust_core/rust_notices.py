@@ -3,11 +3,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Writes, or checks, the notices of the Rust code the client wheel links.
+"""Writes, or checks, the notices of Rust code in the client wheel and Java JAR.
 
 The wheel carries `sdm_client._native`, built from `rust/bindings/sdm-py`
 with its production features, and with it every crate that build links:
-the crates `cargo tree` reaches from sdm-py over normal edges for each
+the union of crates `cargo tree` reaches from sdm-py and sdm-jni over normal edges for each
 shipped Linux, macOS and Windows target, with proc macros and build scripts left out because nothing of
 them is linked, and the workspace's own crates left out because they are
 this repository's. For each, the file reproduces the licence, copyright and
@@ -61,8 +61,8 @@ SAME_TERMS_AS = {'arrow-pyarrow': 'arrow-schema'}
 HEADER = f"""\
 Third-party Rust code in structured-data-models-client
 
-The client wheel carries the Rust core, the module sdm_client._native, built
-from rust/bindings/sdm-py with its production features for the targets
+The Python wheel and Java JAR carry the Rust core, built from
+rust/bindings/sdm-py and rust/bindings/sdm-jni with production features for the targets
 {', '.join(TARGETS)}. These are the crates
 linked into any production build, other than this repository's own, each with the
 licence, copyright and notice files it ships, and then the Rust standard
@@ -99,7 +99,15 @@ def _linked() -> list[tuple[str, str]]:
     for target in TARGETS:
         arguments += ['--target', target]
     tree = _cargo(
-        'tree', '--locked', '-p', 'sdm-py', *arguments, '--format', '{p}'
+        'tree',
+        '--locked',
+        '-p',
+        'sdm-py',
+        '-p',
+        'sdm-jni',
+        *arguments,
+        '--format',
+        '{p}',
     )
     crates = set()
     for line in tree.splitlines():
@@ -144,6 +152,8 @@ def render() -> str:
         where = package.get('repository') or ''
         index.append(f'{name} {version}  {licence}  {where}'.rstrip())
         source = root
+        if (name, version) == ('jni', '0.22.4'):
+            source = RUST / 'licenses' / 'jni-0.22.4'
         if name in SAME_TERMS_AS:
             sibling = packages[(SAME_TERMS_AS[name], version)]
             source = pathlib.Path(sibling['manifest_path']).parent
@@ -166,7 +176,11 @@ def render() -> str:
             )
         title = f'{name} {version}'
         body = [title, '=' * len(title), f'Licence: {licence}']
-        if source != root:
+        if name == 'jni' and source != root:
+            body.append(
+                'Terms preserved from the exact upstream source commit; see rust/licenses/jni-0.22.4/README.md.'
+            )
+        elif source != root:
             body.append(
                 f'Its package carries no terms files; these are the same '
                 f"project's, as {SAME_TERMS_AS[name]} {version} ships them."

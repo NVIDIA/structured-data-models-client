@@ -106,8 +106,17 @@ jobs:
     outputs:
       postgres-image: ${{ env.POSTGRES_IMAGE }}
       pythons: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+      version: ${{ steps.version.outputs.value }}
     steps:
-      - run: echo 'Run the full supported matrix.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: version
+        run: |
+          python3 - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          version = ET.parse('java/pom.xml').getroot().findtext('{http://maven.apache.org/POM/4.0.0}version')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'value={version}\n')
+          PY
 
   lint:
     runs-on: ubuntu-latest
@@ -1606,9 +1615,15 @@ jobs:
           # engine wheels' row does.
           - platform: macos-x86_64
             runner: macos-15-intel
+          - platform: windows-x86_64
+            runner: windows-latest
     # A Java job: the Java tests fail rather than pass without what they
     # need (T3.11's gate).
+    defaults:
+      run:
+        shell: bash
     env:
+      CARGO_BUILD_JOBS: '2'
       SDM_REQUIRE_JAVA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1625,7 +1640,9 @@ jobs:
       - name: The Java binding, by platform
         run: |
           mkdir -p "java-natives/${{ matrix.platform }}"
-          cp rust/target/release/libsdm_jni.dylib "java-natives/${{ matrix.platform }}/"
+          library=libsdm_jni.dylib
+          if [ "$RUNNER_OS" = Windows ]; then library=sdm_jni.dll; fi
+          cp "rust/target/release/$library" "java-natives/${{ matrix.platform }}/"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-native-${{ matrix.platform }}
@@ -1656,9 +1673,10 @@ jobs:
         run: mvn -B -f java/pom.xml -Pall-natives -DskipTests package
       - name: The JAR holds every platform's native
         run: |
-          listed=$(unzip -Z1 java/target/structured-data-models-client-1.0.0.jar)
+          listed=$(unzip -Z1 java/target/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar)
           for native in linux-x86_64/libsdm_jni.so linux-aarch64/libsdm_jni.so \
-                        macos-aarch64/libsdm_jni.dylib macos-x86_64/libsdm_jni.dylib; do
+                        macos-aarch64/libsdm_jni.dylib macos-x86_64/libsdm_jni.dylib \
+                        windows-x86_64/sdm_jni.dll; do
             grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
               || { echo "::error::the JAR holds no $native"; exit 1; }
           done
@@ -1668,9 +1686,18 @@ jobs:
       - name: The JAR's artifact
         run: |
           mkdir -p java-jar
-          cp java/target/structured-data-models-client-1.0.0.jar java/jar-load/JarLoad.java java-jar/
+          cp java/target/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar java/jar-load/JarLoad.java java-jar/
           cp -R java/target/lib java-jar/lib
           cp -R java/target/jdbc java-jar/jdbc
+          cp java/pom.xml java-jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.pom
+          python3 - <<'PYCODE'
+          import hashlib, json, os, pathlib
+          root = pathlib.Path('java-jar')
+          files = sorted([*root.glob('*.jar'), *root.glob('*.pom')])
+          record = {'commit': os.environ['GITHUB_SHA'], 'files': {
+              path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in files}}
+          (root / 'java-artifacts.json').write_text(json.dumps(record, indent=2) + '\n')
+          PYCODE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-jar
@@ -1758,6 +1785,14 @@ jobs:
             platform: macos-x86_64
             runner: macos-15-intel
             image: ''
+          - jdk: '17'
+            platform: windows-x86_64
+            runner: windows-latest
+            image: ''
+          - jdk: '21'
+            platform: windows-x86_64
+            runner: windows-latest
+            image: ''
     env:
       FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
       SDM_REQUIRE_JAVA: '1'
@@ -1766,7 +1801,7 @@ jobs:
         with:
           name: java-jar
           path: jar
-      - if: runner.os == 'macOS'
+      - if: runner.os != 'Linux'
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -1778,7 +1813,9 @@ jobs:
             echo "::error::a Rust toolchain is in the container"; exit 1
           fi
           java -version
-          java $FLAGS -cp "jar/structured-data-models-client-1.0.0.jar:jar/lib/*" jar/JarLoad.java
+          separator=:
+          if [ "$RUNNER_OS" = Windows ]; then separator=';'; fi
+          java $FLAGS -cp "jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar${separator}jar/lib/*" jar/JarLoad.java
 
   # Public parser assertions and packaged-native loading on every supported platform.
   # Recorded cases remain diagnostic; JUnit assertions decide correctness.
@@ -1834,16 +1871,16 @@ jobs:
       - name: The S0 cases on the Java host
         run: |
           pip install pytest pyyaml jsonschema
-          python contract/runners/run_java.py --jar jar/structured-data-models-client-1.0.0.jar \
+          python contract/runners/run_java.py --jar jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar \
             --classpath jar/lib --out java.jsonl contract/cases/s0
       - name: Java parser behavior on this platform
         run: |
-          unzip -q jar/structured-data-models-client-1.0.0.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
+          unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
             -Dtest=PredictiveQueryTest test
       - name: The Java host's acceptance tests
         env:
-          SDM_JAVA_JAR: jar/structured-data-models-client-1.0.0.jar
+          SDM_JAVA_JAR: jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar
           SDM_JAVA_JAR_PLATFORMS: linux-x86_64,linux-aarch64,macos-arm64,macos-x86_64
         run: python -m pytest -q -p no:cacheprovider contract/tests/test_t311_java.py
       - if: ${{ !cancelled() }}
@@ -1932,13 +1969,13 @@ jobs:
         env:
           SDM_REQUIRE_POSTGRES: '1'
         run: |
-          unzip -q jar/structured-data-models-client-1.0.0.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
+          unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
             -Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest test
       - name: The S1 cases on the Java host
         run: |
           python contract/runners/run_java.py --database "$DATABASE" \
-            --jar jar/structured-data-models-client-1.0.0.jar --classpath jar/lib --drivers jar/jdbc \
+            --jar jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar --classpath jar/lib --drivers jar/jdbc \
             --out java.jsonl contract/cases/s1
       - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -1951,7 +1988,7 @@ jobs:
           SDM_REQUIRE_POSTGRES: '1'
           SDM_REQUIRE_JAVA: '1'
           # Absolute: the step runs pytest from the package's directory.
-          SDM_JAVA_JAR: ${{ github.workspace }}/jar/structured-data-models-client-1.0.0.jar
+          SDM_JAVA_JAR: ${{ github.workspace }}/jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar
         run: |
           python -m venv --system-site-packages "$RUNNER_TEMP/kit"
           "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"

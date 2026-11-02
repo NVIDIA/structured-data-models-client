@@ -81,6 +81,12 @@ jobs:
           mkdir -p java/target/natives/linux-x86_64
           cp rust/target/release/libsdm_jni.so java/target/natives/linux-x86_64/
           mvn -B -f java/pom.xml -DskipTests package
+          python - <<'PYVERSION'
+          import os, xml.etree.ElementTree as ET
+          version = ET.parse('java/pom.xml').getroot().findtext('{http://maven.apache.org/POM/4.0.0}version')
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write(f'SDM_JAVA_VERSION={version}\n')
+          PYVERSION
           mvn -B -f java/parity-connect-pom.xml dependency:build-classpath \
             -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt"
           python -m venv "$PARITY_DIR/candidate"
@@ -95,7 +101,7 @@ jobs:
           from sdm_client import _native
           root = pathlib.Path(os.environ['PARITY_DIR'])
           commit = os.environ['GITHUB_SHA']
-          jar = pathlib.Path('java/target/structured-data-models-client-1.0.0.jar')
+          jar = pathlib.Path('java/target') / f"structured-data-models-client-{os.environ['SDM_JAVA_VERSION']}.jar"
           native = pathlib.Path('rust/target/release/libsdm_jni.so')
           java = dict(commit=commit, package_hash=hashlib.sha256(jar.read_bytes()).hexdigest(),
                       native_hash=hashlib.sha256(native.read_bytes()).hexdigest(), contract=_native.CONTRACT_VERSION)
@@ -120,7 +126,7 @@ jobs:
           if [ "$?" -ne 0 ]; then runners_ok=1; fi
           mvn -B -f java/pom.xml -Dtest=ParityRunnerTest \
             -Dsdm.native.library="$GITHUB_WORKSPACE/rust/target/release/libsdm_jni.so" \
-            -Dsdm.parity.jar="$GITHUB_WORKSPACE/java/target/structured-data-models-client-1.0.0.jar" \
+            -Dsdm.parity.jar="$GITHUB_WORKSPACE/java/target/structured-data-models-client-${SDM_JAVA_VERSION}.jar" \
             -Dsdm.parity.provenance="$PARITY_DIR/java-provenance.json" \
             -Dsdm.parity.connect.classpath="$PARITY_DIR/connect-classpath.txt" \
             -Dsdm.parity.commit="$GITHUB_SHA" \
