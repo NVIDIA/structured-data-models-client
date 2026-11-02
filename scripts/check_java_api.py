@@ -27,6 +27,18 @@ def main():
         cwd=ROOT,
         text=True,
     ).strip()
+    build = ['-q', '-Dmaven.test.skip=true', 'compile', 'jar:jar']
+    baseline = subprocess.check_output(
+        ['git', 'ls-tree', '--name-only', base, 'java/pom.xml'],
+        cwd=ROOT,
+        text=True,
+    ).strip()
+    if not baseline:
+        run(args.maven, '-f', 'java/pom.xml', *build)
+        print(
+            f'Java API introduced: candidate compiled; no Java baseline at {base}'
+        )
+        return
     with tempfile.TemporaryDirectory(prefix='sdm-java-api-') as directory:
         target = Path(directory)
         archive = target / 'baseline.tar'
@@ -41,7 +53,6 @@ def main():
         )
         with tarfile.open(archive) as bundle:
             bundle.extractall(target, filter='data')
-        build = ['-q', '-Dmaven.test.skip=true', 'compile', 'jar:jar']
         run(args.maven, '-f', str(target / 'java/pom.xml'), *build)
         jars = list((target / 'java/target').glob('*.jar'))
         if len(jars) != 1:

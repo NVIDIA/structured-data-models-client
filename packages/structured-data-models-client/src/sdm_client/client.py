@@ -305,6 +305,21 @@ class SDMClient:
         self._pinned: set[FittedModel] = set()
 
     @classmethod
+    def in_process(cls, *models: Any, device: Any = None) -> SDMClient:
+        """Run models locally using the same Rust preparation and result path.
+
+        Pass loaded structured-data-models models, or omit them to load weights
+        on first use. The optional ``in-process`` extra requires Python 3.11+.
+        ``device`` controls models loaded by this client; supplied models keep
+        their placement. Local refusals carry no HTTP status.
+        """
+        from sdm_client.in_process import InProcessBackend
+
+        client = cls.__new__(cls)
+        client._start(InProcessBackend(models, device))
+        return client
+
+    @classmethod
     def for_databricks_serving(
         cls,
         endpoint: str,

@@ -195,7 +195,9 @@ def main():
         '--language', choices=['python', 'java', 'rust'], default='python'
     )
     parser.add_argument(
-        '--gate', choices=['local', 'native', 'large-memory'], default='local'
+        '--gate',
+        choices=['local', 'native', 'large-memory', 'in-process'],
+        default='local',
     )
     parser.add_argument('--group', action='append')
     parser.add_argument('--run', action='store_true')

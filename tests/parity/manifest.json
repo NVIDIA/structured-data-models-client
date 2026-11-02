@@ -3541,9 +3541,28 @@
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession"
         ]
       }
+    },
+    {
+      "id": "in-process-models",
+      "apis": {
+        "python": [
+          "SDMClient.in_process"
+        ],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_without_the_extra_the_extra_is_named",
+          "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_a_tabular_answer_is_the_one_the_model_gives_when_called_directly",
+          "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_a_session_keeps_the_question_it_pinned"
+        ],
+        "java": []
+      },
+      "gate": "in-process",
+      "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate."
     }
   ],
-  "public_api_snapshot_sha256": "341df3535133e5a5d5ae015c31aba471b9e4d58a32f9b0e55bb8a03cf715b2e4",
+  "public_api_snapshot_sha256": "12d022ec41bded424698b753b64847feaa5441f43225a616085871d35fc1a593",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4019,6 +4038,9 @@
       },
       "sdm_connectors.resolve_sql": {
         "capability": "sql-helpers"
+      },
+      "sdm_client.SDMClient.in_process": {
+        "capability": "in-process-models"
       }
     },
     "java": {
@@ -4970,6 +4992,11 @@
       "capability": "provider-contract",
       "language": "java",
       "reason": "This is a shared Rust provider contract; host adapter behavior is covered by readers and relational materialization."
+    },
+    {
+      "capability": "in-process-models",
+      "language": "java",
+      "reason": "Runs the Python structured-data-models/PyTorch runtime in the caller process; Java uses the same models through endpoints."
     }
   ],
   "contract_changes": [
@@ -5051,12 +5078,12 @@
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "api_exceptions",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
     },
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "api_inventory",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
+      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
     },
     {
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
@@ -5177,6 +5204,16 @@
       "base_commit": "a8726c3e5771c2397ab88599af9aa273de7545b6",
       "record": "api_contracts/sessions",
       "reason": "Remove the retired route-switch test; warehouse session lifecycle, holdout, changed-question, close and refusal tests remain required on the sole Rust path."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "api_contracts/in-process-models",
+      "reason": "Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
+    },
+    {
+      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
     }
   ],
   "capabilities": [

@@ -27,6 +27,9 @@ A rename that sweeps the tree will change these, and nothing will fail:
   so changing them splits Databricks partner telemetry and query history at
   that version.
 
+- `APPLICATION` in `sdm_connectors/backends/snowflake.py`, `nvidia/kumo-sdm`, names sessions for Snowflake attribution.
+  Preserve that value when renaming internal code.
+
 ## Run the maintained suites
 
 Follow `CONTRIBUTING.md` for Python, Rust and Java checks.

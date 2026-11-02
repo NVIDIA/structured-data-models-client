@@ -1224,6 +1224,7 @@ class TestDistributionCoherence:
                     'pyyaml',
                     'pytz',  # explicit timezone fixtures, including DST folds
                     'databricks-sdk',
+                    'structured-data-models',  # optional local model runtime
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '
                     f"this repository's distributions"

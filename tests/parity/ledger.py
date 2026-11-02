@@ -203,12 +203,19 @@ def main():
         data['api_inventory']['java'],
     )
     base = git('merge-base', args.base, 'HEAD')
-    before = json.loads(git('show', f'{base}:tests/parity/manifest.json'))
-    validate_changes(before, data, base)
+    baseline_present = bool(
+        git('ls-tree', '--name-only', base, 'tests/parity/manifest.json')
+    )
+    if baseline_present:
+        before = json.loads(git('show', f'{base}:tests/parity/manifest.json'))
+        validate_changes(before, data, base)
     print(
         json.dumps(
             {
                 'base_commit': base,
+                'baseline_manifest': 'present'
+                if baseline_present
+                else 'introduced',
                 'python_symbols': len(data['api_inventory']['python']),
                 'java_symbols': len(data['api_inventory']['java']),
                 'status': 'passed',

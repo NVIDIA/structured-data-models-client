@@ -81,3 +81,10 @@ The [compatibility ledger](../../tests/parity/README.md) maps supported APIs and
 API snapshots and behavior tests enforce those declarations, including explicit applicability exceptions.
 Local contract tests do not establish live endpoint coverage; endpoint evidence and final runtime/performance acceptance remain separate.
 Maintained tests use the current client and self-contained fixtures, without installing a historical implementation.
+
+## Models running in Python
+
+`SDMClient.in_process()` uses the same Rust preparation and result assembly as endpoint predictions.
+The `sdm_client/in_process/` modules load models, convert model inputs, run inference and own fitted model state.
+They replace the model server, not the shared core: sampling, batching and result key restoration remain in Rust.
+Canonical request/response data still crosses the core boundary; this path avoids HTTP, but does not claim to avoid JSON conversion.

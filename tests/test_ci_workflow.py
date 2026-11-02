@@ -1193,7 +1193,7 @@ def test_ci_has_no_phase_branch_scheduler():
 def test_ci_configuration_never_skips_jobs_based_on_migration_commits():
     workflow = _workflow()
     job = workflow['jobs']['configuration']
-    assert set(job['outputs']) == {'pythons', 'postgres-image'}
+    assert set(job['outputs']) == {'pythons', 'postgres-image', 'version'}
     assert 'needs.landing' not in CI.read_text()
     assert json.loads(job['outputs']['pythons']) == [
         '3.10',

@@ -125,3 +125,7 @@ Raw-reader coverage is tracked in the [verification tracker](../../docs/design/r
 `expected_by_model` records verified model-specific refusals, independently of candidate-only `expected_by_language` improvements.
 Supported predictions and endpoint-stage refusals both require live endpoint identity.
 Typed fixture declarations describe data before source creation; they never repair reader output.
+
+When the target branch has no compatibility ledger or Java package yet, the checks report that introduction explicitly.
+Current inventory and behavior requirements still apply; historical ledger/API comparisons begin once that baseline exists.
+A missing or invalid Git reference remains an error.

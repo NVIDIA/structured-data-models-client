@@ -161,6 +161,37 @@ def test_a_session_pins_the_context_and_scoring_sends_only_the_rows():
     assert set(scoring) == {'predict', 'output', 'metadata'}
 
 
+@pytest.mark.parametrize('task', ['classification', 'regression'])
+def test_session_scoring_does_not_encode_the_context(monkeypatch, task):
+    from sdm_client import SDMClient
+    from sdm_client._rust import sessions
+
+    request = request_for(task)
+    response = {
+        'id': 'answer',
+        'model': 'kumo-tabular',
+        'metadata': {},
+        'predictions': [{'row_index': i, 'prediction': 0} for i in range(2)],
+    }
+    transport = StubTransport(response)
+    with SDMClient(url='http://localhost:8000') as client:
+        client._transport.close()
+        client._transport = transport
+        with client.fit(request, model='kumo-tabular') as fitted:
+            encode = sessions.encode_table
+            encoded = []
+
+            def scoring_only(frame, columns, half):
+                assert half != 'context'
+                encoded.append(half)
+                return encode(frame, columns, half)
+
+            monkeypatch.setattr(sessions, 'encode_table', scoring_only)
+            fitted.predict(request)
+    assert encoded
+    assert all('context' not in payload for payload in transport.scored)
+
+
 def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
     assert envelope()['metadata']['request_id'].startswith('sdm-')
 

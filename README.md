@@ -76,6 +76,10 @@ with SDMClient(url='http://localhost:8000') as client:
 The [quickstart](docs/get-started/quickstart.md) runs this end to end, and
 [prerequisites](docs/get-started/prerequisites.md) covers what you need first.
 
+Models can also run in the Python process with `SDMClient.in_process(...)` and the optional `in-process` extra (Python 3.11+).
+Rust prepares requests and assembles results on both paths; the Python model runtime replaces the HTTP endpoint.
+See [the local-model quickstart](docs/get-started/quickstart.md).
+
 ## Installation
 
 | Command | You get |

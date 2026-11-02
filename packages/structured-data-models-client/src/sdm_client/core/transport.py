@@ -500,8 +500,9 @@ class EndpointFailed(Exception):  # noqa: N818 - says what happened
 class WireTransport(Protocol):
     r"""What a client needs from whatever carries its requests.
 
-    A NIM reached over HTTP is one; a Databricks Model Serving endpoint is
-    another. The client asks only this of either.
+    A NIM reached over HTTP, a Databricks serving endpoint and a local Python
+    model runtime each implement this boundary. Rust owns request preparation
+    and result assembly for all three.
     """
 
     #: Whether the endpoint can pin a context. A client refuses ``fit()`` up

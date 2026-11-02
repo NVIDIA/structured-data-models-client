@@ -15,6 +15,8 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import Refused, TransportFailed, run
 from sdm_client.core.transport import EndpointFailed
@@ -65,11 +67,22 @@ def _explanation(text: str | None, by_step: bool) -> Any:
     }
 
 
+def _numpy_scalar(value: Any) -> Any:
+    """Translate ordinary NumPy scalar input at the Python/core boundary."""
+    if isinstance(value, np.generic):
+        plain = value.item()
+        if not isinstance(plain, np.generic):
+            return plain
+    raise TypeError('value has no JSON scalar representation')
+
+
 def _payload(payload: dict[str, Any]) -> bytes:
     r"""A payload as the core reads it; one holding a value JSON has no form
     for is refused as the client's transport refuses it, with no context."""
     try:
-        return json.dumps(payload, allow_nan=False).encode()
+        return json.dumps(
+            payload, allow_nan=False, default=_numpy_scalar
+        ).encode()
     except (TypeError, ValueError):
         pass
     raise StructuredDataError(
@@ -587,10 +600,15 @@ def sender(client: SDMClient, model_id: str) -> Any:
             if failed.code == 'TRANSPORT_ERROR':
                 transport_failed = True
             else:
-                failure = StructuredDataError(
-                    'the transport to the model endpoint refused the call',
-                    code=failed.code,
-                )
+                from sdm_client.in_process.backend import InProcessBackend
+
+                if isinstance(client._transport, InProcessBackend):
+                    failure = failed
+                else:
+                    failure = StructuredDataError(
+                        'the transport to the model endpoint refused the call',
+                        code=failed.code,
+                    )
         except Exception as other:  # noqa: BLE001 - the reference's own
             # Any other exception the transport raised (the Databricks
             # SDK's ValueError for a failed OAuth refresh): the call failed,

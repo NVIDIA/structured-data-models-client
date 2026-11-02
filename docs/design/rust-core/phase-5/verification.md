@@ -53,26 +53,19 @@ No new tests were run for this planning audit.
 
 ## Effort 3 work in progress
 
-Java Windows x86-64 build jobs, DLL loading, five-target JAR checks and Windows JDK 17/21 load jobs are implemented locally.
-The Java CI/release checks passed (56 tests); the expanded Java CI suite passed separately (4 tests), including the new Windows coverage assertion.
-Workflow YAML, Maven XML and focused Python lint/format checks pass.
-These are configuration checks, not successful native builds or platform install evidence.
-Actual five-platform Python and Java builds, Java publication, final acceptance reconciliation and publication remain pending.
-The repository is public and GitHub access is available; release version and Java repository/access are awaiting owner input.
+- Owner scope: five targets for Python and Java; Windows ARM64 deferred because required Arrow binaries are unavailable upstream.
+- Distribution preparation committed as `d13d50c9d`: Windows x86-64 Java build/loading, complete JAR contents, version-derived artifact paths and JAR/POM source/hash checks.
+- Independent review fixes verified: actual DLL fixture packaging, actual JAR license/notice contents and generated attribution including JNI.
+- Focused distribution checks: 69 CI/release/attribution tests passed; final Java CI/artifact suite has 10 passing tests, including corrupted-artifact rejection.
+- Main reconciliation is underway: local model execution stays behind Rust request/result handling; old Python adapters and engine remain removed.
+- New local model suite: 82 passed, no failures; CPU random-weight models, not live-endpoint evidence.
+- Shared Rust fix: transmitted diagnostic queries respect the server's 1024-character limit; original request text is preserved, including Unicode (focused Rust regression passed).
+- API ledger passes with 159 Python and 307 Java symbols; Python-only model runtime applicability is explicit.
+- Broad source suite: 6,154 passed and 269 skipped; four stale test expectations were corrected and one Java check rerun with the required JDK, with all five passing.
+- Independent reconciliation review approved the code boundaries; required local-model API identities now run through the existing outcome checker (5 passed, no skips).
+- Two independent reuse reviews are retained at `phase-5/effort-3/evidence-review-a.md` and `evidence-review-b.md` in the external archive.
+  Both support retaining unchanged sampling/SQL proof, while requiring current checks for changed Python dispatch, numeric batching, DuckDB reads, Snowflake connections and long Unicode queries.
+  The 582-cell report spans multiple builds; it and the 210-cell type report are historical evidence, not one final-build certificate.
+- Remaining: actual platform CI, bounded affected live checks, original acceptance/performance reconciliation, release version, Java publication destination/access and publication verification.
 
-Owner decision: defer native Windows ARM64 Python until upstream dependencies are available; Java ARM64 was subsequently deferred too.
-PyPI release-file inspection found no Windows ARM64 PyArrow wheels across its published versions, nor Python 3.10 ARM64 Windows wheels for NumPy/pandas/Pydantic Core.
-Fetched `origin/main` has six commits not yet integrated, including in-process model support, cached Tabular encoding and Snowflake session naming; reconciliation remains open.
-
-Owner decision: defer Windows ARM64 Java too; the published Arrow Java 19.0.0 JAR contains Windows x86-64 only.
-The required release set is now five targets for each language: Linux and macOS x86-64/ARM64, plus Windows x86-64.
-Local Maven packaging succeeds after the Windows loader changes; this is Linux build evidence only.
-
-Java release preparation now carries the tested JAR/POM and a source-commit/hash record from CI into protected GitHub Release assets; Maven repository publication is still pending destination/access.
-The packaged-JAR smoke source now exercises public Arrow schema construction as well as native parser loading and compiles locally.
-Focused local Java Tabular execution: 13 tests, zero failures/errors, one skipped; this is not live-model or Windows execution evidence.
-
-Independent distribution review found and fixed missing Windows DLL resource inclusion, hard-coded release versions and missing JAR attribution.
-Maven packaging verified the actual DLL fixture bytes and the built JAR's LICENSE/NOTICE/generated JNI attribution entries.
-Focused CI/release/attribution tests passed (69 tests), followed by 9 Java CI/artifact tests including wrong-commit, changed-hash, missing-file and wrong-version rejection.
-CI and live-validation Java paths now derive their version from the POM.
+The final candidate is not yet accepted, built across all targets or published.

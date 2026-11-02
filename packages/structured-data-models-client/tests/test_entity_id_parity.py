@@ -179,6 +179,9 @@ class StubTransport:
     def delete_session(self, session_id: str) -> None:
         return None
 
+    def close(self) -> None:
+        pass
+
 
 def fitted_on(schema: Schema, response: dict):
     from sdm_client import SDMClient
