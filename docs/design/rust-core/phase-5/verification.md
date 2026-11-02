@@ -144,3 +144,25 @@ Commit `1661f3388` updates RC-version snapshots and connector assertions; 101 fo
 CI run `41501690988` tests earlier source `43d94e9bc`, so its ordering, lint and RC-expectation failures do not test these fixes.
 The Snowflake subprocess probe passes locally but failed in CI; added diagnostics preserve this unresolved item for the next run.
 A new local release wheel is building from `1661f3388`; final platform validation and the recorded session-performance finding remain open.
+
+## Retained observation coverage
+
+The live matrix is complemented by these maintained contracts; final CI must execute them.
+
+| Observation | Retained tests |
+|---|---|
+| SQL and typed parameters | `contract/tests/test_t22_sqlite.py`; Rust `databricks_goldens.rs` and `t328_key_text.rs` |
+| Provider paging, failures and negative controls | `contract/tests/test_t25_provider_kit.py`, with live local database services |
+| Warnings and refusal details | `test_invalid_escape_warning_on_the_core.py`, `test_t310_metric_time_warning.py`, `test_tabular_direct_core.py`, `test_t136_refusal_codes.py` |
+| HTTP errors, causes, retries and timeouts | `test_transport_socket.py` and `test_transport_hardening.py` |
+| Pickles and versioned state | `test_t214b_pickles.py`, `test_schema_pickles.py`, `test_t214b_host.py` |
+| New in-memory semantics | 12 generated Tabular cases and eight generated Relational temporal-join cases; independent row/order/aggregate oracles |
+
+The two generated suites passed all 38 tests, including their fixed examples.
+Incidental pandas warnings and owner-approved stable ordering remain explicit accepted differences; this is not a replay of every historical error string.
+Exact test-function mapping is retained in external `effort-3/evidence-observation-map.md`.
+
+The historical managed Databricks sweep is genuine Jobs evidence: 21 paired profiles and 255 questions, with pinned artifacts and terminal run receipts.
+Its reviewed consumer SHA-256 is `cfabf1853ccc01d722da21d0f9261d7a970d95cbd6f3566ad9a8ee2b380e28ce`.
+Reuse unchanged warehouse-query outcomes; the affected DBR16.4 nullable-string path still needs a current managed-runtime check.
+Local CI dependency recreation is not a managed-job execution.
