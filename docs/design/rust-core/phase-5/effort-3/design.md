@@ -28,6 +28,15 @@ Reuse existing runners and build artifacts; do not rerun every live test on ever
 Keep GPU/warehouse checks outside per-commit CI; local live validation is sufficient for its recorded scope.
 Reproduce real bugs through the public API before fixing them; missing required results remain incomplete.
 
+### Main reconciliation: inference option admission
+
+Live checks found that invalid options return `VALIDATION_FAILED` remotely but `INVALID_REQUEST` locally.
+Restore main's early rejection contract with one Rust helper for `use_prediction_time`, `run_mode` and `inference_config`.
+Use it for direct/gathered predictions and fitted sessions in both languages; retain model-specific checks separately.
+Remove the duplicate Python typing helper after ordinary options reach Rust on every path, including paths that currently replace prepared options in Python.
+Keep NumPy-to-native conversion at Python admission; do not change sampling, SQL or add callbacks.
+Verify invalid options cause no transport call, and accepted options work against the endpoint and local models.
+
 ## 2. Build the complete distribution set
 
 “Configured” below means the workflow exists, not that this release has passed.

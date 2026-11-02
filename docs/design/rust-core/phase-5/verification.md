@@ -68,4 +68,10 @@ No new tests were run for this planning audit.
   The 582-cell report spans multiple builds; it and the 210-cell type report are historical evidence, not one final-build certificate.
 - Remaining: actual platform CI, bounded affected live checks, original acceptance/performance reconciliation, release version, Java publication destination/access and publication verification.
 
+Current candidate `418520620` is running in full CI `41490937592`.
+Its clean installed wheel passed five memory prediction/session cells, 24 DuckDB cells (including expected refusals), and eight Snowflake/semantic-view cells.
+Eleven additional live option/long-query checks passed; nine invalid-option cases exposed the early-rejection gap described in the Effort 3 design.
+The wide 5,000-column public journey passed in 14.38 seconds process wall time with 202,016 KiB peak RSS; this is a current measurement, not a complete performance gate.
+Commit `932fabaf9` records an independently reviewed non-applicable ZIP advisory in an excluded test-build code path; local dependency checks pass.
+
 The final candidate is not yet accepted, built across all targets or published.
