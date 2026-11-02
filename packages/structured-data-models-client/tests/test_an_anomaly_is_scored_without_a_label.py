@@ -73,6 +73,19 @@ def test_a_score_and_a_label_per_row_come_back(anomaly):
         assert set(answer[name].unique()) <= {0.0, 1.0}
 
 
+def test_only_the_fields_that_were_asked_for_come_back(anomaly):
+    """Asking for the score alone is a smaller answer, not the same one with
+    the labels computed and sent anyway."""
+    with SDMClient.in_process(anomaly) as client:
+        request = Request.anomaly(readings(), inference=FAST)
+        answer = client.predict(
+            request, model=KumoAnomaly(), outputs=['prediction']
+        ).to_pandas()
+
+    assert 'prediction' in answer.columns
+    assert not [name for name in answer.columns if name.startswith('prob')]
+
+
 def test_the_same_readings_score_the_same_twice(anomaly):
     """Reconstruction is sampled, so the answer is seeded. Without that an
     unchanged request comes back with different numbers every call."""

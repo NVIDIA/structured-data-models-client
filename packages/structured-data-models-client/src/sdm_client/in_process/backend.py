@@ -81,6 +81,7 @@ class ScoresRowsAlone(Protocol):
         model: Any,
         payload: Mapping[str, Any],
         ids: Sequence[Any],
+        fields: Sequence[str],
         generator: Any = None,
     ) -> list[Any]: ...
 
@@ -184,7 +185,7 @@ class InProcessBackend:
             served, model = self._serving(payload['model'])
             _check_loaded_for(served, model, task['kind'])
             if isinstance(served, ScoresRowsAlone):
-                items = _scored(served, model, payload)
+                items = _scored(served, model, payload, fields)
             else:
                 context = served.context(payload)
                 query = served.query(context, payload, payload['schema'])
@@ -577,7 +578,10 @@ def _autocast(device: Any) -> Any:
 
 
 def _scored(
-    served: ScoresRowsAlone, model: Any, payload: Mapping[str, Any]
+    served: ScoresRowsAlone,
+    model: Any,
+    payload: Mapping[str, Any],
+    fields: list[str],
 ) -> list[Any]:
     r"""One answer per row, from a model with no context to fit."""
     import torch
@@ -593,6 +597,7 @@ def _scored(
             model,
             payload,
             ids,
+            fields,
             torch.Generator(device=device).manual_seed(_SEED),
         )
 

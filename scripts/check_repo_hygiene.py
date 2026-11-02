@@ -196,6 +196,13 @@ RETIRED_ALLOWLIST = {
 
 REPOSITORY_URL = re.compile(r'https://github\.com/NVIDIA/[A-Za-z0-9._-]+')
 
+#: Repositories this one legitimately points at, as opposed to the names it
+#: used to be published under. A dependency installed from its own source is
+#: a URL a reader is meant to follow, so it is not a stale name for this one.
+UPSTREAM_URLS = frozenset(
+    {'https://github.com/NVIDIA/structured-data-models.git'}
+)
+
 
 def tracked_files() -> list[Path]:
     import subprocess
@@ -340,7 +347,7 @@ def check_repository_url() -> int:
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for found in set(REPOSITORY_URL.findall(text)):
-            if found != expected:
+            if found != expected and found not in UPSTREAM_URLS:
                 findings.append(f'{relative}: {found}')
 
     for finding in sorted(findings):

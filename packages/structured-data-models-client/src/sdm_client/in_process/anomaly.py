@@ -156,6 +156,7 @@ class Anomaly:
         model: Any,
         payload: Mapping[str, Any],
         ids: Sequence[Any],
+        fields: Sequence[str],
         generator: Any = None,
     ) -> list[PredictionItem]:
         r"""Score each row, under the id the request gave it.
@@ -178,10 +179,15 @@ class Anomaly:
             generator=generator,
         )
         scores = out['mae'].numerical[..., 0].tolist()
-        labels = {
-            name: out[name].categorical.decode()[..., 0].tolist()
-            for name in THRESHOLDERS
-        }
+        labelled = 'probabilities' in fields
+        labels = (
+            {
+                name: out[name].categorical.decode()[..., 0].tolist()
+                for name in THRESHOLDERS
+            }
+            if labelled
+            else {}
+        )
         return [
             PredictionItem(
                 row_index=index,
@@ -189,7 +195,9 @@ class Anomaly:
                 prediction=score,
                 probabilities={
                     name: float(labels[name][index]) for name in THRESHOLDERS
-                },
+                }
+                if labelled
+                else None,
             )
             for index, score in enumerate(scores)
         ]
