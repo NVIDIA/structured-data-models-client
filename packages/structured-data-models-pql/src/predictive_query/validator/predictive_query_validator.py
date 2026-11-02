@@ -261,6 +261,10 @@ class PredictiveQueryValidator:
         r"""Validates that all wildcard columns that appear in the query are
         correctly nested in a `COUNT` aggregation.
 
+        The exception is a ``DETECT ANOMALY`` target, where the wildcard is
+        the question: the score is joint across the scored channels, so the
+        target names the row rather than one column of it.
+
         Args:
             parsed_query (ParsedPredictiveQuery): the input parsed query.
 
@@ -278,9 +282,10 @@ class PredictiveQueryValidator:
         response = merge(
             response, self._validate_wildcard_col(parsed_query.entity_ast)
         )
-        response = merge(
-            response, self._validate_wildcard_col(parsed_query.target_ast)
-        )
+        if parsed_query.problem_type != ProblemType.ANOMALY:
+            response = merge(
+                response, self._validate_wildcard_col(parsed_query.target_ast)
+            )
         if parsed_query.whatif_ast is not None:
             response = merge(
                 response, self._validate_wildcard_col(parsed_query.whatif_ast)

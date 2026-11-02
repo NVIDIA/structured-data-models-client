@@ -200,6 +200,11 @@ class ParsedPredictiveQuery:
                     f' {self.num_forecasts}'
                     f' {maybe_bold("TIMEFRAMES", rich)}'
                 )
+            elif self.problem_type == ProblemType.ANOMALY:
+                query_str += (
+                    f' {maybe_bold("DETECT", rich)}'
+                    f' {maybe_bold("ANOMALY", rich)}'
+                )
             else:
                 query_str += f' {self.problem_type.value}'
         if self.top_k is not None:

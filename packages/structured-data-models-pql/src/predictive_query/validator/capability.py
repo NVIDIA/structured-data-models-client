@@ -27,7 +27,7 @@ from predictive_query.schema.common import (
     ValidationResponse,
 )
 from predictive_query.schema.definition import ColumnKey, SchemaDefinition
-from predictive_query.schema.typing import AggregationType
+from predictive_query.schema.typing import AggregationType, ProblemType
 from predictive_query.validator.utils import col_name, table_name
 
 
@@ -63,6 +63,40 @@ def check_parsed_capabilities(
                     f'or use a model that reads relationships.'
                 ),
                 code=codes.MODEL_NO_TEMPORAL_TARGET,
+            )
+        )
+
+    if query.problem_type == ProblemType.ANOMALY and not (
+        can.anomaly_detection
+    ):
+        response.errors.append(
+            ValidationError(
+                title='Anomaly detection not supported',
+                message=(
+                    f'DETECT ANOMALY asks for a score the data does not '
+                    f'contain, and {can.model} predicts a value the data '
+                    f'defines. Ask an anomaly-detection model, or name a '
+                    f'target to predict.'
+                ),
+                code=codes.MODEL_NO_ANOMALY_DETECTION,
+            )
+        )
+
+    forecasts_a_bare_column = query.problem_type == ProblemType.FORECAST and (
+        isinstance(target, Column)
+    )
+    if forecasts_a_bare_column and not can.series_forecasting:
+        response.errors.append(
+            ValidationError(
+                title='Series forecasting not supported',
+                message=(
+                    f"Forecasting a column's own next values is not "
+                    f'something {can.model} does; it forecasts an aggregate '
+                    f'over a time window. Give the target a window, such as '
+                    f'SUM(table.col, 0, 30, days), or ask a time-series '
+                    f'model.'
+                ),
+                code=codes.MODEL_NO_SERIES_FORECASTING,
             )
         )
     return response

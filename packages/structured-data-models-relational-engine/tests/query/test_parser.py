@@ -554,7 +554,8 @@ def test_parse_string_entity_ids(
         ),
         pytest.param(
             'PREDICT USERS.AGE FORECAST 4 TIMEFRAMES FOR USERS.USER_ID = 0',
-            'FORECAST requires a temporal target',
+            "Forecasting a column's own next values is not something "
+            'a relational model does',
             id='forecast-static-target',
         ),
         pytest.param(

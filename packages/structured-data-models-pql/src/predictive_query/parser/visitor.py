@@ -52,6 +52,7 @@ FOR_EACH = 'for_each'
 PROBLEM_TYPE = 'problem_type'
 TOP_K = 'top_k'
 FORECAST = 'forecast'
+DETECT = 'detect'
 
 
 class PQLVisitor(PQLGrammarVisitor):
@@ -120,6 +121,7 @@ class PQLVisitor(PQLGrammarVisitor):
         complete_dict[PROBLEM_TYPE] = None
         complete_dict[TOP_K] = None
         complete_dict[FORECAST] = None
+        complete_dict[DETECT] = None
         assert problem_spec is not None
         spec = problem_spec.accept(self)
         if spec is not None:
@@ -161,12 +163,16 @@ class PQLVisitor(PQLGrammarVisitor):
         Returns:
             A `dict` containing any of: problem_type, top_k, forecast.
         """
-        # forecast | problem_type top_k | top_k | problem_type | (empty)
+        # forecast | detect | problem_type top_k | top_k | problem_type |
+        # (empty)
         if ctx.getChildCount() == 0:
             return {}
         forecast = ctx.forecast()
         if forecast is not None:
             return {FORECAST: forecast.accept(self)}
+        detect = ctx.detect()
+        if detect is not None:
+            return {DETECT: detect.accept(self)}
         result: dict[str, int | str | None] = {}
         problem_type = ctx.problem_type()
         if problem_type is not None:
@@ -189,6 +195,17 @@ class PQLVisitor(PQLGrammarVisitor):
             return None
         assert str(ctx.getChild(0)).upper() == 'TOP'
         return int(str(ctx.getChild(1)))
+
+    # Visit a parse tree produced by PQLGrammarParser#detect.
+    def visitDetect(self, ctx: PQLGrammarParser.DetectContext) -> bool:
+        r"""Called by the :class:`PQLGrammarParser` to parse the detect node.
+
+        Returns:
+            :obj:`True` when the query carries a ``DETECT ANOMALY`` clause.
+        """
+        assert str(ctx.getChild(0)).upper() == 'DETECT'
+        assert str(ctx.getChild(1)).upper() == 'ANOMALY'
+        return True
 
     # Visit a parse tree produced by PQLGrammarParser#forecast.
     def visitForecast(

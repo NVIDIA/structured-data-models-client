@@ -216,11 +216,14 @@ class ProblemType(StrEnum):
     and during batch prediction we output top k targets.
     With CLASSIFY we use a classification loss.
     With FORECAST we use a time-series forecasting approach.
+    With ANOMALY the model scores each row rather than predicting a label
+    the data defines.
     """
 
     RANK = 'RANK'
     CLASSIFY = 'CLASSIFY'
     FORECAST = 'FORECAST'
+    ANOMALY = 'ANOMALY'
 
 
 class AggregationType(StrEnum):
