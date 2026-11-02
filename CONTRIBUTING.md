@@ -100,6 +100,24 @@ This makes the change visible in review:
 .venv/bin/python scripts/snapshot_wire_payloads.py --write
 ```
 
+## Native memory checks
+
+On Linux x86-64, run the existing host tests with AddressSanitizer and leak detection before release or after native-boundary changes.
+Use a separate target directory so instrumentation does not replace ordinary build artifacts.
+The nightly compiler is only for this check; release builds retain the pinned stable toolchain.
+
+```bash
+rustup toolchain install nightly-2026-07-15 --profile minimal --component rust-src
+cd rust
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/sdm-host-asan" CARGO_BUILD_JOBS=2 \
+  RUSTFLAGS='-Zsanitizer=address' ASAN_OPTIONS='detect_leaks=1:halt_on_error=1' \
+  cargo +nightly-2026-07-15 test -Zbuild-std \
+  --target x86_64-unknown-linux-gnu --locked -p sdm-host --tests
+```
+
+This checks the Rust host and its dependencies; Python/JVM ownership and crash tests remain separate requirements.
+See [Rust sanitizer documentation](https://doc.rust-lang.org/unstable-book/compiler-flags/sanitizer.html) for instrumentation limits.
+
 ## Testing against something live
 
 The two commands above need nothing running. These need an endpoint, and are

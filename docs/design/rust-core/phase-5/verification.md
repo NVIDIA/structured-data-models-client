@@ -38,8 +38,10 @@ Audited against archived `migration-plan.md` §6–8 and `phase-4/acceptance-map
 
 At source `cc44e8dd8`, the retained contract-decoder property suite (6 tests) and core PQL/view fuzz suites (1 + 5 tests) passed with the pinned toolchain and warm build.
 Logs: external `phase-5/effort-3/current-contract-fuzz.log` and `current-core-fuzz.log`.
-Current CI contains boundary guards and bounded decoder fuzz tests, but this audit found no sanitizer job in the workflow.
-Locate applicable historical safety evidence or execute the missing check; absence from CI does not prove a product defect or waive the requirement.
+The deferred host sanitizer check is now complete locally: 128 tests across 18 executables passed with AddressSanitizer and Linux leak detection, no ignored tests or sanitizer diagnostics.
+It used `nightly-2026-07-15`, rebuilt the standard library, and tested unchanged Rust source from `59addf5cc`; command, lockfile/log hashes and exit status are recorded in external `phase-5/effort-3/host-asan-state.json`.
+The newer nightly failed to compile before tests; both attempt logs are retained.
+This closes the scoped host check, not all L8 requirements or sanitizer coverage of Python/JVM adapters.
 Do not rebuild retired migration tooling merely to preserve its command names.
 
 ## Existing decisions are not new failures
@@ -106,5 +108,9 @@ CI exposed additional compatibility and test-configuration gaps.
 The DBR16.4 Arrow string-storage mismatch is reproduced and fixed, with null preservation verified in its exact environment.
 Stale wheel-smoke package references, Windows log decoding, missing timezone data, retired CI selectors and obsolete test expectations are repaired; 447 related checks passed and the final stale assertion passed separately.
 NumPy producer admission remains incomplete across supported Python/platform combinations; the bounded ordering proposal in the design awaits an owner decision.
+
+The Java load matrix now requires JDK 17 and 21 on every required platform; 15 workflow/artifact tests passed, including an exact matrix-completeness check.
+Current Python socket retry/timeout and credential-redaction tests passed (61 tests at `05e9a5d63`); external log: `phase-5/effort-3/current-transport-safety.log`.
+The independent native-safety review confirms that the deferred sanitizer requirement concerns `sdm-host`; Python/JVM ownership and crash tests are complementary, not sanitizer coverage of those runtimes.
 
 The final candidate is not yet accepted, built across all targets or published.
