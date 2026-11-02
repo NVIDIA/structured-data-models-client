@@ -1480,7 +1480,6 @@ jobs:
       - name: Required Python API cases and collected result identities
         run: |
           python tests/parity/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json"
-          python tests/parity/api_contracts.py --gate native --run --out "$RUNNER_TEMP/python-type-results.json"
 
   # Installed-client and binding checks across supported native runtimes.
   runtime-install:

@@ -13,6 +13,33 @@ import pytest
 
 
 @pytest.mark.parametrize(
+    'selection', [['--gate', 'native'], ['--group', 'unknown']]
+)
+def test_empty_selection_never_collects_unrelated_tests(tmp_path, selection):
+    marker = tmp_path / 'collected'
+    (tmp_path / 'test_unrelated.py').write_text(
+        f'from pathlib import Path\nPath({str(marker)!r}).touch()\n'
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).with_name('api_contracts.py').resolve()),
+            *selection,
+            '--run',
+            '--out',
+            str(tmp_path / 'result.json'),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert 'no tests selected' in result.stderr
+    assert not marker.exists()
+    assert not (tmp_path / 'result.json').exists()
+
+
+@pytest.mark.parametrize(
     ('extra', 'complete', 'completed'),
     [([], True, 2), (['-k', 'one'], False, 1)],
 )

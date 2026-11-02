@@ -232,6 +232,8 @@ def main():
             )
         )
         return 0 if nodes else 1
+    if not nodes:
+        parser.error('no tests selected for this language and gate')
     if args.run and args.language == 'rust' and args.out is not None:
         return rust_run(nodes, args.out)
     if args.language != 'python' or args.out is None:

@@ -12,7 +12,7 @@
 | Release scope | Python/Java `2.0.0rc1`, Rust `2.0.0-rc.1`; Linux x86/Arm, macOS Intel/Arm, Windows x86; Windows Arm deferred by owner |
 | Python artifact | All five shipping wheels verified against source/native hashes; clean Linux manylinux2014 install verifies contract 57 and RC versions; retired runtimes absent |
 | Java artifact | JAR/POM hashes verified at `2e3823fcc`; all five native libraries and legal notices present; platform consumer jobs are running |
-| Final CI | [Run 41510270371](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41510270371), source `2e3823fcc`; still running; Python 3.10 comparator and installed API source-checkout selection need corrected validation |
+| Final CI | [Run 41515561878](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41515561878), source `6a0bdfa20`; Python 3.10 and all 400 installed API cases pass; an empty Python native-gate invocation needs corrected validation |
 | Ordering improvement | Approved stable ties and exact numeric values; 407 focused Python tests, Rust checks, independent review and two installed live Tabular journeys passed |
 | Generated semantics | 12 Tabular and eight Relational cases added to existing suites; all 38 tests including fixed examples passed; independent oracle review approved |
 | Managed runtime | DBR16.4 run `704276691546809` passed: raw Spark and Arrow-backed strings preserved 12 nulls each and completed prediction plus fit/predict/close against Tabular version 2 |
@@ -41,3 +41,7 @@ Receipt: external `final-ci-artifacts/java-native-dependency-inspection.json`.
 The complete local inventory contains five client wheels, two pure-Python wheels, two source archives, one JAR and its POM; hashes and source identities are in external `final-ci-artifacts/artifact-inventory.json`.
 Both API/connector source archives contain legal notices and successfully rebuild wheels.
 Independent review approved reuse of the 128-test host sanitizer result for unchanged host memory-safety code and dependencies, without extending it to new ordering behavior or other platforms.
+
+The Python native-gate invocation selected no tests and accidentally triggered whole-repository pytest collection.
+It is removed, with an early-error regression preventing empty selections from running pytest; the declared native provider/type gates remain enforced in Rust CI.
+All 78 focused checks and independent review passed; final corrected CI remains required.
