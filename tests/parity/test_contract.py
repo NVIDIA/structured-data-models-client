@@ -723,7 +723,10 @@ def test_derived_reference_alignment_precedes_identity_proof_without_hiding_chan
         )
 
 
-def test_snowflake_platform_probe_requires_exact_command_and_driver_origin():
+@pytest.mark.parametrize('linked_system_tool', [False, True])
+def test_snowflake_platform_probe_requires_exact_command_and_driver_origin(
+    linked_system_tool,
+):
     pytest.importorskip('snowflake.connector')
     code = """
 import json, subprocess
@@ -738,6 +741,20 @@ assert outside.report['observed_subprocesses'] == []
 assert outside.report['unobserved_subprocesses'] == ['subprocess.Popen']
 print(json.dumps(guard.report))
 """
+    if linked_system_tool:
+        code = (
+            """
+from pathlib import Path
+original_resolve = Path.resolve
+def system_resolve(self, *args, **kwargs):
+    resolved = original_resolve(self, *args, **kwargs)
+    if resolved == Path('/usr/bin/uname'):
+        return Path('/usr/lib/cargo/bin/coreutils/uname')
+    return resolved
+Path.resolve = system_resolve
+"""
+            + code
+        )
     ran = subprocess.run(
         [sys.executable, '-c', code],
         cwd=HERE,

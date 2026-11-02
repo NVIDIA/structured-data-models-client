@@ -93,7 +93,10 @@ def snowflake_platform_probe(event, args):
     ):
         return False
     program = shutil.which('uname')
-    if program is None or Path(program).resolve() != Path('/usr/bin/uname'):
+    if (
+        program is None
+        or Path(program).resolve() != Path('/usr/bin/uname').resolve()
+    ):
         return False
     description = sys.modules.get('snowflake.connector.description')
     if description is None:
