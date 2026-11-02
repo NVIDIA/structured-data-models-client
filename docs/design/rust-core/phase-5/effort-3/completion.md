@@ -11,7 +11,7 @@
 | Integration | Candidate includes `main` at `12955d397` and `rust-core` at `2b9e6ea88`; verified against refreshed remote refs |
 | Release scope | Python/Java `2.0.0rc1`, Rust `2.0.0-rc.1`; Linux x86/Arm, macOS Intel/Arm, Windows x86; Windows Arm deferred by owner |
 | Python artifact | Clean Linux x86 install verified against native hash, contract 57 and all three RC package versions; retired runtimes absent; this local glibc 2.34 wheel is not shipping manylinux2014 proof |
-| Final CI | [Run 41506491000](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41506491000), source `ba74849b0`; found test-infrastructure issues now fixed locally; corrected CI run pending |
+| Final CI | [Run 41510270371](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41510270371), source `2e3823fcc`; corrected full CI is pending/running |
 | Ordering improvement | Approved stable ties and exact numeric values; 407 focused Python tests, Rust checks, independent review and two installed live Tabular journeys passed |
 | Generated semantics | 12 Tabular and eight Relational cases added to existing suites; all 38 tests including fixed examples passed; independent oracle review approved |
 | Managed runtime | DBR16.4 run `704276691546809` passed: raw Spark and Arrow-backed strings preserved 12 nulls each and completed prediction plus fit/predict/close against Tabular version 2 |

@@ -164,5 +164,17 @@ Exact test-function mapping is retained in external `effort-3/evidence-observati
 
 The historical managed Databricks sweep is genuine Jobs evidence: 21 paired profiles and 255 questions, with pinned artifacts and terminal run receipts.
 Its reviewed consumer SHA-256 is `cfabf1853ccc01d722da21d0f9261d7a970d95cbd6f3566ad9a8ee2b380e28ce`.
-Reuse unchanged warehouse-query outcomes; the affected DBR16.4 nullable-string path still needs a current managed-runtime check.
+Reuse unchanged warehouse-query outcomes; the affected DBR16.4 nullable-string path passed the managed check described below.
 Local CI dependency recreation is not a managed-job execution.
+
+## Managed DBR16.4 closure
+
+Run `704276691546809`, task `997203890765698`, completed successfully with installed RC source `483df0c54` and a matching native hash.
+Raw Spark reads and Arrow-backed strings each retained all 12 nulls and completed prediction plus fit/predict/close against Tabular model version 2.
+The runtime used NumPy 1.26.4, pandas 2.2.2 and Arrow 15.0.2.
+The first attempt failed before product execution because the notebook incorrectly constrained pandas to the runtime's bundled 1.5.3; the corrected install follows the client's documented minimum.
+Receipt: external `effort-3/dbr164/receipt-r2.json`, with raw terminal state and notebook output alongside it.
+This is a fresh x86 managed-runtime check; the historical Arm outcome is retained with separate current native-platform checks, not described as freshly rerun.
+
+Corrected full CI is run `41510270371` on source `2e3823fcc`.
+Its predecessor exposed test/configuration issues now independently reviewed and fixed; it is not a final passing run.
