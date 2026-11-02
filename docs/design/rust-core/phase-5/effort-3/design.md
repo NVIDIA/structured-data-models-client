@@ -91,7 +91,8 @@ Native Windows ARM64 Python is deferred by owner decision: PyArrow has no publis
 Java Windows ARM64 is also deferred by owner decision: Arrow Java 19.0.0 has no ARM64 Windows DLL.
 Verify the remaining targets’ minimum OS versions and dependencies.
 Use current Linux glibc builds; 32-bit, Alpine/musl, PyPy and free-threaded Python are outside this release matrix.
-Keep API/connector source archives; explicitly decide whether to add a client source archive, which the current release workflow does not produce.
+Keep API/connector source archives.
+For this RC the native client remains wheel-only, matching the supported-platform release contract; a client source distribution is outside scope.
 Reuse the heavy-job guard and Cargo jobs=2; run large-memory checks sequentially.
 
 ## 3. Prepare artifacts; publication is on hold
