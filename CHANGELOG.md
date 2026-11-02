@@ -70,7 +70,7 @@ these packages. All five distributions share one version and one entry.
 
 - `result.explanation` and `PredictionResult(explanation=...)` are deprecated
   in favour of `result.explanations` and `explanations=`, warn with
-  `DeprecationWarning`, and will be removed in 2.0.0. To upgrade, read a row's
+  `DeprecationWarning`. To upgrade, read a row's
   explanation as `result.explanations[key]`, under the key naming that row in
   `result.to_pandas()`. `result.explanation` returns the first record's raw
   explanation only; the `{'by_forecast_step': ...}` it held for a forecast is
