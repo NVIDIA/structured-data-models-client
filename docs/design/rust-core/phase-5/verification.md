@@ -143,7 +143,7 @@ It passed 407 Python index tests, targeted Rust tests, Clippy and two live Tabul
 Commit `1661f3388` updates RC-version snapshots and connector assertions; 101 focused checks passed, with two optional skips.
 CI run `41501690988` tests earlier source `43d94e9bc`, so its ordering, lint and RC-expectation failures do not test these fixes.
 The Snowflake subprocess-probe failure was traced to the runner’s system-tool symlink and repaired without changing client behavior; subsequent CI Python 3.11–3.14 suites passed.
-Shipping RC artifacts now identify source `2e3823fcc`; four platform wheels and the five-native JAR/POM hashes have been checked.
+Shipping RC artifacts now identify source `2e3823fcc`; all five platform wheels and the five-native JAR/POM hashes have been checked.
 Final platform validation and the recorded session-performance finding remain open.
 
 ## Retained observation coverage
@@ -185,3 +185,8 @@ The affected Python 3.10 tests pass; the full local comparator suite passed 49 t
 The first local API attempt used the older installed 1.0.0 package and correctly failed its version snapshot; the current-source rerun passes.
 Independent review approved the corrections; external canonical-source checks remain in the maintainer suite, not claimed by installed API evidence.
 The existing CI run continues for platform artifacts; final corrected CI is still required.
+
+Artifact inventory is now complete locally: five native wheels, API/connectors wheels and source archives, and JAR/POM, with hashes and build-source identities.
+Both source archives rebuilt wheels successfully; final CI acceptance is separate.
+Scoped host ASan reuse was independently approved in external `effort-3/host-asan-reuse-disposition.json`: unchanged host/binding sources and external dependencies, with only workspace version changes in Cargo.lock.
+This retains the earlier memory-safety scope and does not certify the new sorting algorithms or final binaries.

@@ -10,7 +10,7 @@
 |---|---|
 | Integration | Candidate includes `main` at `12955d397` and `rust-core` at `2b9e6ea88`; verified against refreshed remote refs |
 | Release scope | Python/Java `2.0.0rc1`, Rust `2.0.0-rc.1`; Linux x86/Arm, macOS Intel/Arm, Windows x86; Windows Arm deferred by owner |
-| Python artifact | Current CI shipping wheels verified for Linux x86/Arm, Windows x86 and macOS Arm; clean Linux manylinux2014 install verifies native hash, contract 57 and RC versions; retired runtimes absent |
+| Python artifact | All five shipping wheels verified against source/native hashes; clean Linux manylinux2014 install verifies contract 57 and RC versions; retired runtimes absent |
 | Java artifact | JAR/POM hashes verified at `2e3823fcc`; all five native libraries and legal notices present; platform consumer jobs are running |
 | Final CI | [Run 41510270371](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41510270371), source `2e3823fcc`; still running; Python 3.10 comparator and installed API source-checkout selection need corrected validation |
 | Ordering improvement | Approved stable ties and exact numeric values; 407 focused Python tests, Rust checks, independent review and two installed live Tabular journeys passed |
@@ -37,3 +37,7 @@ Those source checks remain in the maintainer suite; installed API success does n
 Static inspection confirms JNI glibc requirements of at most 2.17, macOS deployment targets of 10.12 Intel / 11.0 Arm and system-only macOS dependencies; Windows imports the Visual C++ and Universal CRT runtimes.
 This is binary inspection, not execution on those oldest operating systems; JDK and connector dependency requirements also apply.
 Receipt: external `final-ci-artifacts/java-native-dependency-inspection.json`.
+
+The complete local inventory contains five client wheels, two pure-Python wheels, two source archives, one JAR and its POM; hashes and source identities are in external `final-ci-artifacts/artifact-inventory.json`.
+Both API/connector source archives contain legal notices and successfully rebuild wheels.
+Independent review approved reuse of the 128-test host sanitizer result for unchanged host memory-safety code and dependencies, without extending it to new ordering behavior or other platforms.
