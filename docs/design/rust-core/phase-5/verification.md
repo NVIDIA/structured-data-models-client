@@ -17,7 +17,7 @@ Phase 5 removal/packaging changes need an explicit impact assessment before reus
 | Performance | Actual Phase 3 measurements and accepted costs; narrower Phase 4 ordering/session measurements | **Reconcile first:** apply exact accepted dispositions, benchmark new/affected paths; no blanket 10% target reset |
 | Engine-free packaging | Existing clean wheel/JAR checks still include the pre-removal dependency layout | **Must run after changes:** clean install without old engine/Python PQL, public API and frozen pickle compatibility, supported native platforms |
 | Historical refusal wording census | Frozen receipts, difference registry and original comparison tests preserved in the effort 2 archive | **Effort 3 applicability/reconciliation:** permanent template/public-refusal tests do not prove the final candidate matches every historical census probe |
-| Distribution release | Python and Java build configuration covers five targets; Java JAR/POM release assets are configured, but repository publication is unresolved | **Effort 3:** complete the [distribution matrix](effort-3/design.md), publish Python/Java artifacts and verify clean consumer installs; configured builds are not successful release evidence |
+| Distribution preparation | Five Python/Java targets; Windows ARM64 deferred; RC version selected; initial Java destination is GitHub Releases | **Effort 3:** verify the [distribution matrix](effort-3/design.md) and clean local installs; publication is explicitly on hold |
 | Final acceptance | Prior CI and historical artifacts are retained | **Must close:** required final-source CI and final-artifact gates, with approved evidence reuse explicitly recorded |
 
 ## Original acceptance requirements: concrete closure work
@@ -31,7 +31,7 @@ Audited against archived `migration-plan.md` §6–8 and `phase-4/acceptance-map
 | L2: public contracts | Final maintained API/outcome ledger and refusal tests; explicitly reconcile historical observation fields and approved differences rather than claiming the old corpus was replayed |
 | L3: randomized cases | Carry forward reviewed Phase 3 generated/held-out results for unchanged algorithms; identify new Phase 4 paths not covered by that campaign |
 | L4: SQL/providers | Final SQLite/DuckDB/Postgres golden and provider jobs; previous Postgres jobs used retired selectors, now repaired |
-| L5: conversions | Final runtime/driver jobs, including repaired DBR16.4 Arrow conversion and unresolved NumPy platform ordering |
+| L5: conversions | Final runtime/driver jobs, including repaired DBR16.4 Arrow conversion and approved portable Rust ordering |
 | L6: live predictions | Retain identified historical cells; finish affected installed-client journeys, including ranking/forecast, and reconcile the Databricks runtime sweep separately |
 | L7: performance | Preserve exact approved historical costs; measure changed numeric preparation and session paths, with baseline identities and memory scope |
 | L8: artifacts/safety | Final five-platform wheel/JAR acceptance, minimum-system-library checks and explicit sanitizer/crash/leak evidence; Java loading alone cannot establish these |
@@ -135,3 +135,12 @@ Full RC CI `41501690988` was dispatched on `43d94e9bc` with locked Rust dependen
 The installed `64a164bd0` RC wheel passed live in-memory Relational ranking and forecasting against private-bridge model version 28, followed by the selected Python contract checks.
 Evidence: external `phase-5/effort-3/rc-live-ranking-forecast.jsonl` and `rc-live-ranking-forecast-report.json`.
 These two cases close the affected Python journey rerun; they are not a Java comparison or a complete live/runtime matrix.
+
+## Latest RC corrections
+
+Commit `79769ad00` implements the approved portable Tabular ordering.
+It passed 407 Python index tests, targeted Rust tests, Clippy and two live Tabular journeys; independent review found no remaining blocker.
+Commit `1661f3388` updates RC-version snapshots and connector assertions; 101 focused checks passed, with two optional skips.
+CI run `41501690988` tests earlier source `43d94e9bc`, so its ordering, lint and RC-expectation failures do not test these fixes.
+The Snowflake subprocess probe passes locally but failed in CI; added diagnostics preserve this unresolved item for the next run.
+A new local release wheel is building from `1661f3388`; final platform validation and the recorded session-performance finding remain open.
