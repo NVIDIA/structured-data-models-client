@@ -46,7 +46,7 @@ class GradientDecoder:
             return GradientExplanations()
         ids = [item.id for item in explained]
         unique = len(set(ids)) == len(ids)
-        by_id = unique and any(key is not None for key in ids)
+        by_id = unique and all(key is not None for key in ids)
         entries: dict[Any, dict[str, Any]] = {}
         hops: dict[Any, dict[str, list[int | None]]] = {}
         for item in explained:

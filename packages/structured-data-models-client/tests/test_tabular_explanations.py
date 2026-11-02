@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from sdm_api.generated.tfm_api import PredictionItem
 
 from sdm_client import Request
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model
+from sdm_client.explanations import GradientDecoder
 from sdm_client.models import KUMO_TABULAR
 
 EXPLAIN = ('prediction', 'explanation')
@@ -230,6 +232,38 @@ def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
     assert sorted(result.explanations) == [0, 1]
     assert result.explanations[1]['instance']['gradients'] == [[-2.0], [2.0]]
     assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
+
+
+def test_a_missing_id_keys_all_rows_by_row_index(
+    gradient_explanation,
+):
+    """If any explained row lacks an id, every explanation is under its
+    row_index, as with repeated ids, so the keying is all-or-nothing.
+
+    Assumptions:
+    - Two items with ids ``None`` and 90, as in-process tabular yields when
+      the predict frame's key column holds a null; each has an explanation.
+    """
+    items = [
+        PredictionItem(
+            id=key,
+            row_index=index,
+            prediction=1,
+            explanation=gradient_explanation(
+                outputs=CLASSES,
+                row=index,
+                columns=['age'],
+                gradients=[[-(index + 1.0)], [index + 1.0]],
+            ),
+        )
+        for index, key in enumerate([None, 90])
+    ]
+
+    explanations = GradientDecoder().decode(items)
+
+    assert sorted(explanations) == [0, 1]
+    assert explanations[1]['instance']['gradients'] == [[-2.0], [2.0]]
+    assert list(explanations.to_pandas().columns)[0] == 'row_index'
 
 
 def test_a_tabular_entry_has_no_related_tables(
