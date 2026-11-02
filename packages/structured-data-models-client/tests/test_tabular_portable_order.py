@@ -76,3 +76,40 @@ def assert_materialization(index):
     assert request.context.instance_table['id'].tolist() == expected
     assert set(expected) == set(sampled['id'])
     assert request.predict.instance_table['id'].tolist() == [80]
+
+
+@pytest.mark.parametrize('seed', range(12))
+def test_generated_context_matches_independent_row_identity_oracle(seed):
+    rng = np.random.default_rng(seed)
+    count = int(rng.integers(24, 100))
+    labels = [None, -1, 0, 0, 2**53 + 1, np.float64(2**53)]
+    data = pd.DataFrame(
+        {
+            'id': range(count),
+            'feature': rng.normal(size=count),
+            'target': rng.normal(size=count),
+        },
+        index=pd.Index(
+            [labels[int(i)] for i in rng.integers(len(labels), size=count)],
+            dtype=object,
+        ),
+    )
+    # Null features are valid; null targets must never enter the context.
+    data.iloc[::5, data.columns.get_loc('feature')] = np.nan
+    data.iloc[::7, data.columns.get_loc('target')] = np.nan
+    requested = rng.choice(count, size=3, replace=False).tolist()
+    candidates = data.loc[~data['id'].isin(requested) & data['target'].notna()]
+    size = int(rng.integers(3, len(candidates) + 1))
+    if size == len(candidates):
+        expected = candidates['id'].tolist()
+    else:
+        draw = candidates.sample(n=size, random_state=42)
+        order = sorted(range(size), key=lambda i: key(draw.index[i]))
+        expected = draw.iloc[order]['id'].tolist()
+    request = PredictiveQuery(
+        'PREDICT data.target FOR EACH data.id', {'data': data}
+    ).materialize(
+        indices=requested, num_context_samples=size, task='regression'
+    )
+    assert request.context.instance_table['id'].tolist() == expected
+    assert request.predict.instance_table['id'].tolist() == requested
