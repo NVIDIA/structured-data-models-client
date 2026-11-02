@@ -90,7 +90,8 @@ No new tests were run for this planning audit.
 - Two independent reuse reviews are retained at `phase-5/effort-3/evidence-review-a.md` and `evidence-review-b.md` in the external archive.
   Both support retaining unchanged sampling/SQL proof, while requiring current checks for changed Python dispatch, numeric batching, DuckDB reads, Snowflake connections and long Unicode queries.
   The 582-cell report spans multiple builds; it and the 210-cell type report are historical evidence, not one final-build certificate.
-- Remaining: corrected final CI, complete platform artifacts, performance disposition and final evidence review; publication is explicitly on hold.
+- Final CI and artifact verification passed; the owner accepted the measured RC performance cost.
+  Final independent evidence review accepted RC preparation; publication is explicitly on hold.
 
 Full CI `41490937592` completed with failures on source `418520620`; current fixes are committed in `3b443c78a` and still require final CI.
 The failed run nevertheless verified packaged Java loading and public Arrow `Schema.fromData` on all five required platforms (JDK 21 everywhere; JDK 17 additionally on Linux x86-64 and Windows x86-64).
@@ -107,13 +108,13 @@ Commit `932fabaf9` records an independently reviewed non-applicable ZIP advisory
 CI exposed additional compatibility and test-configuration gaps.
 The DBR16.4 Arrow string-storage mismatch is reproduced and fixed, with null preservation verified in its exact environment.
 Stale wheel-smoke package references, Windows log decoding, missing timezone data, retired CI selectors and obsolete test expectations are repaired; 447 related checks passed and the final stale assertion passed separately.
-Owner-approved stable Rust ordering now removes NumPy producer admission from the supported Python path; affected local and installed live checks passed, with final platform CI pending.
+Owner-approved stable Rust ordering now removes NumPy producer admission from the supported Python path; affected local, installed live and final platform CI checks passed.
 
 The Java load matrix now requires JDK 17 and 21 on every required platform; 15 workflow/artifact tests passed, including an exact matrix-completeness check.
 Current Python socket retry/timeout and credential-redaction tests passed (61 tests at `05e9a5d63`); external log: `phase-5/effort-3/current-transport-safety.log`.
 The independent native-safety review confirms that the deferred sanitizer requirement concerns `sdm-host`; Python/JVM ownership and crash tests are complementary, not sanitizer coverage of those runtimes.
 
-The final candidate is not yet accepted, built across all targets or published.
+The final candidate is built and CI-validated across all five approved targets; publication remains on hold.
 
 Owner release direction: prepare a 2.0.0 RC; do not publish or tag.
 Java will initially use GitHub Releases after separate authorization; Maven Central is a follow-up.
@@ -132,9 +133,9 @@ RC artifact check at `64a164bd0`: API/connectors wheels and source archives buil
 All three wheels installed into a fresh external Python 3.12 environment; dependency checks, native SHA/contract 57 checks and absence of retired engine/PQL imports passed.
 The installed client completed six fit/close cycles and 30 predictions using a local constant-response transport, not a live model endpoint.
 Evidence: external `phase-5/effort-3/rc-installed-identity.json`, `rc-pure-python/artifacts.json` and `rc-session-smoke.json`.
-This local Linux x86-64 wheel targets glibc 2.34; the required manylinux2014 and other platform artifacts still need CI verification.
+This earlier local Linux x86-64 wheel targets glibc 2.34; current manylinux2014 and other platform artifacts are verified separately below.
 
-Full RC CI `41501690988` was dispatched on `43d94e9bc` with locked Rust dependencies; it is not yet a passing result.
+Earlier RC CI `41501690988` tested `43d94e9bc` with locked Rust dependencies; it was superseded and is not counted as passing evidence.
 The installed `64a164bd0` RC wheel passed live in-memory Relational ranking and forecasting against private-bridge model version 28, followed by the selected Python contract checks.
 Evidence: external `phase-5/effort-3/rc-live-ranking-forecast.jsonl` and `rc-live-ranking-forecast-report.json`.
 These two cases close the affected Python journey rerun; they are not a Java comparison or a complete live/runtime matrix.
@@ -146,8 +147,8 @@ It passed 407 Python index tests, targeted Rust tests, Clippy and two live Tabul
 Commit `1661f3388` updates RC-version snapshots and connector assertions; 101 focused checks passed, with two optional skips.
 CI run `41501690988` tests earlier source `43d94e9bc`, so its ordering, lint and RC-expectation failures do not test these fixes.
 The Snowflake subprocess-probe failure was traced to the runner’s system-tool symlink and repaired without changing client behavior; subsequent CI Python 3.11–3.14 suites passed.
-Shipping RC artifacts now identify source `2e3823fcc`; all five platform wheels and the five-native JAR/POM hashes have been checked.
-Final platform validation and the recorded session-performance finding remain open.
+Earlier shipping artifacts identified source `2e3823fcc`; their checks are retained as history.
+Current artifact identity and remaining acceptance are recorded below; the owner has accepted the measured session-preparation overhead for this RC.
 
 ## Retained observation coverage
 
@@ -187,9 +188,22 @@ Run `41510270371` exposed two further test-only issues, corrected in `f26f51aa9`
 The affected Python 3.10 tests pass; the full local comparator suite passed 49 tests and the corrected current-source API gate passed all 400 cases without skips.
 The first local API attempt used the older installed 1.0.0 package and correctly failed its version snapshot; the current-source rerun passes.
 Independent review approved the corrections; external canonical-source checks remain in the maintainer suite, not claimed by installed API evidence.
-The existing CI run continues for platform artifacts; final corrected CI is still required.
+That earlier CI run was superseded; current corrected CI is recorded below.
 
 Artifact inventory is now complete locally: five native wheels, API/connectors wheels and source archives, and JAR/POM, with hashes and build-source identities.
 Both source archives rebuilt wheels successfully; final CI acceptance is separate.
 Scoped host ASan reuse was independently approved in external `effort-3/host-asan-reuse-disposition.json`: unchanged host/binding sources and external dependencies, with only workspace version changes in Cargo.lock.
 This retains the earlier memory-safety scope and does not certify the new sorting algorithms or final binaries.
+
+## Current candidate acceptance
+
+Final candidate `d494b2e76` passed [CI run 41524166634](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41524166634).
+All five Python wheels and the Java JAR/POM have verified hashes and source identities; the JAR contains all five native libraries and legal notices.
+The 11-file inventory is external `effort-3/ci-41524166634-artifacts/artifact-inventory.json`.
+API/connector source archives retain their original `29950f0d9` identity, with unchanged package directories and successful wheel rebuild evidence.
+The installed client suite passed 4,324 tests, with 250 skips and 87 deselections; the separate required API gate passed all 400 cases without skips.
+Both macOS wheel consumers passed 143 public API cases and optional connector-driver imports.
+Two independent reviews found no additional implementation or artifact blocker.
+Final CI completed successfully with 81 successful jobs, including all ten JDK 17/21 platform loading checks and Java behavior/provider suites; the targeted-only PQL job was intentionally skipped.
+Final independent evidence review accepted RC preparation for `d494b2e76`, with no remaining acceptance gap in the approved scope.
+Publication, tags and merge remain on hold by owner instruction.

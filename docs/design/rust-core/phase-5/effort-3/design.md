@@ -4,7 +4,7 @@
 
 # Effort 3: verify and prepare the 2.0 release candidate
 
-**Implementation in progress.**
+**RC preparation complete; merge and publication remain on hold.**
 Prepare a tested 2.0.0 release candidate for review.
 **Owner instruction: do not publish anything or create a release yet.**
 Prepare Python `2.0.0rc1` and corresponding Rust/Java RC versions; GitHub Releases is the initial Java destination only after separate publication authorization.
@@ -63,7 +63,7 @@ This changes neither sampled membership nor warehouse push-down SQL.
 Custom comparison functions remain unsupported.
 Implemented stable ties and exact represented numeric-value comparisons in Rust.
 Validation: 407 Python index tests, targeted Rust tests and Clippy passed; duplicate-label and mixed-number examples also completed live Tabular predictions.
-Independent review found no remaining blocker; final cross-platform RC validation remains pending.
+Independent review found no remaining blocker; final cross-platform RC validation passed.
 Keep legacy contract profiles readable while removing their use from the Python admission path.
 
 ## 2. Build the complete distribution set
