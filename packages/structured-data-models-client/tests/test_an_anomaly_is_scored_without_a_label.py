@@ -210,6 +210,33 @@ def test_readings_that_leave_out_a_composite_key_are_answered(anomaly):
     assert answer['row_index'].tolist() == list(range(len(frame)))
 
 
+def test_a_meaning_given_to_a_column_with_nothing_in_it_is_kept(anomaly):
+    """The placeholder is a meaning nobody chose. One a caller typed by hand
+    is a claim, whether or not the column it is on held anything to read."""
+    from sdm_client import Schema
+
+    frame = readings()[['flow', 'pressure']]
+    schema = Schema.from_data({'instance': frame.iloc[:0].astype(object)})
+    schema['instance']['flow'].stype = 'categorical'
+
+    with pytest.raises(StructuredDataError):
+        with SDMClient.in_process(anomaly) as client:
+            client.predict(
+                Request.anomaly(frame, schema=schema, inference=FAST),
+                model=KumoAnomaly(),
+            )
+
+
+def test_a_score_that_is_not_a_number_is_refused(anomaly):
+    """A row scored NaN is not a row that is unremarkable, and a frame of
+    them cannot be thresholded or plotted."""
+    frame = pd.DataFrame({'flow': [1e100, 2e100] * 50})
+
+    with pytest.raises(StructuredDataError) as caught:
+        scored(anomaly, frame)
+    assert 'malformed' in str(caught.value)
+
+
 def test_a_column_the_model_cannot_reconstruct_is_refused(anomaly):
     """A reading it cannot reconstruct has no error to score."""
     frame = readings()

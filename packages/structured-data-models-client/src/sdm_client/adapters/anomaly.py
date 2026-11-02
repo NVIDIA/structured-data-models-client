@@ -214,10 +214,11 @@ def _meaning(column: Any, dtype: str) -> str:
     numbers and the model reconstructs numbers, so there the meaning follows
     the dtype instead.
 
-    Only that column. `untyped` is the one case where nothing was read and
-    nothing was said, so a meaning carried by a column that holds values is a
-    claim either way, and is left alone to be refused on its own terms.
+    Only that column, and only where nothing was said about it either. A
+    column that holds values carries a claim, and so does one a caller typed
+    by hand though it held none; both are left alone to be refused on their
+    own terms.
     """
-    if not column.untyped:
+    if not column.untyped or column.stype_declared:
         return coherent_stype(column.stype, dtype, column)
     return MEANING_OF.get(dtype) or coherent_stype(column.stype, dtype, column)

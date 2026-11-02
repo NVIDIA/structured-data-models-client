@@ -183,7 +183,16 @@ class Anomaly:
             num_steps=int(options.get('num_steps') or _STEPS),
             generator=generator,
         )
-        scores = out['mae'].numerical[..., 0].tolist()
+        scored = out['mae'].numerical[..., 0]
+        if not bool(scored.isfinite().all()):
+            # The same refusal the other models make. A score that is not a
+            # number is not a row that is unremarkable, and returning one
+            # hands a caller a frame they cannot threshold or plot.
+            raise StructuredDataError(
+                'the model answered with a malformed output',
+                code='INTERNAL_ERROR',
+            )
+        scores = scored.tolist()
         labelled = 'probabilities' in fields
         labels = (
             {
