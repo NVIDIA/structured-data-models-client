@@ -54,10 +54,17 @@ def same(value, expected, dtype):
     ):
 
         def instant(text, source=False):
-            parsed = datetime.datetime.fromisoformat(
-                text.replace('Z', '+00:00')
-            )
             fraction = re.search(r'[T ]\d{2}:\d{2}:\d{2}[.,](\d+)', text)
+            # Parse whole seconds separately: Python 3.10 rejects nanoseconds.
+            # Decimal below retains every fractional digit for the comparison.
+            whole = (
+                text[: fraction.start(1) - 1] + text[fraction.end(1) :]
+                if fraction
+                else text
+            )
+            parsed = datetime.datetime.fromisoformat(
+                whole.replace('Z', '+00:00')
+            )
             remainder = Decimal('0.' + fraction[1]) if fraction else Decimal(0)
             if source:
                 digits = {

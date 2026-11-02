@@ -99,6 +99,8 @@ Raw request payloads remain in observations; any accepted representation differe
 Candidate records must identify the requested commit and one consistent installed package/native artifact per language.
 
 API-only behavior gates are mapped in `manifest.json` under `api_contracts`, separately from the prediction matrix.
+The installed API gate checks generated-file integrity and public wire behavior without requiring a sibling source repository.
+The two canonical-source provenance tests remain in the maintainer suite and explicitly skip when the pinned external contract checkout is unavailable; an installed API pass does not prove those source comparisons.
 `python tests/parity/api_contracts.py --language python --gate local --run --out api-report.json` runs those existing public tests; missing or skipped coverage stays incomplete.
 The registry pins the exported API snapshot so API additions require an explicit coverage update.
 Candidate provenance must match the installed wheel, native library, source commit and clean-build sidecar.
