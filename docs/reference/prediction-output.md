@@ -130,8 +130,8 @@ result = client.predict(request, model=KumoRelational(),
                         outputs=['prediction', 'probabilities', 'explanation'])
 ```
 
-In the query, `EXPLAIN PREDICT …` means the same as `outputs=['explanation']`;
-passing both is allowed and redundant. A ranking refuses it, since it is
+In the query, `EXPLAIN PREDICT …` adds `'explanation'` to the outputs the
+call would ask for anyway; passing both is allowed and redundant. A ranking refuses it, since it is
 assembled client-side from per-candidate classifications; a forecast explains
 each step.
 
