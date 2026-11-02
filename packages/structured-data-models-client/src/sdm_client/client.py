@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import copy
 import dataclasses
-import re
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import TracebackType
@@ -36,7 +35,12 @@ from sdm_client.base import (
 from sdm_client.core.backend import Backend, NimBackend
 from sdm_client.core.transport import Transport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
-from sdm_client.decompose import RANKING, Decomposition, about_the_part
+from sdm_client.decompose import (
+    _AN_EXPLAIN,
+    RANKING,
+    Decomposition,
+    about_the_part,
+)
 from sdm_client.errors import (
     StructuredDataError,
     UnknownModelError,
@@ -1340,9 +1344,6 @@ def _by_step(
     built._names_its_step = True
     built._names_its_rows = all(part._names_its_rows for part in answers)
     return built
-
-
-_AN_EXPLAIN = re.compile(r'^\s*EXPLAIN\s+', re.IGNORECASE)
 
 
 def _explained_if_asked(

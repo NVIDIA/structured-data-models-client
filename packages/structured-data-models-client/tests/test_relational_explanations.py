@@ -736,6 +736,11 @@ def relational_asked(
         return (payload,)
 
     monkeypatch.setattr(RelationalMaterializer, '_gather', gather)
+    return materialized(text, **how)
+
+
+def materialized(text: str, **how: Any) -> Request:
+    """``text`` materialized over the sample graph for users 5 and 7."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_data(
@@ -810,25 +815,44 @@ def test_relational_asks_for_explanation(
     assert sorted(result.explanations) == [5, 7]
 
 
-def test_ranking_refused_before_sending(monkeypatch, relational_endpoint):
-    """An `EXPLAIN` ranking is refused by the ranking-outputs check, naming
-    ``'explanation'``, before any call is sent.
+@pytest.fixture
+def gathers(monkeypatch) -> list[Any]:
+    """Each query the engine is asked to gather, answered by users 5 and 7."""
+    asked: list[Any] = []
+
+    def gather(self, query, indices, num_context_samples, options):
+        asked.append(query)
+        return (gathered(5, 7),)
+
+    monkeypatch.setattr(RelationalMaterializer, '_gather', gather)
+    return asked
+
+
+def test_ranking_refused_before_gathering(gathers):
+    """An `EXPLAIN` ranking is refused by ``materialize()``, saying a ranking
+    gives back no explanation, before any candidate's context is gathered.
 
     Assumptions:
-    - Built by the real ``materialize()`` with two candidates; gathering is
-      stood in for.
+    - Two candidates; gathering is stood in for by a recorder.
     """
-    client, endpoint = relational_endpoint()
-    request = relational_asked(
-        monkeypatch, RANK, kind='binary_classification', candidates=[0, 1]
-    )
-
     with pytest.raises(StructuredDataError) as refused:
-        client.predict(request, model=KumoRelational())
+        materialized(RANK, candidates=[0, 1])
 
-    assert len(request.parts) == 2
+    assert refused.value.code == 'INVALID_REQUEST'
     assert "'explanation' is not among them" in str(refused.value)
-    assert endpoint.sent == []
+    assert gathers == []
+
+
+def test_explain_without_ranking_is_gathered(gathers):
+    """An `EXPLAIN` query that ranks nothing is gathered and keeps its text.
+
+    Assumptions:
+    - Gathering is stood in for by a recorder.
+    """
+    request = materialized(f'EXPLAIN {TIER}')
+
+    assert len(gathers) == 1
+    assert request.query == f'EXPLAIN {TIER}'
 
 
 def test_forecast_explains_every_step(

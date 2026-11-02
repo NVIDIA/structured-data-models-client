@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -52,6 +53,8 @@ MOST_PARTS = 200
 
 RANKING = 'ranking'
 FORECAST = 'forecast'
+
+_AN_EXPLAIN = re.compile(r'^\s*EXPLAIN\s+', re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,16 @@ def parts_of(
 
     kind = str(getattr(query, 'problem_type', ''))
     if kind.endswith('RANK'):
+        if _AN_EXPLAIN.match(text):
+            # Said here, before a context is gathered per candidate for a
+            # request predict() would refuse.
+            raise StructuredDataError(
+                'this query begins EXPLAIN, and a ranking gives back '
+                "prediction and rankings; 'explanation' is not among them. Ask "
+                'it without EXPLAIN, or ask one of the per-candidate '
+                'classifications it is asked as directly',
+                code='INVALID_REQUEST',
+            )
         if 'prediction_statistic' in options:
             # Said here: each part is a classification, and refusing there
             # would name a binary_classification the caller never wrote.
