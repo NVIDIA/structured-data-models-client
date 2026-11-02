@@ -1102,7 +1102,9 @@ class TestDistributionCoherence:
             crate = tomllib.loads((REPO / 'rust/Cargo.toml').read_text())[
                 'workspace'
             ]['package']['version']
-        assert crate == self._declared_version(), (
+        from packaging.version import Version
+
+        assert Version(crate) == Version(self._declared_version()), (
             f'sdm-py is at {crate}, the five at {self._declared_version()}'
         )
         client = _pyproject('structured-data-models-client')
@@ -1244,7 +1246,7 @@ class TestDistributionCoherence:
             'optional-dependencies'
         ]
         assert (
-            'structured-data-models-connectors[databricks]==1.0.0'
+            f'structured-data-models-connectors[databricks]=={self._declared_version()}'
             in client['databricks']
         )
         connectors = _pyproject('structured-data-models-connectors')['project']
@@ -1264,7 +1266,7 @@ class TestDistributionCoherence:
             'optional-dependencies'
         ]
         assert client['lakebase'] == [
-            'structured-data-models-connectors[lakebase]==1.0.0'
+            f'structured-data-models-connectors[lakebase]=={self._declared_version()}'
         ]
         (everything,) = client['all']
         assert 'lakebase' in everything.partition('[')[2].rstrip(']').split(',')

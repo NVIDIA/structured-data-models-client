@@ -12,7 +12,7 @@ members = ["crates/*", "bindings/sdm-py", "bindings/sdm-jni"]
 [workspace.package]
 # Released with the client at its version; a guard holds sdm-py's version
 # equal to the maintained Python distributions.
-version = "1.0.0"
+version = "2.0.0-rc.1"
 edition = "2024"
 rust-version = "1.97"
 license = "Apache-2.0"

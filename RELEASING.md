@@ -58,6 +58,13 @@ Attaching a JAR is not Maven repository publication.
 The Java repository destination and release credentials remain to be configured before the first Java release; install the published coordinates in a clean consumer before marking Java publication complete.
 Keep the JAR, POM, Rust workspace and three Python distribution versions aligned.
 
+## Current release-candidate preparation
+
+Prepare `2.0.0rc1` for Python and Java; Rust uses the equivalent SemVer spelling `2.0.0-rc.1`.
+Publication and tagging are on hold until the owner explicitly authorizes them.
+Java initially targets GitHub Release assets; Maven Central is a follow-up.
+The existing publication workflow accepts final-release tags only; RC publication would need a separately reviewed prerelease path.
+
 ## Bumping the version
 
 One literal per distribution, in `_version.py`. All three must match, and
