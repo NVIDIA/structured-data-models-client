@@ -11,6 +11,7 @@
 | Integration | Candidate includes `main` at `12955d397` and `rust-core` at `2b9e6ea88`; verified against refreshed remote refs |
 | Release scope | Python/Java `2.0.0rc1`, Rust `2.0.0-rc.1`; Linux x86/Arm, macOS Intel/Arm, Windows x86; Windows Arm deferred by owner |
 | Python artifact | Current CI shipping wheels verified for Linux x86/Arm, Windows x86 and macOS Arm; clean Linux manylinux2014 install verifies native hash, contract 57 and RC versions; retired runtimes absent |
+| Java artifact | JAR/POM hashes verified at `2e3823fcc`; all five native libraries and legal notices present; platform consumer jobs are running |
 | Final CI | [Run 41510270371](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41510270371), source `2e3823fcc`; still running; Python 3.10 comparator and installed API source-checkout selection need corrected validation |
 | Ordering improvement | Approved stable ties and exact numeric values; 407 focused Python tests, Rust checks, independent review and two installed live Tabular journeys passed |
 | Generated semantics | 12 Tabular and eight Relational cases added to existing suites; all 38 tests including fixed examples passed; independent oracle review approved |
@@ -32,3 +33,7 @@ Independent review approved the CI-only corrections without finding weakened gat
 
 Two further test-only corrections were independently reviewed: Python 3.10 timestamp comparisons preserve nanoseconds outside the datetime parser, and the installed API gate excludes two external-source provenance checks.
 Those source checks remain in the maintainer suite; installed API success does not prove comparison against the external canonical specification.
+
+Static inspection confirms JNI glibc requirements of at most 2.17, macOS deployment targets of 10.12 Intel / 11.0 Arm and system-only macOS dependencies; Windows imports the Visual C++ and Universal CRT runtimes.
+This is binary inspection, not execution on those oldest operating systems; JDK and connector dependency requirements also apply.
+Receipt: external `final-ci-artifacts/java-native-dependency-inspection.json`.

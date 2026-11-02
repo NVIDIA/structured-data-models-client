@@ -126,12 +126,15 @@ If a later model call fails, `exception.answered(allocator)` returns any complet
 |---|---|
 | Group | `com.nvidia` |
 | Artifact | `structured-data-models-client` |
-| Version | the client's (`1.0.0`) |
+| Version | the client's (`2.0.0rc1`, unpublished release candidate) |
 | Java package | `com.nvidia.sdm` |
 | Bytecode | Java 17, tested on JDK 17 and 21 |
-| Natives in the JAR | Linux x86_64 and aarch64 (glibc 2.17 or later), macOS arm64 and x86_64 |
+| Natives in the JAR | Linux x86_64 and aarch64 (glibc 2.17 or later), macOS arm64 and x86_64, Windows x86_64 |
 
 The JAR depends on Arrow Java (`arrow-c-data`, `arrow-vector`, `arrow-memory-core`, and `arrow-memory-unsafe` at run time) and on the SLF4J 2 API, which it declares and does not bind: the application chooses its logger.
+Windows requires the Microsoft Visual C++ 2015–2022 x64 runtime.
+Windows ARM64 is deferred because the published Arrow dependency does not provide its native DLL.
+Native binary deployment targets do not establish support for older operating systems; the selected JDK, Arrow and connector drivers must also support the operating system.
 
 ## Runtime flags
 
