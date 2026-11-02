@@ -165,8 +165,14 @@ class Anomaly:
         back with different numbers every call.
         """
         options = payload.get('inference') or {}
+        # The rows are read into CPU tensors, and the model may be anywhere.
+        # The fitted path moves its context the same way; this one has no
+        # context, so the rows are all there is to move.
+        rows = self.rows(payload)
+        if generator is not None:
+            rows = rows.to(generator.device)
         out = model(
-            self.rows(payload),
+            rows,
             num_samples=int(options.get('num_samples') or _SAMPLES),
             num_steps=int(options.get('num_steps') or _STEPS),
             generator=generator,

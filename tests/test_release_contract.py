@@ -856,11 +856,21 @@ class TestTheRequestBodiesAreContractual:
                 'predcition',
             ),
             (lambda body: body.pop('schema'), "'schema'"),
+            (
+                lambda body: body['task'].update(kind='anomaly_detectoin'),
+                'anomaly_detectoin',
+            ),
+            (
+                lambda body: body.update(model='kumo-anomoly'),
+                'kumo-anomoly',
+            ),
         ],
         ids=[
             'an invented top-level key',
             'a field off the enum',
             'a dropped section',
+            'a misspelt task kind',
+            'a misspelt model id',
         ],
     )
     def test_a_model_the_contract_has_not_heard_of_is_policed_elsewhere(

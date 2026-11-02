@@ -150,7 +150,9 @@ def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
 #: what a deployment serves, and no deployment serves these: they run in this
 #: process only. Everything else about such a body is still policed, so an
 #: envelope that is wrong in any other way still fails here.
-NOT_IN_THE_CONTRACT = {'kumo-anomaly': ('model', 'task.kind')}
+NOT_IN_THE_CONTRACT = {
+    'kumo-anomaly': {'model': 'kumo-anomaly', 'task.kind': 'anomaly_detection'}
+}
 
 
 def _declared_elsewhere(body: dict[str, Any], error: Any) -> bool:
@@ -159,7 +161,11 @@ def _declared_elsewhere(body: dict[str, Any], error: Any) -> bool:
     exempt = NOT_IN_THE_CONTRACT.get(body.get('model'))
     if exempt is None or error.validator != 'enum':
         return False
-    return '.'.join(str(part) for part in error.path) in exempt
+    where = '.'.join(str(part) for part in error.path)
+    # The value as well as the field. Forgiving the field alone would accept
+    # `anomaly_detectoin` and every other misspelling of it, which is the one
+    # thing this file exists to catch.
+    return where in exempt and error.instance == exempt[where]
 
 
 def main() -> int:

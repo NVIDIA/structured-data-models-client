@@ -61,6 +61,7 @@ def test_a_score_and_a_label_per_row_come_back(anomaly):
 
     assert list(answer.columns) == [
         'row_index',
+        'id',
         'prediction',
         'probability_scs',
         'probability_macs',
@@ -125,6 +126,34 @@ def test_a_key_column_is_not_read_as_a_channel(anomaly):
     assert scored(anomaly, frame)['prediction'].tolist() == pytest.approx(
         scored(anomaly, without)['prediction'].tolist()
     )
+
+
+def test_each_answer_comes_back_under_the_row_s_own_key(anomaly):
+    """`sdm_client.result` tells callers to join on the key, so a key that
+    joins for one model and not another is a difference nobody expects."""
+    frame = readings()
+    frame['reading_id'] += 1000
+    answer = scored(anomaly, frame)
+
+    assert answer['id'].tolist() == frame['reading_id'].tolist()
+
+
+def test_readings_are_answered_though_the_schema_was_built_from_nulls(
+    anomaly,
+):
+    """A column with nothing in it is declared categorical because a schema
+    has to say something. The readings then decide its dtype, and refusing
+    them for the placeholder's sake refuses a question that is answerable."""
+    from sdm_client import Schema
+
+    frame = readings()[['flow', 'pressure']]
+    blank = Schema.from_data({'instance': frame.iloc[:0].astype(object)})
+
+    with SDMClient.in_process(anomaly) as client:
+        request = Request.anomaly(frame, schema=blank, inference=FAST)
+        answer = client.predict(request, model=KumoAnomaly()).to_pandas()
+
+    assert len(answer) == len(frame)
 
 
 def test_a_column_the_model_cannot_reconstruct_is_refused(anomaly):

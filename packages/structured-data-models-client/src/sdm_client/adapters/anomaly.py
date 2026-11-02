@@ -25,6 +25,11 @@ from sdm_api.generated.tfm_api import (
     ResponseContractError,
 )
 
+from sdm_client.adapters.single_table import (
+    MEANING_OF,
+    coherent_stype,
+    named_entities,
+)
 from sdm_client.base import ModelSpec
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.models import KUMO_ANOMALY
@@ -114,7 +119,7 @@ class AnomalyAdapter:
         return PredictionResult(
             model=model,
             request_id=request_id,
-            items=items,
+            items=named_entities(items, payload),
             metadata=dict(metadata or {}),
             outputs=outputs,
         )
@@ -163,7 +168,10 @@ class AnomalyAdapter:
 
         instance_schema: dict[str, Any] = {
             'columns': {
-                name: {'dtype': dtypes[name], 'stype': table[name].stype}
+                name: {
+                    'dtype': dtypes[name],
+                    'stype': _meaning(table[name], dtypes[name]),
+                }
                 for name in readings.columns
             }
         }
@@ -195,3 +203,18 @@ class AnomalyAdapter:
                 json_ready(request.inference)
             )
         return envelope
+
+
+def _meaning(column: Any, dtype: str) -> str:
+    r"""What to declare a column as, for a model that reads one meaning.
+
+    `coherent_stype` holds a placeholder meaning only where the dtype cannot
+    carry it, and a float can be categorical, so a column the caller never
+    typed stays categorical and this model then refuses it. The readings are
+    numbers and the model reconstructs numbers, so an undeclared meaning
+    follows the dtype here. A meaning the caller did assign is a claim, and is
+    left alone to be refused on its own terms.
+    """
+    if column.stype_declared:
+        return str(column.stype)
+    return MEANING_OF.get(dtype) or coherent_stype(column.stype, dtype, column)

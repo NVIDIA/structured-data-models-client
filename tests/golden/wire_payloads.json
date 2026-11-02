@@ -106,7 +106,7 @@
             },
             "user_id": {
               "dtype": "int64",
-              "stype": "ID"
+              "stype": "numerical"
             }
           },
           "primary_key": [
@@ -231,7 +231,7 @@
             },
             "user_id": {
               "dtype": "int64",
-              "stype": "ID"
+              "stype": "numerical"
             }
           },
           "primary_key": [
