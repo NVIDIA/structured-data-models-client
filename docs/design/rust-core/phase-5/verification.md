@@ -90,7 +90,7 @@ No new tests were run for this planning audit.
 - Two independent reuse reviews are retained at `phase-5/effort-3/evidence-review-a.md` and `evidence-review-b.md` in the external archive.
   Both support retaining unchanged sampling/SQL proof, while requiring current checks for changed Python dispatch, numeric batching, DuckDB reads, Snowflake connections and long Unicode queries.
   The 582-cell report spans multiple builds; it and the 210-cell type report are historical evidence, not one final-build certificate.
-- Remaining: actual platform CI, bounded affected live checks, original acceptance/performance reconciliation, RC version alignment and final local artifact verification; publication is explicitly on hold.
+- Remaining: corrected final CI, complete platform artifacts, performance disposition and final evidence review; publication is explicitly on hold.
 
 Full CI `41490937592` completed with failures on source `418520620`; current fixes are committed in `3b443c78a` and still require final CI.
 The failed run nevertheless verified packaged Java loading and public Arrow `Schema.fromData` on all five required platforms (JDK 21 everywhere; JDK 17 additionally on Linux x86-64 and Windows x86-64).
@@ -107,7 +107,7 @@ Commit `932fabaf9` records an independently reviewed non-applicable ZIP advisory
 CI exposed additional compatibility and test-configuration gaps.
 The DBR16.4 Arrow string-storage mismatch is reproduced and fixed, with null preservation verified in its exact environment.
 Stale wheel-smoke package references, Windows log decoding, missing timezone data, retired CI selectors and obsolete test expectations are repaired; 447 related checks passed and the final stale assertion passed separately.
-NumPy producer admission remains incomplete across supported Python/platform combinations; the bounded ordering proposal in the design awaits an owner decision.
+Owner-approved stable Rust ordering now removes NumPy producer admission from the supported Python path; affected local and installed live checks passed, with final platform CI pending.
 
 The Java load matrix now requires JDK 17 and 21 on every required platform; 15 workflow/artifact tests passed, including an exact matrix-completeness check.
 Current Python socket retry/timeout and credential-redaction tests passed (61 tests at `05e9a5d63`); external log: `phase-5/effort-3/current-transport-safety.log`.
@@ -117,13 +117,13 @@ The final candidate is not yet accepted, built across all targets or published.
 
 Owner release direction: prepare a 2.0.0 RC; do not publish or tag.
 Java will initially use GitHub Releases after separate authorization; Maven Central is a follow-up.
-The sorting audit corrected an earlier claim: no-replacement sampling preserves unique source indexes; the unresolved cases involve existing ties and certain numeric object labels.
+The sorting audit corrected an earlier claim: no-replacement sampling preserves unique source indexes; the approved change concerns existing ties and certain numeric object labels.
 
 Current session comparison (release wheel `d17422bb9`, same Python/NumPy/pandas/Arrow as archived `9bda54ef1`): three alternating process runs, each with five measured repetitions, found median fit 27.4 ms versus 23.9 ms and scoring 7.3 ms versus 6.4 ms (about +15%).
 Peak process RSS was 134,772 versus 133,704 KiB; this is a process high-water measure, not isolated native allocation.
 The earlier build explicitly forced Rust routing; its default route is Python, so the initial default-route comparison is not a Rust baseline.
 Evidence: external `phase-5/effort-3/session-benchmark-interleaved-core.json` and `session-benchmark-current-environment.json`.
-This local constant-response benchmark excludes network/model time; the timing regression remains unresolved pending attribution, not accepted or hidden by earlier dispositions.
+This local constant-response benchmark excludes network/model time; the measured overhead remains pending owner disposition, not accepted or hidden by earlier dispositions.
 
 RC artifact check at `64a164bd0`: API/connectors wheels and source archives built as `2.0.0rc1`; the client wheel normalizes Rust `2.0.0-rc.1` to the same Python version.
 All three wheels installed into a fresh external Python 3.12 environment; dependency checks, native SHA/contract 57 checks and absence of retired engine/PQL imports passed.
