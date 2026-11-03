@@ -230,6 +230,8 @@ jobs:
       # from Cargo.lock and compared with the committed file.
       - run: python3 scripts/rust_core/rust_notices.py --check
         working-directory: .
+      - run: python3 scripts/mermaid_notices.py --check
+        working-directory: .
       # The open source inventory main's 4cfbcd18 added for nSpect's scan,
       # uv.lock, current with every distribution's requirements (T2.0c).
       # Reading the client's version builds its metadata with maturin, so
