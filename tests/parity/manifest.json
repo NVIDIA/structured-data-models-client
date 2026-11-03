@@ -5831,6 +5831,46 @@
       "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
       "record": "api_inventory",
       "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/schema-visualization",
+      "reason": "Restore reviewed Python/Java metadata diagrams and exports; host-only rendering with shared assets. See visualization/design.md under phase-5/api-removal-audit."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/schema-notebook-display",
+      "reason": "Python notebook display is an intentional host-specific convenience; Java exposes HTML/file export instead. See visualization/design.md."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/sanitization-reports",
+      "reason": "Expose immutable preparation accounting, including fitted and decomposed requests, without changing filtering or warehouse queries. See sanitization/design.md."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/relbench",
+      "reason": "Restore Python/Java loaders with one pinned catalog and existing core admission. See relbench/design.md."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/metadata-explanation-reports",
+      "reason": "Add reviewed immutable metadata/explanation views and lazy shared numerical attribution policy. See reports/design.md."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_exceptions",
+      "reason": "Record Python-only notebook display; equivalent diagram content and file export remain covered in Java."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_inventory",
+      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained."
     }
   ],
   "capabilities": [

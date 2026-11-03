@@ -4,7 +4,7 @@
 
 # 2. Schema reports and explanation conveniences
 
-**Status: implemented in Python and Java, independently reviewed, with shared metadata and attribution fixtures.**
+**Status: implemented, independently reviewed and merged into `rust-core-phase-6`.**
 Expose readable information already held by schemas/results, without another warehouse or model call.
 Independent boundary review is incorporated below; this document is the implementation contract.
 
