@@ -412,6 +412,8 @@ class _TableShape:
             and self.time_column == other.time_column
             and getattr(self, 'end_time_column', None)
             == getattr(other, 'end_time_column', None)
+            and getattr(self, '_calculated_columns', ())
+            == getattr(other, '_calculated_columns', ())
             and getattr(self, 'source_name', None)
             == getattr(other, 'source_name', None)
         )
@@ -962,6 +964,17 @@ class Schema:
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
         self._conversion_notes: tuple[str, ...] = ()
+
+    def with_sql_column(self, table: str, name: str, expression: str) -> Schema:
+        """Return a schema with a provider-dialect SQL column over physical source columns.
+
+        The source evaluates caller-supplied SQL under its existing credentials.
+        Existing columns cannot be overwritten. No warehouse table is modified.
+        In-memory inputs should calculate their columns before schema admission.
+        """
+        from sdm_client._rust.sql_column import add
+
+        return add(self, table, name, expression)
 
     def infer_metadata(self) -> Schema:
         """Return a schema with missing, non-disabled key/time choices inferred."""
@@ -1719,7 +1732,7 @@ def _copy_table(table: _T) -> _T:
     """
     copied = type(table).__new__(type(table))
     object.__setattr__(copied, 'name', table.name)
-    for held in ('data', 'source_name'):
+    for held in ('data', 'source_name', '_calculated_columns'):
         if hasattr(table, held):
             object.__setattr__(copied, held, getattr(table, held))
     object.__setattr__(

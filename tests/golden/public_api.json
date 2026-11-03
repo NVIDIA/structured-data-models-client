@@ -449,6 +449,7 @@
           "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
           "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'",
           "with_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
+          "with_sql_column": "(self, table: 'str', name: 'str', expression: 'str') -> 'Schema'",
           "without_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
           "without_table": "(self, name: 'str') -> 'Schema'"
         },

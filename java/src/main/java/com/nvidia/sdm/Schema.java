@@ -415,6 +415,28 @@ public final class Schema {
     return edited(edit);
   }
 
+  /** Return a schema with a new provider-dialect SQL column over physical source columns.
+   * SQL is executed under the source credentials; no warehouse table is modified.
+   */
+  public Schema withSqlColumn(String table, String name, String expression) {
+    if (table == null || name == null || expression == null) {
+      throw new StructuredDataException("table, name and expression must be strings", "INVALID_REQUEST", Map.of(), null);
+    }
+    if (source == null) {
+      throw new StructuredDataException("SQL columns require a source-backed schema", "UNSUPPORTED_REQUEST", Map.of(), null);
+    }
+    Providers.Chosen chosen = Providers.of(source);
+    Map<String, Object> operation = Map.of("op", "add_sql_column", "provider", chosen.choice(), "schema", 1, "input", 2);
+    Map<Integer, Object> attachments = Map.of(1, Host.attachment(toHeld()), 2, Host.attachment(Map.of("table", table, "name", name, "expression", expression)));
+    try (Host.Finished finished = Host.run(operation, attachments, new Host.Call(chosen.provider(), null, Providers.held(source)))) {
+      Results.Described answer = (Results.Described) Results.expect(finished.result(), "describe_source");
+      Schema result = described(read(finished.bytes(answer.description())), source);
+      Schema noted = new Schema(result.tables, result.relationships, source, conversionNotes);
+      noted.inference = result.inference;
+      return noted;
+    }
+  }
+
   /** This schema with its relationships replaced by {@code relationships}, in order. */
   public Schema withRelationships(List<Relationship> relationships) {
     List<Object> links = new ArrayList<>();
@@ -511,6 +533,7 @@ public final class Schema {
       held.put("name", table.name());
       held.put("source", Map.of("source", List.of(table.sourceName())));
       held.put("columns", columns);
+      held.put("calculated_columns", table.calculatedColumns());
       held.put("primary_key", table.primaryKey());
       held.put("time_column", table.timeColumn().orElse(null));
       held.put("end_time_column", table.endTimeColumn().orElse(null));
@@ -665,7 +688,8 @@ public final class Schema {
         key,
         (String) table.get("time_column"),
         (String) table.get("end_time_column"),
-        duplicates);
+        duplicates,
+        (List<Map<String, Object>>) table.getOrDefault("calculated_columns", List.of()));
   }
 
   @SuppressWarnings("unchecked")

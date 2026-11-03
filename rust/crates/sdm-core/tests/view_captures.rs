@@ -803,6 +803,7 @@ fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
             .tables
             .iter()
             .map(|table| HeldTable {
+                calculated_columns: vec![],
                 name: table.name.clone(),
                 source: table.source.clone(),
                 columns: table

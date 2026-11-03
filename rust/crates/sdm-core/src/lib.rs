@@ -31,6 +31,7 @@ mod ranking;
 mod result;
 pub mod run;
 mod session;
+mod sql_column;
 mod subgraph;
 mod tabular_arrow;
 mod tabular_selection;

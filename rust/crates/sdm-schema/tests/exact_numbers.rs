@@ -58,6 +58,7 @@ fn int(name: &str) -> DescribedColumn {
 
 fn table(name: &str, columns: Vec<DescribedColumn>, key: Option<&str>) -> DescribedTable {
     DescribedTable {
+        calculated_columns: vec![],
         name: name.into(),
         source: name.into(),
         columns,

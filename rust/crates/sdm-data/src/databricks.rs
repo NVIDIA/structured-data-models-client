@@ -238,7 +238,7 @@ impl SqlDialect for Databricks {
     /// where one is named like a session word ([`SESSION_WORDS`]), which
     /// Databricks reads, quoted or not, as the session's value once the
     /// column is dropped or renamed; otherwise the source by its name.
-    fn derived(&self, relation: &Relation, source: &str) -> Option<String> {
+    fn derived(&self, _request: &DataRequest, relation: &Relation, source: &str) -> Option<String> {
         if relation.found
             && !relation
                 .columns

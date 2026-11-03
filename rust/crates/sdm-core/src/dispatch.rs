@@ -64,6 +64,9 @@ pub fn start(
         Operation::LabelsFrames(request) => Run::new(move |asker| async move {
             crate::materialize::frames::labels(asker, request, attachments, facts, zones).await
         }),
+        Operation::AddSqlColumn(request) => {
+            crate::sql_column::start(root, request, attachments, facts)?
+        }
         Operation::LabelsSource(request) => {
             crate::materialize::label_query::source(root, request, attachments, facts, zones)?
         }

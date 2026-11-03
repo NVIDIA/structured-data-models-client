@@ -36,6 +36,8 @@ use crate::{big_integer, exact_number};
 
 /// What [`table`] read of one table.
 pub(crate) struct Discovered {
+    /// Physical catalog names before applying a derived projection.
+    pub physical_names: Vec<String>,
     /// The catalog's columns read, in its order, as the preview holds them.
     pub declared: Vec<CatalogColumn>,
     /// The table's keys over the columns the schema keeps, each index's
@@ -112,7 +114,15 @@ pub(crate) async fn table(
     caller_named: bool,
     previewed: Option<&[String]>,
 ) -> Result<Discovered, CoreError> {
-    let one = || vec![table.source.clone()];
+    // Catalog facts belong to physical columns; computed fields come from the
+    // projection's Arrow preview. Never send SQL expressions to catalog readers.
+    let mut catalog_source = table.source.clone();
+    if table.source.is_derived() && !table.source.found {
+        catalog_source.columns.clear();
+        catalog_source.filter = None;
+        catalog_source.found = false;
+    }
+    let one = || vec![catalog_source.clone()];
     let columns = DataRequest::Describe {
         tables: one(),
         part: DescribePart::Columns,
@@ -163,10 +173,49 @@ pub(crate) async fn table(
         Err(failed) => return Err(failed),
     };
     let mut declared = declared_columns(columns)?;
+    let physical_names = declared.iter().map(|c| c.name.clone()).collect();
     if declared.is_empty() {
         // A table the source answers with no columns, as the reference
         // refuses one it cannot read.
         return Err(not_held(asker, &table.source).await);
+    }
+    if table.source.is_derived() && !table.source.found && !table.source.columns.is_empty() {
+        let physical = declared;
+        declared = table
+            .source
+            .columns
+            .iter()
+            .map(|column| {
+                if let Some(name) = &column.column {
+                    let mut read = physical
+                        .iter()
+                        .find(|c| &c.name == name)
+                        .cloned()
+                        .ok_or_else(|| {
+                            CoreError::new(
+                                Sentence::SchemaRefinement,
+                                "a projected source column is absent",
+                            )
+                            .with_field(
+                                "reason",
+                                Detail::text("a projected source column is absent"),
+                            )
+                        })?;
+                    read.name.clone_from(&column.name);
+                    Ok(read)
+                } else {
+                    Ok(CatalogColumn {
+                        name: column.name.clone(),
+                        declared_type: String::new(),
+                        not_null: false,
+                        primary_key: false,
+                        key_nullable: true,
+                        unique: false,
+                        dtype: None,
+                    })
+                }
+            })
+            .collect::<Result<Vec<_>, CoreError>>()?;
     }
     // Every later read of the table reads the columns its catalog found
     // (`Asker::guard`).
@@ -175,6 +224,29 @@ pub(crate) async fn table(
         declared.iter().map(|column| column.name.clone()).collect(),
     );
     let mut keys = declared_keys(keys)?;
+    if table.source.is_derived() && !table.source.found && !table.source.columns.is_empty() {
+        keys = key_columns(asker, &catalog_source, keys).await?;
+        keys = keys
+            .into_iter()
+            .filter_map(|mut key| {
+                let names: Option<Vec<String>> = key
+                    .columns
+                    .iter()
+                    .map(|physical| {
+                        table
+                            .source
+                            .columns
+                            .iter()
+                            .find(|column| column.column.as_ref() == Some(physical))
+                            .map(|column| column.name.clone())
+                    })
+                    .collect();
+                key.columns = names?;
+                Some(key)
+            })
+            .collect();
+    }
+
     if let Some(kept) = &table.columns {
         // Only the columns the schema keeps are read, and only the keys
         // over them, so a column it leaves out is never inferred, as the
@@ -198,12 +270,18 @@ pub(crate) async fn table(
             }
         }
     }
-    let constraints = key_columns(asker, &table.source, keys).await?;
+    let constraints =
+        if table.source.is_derived() && !table.source.found && !table.source.columns.is_empty() {
+            keys
+        } else {
+            key_columns(asker, &catalog_source, keys).await?
+        };
     if previewed.is_none() && declared.is_empty() {
         // None of the columns kept is the source's: nothing to preview, and
         // the caller says which it lacks (plan B's read of a table as it
         // stands, `describe::as_it_stands`, refuses the first by name).
         return Ok(Discovered {
+            physical_names,
             declared,
             constraints,
             preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
@@ -217,6 +295,7 @@ pub(crate) async fn table(
         if declared.is_empty() {
             // None of them is the source's: nothing to preview.
             return Ok(Discovered {
+                physical_names,
                 declared,
                 constraints,
                 preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
@@ -251,6 +330,7 @@ pub(crate) async fn table(
     let preview = exact_number::settle(preview, &constraints)?;
     let source_types = retained_source_types(&preview, &declared);
     Ok(Discovered {
+        physical_names,
         declared,
         constraints,
         preview,

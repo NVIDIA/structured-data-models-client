@@ -360,6 +360,7 @@ fn read_with_frame_widths(
             });
         }
         tables.push(DescribedTable {
+            calculated_columns: table.calculated_columns.clone(),
             name: table.name,
             source: table.source,
             columns,
@@ -407,6 +408,7 @@ pub fn held(
             .tables
             .iter()
             .map(|table| HeldTable {
+                calculated_columns: table.calculated_columns.clone(),
                 name: table.name.clone(),
                 source: table.source.clone(),
                 columns: table

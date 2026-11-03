@@ -86,6 +86,7 @@ fn shop() -> SourceDescription {
         inference: None,
         tables: vec![
             DescribedTable {
+                calculated_columns: vec![],
                 name: "users".into(),
                 source: "users".into(),
                 columns: users,
@@ -96,6 +97,7 @@ fn shop() -> SourceDescription {
                 duplicate_keys: Some(Scalar::UInt64(0)),
             },
             DescribedTable {
+                calculated_columns: vec![],
                 name: "orders".into(),
                 source: "orders".into(),
                 columns: orders,

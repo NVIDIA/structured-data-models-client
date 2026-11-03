@@ -23,6 +23,7 @@ public final class Table {
   private final String timeColumn;
   private final String endTimeColumn;
   private final Long duplicateKeys;
+  private final List<java.util.Map<String, Object>> calculatedColumns;
 
   Table(String name, String sourceName, List<Column> columns, List<String> primaryKey, String timeColumn, Long duplicateKeys) {
     this(name, sourceName, columns, primaryKey, timeColumn, null, duplicateKeys);
@@ -36,6 +37,11 @@ public final class Table {
       String timeColumn,
       String endTimeColumn,
       Long duplicateKeys) {
+    this(name, sourceName, columns, primaryKey, timeColumn, endTimeColumn, duplicateKeys, List.of());
+  }
+
+  Table(String name, String sourceName, List<Column> columns, List<String> primaryKey, String timeColumn, String endTimeColumn, Long duplicateKeys, List<java.util.Map<String, Object>> calculatedColumns) {
+    this.calculatedColumns = calculatedColumns.stream().map(java.util.Map::copyOf).toList();
     this.name = Objects.requireNonNull(name, "name");
     this.sourceName = sourceName;
     this.columns = List.copyOf(columns);
@@ -44,6 +50,8 @@ public final class Table {
     this.endTimeColumn = endTimeColumn;
     this.duplicateKeys = duplicateKeys;
   }
+
+  List<java.util.Map<String, Object>> calculatedColumns() { return calculatedColumns; }
 
   /** Snapshot metadata locally, without reading rows. */
   public TableMetadata metadataReport() {
@@ -109,6 +117,7 @@ public final class Table {
   public boolean equals(Object other) {
     return other instanceof Table table
         && name.equals(table.name)
+        && calculatedColumns.equals(table.calculatedColumns)
         && Objects.equals(sourceName, table.sourceName)
         && columns.equals(table.columns)
         && primaryKey.equals(table.primaryKey)
@@ -119,7 +128,7 @@ public final class Table {
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, sourceName, columns, primaryKey, timeColumn, endTimeColumn, duplicateKeys);
+    return Objects.hash(name, sourceName, columns, primaryKey, timeColumn, endTimeColumn, duplicateKeys, calculatedColumns);
   }
 
   @Override

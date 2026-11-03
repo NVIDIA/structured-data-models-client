@@ -194,12 +194,53 @@ pub(crate) trait SqlDialect: Sync {
         Err(sdm_contract::data::views_unread())
     }
 
+    /// Provider-specific projection constraints, before rendering any SQL.
+    fn validate_projection(&self, _relation: &Relation) -> Result<(), CoreError> {
+        Ok(())
+    }
+
     /// A derived relation's `FROM` (contract v28), `source` the rendering
     /// of the relation it reads; `None` for a dialect that reads none, where
     /// a derived relation is refused by name (`derived_relations` is false
     /// in its capabilities).
-    fn derived(&self, _relation: &Relation, _source: &str) -> Option<String> {
+    fn derived(
+        &self,
+        _request: &DataRequest,
+        _relation: &Relation,
+        _source: &str,
+    ) -> Option<String> {
         None
+    }
+
+    /// A physical-source SQL projection, used by dialects with ordinary subqueries.
+    /// Expressions stay in the provider dialect; names are always quoted.
+    fn projected(&self, relation: &Relation, source: &str) -> String {
+        if relation.found {
+            return source.to_owned();
+        }
+        let columns = if relation.columns.is_empty() {
+            "*".to_owned()
+        } else {
+            relation
+                .columns
+                .iter()
+                .map(|column| {
+                    let value = match (&column.column, &column.expression) {
+                        (Some(name), _) => self.identifier(name),
+                        (_, Some(expression)) => format!("({expression})"),
+                        _ => String::new(), // contract validation rejects this shape
+                    };
+                    format!("{value} AS {}", self.identifier(&column.name))
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let filter = relation
+            .filter
+            .as_ref()
+            .map(|value| format!(" WHERE ({value})"))
+            .unwrap_or_default();
+        format!("(SELECT {columns} FROM {source}{filter})")
     }
 
     // --- key sets: names, binding and joins --------------------------------
@@ -495,6 +536,7 @@ pub(crate) fn from(
     if let Some(refusal) = refuse_derived(request, field, relation, renders) {
         return Err(refusal);
     }
+    dialect.validate_projection(relation)?;
     let source = relation
         .source
         .iter()
@@ -507,7 +549,7 @@ pub(crate) fn from(
     // A dialect declaring derived relations renders them (contract v28);
     // one that declares them and renders none is this build's fault, never
     // a read of the source with the relation's columns or filter dropped.
-    dialect.derived(relation, &source).ok_or_else(|| {
+    dialect.derived(request, relation, &source).ok_or_else(|| {
         CoreError::new(
             Sentence::Internal,
             "a dialect declaring derived relations rendered none",

@@ -3790,9 +3790,29 @@
         ]
       },
       "gate": "local"
+    },
+    {
+      "id": "sql-columns",
+      "apis": {
+        "python": [
+          "Schema.with_sql_column"
+        ],
+        "java": [
+          "Schema.withSqlColumn"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_sql_columns.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/SqlColumnTest.java"
+        ]
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "bc4ece70899e87cd6fa6659e24b79347436daad7888526668401c2181cdef1c8",
+  "public_api_snapshot_sha256": "91e44f3e4987a6af53c4fe662152edab964b3485b35945893ef30442ba862525",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4454,6 +4474,9 @@
       },
       "sdm_client.TableMetadata.end_time_column": {
         "capability": "end-time"
+      },
+      "sdm_client.Schema.with_sql_column": {
+        "capability": "sql-columns"
       }
     },
     "java": {
@@ -5842,6 +5865,9 @@
       },
       "com.nvidia.sdm.TableMetadata#public java.lang.String endTimeColumn();": {
         "capability": "end-time"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSqlColumn(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "sql-columns"
       }
     }
   },
@@ -6156,12 +6182,12 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_inventory",
-      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
+      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "public_api_snapshot_sha256",
-      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
+      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
@@ -6201,12 +6227,17 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "live_api_tests",
-      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
+      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/end-time",
       "reason": "Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/sql-columns",
+      "reason": "Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
     }
   ],
   "capabilities": [
@@ -7847,6 +7878,11 @@
     {
       "api_contract": "end-time",
       "test": "packages/structured-data-models-client/tests/test_end_time_warehouse.py::test_live_end_time_selection_masking_and_prediction",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "sql-columns",
+      "test": "packages/structured-data-models-client/tests/test_sql_columns_warehouse.py::test_live_calculated_column_values_refresh_and_prediction",
       "evidence_level": "live-required"
     }
   ]

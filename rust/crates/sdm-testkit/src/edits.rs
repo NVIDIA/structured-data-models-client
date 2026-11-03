@@ -161,6 +161,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
             .tables
             .iter()
             .map(|table| HeldTable {
+                calculated_columns: vec![],
                 name: table.name.clone(),
                 source: table.source.clone(),
                 columns: table
@@ -214,6 +215,7 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
             });
         }
         tables.push(DescribedTable {
+            calculated_columns: vec![],
             name: table.name.clone(),
             source: table.source.clone(),
             columns,

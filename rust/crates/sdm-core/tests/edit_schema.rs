@@ -88,6 +88,7 @@ fn described() -> SourceDescription {
     SourceDescription {
         inference: None,
         tables: vec![DescribedTable {
+            calculated_columns: vec![],
             name: "users".into(),
             source: "users".into(),
             columns: vec![
@@ -112,6 +113,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
             .tables
             .iter()
             .map(|t| HeldTable {
+                calculated_columns: vec![],
                 name: t.name.clone(),
                 source: t.source.clone(),
                 columns: t
