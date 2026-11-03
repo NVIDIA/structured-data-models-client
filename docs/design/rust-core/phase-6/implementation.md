@@ -10,7 +10,7 @@ Use at most two heavy jobs, Cargo jobs=2 and the existing heavy guard; do not in
 
 | Feature | Branch | Status |
 |---|---|---|
-| Visualization | `rust-core-phase-6-visualization` | Contract approved; tests and implementation in progress |
+| Visualization | `rust-core-phase-6-visualization` | Reviewed and merged; 13 Python / 3 Java tests passed; integrated wheel asset check pending |
 | Sanitization | `rust-core-phase-6-sanitization` | Contract approved; tests and implementation in progress |
 | RelBench | `rust-core-phase-6-relbench` | Contract approved; tests and implementation in progress |
 | Reports/explanations | `rust-core-phase-6-reports` | Queued for a worker slot; contract review first |

@@ -31,8 +31,8 @@ Three modes. Only the first needs the network, which is why the other two
 are the ones CI runs:
 
     --refresh   read npm and rewrite MERMAID_COMPONENTS.json
-    --write     render from that file and splice it into both LICENSE files
-    --check     render from that file, and verify both LICENSE files carry
+    --write     render from that file into THIRD-PARTY-NOTICES-MERMAID.txt
+    --check     render from that file, and verify the notices file carries
                 it, and that each license this repository relies on is
                 present whole. MPL-2.0 is named but not carried, because
                 the one component under it offers Apache-2.0 instead
@@ -544,7 +544,7 @@ def render() -> str:
     return '\n'.join(lines) + '\n'
 
 
-#: Where each license's text starts in the LICENSE files, and the digest of
+#: Where each license's text starts in the notices file, and the digest of
 #: that whole text. A digest rather than a few marker lines: markers prove a
 #: heading survived, not a license. Checking for "Apache License" passed with
 #: the entire Apache body deleted, and checking several lines still passed
@@ -653,7 +653,7 @@ def main() -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--refresh', action='store_true', help='read npm')
     group.add_argument(
-        '--write', action='store_true', help='update the LICENSE files'
+        '--write', action='store_true', help='update the Mermaid notices file'
     )
     group.add_argument('--check', action='store_true', help='verify them')
     args = parser.parse_args()
@@ -694,7 +694,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print('both license files carry the recorded attribution and its texts')
+    print('Mermaid notices carry the recorded attribution and its texts')
     return 0
 
 
