@@ -46,10 +46,10 @@ Expose those counts without changing which rows survive; capture clean-table cou
 
 ## Remaining scope and acceptance
 
-The first four features, explicit inference/edits, time-series preparation, labels-only extraction and end-time support are complete.
-See [restoration completion](restoration-completion.md) for evidence.
-The [restoration tracker](../phase-5/api-removal-audit/design.md) still includes scoped SQL-column and custom relational-example work.
-Partial replacements such as connection rebinding and retry/batch scoping require an explicit tested migration mapping or accepted retirement decision.
+The nine scoped restorations, including end-time, SQL columns and supplied relational examples, are complete.
+See [final restoration evidence](final-restorations.md) and the earlier linked completion records.
+The owner has approved the [connection and execution follow-up](remaining-api-mappings.md): rebinding, batch/session convenience, typed settings and optional explanation summaries.
+These follow-up capabilities require reviewed APIs, implementation and verified Python/Java behavior before the remaining mappings are closed.
 Do not silently expand restoration into unsupported old behavior: the old in-memory table API rejected generic expressions.
 
 Use the existing compatibility manifest for Python/Java mappings and targeted tests, including capability-level coverage outside the old facade snapshot.
