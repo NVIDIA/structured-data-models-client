@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Callable
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -131,6 +130,7 @@ def gathered(*users: int, first: int = 100, task: str = 'classification'):
     wrong call, gives another entity's row.
     """
     instances = {user: first + at for at, user in enumerate(users)}
+    labels = [0.0, 1.0, 0.0] if task == 'regression' else ['no', 'yes', 'no']
     related: dict[str, dict[str, Any]] = {}
     for name, (columns, _) in TABLES.items():
         rows: list[list[Any]] = []
@@ -178,7 +178,9 @@ def gathered(*users: int, first: int = 100, task: str = 'classification'):
             'instance_table': {
                 'format': 'arrays',
                 'columns': ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
-                'rows': [[0, 1, 'no'], [1, 2, 'yes'], [2, 3, 'no']],
+                'rows': [
+                    [at, at + 1, label] for at, label in enumerate(labels)
+                ],
             },
         },
         'predict': {
@@ -251,10 +253,22 @@ class Transport:
     def __init__(self, gradient_explanation) -> None:
         self.build = gradient_explanation
         self.sent: list[dict] = []
+        self.pinned: dict = {}
 
     def predict(self, payload: dict) -> dict:
         self.sent.append(payload)
         return nim_answer(payload, self.build)
+
+    def create_session(self, payload: dict) -> dict:
+        self.pinned = payload
+        return {'session_id': 's1'}
+
+    def session_predict(self, session_id: str, payload: dict) -> dict:
+        """Answered as a one-shot call over the pinned half and ``payload``."""
+        return self.predict({**self.pinned, **payload})
+
+    def delete_session(self, session_id: str) -> None:
+        return None
 
     def close(self) -> None:
         return None
@@ -665,42 +679,28 @@ def test_hand_built_parts_whose_rows_cannot_be_found_are_refused(
 # --- a forecast ---------------------------------------------------------------
 
 
-def forecast(gradient_explanation, steps: int = 2):
-    """A forecast of users 5 and 7 over ``steps`` steps, through the client's
-    decomposed route, each step answered by the adapter as the NIM would."""
-    from sdm_client.decompose import Decomposition
-
-    rewritten = Decomposition(
-        'forecast', tuple((f'q{step}', step) for step in range(1, steps + 1))
+@pytest.fixture
+def forecast(monkeypatch, relational_endpoint):
+    """A two-step forecast of users 5 and 7 through ``predict()``, each step a
+    regression the endpoint answers and explains as the NIM would."""
+    client, _ = relational_endpoint()
+    request = relational_asked(
+        monkeypatch, FORECAST.removeprefix('EXPLAIN '), kind='regression'
     )
-    request = SimpleNamespace(
-        _decomposition=rewritten, parts=tuple(object() for _ in range(steps))
-    )
-    adapter = RelationalAdapter()
-    answers = []
-    for _ in range(steps):
-        payload = gathered(5, 7, task='regression')
-        answer = nim_answer(payload, gradient_explanation)
-        for record in answer['predictions']:
-            record['prediction'] = 1.0
-            del record['probabilities']
-        answers.append(adapter.normalize(answer, EXPLAIN, payload))
-    client = SDMClient.__new__(SDMClient)
-    handed = iter(answers)
-    client.predict = lambda part, model, outputs: next(handed)
-    return SDMClient._answer_in_parts(
-        client, request, 'kumo-relational', ['prediction', 'explanation']
+    return client.predict(
+        request, model=KumoRelational(), outputs=['prediction', 'explanation']
     )
 
 
-def test_a_forecast_is_explained_under_id_and_step(gradient_explanation):
+def test_a_forecast_is_explained_under_id_and_step(forecast):
     """Each point of a forecast is explained under ``(id, forecast_step)``,
     and nothing is gathered under ``by_forecast_step``.
 
     Assumptions:
-    - Two steps, each answered with an explanation for users 5 and 7.
+    - Two steps, built by the real ``materialize()`` with gathering stood
+      in for, each answered with an explanation for users 5 and 7.
     """
-    result = forecast(gradient_explanation)
+    result = forecast
 
     assert sorted(result.explanations.gradients) == [
         (5, 1),
@@ -715,14 +715,14 @@ def test_a_forecast_is_explained_under_id_and_step(gradient_explanation):
     )
 
 
-def test_a_forecasts_flat_table_names_the_step(gradient_explanation):
+def test_a_forecasts_flat_table_names_the_step(forecast):
     """``to_pandas()`` of a forecast's explanations starts with ``id`` and
     ``forecast_step``.
 
     Assumptions:
-    - Two steps, each explained.
+    - Two steps, built by the real ``materialize()``, each explained.
     """
-    flat = forecast(gradient_explanation).explanations.gradients.to_pandas()
+    flat = forecast.explanations.gradients.to_pandas()
 
     assert list(flat.columns)[:3] == ['id', 'forecast_step', 'table']
     assert sorted(set(flat['forecast_step'])) == [1, 2]
@@ -1077,3 +1077,342 @@ def test_a_boolean_class_is_named_by_the_frames_column_for_it(
 
     assert named == {'probability_False', 'probability_True'}
     assert named <= set(result.to_pandas().columns)
+
+
+# --- column analysis, made once per request -------------------------------
+#
+# Each labelled context below gives every entity one ``users`` row, so the
+# analysis has one ``COUNT(*)`` cohort holding every entity, and its mean per
+# class is that class's share of the context's labels.
+
+#: Two of four entities labelled ``'yes'``.
+EVEN = [(1, 'no'), (2, 'yes'), (3, 'no'), (4, 'yes')]
+#: One of three entities labelled ``'yes'``.
+SKEWED = [(1, 'no'), (2, 'yes'), (3, 'no')]
+
+
+def labelled(payload: dict, entities: list[tuple[int, Any]]) -> dict:
+    """``payload`` with its context replaced by ``entities``, each an
+    ``(entity, label)`` with one linked ``users`` row."""
+    payload['context'] = {
+        'instance_table': {
+            'format': 'arrays',
+            'columns': ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
+            'rows': [
+                [at, entity, label]
+                for at, (entity, label) in enumerate(entities)
+            ],
+        },
+        'related_tables': {
+            'users': {
+                'format': 'arrays',
+                'columns': TABLES['users'][0],
+                'rows': [
+                    [at, entity, 1.0] for at, (entity, _) in enumerate(entities)
+                ],
+            }
+        },
+    }
+    return payload
+
+
+def gathering(monkeypatch, *calls: tuple[dict, ...]) -> None:
+    """Answer each gather with the next of ``calls``, a tuple of payloads."""
+    handed = iter(calls)
+    monkeypatch.setattr(
+        RelationalMaterializer,
+        '_gather',
+        lambda self, query, indices, num_context_samples, options: next(handed),
+    )
+
+
+def asked_over(monkeypatch, entities, text: str = TIER) -> Request:
+    """``text`` scoring users 5 and 7 over the context ``entities``."""
+    gathering(monkeypatch, (labelled(gathered(5, 7), entities),))
+    return materialized(text)
+
+
+def label_means(result) -> dict[Any, float]:
+    """Per class, the mean in the ``users`` ``COUNT(*)`` cohort."""
+    frame = result.explanations.columns.to_pandas()
+    count = frame[(frame['table'] == 'users') & (frame['column'] == 'COUNT(*)')]
+    assert list(count['cohort'].unique()) == ['[1 - 1+]']
+    assert set(count['share']) == {1.0}
+    return dict(zip(count['class'], count['mean'], strict=True))
+
+
+@pytest.mark.parametrize(
+    ('outputs', 'analysed'),
+    [(['prediction'], False), (['prediction', 'explanation'], True)],
+    ids=['not asked', 'asked'],
+)
+def test_relational_one_shot_analysis_only_when_explained(
+    monkeypatch, relational_endpoint, outputs, analysed
+):
+    """A one-shot relational answer carries a column analysis exactly when an
+    explanation was asked for.
+
+    Assumptions:
+    - Gathering is stood in for; the endpoint explains every call.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            asked_over(monkeypatch, EVEN),
+            model=KumoRelational(),
+            outputs=outputs,
+        )
+
+    assert (result.explanations.columns is not None) is analysed
+
+
+def test_relational_one_shot_predicts_analyse_apart(
+    monkeypatch, relational_endpoint
+):
+    """Separate ``predict()`` calls each analyse their own request's context.
+
+    Assumptions:
+    - The first request's context is ``EVEN`` (yes 1/2), the second's
+      ``SKEWED`` (yes 1/3).
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        even, skewed = (
+            client.predict(
+                asked_over(monkeypatch, entities),
+                model=KumoRelational(),
+                outputs=['prediction', 'explanation'],
+            )
+            for entities in (EVEN, SKEWED)
+        )
+
+    assert label_means(even) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
+    assert label_means(skewed) == pytest.approx({'no': 2 / 3, 'yes': 1 / 3})
+
+
+def test_relational_fits_analyse_apart_and_after_the_holdout(
+    monkeypatch, relational_endpoint
+):
+    """Separate ``fit()`` calls each analyse what they pin, and a holdout is
+    out of it: holding entity 4 back leaves yes at 1/3, not 1/2.
+
+    Assumptions:
+    - Both sessions are fitted over ``EVEN``; the second holds 4 back.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        whole, held = (
+            client.fit(
+                asked_over(monkeypatch, EVEN),
+                model=KumoRelational(),
+                outputs=['prediction', 'explanation'],
+                holdout=holdout,
+            ).predict(asked_over(monkeypatch, EVEN))
+            for holdout in (None, [4])
+        )
+
+    assert label_means(whole) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
+    assert label_means(held) == pytest.approx({'no': 2 / 3, 'yes': 1 / 3})
+
+
+def test_a_relational_session_keeps_its_fit_time_analysis(
+    monkeypatch, relational_endpoint
+):
+    """A session's answers all carry the one analysis made at fit, even for a
+    request re-materialized over a different context.
+
+    Assumptions:
+    - Fitted over ``EVEN``; the later requests are gathered over ``EVEN``
+      and then ``SKEWED``, and both are accepted as the pinned question.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fitted = client.fit(
+            asked_over(monkeypatch, EVEN),
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+        same = fitted.predict(asked_over(monkeypatch, EVEN))
+        other = fitted.predict(asked_over(monkeypatch, SKEWED))
+
+    assert other.explanations.columns is same.explanations.columns
+    assert label_means(other) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
+
+
+def test_a_split_request_analyses_its_context_before_the_drop(
+    monkeypatch, relational_endpoint
+):
+    """A request gathered as two calls is analysed once, over the context as
+    gathered, before the scored entities' own rows were dropped from it.
+
+    Assumptions:
+    - Both calls share one context of five entities, two of them the scored
+      users 5 and 7: yes 2/5 as gathered, 1/3 once they are dropped.
+    """
+    gathered_as = [(1, 'no'), (5, 'yes'), (7, 'no'), (2, 'yes'), (3, 'no')]
+    first = labelled(gathered(5), gathered_as)
+    second = gathered(7)
+    second['context'] = first['context']
+    gathering(monkeypatch, (first, second))
+    client, endpoint = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            materialized(TIER),
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    assert [
+        [row[1] for row in sent['context']['instance_table']['rows']]
+        for sent in endpoint.sent
+    ] == [[1, 2, 3], [1, 2, 3]]
+    assert label_means(result) == pytest.approx({'no': 3 / 5, 'yes': 2 / 5})
+
+
+def test_a_forecast_is_analysed_over_every_steps_rows(
+    monkeypatch, relational_endpoint
+):
+    """A forecast carries one analysis over every step's labelled rows, each
+    step's entities kept apart: the mean label is over all six rows.
+
+    Assumptions:
+    - Two steps gathered over three entities each, labelled 0, 1, 0 and
+      then 3, 3, 3: 10/6 over both, 1/3 over the first alone.
+    - Both steps number their instances from 0; one ``COUNT(*)`` cohort at
+      1 shows no entity took another step's ``users`` row.
+    """
+    gathering(
+        monkeypatch,
+        *(
+            (labelled(gathered(5, 7, task='regression'), labels),)
+            for labels in (
+                [(1, 0.0), (2, 1.0), (3, 0.0)],
+                [(1, 3.0), (2, 3.0), (3, 3.0)],
+            )
+        ),
+    )
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(materialized(FORECAST), model=KumoRelational())
+
+    assert label_means(result) == pytest.approx({None: 10 / 6})
+
+
+def test_a_forecast_analyses_a_table_only_some_steps_reached(
+    monkeypatch, relational_endpoint
+):
+    """A related table one step's context lacks is still analysed, each of
+    its rows read against the entity of the step that carried it.
+
+    Assumptions:
+    - Two steps over entities 1, 2, 3 (instances 0-2 in each), labelled
+      0, 10, 0 and then 100, 200, 300.
+    - ``orders`` (``amount`` 1, 2, 3) is reached only in step 1, ``events``
+      (``seconds`` 10, 20, 30) only in step 2, one row per entity; both
+      columns are numerical. An entity with no row of a table drops out of
+      that column's cohorts.
+    - Hand-computed: deciles of 10, 20, 30 are 10, 12, ..., 30; the values
+      land in the bins ending 12, 20 and 30, so the kept cohorts are
+      [10 - 12], (12 - 20], (20 - 30], one entity each, means 100, 200, 300. Read against step 1's entities instead, they
+      would be 0, 10, 0; dropped, ``events`` would be absent.
+    """
+
+    def step(labels: list[float], table: str, values: list[float]) -> dict:
+        entities = list(zip([1, 2, 3], labels, strict=True))
+        payload = labelled(gathered(5, 7, task='regression'), entities)
+        columns = TABLES[table][0]
+        # The schema is the graph's, the same in every step.
+        for name in ('orders', 'events'):
+            described = payload['schema']['related_tables'][name]
+            described['columns'][TABLES[name][1]]['stype'] = 'numerical'
+        rows = {
+            'orders': lambda at, entity, value: [
+                at,
+                9000 + at,
+                entity,
+                77,
+                value,
+            ],
+            'events': lambda at, entity, value: [
+                at,
+                at,
+                entity,
+                'login',
+                value,
+            ],
+        }[table]
+        payload['context']['related_tables'][table] = {
+            'format': 'arrays',
+            'columns': columns,
+            'rows': [
+                rows(at, entity, value)
+                for at, ((entity, _), value) in enumerate(
+                    zip(entities, values, strict=True)
+                )
+            ],
+        }
+        return payload
+
+    gathering(
+        monkeypatch,
+        (step([0.0, 10.0, 0.0], 'orders', [1.0, 2.0, 3.0]),),
+        (step([100.0, 200.0, 300.0], 'events', [10.0, 20.0, 30.0]),),
+    )
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(materialized(FORECAST), model=KumoRelational())
+
+    frame = result.explanations.columns.to_pandas()
+    analysed = {
+        column: (
+            list(cohorts['cohort']),
+            list(cohorts['share']),
+            list(cohorts['mean']),
+        )
+        for column, cohorts in frame.groupby('column')
+        if column in ('amount', 'seconds')
+    }
+    assert analysed['seconds'][0] == ['[10 - 12]', '(12 - 20]', '(20 - 30]']
+    assert analysed['seconds'][1] == pytest.approx([1 / 3] * 3)
+    assert analysed['seconds'][2] == pytest.approx([100.0, 200.0, 300.0])
+    assert analysed['amount'][0] == ['[1 - 1.2]', '(1.2 - 2]', '(2 - 3]']
+    assert analysed['amount'][2] == pytest.approx([0.0, 10.0, 0.0])
+
+
+def test_a_forecast_not_explained_is_not_analysed(
+    monkeypatch, relational_endpoint
+):
+    """A forecast asked without an explanation carries no analysis.
+
+    Assumptions:
+    - Two steps, asked for the prediction only.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            relational_asked(
+                monkeypatch,
+                FORECAST.removeprefix('EXPLAIN '),
+                kind='regression',
+            ),
+            model=KumoRelational(),
+            outputs=['prediction'],
+        )
+
+    assert result.explanations.columns is None

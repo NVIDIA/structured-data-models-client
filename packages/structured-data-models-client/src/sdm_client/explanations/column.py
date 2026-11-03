@@ -29,8 +29,11 @@ class _Cohorts:
     score: float
 
 
-class ColumnAnalysis:
-    r"""Column analysis of one payload's context, as kumo-ml's RFM computes it.
+class ColumnExplanations:
+    r"""Per-column cohort statistics over a request's labelled rows.
+
+    Says which columns the outcome moves with, and how: the more a column's
+    cohorts differ in mean outcome, the higher its score.
 
     Each analysed column is split into cohorts: numerical values and
     ``COUNT(*)`` (rows linked to an entity) into quantile bins, categories into
@@ -81,13 +84,12 @@ class ColumnAnalysis:
                 [(target == label).to_numpy(float) for label in self._classes],
                 axis=1,
             )
-        self._outcome: np.ndarray = outcome
         self._entities = len(instance)
         self._columns: list[_Cohorts] = []
         if 'related_tables' in context:
-            self._relational(payload, instance)
+            self._relational(payload, instance, outcome)
         else:
-            self._tabular(payload, instance)
+            self._tabular(payload, instance, outcome)
         total = sum(column.score for column in self._columns)
         if total > 0:
             self._columns = [
@@ -139,7 +141,10 @@ class ColumnAnalysis:
     # Payload ##################################################################
 
     def _tabular(
-        self, payload: Mapping[str, Any], instance: pd.DataFrame
+        self,
+        payload: Mapping[str, Any],
+        instance: pd.DataFrame,
+        outcome: np.ndarray,
     ) -> None:
         described = payload['schema']['instance_table']
         excluded = {
@@ -159,12 +164,16 @@ class ColumnAnalysis:
             np.zeros(rows, dtype=int),
             np.arange(rows),
             stypes,
+            outcome,
             anchor=None,
             count=False,
         )
 
     def _relational(
-        self, payload: Mapping[str, Any], instance: pd.DataFrame
+        self,
+        payload: Mapping[str, Any],
+        instance: pd.DataFrame,
+        outcome: np.ndarray,
     ) -> None:
         schema = payload['schema']
         context = payload['context']
@@ -211,6 +220,7 @@ class ColumnAnalysis:
                 hop[reached].to_numpy(int),
                 frame[self._INSTANCE_ID].map(entity_of).to_numpy(int),
                 stypes,
+                outcome,
                 anchor=anchor,
                 count=True,
             )
@@ -224,6 +234,7 @@ class ColumnAnalysis:
         hops: np.ndarray,
         entity: np.ndarray,
         stypes: Mapping[str, str | None],
+        outcome: np.ndarray,
         *,
         anchor: np.ndarray | None,
         count: bool,
@@ -231,7 +242,8 @@ class ColumnAnalysis:
         r"""Every analysed column of one table, per hop the table is reached at.
 
         Category mappings and keep/drop decisions are made once over the
-        table's rows at all hops, as kumo-ml's encoders are.
+        table's rows at all hops, so a category names the same cohort at
+        every hop.
         """
         prepared: dict[str, tuple[str, Any]] = {}
         for column, stype in stypes.items():
@@ -248,14 +260,20 @@ class ColumnAnalysis:
             if count:
                 links = np.bincount(linked, minlength=self._entities)
                 self._add(
-                    name, hop, self.COUNT, None, self._ranges(links, True)
+                    name,
+                    hop,
+                    self.COUNT,
+                    None,
+                    self._ranges(links, True, outcome),
                 )
             for column, (kind, data) in prepared.items():
                 if kind == 'numerical':
-                    result = self._ranges(self._means(data[at], linked), False)
+                    result = self._ranges(
+                        self._means(data[at], linked), False, outcome
+                    )
                 elif kind == 'timestamp':
                     assert anchor is not None
-                    result = self._times(data[at], linked, anchor)
+                    result = self._times(data[at], linked, anchor, outcome)
                 else:
                     index, labels, other = data
                     if kind == 'categorical':
@@ -266,11 +284,11 @@ class ColumnAnalysis:
                         position = np.searchsorted(rows, index[0][keep])
                         pairs = (linked[position], index[1][keep])
                     shares = self._shares(pairs, linked, len(labels))
-                    result = self._categories(shares, labels, other)
+                    result = self._categories(shares, labels, other, outcome)
                 self._add(name, hop, column, stypes[column], result)
 
     def _prepare(self, values: pd.Series, stype: str) -> tuple[str, Any] | None:
-        r"""A column's per-row data, or ``None`` if kumo-ml's encoder drops it.
+        r"""A column's per-row data, or ``None`` when it holds nothing to group.
 
         A categorical becomes ``(index, labels, other)``: each row's cohort,
         the cohort labels (N/A last) and which label is the merged tail. A
@@ -368,7 +386,7 @@ class ColumnAnalysis:
 
     @staticmethod
     def _categorical_kept(present: pd.Series, stype: str) -> bool:
-        r"""kumo-ml's ``infer_categorical_encoder`` / ``infer_id_encoder``."""
+        r"""Whether the categories group rows, rather than mostly name them."""
         count = len(present)
         frequency = present.value_counts()
         unique = len(frequency)
@@ -407,7 +425,11 @@ class ColumnAnalysis:
         )
 
     def _times(
-        self, times: np.ndarray, entity: np.ndarray, anchor: np.ndarray
+        self,
+        times: np.ndarray,
+        entity: np.ndarray,
+        anchor: np.ndarray,
+        outcome: np.ndarray,
     ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
         r"""Time before the entity's anchor, in ``NUM_COHORTS`` buckets."""
         known = times[~np.isnan(times)]
@@ -427,12 +449,12 @@ class ColumnAnalysis:
             for start, end in zip(edges[:-1], edges[1:], strict=True)
         ]
         return self._categories(
-            shares, labels, np.zeros(len(labels), dtype=bool)
+            shares, labels, np.zeros(len(labels), dtype=bool), outcome
         )
 
     @classmethod
     def _time_window(cls, seconds: int) -> tuple[int, str]:
-        r"""kumo-ml's ``get_time_cohort``: bucket width and unit for a span."""
+        r"""The bucket width and unit that split a time span into cohorts."""
         if seconds == 0:
             return 1, 'months'
         hours = seconds // (60 * 60)
@@ -451,12 +473,12 @@ class ColumnAnalysis:
     # Aggregation ##############################################################
 
     def _ranges(
-        self, values: np.ndarray, is_count: bool
+        self, values: np.ndarray, is_count: bool, outcome: np.ndarray
     ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
-        r"""kumo-ml's ``aggregate_range``: entities in quantile bins."""
+        r"""Entities in quantile bins: labels, shares, means and raw score."""
         values = values.astype(float)
         valid = ~np.isnan(values)
-        values, outcome = values[valid], self._outcome[valid]
+        values, outcome = values[valid], outcome[valid]
         if values.size == 0:
             return None
         bins = np.quantile(values, np.linspace(0, 1, self.NUM_COHORTS + 1))
@@ -492,14 +514,18 @@ class ColumnAnalysis:
         return cohorts, counts / counts.sum(), means, self._score(means, counts)
 
     def _categories(
-        self, shares: np.ndarray, labels: list[str], other: np.ndarray
+        self,
+        shares: np.ndarray,
+        labels: list[str],
+        other: np.ndarray,
+        outcome: np.ndarray,
     ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
-        r"""kumo-ml's ``aggregate_category``: entities weighted by share."""
+        r"""Category cohorts, each entity weighted by its share in them."""
         counts = shares.sum(axis=0)
         keep = counts > 0
         if not keep.any():
             return None
-        sums = shares.T @ self._outcome
+        sums = shares.T @ outcome
         counts, other = counts[keep], other[keep]
         means = sums[keep] / counts[:, None]
         cohorts = [

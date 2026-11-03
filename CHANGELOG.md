@@ -33,16 +33,27 @@ these packages. All five distributions share one version and one entry.
   distribution, so those wheels remain the full set of platforms it supports:
   `structured-data-models-client` itself is pure Python and stays broader.
 - `kumo-tabular` accepts `explanation` in `outputs`.
-- `result.explanations` maps each explained row's key to its explanation: the
-  row's `id`, `(id, forecast_step)` on a forecast, or `row_index` when the
-  request has no entity id. Each entry is a plain dict of `outputs` and, on
-  `kumo-tabular`, the row's own columns under `instance`, or, on
-  `kumo-relational`, every table, the entity's own included, under `related`,
-  whose rows always carry their values as sent; `keys` is present when the
-  table's key column is one the model receives, i.e. a column a relationship
-  joins on; otherwise rows are identified by their values. It is kept out of
-  `result.to_pandas()`; `result.explanations.to_pandas()` flattens it into one
-  line per row, output and column, with each row's `hop` from the entity.
+- `result.explanations` holds a prediction's explanations in two parts,
+  `gradients` and `columns`. `result.explanations.gradients` maps each
+  explained row's key to its explanation: the row's `id`, `(id,
+  forecast_step)` on a forecast, or `row_index` when the request has no entity
+  id. Each entry is a plain dict of `outputs` and, on `kumo-tabular`, the
+  row's own columns under `instance`, or, on `kumo-relational`, every table,
+  the entity's own included, under `related`, whose rows always carry their
+  values as sent; `keys` is present when the table's key column is one the
+  model receives, i.e. a column a relationship joins on; otherwise rows are
+  identified by their values. It is kept out of `result.to_pandas()`;
+  `result.explanations.gradients.to_pandas()` flattens it into one line per
+  row, output and column, with each row's `hop` from the entity.
+- `result.explanations.columns` is a column analysis the client computes from
+  the labelled context rows: each column split into cohorts, each cohort's
+  share and mean outcome, and a score per column, normalized to sum to 1.
+  `result.explanations.columns.to_pandas()` gives one line per table, hop,
+  column, cohort and class. `predict()` computes it on each call that asks for
+  explanations; a session computes it once at `fit()`, after `holdout` is
+  taken out, and attaches it to every answer when `fit()` asked for
+  `'explanation'`, otherwise only to a prediction whose query begins
+  `EXPLAIN`. It is `None` when explanations were not asked for.
 - The `EXPLAIN` query prefix: `EXPLAIN PREDICT …` adds `'explanation'` to the
   call's outputs. A ranking refuses it; a forecast explains each step.
 
@@ -73,7 +84,7 @@ these packages. All five distributions share one version and one entry.
 - `result.explanation` and `PredictionResult(explanation=...)` are deprecated
   in favour of `result.explanations` and `explanations=`, warn with
   `DeprecationWarning`. To upgrade, read a row's
-  explanation as `result.explanations[key]`, under the key naming that row in
+  explanation as `result.explanations.gradients[key]`, under the key naming that row in
   `result.to_pandas()`. `result.explanation` returns the first record's raw
   explanation only; the `{'by_forecast_step': ...}` it held for a forecast is
   gone.

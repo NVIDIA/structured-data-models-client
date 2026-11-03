@@ -500,7 +500,7 @@ result = client.predict(
 )
 
 result.to_pandas()  # always a DataFrame
-result.explanations  # empty unless you asked for them
+result.explanations  # .gradients and .columns, empty unless you asked for them
 ```
 
 Explanations are an **output field**, not a method. Ask for one with
@@ -584,7 +584,7 @@ leaving the document wrong.
 
 ### Explanations are keyed by row, off the frame
 
-Every scored row is explained, and `result.explanations` maps each row's key
+Every scored row is explained, and `result.explanations.gradients` maps each row's key
 to its explanation: the `id` it carries in `to_pandas()`, `(id,
 forecast_step)` for a forecast, and `row_index` when the request has no entity
 key. The same rule holds on both models. A client opened with
@@ -610,7 +610,7 @@ merged.
 **Kept off the frame.** An entry is nested: outputs by columns for the row
 itself, and outputs by rows by columns for each related table. `to_pandas()`
 stays one row per answer, as the task decides, and the explanations sit beside
-it on the result. `result.explanations.to_pandas()` flattens them into a table
+it on the result. `result.explanations.gradients.to_pandas()` flattens them into a table
 of their own when one is wanted, with each related row's `hop` from the entity
 worked out from the relationships and foreign-key values the client sent.
 

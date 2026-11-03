@@ -117,7 +117,7 @@ an `explain=` argument, and read from `result.explanations`. It covers every
 scored row, with no row limit. `EXPLAIN PREDICT …` means the same as that
 output; passing both is allowed and redundant. On a forecast each step is
 explained; a ranking refuses it, since a ranking is assembled from
-per-candidate classifications and has no explanation of its own. `result.explanations` maps each row's key to its
+per-candidate classifications and has no explanation of its own. `result.explanations.gradients` maps each row's key to its
 explanation, the same key that identifies the row in `to_pandas()`: the
 entity's `id`, or `(id, forecast_step)` on a forecast, since a forecast is
 keyed by the pair. It is kept out of `to_pandas()` itself.
@@ -135,10 +135,10 @@ relationship joins on; otherwise rows are identified by their values.
 datetimes may appear as derived columns, and a table without numerical
 features gives an empty list. The context rows get no gradients. A row reached
 through several paths appears once, with its total effect through all of them.
-`result.explanations.to_pandas()` flattens every entry into one line per (row,
+`result.explanations.gradients.to_pandas()` flattens every entry into one line per (row,
 output, column), with `hop`, how many links the row is from the entity. The
 entity's own table is hop 0.
 
 A ranking refuses an explanation locally, and the shipping endpoint refuses it
-everywhere else, so treat `result.explanations` as possibly empty.
+everywhere else, so treat `result.explanations.gradients` as possibly empty.
 `SDMClient.in_process()` serves it outside a ranking.

@@ -38,7 +38,6 @@ from sdm_client.base import ModelSpec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.explanations import Explanations, GradientDecoder
-from sdm_client.explanations.column import ColumnAnalysis
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
@@ -166,15 +165,6 @@ class TabularAdapter:
         metadata: Mapping[str, Any] | None = None,
     ) -> PredictionResult:
         named = as_declared_target(_named_entities(items, payload), payload)
-        # A session's scoring call carries no context, so has nothing to
-        # analyse.
-        analysis = (
-            ColumnAnalysis(payload)
-            if 'explanation' in outputs
-            and payload is not None
-            and 'context' in payload
-            else None
-        )
         return PredictionResult(
             model=model,
             request_id=request_id,
@@ -184,7 +174,6 @@ class TabularAdapter:
             explanations=Explanations(
                 # One table, so an entry has no related rows to name.
                 GradientDecoder(labelled_by=payload).decode(named),
-                analysis,
             ),
         )
 

@@ -201,18 +201,19 @@ same one.
 
 Add `'explanation'` to `outputs` and every scored row is explained. There is no
 row limit. The explanations are kept out of `to_pandas()`, on
-`result.explanations`, a mapping from each row's key to its explanation: the
+`result.explanations.gradients`, a mapping from each row's key to its explanation: the
 row's `id` when the request has one, otherwise its `row_index`. A NIM and
 `SDMClient.in_process()` both serve it, with the same `result.explanations`.
 `EXPLAIN PREDICT …` means the same as `outputs=['explanation']`; passing both
 is allowed and redundant.
 
 ```python
-entry = result.explanations[0]       # the row scored at row_index 0
+entry = result.explanations.gradients[0]  # the row scored at row_index 0
 entry['outputs']                     # the explained scores, in order
 entry['instance']['columns']         # the model's preprocessed numerical columns
 entry['instance']['gradients']       # [output][column]
-result.explanations.to_pandas()      # one line per (row, output, column)
+result.explanations.gradients.to_pandas()  # one line per (row, output, column)
+result.explanations.columns.to_pandas()    # per-column cohorts of the labelled rows
 ```
 
 An entry here has no `related` key: this model reads one table. `columns` are

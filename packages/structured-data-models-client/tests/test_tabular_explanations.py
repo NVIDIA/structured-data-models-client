@@ -579,15 +579,15 @@ def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
 # --- a query asked with `EXPLAIN` -------------------------------------------
 
 
-def tabular_asked(text: str) -> Request:
-    """``text`` over ``people``, scoring persons 50 and 51."""
+def tabular_asked(text: str, indices: tuple[int, ...] = (50, 51)) -> Request:
+    """``text`` over ``people``, scoring ``indices`` (persons 50 and 51)."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_data(
             {'people': people()}, primary_keys={'people': 'person_id'}
         )
     return PredictiveQuery(text, schema).materialize(
-        indices=[50, 51], model=KumoTabular(), task='classification'
+        indices=list(indices), model=KumoTabular(), task='classification'
     )
 
 
@@ -789,3 +789,189 @@ def test_session_refuses_another_question(tabular_endpoint, prefix):
     with pytest.raises(StructuredDataError, match='pinned a different'):
         fitted.predict(other)
     assert endpoint.sent == []
+
+
+# --- column analysis, made once per request -------------------------------
+#
+# ``people`` has 60 persons; person ``i`` is in segment ``'south'`` when
+# ``i % 3 == 0``, so 20 are. Scoring persons 50 and 51 (51 is south) leaves
+# 58 context rows, 19 of them south.
+
+
+def south_share(result) -> float:
+    """The share of context rows in the ``segment`` column's south cohort."""
+    frame = result.explanations.columns.to_pandas()
+    south = frame[(frame['column'] == 'segment') & (frame['cohort'] == 'south')]
+    return float(south['share'].iloc[0])
+
+
+@pytest.fixture
+def quiet():
+    """Silence the notices materializing and scoring ``people`` raise."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        yield
+
+
+@pytest.mark.parametrize(
+    ('text', 'outputs', 'analysed'),
+    [
+        (CHURN, ['prediction'], False),
+        (CHURN, ['prediction', 'explanation'], True),
+        (f'EXPLAIN {CHURN}', None, True),
+    ],
+    ids=['not asked', 'asked in outputs', 'asked with EXPLAIN'],
+)
+def test_one_shot_analysis_only_when_explained(
+    tabular_endpoint, quiet, text, outputs, analysed
+):
+    """A one-shot answer carries a column analysis exactly when an
+    explanation was asked for.
+
+    Assumptions:
+    - Persons 50 and 51 scored; the endpoint explains when asked.
+    """
+    client, _ = tabular_endpoint
+
+    result = client.predict(
+        tabular_asked(text), model=KumoTabular(), outputs=outputs
+    )
+
+    assert (result.explanations.columns is not None) is analysed
+
+
+def test_one_shot_analysis_reads_the_requests_context(tabular_endpoint, quiet):
+    """A one-shot analysis is over the context sent: 19 of 58 rows south.
+
+    Assumptions:
+    - Persons 50 and 51 scored, so they are out of the context.
+    """
+    client, _ = tabular_endpoint
+
+    result = client.predict(
+        tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
+    )
+
+    assert south_share(result) == pytest.approx(19 / 58)
+
+
+def test_each_one_shot_predict_makes_its_own_analysis(tabular_endpoint, quiet):
+    """Separate ``predict()`` calls each analyse their own request; nothing is
+    reused between them.
+
+    Assumptions:
+    - Two calls on one request, then one scoring persons 0 and 3 (both
+      south), whose context is 18 of 58 rows south.
+    """
+    client, _ = tabular_endpoint
+    request = tabular_asked(CHURN)
+
+    first = client.predict(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    second = client.predict(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    other = client.predict(
+        tabular_asked(CHURN, indices=(0, 3)),
+        model=KumoTabular(),
+        outputs=list(EXPLAIN),
+    )
+
+    assert first.explanations.columns is not second.explanations.columns
+    pd.testing.assert_frame_equal(
+        first.explanations.columns.to_pandas(),
+        second.explanations.columns.to_pandas(),
+    )
+    assert south_share(other) == pytest.approx(18 / 58)
+
+
+def test_each_fit_makes_its_own_analysis(tabular_endpoint, quiet):
+    """Separate ``fit()`` calls each analyse what they pin; nothing is reused
+    between sessions.
+
+    Assumptions:
+    - Two fits of one request, and one holding persons 0-5 back (0 and 3
+      south), which pins 52 rows, 17 of them south.
+    """
+    client, _ = tabular_endpoint
+    request = tabular_asked(CHURN)
+
+    first = client.fit(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    second = client.fit(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    held = client.fit(
+        request, model=KumoTabular(), outputs=list(EXPLAIN), holdout=range(6)
+    )
+    answers = [fitted.predict(request) for fitted in (first, second, held)]
+
+    assert (
+        answers[0].explanations.columns is not answers[1].explanations.columns
+    )
+    pd.testing.assert_frame_equal(
+        answers[0].explanations.columns.to_pandas(),
+        answers[1].explanations.columns.to_pandas(),
+    )
+    assert south_share(answers[0]) == pytest.approx(19 / 58)
+    assert south_share(answers[2]) == pytest.approx(17 / 52)
+
+
+def test_fit_analysis_leaves_out_the_holdout(tabular_endpoint, quiet):
+    """A session's analysis is over the rows pinned after the holdout is
+    taken out: 17 of 52 south, not 19 of 58.
+
+    Assumptions:
+    - Persons 0-5 held back, two of them (0 and 3) south.
+    """
+    client, _ = tabular_endpoint
+    request = tabular_asked(CHURN)
+
+    fitted = client.fit(
+        request, model=KumoTabular(), outputs=list(EXPLAIN), holdout=range(6)
+    )
+
+    assert south_share(fitted.predict(request)) == pytest.approx(17 / 52)
+
+
+def test_a_session_reuses_its_fit_time_analysis(
+    tabular_endpoint, tabular_request
+):
+    """Every answer of a session explained at fit carries the one analysis
+    made at fit, an answer with no rows to score included.
+
+    Assumptions:
+    - The session is fitted on a request built from frames; the later
+      requests share its context, the last scoring no rows.
+    """
+    client, endpoint = tabular_endpoint
+    fitted = client.fit(
+        tabular_request(rows=2), model=KumoTabular(), outputs=list(EXPLAIN)
+    )
+
+    answers = [fitted.predict(tabular_request(rows=rows)) for rows in (2, 1, 0)]
+
+    assert len(endpoint.sent) == 2
+    assert answers[0].explanations.columns is not None
+    assert all(
+        answer.explanations.columns is answers[0].explanations.columns
+        for answer in answers
+    )
+
+
+@pytest.mark.parametrize(
+    ('text', 'analysed'),
+    [(CHURN, False), (f'EXPLAIN {CHURN}', True)],
+    ids=['plain', 'explain'],
+)
+def test_a_session_fit_without_explanation_analyses_when_asked(
+    tabular_endpoint, quiet, text, analysed
+):
+    """A session fitted without an explanation attaches the fit-time analysis
+    only to a call asked with `EXPLAIN`.
+
+    Assumptions:
+    - The session pinned the plain question with the default outputs.
+    """
+    client, _ = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+
+    result = fitted.predict(tabular_asked(text))
+
+    assert (result.explanations.columns is not None) is analysed
+    if analysed:
+        assert south_share(result) == pytest.approx(19 / 58)
