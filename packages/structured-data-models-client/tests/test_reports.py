@@ -96,3 +96,138 @@ def test_non_json_cycle_and_non_string_key_rejected():
     payload['cycle'] = payload
     with pytest.raises(StructuredDataError):
         _ = result(payload).explanation_view
+
+
+def test_shared_attribution_fixtures():
+    import json
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[3]
+        / 'tests/fixtures/reports/attribution.json'
+    )
+    for case in json.loads(path.read_text()):
+        view = result(case['payload']).explanation_view
+        if 'error' in case:
+            with pytest.raises(StructuredDataError) as error:
+                view.feature_importance(case['normalize'])
+            assert error.value.code == 'INVALID_REQUEST', case['name']
+            assert error.value.details['path'] == case['error'], case['name']
+        else:
+            report = view.feature_importance(case['normalize'])
+            if case['rows'] is None:
+                assert report is None, case['name']
+            else:
+                assert report.normalized == case['normalize']
+                assert [
+                    [r.table, r.column, r.score] for r in report.rows
+                ] == case['rows'], case['name']
+                assert list(report.to_pandas().columns) == [
+                    'table',
+                    'column',
+                    'score',
+                ]
+
+
+@pytest.mark.parametrize(
+    'score',
+    [float('nan'), float('inf'), -float('inf'), 10**5000],
+    ids=['nan', 'inf', 'negative-inf', 'huge-int'],
+)
+def test_nonfinite_scores_use_shared_error(score):
+    payload = {
+        'format': 'kumo_rfm_v2_1',
+        'details': {
+            'subgraphs': [
+                {'tables': {'t': {'n': {'cells': {'c': {'score': score}}}}}}
+            ]
+        },
+    }
+    with pytest.raises(StructuredDataError) as error:
+        result(payload).explanation_view.feature_importance()
+    assert error.value.code == 'INVALID_REQUEST'
+    assert (
+        error.value.details['path']
+        == '$.details.subgraphs[0].tables.t.n.cells.c.score'
+    )
+
+
+def test_report_rendering_does_not_call_native(monkeypatch, capsys):
+    import sdm_client._rust.direct as direct
+    from sdm_client.reports import MetadataReport, TableMetadata
+
+    monkeypatch.setattr(
+        direct, '_call', lambda *args, **kwargs: pytest.fail('native call')
+    )
+    report = MetadataReport((TableMetadata('empty', (), (), None),))
+    assert report.to_pandas().empty
+    assert list(report.to_pandas().columns) == [
+        'table',
+        'column',
+        'dtype',
+        'stype',
+        'primary_key',
+        'time_column',
+    ]
+    report.print()
+    assert capsys.readouterr().out == 'empty\n'
+    result({'summary': 'local'}).explanation_view.print()
+    assert capsys.readouterr().out == 'local\n'
+
+
+def test_shared_metadata_fixture():
+    import json
+    from pathlib import Path
+
+    from sdm_client import (
+        ColumnMetadata,
+        LinkMetadata,
+        LinkReport,
+        MetadataReport,
+        TableMetadata,
+    )
+
+    path = (
+        Path(__file__).resolve().parents[3]
+        / 'tests/fixtures/reports/metadata.json'
+    )
+    fixture = json.loads(path.read_text())
+    report = MetadataReport(
+        tuple(
+            TableMetadata(
+                t['name'],
+                tuple(ColumnMetadata(**c) for c in t['columns']),
+                tuple(t['primary_key']),
+                t['time_column'],
+            )
+            for t in fixture['tables']
+        )
+    )
+    assert report.to_text() == fixture['text']
+    links = LinkReport(tuple(LinkMetadata(**r) for r in fixture['links']))
+    assert links.to_text() == fixture['link_text']
+    assert links.to_pandas().to_dict('records') == fixture['links']
+
+
+def test_source_table_metadata_does_not_read_rows_or_call_native(monkeypatch):
+    import sdm_client._rust.direct as direct
+    import sdm_client._rust.run as run_module
+    from sdm_client import SourceTable
+
+    table = SourceTable(
+        'events',
+        'warehouse.events',
+        {'id': Column('id', 'int64', 'ID')},
+        primary_key='id',
+    )
+    monkeypatch.setattr(
+        direct, '_call', lambda *args, **kwargs: pytest.fail('native call')
+    )
+    monkeypatch.setattr(
+        run_module, 'native', lambda: pytest.fail('native load')
+    )
+    assert table.metadata_report().primary_key == ('id',)
+    assert (
+        table.metadata_report().to_text()
+        == 'events\n  id: int64, ID (primary key)'
+    )

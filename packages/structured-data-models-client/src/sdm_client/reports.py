@@ -331,11 +331,17 @@ class ExplanationView(_Printable):
                             if type(score) in (str, int, float, bool)
                             else {'invalid': True}
                         )
+                        try:
+                            encoded = json.dumps(scalar)
+                        except (ValueError, OverflowError):
+                            # Python can refuse huge integer text before Rust sees it.
+                            # Send an invalid scalar so the shared policy reports its path.
+                            encoded = '{}'
                         cells.append(
                             dict(
                                 table=table,
                                 column=column,
-                                score=json.dumps(scalar),
+                                score=encoded,
                                 path=cell_path + '.score',
                             )
                         )

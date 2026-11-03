@@ -45,6 +45,7 @@ pub enum Operation {
     ReadResultItems(crate::result::ReadResultItems),
     ReadRequestSplit(crate::split::ReadRequestSplit),
     MergeResults(crate::result::MergeResults),
+    FeatureImportance(crate::direct::DirectInput),
     PlanResultMerge(crate::direct::DirectInput),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
@@ -121,6 +122,7 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::TabularArrow(_) => "tabular_arrow",
+            Operation::FeatureImportance(_) => "feature_importance",
             Operation::PlanResultMerge(_) => "plan_result_merge",
             Operation::ReadResultItems(_) => "read_result_items",
             Operation::ReadRequestSplit(_) => "read_request_split",
@@ -298,6 +300,7 @@ impl Operation {
             | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
+            | Operation::FeatureImportance(v)
             | Operation::PlanResultMerge(v)
             | Operation::CheckColumn(v)
             | Operation::CheckDirectOption(v)
@@ -1801,6 +1804,10 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "FeatureImportance.input")]
+    pub feature_importance_input: crate::result::FeatureImportanceInput,
+    #[schemars(rename = "DirectValue.feature_importance")]
+    pub feature_importance_output: crate::result::FeatureImportanceOutput,
     #[schemars(rename = "PlanResultMerge.input")]
     pub plan_result_merge_input: crate::result::PlanResultMerge,
     #[schemars(rename = "DirectValue.plan_result_merge")]
