@@ -7,11 +7,13 @@
 import importlib
 import json
 import os
+from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+from sdm_client.errors import StructuredDataError
 
 pytestmark = [pytest.mark.live_warehouse, pytest.mark.live_nim]
 
@@ -52,9 +54,13 @@ def test_live_calculated_column_values_refresh_and_prediction(connector):
     expected = {
         row[0]: row[1] * 2 for row in fixture['tables']['users']['rows']
     }
-    with importlib.import_module(driver).connect(
-        **settings['connect']
-    ) as connection:
+    with ExitStack() as stack:
+        connection = stack.enter_context(
+            importlib.import_module(driver).connect(**settings['connect'])
+        )
+        replacement_connection = stack.enter_context(
+            importlib.import_module(driver).connect(**settings['connect'])
+        )
         source = source_type(connection, **settings.get('source', {}))
         if connector in ('databricks-metric', 'snowflake-semantic'):
             source = source.semantic_model(
@@ -77,6 +83,28 @@ def test_live_calculated_column_values_refresh_and_prediction(connector):
         )
         assert 'doubled' not in schema['users'].columns
         changed['users']['doubled'].stype = 'numerical'
+        replacement_source = source_type(
+            replacement_connection, **settings.get('source', {})
+        )
+        if connector in ('databricks-metric', 'snowflake-semantic'):
+            replacement_source = replacement_source.semantic_model(
+                settings['view'], trust_expressions=False
+            )
+        wrong_namespace = dict(settings.get('source', {}))
+        wrong_namespace['schema'] = '__sdm_rebind_wrong_namespace'
+        incompatible = source_type(replacement_connection, **wrong_namespace)
+        with pytest.raises(StructuredDataError, match='same backend'):
+            changed.with_source(incompatible)
+        if connector in ('databricks-metric', 'snowflake-semantic'):
+            untrusted_change = source_type(
+                replacement_connection, **settings.get('source', {})
+            ).semantic_model(settings['view'], trust_expressions=True)
+            with pytest.raises(StructuredDataError, match='same backend'):
+                changed.with_source(untrusted_change)
+        original = changed
+        changed = changed.with_source(replacement_source)
+        assert original.source is source
+        assert changed.source is replacement_source
         query = PredictiveQuery(
             f'PREDICT users.doubled FOR EACH users.{key}', changed
         )

@@ -996,6 +996,18 @@ class Schema:
             inference=inference,
         )
 
+    def with_source(self, source: Source) -> Schema:
+        """Return this schema using a replacement caller-owned database source.
+
+        Backend, namespace, source kind and semantic-model settings must match.
+        Rust checks the replacement tables and column types without reinference
+        or a full key-uniqueness scan. Neither connection is closed or changed.
+        Existing queries and requests retain their original source.
+        """
+        from sdm_client._rust.rebind import rebind
+
+        return rebind(self, source)
+
     def with_sql_column(self, table: str, name: str, expression: str) -> Schema:
         """Return a schema with a provider-dialect SQL column over physical source columns.
 

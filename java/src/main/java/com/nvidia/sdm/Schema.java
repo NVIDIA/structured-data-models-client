@@ -425,6 +425,31 @@ public final class Schema {
     return Examples.materialize(this,task,context,predict,options);
   }
 
+  /** Revalidate these declarations on a replacement caller-owned source.
+   * Backend, namespace, source kind and semantic settings must match.
+   * Neither connection is closed; existing queries and requests remain unchanged.
+   * This checks columns and types, not every row for key uniqueness.
+   */
+  public Schema withSource(Source replacement) {
+    Objects.requireNonNull(replacement, "source");
+    if (source == null) {
+      throw new StructuredDataException("rebinding requires a source-backed schema", "UNSUPPORTED_REQUEST", Map.of(), null);
+    }
+    Providers.Chosen previous = Providers.of(source);
+    Providers.Chosen chosen = Providers.of(replacement);
+    Map<String, Object> operation = Map.of("op", "rebind_source", "provider", chosen.choice(),
+        "previous_provider", previous.choice(), "source_kind", replacement.getClass().getSimpleName(),
+        "previous_source_kind", source.getClass().getSimpleName(), "schema", 1);
+    try (Host.Finished finished = Host.run(operation, Map.of(1, Host.attachment(toHeld())),
+        new Host.Call(chosen.provider(), null, Providers.held(replacement)))) {
+      Results.Described answer = (Results.Described) Results.expect(finished.result(), "describe_source");
+      Schema result = described(read(finished.bytes(answer.description())), replacement);
+      Schema noted = new Schema(result.tables, result.relationships, replacement, conversionNotes);
+      noted.inference = result.inference;
+      return noted;
+    }
+  }
+
   /** Return a schema with a new provider-dialect SQL column over physical source columns.
    * SQL is executed under the source credentials; no warehouse table is modified.
    */
