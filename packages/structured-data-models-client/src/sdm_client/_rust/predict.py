@@ -395,6 +395,10 @@ def predict(
 
     operation: dict[str, Any] = {
         'op': 'predict',
+        'supports_sessions': getattr(
+            client._transport, 'serves_sessions', False
+        )
+        is True,
         'model': model_id,
         'request_id': _request_id(),
         # The outputs the caller named, or that it named none (the core then
@@ -429,7 +433,11 @@ def predict(
             candidate=lambda fields: given[fields['candidate']],
             part_candidate=lambda fields: given[fields['ranking_candidate']],
         ):
-            finished = run(operation, attachments, model=model_call)
+            finished = run(
+                operation,
+                attachments,
+                model_endpoints=endpoint_sender(client, model_call),
+            )
     except Exception as error:
         # Whatever the call raised, the answers before it are put on it.
         _carry_the_answers(error, request.parts is not None)
@@ -634,3 +642,31 @@ def sender(client: SDMClient, model_id: str) -> Any:
         raise Refused(unexpected)
 
     return model_call
+
+
+def endpoint_sender(client: SDMClient, model_call: Any) -> Any:
+    """Route Rust-selected endpoints; no lifecycle decisions live in this host."""
+
+    def send(endpoint: Any, body: bytes) -> bytes:
+        if endpoint == 'predict':
+            return model_call(body)
+        try:
+            payload = json.loads(body)
+            if endpoint == 'create_session':
+                answer = client._transport.create_session(payload)
+            elif isinstance(endpoint, dict) and 'session_predict' in endpoint:
+                answer = client._transport.session_predict(
+                    endpoint['session_predict']['session_id'], payload
+                )
+            elif isinstance(endpoint, dict) and 'delete_session' in endpoint:
+                client._transport.delete_session(
+                    endpoint['delete_session']['session_id']
+                )
+                return b''
+            else:
+                raise RuntimeError('unexpected model endpoint')
+            return json.dumps(answer).encode()
+        except Exception as error:
+            raise Refused(error, getattr(error, 'status_code', None)) from None
+
+    return send

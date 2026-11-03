@@ -186,6 +186,7 @@ fn predict(calls: &[&[i64]], endpoint: Option<ModelEndpoint>) -> Run {
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Predict(Predict {
+                supports_sessions: false,
                 direct: None,
                 state: Some(state),
                 held: None,

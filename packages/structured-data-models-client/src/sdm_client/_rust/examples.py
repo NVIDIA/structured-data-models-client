@@ -30,6 +30,7 @@ def materialize(
     predict: Any,
     *,
     num_neighbors: Any,
+    rows_per_call: int | None,
     random_seed: int,
     inference: Any,
 ) -> Request:
@@ -65,6 +66,7 @@ def materialize(
         'task': asdict(task),
         'num_neighbors': None if num_neighbors is None else list(num_neighbors),
         'random_seed': codec.seed(random_seed),
+        'rows_per_call': rows_per_call,
     }
     attachments: dict[int, Any] = {
         2: codec.attachment(input),

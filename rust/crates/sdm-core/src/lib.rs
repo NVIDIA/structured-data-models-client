@@ -9,6 +9,7 @@
 
 mod arrow_logical;
 pub mod attached;
+mod batch_session;
 pub mod big_integer;
 pub mod compose;
 mod describe;

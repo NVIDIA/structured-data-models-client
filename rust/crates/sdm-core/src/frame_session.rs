@@ -43,7 +43,26 @@ fn validate(state: &FrameSessionState) -> Result<(), CoreError> {
     }
     Ok(())
 }
-async fn call(asker: &Asker, endpoint: Endpoint, body: Value) -> Result<Value, CoreError> {
+/// Both explicit and temporary sessions accept the endpoint's ID aliases.
+pub(crate) fn session_id(answer: &Value) -> Result<&str, CoreError> {
+    answer
+        .get("session_id")
+        .and_then(Value::as_text)
+        .filter(|id| !id.is_empty())
+        .or_else(|| {
+            answer
+                .get("id")
+                .and_then(Value::as_text)
+                .filter(|id| !id.is_empty())
+        })
+        .ok_or_else(|| predict::bad_response("session_id", "missing"))
+}
+
+pub(crate) async fn call(
+    asker: &Asker,
+    endpoint: Endpoint,
+    body: Value,
+) -> Result<Value, CoreError> {
     match asker
         .call_model(
             endpoint,
@@ -149,17 +168,7 @@ pub(crate) async fn run(
             let pinned = subset(&body, &["model", "task", "schema"]);
             let state_keys = row_keys(&body, "context", windowed)?;
             let answer = call(&asker, Endpoint::CreateSession, body).await?;
-            let id = answer
-                .get("session_id")
-                .and_then(Value::as_text)
-                .filter(|s| !s.is_empty())
-                .or_else(|| {
-                    answer
-                        .get("id")
-                        .and_then(Value::as_text)
-                        .filter(|s| !s.is_empty())
-                })
-                .ok_or_else(|| predict::bad_response("session_id", "missing"))?;
+            let id = session_id(&answer)?;
             let state = FrameSessionState {
                 version: 1,
                 session_id: id.into(),

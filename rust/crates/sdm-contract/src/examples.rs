@@ -54,6 +54,8 @@ pub struct RelationalTask {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExampleCall {
+    #[serde(default)]
+    pub rows_per_call: Option<u64>,
     pub task: RelationalTask,
     pub num_neighbors: Option<Vec<u32>>,
     pub random_seed: Seed,

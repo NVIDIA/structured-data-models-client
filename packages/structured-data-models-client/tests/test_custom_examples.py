@@ -367,3 +367,21 @@ def test_live_warehouse_supplied_examples(provider):
             assert len(client.predict(request, model=KumoRelational())) == 2
         finally:
             client.close()
+
+
+def test_supplied_link_batches_obey_model_limit():
+    case = next(
+        c for c in FIXTURE['cases'] if c['id'] == 'temporal_link_prediction'
+    )
+    predicted = pd.concat(
+        [frame(case['predict']).iloc[:1]] * 201, ignore_index=True
+    )
+    request = schema_for(case).materialize_examples(
+        RelationalTask(**case['task']),
+        frame(case['context']),
+        predicted,
+        rows_per_call=500,
+    )
+    assert [
+        len(p['predict']['instance_table']['rows']) for p in request.payloads
+    ] == [200, 1]

@@ -213,6 +213,7 @@ fn payload_text() -> String {
 
 fn predict_run() -> Run {
     let operation = Operation::Predict(Predict {
+        supports_sessions: false,
         direct: None,
         state: Some(RequestState {
             version: REQUEST_STATE_VERSION,

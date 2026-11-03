@@ -42,7 +42,7 @@ public final class HttpTransport {
   public static final String PREDICTIONS = "/v1/predictions";
 
   /** The statuses tried again. */
-  static final Set<Integer> RETRY_STATUS = Set.of(429, 502, 503, 504);
+  static final Set<Integer> RETRY_STATUS = Set.of(408, 429, 502, 503, 504);
 
   /** The largest answer read. */
   static final int MAX_RESPONSE_BYTES = 64 * 1024 * 1024;

@@ -160,6 +160,7 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         })),
         start(Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(state.clone()),
             held: None,
@@ -171,6 +172,7 @@ pub fn messages() -> Vec<ControlMessage> {
             model_endpoint: None,
         })),
         start(Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(state.clone()),
             held: None,

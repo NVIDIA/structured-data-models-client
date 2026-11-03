@@ -975,6 +975,7 @@ class Schema:
         predict: Any,
         *,
         num_neighbors: Sequence[int] | None = None,
+        rows_per_call: int | None = None,
         random_seed: int = 42,
         inference: Mapping[str, Any] | InferenceConfig | None = None,
     ) -> Request:
@@ -992,6 +993,7 @@ class Schema:
             context,
             predict,
             num_neighbors=num_neighbors,
+            rows_per_call=rows_per_call,
             random_seed=random_seed,
             inference=inference,
         )

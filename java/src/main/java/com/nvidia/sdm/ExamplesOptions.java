@@ -11,12 +11,15 @@ import java.util.Map;
 public final class ExamplesOptions {
   final List<Integer> neighbors;
   final long seed;
+  final Long rowsPerCall;
   final Map<String,Object> inference;
-  private ExamplesOptions(Builder b) { neighbors=b.neighbors==null?null:List.copyOf(b.neighbors); seed=b.seed; inference=DirectOptions.snapshot(b.inference); }
+  private ExamplesOptions(Builder b) { neighbors=b.neighbors==null?null:List.copyOf(b.neighbors); seed=b.seed; rowsPerCall=b.rowsPerCall; inference=DirectOptions.snapshot(b.inference); }
   public static Builder builder() { return new Builder(); }
   public static final class Builder {
     private List<Integer> neighbors;
     private long seed=42;
+    private Long rowsPerCall;
+    public Builder rowsPerCall(long value) { rowsPerCall=value; return this; }
     private Map<String,Object> inference=Map.of();
     private Builder() {}
     public Builder numNeighbors(List<Integer> values) { neighbors=values; return this; }

@@ -113,6 +113,9 @@ async fn run(
     facts: HostFacts,
 ) -> Result<OperationResult, CoreError> {
     let call: ExampleCall = crate::attached::take_json(&mut attachments, request.input)?;
+    if call.rows_per_call == Some(0) {
+        return Err(refuse("rows_per_call must be positive"));
+    }
     let context = arrow(&mut attachments, request.context)?;
     let predict = arrow(&mut attachments, request.predict)?;
     check_columns(&context, true)?;
@@ -322,8 +325,11 @@ async fn run(
     let names = crate::subgraph::sample_columns(&graph, entity, &[]);
     let per_call = if forecasting {
         1
+    } else if linking {
+        usize::try_from(call.rows_per_call.unwrap_or(200).min(200))
+            .map_err(|_| internal("batch size overflow"))?
     } else {
-        usize::try_from(options::rows_one_call_scores(None))
+        usize::try_from(options::rows_one_call_scores(call.rows_per_call))
             .map_err(|_| internal("batch size overflow"))?
     };
     let mut calls = Vec::new();

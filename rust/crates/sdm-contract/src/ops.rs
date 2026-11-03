@@ -1765,6 +1765,9 @@ pub struct HeldRanking {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predict {
+    /// The host can route session HTTP operations. Reuse policy remains in Rust.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub supports_sessions: bool,
     /// A direct request, mutually exclusive with gathered state/held inputs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub direct: Option<crate::direct::DirectModelInput>,

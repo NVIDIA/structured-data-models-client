@@ -11,7 +11,7 @@ import java.util.Map;
 final class Examples {
   private Examples() {}
   static Request materialize(Schema schema,RelationalTask task,org.apache.arrow.vector.table.Table context,org.apache.arrow.vector.table.Table predict,ExamplesOptions options) {
-    Map<String,Object> input=new LinkedHashMap<>(); input.put("task",task.contract()); input.put("num_neighbors",options.neighbors); input.put("random_seed",PredictiveQuery.seed(options.seed));
+    Map<String,Object> input=new LinkedHashMap<>(); input.put("task",task.contract()); input.put("num_neighbors",options.neighbors); input.put("random_seed",PredictiveQuery.seed(options.seed)); input.put("rows_per_call",options.rowsPerCall);
     Map<Integer,Object> attachments=new LinkedHashMap<>(); attachments.put(2,Host.attachment(input)); attachments.put(5,Host.optionAttachment(options.inference));
     Map<Integer,byte[]> tables=Map.of(3,ArrowTabular.snapshot(context),4,ArrowTabular.snapshot(predict));
     RelationalMaterializer owner=null;

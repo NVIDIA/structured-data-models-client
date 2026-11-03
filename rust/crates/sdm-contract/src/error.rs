@@ -746,9 +746,11 @@ warning_codes! {
     InvalidStringEscape = "INVALID_STRING_ESCAPE",
     ViewReadInPart = "VIEW_READ_IN_PART",
     SeedIgnored = "SEED_IGNORED",
+    SessionCleanup = "SESSION_CLEANUP",
 }
 
 sentences! {
+    SessionCleanup = "session_cleanup", W::SessionCleanup;
     DirectColumnNames = "direct_column_names", E::InvalidRequest;
     DirectConstantClass = "direct_constant_class", W::FrameSchema;
     DirectNativeConstantClass = "direct_native_constant_class", W::FrameSchema;

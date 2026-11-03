@@ -1538,6 +1538,7 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"Unspecified 'schema' for table '{table}' in database '{in_database}'"#)
         }
         S::TableNoColumns => said(r#"Table '{table}' has no columns"#),
+        S::SessionCleanup => said("temporary session cleanup failed"),
         S::SeedIgnored => said(
             r#"The '{database}' backend does not support seeded random sampling, so 'random_seed' is ignored when drawing in-context examples. Repeated calls with the same seed may return different predictions."#,
         ),

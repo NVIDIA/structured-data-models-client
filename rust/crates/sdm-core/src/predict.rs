@@ -73,6 +73,7 @@ pub(crate) struct Asked {
 /// What a `predict` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {
+    pub supports_sessions: bool,
     /// The request state's payload, as the host attached it.
     pub payload: Vec<u8>,
     /// The question's text, as the state holds it.
@@ -373,25 +374,64 @@ pub(crate) async fn one(
         // rows counted.
         let mut bodies = Vec::with_capacity(payloads.len());
         for (payload, request_id) in payloads.iter().zip(&ids) {
-            bodies.push(call_bytes(&body(
+            bodies.push(body(
                 payload,
                 &inputs.model,
                 request_id,
                 &outputs,
                 &inputs.inference_asked,
-            )?)?);
+            )?);
         }
+        let mut session = crate::batch_session::Session::eligible(
+            &bodies,
+            inputs.supports_sessions && inputs.endpoint.is_none(),
+        );
+        // Validate all full calls before any network effect, including their size.
+        // Retain only the small scoring half alongside encoded fallback bytes.
+        let plans = bodies
+            .into_iter()
+            .map(|body| {
+                let bytes = call_bytes(&body)?;
+                let scoring = if session.is_some() {
+                    sdm_request::frame_session::subset(
+                        &body,
+                        &["predict", "output", "inference", "metadata"],
+                    )
+                } else {
+                    Value::Null
+                };
+                Ok((scoring, bytes))
+            })
+            .collect::<Result<Vec<_>, CoreError>>()?;
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
-        for ((payload, bytes), start) in payloads.iter().zip(bodies).zip(starts) {
-            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
+        for ((payload, (body, bytes)), start) in payloads.iter().zip(plans).zip(starts) {
+            let response = async {
+                if let Some(session) = session.as_mut()
+                    && let Some(answer) = session.score(asker, &body).await?
+                {
+                    let response = PredictionResponse::read(&answer).map_err(refused)?;
+                    return layout(payload, &response, crate::pql::float_text);
+                }
+                call(asker, payload, bytes, inputs.endpoint.as_ref()).await
+            }
+            .await;
+            let answered = match response {
                 Ok(part) => numbered_from(part, start),
                 Err(error) => Err(error),
             };
             match answered {
                 Ok(part) => parts.push(part),
-                Err(error) => return Err(carry_calls(asker, error, parts, &outputs, start)),
+                Err(error) => {
+                    if let Some(session) = session.take() {
+                        session.close(asker).await;
+                    }
+                    return Err(carry_calls(asker, error, parts, &outputs, start));
+                }
             }
+        }
+        if let Some(session) = session {
+            session.close(asker).await;
         }
         merge(parts)?
     };

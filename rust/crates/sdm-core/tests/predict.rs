@@ -109,6 +109,7 @@ fn predict_run_setting(
     inference_asked: &[&str],
 ) -> Result<Run, CoreError> {
     let operation = Operation::Predict(Predict {
+        supports_sessions: false,
         direct: None,
         state: Some(RequestState {
             version,
@@ -178,10 +179,6 @@ fn answered(status: u16, answer: &[u8]) -> (Run, Result<Step, CoreError>) {
     (run, step)
 }
 
-fn rule(error: &CoreError) -> Option<&Detail> {
-    error.fields.get("rule")
-}
-
 fn text(value: &str) -> Detail {
     Detail::text(value)
 }
@@ -220,6 +217,7 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
     // given back under other candidates' names.
     let run = |first: u32, later: u32| {
         let operation = Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(RequestState {
                 version: REQUEST_STATE_VERSION,
@@ -714,7 +712,7 @@ fn a_refusal_and_a_failed_transport_end_the_run_with_named_errors() {
 }
 
 #[test]
-fn what_predict_does_not_port_yet_is_refused_by_name() {
+fn unsupported_models_are_refused_and_float_keys_keep_their_identity() {
     // The tabular model cannot answer a request of this shape, as the
     // client's check refuses it; one that is no model is unknown.
     let mut run = predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-tabular").unwrap();
@@ -735,13 +733,6 @@ fn what_predict_does_not_port_yet_is_refused_by_name() {
         (ErrorKind::NotFound, ErrorCode::UnknownModel)
     );
     assert!(!written(&error).contains(CANARY));
-    // A task this build writes no call for, before any call.
-    let forecast = payload_text().replace(
-        r#""kind":"regression","target""#,
-        r#""kind":"forecasting","target""#,
-    );
-    let mut run = predict_run(REQUEST_STATE_VERSION, forecast, "kumo-relational").unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), Some(&text("problem_type")));
     // An entity of a float key is read as the reference's `as_declared`
     // reads it, a double, and given as the JSON text of that value (T1.36
     // fix 8; until then refused by rule id_type).

@@ -498,6 +498,7 @@ pub fn start(
                 }
             };
             let inputs = crate::predict::Inputs {
+                supports_sessions: request.supports_sessions,
                 payload: asked.payload,
                 query: asked.query,
                 model: request.model,

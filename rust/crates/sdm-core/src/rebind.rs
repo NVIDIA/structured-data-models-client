@@ -14,8 +14,10 @@ pub(crate) fn start(
     mut attachments: Attachments,
     facts: HostFacts,
 ) -> Result<Run, CoreError> {
-    if !matches!(request.provider, sdm_contract::data::ProviderChoice::Sql { .. })
-        || request.provider != request.previous_provider
+    if !matches!(
+        request.provider,
+        sdm_contract::data::ProviderChoice::Sql { .. }
+    ) || request.provider != request.previous_provider
         || request.source_kind != request.previous_source_kind
     {
         let reason = "rebinding requires the same backend, namespace, source kind and semantic model/trust settings";
