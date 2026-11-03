@@ -48,6 +48,7 @@ from sdm_client.sanitization import SanitizationReport, TableSanitizationReport
 from sdm_client.schema import (
     Column,
     Relationship,
+    RelationshipOrigin,
     Schema,
     SourceTable,
     Table,
@@ -76,6 +77,7 @@ __all__ = [
     'PredictionResult',
     'PredictiveQuery',
     'Relationship',
+    'RelationshipOrigin',
     'Request',
     'Schema',
     'SanitizationReport',

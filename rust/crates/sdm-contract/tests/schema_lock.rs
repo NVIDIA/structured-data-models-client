@@ -657,9 +657,18 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.native_layout",
     ),
-    ("Operation/prepare_time_series.input", "PrepareTimeSeries.input"),
-    ("OperationResult/direct_value.value", "DirectValue.prepare_time_series"),
-    ("Operation/feature_importance.input", "FeatureImportance.input"),
+    (
+        "Operation/prepare_time_series.input",
+        "PrepareTimeSeries.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepare_time_series",
+    ),
+    (
+        "Operation/feature_importance.input",
+        "FeatureImportance.input",
+    ),
     (
         "OperationResult/direct_value.value",
         "DirectValue.feature_importance",

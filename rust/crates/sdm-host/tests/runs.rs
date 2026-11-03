@@ -732,6 +732,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             (
                 AttachmentId(1),
                 json(&SourceDescription {
+                    inference: None,
                     tables: vec![],
                     links: vec![],
                 }),

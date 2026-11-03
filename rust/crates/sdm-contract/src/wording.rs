@@ -1097,6 +1097,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::ReservedNames => said(
             r#"{reserved!c} use names reserved by the SQL backends: a column may not start with {prefix!r}, because the generated joins already select columns of that name and the reference would be ambiguous. Rename the column, or project it under another name."#,
         ),
+        S::SchemaRefinement => said("{reason}"),
         S::SchemaLinkUnread => said(
             r#"a relationship of the schema cannot be sampled: it does not join a foreign key to its table's primary key"#,
         ),

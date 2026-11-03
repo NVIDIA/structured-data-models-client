@@ -3714,9 +3714,40 @@
       },
       "gate": "local",
       "note": "Shared history fixtures; public materialization; owned outputs and invalid inputs. One resulting live forecast separately verified."
+    },
+    {
+      "id": "schema-refinement",
+      "apis": {
+        "python": [
+          "Schema.infer_metadata",
+          "Schema.infer_links",
+          "Schema.without_table",
+          "Schema.with_relationship",
+          "Schema.without_relationship",
+          "Schema.link_origins"
+        ],
+        "java": [
+          "Schema.inferMetadata",
+          "Schema.inferLinks",
+          "Schema.withoutTable",
+          "Schema.withRelationship",
+          "Schema.withoutRelationship",
+          "Schema.linkOrigins"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_schema_refinement.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/SchemaRefinementTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Shared fixtures verify detached edits, recorded link origin, explicit choices and persistence; provider materialization checks the unchanged sampler boundary."
     }
   ],
-  "public_api_snapshot_sha256": "a4f1748feea6c8d2fda49bf9e267fe823198268eae79d3403c0b88c775c621b8",
+  "public_api_snapshot_sha256": "30f5e87211c16aa07929f7dd9d7cb745863beeefb9cf8b1e3a5050f43af906e1",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -3800,6 +3831,51 @@
       "sdm_client.Column.untyped": {
         "capability": "schema-edits"
       },
+      "sdm_client.ColumnMetadata": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.cohorts": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.details": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.feature_importance": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.print": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.subgraphs": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.summary": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.to_text": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ExplanationView.warnings": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.FeatureImportance": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.FeatureImportance.print": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.FeatureImportance.to_pandas": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.FeatureImportance.to_text": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.FeatureImportanceRow": {
+        "capability": "metadata-explanation-reports"
+      },
       "sdm_client.FittedModel": {
         "capability": "sessions"
       },
@@ -3812,8 +3888,14 @@
       "sdm_client.FittedModel.predict": {
         "capability": "sessions"
       },
+      "sdm_client.FittedModel.sanitization_report": {
+        "capability": "sanitization-reports"
+      },
       "sdm_client.FittedModel.session_id": {
         "capability": "sessions"
+      },
+      "sdm_client.ForecastInput": {
+        "capability": "timeseries-preparation"
       },
       "sdm_client.KumoRelational": {
         "capability": "direct-dtypes-options"
@@ -3826,6 +3908,33 @@
       },
       "sdm_client.KumoTabular.name": {
         "capability": "direct-dtypes-options"
+      },
+      "sdm_client.LinkMetadata": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.LinkReport": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.LinkReport.print": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.LinkReport.to_pandas": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.LinkReport.to_text": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.MetadataReport": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.MetadataReport.print": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.MetadataReport.to_pandas": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.MetadataReport.to_text": {
+        "capability": "metadata-explanation-reports"
       },
       "sdm_client.MissingExtraError": {
         "capability": "errors"
@@ -3860,6 +3969,9 @@
       "sdm_client.PredictionResult.explanation": {
         "capability": "results-merge"
       },
+      "sdm_client.PredictionResult.explanation_view": {
+        "capability": "metadata-explanation-reports"
+      },
       "sdm_client.PredictionResult.merge": {
         "capability": "results-merge"
       },
@@ -3877,6 +3989,15 @@
       },
       "sdm_client.Relationship": {
         "capability": "schema-edits"
+      },
+      "sdm_client.RelationshipOrigin": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.RelationshipOrigin.origin": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.RelationshipOrigin.relationship": {
+        "capability": "schema-refinement"
       },
       "sdm_client.Request": {
         "capability": "direct-dtypes-options"
@@ -3914,6 +4035,9 @@
       "sdm_client.Request.query": {
         "capability": "direct-dtypes-options"
       },
+      "sdm_client.Request.sanitization_report": {
+        "capability": "sanitization-reports"
+      },
       "sdm_client.Request.target_moves_with_time": {
         "capability": "direct-dtypes-options"
       },
@@ -3935,6 +4059,9 @@
       "sdm_client.SDMClient.health_ready": {
         "capability": "readiness-discovery"
       },
+      "sdm_client.SDMClient.in_process": {
+        "capability": "in-process-models"
+      },
       "sdm_client.SDMClient.models": {
         "capability": "readiness-discovery"
       },
@@ -3946,6 +4073,12 @@
       },
       "sdm_client.SDMWarning": {
         "capability": "errors"
+      },
+      "sdm_client.SanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.SanitizationReport.tables": {
+        "capability": "sanitization-reports"
       },
       "sdm_client.Schema": {
         "capability": "schema-edits"
@@ -3959,8 +4092,32 @@
       "sdm_client.Schema.from_data": {
         "capability": "schema-edits"
       },
+      "sdm_client.Schema.from_relbench": {
+        "capability": "relbench"
+      },
       "sdm_client.Schema.from_source": {
         "capability": "schema-edits"
+      },
+      "sdm_client.Schema.infer_links": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.Schema.infer_metadata": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.Schema.link_origins": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.Schema.link_report": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.Schema.metadata_report": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.Schema.print_links": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.Schema.print_metadata": {
+        "capability": "metadata-explanation-reports"
       },
       "sdm_client.Schema.snapshot": {
         "capability": "schema-edits"
@@ -3971,14 +4128,38 @@
       "sdm_client.Schema.tables": {
         "capability": "schema-edits"
       },
+      "sdm_client.Schema.to_html": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.to_mermaid": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.visualize": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.with_relationship": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.Schema.without_relationship": {
+        "capability": "schema-refinement"
+      },
+      "sdm_client.Schema.without_table": {
+        "capability": "schema-refinement"
+      },
       "sdm_client.SourceTable": {
         "capability": "schema-edits"
       },
       "sdm_client.SourceTable.duplicate_keys": {
         "capability": "schema-edits"
       },
+      "sdm_client.SourceTable.metadata_report": {
+        "capability": "metadata-explanation-reports"
+      },
       "sdm_client.SourceTable.primary_key": {
         "capability": "schema-edits"
+      },
+      "sdm_client.SourceTable.print_metadata": {
+        "capability": "metadata-explanation-reports"
       },
       "sdm_client.SourceTable.time_column": {
         "capability": "schema-edits"
@@ -3995,11 +4176,32 @@
       "sdm_client.Table.duplicate_keys": {
         "capability": "schema-edits"
       },
+      "sdm_client.Table.metadata_report": {
+        "capability": "metadata-explanation-reports"
+      },
       "sdm_client.Table.primary_key": {
         "capability": "schema-edits"
       },
+      "sdm_client.Table.print_metadata": {
+        "capability": "metadata-explanation-reports"
+      },
       "sdm_client.Table.time_column": {
         "capability": "schema-edits"
+      },
+      "sdm_client.TableMetadata": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.TableMetadata.print": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.TableMetadata.to_pandas": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.TableMetadata.to_text": {
+        "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.TableSanitizationReport": {
+        "capability": "sanitization-reports"
       },
       "sdm_client.Target": {
         "capability": "request-inspection"
@@ -4024,6 +4226,9 @@
       },
       "sdm_client.__version__": {
         "capability": "release-metadata"
+      },
+      "sdm_client.build_timeseries": {
+        "capability": "timeseries-preparation"
       },
       "sdm_connectors.ConnectorError": {
         "capability": "errors"
@@ -4192,153 +4397,6 @@
       },
       "sdm_connectors.resolve_sql": {
         "capability": "sql-helpers"
-      },
-      "sdm_client.SDMClient.in_process": {
-        "capability": "in-process-models"
-      },
-      "sdm_client.Schema.to_mermaid": {
-        "capability": "schema-visualization"
-      },
-      "sdm_client.Schema.to_html": {
-        "capability": "schema-visualization"
-      },
-      "sdm_client.Schema.visualize": {
-        "capability": "schema-visualization"
-      },
-      "sdm_client.Schema.from_relbench": {
-        "capability": "relbench"
-      },
-      "sdm_client.FittedModel.sanitization_report": {
-        "capability": "sanitization-reports"
-      },
-      "sdm_client.Request.sanitization_report": {
-        "capability": "sanitization-reports"
-      },
-      "sdm_client.SanitizationReport": {
-        "capability": "sanitization-reports"
-      },
-      "sdm_client.SanitizationReport.tables": {
-        "capability": "sanitization-reports"
-      },
-      "sdm_client.TableSanitizationReport": {
-        "capability": "sanitization-reports"
-      },
-      "sdm_client.ColumnMetadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.cohorts": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.details": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.feature_importance": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.print": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.subgraphs": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.summary": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.to_text": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ExplanationView.warnings": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.FeatureImportance": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.FeatureImportance.print": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.FeatureImportance.to_pandas": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.FeatureImportance.to_text": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.FeatureImportanceRow": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.LinkMetadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.LinkReport": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.LinkReport.print": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.LinkReport.to_pandas": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.LinkReport.to_text": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.MetadataReport": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.MetadataReport.print": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.MetadataReport.to_pandas": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.MetadataReport.to_text": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.PredictionResult.explanation_view": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.Schema.link_report": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.Schema.metadata_report": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.Schema.print_links": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.Schema.print_metadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.SourceTable.metadata_report": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.SourceTable.print_metadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.Table.metadata_report": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.Table.print_metadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.TableMetadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.TableMetadata.print": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.TableMetadata.to_pandas": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.TableMetadata.to_text": {
-        "capability": "metadata-explanation-reports"
-      },
-      "sdm_client.ForecastInput": {
-        "capability": "timeseries-preparation"
-      },
-      "sdm_client.build_timeseries": {
-        "capability": "timeseries-preparation"
       }
     },
     "java": {
@@ -4386,6 +4444,30 @@
       },
       "com.nvidia.sdm.Column#public java.lang.String toString();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.ColumnMetadata": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public com.nvidia.sdm.ColumnMetadata(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public java.lang.String dtype();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public java.lang.String name();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ColumnMetadata#public java.lang.String stype();": {
+        "capability": "metadata-explanation-reports"
       },
       "com.nvidia.sdm.DatabricksServing": {
         "capability": "public-serving-refusals"
@@ -4498,8 +4580,89 @@
       "com.nvidia.sdm.DuckDbSource#public static com.nvidia.sdm.DuckDbSource of(java.sql.Connection);": {
         "capability": "readers"
       },
+      "com.nvidia.sdm.ExplanationView": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public com.nvidia.sdm.ExplanationView(java.util.Map<java.lang.String, ?>);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public com.nvidia.sdm.FeatureImportance featureImportance(boolean);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.lang.String summary();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.lang.String toText();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.util.List<?> cohorts();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.util.List<?> subgraphs();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.util.List<java.lang.String> warnings();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.util.Map<java.lang.String, java.lang.Object> details();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ExplanationView#public java.util.Map<java.lang.String, java.lang.Object> raw();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public boolean normalized();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public com.nvidia.sdm.FeatureImportance(java.util.List<com.nvidia.sdm.FeatureImportanceRow>, boolean);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public java.lang.String toText();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportance#public java.util.List<com.nvidia.sdm.FeatureImportanceRow> rows();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public com.nvidia.sdm.FeatureImportanceRow(java.lang.String, java.lang.String, double);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public double score();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public java.lang.String column();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.FeatureImportanceRow#public java.lang.String table();": {
+        "capability": "metadata-explanation-reports"
+      },
       "com.nvidia.sdm.FittedModel": {
         "capability": "sessions"
+      },
+      "com.nvidia.sdm.FittedModel#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
+        "capability": "sanitization-reports"
       },
       "com.nvidia.sdm.FittedModel#public synchronized boolean isClosed();": {
         "capability": "sessions"
@@ -4512,6 +4675,30 @@
       },
       "com.nvidia.sdm.FittedModel#public synchronized void close();": {
         "capability": "sessions"
+      },
+      "com.nvidia.sdm.ForecastInput": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.ForecastInput(com.nvidia.sdm.Schema, com.nvidia.sdm.PredictiveQuery, java.time.Instant);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.PredictiveQuery query();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.Schema schema();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public final boolean equals(java.lang.Object);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public final int hashCode();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public final java.lang.String toString();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public java.time.Instant anchorTime();": {
+        "capability": "timeseries-preparation"
       },
       "com.nvidia.sdm.FromSourceOptions": {
         "capability": "schema-edits"
@@ -4557,6 +4744,54 @@
       },
       "com.nvidia.sdm.JdbcSource#public abstract java.sql.Connection connection();": {
         "capability": "readers"
+      },
+      "com.nvidia.sdm.LinkMetadata": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public com.nvidia.sdm.LinkMetadata(java.lang.String, java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public java.lang.String sourceColumn();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public java.lang.String sourceTable();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public java.lang.String targetColumn();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkMetadata#public java.lang.String targetTable();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport#public com.nvidia.sdm.LinkReport(java.util.List<com.nvidia.sdm.LinkMetadata>);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport#public java.lang.String toText();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.LinkReport#public java.util.List<com.nvidia.sdm.LinkMetadata> links();": {
+        "capability": "metadata-explanation-reports"
       },
       "com.nvidia.sdm.MaterializeOptions": {
         "capability": "direct-dtypes-options"
@@ -4617,6 +4852,27 @@
       },
       "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder task(java.lang.String);": {
         "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MetadataReport": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.MetadataReport#public com.nvidia.sdm.MetadataReport(java.util.List<com.nvidia.sdm.TableMetadata>);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.MetadataReport#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.MetadataReport#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.MetadataReport#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.MetadataReport#public java.lang.String toText();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.MetadataReport#public java.util.List<com.nvidia.sdm.TableMetadata> tables();": {
+        "capability": "metadata-explanation-reports"
       },
       "com.nvidia.sdm.ModelCapabilities": {
         "capability": "readiness-discovery"
@@ -4731,6 +4987,9 @@
       },
       "com.nvidia.sdm.PredictionResult": {
         "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.ExplanationView explanationView();": {
+        "capability": "metadata-explanation-reports"
       },
       "com.nvidia.sdm.PredictionResult#public java.lang.String model();": {
         "capability": "results-merge"
@@ -4885,6 +5144,30 @@
       "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readTable(com.nvidia.sdm.Source, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
         "capability": "readers"
       },
+      "com.nvidia.sdm.RelBenchOptions": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public boolean offline();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public java.nio.file.Path cacheDirectory();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public static com.nvidia.sdm.RelBenchOptions$Builder builder();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions build();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder cacheDirectory(java.nio.file.Path);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder offline(boolean);": {
+        "capability": "relbench"
+      },
       "com.nvidia.sdm.RelationalMaterializer": {
         "capability": "relational-materialization"
       },
@@ -4921,6 +5204,27 @@
       "com.nvidia.sdm.Relationship#public java.lang.String targetTable();": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.RelationshipOrigin": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.RelationshipOrigin#public com.nvidia.sdm.Relationship relationship();": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.RelationshipOrigin#public com.nvidia.sdm.RelationshipOrigin(com.nvidia.sdm.Relationship, java.lang.String);": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.RelationshipOrigin#public final boolean equals(java.lang.Object);": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.RelationshipOrigin#public final int hashCode();": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.RelationshipOrigin#public final java.lang.String toString();": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.RelationshipOrigin#public java.lang.String origin();": {
+        "capability": "schema-refinement"
+      },
       "com.nvidia.sdm.Request": {
         "capability": "direct-dtypes-options"
       },
@@ -4944,6 +5248,9 @@
       },
       "com.nvidia.sdm.Request#public com.nvidia.sdm.RequestSplit predict();": {
         "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
+        "capability": "sanitization-reports"
       },
       "com.nvidia.sdm.Request#public com.nvidia.sdm.Schema schema();": {
         "capability": "direct-dtypes-options"
@@ -5035,11 +5342,44 @@
       "com.nvidia.sdm.RequestSplit#public org.apache.arrow.vector.ipc.ArrowReader readRelated(java.lang.String, org.apache.arrow.memory.BufferAllocator);": {
         "capability": "request-inspection"
       },
+      "com.nvidia.sdm.SanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public com.nvidia.sdm.SanitizationReport(java.lang.String, java.util.List<com.nvidia.sdm.TableSanitizationReport>);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final boolean equals(java.lang.Object);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final int hashCode();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final java.lang.String toString();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public java.lang.String status();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public java.util.List<com.nvidia.sdm.TableSanitizationReport> tables();": {
+        "capability": "sanitization-reports"
+      },
       "com.nvidia.sdm.Schema": {
         "capability": "schema-edits"
       },
       "com.nvidia.sdm.Schema#public boolean equals(java.lang.Object);": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.LinkReport linkReport();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.MetadataReport metadataReport();": {
+        "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema inferLinks();": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema inferMetadata();": {
+        "capability": "schema-refinement"
       },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema snapshot();": {
         "capability": "schema-edits"
@@ -5065,6 +5405,12 @@
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutPrimaryKey(java.lang.String);": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutRelationship(com.nvidia.sdm.Relationship);": {
+        "capability": "schema-refinement"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutTable(java.lang.String);": {
+        "capability": "schema-refinement"
+      },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutTimeColumn(java.lang.String);": {
         "capability": "schema-edits"
       },
@@ -5077,11 +5423,26 @@
       "com.nvidia.sdm.Schema#public int hashCode();": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.Schema#public java.lang.String toHtml();": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toHtml(boolean);": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toMermaid();": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toMermaid(boolean);": {
+        "capability": "schema-visualization"
+      },
       "com.nvidia.sdm.Schema#public java.lang.String toString();": {
         "capability": "schema-edits"
       },
       "com.nvidia.sdm.Schema#public java.util.List<com.nvidia.sdm.Relationship> relationships();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.util.List<com.nvidia.sdm.RelationshipOrigin> linkOrigins();": {
+        "capability": "schema-refinement"
       },
       "com.nvidia.sdm.Schema#public java.util.List<com.nvidia.sdm.Table> tables();": {
         "capability": "schema-edits"
@@ -5091,6 +5452,12 @@
       },
       "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromData(java.util.Map<java.lang.String, org.apache.arrow.vector.table.Table>);": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String, com.nvidia.sdm.RelBenchOptions);": {
+        "capability": "relbench"
       },
       "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromSource(com.nvidia.sdm.Source);": {
         "capability": "schema-edits"
@@ -5103,6 +5470,12 @@
       },
       "com.nvidia.sdm.Schema#public void checkConsistent();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path) throws java.io.IOException;": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path, boolean) throws java.io.IOException;": {
+        "capability": "schema-visualization"
       },
       "com.nvidia.sdm.Schema#public void writeTo(java.io.OutputStream) throws java.io.IOException;": {
         "capability": "schema-edits"
@@ -5239,6 +5612,9 @@
       "com.nvidia.sdm.Table#public com.nvidia.sdm.Column column(java.lang.String);": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.Table#public com.nvidia.sdm.TableMetadata metadataReport();": {
+        "capability": "metadata-explanation-reports"
+      },
       "com.nvidia.sdm.Table#public int hashCode();": {
         "capability": "schema-edits"
       },
@@ -5263,80 +5639,35 @@
       "com.nvidia.sdm.Table#public java.util.OptionalLong duplicateKeys();": {
         "capability": "schema-edits"
       },
-      "com.nvidia.sdm.Schema#public java.lang.String toMermaid();": {
-        "capability": "schema-visualization"
+      "com.nvidia.sdm.TableMetadata": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.Schema#public java.lang.String toMermaid(boolean);": {
-        "capability": "schema-visualization"
+      "com.nvidia.sdm.TableMetadata#public com.nvidia.sdm.TableMetadata(java.lang.String, java.util.List<com.nvidia.sdm.ColumnMetadata>, java.util.List<java.lang.String>, java.lang.String);": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.Schema#public java.lang.String toHtml();": {
-        "capability": "schema-visualization"
+      "com.nvidia.sdm.TableMetadata#public final boolean equals(java.lang.Object);": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.Schema#public java.lang.String toHtml(boolean);": {
-        "capability": "schema-visualization"
+      "com.nvidia.sdm.TableMetadata#public final int hashCode();": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path) throws java.io.IOException;": {
-        "capability": "schema-visualization"
+      "com.nvidia.sdm.TableMetadata#public final java.lang.String toString();": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path, boolean) throws java.io.IOException;": {
-        "capability": "schema-visualization"
+      "com.nvidia.sdm.TableMetadata#public java.lang.String name();": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.RelBenchOptions": {
-        "capability": "relbench"
+      "com.nvidia.sdm.TableMetadata#public java.lang.String timeColumn();": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.RelBenchOptions#public boolean offline();": {
-        "capability": "relbench"
+      "com.nvidia.sdm.TableMetadata#public java.lang.String toText();": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.RelBenchOptions#public java.nio.file.Path cacheDirectory();": {
-        "capability": "relbench"
+      "com.nvidia.sdm.TableMetadata#public java.util.List<com.nvidia.sdm.ColumnMetadata> columns();": {
+        "capability": "metadata-explanation-reports"
       },
-      "com.nvidia.sdm.RelBenchOptions#public static com.nvidia.sdm.RelBenchOptions$Builder builder();": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.RelBenchOptions$Builder": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions build();": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder cacheDirectory(java.nio.file.Path);": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder offline(boolean);": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String);": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String, com.nvidia.sdm.RelBenchOptions);": {
-        "capability": "relbench"
-      },
-      "com.nvidia.sdm.FittedModel#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.Request#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport#public com.nvidia.sdm.SanitizationReport(java.lang.String, java.util.List<com.nvidia.sdm.TableSanitizationReport>);": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport#public final boolean equals(java.lang.Object);": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport#public final int hashCode();": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport#public final java.lang.String toString();": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport#public java.lang.String status();": {
-        "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.SanitizationReport#public java.util.List<com.nvidia.sdm.TableSanitizationReport> tables();": {
-        "capability": "sanitization-reports"
+      "com.nvidia.sdm.TableMetadata#public java.util.List<java.lang.String> primaryKey();": {
+        "capability": "metadata-explanation-reports"
       },
       "com.nvidia.sdm.TableSanitizationReport": {
         "capability": "sanitization-reports"
@@ -5370,243 +5701,6 @@
       },
       "com.nvidia.sdm.TableSanitizationReport#public long outputRows();": {
         "capability": "sanitization-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public com.nvidia.sdm.ColumnMetadata(java.lang.String, java.lang.String, java.lang.String);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public java.lang.String dtype();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public java.lang.String name();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ColumnMetadata#public java.lang.String stype();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public com.nvidia.sdm.ExplanationView(java.util.Map<java.lang.String, ?>);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public com.nvidia.sdm.FeatureImportance featureImportance(boolean);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.lang.String summary();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.lang.String toText();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.util.List<?> cohorts();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.util.List<?> subgraphs();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.util.List<java.lang.String> warnings();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.util.Map<java.lang.String, java.lang.Object> details();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ExplanationView#public java.util.Map<java.lang.String, java.lang.Object> raw();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public boolean normalized();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public com.nvidia.sdm.FeatureImportance(java.util.List<com.nvidia.sdm.FeatureImportanceRow>, boolean);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public java.lang.String toText();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportance#public java.util.List<com.nvidia.sdm.FeatureImportanceRow> rows();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public com.nvidia.sdm.FeatureImportanceRow(java.lang.String, java.lang.String, double);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public double score();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public java.lang.String column();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.FeatureImportanceRow#public java.lang.String table();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public com.nvidia.sdm.LinkMetadata(java.lang.String, java.lang.String, java.lang.String, java.lang.String);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public java.lang.String sourceColumn();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public java.lang.String sourceTable();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public java.lang.String targetColumn();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkMetadata#public java.lang.String targetTable();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport#public com.nvidia.sdm.LinkReport(java.util.List<com.nvidia.sdm.LinkMetadata>);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport#public java.lang.String toText();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.LinkReport#public java.util.List<com.nvidia.sdm.LinkMetadata> links();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport#public com.nvidia.sdm.MetadataReport(java.util.List<com.nvidia.sdm.TableMetadata>);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport#public java.lang.String toText();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.MetadataReport#public java.util.List<com.nvidia.sdm.TableMetadata> tables();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.ExplanationView explanationView();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.LinkReport linkReport();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.MetadataReport metadataReport();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.Table#public com.nvidia.sdm.TableMetadata metadataReport();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public com.nvidia.sdm.TableMetadata(java.lang.String, java.util.List<com.nvidia.sdm.ColumnMetadata>, java.util.List<java.lang.String>, java.lang.String);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public final boolean equals(java.lang.Object);": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public final int hashCode();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public final java.lang.String toString();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public java.lang.String name();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public java.lang.String timeColumn();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public java.lang.String toText();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public java.util.List<com.nvidia.sdm.ColumnMetadata> columns();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.TableMetadata#public java.util.List<java.lang.String> primaryKey();": {
-        "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.ForecastInput": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.ForecastInput(com.nvidia.sdm.Schema, com.nvidia.sdm.PredictiveQuery, java.time.Instant);": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.PredictiveQuery query();": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.Schema schema();": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public final boolean equals(java.lang.Object);": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public final int hashCode();": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public final java.lang.String toString();": {
-        "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ForecastInput#public java.time.Instant anchorTime();": {
-        "capability": "timeseries-preparation"
       },
       "com.nvidia.sdm.TimeSeries": {
         "capability": "timeseries-preparation"
@@ -5965,6 +6059,11 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/timeseries-preparation",
       "reason": "Restore reviewed Python/Java history-to-forecast builder using shared Rust Arrow preparation."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/schema-refinement",
+      "reason": "Restore reviewed inference reruns and atomic schema edits in Python/Java; Rust owns inference and provenance."
     }
   ],
   "capabilities": [

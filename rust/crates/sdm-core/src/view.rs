@@ -620,6 +620,7 @@ pub(crate) fn describe(
         .collect();
     Ok((
         SourceDescription {
+            inference: None,
             tables: described,
             links,
         },

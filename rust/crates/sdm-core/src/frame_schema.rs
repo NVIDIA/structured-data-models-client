@@ -99,6 +99,7 @@ pub(crate) fn describe(
         choices.push(time);
     }
     let description = sdm_contract::ops::SourceDescription {
+        inference: None,
         tables,
         links: vec![],
     };

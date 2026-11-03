@@ -92,6 +92,7 @@ fn shop() -> SourceDescription {
         zone: None,
     };
     SourceDescription {
+        inference: None,
         tables: vec![
             DescribedTable {
                 name: "orders".into(),

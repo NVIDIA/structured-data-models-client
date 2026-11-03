@@ -309,6 +309,9 @@ pub(crate) async fn run(
         },
         duplicates,
     )?;
+    if let Some(state) = &mut description.inference {
+        state.key_declared.extend(spec.primary_keys.keys().cloned());
+    }
     for warning in warnings {
         asker.warn(warning);
     }
