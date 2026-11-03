@@ -38,8 +38,11 @@ Raw F1 text prediction remains outside the successful endpoint evidence; the ear
 
 ## Validation
 
-The affected Python report/loader suites and the extended dirty-sanitization persistence case passed: 22 tests.
-The matching Java report/loader suites and dirty-sanitization persistence case passed: 15 tests.
+The affected Python report/loader suites and the extended dirty-sanitization persistence case passed: 22 tests, including four new test cases and one extended persistence case.
+The matching Java report/loader suites and dirty-sanitization persistence case passed: 15 tests, including four new test cases and one extended persistence case.
 Both hosts used isolated existing contract-59 native artifacts; no native rebuild or shared environment installation was needed.
 Ruff lint/format checks and the whitespace check passed.
 No product defect was found by these additions, so no product code, API snapshot or native contract changed.
+
+The composed workflow is selected once under the RelBench API contract group.
+The existing whole-file report selections include the new accessor and nesting tests, while the existing sanitization selections retain the extended persistence cases.
