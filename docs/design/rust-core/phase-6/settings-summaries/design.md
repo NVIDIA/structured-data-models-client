@@ -45,7 +45,7 @@ summary = ExplanationSummarizer(endpoint, model, api_key=key).summarize(
 )
 ```
 
-Java uses `MaterializeOptions.builder().inferenceConfig(config)` or `ExamplesOptions.builder().inference(config)`.
+Java uses `MaterializeOptions.builder().inferenceConfig(config)` or `ExamplesOptions.builder().inferenceConfig(config)`.
 `new ExplanationSummarizer(endpoint, model)` needs no credentials for an unauthenticated endpoint; optional key and timeout constructors are available.
 No remote text endpoint was configured in the available model validation configuration, so live prose quality is not claimed.
 The HTTP contract is verified locally with synthetic data.

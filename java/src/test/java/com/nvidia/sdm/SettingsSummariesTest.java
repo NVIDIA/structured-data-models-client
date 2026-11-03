@@ -103,7 +103,7 @@ class SettingsSummariesTest {
     var schema=CustomExamplesTest.memory(fixture,"timeless".equals(test.get("schema_variant")));
     var config=InferenceConfig.builder().classShuffle(true).build();
     try(var allocator=new RootAllocator();var context=CustomExamplesTest.arrow(allocator,CustomExamplesTest.object(test.get("context")),"binary_classification");var predict=CustomExamplesTest.arrow(allocator,CustomExamplesTest.object(test.get("predict")),"")) {
-      var typed=schema.materializeExamples(CustomExamplesTest.task(test),context,predict,ExamplesOptions.builder().inference(config).build());
+      var typed=schema.materializeExamples(CustomExamplesTest.task(test),context,predict,ExamplesOptions.builder().inferenceConfig(config).build());
       var mapped=schema.materializeExamples(CustomExamplesTest.task(test),context,predict,ExamplesOptions.builder().inference(config.toMap()).build());
       assertEquals(CustomExamplesTest.payload(typed,0),CustomExamplesTest.payload(mapped,0));
     }
@@ -126,12 +126,12 @@ class SettingsSummariesTest {
     try(var allocator=new RootAllocator();var context=CustomExamplesTest.arrow(allocator,CustomExamplesTest.object(test.get("context")),"regression");
         var predict=CustomExamplesTest.arrow(allocator,CustomExamplesTest.object(test.get("predict")),"")) {
       for(var config:List.of(InferenceConfig.builder().build(),InferenceConfig.builder().numEstimators(2).columnShuffle(true).categoryShuffle(true).hopShuffle(true).targetTransforms(Arrays.asList("clip",null)).outputType("mean").build())) {
-        Request typed=schema.materializeExamples(task,context,predict,ExamplesOptions.builder().inference(config).build());
+        Request typed=schema.materializeExamples(task,context,predict,ExamplesOptions.builder().inferenceConfig(config).build());
         Request mapped=schema.materializeExamples(task,context,predict,ExamplesOptions.builder().inference(config.toMap()).build());
         assertEquals(CustomExamplesTest.payload(typed,0),CustomExamplesTest.payload(mapped,0));
       }
       for(var config:List.of(InferenceConfig.builder().numEstimators(0).build(),InferenceConfig.builder().classShuffle(true).build(),InferenceConfig.builder().outputType("invalid").build())) {
-        var typed=assertThrows(StructuredDataException.class,()->schema.materializeExamples(task,context,predict,ExamplesOptions.builder().inference(config).build()));
+        var typed=assertThrows(StructuredDataException.class,()->schema.materializeExamples(task,context,predict,ExamplesOptions.builder().inferenceConfig(config).build()));
         var mapped=assertThrows(StructuredDataException.class,()->schema.materializeExamples(task,context,predict,ExamplesOptions.builder().inference(config.toMap()).build()));
         assertEquals(typed.code(),mapped.code());assertEquals(typed.details(),mapped.details());
       }

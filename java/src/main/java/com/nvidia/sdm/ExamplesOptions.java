@@ -22,7 +22,7 @@ public final class ExamplesOptions {
     public Builder numNeighbors(List<Integer> values) { neighbors=values; return this; }
     public Builder randomSeed(long value) { seed=value; return this; }
     public Builder inference(Map<String,Object> value) { inference=value; return this; }
-    public Builder inference(InferenceConfig value) { inference=value.toMap(); return this; }
+    public Builder inferenceConfig(InferenceConfig value) { inference=value.toMap(); return this; }
     public ExamplesOptions build() { return new ExamplesOptions(this); }
   }
 }
