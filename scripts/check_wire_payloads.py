@@ -151,7 +151,12 @@ def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
 #: process only. Everything else about such a body is still policed, so an
 #: envelope that is wrong in any other way still fails here.
 NOT_IN_THE_CONTRACT = {
-    'kumo-anomaly': {'model': 'kumo-anomaly', 'task.kind': 'anomaly_detection'}
+    'kumo-anomaly': {
+        'model': 'kumo-anomaly',
+        'task.kind': 'anomaly_detection',
+    },
+    # `forecasting` is a kind the contract carries; only the id is new.
+    'kumo-forecast': {'model': 'kumo-forecast'},
 }
 
 

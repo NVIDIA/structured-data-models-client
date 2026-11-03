@@ -1,0 +1,201 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""``kumo-forecast`` asked to continue a series it is shown the history of.
+
+A small random-weight model stands in for the published one, so nothing is
+downloaded and no GPU is needed.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from sdm_client import (
+    KumoForecast,
+    KumoTabular,
+    Request,
+    SDMClient,
+    StructuredDataError,
+    UnsupportedRequestError,
+)
+from sdm_client.core.warnings import SDMWarning
+
+pytestmark = pytest.mark.filterwarnings('ignore')
+
+#: The published model reads 512 steps and forecasts 72, so retrieval needs a
+#: history longer than both put together before it has anything to retrieve.
+RETRIEVAL_NEEDS = 512 + 72
+
+
+def history(rows: int = 200) -> pd.DataFrame:
+    step = np.arange(rows, dtype=float)
+    return pd.DataFrame({'flow': np.sin(step / 9), 'temp': np.cos(step / 7)})
+
+
+def forecast_of(model, frame: pd.DataFrame, horizon: int = 6, **inference):
+    with SDMClient.in_process(model) as client:
+        request = Request.forecast(
+            frame, target='flow', horizon=horizon, inference=inference or None
+        )
+        return client.predict(request, model=KumoForecast()).to_pandas()
+
+
+def test_one_row_per_step_comes_back_in_order(forecast):
+    answer = forecast_of(forecast, history(), horizon=6)
+
+    assert list(answer.columns) == ['row_index', 'forecast_step', 'prediction']
+    assert answer['forecast_step'].tolist() == list(range(6))
+    assert np.isfinite(answer['prediction']).all()
+
+
+@pytest.mark.parametrize('horizon', [1, 6, 80])
+def test_the_horizon_is_how_many_steps_are_asked_for(forecast, horizon):
+    """Beyond the model's own 72 the forecast is extended autoregressively,
+    which is still the horizon that was asked for."""
+    assert len(forecast_of(forecast, history(), horizon=horizon)) == horizon
+
+
+def test_the_answer_is_the_one_the_model_gives_when_called_directly(
+    sdm, forecast
+):
+    """Nothing is computed on the way through: the client shapes the request
+    and reads the answer back, and the numbers are the model's own."""
+    import torch
+
+    frame = history()
+    answer = forecast_of(forecast, frame, horizon=6)
+    target = sdm.TableTensor.from_pandas(frame[['flow']], {'flow': 'numerical'})
+    alongside = sdm.TableTensor.from_pandas(
+        frame[['temp']], {'temp': 'numerical'}
+    )
+    direct = forecast(alongside, target, alongside[:6, ..., :0])
+
+    torch.testing.assert_close(
+        torch.tensor(answer['prediction'].to_numpy()),
+        direct['flow'].numerical[..., 0].double(),
+    )
+
+
+def test_the_same_history_forecasts_the_same_twice(forecast):
+    frame = history()
+
+    assert forecast_of(forecast, frame)['prediction'].tolist() == (
+        pytest.approx(forecast_of(forecast, frame)['prediction'].tolist())
+    )
+
+
+def test_a_key_column_is_not_read_as_history(forecast):
+    """`reading_id` names the step. Forecasting from it would read a counter
+    that rises for ever as though it were something measured."""
+    frame = history()
+    keyed = frame.assign(reading_id=np.arange(len(frame)))
+
+    assert forecast_of(forecast, keyed)['prediction'].tolist() == (
+        pytest.approx(forecast_of(forecast, frame)['prediction'].tolist())
+    )
+
+
+@pytest.mark.parametrize('horizon', [0, -1, 1.5, True])
+def test_a_horizon_that_is_not_a_count_of_steps_is_refused(forecast, horizon):
+    with pytest.raises(StructuredDataError) as caught:
+        Request.forecast(history(), target='flow', horizon=horizon)
+    assert 'horizon' in str(caught.value)
+
+
+def test_a_history_without_the_series_is_refused(forecast):
+    with pytest.raises(StructuredDataError) as caught:
+        Request.forecast(history(), target='missing', horizon=4)
+    assert 'missing' in str(caught.value)
+
+
+def test_a_history_with_no_rows_is_refused(forecast):
+    with pytest.raises(StructuredDataError) as caught:
+        Request.forecast(history().iloc[:0], target='flow', horizon=4)
+    assert 'no rows' in str(caught.value)
+
+
+def test_a_column_the_model_cannot_forecast_from_is_refused(forecast):
+    frame = history()
+    frame['site'] = 'north'
+
+    with pytest.raises(StructuredDataError) as caught:
+        forecast_of(forecast, frame)
+    assert 'site' in str(caught.value)
+
+
+def test_retrieval_that_has_nothing_to_retrieve_from_says_so(forecast):
+    """Below one window plus a horizon the model ignores `alpha` without
+    saying anything, so a caller who set it would read a direct forecast and
+    believe it was blended."""
+    with pytest.warns(SDMWarning, match='retrieval'):
+        forecast_of(forecast, history(200), alpha=0.2)
+
+
+def test_retrieval_that_can_run_is_not_warned_about(forecast):
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', SDMWarning)
+        forecast_of(forecast, history(RETRIEVAL_NEEDS), alpha=0.2)
+
+
+def test_retrieval_changes_the_forecast_where_it_runs(forecast):
+    """The premise of the warning above: with enough history it does
+    something, so a run that is silently skipped is worth saying."""
+    frame = history(RETRIEVAL_NEEDS)
+    direct = forecast_of(forecast, frame)['prediction'].tolist()
+    blended = forecast_of(forecast, frame, alpha=0.2)['prediction'].tolist()
+
+    assert direct != pytest.approx(blended)
+
+
+@pytest.mark.parametrize(
+    ('option', 'value'),
+    [('alpha', -0.1), ('alpha', 1.5), ('k', 0), ('k', 1.5)],
+)
+def test_a_retrieval_knob_outside_its_range_is_refused(forecast, option, value):
+    with pytest.raises(StructuredDataError) as caught:
+        forecast_of(forecast, history(), **{option: value})
+    assert option in str(caught.value)
+
+
+def test_there_is_no_session_to_pin(forecast):
+    with SDMClient.in_process(forecast) as client:
+        with pytest.raises(
+            (UnsupportedRequestError, StructuredDataError)
+        ) as caught:
+            client.fit(
+                Request.forecast(history(), target='flow', horizon=4),
+                model=KumoForecast(),
+            )
+    assert 'session' in str(caught.value)
+
+
+def test_another_model_is_not_asked_this_question(tabular):
+    with SDMClient.in_process(tabular) as client:
+        with pytest.raises(StructuredDataError):
+            client.predict(
+                Request.forecast(history(), target='flow', horizon=4),
+                model=KumoTabular(),
+            )
+
+
+def test_a_structured_data_models_without_this_model_still_answers(
+    sdm, monkeypatch
+):
+    monkeypatch.delattr(sdm.models, 'KumoForecast', raising=False)
+
+    with pytest.raises(StructuredDataError) as caught:
+        SDMClient.in_process(object())
+    assert caught.value.code == 'INVALID_CONFIGURATION'
+
+
+def test_a_model_that_is_not_installed_is_not_offered(sdm, monkeypatch):
+    monkeypatch.delattr(sdm.models, 'KumoForecast', raising=False)
+
+    with SDMClient.in_process() as client:
+        assert 'kumo-forecast' not in client.models()

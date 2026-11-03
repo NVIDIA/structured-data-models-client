@@ -627,6 +627,100 @@ class Request:
         request.entity_table = entity_table
         return request
 
+    @classmethod
+    def forecast(
+        cls,
+        history: pd.DataFrame,
+        *,
+        target: str,
+        horizon: int,
+        schema: Schema | None = None,
+        entity_table: str = 'instance',
+        inference: Mapping[str, Any] | None = None,
+    ) -> Request:
+        r"""Continue a series for ``horizon`` steps beyond its history.
+
+        The rows of ``history`` are time steps in the order they happened.
+        There are no rows to score: the question is about steps that have not
+        been measured, so the horizon is a count rather than a frame, and
+        nothing known about the future travels, because the model reads
+        nothing about it.
+
+        Args:
+            history: The series so far, one row per step. Must carry
+                ``target``; every other numerical column is read as something
+                measured alongside it.
+            target: The column being forecast.
+            horizon: How many steps to continue it for.
+            schema: Override the inferred schema. Rarely needed.
+            entity_table: The name the instance table is known by.
+            inference: Gathering knobs passed to the adapter.
+
+        Raises:
+            StructuredDataError: If ``history`` is not a DataFrame, carries no
+                ``target``, or has no rows, or ``horizon`` is not a positive
+                whole number.
+
+        >>> request = Request.forecast(readings, target='flow', horizon=24)
+        >>> client.predict(request, model=KumoForecast())
+        """
+        history = _require_frame(history, 'history')
+        if isinstance(horizon, bool) or not isinstance(horizon, int):
+            raise StructuredDataError(
+                f'horizon is {horizon!r}; it is a whole number of steps',
+                code='INVALID_REQUEST',
+            )
+        if horizon < 1:
+            raise StructuredDataError(
+                f'horizon is {horizon}; a forecast of no steps is not a '
+                f'question with an answer',
+                code='INVALID_REQUEST',
+            )
+        if len(history) == 0:
+            raise StructuredDataError(
+                'history has no rows, so there is no series to continue',
+                code='INVALID_REQUEST',
+            )
+        if target not in history.columns:
+            raise StructuredDataError(
+                f'history has no column {target!r}, which is the series '
+                f'being forecast; it has '
+                f'{sorted(map(str, history.columns))}',
+                code='INVALID_REQUEST',
+            )
+        if schema is None:
+            schema = Schema.from_data({entity_table: history})
+        _check_scored_values_mean_what_the_schema_says(
+            history, schema, entity_table
+        )
+
+        request = cls.__new__(cls)
+        request.schema = schema
+        request.task = Task(
+            kind='forecasting',
+            target=Target(
+                column_name=target,
+                dtype=schema[entity_table][target].dtype,
+                table_name=entity_table,
+            ),
+        )
+        request.horizon = horizon
+        # The history is what the model is shown, which is the context. The
+        # half to score is one row per step, carrying the series being asked
+        # about and nothing in it: those are the steps whose value is not
+        # known, which is the question. A table of no columns would say the
+        # same and is not a table the contract has.
+        request._context = Split(instance_table=history)
+        request._predict = Split(
+            instance_table=pd.DataFrame(
+                {target: [None] * horizon}, dtype='object'
+            )
+        )
+        request.inference = dict(inference or {})
+        request.requested_inference = dict(inference or {})
+        request.entity_table = entity_table
+        return request
+
     @property
     def _question(self) -> Question:
         r"""What this request asks. See :class:`Question`."""

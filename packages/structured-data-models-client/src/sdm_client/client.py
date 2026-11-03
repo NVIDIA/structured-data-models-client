@@ -86,6 +86,10 @@ def _adapter_for(spec: ModelSpec) -> ModelAdapter:
         from sdm_client.adapters.anomaly import AnomalyAdapter
 
         return AnomalyAdapter()
+    if spec.model_id == 'kumo-forecast':
+        from sdm_client.adapters.forecast import ForecastAdapter
+
+        return ForecastAdapter()
     raise UnknownModelError(spec.model_id, list(MODELS))
 
 
