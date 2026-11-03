@@ -33,7 +33,7 @@ See [completion evidence](completion.md) for scope, reviews and remaining audit 
 | Inference and safe edits | `rust-core-phase-6-inference` | Resumed on contract 60; provenance correction and contract 61 validation in progress |
 | Time-series preparation | `rust-core-phase-6-timeseries` | Reviewed and merged; Python/Java fixtures and live four-row forecast passed |
 | Labels-only extraction | `rust-core-phase-6-labels` | Contract approved; implementation in progress |
-| Thorough testing of the first four | `rust-core-phase-6-coverage` | Worker active; auditing and strengthening public-workflow coverage |
+| Thorough testing of the first four | `rust-core-phase-6-coverage` | Reviewed and merged; composed workflows, corruption/ownership/report edge cases; 22 Python / 15 Java tests passed |
 
 The three designs under `phase-5/api-removal-audit/{inference-edits,timeseries,labels-only}/design.md` define the scope and testing expectations.
 Use existing test infrastructure, focused old-client comparisons and independently calculated expected results; do not rebuild migration instrumentation.
@@ -48,3 +48,5 @@ Inference/labels may develop isolated logic and tests, but must integrate the pr
 Planned subsequent contracts: inference 61, labels 62, each based on the preceding integrated contract.
 
 Contract lock policy retains merged entries and only the newest unmerged version via `scripts/rust_core/contract_lock.py --prune-working`; schema history files remain unchanged.
+
+[Original-feature coverage audit](coverage-audit.md) records the focused additions and their limits.
