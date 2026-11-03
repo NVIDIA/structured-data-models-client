@@ -25,6 +25,7 @@ import pytest
 from sample_tables import graph
 
 from sdm_client import (
+    ColumnExplanations,
     KumoRelational,
     PredictiveQuery,
     Relationship,
@@ -1323,20 +1324,36 @@ def test_a_forecast_analyses_a_table_only_some_steps_reached(
       (``seconds`` 10, 20, 30) only in step 2, one row per entity; both
       columns are numerical. An entity with no row of a table drops out of
       that column's cohorts.
+    - Each step's schema names only ``users`` and the table it reached, with
+      their links, as the engine sends it.
     - Hand-computed: deciles of 10, 20, 30 are 10, 12, ..., 30; the values
       land in the bins ending 12, 20 and 30, so the kept cohorts are
-      [10 - 12], (12 - 20], (20 - 30], one entity each, means 100, 200, 300. Read against step 1's entities instead, they
-      would be 0, 10, 0; dropped, ``events`` would be absent.
+      [10 - 12], (12 - 20], (20 - 30], one entity each, means 100, 200,
+      300. Read against step 1's entities instead, they would be 0, 10, 0;
+      dropped, ``events`` would be absent.
     """
 
     def step(labels: list[float], table: str, values: list[float]) -> dict:
         entities = list(zip([1, 2, 3], labels, strict=True))
         payload = labelled(gathered(5, 7, task='regression'), entities)
         columns = TABLES[table][0]
-        # The schema is the graph's, the same in every step.
-        for name in ('orders', 'events'):
-            described = payload['schema']['related_tables'][name]
-            described['columns'][TABLES[name][1]]['stype'] = 'numerical'
+        # As the engine sends it: the schema names only the tables this
+        # step reached, and the links between them.
+        schema = payload['schema']
+        kept = {'users', table}
+        schema['related_tables'] = {
+            name: described
+            for name, described in schema['related_tables'].items()
+            if name in kept
+        }
+        schema['relationships'] = [
+            link
+            for link in schema['relationships']
+            if link.get('source_table', 'users') in kept
+            and link['target_table'] in kept
+        ]
+        described = schema['related_tables'][table]
+        described['columns'][TABLES[table][1]]['stype'] = 'numerical'
         rows = {
             'orders': lambda at, entity, value: [
                 at,
@@ -1391,6 +1408,65 @@ def test_a_forecast_analyses_a_table_only_some_steps_reached(
     assert analysed['seconds'][2] == pytest.approx([100.0, 200.0, 300.0])
     assert analysed['amount'][0] == ['[1 - 1.2]', '(1.2 - 2]', '(2 - 3]']
     assert analysed['amount'][2] == pytest.approx([0.0, 10.0, 0.0])
+
+
+def test_time_cohorts_hold_every_rows_age():
+    """Each related row's age before its own entity's anchor falls in the
+    time cohort whose label contains it: the oldest in the closed last
+    cohort, one exactly on an edge in the cohort that edge opens.
+
+    Assumptions:
+    - Entity 1 (label 100) is anchored 2024-01-31 with one event on
+      2024-01-01, 30 days old; entity 2 (label 10) is anchored 2024-01-11
+      with events on 2024-01-05 and 2024-01-01, 6 and 10 days old.
+    - Cohort width is the oldest age over ten, rounded up, so ten cohorts
+      cover it; an age on an edge goes in the cohort that edge opens, and
+      the last cohort is closed.
+    - Hand-computed: the oldest age, 30 days, gives 3-day cohorts ending at
+      30. 6 opens [6, 9), 10 is in [9, 12), 30 closes [27, 30]. Each entity weighs 1, split over its rows, so the shares are
+      1/4, 1/4, 1/2 and the means 10, 10, 100.
+    - The raw timestamps span 4 days, which gave 1-day cohorts up to 10
+      days: 30 fell in [9, 10) and 6 in [5, 6).
+    """
+    events = [(1, '2024-01-01'), (2, '2024-01-05'), (2, '2024-01-01')]
+    payload = labelled(
+        gathered(5, 7, task='regression'), [(1, 100.0), (2, 10.0)]
+    )
+    payload['task']['anchor_time_column'] = 'anchor'
+    instance = payload['context']['instance_table']
+    instance['columns'].append('anchor')
+    for row, anchor in zip(
+        instance['rows'], ['2024-01-31', '2024-01-11'], strict=True
+    ):
+        row.append(anchor)
+    payload['schema']['related_tables']['events'] = {
+        'columns': {
+            'instance_id': {'dtype': 'int64'},
+            '__node_id': {'dtype': 'int64'},
+            'user_id': {'dtype': 'int64'},
+            'at': {'dtype': 'datetime64[ns]', 'stype': 'timestamp'},
+        },
+        'primary_key': PRIMARY_KEYS['events'],
+    }
+    payload['context']['related_tables']['events'] = {
+        'format': 'arrays',
+        'columns': ['instance_id', '__node_id', 'user_id', 'at'],
+        'rows': [
+            [entity - 1, node, entity, at]
+            for node, (entity, at) in enumerate(events)
+        ],
+    }
+
+    frame = ColumnExplanations(payload).to_pandas()
+
+    cohorts = frame[frame['column'] == 'at']
+    assert list(cohorts['cohort']) == [
+        '[6 days, 9 days)',
+        '[9 days, 12 days)',
+        '[27 days, 30 days]',
+    ]
+    assert list(cohorts['share']) == pytest.approx([1 / 4, 1 / 4, 1 / 2])
+    assert list(cohorts['mean']) == pytest.approx([10.0, 10.0, 100.0])
 
 
 def test_a_forecast_not_explained_is_not_analysed(

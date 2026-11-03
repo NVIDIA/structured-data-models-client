@@ -432,22 +432,21 @@ class ColumnExplanations:
         outcome: np.ndarray,
     ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
         r"""Time before the entity's anchor, in ``NUM_COHORTS`` buckets."""
-        known = times[~np.isnan(times)]
-        low, high = (
-            (int(known.min()), int(known.max())) if known.size else (0, 0)
-        )
-        window, unit = self._time_window(high - low)
-        before = (anchor[entity] - times) / self._SECONDS[unit]
-        valid = before >= 0  # NaN and future-looking rows drop out.
+        seconds = anchor[entity] - times
+        valid = seconds >= 0  # NaN and future-looking rows drop out.
+        oldest = int(seconds[valid].max()) if valid.any() else 0
+        window, unit = self._time_window(oldest)
+        before = seconds[valid] / self._SECONDS[unit]
         edges = np.arange(0, (self.NUM_COHORTS + 1) * window, window)
-        index = np.searchsorted(edges[1:-1], before[valid], side='left')
+        index = np.searchsorted(edges[1:-1], before, side='right')
         shares = self._shares(
             (entity[valid], index), entity[valid], self.NUM_COHORTS
         )
         labels = [
             f'[{start} {unit}, {end} {unit})'
-            for start, end in zip(edges[:-1], edges[1:], strict=True)
+            for start, end in zip(edges[:-2], edges[1:-1], strict=True)
         ]
+        labels.append(f'[{edges[-2]} {unit}, {edges[-1]} {unit}]')
         return self._categories(
             shares, labels, np.zeros(len(labels), dtype=bool), outcome
         )
@@ -460,15 +459,17 @@ class ColumnExplanations:
         hours = seconds // (60 * 60)
         days = hours // 24
         weeks = days // 7
-        months = days // 30
         n = cls.NUM_COHORTS
         if hours < 7 * n:
-            return max(hours // n, 1), 'hours'
-        if days < 5 * n:
-            return max(days // n, 1), 'days'
-        if weeks < 3 * n:
-            return max(weeks // n, 1), 'weeks'
-        return max(months // n, 1), 'months'
+            unit = 'hours'
+        elif days < 5 * n:
+            unit = 'days'
+        elif weeks < 3 * n:
+            unit = 'weeks'
+        else:
+            unit = 'months'
+        # Rounded up from the exact span, so the buckets reach the oldest age.
+        return max(math.ceil(seconds / (cls._SECONDS[unit] * n)), 1), unit
 
     # Aggregation ##############################################################
 

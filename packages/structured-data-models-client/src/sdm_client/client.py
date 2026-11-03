@@ -1075,7 +1075,25 @@ class _LabelledRows:
                 )
                 for name in names
             }
-        return {**each[0], 'context': context}
+        # A step's schema describes only the tables that step reached.
+        schemas = [payload['schema'] for payload in each]
+        schema = dict(schemas[0])
+        if any('related_tables' in step_schema for step_schema in schemas):
+            described: dict[str, Any] = {}
+            for step_schema in schemas:
+                for name, table in (
+                    step_schema.get('related_tables') or {}
+                ).items():
+                    described.setdefault(name, table)
+            schema['related_tables'] = described
+        if any('relationships' in step_schema for step_schema in schemas):
+            links: list[Any] = []
+            for step_schema in schemas:
+                for link in step_schema.get('relationships') or []:
+                    if link not in links:
+                        links.append(link)
+            schema['relationships'] = links
+        return {**each[0], 'schema': schema, 'context': context}
 
     def _stacked(
         self, tables: Sequence[tuple[int, Mapping[str, Any]]]
