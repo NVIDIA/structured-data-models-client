@@ -53,6 +53,12 @@ def tables() -> dict[str, pd.DataFrame]:
     Order counts differ sharply between the two halves, so a prediction that
     tracks them is evidence the whole path works rather than that something
     came back.
+
+    ``events`` has no primary key: ``user_id`` repeats in it, so nothing names
+    one of its rows, and the engine numbers them itself. Its timestamps sit
+    inside the span of ``orders``, and the questions here aggregate
+    ``orders`` only, which is what the engine measures history and anchor
+    times against.
     """
     users = pd.DataFrame(
         {
@@ -79,7 +85,22 @@ def tables() -> dict[str, pd.DataFrame]:
                 }
             )
             order_id += 1
-    return {'users': users, 'orders': pd.DataFrame(rows)}
+    events = [
+        {
+            'user_id': user,
+            'kind': 'login' if k % 2 else 'view',
+            'value': float(user % 5 + k),
+            'ts': pd.Timestamp('2024-01-01')
+            + pd.Timedelta(days=k * 30 + (user % 9)),
+        }
+        for user in range(N_USERS)
+        for k in range(3)
+    ]
+    return {
+        'users': users,
+        'orders': pd.DataFrame(rows),
+        'events': pd.DataFrame(events),
+    }
 
 
 COUNT_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
@@ -328,3 +349,158 @@ def test_run_mode_is_refused_as_an_option(query):
     with pytest.raises(StructuredDataError) as error:
         query.materialize(indices=[0], run_mode='best')
     assert 'run_mode' in str(error.value)
+
+
+EXPLAIN = ['prediction', 'probabilities', 'explanation']
+BINARY_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
+#: The table whose related blocks carry ``keys``, and its key. The engine
+#: sends a related table's primary key only when a relationship joins on it:
+#: ``user_id`` is the join column, so only ``users`` is keyed.
+KEYS = {'users': 'user_id'}
+#: The tables whose related blocks carry ``rows`` and no ``keys``, each with a
+#: column whose sent values the returned rows are checked against: ``orders``,
+#: whose ``order_id`` no relationship joins on, and ``events``, which has no
+#: primary key.
+KEYLESS = {'orders': 'price', 'events': 'value'}
+
+
+@pytest.fixture(scope='module')
+def binary_query():
+    return PredictiveQuery(BINARY_QUERY, tables())
+
+
+def assert_explained_as_sent(result, asked):
+    """Every asked entity is explained once, under its id, by its own rows.
+
+    An entry has ``outputs`` and ``related`` only, the entity's own table
+    among the related ones. Each block's ``keys`` are the primary keys of its
+    ``rows``, whose values are the caller's for that key and belong to that
+    entity, and its gradients are ``[output][row][column]``, aligned with
+    ``rows``. Keys come back only for a join column, so only ``users`` has
+    them; every other block has ``rows`` and no ``keys``, each row the
+    caller's columns of one of that entity's rows. In ``to_pandas()`` the
+    entity's own table is at hop 0, the others at 1 or more, and an unkeyed
+    table's lines have no ``key``.
+    """
+    sent_tables = tables()
+    graph = {name: sent_tables[name].set_index(KEYS[name]) for name in KEYS}
+    keyless = {name: sent_tables[name] for name in KEYLESS}
+    frame = result.to_pandas()
+    assert 'explanation' not in frame.columns
+    ids = {int(key): key for key in result.explanations}
+    assert len(ids) == len(result.explanations)
+    assert sorted(ids) == sorted(asked)
+    assert sorted(ids) == sorted(int(value) for value in frame['id'])
+
+    for entity, key in ids.items():
+        entry = result.explanations[key]
+        assert set(entry) == {'outputs', 'related'}
+        outputs = len(entry['outputs'])
+        # Both class probabilities of a binary target.
+        assert outputs == 2
+        related = entry['related']
+        assert 'users' in related, 'the entity has no block of its own'
+        assert set(related) <= set(KEYS) | set(KEYLESS)
+        for name, block in related.items():
+            assert len(block['gradients']) == outputs
+            for by_row in block['gradients']:
+                assert len(by_row) == len(block['rows'])
+                for by_column in by_row:
+                    assert len(by_column) == len(block['columns'])
+            if name in KEYLESS:
+                assert 'keys' not in block, f'{name} is not joined on its key'
+                own_rows = keyless[name][keyless[name]['user_id'] == entity]
+                column = KEYLESS[name]
+                for row in block['rows']:
+                    # The caller's columns only: no instance_id, no __node_id.
+                    assert set(row) <= set(keyless[name].columns)
+                    assert int(row['user_id']) == entity
+                    assert row[column] in set(own_rows[column])
+                continue
+            assert 'keys' in block, f'{name} has a key and came back without'
+            assert len(block['keys']) == len(block['rows'])
+            for row_key, row in zip(block['keys'], block['rows'], strict=True):
+                # The caller's columns only: no instance_id, no __node_id.
+                assert set(row) <= {KEYS[name], *graph[name].columns}
+                assert int(row[KEYS[name]]) == int(row_key)
+                assert int(row['user_id']) == entity
+                sent = graph[name].loc[int(row_key)]
+                assert row['segment'] == sent['segment']
+        assert [int(one) for one in related['users']['keys']] == [entity]
+
+    flat = result.explanations.to_pandas()
+    assert list(flat.columns) == [
+        'id',
+        'table',
+        'hop',
+        'key',
+        'row',
+        'output',
+        'column',
+        'gradient',
+    ]
+    assert 'instance' not in set(flat['table'])
+    assert set(int(one) for one in flat['id']) == set(asked)
+    own = flat[flat['table'] == 'users']
+    assert len(own), "the entity's own table has no gradient"
+    assert (own['hop'] == 0).all()
+    assert [int(one) for one in own['key']] == [int(one) for one in own['id']]
+    others = flat[flat['table'] != 'users']
+    assert others['hop'].notna().all()
+    assert (others['hop'] >= 1).all()
+    unkeyed = flat[flat['table'].isin(KEYLESS)]
+    assert unkeyed['key'].isna().all()
+    assert (unkeyed['hop'] == 1).all()
+
+
+@requires_relational
+def test_every_entity_is_explained_with_its_own_related_rows(
+    client, binary_query
+):
+    """Several entities in one call each get an explanation of their own,
+    whose related rows are the ones sent for that entity.
+
+    Assumptions:
+    - The NIM explains every predict row, both probabilities of a binary
+      target.
+    - Keys come back only for a join column: ``users`` (joined on
+      ``user_id``) carries ``keys``; ``orders`` (``order_id`` joins nothing)
+      and ``events`` (no primary key) carry ``rows`` and no ``keys``, so
+      both kinds of related block are read back.
+    """
+    asked = [0, 1, 2, 3]
+    request = binary_query.materialize(indices=asked)
+    assert len(request.payloads) == 1
+
+    result = client.predict(request, model=KumoRelational(), outputs=EXPLAIN)
+
+    assert_explained_as_sent(result, asked)
+
+
+@requires_relational
+def test_a_request_sent_in_several_calls_explains_every_entity(
+    client, binary_query
+):
+    """A request over the per-call cap is sent in calls that each number
+    their rows from 0, and every entity still gets one entry, with its own
+    related rows, keyed only where the key is a join column.
+
+    Assumptions:
+    - Keys come back only for a join column, so only ``users`` has them;
+      ``orders`` and ``events`` rows are checked by entity and value rather
+      than by key.
+    - ``rows_per_call=2`` stands in for the cap, as in the batching test
+      above, and splits eight entities into four calls.
+    """
+    import warnings
+
+    asked = list(range(8))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = binary_query.materialize(indices=asked, rows_per_call=2)
+        result = client.predict(
+            request, model=KumoRelational(), outputs=EXPLAIN
+        )
+
+    assert len(request.payloads) == 4
+    assert_explained_as_sent(result, asked)

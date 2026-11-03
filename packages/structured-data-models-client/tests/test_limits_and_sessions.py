@@ -57,7 +57,6 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
-    assert RELATIONAL_LIMITS['explanation_predict_rows'] == 1
     assert RELATIONAL_LIMITS['hops_max'] == 6
     assert RELATIONAL_LIMITS['tables_max'] == 15
 
@@ -71,33 +70,28 @@ def test_num_hops_must_be_a_whole_number(bad):
     assert error.value.code == 'INVALID_REQUEST'
 
 
-def test_an_explanation_covering_more_than_one_entity_is_refused():
-    """The model explains one entity at a time; more gets an opaque 500."""
-    request = _Gathered(payload(predict_rows=4, context_rows=100))
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(
-            RelationalAdapter().prediction_plan(
-                request, ('prediction', 'explanation')
-            )
-        )
-    assert 'one at a time' in str(error.value)
+def test_explains_large_context():
+    """An explanation over a 5,000-row context is sent.
 
-
-def test_an_explanation_over_the_smaller_context_budget_is_refused():
-    """Explaining forces the smaller budget, which caps context at 1,000."""
+    Assumptions:
+    - The payload scores one entity.
+    - The SDM NIM has no 1,000-row explanation limit.
+    """
     request = _Gathered(payload(predict_rows=1, context_rows=5_000))
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(
-            RelationalAdapter().prediction_plan(
-                request, ('prediction', 'explanation')
-            )
+    plans = list(
+        RelationalAdapter().prediction_plan(
+            request, ('prediction', 'explanation')
         )
-    message = str(error.value)
-    assert 'num_context_samples' in message
-    assert '1,000' in message
+    )
+    assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
-def test_an_explanation_within_both_limits_is_allowed():
+def test_an_explanation_over_a_small_context_is_sent():
+    """An explanation over a 500-row context is sent in one call.
+
+    Assumptions:
+    - The payload scores one entity.
+    """
     request = _Gathered(payload(predict_rows=1, context_rows=500))
     plans = list(
         RelationalAdapter().prediction_plan(
@@ -108,8 +102,13 @@ def test_an_explanation_within_both_limits_is_allowed():
     assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
-def test_a_prediction_without_an_explanation_is_not_held_to_those_limits():
-    """Both caps are explanation-only; an ordinary batch is unaffected."""
+def test_a_prediction_of_many_rows_over_a_large_context_is_one_call():
+    """An ordinary batch of 500 rows over a 5,000-row context is sent as it
+    was gathered, in one call.
+
+    Assumptions:
+    - The request was gathered as one payload, within every per-call cap.
+    """
     request = _Gathered(payload(predict_rows=500, context_rows=5_000))
     plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
     assert len(plans) == 1
@@ -243,13 +242,6 @@ def test_the_preflight_runs_through_a_real_materialized_request():
     plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
     assert len(plans) == 1
     assert plans[0]['model'] == 'kumo-relational'
-
-    with pytest.raises(UnsupportedRequestError):
-        list(
-            RelationalAdapter().prediction_plan(
-                request, ('prediction', 'explanation')
-            )
-        )
 
 
 def gathered_in_calls(*, calls: int, context_rows: int):
@@ -508,7 +500,7 @@ def test_a_session_refuses_a_request_asked_as_several_questions():
 
 def test_a_session_scoring_call_carries_the_inference_block():
     """The contract's SessionPredictionRequest lists `inference`; dropping it
-    made explanations unreachable through a session, because the endpoint only
+    made explanations unreachable through a session on a deployment that only
     explains when inference.run_mode is 'fast'."""
     pytest.importorskip('sdm_relational_engine')
     from sdm_client.adapters.relational import _SESSION_SCORING

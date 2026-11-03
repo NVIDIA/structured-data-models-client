@@ -244,8 +244,47 @@ def test_the_entity_key_is_carried_when_the_model_has_one():
 
 def test_an_explanation_is_absent_rather_than_a_different_return_type():
     result = result_with({'row_index': 0, 'prediction': 1})
-    assert result.explanation is None
+    assert result.explanations == {}
     assert isinstance(result.to_pandas(), pd.DataFrame)
+
+
+_RAW = {'format': 'sdm_gradient_v1', 'details': {'outputs': []}}
+
+
+def test_the_deprecated_explanation_is_the_first_records_raw_one():
+    """result.explanation warns and returns the first explained record's raw dict."""
+    result = result_with(
+        {'row_index': 0, 'prediction': 1},
+        {'row_index': 1, 'prediction': 0, 'explanation': _RAW},
+        {'row_index': 2, 'prediction': 1, 'explanation': {'format': 'x'}},
+    )
+    with pytest.warns(
+        DeprecationWarning, match=r'use result\.explanations.*2\.0\.0'
+    ):
+        assert result.explanation == _RAW
+
+
+def test_the_deprecated_explanation_is_none_and_still_warns_when_none_came():
+    """result.explanation warns and returns None when no record is explained."""
+    result = result_with({'row_index': 0, 'prediction': 1})
+    with pytest.warns(
+        DeprecationWarning, match=r'result\.explanation is deprecated'
+    ):
+        assert result.explanation is None
+
+
+def test_the_deprecated_explanation_keyword_is_accepted_and_read_back():
+    """explanation= warns, is what result.explanation returns, and leaves explanations alone."""
+    with pytest.warns(DeprecationWarning, match=r'pass explanations=.*2\.0\.0'):
+        result = PredictionResult(
+            model='kumo-tabular',
+            request_id='r-1',
+            items=[PredictionItem.from_dict({'row_index': 0, 'prediction': 1})],
+            explanation=_RAW,
+        )
+    with pytest.warns(DeprecationWarning):
+        assert result.explanation == _RAW
+    assert result.explanations == {}
 
 
 def test_quantiles_are_spread_under_a_readable_prefix():
@@ -325,7 +364,7 @@ def forecast_through_the_client(explanations, requested):
                 PredictionItem(row_index=0, prediction=1.0, forecast_step=None)
             ],
             outputs=tuple(requested),
-            explanation=held,
+            explanations=held,
         )
         for held in explanations
     ]
@@ -346,7 +385,7 @@ def test_a_forecast_step_that_carries_no_explanation_is_named():
     answer carries an explanation sees the step that did and says nothing
     about the one that did not."""
     said = forecast_through_the_client(
-        [{'cohorts': ['a']}, None], ['prediction', 'explanation']
+        [{0: {'outputs': []}}, None], ['prediction', 'explanation']
     )
 
     assert any('step 2 carries none' in message for message in said)
@@ -354,7 +393,8 @@ def test_a_forecast_step_that_carries_no_explanation_is_named():
 
 def test_a_forecast_whose_steps_all_explain_is_not_reported():
     said = forecast_through_the_client(
-        [{'cohorts': ['a']}, {'cohorts': ['b']}], ['prediction', 'explanation']
+        [{0: {'outputs': []}}, {0: {'outputs': []}}],
+        ['prediction', 'explanation'],
     )
 
     assert not any('carries none' in message for message in said)
@@ -362,7 +402,7 @@ def test_a_forecast_whose_steps_all_explain_is_not_reported():
 
 def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported():
     said = forecast_through_the_client(
-        [{'cohorts': ['a']}, None], ['prediction']
+        [{0: {'outputs': []}}, None], ['prediction']
     )
 
     assert said == []

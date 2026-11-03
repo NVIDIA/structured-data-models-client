@@ -113,6 +113,29 @@ labels come from, so a ranking and a forecast are asked with `predict()` and
 `fit()` refuses them.
 
 An explanation is asked for as an output, `outputs=[..., 'explanation']`, never
-an `explain=` argument, and read from `result.explanation`. It covers one
-scored row at a time. A ranking refuses it locally, and the shipping endpoint
-refuses it everywhere else, so treat `result.explanation` as possibly `None`.
+an `explain=` argument, and read from `result.explanations`. It covers every
+scored row, with no row limit. `result.explanations` maps each row's key to its
+explanation, the same key that identifies the row in `to_pandas()`: the
+entity's `id`, or `(id, forecast_step)` on a forecast, since a forecast is
+keyed by the pair. It is kept out of `to_pandas()` itself.
+
+An entry holds `outputs`, the explained scores in order, and `related`, one
+block per table the client gathered for that entity. The entity's own row is
+one of those blocks, under its table's name, such as `related['users']`, at
+hop 0.
+A block always carries `rows`, each row's values as sent, with `columns` and
+`gradients` as `[output][row][column]`, aligned with those rows. `keys` is
+present when the table's key column is one the model receives, i.e. a column a
+relationship joins on; otherwise rows are identified by their values.
+
+`columns` are the model's preprocessed numerical columns: categoricals and
+datetimes may appear as derived columns, and a table without numerical
+features gives an empty list. The context rows get no gradients. A row reached
+through several paths appears once, with its total effect through all of them.
+`result.explanations.to_pandas()` flattens every entry into one line per (row,
+output, column), with `hop`, how many links the row is from the entity. The
+entity's own table is hop 0.
+
+A ranking refuses an explanation locally, and the shipping endpoint refuses it
+everywhere else, so treat `result.explanations` as possibly empty.
+`SDMClient.in_process()` serves it outside a ranking.

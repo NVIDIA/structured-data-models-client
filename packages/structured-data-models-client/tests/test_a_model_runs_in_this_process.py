@@ -431,6 +431,74 @@ def test_an_output_option_is_refused_before_the_model_runs(
     assert ran == []
 
 
+@pytest.mark.parametrize('model', ['tabular', 'relational'])
+def test_an_explanation_is_answered_in_this_process(request, model):
+    """A model in this process explains each row it answers, as a NIM does,
+    rather than refusing ``'explanation'``.
+
+    Assumptions:
+    - The client sends ``'explanation'``, since both models declare it.
+    - Small random-weight models stand in for the published ones.
+    """
+    served = request.getfixturevalue(model)
+    if model == 'tabular':
+        frame = people()[['person_id', 'age', 'visits', 'churn']]
+        asked = Request(
+            context=frame.iloc[:45],
+            predict=frame.iloc[45:].drop(columns=['churn']),
+            target='churn',
+            task='classification',
+        )
+        handle = KumoTabular()
+    else:
+        asked = PredictiveQuery(BINARY, graph()).materialize(indices=[0, 1])
+        handle = KumoRelational()
+
+    with SDMClient.in_process(served) as client:
+        result = client.predict(
+            asked, model=handle, outputs=['prediction', 'explanation']
+        )
+
+    assert len(result.explanations) == len(result) > 0
+
+
+def test_an_output_the_model_does_not_produce_is_refused_before_it_loads(
+    sdm, monkeypatch
+):
+    """An output this process does not produce is refused before the model's
+    weights are loaded, since a first load is a download.
+
+    Assumptions:
+    - The client was opened with no model, so it loads one on first use.
+    - Constructing ``sdm.models.KumoTabular`` is replaced by a stub that
+      records the call; any call means the weights were loaded.
+    - ``'quantiles'`` passes the client's own checks and is not produced
+      for a classification in this process.
+    """
+    loads = []
+    monkeypatch.setattr(
+        sdm.models, 'KumoTabular', lambda **kwargs: loads.append(kwargs)
+    )
+    frame = people()[['person_id', 'age', 'visits', 'churn']]
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+    )
+    with SDMClient.in_process() as client:
+        error = refused(
+            lambda: client.predict(
+                request,
+                model=KumoTabular(),
+                outputs=['prediction', 'quantiles'],
+            )
+        )
+
+    assert error.code == 'UNSUPPORTED_OUTPUT'
+    assert loads == []
+
+
 def test_releasing_a_session_does_not_wait_for_a_model_to_finish(
     tabular, monkeypatch
 ):

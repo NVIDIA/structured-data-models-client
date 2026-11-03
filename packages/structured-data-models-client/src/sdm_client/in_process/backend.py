@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import dataclasses
 import sys
 import threading
 import uuid
@@ -24,7 +25,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.in_process.answers import QUANTILE_LEVELS, classified, regressed
+from sdm_client.explanations import GradientConverter
+from sdm_client.in_process.answers import (
+    QUANTILE_LEVELS,
+    class_order,
+    classified,
+    interpolated,
+    point,
+    regressed,
+)
 from sdm_client.in_process.columns import Context
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
@@ -129,12 +138,17 @@ class InProcessBackend:
         outputs: tuple[str, ...],
     ) -> PredictionResult:
         with self._running():
-            served, model = self._serving(payload['model'])
             task = payload['task']
-            fields = _fields(served, model, task['kind'], payload)
+            # Refused before the model is loaded: a first load is a download.
+            fields = _fields(
+                self._reader(payload['model']), task['kind'], payload
+            )
+            served, model = self._serving(payload['model'])
+            _check_loaded_for(served, model, task['kind'])
             context = served.context(payload)
             query = served.query(context, payload, payload['schema'])
-            answer = _run(_fit(model, context), query)
+            fitted = _fit(model, context)
+            answer = _run(fitted, query)
             items = _items(
                 served,
                 task,
@@ -144,6 +158,10 @@ class InProcessBackend:
                 answer,
                 fields,
             )
+            if 'explanation' in fields:
+                items = _explained(
+                    items, fitted, query, context, task['kind'], payload, fields
+                )
         return adapter.answered(
             items,
             outputs,
@@ -157,8 +175,10 @@ class InProcessBackend:
     ) -> str:
         r"""Fit the context once, to be scored against until released."""
         with self._running():
+            kind = payload['task']['kind']
+            _fields(self._reader(payload['model']), kind, payload)
             served, model = self._serving(payload['model'])
-            _fields(served, model, payload['task']['kind'], payload)
+            _check_loaded_for(served, model, kind)
             context = served.context(payload)
             fitted = _fit(model, context)
             session_id = uuid.uuid4().hex
@@ -190,7 +210,8 @@ class InProcessBackend:
                     code='SESSION_NOT_FOUND',
                 )
             served, task = session.served, session.task
-            fields = _fields(served, session.fitted, task['kind'], payload)
+            fields = _fields(served, task['kind'], payload)
+            _check_loaded_for(served, session.fitted, task['kind'])
             served.check_inference(
                 payload.get('inference') or {}, task, settled=True
             )
@@ -205,6 +226,16 @@ class InProcessBackend:
                 answer,
                 fields,
             )
+            if 'explanation' in fields:
+                items = _explained(
+                    items,
+                    session.fitted,
+                    query,
+                    session.context,
+                    task['kind'],
+                    payload,
+                    fields,
+                )
         return adapter.answered(
             items,
             outputs,
@@ -218,6 +249,20 @@ class InProcessBackend:
         with self._state:
             self._require_open()
             self._sessions.pop(session_id, None)
+
+    def _reader(self, model_id: str) -> Tabular | Relational:
+        r"""What reads requests for ``model_id``, known without loading it."""
+        served = _SERVED.get(model_id)
+        if served is None:
+            raise self._not_served(model_id)
+        return served
+
+    def _not_served(self, model_id: str) -> StructuredDataError:
+        return StructuredDataError(
+            f'{model_id} is not served by this client, which was opened '
+            f'with {self.list_models()} only',
+            code='INVALID_CONFIGURATION',
+        )
 
     def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
@@ -236,11 +281,7 @@ class InProcessBackend:
                 self._require_open()
                 self._models[model_id] = model
         if model is None or served is None:
-            raise StructuredDataError(
-                f'{model_id} is not served by this client, which was opened '
-                f'with {self.list_models()} only',
-                code='INVALID_CONFIGURATION',
-            )
+            raise self._not_served(model_id)
         if model.training:
             raise StructuredDataError(
                 f'the {served.model_id} model is in training mode, and scores '
@@ -346,18 +387,24 @@ def _request_id(payload: Mapping[str, Any]) -> str:
     return str((payload.get('metadata') or {}).get('request_id') or '')
 
 
-def _check_task(served: Tabular | Relational, model: Any, kind: str) -> None:
-    r"""Refuse a task this model does not answer, or was loaded without.
-
-    A model can be loaded for classification or regression alone, which a
-    NIM's never is, so that is asked of the model rather than of its kind.
-    """
+def _check_task(served: Tabular | Relational, kind: str) -> None:
+    r"""Refuse a task this model does not answer."""
     if kind not in served.outputs:
         raise StructuredDataError(
             f'{served.model_id} does not answer {kind!r}; it answers '
             f'{sorted(served.outputs)}',
             code='UNSUPPORTED_TASK',
         )
+
+
+def _check_loaded_for(
+    served: Tabular | Relational, model: Any, kind: str
+) -> None:
+    r"""Refuse a task this model was loaded without.
+
+    A model can be loaded for classification or regression alone, which a
+    NIM's never is, so that is asked of the model rather than of its kind.
+    """
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)
     if needed not in loaded:
@@ -371,13 +418,12 @@ def _check_task(served: Tabular | Relational, model: Any, kind: str) -> None:
 
 def _fields(
     served: Tabular | Relational,
-    model: Any,
     kind: str,
     payload: Mapping[str, Any],
 ) -> list[str]:
     r"""The fields asked for, refused where this model does not produce
-    them for this task."""
-    _check_task(served, model, kind)
+    them for this task. Needs no loaded model, so it runs before one is."""
+    _check_task(served, kind)
     output = payload.get('output') or {}
     fields = list(output.get('fields') or ['prediction'])
     unsupported = [name for name in fields if name not in served.outputs[kind]]
@@ -448,12 +494,14 @@ def _fit(model: Any, context: Context) -> Any:
 
 
 def _run(fitted: Any, query: tuple[Any, Any]) -> Any:
-    x, related = query
     device = _placement(fitted)
     with _autocast(device):
-        return fitted.predict(
-            x.to(device), None if related is None else related.to(device)
-        )
+        return fitted.predict(*_placed(query, device))
+
+
+def _placed(query: tuple[Any, Any], device: Any) -> tuple[Any, Any]:
+    x, related = query
+    return x.to(device), None if related is None else related.to(device)
 
 
 def _placement(model: Any) -> Any:
@@ -486,3 +534,90 @@ def _items(
     if task['kind'] != 'regression':
         return classified(answer, context.encoded, context.labels, ids, fields)
     return regressed(answer, ids, fields, _statistic(payload), _levels(payload))
+
+
+def _explained(
+    items: list[Any],
+    fitted: Any,
+    query: tuple[Any, Any],
+    context: Context,
+    kind: str,
+    payload: Mapping[str, Any],
+    fields: Sequence[str],
+) -> list[Any]:
+    r"""``items``, each carrying the explanation a NIM sends for its row."""
+    import torch
+    from sdm.explain import GradientExplainer
+
+    if kind != 'regression':
+        outputs = GradientConverter.class_outputs(context.labels)
+        reported = _Reported(
+            fitted,
+            lambda numbers, output: numbers[
+                ..., class_order(output, context.encoded)
+            ],
+        )
+    else:
+        statistic = _statistic(payload)
+        levels = list(_levels(payload)) if 'quantiles' in fields else []
+        outputs = GradientConverter.regression_outputs(statistic, levels)
+        reported = _Reported(
+            fitted,
+            lambda numbers, _: torch.stack(
+                [
+                    point(numbers, statistic),
+                    *(interpolated(numbers, level) for level in levels),
+                ],
+                dim=-1,
+            ),
+        )
+    device = _placement(fitted)
+    x, related = _placed(query, device)
+    with (
+        _autocast(device),
+        torch.inference_mode(False),
+        torch.enable_grad(),
+    ):
+        instance, attributed = GradientExplainer().explain(reported, x, related)
+    sent = payload['predict'].get('related_tables') or {}
+    explained = GradientConverter.convert(
+        outputs,
+        instance,
+        attributed,
+        rows=len(payload['predict']['instance_table']['rows']),
+        related_rows={name: len(table['rows']) for name, table in sent.items()},
+        owners=None
+        if related is None
+        else GradientConverter.entity_rows(x, related),
+    )
+    return [
+        dataclasses.replace(item, explanation=record)
+        for item, record in zip(items, explained, strict=True)
+    ]
+
+
+class _Reported:
+    r"""A fitted model answering only the scores a response reports, so the
+    explainer differentiates those and nothing else, as a NIM's does."""
+
+    def __init__(self, fitted: Any, scores: Any) -> None:
+        self._fitted = fitted
+        self._scores = scores
+
+    @property
+    def _cache(self) -> Any:
+        return self._fitted._cache
+
+    def predict(
+        self, x: Any, related_tables: Any = None, *, callbacks: Any = None
+    ) -> Any:
+        from sdm import TableTensor
+
+        output = self._fitted.predict(
+            x=x, related_tables=related_tables, callbacks=callbacks
+        )
+        scores = self._scores(output.numerical, output)
+        return TableTensor(
+            columns={'numerical': [str(i) for i in range(scores.shape[-1])]},
+            numerical=scores,
+        )

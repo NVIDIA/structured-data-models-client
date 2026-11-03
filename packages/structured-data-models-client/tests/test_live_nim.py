@@ -225,3 +225,106 @@ def test_a_tabular_question_runs_from_predictive_query_text(client):
     frame = client.predict(request, model=KumoTabular()).to_pandas()
     assert len(frame) == 3
     assert 'prediction' in frame.columns
+
+
+EXPLAIN = ['prediction', 'probabilities', 'explanation']
+FLAT_COLUMNS = ['table', 'hop', 'key', 'row', 'output', 'column', 'gradient']
+
+
+def explained_by_tabular(client, *, keyed: bool = True):
+    """Score ``unlabelled()`` with explanations, without ``row_id`` when
+    ``keyed`` is false."""
+    context, predict = labelled(), unlabelled()
+    if not keyed:
+        context = context.drop(columns='row_id')
+        predict = predict.drop(columns='row_id')
+    request = Request(
+        context=context,
+        predict=predict,
+        target='churn',
+        task='classification',
+    )
+    return client.predict(request, model=KumoTabular(), outputs=EXPLAIN)
+
+
+def assert_instance_only(entry):
+    """A kumo-tabular entry: its outputs and its own row's gradients,
+    ``[output][column]``, and no related tables."""
+    assert set(entry) == {'outputs', 'instance'}
+    # Both class probabilities of a binary target.
+    assert len(entry['outputs']) == 2
+    instance = entry['instance']
+    assert set(instance) == {'columns', 'gradients'}
+    assert instance['columns'], 'no column was explained'
+    assert len(instance['gradients']) == len(entry['outputs'])
+    for by_column in instance['gradients']:
+        assert len(by_column) == len(instance['columns'])
+
+
+@requires_tabular
+def test_every_scored_row_is_explained_under_its_id(client):
+    """Each of several rows scored in one call gets its own explanation, under
+    the id the frame gives it, holding only its own row's gradients.
+
+    Assumptions:
+    - ``row_id`` is the rows' key, so the frame names them 900, 901, 902.
+    - The NIM explains every scored row and both class probabilities.
+    """
+    result = explained_by_tabular(client)
+    frame = result.to_pandas()
+
+    assert sorted(result.explanations) == sorted(frame['id'])
+    assert sorted(result.explanations) == [900, 901, 902]
+    for entry in result.explanations.values():
+        assert_instance_only(entry)
+    assert 'explanation' not in frame.columns
+
+
+@requires_tabular
+def test_the_flat_explanation_table_holds_each_rows_own_block(client):
+    """``to_pandas()`` gives one line per (row, output, column), all of the
+    row's own block at hop 0, named by the frame's id and output columns.
+
+    Assumptions:
+    - ``row_id`` is the rows' key, so each line's ``key`` is the row's id.
+    """
+    result = explained_by_tabular(client)
+    frame = result.to_pandas()
+    flat = result.explanations.to_pandas()
+
+    assert list(flat.columns) == ['id', *FLAT_COLUMNS]
+    assert len(flat) == sum(
+        len(entry['outputs']) * len(entry['instance']['columns'])
+        for entry in result.explanations.values()
+    )
+    assert set(flat['table']) == {'instance'}
+    assert (flat['hop'] == 0).all()
+    assert (flat['row'] == 0).all()
+    assert list(flat['key']) == list(flat['id'])
+    assert set(flat['id']) == {900, 901, 902}
+    assert set(flat['output']) <= set(frame.columns)
+    assert flat['gradient'].notna().all()
+
+
+@requires_tabular
+def test_rows_without_a_key_are_explained_under_their_row_index(client):
+    """With no key column, each row's explanation is under its row_index, in
+    the same shape.
+
+    Assumptions:
+    - The rows carry no ``row_id``, so the NIM sends no id.
+    """
+    result = explained_by_tabular(client, keyed=False)
+    frame = result.to_pandas()
+
+    assert sorted(result.explanations) == list(frame['row_index'])
+    assert sorted(result.explanations) == [0, 1, 2]
+    for entry in result.explanations.values():
+        assert_instance_only(entry)
+    assert 'explanation' not in frame.columns
+
+    flat = result.explanations.to_pandas()
+    assert list(flat.columns) == ['row_index', *FLAT_COLUMNS]
+    assert set(flat['row_index']) == {0, 1, 2}
+    assert set(flat['table']) == {'instance'}
+    assert (flat['hop'] == 0).all()
