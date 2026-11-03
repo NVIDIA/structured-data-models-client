@@ -3559,9 +3559,54 @@
       },
       "gate": "in-process",
       "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate."
+    },
+    {
+      "id": "schema-visualization",
+      "apis": {
+        "python": [
+          "Schema.to_mermaid",
+          "Schema.to_html",
+          "Schema.visualize"
+        ],
+        "java": [
+          "Schema.toMermaid",
+          "Schema.toHtml",
+          "Schema.visualize"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_visualization.py::test_empty_schema_public_journey",
+          "packages/structured-data-models-client/tests/test_visualization.py::test_metadata_keys_edges_and_safe_labels",
+          "packages/structured-data-models-client/tests/test_visualization.py::test_image_errors_do_not_disclose_schema"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#emptySchemaExportsWithoutNativeOrNetwork",
+          "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#sharedMetadataRetainsKeysAndEscapesNames",
+          "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#packagedRendererMatchesPinnedUpstream"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "schema-notebook-display",
+      "apis": {
+        "python": [
+          "Schema.visualize"
+        ],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_visualization.py::test_notebook_display_is_sandboxed",
+          "packages/structured-data-models-client/tests/test_visualization.py::test_streamlit_display_and_restricted_fallback"
+        ],
+        "java": []
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "73a05cddb755f97bc1e97ae58bdf21bd00498ff6e7a93ceae5b1f400b2fe63e4",
+  "public_api_snapshot_sha256": "9bb1348c34457796d599b2ae87378435ba628ce9f397ddd6273598a06e675474",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4040,6 +4085,15 @@
       },
       "sdm_client.SDMClient.in_process": {
         "capability": "in-process-models"
+      },
+      "sdm_client.Schema.to_mermaid": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.to_html": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.visualize": {
+        "capability": "schema-visualization"
       }
     },
     "java": {
@@ -4963,6 +5017,24 @@
       },
       "com.nvidia.sdm.Table#public java.util.OptionalLong duplicateKeys();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toMermaid();": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toMermaid(boolean);": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toHtml();": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toHtml(boolean);": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path) throws java.io.IOException;": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path, boolean) throws java.io.IOException;": {
+        "capability": "schema-visualization"
       }
     }
   },
@@ -4996,6 +5068,11 @@
       "capability": "in-process-models",
       "language": "java",
       "reason": "Runs the Python structured-data-models/PyTorch runtime in the caller process; Java uses the same models through endpoints."
+    },
+    {
+      "capability": "schema-notebook-display",
+      "language": "java",
+      "reason": "Automatic notebook display and BytesIO export are Python-specific; Java provides equivalent source, HTML and explicit file exports."
     }
   ],
   "contract_changes": [
@@ -5213,6 +5290,31 @@
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "public_api_snapshot_sha256",
       "reason": "Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_contracts/schema-visualization",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_contracts/schema-notebook-display",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_exceptions",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_inventory",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
     }
   ],
   "capabilities": [

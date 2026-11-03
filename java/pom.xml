@@ -195,6 +195,10 @@
   <build>
     <resources>
       <resource>
+        <directory>${project.basedir}/../packages/structured-data-models-client/src/sdm_client/assets</directory>
+        <targetPath>com/nvidia/sdm/visualization</targetPath>
+      </resource>
+      <resource>
         <directory>${sdm.natives}</directory>
         <targetPath>com/nvidia/sdm/native</targetPath>
         <includes>
