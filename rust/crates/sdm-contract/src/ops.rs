@@ -46,6 +46,7 @@ pub enum Operation {
     ReadRequestSplit(crate::split::ReadRequestSplit),
     MergeResults(crate::result::MergeResults),
     FeatureImportance(crate::direct::DirectInput),
+    PrepareTimeSeries(crate::frames::PrepareTimeSeries),
     PlanResultMerge(crate::direct::DirectInput),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
@@ -121,6 +122,7 @@ impl Operation {
     /// The operation's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
+            Operation::PrepareTimeSeries(_) => "prepare_time_series",
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::FeatureImportance(_) => "feature_importance",
             Operation::PlanResultMerge(_) => "plan_result_merge",
@@ -194,6 +196,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::PrepareTimeSeries(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadResultItems(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
             Operation::MergeResults(v) => {
@@ -1804,6 +1807,10 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "PrepareTimeSeries.input")]
+    pub prepare_time_series_input: crate::frames::TimeSeriesOptions,
+    #[schemars(rename = "DirectValue.prepare_time_series")]
+    pub prepare_time_series_output: crate::frames::TimeSeriesPrepared,
     #[schemars(rename = "FeatureImportance.input")]
     pub feature_importance_input: crate::result::FeatureImportanceInput,
     #[schemars(rename = "DirectValue.feature_importance")]

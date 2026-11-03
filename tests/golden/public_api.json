@@ -117,6 +117,7 @@
       "FeatureImportance",
       "FeatureImportanceRow",
       "FittedModel",
+      "ForecastInput",
       "KumoRelational",
       "KumoTabular",
       "LinkMetadata",
@@ -144,7 +145,8 @@
       "Task",
       "UnknownModelError",
       "UnsupportedRequestError",
-      "__version__"
+      "__version__",
+      "build_timeseries"
     ],
     "members": {
       "Column": {
@@ -218,6 +220,13 @@
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
         "signature": "() -> 'None'"
+      },
+      "ForecastInput": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(schema: 'Schema', query: 'PredictiveQuery', anchor_time: 'pd.Timestamp | None') -> None"
       },
       "KumoRelational": {
         "bases": [
@@ -533,6 +542,10 @@
       "__version__": {
         "kind": "str",
         "value": "2.0.0rc1"
+      },
+      "build_timeseries": {
+        "kind": "callable",
+        "signature": "(frame: 'pd.DataFrame | pa.Table', timeseries_col: 'str', *, timestamps_col: 'str | None' = None, time_delta: 'pd.Timedelta | None' = None, anchor_time: 'pd.Timestamp | None' = None, entity_col: 'str | None' = None, num_timeframes: 'int' = 1) -> 'ForecastInput'"
       }
     }
   },

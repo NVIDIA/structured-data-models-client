@@ -61,6 +61,13 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::PrepareTimeSeries(request) => {
+            let input = take_json(&mut attachments, request.input)?;
+            let Some(Attachment::Arrow(table)) = attachments.remove(&request.table) else {
+                return Err(internal("time-series input is not Arrow"));
+            };
+            Run::new(move |asker| async move { crate::timeseries::prepare(&asker, input, table) })
+        }
         Operation::FeatureImportance(request) => {
             let input: sdm_contract::result::FeatureImportanceInput =
                 take_json(&mut attachments, request.input)?;

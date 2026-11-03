@@ -443,6 +443,10 @@ pub fn template(sentence: Sentence) -> Template {
         S::TabularRowRepeated => said(r#"the response answers row {index} more than once"#),
         S::TabularRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
         S::RequestSplitInvalid => said("cannot inspect request data: {reason}"),
+        S::TimeSeriesInput => said(r#"{reason}"#),
+        S::TimeSeriesIrregular => said(
+            "History intervals differ; using their median. Pass time_delta explicitly to override.",
+        ),
         S::FeatureImportanceScore => said("explanation score must be finite numeric attribution"),
         S::ResultMergeEmpty => said("no parts to merge"),
         S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
