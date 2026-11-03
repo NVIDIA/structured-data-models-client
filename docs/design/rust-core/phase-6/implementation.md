@@ -30,10 +30,10 @@ See [completion evidence](completion.md) for scope, reviews and remaining audit 
 
 | Work | Branch | Status |
 |---|---|---|
-| Inference and safe edits | `rust-core-phase-6-inference` | Contract approved; implementation in progress |
+| Inference and safe edits | `rust-core-phase-6-inference` | Implementation checkpoint; constructor provenance review and native validation await contract 60 |
 | Time-series preparation | `rust-core-phase-6-timeseries` | Contract approved; implementation in progress |
 | Labels-only extraction | `rust-core-phase-6-labels` | Contract approved; implementation in progress |
-| Thorough testing of the first four | `rust-core-phase-6-coverage` | Queued for first worker slot |
+| Thorough testing of the first four | `rust-core-phase-6-coverage` | Worker active; auditing and strengthening public-workflow coverage |
 
 The three designs under `phase-5/api-removal-audit/{inference-edits,timeseries,labels-only}/design.md` define the scope and testing expectations.
 Use existing test infrastructure, focused old-client comparisons and independently calculated expected results; do not rebuild migration instrumentation.
