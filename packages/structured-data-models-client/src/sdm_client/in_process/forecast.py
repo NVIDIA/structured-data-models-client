@@ -116,7 +116,17 @@ class Forecast:
         self, payload: Mapping[str, Any], target: str
     ) -> tuple[Any, Any]:
         r"""The history, split into the series to continue and what else was
-        measured alongside it."""
+        measured alongside it.
+
+        A key names the step rather than measuring anything, so it is not
+        history. The series being forecast is the exception: one whose values
+        happen to be unique is inferred as a key, and dropping it would drop
+        the very column being asked about.
+
+        Nothing measured alongside it is the ordinary case. An empty shape
+        has no column to read a length from, so the history's own length is
+        what says how long it is.
+        """
         spec = payload['schema']['instance_table']
         table = payload['context']['instance_table']
         check_columns(table, spec, 'the history')
@@ -126,11 +136,6 @@ class Forecast:
                 f'series being forecast',
                 code='INVALID_REQUEST',
             )
-        # A key names the step rather than measuring anything, so it is not
-        # history. The target is the exception: it was named as the series to
-        # forecast, and a series of values that happen to be unique is
-        # inferred as a key, which would drop the very column being asked
-        # about.
         keys = key_columns(spec) - {target}
         stypes = {
             name: stype_of(name, spec['columns'][name])
@@ -152,9 +157,6 @@ class Forecast:
         history = Shape.of(spec, {target: stypes[target]}).tensor(
             table, 'the history'
         )
-        # A series with nothing measured alongside it is the ordinary case,
-        # and an empty shape has no column to read a length from, so the
-        # history's own length is what says how long it is.
         alongside = (
             Shape.of(spec, measured).tensor(table, 'the history')
             if measured
@@ -178,7 +180,15 @@ class Forecast:
         fields: Sequence[str],
         generator: Any = None,
     ) -> list[PredictionItem]:
-        r"""Continue the series for as many steps as were asked for."""
+        r"""Continue the series for as many steps as were asked for.
+
+        How many rows the query carries is the horizon, and that does not
+        depend on how long the history is: slicing the history to length
+        capped a long forecast at the number of steps already seen.
+
+        One row is scored, and one answer per step of it, with
+        ``forecast_step`` counting from one as the contract declares it.
+        """
         import torch
 
         target = payload['task']['target']['column_name']
@@ -203,9 +213,6 @@ class Forecast:
             device = generator.device
             history = history.to(device)
             alongside = alongside.to(device)
-        # How many rows the query has is the horizon, and it does not depend
-        # on how long the history is: slicing the history to length capped a
-        # long forecast at the number of steps already seen.
         steps = torch.empty(horizon, 0, device=device)
         out = model(
             alongside,
@@ -221,8 +228,6 @@ class Forecast:
                 'the model answered with a malformed output',
                 code='INTERNAL_ERROR',
             )
-        # One row is scored, and one answer per step of it. `forecast_step`
-        # counts from one, which is what the contract declares it as.
         return [
             PredictionItem(row_index=0, forecast_step=step, prediction=value)
             for step, value in enumerate(forecast.tolist(), start=1)

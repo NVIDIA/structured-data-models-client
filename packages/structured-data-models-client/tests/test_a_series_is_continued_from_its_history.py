@@ -55,11 +55,11 @@ def forecast_of(
 
 
 def test_one_row_per_step_comes_back_in_order(forecast):
+    """One row is scored, and the step counts from one, which is what the
+    contract declares `forecast_step` as."""
     answer = forecast_of(forecast, history(), horizon=6)
 
     assert list(answer.columns) == ['row_index', 'forecast_step', 'prediction']
-    # One row is scored, and the step counts from one, which is what the
-    # contract declares `forecast_step` as.
     assert answer['row_index'].tolist() == [0] * 6
     assert answer['forecast_step'].tolist() == list(range(1, 7))
     assert np.isfinite(answer['prediction']).all()

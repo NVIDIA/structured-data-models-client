@@ -148,6 +148,14 @@ class ForecastAdapter:
     def _envelope(
         self, request: Request, outputs: tuple[str, ...]
     ) -> dict[str, Any]:
+        r"""The request on the wire, refused where it carries no horizon.
+
+        A request without one was built by the constructor that takes a half
+        to score. Those rows are the future, and this model reads nothing
+        about the future: it would discard every value in them and answer
+        from the count alone, which is a different question answered
+        quietly.
+        """
         if request.payloads is not None:
             raise UnsupportedRequestError(
                 f'this request was gathered for another model and carries '
@@ -156,10 +164,6 @@ class ForecastAdapter:
             )
         horizon = getattr(request, 'horizon', None)
         if horizon is None:
-            # Built by the constructor that takes a half to score. Those rows
-            # are the future, and this model reads nothing about the future:
-            # it would discard every value in them and answer from the count
-            # alone, which is a different question answered quietly.
             raise UnsupportedRequestError(
                 f'{self.spec.model_id} forecasts from a history and a number '
                 f'of steps, and reads nothing about the steps themselves. '

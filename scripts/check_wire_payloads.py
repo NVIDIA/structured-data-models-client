@@ -149,13 +149,14 @@ def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
 #: name, and the fields those enums reject them in. The contract describes
 #: what a deployment serves, and no deployment serves these: they run in this
 #: process only. Everything else about such a body is still policed, so an
-#: envelope that is wrong in any other way still fails here.
+#: envelope that is wrong in any other way still fails here. `forecasting`
+#: is absent from this for a reason: it is a kind the contract carries, and
+#: only the model id of one is new.
 NOT_IN_THE_CONTRACT = {
     'kumo-anomaly': {
         'model': 'kumo-anomaly',
         'task.kind': 'anomaly_detection',
     },
-    # `forecasting` is a kind the contract carries; only the id is new.
     'kumo-forecast': {'model': 'kumo-forecast'},
 }
 

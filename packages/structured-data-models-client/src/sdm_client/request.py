@@ -649,7 +649,18 @@ class Request:
         There are no rows to score: the question is about steps that have not
         been measured, so the horizon is a count rather than a frame, and
         nothing known about the future travels, because the model reads
-        nothing about it.
+        nothing about it. The history is what the model is shown, so it is
+        the context; one row is scored, carrying the series being asked
+        about and nothing in it, and the horizon travels as
+        ``task.num_forecasts``, because the contract's own shape is one
+        answer per scored row per horizon.
+
+        A series whose values happen to be unique is inferred as the table's
+        key, and a key names a step rather than measuring anything. Naming
+        the column as the series to forecast settles what it is, and the key
+        falls to whatever inference would have chosen without it: cleared
+        outright, a real identifier beside it was left to be read as
+        history.
 
         Args:
             history: The series so far, one row per step. Must carry
@@ -702,12 +713,6 @@ class Request:
             )
         if schema is None:
             schema = Schema.from_data({entity_table: history})
-            # A series whose values happen to be unique is inferred as the
-            # table's key, and a key names a step rather than measuring
-            # anything. The caller named this column as the series to
-            # forecast, which settles what it is. The key is then whatever
-            # inference would have chosen without it: clearing it outright
-            # left a real identifier beside the target to be read as history.
             table = schema[entity_table]
             if target in _as_key_tuple(table.primary_key):
                 beside = history.drop(columns=[target])
@@ -735,10 +740,6 @@ class Request:
             options={'num_forecasts': horizon},
         )
         request.horizon = horizon
-        # The history is what the model is shown, which is the context. One
-        # row is scored, carrying the series being asked about and nothing in
-        # it, and the horizon travels as `task.num_forecasts`: the contract's
-        # own shape is one answer per scored row per horizon.
         request._context = Split(instance_table=history)
         request._predict = Split(
             instance_table=pd.DataFrame({target: [None]}, dtype='object')

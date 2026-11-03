@@ -187,14 +187,17 @@ KUMO_ANOMALY = ModelSpec(
 
 TFM_MODEL_KUMO_FORECAST = 'kumo-forecast'
 
+#: The model that continues a series beyond its history.
+#:
+#: It holds no session: every call carries the history, the horizon and
+#: nothing held over, because the model fits no context and there is none to
+#: pin.
 KUMO_FORECAST = ModelSpec(
     model_id=TFM_MODEL_KUMO_FORECAST,
     profile=TIMESERIES,
     runtime=RuntimeContract(
         tasks=frozenset({'forecasting'}),
         outputs=frozenset({'prediction'}),
-        # Every call carries the history, the horizon and nothing held over:
-        # the model fits no context, so there is none to pin.
         sessions=False,
         inference_options=frozenset({'alpha', 'k', 'temperature'}),
     ),
