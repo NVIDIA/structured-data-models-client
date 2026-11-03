@@ -30,9 +30,9 @@ See [completion evidence](completion.md) for scope, reviews and remaining audit 
 
 | Work | Branch | Status |
 |---|---|---|
-| Inference and safe edits | `rust-core-phase-6-inference` | Assigned; contract review first |
-| Time-series preparation | `rust-core-phase-6-timeseries` | Assigned; contract review first |
-| Labels-only extraction | `rust-core-phase-6-labels` | Assigned; contract review first |
+| Inference and safe edits | `rust-core-phase-6-inference` | Contract approved; implementation in progress |
+| Time-series preparation | `rust-core-phase-6-timeseries` | Contract approved; implementation in progress |
+| Labels-only extraction | `rust-core-phase-6-labels` | Contract approved; implementation in progress |
 | Thorough testing of the first four | `rust-core-phase-6-coverage` | Queued for first worker slot |
 
 The three designs under `phase-5/api-removal-audit/{inference-edits,timeseries,labels-only}/design.md` define the scope and testing expectations.
@@ -44,3 +44,5 @@ The coordinator serializes contract-version allocation and warm-target ownership
 
 Current allocation: time-series preparation owns contract 60 and the warm native target.
 Inference/labels may develop isolated logic and tests, but must integrate the preceding contract before generating their own version.
+
+Planned subsequent contracts: inference 61, labels 62, each based on the preceding integrated contract.
