@@ -197,9 +197,11 @@ KUMO_FORECAST = ModelSpec(
     profile=TIMESERIES,
     runtime=RuntimeContract(
         tasks=frozenset({'forecasting'}),
-        outputs=frozenset({'prediction'}),
+        outputs=frozenset({'prediction', 'explanation'}),
         sessions=False,
-        inference_options=frozenset({'alpha', 'k', 'temperature'}),
+        inference_options=frozenset(
+            {'alpha', 'k', 'temperature', 'feature_axis'}
+        ),
     ),
 )
 
