@@ -85,7 +85,7 @@ A new goal covers these three efforts; prior restoration evidence remains valid 
 |---|---|---|
 | Connection rebinding | `rust-core-phase-6-rebinding` | Contract approved: detached `with_source` / `withSource`, same backend/namespace/source kind; implementing |
 | Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Contract approved: supplied batch-size control, identical-context session reuse, bounded recovery and centralized retries; implementing |
-| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Contract approved: immutable inference options and explicitly configured host summarizer; implementing |
+| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Reviewed and integrated; 22 Python / 6 Java checks passed; final combined inventory and validation pending |
 
 Each agent submits its precise API/boundary proposal before substantial implementation.
 The coordinator reviews proposals, serializes native contract versions/builds and arranges reciprocal implementation review.

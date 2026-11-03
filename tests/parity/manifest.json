@@ -3833,9 +3833,51 @@
         ]
       },
       "gate": "local"
+    },
+    {
+      "id": "typed-inference-settings",
+      "apis": {
+        "python": [
+          "InferenceConfig"
+        ],
+        "java": [
+          "InferenceConfig"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_settings_summaries.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/SettingsSummariesTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed."
+    },
+    {
+      "id": "explanation-summaries",
+      "apis": {
+        "python": [
+          "ExplanationSummarizer"
+        ],
+        "java": [
+          "ExplanationSummarizer"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_settings_summaries.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/SettingsSummariesTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed."
     }
   ],
-  "public_api_snapshot_sha256": "f5a28934ff3ca943c6c3c1baf5c767214f7af38ca7dc8bdba04d2af11dad006c",
+  "public_api_snapshot_sha256": "284ef118d1edb8bd1311ef134fd83d34c4a4a923283fb85cf84cfa15b2cbb351",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4515,6 +4557,39 @@
       },
       "sdm_client.RelationalTask.step_size_ns": {
         "capability": "custom-examples"
+      },
+      "sdm_client.ExplanationSummarizer": {
+        "capability": "explanation-summaries"
+      },
+      "sdm_client.ExplanationSummarizer.summarize": {
+        "capability": "explanation-summaries"
+      },
+      "sdm_client.InferenceConfig": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.category_shuffle": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.class_shuffle": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.column_shuffle": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.hop_shuffle": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.num_estimators": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.output_type": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.target_transforms": {
+        "capability": "typed-inference-settings"
+      },
+      "sdm_client.InferenceConfig.to_dict": {
+        "capability": "typed-inference-settings"
       }
     },
     "java": {
@@ -6002,6 +6077,63 @@
       },
       "com.nvidia.sdm.RelationalTask#public java.lang.String linkTargetTable();": {
         "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String, java.lang.String, java.time.Duration);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public java.lang.String summarize(com.nvidia.sdm.ExplanationView, java.lang.String, java.lang.Object);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.InferenceConfig": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig#public java.util.Map<java.lang.String, java.lang.Object> toMap();": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig#public static com.nvidia.sdm.InferenceConfig$Builder builder();": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig build();": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder categoryShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder classShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder columnShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder hopShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder numEstimators(int);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder outputType(java.lang.String);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder targetTransforms(java.util.List<java.lang.String>);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
+        "capability": "typed-inference-settings"
       }
     }
   },
@@ -6377,6 +6509,16 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/custom-examples",
       "reason": "Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/explanation-summaries",
+      "reason": "Add reviewed immutable inference settings using Rust validation and explicit opt-in host explanation summaries; both public language APIs have local behavioral tests."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/typed-inference-settings",
+      "reason": "Add reviewed immutable inference settings using Rust validation and explicit opt-in host explanation summaries; both public language APIs have local behavioral tests."
     }
   ],
   "capabilities": [

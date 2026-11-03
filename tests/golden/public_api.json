@@ -113,11 +113,13 @@
     "__all__": [
       "Column",
       "ColumnMetadata",
+      "ExplanationSummarizer",
       "ExplanationView",
       "FeatureImportance",
       "FeatureImportanceRow",
       "FittedModel",
       "ForecastInput",
+      "InferenceConfig",
       "KumoRelational",
       "KumoTabular",
       "LinkMetadata",
@@ -169,6 +171,15 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "ExplanationSummarizer": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "summarize": "(self, view: 'ExplanationView', query: 'str', prediction: 'Any') -> 'str'"
+        },
+        "signature": "(endpoint: 'str', model: 'str', *, api_key: 'str | None' = None, timeout: 'float' = 60.0) -> 'None'"
       },
       "ExplanationView": {
         "bases": [
@@ -229,6 +240,23 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(schema: 'Schema', query: 'PredictiveQuery', anchor_time: 'pd.Timestamp | None') -> None"
+      },
+      "InferenceConfig": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "category_shuffle",
+          "class_shuffle",
+          "column_shuffle",
+          "hop_shuffle",
+          "num_estimators",
+          "output_type",
+          "target_transforms"
+        ],
+        "public_methods": {
+          "to_dict": "(self) -> dict[str, typing.Any]"
+        },
+        "signature": "(num_estimators: int | None = None, column_shuffle: bool | None = None, category_shuffle: bool | None = None, hop_shuffle: bool | None = None, class_shuffle: bool | None = None, target_transforms: collections.abc.Sequence[str | None] | None = None, output_type: str | None = None) -> None"
       },
       "KumoRelational": {
         "bases": [
@@ -453,7 +481,7 @@
           "infer_links": "(self) -> 'Schema'",
           "infer_metadata": "(self) -> 'Schema'",
           "link_report": "(self) -> 'LinkReport'",
-          "materialize_examples": "(self, task: 'RelationalTask', context: 'Any', predict: 'Any', *, num_neighbors: 'Sequence[int] | None' = None, random_seed: 'int' = 42, inference: 'Mapping[str, Any] | None' = None) -> 'Request'",
+          "materialize_examples": "(self, task: 'RelationalTask', context: 'Any', predict: 'Any', *, num_neighbors: 'Sequence[int] | None' = None, random_seed: 'int' = 42, inference: 'Mapping[str, Any] | InferenceConfig | None' = None) -> 'Request'",
           "metadata_report": "(self) -> 'MetadataReport'",
           "print_links": "(self) -> 'None'",
           "print_metadata": "(self) -> 'None'",
