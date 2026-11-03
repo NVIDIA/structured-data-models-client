@@ -84,6 +84,19 @@ class RelationalTest {
             "duplicate_primary_key_rows", 0, "null_time_rows", 0)))));
   }
 
+  @Test void decomposedRequestsRetainSanitizationReport() {
+    Schema schema = fixture(true, true);
+    for (String query : List.of(RANK, FORECAST)) {
+      MaterializeOptions.Builder builder = options(1L, 2L);
+      if (query.equals(RANK)) builder.candidates(List.of(1L, 2L, 3L));
+      Request request = PredictiveQuery.parse(query).materialize(schema, builder.build());
+      assertEquals("available", request.sanitizationReport().status());
+      for (Request part : request.parts().orElseThrow()) {
+        assertEquals(request.sanitizationReport(), part.sanitizationReport());
+      }
+    }
+  }
+
   static final String SCALAR = "PREDICT users.value FOR EACH users.user_id";
   static final String TEMPORAL = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id";
   static final String LINK = "PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id";

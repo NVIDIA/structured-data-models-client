@@ -470,3 +470,25 @@ def test_legacy_saved_requests_report_unavailable_or_not_applicable():
         pickle.loads(pickle.dumps(direct)).sanitization_report.status
         == 'not_applicable'
     )
+
+
+@pytest.mark.parametrize('ranking', [False, True])
+def test_decomposed_requests_retain_sanitization_report(ranking):
+    data = link_schema()
+    text = (
+        'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 2 '
+        if ranking
+        else 'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 2 TIMEFRAMES '
+    ) + 'FOR EACH users.user_id'
+    request = PredictiveQuery(text, data).materialize(
+        indices=[1, 2],
+        random_seed=7,
+        model=KumoRelational(),
+        **({'candidates': [1, 2, 3]} if ranking else {}),
+    )
+    assert request.sanitization_report.status == 'available'
+    assert request.parts
+    assert all(
+        part.sanitization_report == request.sanitization_report
+        for part in request.parts
+    )
