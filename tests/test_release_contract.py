@@ -1236,6 +1236,13 @@ class TestDistributionCoherence:
     def test_every_advertised_extra_of_the_client_resolves_to_a_real_target(
         self,
     ):
+        """Every extra names a distribution this repository publishes, or
+        one of the few it does not.
+
+        databricks-sdk and structured-data-models are imported by the
+        client's own transports, and matplotlib by the one module that draws
+        an answer, so the client is the distribution that declares them.
+        """
         client = _pyproject('structured-data-models-client')['project']
         known = set(_distributions())
         for extra, requirements in client['optional-dependencies'].items():
@@ -1246,10 +1253,6 @@ class TestDistributionCoherence:
                     .split('>=')[0]
                     .strip()
                 )
-                # databricks-sdk and structured-data-models are imported by the
-                # client's own transports, and matplotlib by the one module
-                # that draws an answer, so the client is the distribution that
-                # declares them.
                 assert name in known or name in {
                     'pytest',
                     'requests-mock',

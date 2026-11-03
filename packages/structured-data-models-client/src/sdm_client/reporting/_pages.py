@@ -2,17 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from NVIDIA/Kumo-TS, Kumo-Anomaly/sdk/reporting.py
-# at af74798bbf7d020d3298f545fb9be383560a18ce.
-
 r"""Drawing an anomaly run as a PDF.
 
-The pages are the ones Kumo-TS draws: a score overview, then the signals with
-detections marked on them, then a note on what the score is. The drawing is
-kept as that package wrote it, so a report from this client and a report from
-that one are the same document.
+Three pages: a score overview, then the signals with detections marked on
+them, then a note on what the score is. The drawing is kept as it was
+written, so a report from this client and a report from the research code
+these came from are the same document.
 
-What is new here is the join. That package scores a frame and draws the frame
+What is new here is the join. That code scores a frame and draws the frame
 it scored; this client sends readings somewhere and reads an answer back, so
 the two have to be put together again before anything can be drawn, and
 getting that wrong would draw the wrong rows under the right labels.

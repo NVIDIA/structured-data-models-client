@@ -148,7 +148,17 @@ def _rejoined(
     detected_by: str | Sequence[Any] | np.ndarray,
 ) -> tuple[pd.DataFrame, str, str]:
     r"""``readings`` with each row's score and label put back on it, and
-    what those two columns ended up being called."""
+    what those two columns ended up being called.
+
+    The readings keep their own index: a DatetimeIndex is an axis the pages
+    plot against, and resetting it drew dates a month apart as evenly spaced
+    steps. ``row_index`` is a position in the frame that was sent rather
+    than a label of this index, so the values are assigned as arrays, which
+    is positional and ignores the index entirely.
+
+    A label is not converted to a whole number here. 0.9 is not a label, and
+    truncating it would turn it into one before anything checked it.
+    """
     answer = result.to_pandas()
     named = isinstance(detected_by, str)
     label = f'probability_{detected_by}' if named else None
@@ -179,18 +189,11 @@ def _rejoined(
             code='INVALID_REQUEST',
         )
 
-    # The readings keep their own index: a DatetimeIndex is an axis upstream
-    # plots against, and resetting it drew dates a month apart as evenly
-    # spaced steps. `row_index` is a position in the frame that was sent
-    # rather than a label of this index, so the values are assigned as arrays,
-    # which is positional and ignores the index entirely.
     drawn = readings.copy()
     ordered = answer.sort_values('row_index', kind='stable')
     score = _free(_SCORE, drawn.columns)
     detected = _free(_DETECTED, drawn.columns)
     drawn[score] = ordered[_SCORE].to_numpy()
-    # Not converted to whole numbers here. A label of 0.9 is not a label, and
-    # truncating it would turn it into one before anything checked it.
     drawn[detected] = (
         ordered[label].to_numpy()
         if label is not None
@@ -206,6 +209,11 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
     of the readings in the order the readings are in, which is the same thing
     the scores are matched by, and aligning them on an index instead would
     match a detection to whichever row happened to share a label.
+
+    A score is refused rather than read as a detection. Drawn as one it
+    marks every row whose score rounds up, which is a different report from
+    the one the caller asked for and looks exactly like the one they asked
+    for.
     """
     values = np.asarray(
         detections.to_numpy()
@@ -222,9 +230,6 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
         return values
     numeric = np.asarray(values, dtype=float)
     if not bool(np.isin(numeric, (0.0, 1.0)).all()):
-        # A score is not a detection. Drawn as one it marks every row whose
-        # score rounds up, which is a different report from the one the
-        # caller asked for and looks exactly like the one they asked for.
         raise StructuredDataError(
             'detected_by carries values other than true and false, so it is '
             'a score rather than a decision about one. Compare it against a '

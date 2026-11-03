@@ -2,9 +2,6 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from NVIDIA/Kumo-TS, Kumo-Anomaly/sdk/thresholds.py
-# at af74798bbf7d020d3298f545fb9be383560a18ce.
-
 r"""Turning anomaly scores into a decision about which rows are anomalous.
 
 The model answers with a score per row and with two thresholders' labels
@@ -53,7 +50,10 @@ def percentile_thresholds(
 
     Raises:
         StructuredDataError: If the percentiles are not between 0 and 100 and
-            in that order, or if the scores are empty or not all finite.
+            in that order, or if the scores are empty or not all finite. A
+            single NaN carries into every percentile and into the mean, and
+            the thresholds come back NaN, which compares false against every
+            score and silently detects nothing at all.
 
     >>> result = client.predict(Request.anomaly(readings), model=KumoAnomaly())
     >>> scores = result.to_pandas()['prediction']
@@ -85,9 +85,6 @@ def percentile_thresholds(
             code='INVALID_REQUEST',
         )
     if not bool(np.isfinite(values).all()):
-        # A single NaN carries into every percentile and into the mean, and
-        # the thresholds come back NaN, which compares false against every
-        # score and silently detects nothing at all.
         raise StructuredDataError(
             'these scores are not all finite, and a threshold worked out '
             'from them detects nothing at all',
