@@ -4,7 +4,7 @@
 
 # Restore missing user capabilities
 
-**Status: first four restorations and time-series preparation are merged into `rust-core-phase-6`; inference is also merged; labels is in validation.**
+**Status: the first seven restorations are complete and merged into `rust-core-phase-6`.**
 Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
@@ -42,7 +42,8 @@ See [completion evidence](../../phase-6/completion.md).
 
 ## Implementation order and tracker
 
-The first four rows and time-series preparation are complete; inference is also complete; labels follows its approved design.
+The first seven rows are complete.
+See [restoration completion](../../phase-6/restoration-completion.md) for the latest evidence.
 See the [implementation tracker](../../phase-6/implementation.md) for validation status.
 Effort is relative, not an ETA.
 Names below describe proposed API placement, not frozen signatures.
@@ -55,7 +56,7 @@ Names below describe proposed API placement, not frozen signatures.
 | 1 / Complete | RelBench loading into `Schema` | Host download/cache/parquet I/O; common pinned dataset metadata; existing schema admission | Small–moderate |
 | 2 / Complete | [Explicit inference and safe edits](inference-edits/design.md) | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
 | 2 / Complete | [Time-series builder](timeseries/design.md) | Hosts expose a preparation recipe; bounded Rust Arrow transformation handles row/time correctness; existing schema/PQL validates outputs | Moderate |
-| 2 / Validating | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
+| 2 / Complete | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
 | 3 | End-time-column configuration | Carry through both facades, shared schema, engine graph, provider projections and eligibility | Substantive |
 | 3 | Generic expression-column and task editing | Define useful edits first; Rust validates expressions, dependencies, entity references and row alignment; providers execute source expressions | Substantive; scope review required |
 

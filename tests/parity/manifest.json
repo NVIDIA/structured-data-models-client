@@ -6145,6 +6145,16 @@
       "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
       "record": "public_api_snapshot_sha256",
       "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/labels-only",
+      "reason": "Restore reviewed model-free labels extraction through the shared Rust engine in Python and Java."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "live_api_tests",
+      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint."
     }
   ],
   "capabilities": [
