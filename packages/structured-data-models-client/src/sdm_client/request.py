@@ -703,12 +703,21 @@ class Request:
         if schema is None:
             schema = Schema.from_data({entity_table: history})
             # A series whose values happen to be unique is inferred as the
-            # table's key, and a key names a row rather than measuring
+            # table's key, and a key names a step rather than measuring
             # anything. The caller named this column as the series to
-            # forecast, which settles what it is.
+            # forecast, which settles what it is. The key is then whatever
+            # inference would have chosen without it: clearing it outright
+            # left a real identifier beside the target to be read as history.
             table = schema[entity_table]
             if target in _as_key_tuple(table.primary_key):
-                table.primary_key = None
+                beside = history.drop(columns=[target])
+                table.primary_key = (
+                    Schema.from_data({entity_table: beside})[
+                        entity_table
+                    ].primary_key
+                    if len(beside.columns)
+                    else None
+                )
                 table[target].stype = 'numerical'
         _check_scored_values_mean_what_the_schema_says(
             history, schema, entity_table

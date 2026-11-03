@@ -109,6 +109,36 @@ def test_a_key_that_is_not_the_target_is_still_a_key(forecast):
     )
 
 
+@pytest.mark.parametrize(
+    'order', [['grid', 'sensor_id'], ['sensor_id', 'grid']]
+)
+def test_an_identifier_beside_the_target_is_the_key_instead(forecast, order):
+    """Both columns are unique, so either could be read as the key. Taking
+    the target out of that choice must leave the other one holding it;
+    clearing the key outright let an identifier in as history."""
+    rows = len(history())
+    frame = pd.DataFrame(
+        {
+            'grid': np.arange(rows, dtype=float) * 1.5,
+            'sensor_id': np.arange(100, 100 + rows),
+        }
+    )[order]
+
+    request = Request.forecast(frame, target='grid', horizon=3)
+
+    assert request.schema['instance'].primary_key == 'sensor_id'
+    assert request.schema['instance']['grid'].stype == 'numerical'
+
+
+def test_a_series_alone_has_no_key_to_fall_back_to(forecast):
+    """The other end of the rule above: nothing beside it means no key."""
+    frame = pd.DataFrame({'grid': np.arange(40, dtype=float) * 1.5})
+
+    request = Request.forecast(frame, target='grid', horizon=3)
+
+    assert request.schema['instance'].primary_key is None
+
+
 def test_the_supervised_constructor_will_not_build_this_question(forecast):
     """Its scored half is the future, and this model reads nothing about the
     future: every value in those rows would be discarded and the answer come
