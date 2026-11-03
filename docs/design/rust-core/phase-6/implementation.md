@@ -69,3 +69,7 @@ The replacement goal assigns implementation and testing to the two feature agent
 The coordinator reviews boundaries and integration; the feature agents also review each other’s changes.
 The separate original-four coverage branch is preserved but is outside this goal.
 All implementations require independent review, affected checks and integration into Phase 6 only.
+
+Supplied-example contract 65 is implemented in the feature branch and passes Rust and Java compilation; runtime validation is pending.
+Its shared Python/Java expectations live in `tests/fixtures/custom-examples/`; the fixture documents the old timeless-anchor overflow that the new implementation must avoid.
+Independent review covers explicit task metadata without fabricated PQL, authoritative labels, unchanged sampling, checked forecast response alignment and input ownership.
