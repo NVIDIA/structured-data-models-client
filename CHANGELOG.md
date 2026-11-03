@@ -50,8 +50,8 @@ these packages. All five distributions share one version and one entry.
 ### Changed
 
 - The refusal of a request over a Databricks serving endpoint's 16 MB limit
-  no longer names `num_context_samples` and entities alone, which a tabular
-  request has none of: it asks for fewer context rows or fewer rows to score.
+  now asks for fewer context rows or fewer rows to score, covering both
+  directly supplied rows and requests built through predictive queries.
 - Every engine wheel is built on a machine of its own, native rather than
   emulated, and each is smoke-tested on the architecture it targets. The
   release no longer builds aarch64 under QEMU, which also takes a privileged

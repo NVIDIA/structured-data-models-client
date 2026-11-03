@@ -137,3 +137,141 @@ def test_tabular_notebook_checks_the_model_after_a_pending_update(
         ):
             exec(connect, namespace)
         client_factory.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('active', 'pending', 'accepted'),
+    [
+        ('tabular', None, True),
+        ('other', None, False),
+        ('tabular', 'other', False),
+    ],
+)
+def test_tabular_deploy_checks_active_and_pending_config(
+    active, pending, accepted
+):
+    cell = next(
+        c
+        for c in _cells(EXAMPLES / 'kumo_tabular_quickstart.ipynb', 'code')
+        if 'workspace = WorkspaceClient()' in c
+    )
+
+    def config(model):
+        return SimpleNamespace(
+            served_entities=[
+                SimpleNamespace(entity_name=model, entity_version='1')
+            ]
+        )
+
+    workspace = Mock()
+    workspace.serving_endpoints.get.return_value = SimpleNamespace(
+        config=config(active),
+        pending_config=config(pending) if pending else None,
+    )
+    namespace = dict(
+        WorkspaceClient=lambda: workspace,
+        NotFound=LookupError,
+        MODEL_NAME='tabular',
+        MODEL_VERSION='1',
+        ENDPOINT_NAME='demo',
+    )
+    if accepted:
+        exec(cell, namespace)
+    else:
+        with pytest.raises(ValueError, match='already exists'):
+            exec(cell, namespace)
+    workspace.serving_endpoints.create.assert_not_called()
+    workspace.serving_endpoints.wait_get_serving_endpoint_not_updating.assert_not_called()
+
+
+@pytest.mark.parametrize('failure', ['UPDATE_FAILED', 'UPDATE_CANCELED'])
+@pytest.mark.parametrize(
+    ('ready', 'model', 'version', 'expected'),
+    [
+        ('READY', 'tabular', '1', None),
+        ('NOT_READY', 'tabular', '1', RuntimeError),
+        ('READY', 'other', '1', ValueError),
+        ('READY', 'tabular', '2', ValueError),
+    ],
+)
+def test_tabular_failed_update_checks_active_deployment(
+    failure, ready, model, version, expected
+):
+    from databricks.sdk.errors import OperationFailed
+
+    cell = next(
+        c
+        for c in _cells(EXAMPLES / 'kumo_tabular_quickstart.ipynb', 'code')
+        if 'wait_get_serving_endpoint_not_updating(' in c
+    )
+    workspace = Mock()
+    error = OperationFailed(failure)
+    workspace.serving_endpoints.wait_get_serving_endpoint_not_updating.side_effect = error
+    workspace.serving_endpoints.get.return_value = SimpleNamespace(
+        state=SimpleNamespace(ready=SimpleNamespace(value=ready)),
+        config=SimpleNamespace(
+            served_entities=[
+                SimpleNamespace(entity_name=model, entity_version=version)
+            ]
+        ),
+    )
+    factory = Mock()
+    namespace = dict(
+        workspace=workspace,
+        OperationFailed=OperationFailed,
+        ENDPOINT_NAME='demo',
+        MODEL_NAME='tabular',
+        MODEL_VERSION='1',
+        timedelta=timedelta,
+        SDMClient=SimpleNamespace(for_databricks_serving=factory),
+        KumoTabular=Mock(),
+    )
+    if expected:
+        with pytest.raises(expected) as caught:
+            exec(cell, namespace)
+        assert caught.value.__cause__ is error
+        factory.assert_not_called()
+    else:
+        exec(cell, namespace)
+        factory.assert_called_once_with('demo', timeout=900)
+
+
+def test_tabular_sampling_is_independent_of_source_order():
+    import pandas as pd
+
+    cells = _cells(EXAMPLES / 'kumo_tabular_quickstart.ipynb', 'code')
+    prepare = next(c for c in cells if c.startswith('products ='))
+    classify = next(c for c in cells if c.startswith("TARGET = 'Color'")).split(
+        'request = Request('
+    )[0]
+    regress = next(c for c in cells if c.startswith('priced =')).split(
+        'request = Request('
+    )[0]
+    frame = pd.DataFrame(
+        {
+            'ProductID': range(100),
+            'Color': ['red', 'blue'] * 50,
+            'ListPrice': range(1, 101),
+        }
+    )
+    for name in [
+        'rowguid',
+        'ModifiedDate',
+        'Name',
+        'ProductNumber',
+        'SellStartDate',
+        'SellEndDate',
+        'DiscontinuedDate',
+    ]:
+        frame[name] = ''
+    results = []
+    for source in [frame, frame.sample(frac=1, random_state=42)]:
+        spark = Mock()
+        spark.table.return_value.toPandas.return_value = source
+        namespace = dict(spark=spark, PRODUCTS='products')
+        exec(prepare, namespace)
+        exec(classify, namespace)
+        exec(regress, namespace)
+        results.append(namespace)
+    for name in ['held_out', 'context', 'to_price', 'priced']:
+        pd.testing.assert_frame_equal(results[0][name], results[1][name])
