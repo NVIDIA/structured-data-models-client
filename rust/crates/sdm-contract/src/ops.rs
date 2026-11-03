@@ -39,6 +39,7 @@ pub enum Operation {
     LabelsFrames(crate::labels::LabelsFrames),
     LabelsSource(crate::labels::LabelsSource),
     AddSqlColumn(crate::sql_column::SqlColumn),
+    RebindSource(crate::rebind::RebindSource),
     MaterializeExamples(crate::examples::MaterializeExamples),
     FrameSession(crate::frame_session::FrameSessionOperation),
     DescribeFrameTables(crate::frames::DescribeFrameTables),
@@ -130,6 +131,7 @@ impl Operation {
             Operation::LabelsFrames(_) => "labels_frames",
             Operation::LabelsSource(_) => "labels_source",
             Operation::AddSqlColumn(_) => "add_sql_column",
+            Operation::RebindSource(_) => "rebind_source",
             Operation::MaterializeExamples(_) => "materialize_examples",
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::FeatureImportance(_) => "feature_importance",
@@ -284,6 +286,7 @@ impl Operation {
                 parts
             }
             Operation::AddSqlColumn(v) => vec![(v.schema, Bytes), (v.input, Bytes)],
+            Operation::RebindSource(v) => vec![(v.schema, Bytes)],
             Operation::PrepareFrameGraph(v) => {
                 let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
                 ids.extend(v.tables.iter().map(|id| (*id, Arrow)));

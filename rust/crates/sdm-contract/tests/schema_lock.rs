@@ -449,6 +449,7 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 const JSON: &[(&str, &str)] = &[
     ("Operation/add_sql_column.input", "sql_column_input"),
     ("Operation/add_sql_column.schema", "Materialize.schema"),
+    ("Operation/rebind_source.schema", "Materialize.schema"),
     ("Operation/materialize_examples.input", "example_input"),
     (
         "Operation/materialize_examples.inference",

@@ -67,6 +67,9 @@ pub fn start(
         Operation::MaterializeExamples(request) => {
             crate::materialize::examples::start(root, request, attachments, facts)?
         }
+        Operation::RebindSource(request) => {
+            crate::rebind::start(root, request, attachments, facts)?
+        }
         Operation::AddSqlColumn(request) => {
             crate::sql_column::start(root, request, attachments, facts)?
         }

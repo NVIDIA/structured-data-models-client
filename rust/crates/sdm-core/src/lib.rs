@@ -28,6 +28,7 @@ pub mod pql;
 mod predict;
 pub mod profiles;
 mod ranking;
+mod rebind;
 mod result;
 pub mod run;
 mod session;
