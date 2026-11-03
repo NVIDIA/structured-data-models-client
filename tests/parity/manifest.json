@@ -3604,9 +3604,37 @@
         "java": []
       },
       "gate": "local"
+    },
+    {
+      "id": "relbench",
+      "apis": {
+        "python": [
+          "Schema.from_relbench"
+        ],
+        "java": [
+          "Schema.fromRelbench",
+          "RelBenchOptions"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_relbench.py::test_offline_metadata_rows_and_no_http",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_corrupt_offline_and_unknown",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_all_pins_have_valid_metadata",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_http_download_cache_and_failure_recovery",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_unsafe_manifest_path_rejected"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#offlineOwnedSchemaPreservesRowsAndDeclarations",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#corruptOfflineCacheAndUnknownNameAreStructured",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#registryIsPackagedAndUnsafePathsFail",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#httpCacheReuseAndFailedDownloadRecovery"
+        ]
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "9bb1348c34457796d599b2ae87378435ba628ce9f397ddd6273598a06e675474",
+  "public_api_snapshot_sha256": "ac2eb29236bbd7c867f65889206cca4f1474089c615be813ad05f5104f23bf82",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4094,6 +4122,9 @@
       },
       "sdm_client.Schema.visualize": {
         "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.from_relbench": {
+        "capability": "relbench"
       }
     },
     "java": {
@@ -5035,6 +5066,36 @@
       },
       "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path, boolean) throws java.io.IOException;": {
         "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.RelBenchOptions": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public boolean offline();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public java.nio.file.Path cacheDirectory();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public static com.nvidia.sdm.RelBenchOptions$Builder builder();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions build();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder cacheDirectory(java.nio.file.Path);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder offline(boolean);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String, com.nvidia.sdm.RelBenchOptions);": {
+        "capability": "relbench"
       }
     }
   },

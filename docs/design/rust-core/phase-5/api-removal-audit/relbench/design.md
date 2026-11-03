@@ -4,7 +4,7 @@
 
 # 4. RelBench dataset loading
 
-**Status: assigned for contract-first implementation. Support both Python and Java; use their existing file/Arrow readers.**
+**Status: implemented and tested; coordinator review before integration.**
 Load a named, pinned dataset into the maintained `Schema`, with its keys, relationships and time metadata.
 This restores a convenience loader, not a second sampling path.
 Independent boundary review is incorporated below; this document is the implementation contract.
@@ -25,19 +25,40 @@ Python / Java download, verify hash, cache, read Parquet
 | Python / Java loader | Download/cache I/O and Parquet reading using existing readers; Java already has a Parquet reader |
 | Shared Rust schema admission | Apply declared metadata and validate tables/relationships; any nontrivial dataset transformation must have shared semantics |
 
-## Proposed user API
+## Approved public contract
 
-`Schema.from_relbench(name, cache_dir=...)` / `Schema.fromRelbench(name, options)`.
-Both return ordinary schemas usable through the existing Relational workflow.
-Use one canonical manifest packaged into wheel and JAR; do not maintain separate dataset registries.
-Recover the old pinned registry and verify its entries before reuse; do not silently switch users to a changing upstream revision.
-Do not require a Python-only RelBench dependency for Java compatibility.
+| Python | Java |
+|---|---|
+| `Schema.from_relbench(name, *, cache_dir=None, offline=False)` | `Schema.fromRelbench(name)` and `Schema.fromRelbench(name, RelBenchOptions)` |
+| `cache_dir` accepts a path/string | `RelBenchOptions.builder().cacheDirectory(path).offline(true).build()` |
 
-Define cache hits, offline cache use, integrity failures and incomplete-download recovery consistently.
-Stream downloads to temporary files, verify hashes, then atomically install them in the cache.
-Reject unsafe relative paths and preserve declared dataset-specific exclusions and type overrides.
-Respect existing Arrow ownership conventions; Java schema data must remain usable after temporary readers close.
-No Rust HTTP/cache subsystem, model call or warehouse sampling changes are needed.
+Both return ordinary, independently owned schemas usable through the existing Relational workflow.
+Names are case-insensitive; `amazon` and `rel-amazon` select the same pinned dataset.
+The default cache is `~/.cache/sdm/relbench`; explicit paths allow shared caches.
+Cache entries use repository/revision/dataset/table paths and are hash-checked on every load.
+Offline mode never opens a network connection and rejects missing or corrupt entries.
+Online mode replaces missing/corrupt entries only after streaming to a unique temporary file, checking SHA-256 and atomically replacing the destination.
+A failed download never replaces a valid entry and removes its temporary file.
+Unknown names/options use `INVALID_REQUEST`; download, cache and integrity failures use `PROVIDER_ERROR`, with dataset/table context.
+Existing schema-validation errors remain unchanged.
+Loading is quiet by default.
+A null key/time declaration means explicitly absent; inferred relationships are cleared before metadata edits and replaced only with declared links.
+
+## Boundaries and evidence
+
+| Evidence | Implementation decision |
+|---|---|
+| Old `rfm/relbench.py` loads pinned Parquet, then applies keys/time/links and exclusions/type overrides | Restore declarations, without recreating the old graph or sampling engine |
+| Old registry identifies immutable Hugging Face commits and SHA-256 hashes | Restore generated registry byte-for-byte from `origin/main`; retain its generator with updated output location |
+| Old exclusions cover HM/Amazon; explicit type overrides cover SALT | Keep these in a small hand-authored JSON overlay alongside the unchanged generated registry |
+| Python `Schema.from_data` accepts explicit key/time/link metadata | Read Parquet using existing PyArrow dependency, then use this entry point and public metadata setters |
+| Java `Readers.read` reads Parquet; `Schema.fromData` takes owned snapshots | Use these APIs and close temporary Arrow tables/allocator before returning; apply metadata through existing schema edits |
+
+The canonical registry and overlay live in Python package resources; Maven packages those same files in the JAR.
+Do not require the archived engine, `relbench`, or `pooch` dependencies.
+The loader performs only declarative column exclusion and metadata application; Rust retains schema validation, inference and all sampling.
+Reject unsafe manifest path components before filesystem/network access.
+No Rust HTTP/cache subsystem, Python callbacks, model calls or warehouse sampling changes are needed.
 
 ## Acceptance
 
@@ -54,3 +75,15 @@ Use existing parity/snapshot tooling; do not hand-edit generated snapshots or in
 Finish with independent code review, address findings, and run affected tests before merging into `rust-core-phase-6`.
 
 Keep exclusions and type overrides declarative in the common manifest; do not encode independent dataset policy in each language.
+
+## Validation result
+
+- Python loader + parity ledger/contracts: 58 passed, two existing environment-dependent skips.
+- Java loader: four tests passed, including shared fixture rows, metadata, ownership and HTTP recovery; JAR contains the exact shared catalogs.
+- Pinned `rel-f1`: 1,224,756 bytes downloaded, nine tables, 97,606 rows and 13 links; Python and Java counts match and schema checks pass.
+- Raw full-dataset prediction reaches the existing v27 endpoint but is refused with `UNSUPPORTED_DTYPE`, consistent with its documented unsupported-text behavior.
+- Explicitly declaring F1 name/reference text fields categorical through the public schema API produces a successful two-row regression prediction, with 32 context samples.
+
+The loader preserves benchmark metadata rather than silently changing types to satisfy a particular model.
+No core or warehouse code changed.
+Independent review identified Java dictionary-owner lifetime and interruption handling; both are addressed and retested.

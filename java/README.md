@@ -99,6 +99,11 @@ Rust owns selection, validation and encoding in both paths; Java owns snapshots,
 ## In-memory Relational
 
 Use `Schema.fromData(Map.of("users", users, "orders", orders))` with Arrow Tables.
+For a pinned benchmark, use `Schema.fromRelbench("f1")`, or pass
+`RelBenchOptions.builder().cacheDirectory(path).offline(true).build()` to reuse a verified cache without HTTP.
+This matches Python `Schema.from_relbench("f1", cache_dir=path, offline=True)`.
+Both preserve declared keys, time columns and relationships; model-specific type support still applies.
+
 Existing schema key, time-column and relationship setters apply.
 
 ```java

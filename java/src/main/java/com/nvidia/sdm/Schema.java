@@ -79,6 +79,16 @@ public final class Schema {
     SchemaVisualization.export(this, path, showColumns);
   }
 
+  /** Load a pinned RelBench dataset, using the default verified local cache. */
+  public static Schema fromRelbench(String name) {
+    return fromRelbench(name, RelBenchOptions.builder().build());
+  }
+
+  /** Load a pinned dataset with declared keys, times and links; offline mode never uses HTTP. */
+  public static Schema fromRelbench(String name, RelBenchOptions options) {
+    return RelBench.load(name, options);
+  }
+
   /** Describe named in-memory Arrow tables, taking owned snapshots before returning. */
   public static Schema fromData(Map<String, org.apache.arrow.vector.table.Table> tables) {
     Objects.requireNonNull(tables, "tables");
