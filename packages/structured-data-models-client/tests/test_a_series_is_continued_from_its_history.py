@@ -22,6 +22,7 @@ from sdm_client import (
     StructuredDataError,
     UnsupportedRequestError,
 )
+from sdm_client.adapters.forecast import ForecastAdapter
 from sdm_client.core.warnings import SDMWarning
 
 pytestmark = pytest.mark.filterwarnings('ignore')
@@ -137,6 +138,24 @@ def test_a_series_alone_has_no_key_to_fall_back_to(forecast):
     request = Request.forecast(frame, target='grid', horizon=3)
 
     assert request.schema['instance'].primary_key is None
+
+
+@pytest.mark.parametrize(('rows', 'refused'), [(10_000, False), (10_001, True)])
+def test_a_history_longer_than_a_table_may_be_is_refused(
+    forecast, rows, refused
+):
+    """The contract caps a table at ten thousand rows, so a longer history
+    builds a payload no deployment may be sent."""
+    frame = pd.DataFrame({'flow': np.sin(np.arange(rows) / 9)})
+    request = Request.forecast(frame, target='flow', horizon=2)
+    plan = ForecastAdapter().prediction_plan(request, ('prediction',))
+
+    if not refused:
+        assert next(plan)['context']['instance_table']['rows']
+        return
+    with pytest.raises(StructuredDataError) as caught:
+        next(plan)
+    assert '10,000' in str(caught.value)
 
 
 def test_the_supervised_constructor_will_not_build_this_question(forecast):

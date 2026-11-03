@@ -313,6 +313,21 @@ def test_a_model_that_is_not_installed_is_not_offered(sdm, monkeypatch):
         assert 'kumo-anomaly' not in client.models()
 
 
+def test_readings_longer_than_a_table_may_be_are_refused(anomaly):
+    """The contract caps a table at ten thousand rows, and these readings
+    travel as one."""
+    from sdm_client.adapters.anomaly import AnomalyAdapter
+
+    frame = pd.DataFrame({'flow': np.sin(np.arange(10_001) / 9)})
+    plan = AnomalyAdapter().prediction_plan(
+        Request.anomaly(frame), ('prediction',)
+    )
+
+    with pytest.raises(StructuredDataError) as caught:
+        next(plan)
+    assert '10,000' in str(caught.value)
+
+
 def test_another_model_is_not_asked_this_question(tabular):
     """`anomaly_detection` is a task only one model here answers."""
     with SDMClient.in_process(tabular) as client:

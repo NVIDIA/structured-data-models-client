@@ -10,7 +10,14 @@ from typing import Any
 
 import pandas as pd
 
+from sdm_client.errors import StructuredDataError
 from sdm_client.wire.dtypes import serialize_column
+
+#: The most rows the contract lets an ``arrays`` table carry
+#: (``ArraysTableData.rows.maxItems``). A deployment may hold to less, which
+#: is what a model's own limits are for; this is what no deployment may
+#: exceed, so it is checked wherever a table is written.
+MAX_TABLE_ROWS = 10_000
 
 
 def encode_table(frame: pd.DataFrame, dtypes: dict[str, str]) -> dict[str, Any]:
@@ -31,11 +38,25 @@ def encode_table(frame: pd.DataFrame, dtypes: dict[str, str]) -> dict[str, Any]:
     table is a list of empty rows rather than an empty table. The two mean
     different things to the server.
 
+    A table longer than the contract carries is refused here rather than by
+    each model in turn: the limit belongs to the wire format, so every table
+    this client writes is held to it whichever model the request is for.
+
     Args:
         frame: The rows to encode.
         dtypes: Wire dtype per column name. Must cover every column of
             ``frame``.
+
+    Raises:
+        StructuredDataError: If ``frame`` has more rows than the contract
+            allows a table to carry.
     """
+    if len(frame) > MAX_TABLE_ROWS:
+        raise StructuredDataError(
+            f'a table carries at most {MAX_TABLE_ROWS:,} rows and this has '
+            f'{len(frame):,}; no deployment may be sent it',
+            code='UNSUPPORTED_SHAPE',
+        )
     columns = list(frame.columns)
     if not columns:
         return {
