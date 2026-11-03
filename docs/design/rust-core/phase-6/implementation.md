@@ -30,9 +30,9 @@ See [completion evidence](completion.md) for scope, reviews and remaining audit 
 
 | Work | Branch | Status |
 |---|---|---|
-| Inference and safe edits | `rust-core-phase-6-inference` | Resumed on contract 60; provenance correction and contract 61 validation in progress |
+| Inference and safe edits | `rust-core-phase-6-inference` | Reviewed and merged; 95 affected Python / 12 Java tests and live three-row prediction passed |
 | Time-series preparation | `rust-core-phase-6-timeseries` | Reviewed and merged; Python/Java fixtures and live four-row forecast passed |
-| Labels-only extraction | `rust-core-phase-6-labels` | Contract approved; implementation in progress |
+| Labels-only extraction | `rust-core-phase-6-labels` | Independent review passed; contract 62 build and provider validation in progress |
 | Thorough testing of the first four | `rust-core-phase-6-coverage` | Reviewed and merged; composed workflows, corruption/ownership/report edge cases; 22 Python / 15 Java tests passed |
 
 The three designs under `phase-5/api-removal-audit/{inference-edits,timeseries,labels-only}/design.md` define the scope and testing expectations.
@@ -42,10 +42,10 @@ Prioritize real execution over mocks where it exercises the feature; use model e
 All changes receive independent review and merge into Phase 6; no publication or merge into `rust-core`/`main`.
 The coordinator serializes contract-version allocation and warm-target ownership to avoid conflicting native builds.
 
-Current allocation: time-series contract 60 is merged; inference owns contract 61 and the warm native target.
+Current allocation: time-series contract 60 and inference contract 61 are merged; labels owns contract 62 and the warm native target.
 Inference/labels may develop isolated logic and tests, but must integrate the preceding contract before generating their own version.
 
-Planned subsequent contracts: inference 61, labels 62, each based on the preceding integrated contract.
+Labels integrates contract 61 before generating contract 62.
 
 Contract lock policy retains merged entries and only the newest unmerged version via `scripts/rust_core/contract_lock.py --prune-working`; schema history files remain unchanged.
 
