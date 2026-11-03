@@ -212,13 +212,14 @@ def coherent_stype(stype: str, dtype: str, column: Column) -> str:
 
     Only the placeholder is overridden. A meaning the caller assigned is a
     claim and is refused rather than quietly rewritten, before it reaches here.
+
+    Every spelling of a timestamp counts, not one of them. The contract
+    writes ``timestamp[us]``, but a hand-built schema may say ``[ns]``,
+    ``[ms]`` or ``[s]``, and reading those as categorical puts exactly the
+    contradiction on the wire that this exists to prevent.
     """
     if supports_dtype(stype, dtype) or column.stype_declared:
         return stype
-    # Every spelling of a timestamp, not one of them. The contract writes
-    # `timestamp[us]`, but a hand-built schema may say `[ns]`, `[ms]` or `[s]`,
-    # and reading those as categorical puts a dtype and a meaning on the wire
-    # that contradict each other. That is what this exists to prevent.
     if dtype.startswith('timestamp'):
         return 'timestamp'
     return MEANING_OF.get(dtype, 'categorical')

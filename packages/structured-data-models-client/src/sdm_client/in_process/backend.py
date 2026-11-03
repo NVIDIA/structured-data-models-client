@@ -88,8 +88,12 @@ class ScoresRowsAlone(Protocol):
 
 @dataclass
 class _Session:
-    # Only a model that fits a context reaches here: `create_session`
-    # refuses one that does not, because there would be nothing to pin.
+    r"""A fitted context, pinned.
+
+    Only a model that fits one reaches here: :meth:`create_session` refuses
+    a model that does not, because there would be nothing to pin.
+    """
+
     served: Tabular | Relational
     task: Mapping[str, Any]
     schema: Mapping[str, Any]
@@ -459,11 +463,12 @@ def _check_loaded_for(served: Served, model: Any, kind: str) -> None:
 
     A model can be loaded for classification or regression alone, which a
     NIM's never is, so that is asked of the model rather than of its kind.
+    Not of a model that fits nothing: what was asked of the others is which
+    heads a checkpoint was packaged with, and a model that fits nothing has
+    no head to package. It answers the one task it is for or it is not that
+    model.
     """
     if isinstance(served, ScoresRowsAlone):
-        # `tasks` says which heads a checkpoint was packaged with, and a model
-        # that fits nothing has no head to package: it answers the one task it
-        # is for or it is not that model.
         return
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)

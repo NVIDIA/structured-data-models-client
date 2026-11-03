@@ -157,14 +157,16 @@ NOT_IN_THE_CONTRACT = {
 
 def _declared_elsewhere(body: dict[str, Any], error: Any) -> bool:
     r"""Whether ``error`` is only that the contract has not heard of this
-    model yet, rather than something wrong with the request."""
+    model yet, rather than something wrong with the request.
+
+    Matched on the value as well as the field. Forgiving the field alone
+    would accept ``anomaly_detectoin`` and every other misspelling of it,
+    which is the one thing this file exists to catch.
+    """
     exempt = NOT_IN_THE_CONTRACT.get(body.get('model'))
     if exempt is None or error.validator != 'enum':
         return False
     where = '.'.join(str(part) for part in error.path)
-    # The value as well as the field. Forgiving the field alone would accept
-    # `anomaly_detectoin` and every other misspelling of it, which is the one
-    # thing this file exists to catch.
     return where in exempt and error.instance == exempt[where]
 
 

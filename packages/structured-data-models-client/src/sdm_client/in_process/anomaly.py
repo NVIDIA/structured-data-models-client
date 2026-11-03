@@ -155,15 +155,15 @@ class Anomaly:
         they were sent, which the client hands back as the row's id.
 
         Otherwise there is no id: each answer is matched to its row by
-        position, and the client puts the row's own key on it.
+        position, and the client puts the row's own key on it. That is also
+        what happens where the readings do not carry the key at all, which
+        is allowed: a key names the row and is not a channel, so there is
+        then no value to answer under.
         """
         key = spec.get('primary_key')
         if not isinstance(key, list) or len(key) < 2:
             return [None] * len(table['rows'])
         if not set(key) <= set(table['columns']):
-            # The readings need not carry the key: it names the row and is
-            # not a channel, so a caller may leave it out. Then there is no
-            # value to answer under and each answer is matched by position.
             return [None] * len(table['rows'])
         cells = [values(table, name) for name in key]
         return [
@@ -183,12 +183,17 @@ class Anomaly:
 
         ``generator`` is what makes the same readings score the same twice.
         Reconstruction is sampled, so without one an unchanged request comes
-        back with different numbers every call.
+        back with different numbers every call. It also says where the model
+        is: the rows are read into CPU tensors and the model may be
+        anywhere, and with no context to fit, the rows are all there is to
+        move to it.
+
+        A score that is not a number is refused rather than returned, as the
+        other models refuse one. It is not a row that is unremarkable, and
+        handing it back hands a caller a frame they cannot threshold or
+        plot.
         """
         options = payload.get('inference') or {}
-        # The rows are read into CPU tensors, and the model may be anywhere.
-        # The fitted path moves its context the same way; this one has no
-        # context, so the rows are all there is to move.
         rows = self.rows(payload)
         if generator is not None:
             rows = rows.to(generator.device)
@@ -200,9 +205,6 @@ class Anomaly:
         )
         scored = out['mae'].numerical[..., 0]
         if not bool(scored.isfinite().all()):
-            # The same refusal the other models make. A score that is not a
-            # number is not a row that is unremarkable, and returning one
-            # hands a caller a frame they cannot threshold or plot.
             raise StructuredDataError(
                 'the model answered with a malformed output',
                 code='INTERNAL_ERROR',

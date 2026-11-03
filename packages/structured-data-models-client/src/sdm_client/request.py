@@ -582,6 +582,13 @@ class Request:
         learn from. Those two arguments are absent rather than empty, because
         a caller who passed them would be describing a question nobody asks.
 
+        What travels instead is a target standing for the score, typed as
+        the score is because that is the one thing about it the answer
+        carries a type for, and a context table of the schema's columns and
+        no rows. The contract has no shape for a request with nothing to
+        learn from, and an empty table is what that looks like on the wire,
+        rather than a section left out of an envelope that requires one.
+
         Args:
             readings: The rows to score. Every numerical column is read as a
                 channel of one multivariate series; a primary key names the
@@ -599,9 +606,6 @@ class Request:
         readings = _require_frame(readings, 'readings')
         if schema is None:
             schema = Schema.from_data({entity_table: readings})
-        # The same question the supervised path asks of the rows it scores. A
-        # schema the caller brought says what a column holds, and readings
-        # that hold something else are a different series under that name.
         _check_scored_values_mean_what_the_schema_says(
             readings, schema, entity_table
         )
@@ -612,16 +616,10 @@ class Request:
             kind='anomaly_detection',
             target=Target(
                 column_name=WHOLE_ROW,
-                # The score, which is what this target stands for and the one
-                # thing about it with a type the answer actually carries.
                 dtype='float64',
                 table_name=entity_table,
             ),
         )
-        # The contract has no shape for a request with no context, and this
-        # one genuinely has none. An empty table carries the schema's columns
-        # and no rows, which is what "nothing to learn from" looks like on the
-        # wire, rather than a section left out of an envelope that requires it.
         request._context = Split(instance_table=readings.iloc[:0])
         request._predict = Split(instance_table=readings)
         request.inference = dict(inference or {})

@@ -165,18 +165,20 @@ KUMO_RELATIONAL = ModelSpec(
 # undone by the next regeneration.
 TFM_MODEL_KUMO_ANOMALY = 'kumo-anomaly'
 
+#: The model that scores a row for how anomalous it is.
+#:
+#: `probabilities` carries the two thresholders' labels. That field is named
+#: for what every other model puts in it, and this one puts something else
+#: there because the contract has no third field for a row's answer; see
+#: :mod:`sdm_client.in_process.anomaly`. It holds no session, because a
+#: session pins a fitted context and this model fits none: every call
+#: reconstructs the rows it was given and nothing carries over.
 KUMO_ANOMALY = ModelSpec(
     model_id=TFM_MODEL_KUMO_ANOMALY,
     profile=ANOMALY,
     runtime=RuntimeContract(
         tasks=frozenset({'anomaly_detection'}),
-        # `probabilities` carries the two thresholders' labels. The field is
-        # named for what every other model puts in it, and this one puts
-        # something else there because the contract has no third field for a
-        # row's answer. See `sdm_client.in_process.anomaly`.
         outputs=frozenset({'prediction', 'probabilities'}),
-        # A session pins a fitted context, and this model fits none: every
-        # call reconstructs the rows it was given and nothing carries over.
         sessions=False,
         inference_options=frozenset({'num_samples', 'num_steps'}),
     ),
