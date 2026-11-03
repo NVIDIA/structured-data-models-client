@@ -30,6 +30,7 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
+from sdm_client.inference import InferenceConfig
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
 from sdm_client.relational_task import RelationalTask
@@ -54,8 +55,11 @@ from sdm_client.schema import (
     SourceTable,
     Table,
 )
+from sdm_client.summaries import ExplanationSummarizer
 
 __all__ = [
+    'InferenceConfig',
+    'ExplanationSummarizer',
     'RelationalTask',
     'ForecastInput',
     'build_timeseries',

@@ -47,6 +47,7 @@ import pandas as pd
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
+from sdm_client.inference import InferenceConfig
 from sdm_client.reports import (
     ColumnMetadata,
     LinkMetadata,
@@ -975,7 +976,7 @@ class Schema:
         *,
         num_neighbors: Sequence[int] | None = None,
         random_seed: int = 42,
-        inference: Mapping[str, Any] | None = None,
+        inference: Mapping[str, Any] | InferenceConfig | None = None,
     ) -> Request:
         """Gather a Relational request from supplied labels and entity IDs.
 

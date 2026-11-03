@@ -192,6 +192,11 @@ public final class MaterializeOptions {
       return this;
     }
 
+    /** Named inference options; Rust supplies defaults and task validation. */
+    public Builder inferenceConfig(InferenceConfig config) {
+      return option("inference_config", Objects.requireNonNull(config).toMap());
+    }
+
     /** The seed of the sample ({@code random_seed}). */
     public Builder randomSeed(long seed) {
       return option("random_seed", seed);

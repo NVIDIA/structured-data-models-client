@@ -56,6 +56,10 @@ def materialize(
             code='INVALID_REQUEST',
         )
 
+    from sdm_client.inference import InferenceConfig
+
+    if isinstance(inference, InferenceConfig):
+        inference = inference.to_dict()
     context, predict = arrow(context), arrow(predict)
     input = {
         'task': asdict(task),

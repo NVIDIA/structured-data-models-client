@@ -63,6 +63,13 @@ class RelationalMaterializer:
         options: dict[str, Any],
         candidates: Sequence[Any] | None = None,
     ) -> Request:
+        from sdm_client.inference import InferenceConfig
+
+        if isinstance(options.get('inference_config'), InferenceConfig):
+            options = {
+                **options,
+                'inference_config': options['inference_config'].to_dict(),
+            }
         unknown = sorted(set(options) - self._MATERIALIZE_OPTIONS)
         if unknown:
             raise StructuredDataError(
