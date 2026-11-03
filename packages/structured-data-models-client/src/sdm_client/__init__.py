@@ -54,6 +54,8 @@ from sdm_client.schema import (
 )
 
 __all__ = [
+    'ForecastInput',
+    'build_timeseries',
     'ColumnMetadata',
     'TableMetadata',
     'MetadataReport',
@@ -89,3 +91,5 @@ __all__ = [
     'UnsupportedRequestError',
     '__version__',
 ]
+
+from sdm_client.timeseries import ForecastInput, build_timeseries

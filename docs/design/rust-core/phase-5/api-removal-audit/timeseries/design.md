@@ -33,9 +33,17 @@ The dates above assume a January 3 cutoff: the last synthetic observation is one
 
 ## Proposed API and boundary
 
-Proposed Python `build_timeseries(frame, ...)` and Java `TimeSeries.build(table, options)` return `ForecastInput(schema, query, anchor_time)`.
-Use the existing pandas/Arrow input conventions and ordinary query/materialization APIs.
-Names are proposals, not an additional client or model type.
+Python `build_timeseries(frame, timeseries_col, *, timestamps_col=None, time_delta=None, anchor_time=None, entity_col=None, num_timeframes=1)` accepts pandas or Arrow and returns frozen `ForecastInput(schema, query, anchor_time)`.
+Java `TimeSeries.build(Arrow Table, TimeSeriesOptions)` returns `ForecastInput(schema, query, anchorTime)`; options use `Duration`, `Instant` and equivalent column names.
+Returned schema data is independently owned; inputs are never consumed, and temporary Java input allocators may close after building.
+Naive timestamps mean UTC, aware timestamps preserve instants, and output timestamps/cutoff are UTC nanoseconds; mixed naive/aware pandas histories are refused.
+Observations are Float64 model values; large integers and decimals may round, while entity keys retain their original types.
+Null observation values are retained, NaN becomes null, infinity and nonnumeric/bool observations are refused; null history lists and null timestamps are refused.
+Individual empty histories retain entities; no observations across all entities is an error.
+Intervals must be exact positive whole minutes, forecast count a positive integer, and timestamp/horizon arithmetic must fit signed nanoseconds.
+Entity IDs must be nonnull and unique; generated `entity_id` must not collide, and the entity key cannot be `value`, `timestamp` or either history column.
+Invalid options/data return `INVALID_REQUEST`; existing schema-admission errors remain unchanged.
+Rust emits the existing warning channel when inferred intervals are irregular.
 
 ```text
 Python/Java builder: input adapter + public workflow
@@ -83,3 +91,27 @@ Record each deliberate old/new difference with its reason and regression test; d
 Old source at `12955d397`: engine `rfm/graph.py:2306–2510`, under `packages/structured-data-models-relational-engine/src/sdm_relational_engine/`.
 Old tests: `packages/structured-data-models-relational-engine/tests/test_timeseries_graph.py`.
 Current reuse points: `sdm-data`, `sdm-schema`, `sdm-pql`, and the existing Python/Java `Schema` and `PredictiveQuery` APIs.
+
+## Implemented example and verification
+
+```python
+import pandas as pd
+from sdm_client import build_timeseries, KumoRelational
+
+forecast = build_timeseries(
+    frame, "sales", entity_col="id",
+    time_delta=pd.Timedelta("1D"), anchor_time=pd.Timestamp("2024-02-01"),
+    num_timeframes=2,
+)
+request = forecast.query.materialize(
+    model=KumoRelational(), indices=[1, 2], anchor_time=forecast.anchor_time,
+)
+result = client.predict(request, model=KumoRelational())
+```
+
+Java uses `TimeSeries.build(table, TimeSeriesOptions.builder("sales").entityColumn("id").timeDelta(Duration.ofDays(1)).anchorTime(cutoff).numTimeframes(2).build())`, then the existing schema/query materialization API.
+Shared Python/Java fixtures check exact rows, times, nulls and query meaning, plus independent output ownership and invalid-input cleanup.
+The old public helper was reproduced accepting unequal per-entity lengths when their totals match and silently assigning the second entity's timestamp to the first entity's value; the new clients reject that input.
+Whole-minute precision, UTC-naive interpretation and strict key/null validation are deliberate improvements, not compatibility accidents.
+A live public builder → materialize → prediction journey returned four forecast rows for two entities and two windows using the existing Relational endpoint.
+The Java adapter works around Arrow's unsupported timezone-list copier using public readers, preserving original timestamp units and instants before Rust normalization.
