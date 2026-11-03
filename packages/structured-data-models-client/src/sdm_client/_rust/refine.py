@@ -15,8 +15,20 @@ if TYPE_CHECKING:
 
 
 def changed(schema: Schema, edit: dict) -> Schema:
+    from sdm_client.schema import Relationship, _Links
+
     result = schema.snapshot()
-    edits._made(result, edit)
+    answer = edits._made(result, edit)
+    links = [
+        Relationship(
+            foreign['table'],
+            foreign['column'],
+            target['table'],
+            target['column'],
+        )
+        for foreign, target in answer['links']
+    ]
+    object.__setattr__(result, 'relationships', _Links(links, result))
     return result
 
 
@@ -55,7 +67,13 @@ def link_edit(
     from sdm_client.schema import Relationship
 
     if not isinstance(relationship, Relationship) or any(
-        not isinstance(name, str) for name in relationship
+        not isinstance(name, str)
+        for name in (
+            relationship.source_table,
+            relationship.source_column,
+            relationship.target_table,
+            relationship.target_column,
+        )
     ):
         raise StructuredDataError(
             'relationship must contain four names', code='INVALID_REQUEST'

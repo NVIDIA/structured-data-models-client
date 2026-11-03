@@ -78,6 +78,9 @@ Metadata is detached; source/frame buffers remain shared, as existing schema sna
 `link_origins` / `linkOrigins()` returns immutable ordered relationship/origin records with `declared`, `inferred` or `unknown` origins.
 Declared includes caller and catalog declarations; only engine-created links are inferred, and old records remain unknown.
 Identical link additions are idempotent; conflicting additions and missing removals raise `INVALID_REQUEST` without mutation.
-Explicit inference reuses existing frame/source observation and then applies a Rust-owned merge preserving columns, types and current choices.
+Explicit inference reuses existing frame/source observation and then applies a Rust-owned merge preserving columns and current choices, using existing key/time role typing and restoration rules.
 Optional typed engine state preserves explicit key/time choices (including none), time-choice dependence on links and link provenance through snapshots/persistence.
 Pure edits perform no source reads; rerunning inference may read previews through existing providers.
+
+Fresh manually constructed schemas may infer missing default choices; setters explicitly assigning none disable that inference.
+Older serialized schemas with no recorded history retain unknown choices conservatively rather than guessing that missing means inferable.

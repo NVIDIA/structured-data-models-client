@@ -57,4 +57,32 @@ class SchemaRefinementTest {
     assertEquals("categorical", inferred.table("customers").column("value").stype());
     assertTrue(inferred.relationships().isEmpty());
   }
+  @Test void providerInferenceAndPureEditsUseExistingBoundary() throws Exception {
+    Schema inferred;
+    try (var connection = java.sql.DriverManager.getConnection("jdbc:duckdb:");
+        var statement = connection.createStatement()) {
+      statement.execute("CREATE TABLE customers(customer_id BIGINT PRIMARY KEY, value DOUBLE)");
+      statement.execute("INSERT INTO customers SELECT i, i * 0.5 FROM range(30) t(i)");
+      statement.execute("CREATE TABLE orders(order_id BIGINT PRIMARY KEY, customer_id BIGINT, amount DOUBLE)");
+      statement.execute("INSERT INTO orders SELECT i, i % 30, i * 0.25 FROM range(60) t(i)");
+      Schema original = Schema.fromSource(DuckDbSource.of(connection)).withRelationships(List.of());
+      inferred = original.inferLinks();
+      assertTrue(original.relationships().isEmpty());
+      assertEquals(List.of(LINK), inferred.relationships());
+      try (Request request = PredictiveQuery.parse("PREDICT customers.value FOR EACH customers.customer_id")
+          .materialize(inferred, MaterializeOptions.builder().indices(List.of(0, 1, 2)).randomSeed(7).build())) {
+        assertNotNull(request);
+        assertEquals(1, inferred.withoutTable("orders").tables().size());
+      }
+    }
+    assertTrue(inferred.withoutRelationship(LINK).relationships().isEmpty());
+  }
+
+  @Test void conflictingRelationshipFailsAtomically() throws Exception {
+    Schema original = schema(false).withRelationship(LINK);
+    Relationship conflict = new Relationship("orders", "customer_id", "orders", "order_id");
+    assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
+        () -> original.withRelationship(conflict)).code());
+    assertEquals(List.of(LINK), original.relationships());
+  }
 }

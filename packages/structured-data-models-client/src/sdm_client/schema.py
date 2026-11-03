@@ -930,6 +930,23 @@ class Schema:
         for table in self._tables.values():
             object.__setattr__(table, '_core_origin', origin)
             object.__setattr__(table, '_schema', self)
+        # Fresh declarations are distinguishable from older records whose
+        # inference history was never recorded. Missing choices stay inferable.
+        self._inference = {
+            'unknown_tables': [],
+            'key_declared': [
+                name
+                for name, table in self._tables.items()
+                if table.primary_key
+            ],
+            'time_declared': [
+                name
+                for name, table in self._tables.items()
+                if table.time_column is not None
+            ],
+            'times': {},
+            'links': [],
+        }
         object.__setattr__(self, 'relationships', _Links([], self))
         self.relationships = relationships
         # The engine's own reading of the source's tables, kept so that each
