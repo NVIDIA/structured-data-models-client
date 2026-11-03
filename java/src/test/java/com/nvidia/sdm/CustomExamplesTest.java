@@ -137,6 +137,38 @@ class CustomExamplesTest {
     }
   }
 
+  @Test void localSqlSourcesPreserveSuppliedLabelsAndRepeatedEntities() throws Exception {
+    for(String backend:List.of("sqlite","duckdb")) {
+      try(var connection=T312Shop.open(backend);RootAllocator allocator=new RootAllocator()) {
+        Schema schema=Schema.fromSource(T312Shop.source(backend,connection))
+            .withPrimaryKey("users","user_id").withPrimaryKey("orders","order_id")
+            .withRelationships(List.of(new Relationship("orders","user_id","users","user_id")));
+        Map<String,Object> contextData=Map.of("columns",List.of("ENTITY","TARGET"),
+            "rows",List.of(List.of(3,1.25),List.of(1,8.5),List.of(3,-2.75)));
+        Map<String,Object> predictData=Map.of("columns",List.of("ENTITY"),
+            "rows",List.of(List.of(3),List.of(0),List.of(3)));
+        Request request;
+        try(Table context=arrow(allocator,contextData,"regression");Table predict=arrow(allocator,predictData,"")) {
+          request=schema.materializeExamples(RelationalTask.regression("users"),context,predict,
+              ExamplesOptions.builder().numNeighbors(List.of(10)).randomSeed(7).build());
+        }
+        Map<String,Object> payload=payload(request,0);
+        assertEquals(List.of(1.25,8.5,-2.75),normalized(column(instance(payload,"context"),"TARGET")),backend);
+        assertEquals(3,rows(instance(payload,"context")).size(),backend);
+        assertEquals(3,rows(instance(payload,"predict")).size(),backend);
+        Map<String,Object> users=object(object(object(payload.get("predict")).get("related_tables")).get("users"));
+        List<Object> batches=column(users,"instance_id"),ids=column(users,"user_id");
+        List<Object> actual=new ArrayList<>();
+        for(Object batch:column(instance(payload,"predict"),"instance_id")) {
+          int position=-1;
+          for(int i=0;i<batches.size();i++) if(normalized(batch).equals(normalized(batches.get(i)))) {position=i;break;}
+          assertTrue(position>=0,backend); actual.add(ids.get(position));
+        }
+        assertEquals(List.of(3.0,0.0,3.0),normalized(actual),backend);
+      }
+    }
+  }
+
   static byte[] forecastAnswer(byte[] bytes) {
     try {
       Map<String,Object> call=object(Json.read(bytes)),table=instance(call,"predict");
@@ -172,12 +204,14 @@ class CustomExamplesTest {
   static byte[] corruptFacts(byte[] bytes,String mutation) throws Exception {
     var input=new DataInputStream(new ByteArrayInputStream(bytes));
     byte[] magic=input.readNBytes(8);int version=input.readInt();byte[] metadata=input.readNBytes(input.readInt());
-    Map<String,Object> manifest=object(Json.read(metadata));
+    Map<String,Object> manifest=new LinkedHashMap<>(object(Json.read(metadata)));
     Map<String,Object> facts=new LinkedHashMap<>(object(manifest.get("example_facts")));
     if(mutation.equals("missing")) facts.remove("entity_table");
     else if(mutation.equals("kind")) facts.put("kind","made_up_task");
+    else if(mutation.equals("fraction")) facts.put("num_forecasts",3.5);
+    else if(mutation.equals("window")) facts.put("windowed",false);
     else facts.put("num_forecasts",99);
-    manifest.put("example_facts",facts);
+    manifest.put("example_facts",mutation.equals("null") ? null : mutation.equals("shape") ? "bad" : facts);
     byte[] changed=Json.write(manifest);
     var output=new ByteArrayOutputStream();var data=new DataOutputStream(output);
     data.write(magic);data.writeInt(version);data.writeInt(changed.length);data.write(changed);input.transferTo(data);
@@ -188,7 +222,7 @@ class CustomExamplesTest {
     Map<String,Object> fixture=fixture();
     Map<String,Object> test=cases(fixture).stream().filter(c->c.get("id").equals("forecasting")).findFirst().orElseThrow();
     byte[] snapshot=saved(prepare(memory(fixture,false),test,object(test.get("predict"))));
-    for(String mutation:List.of("missing","kind","horizon")) {
+    for(String mutation:List.of("missing","kind","horizon","fraction","window","null","shape")) {
       byte[] corrupt=corruptFacts(snapshot,mutation);
       Exception error=assertThrows(Exception.class,()->Request.readFrom(new ByteArrayInputStream(corrupt)),mutation);
       assertTrue(error instanceof IOException || error instanceof StructuredDataException,error.getClass().toString());

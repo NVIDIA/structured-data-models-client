@@ -38,14 +38,14 @@ impl fmt::Debug for FrameGraph {
             .finish_non_exhaustive()
     }
 }
-struct Lease(FrameGraph);
+pub(super) struct Lease(FrameGraph);
 impl Drop for Lease {
     fn drop(&mut self) {
         self.0.0.busy.store(false, Ordering::Release);
     }
 }
 impl FrameGraph {
-    fn lease(&self) -> Result<Lease, CoreError> {
+    pub(super) fn lease(&self) -> Result<Lease, CoreError> {
         if self
             .0
             .busy
@@ -61,6 +61,9 @@ impl FrameGraph {
     }
     pub(super) fn column_type(&self, table: &str, column: &str) -> Result<DataType, CoreError> {
         self.0.snapshot.column_type(table, column)
+    }
+    pub(super) fn description(&self) -> SourceDescription {
+        self.0.description.clone()
     }
     pub(super) fn graph(&self) -> Graph {
         self.0.graph.clone()

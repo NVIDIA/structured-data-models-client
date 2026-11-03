@@ -16,6 +16,7 @@ from sdm_client.schema import Schema
 
 if TYPE_CHECKING:
     from sdm_client._rust.results import CoreQuery
+    from sdm_client.sanitization import SanitizationReport
 
 
 # Host memory limits passed to Rust for request-size enforcement.
@@ -25,6 +26,8 @@ MOST_CALLS = 100
 
 class RelationalMaterializer:
     """Retain host resources while Rust owns sampling and request construction."""
+
+    _sanitization_report: SanitizationReport
 
     _MATERIALIZE_OPTIONS = frozenset(
         {

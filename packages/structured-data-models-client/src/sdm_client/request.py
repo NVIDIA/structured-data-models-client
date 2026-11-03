@@ -336,6 +336,7 @@ class Request:
     # the core did not materialize, which predict on the core predicts from
     # what it holds, as the old client does (T3.26).
     _core: CoreRequest | None = None
+    _sanitization_report: SanitizationReport
 
     @property
     def sanitization_report(self) -> SanitizationReport:

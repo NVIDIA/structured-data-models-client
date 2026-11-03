@@ -313,6 +313,9 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'timeseries-preparation',
         'schema-refinement',
         'labels-only',
+        'end-time',
+        'sql-columns',
+        'custom-examples',
     }
 
 

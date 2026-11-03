@@ -19,9 +19,43 @@ import java.util.Map;
 public final class Results {
   private Results() {}
 
+  public interface RequestFacts { String entityTable(); String problemType(); boolean windowed(); long numForecasts(); }
+  public record ExampleFacts(String entityTable, String problemType, boolean windowed, long numForecasts) implements RequestFacts {}
+  public static ExampleFacts exampleFacts(Object value) {
+    if(value==null)return null;
+    if (!(value instanceof Map<?, ?> data)) throw invalidExamples();
+    String entity=data.get("entity_table") instanceof String e ? e : null;
+    String kind=data.get("kind") instanceof String k ? k : null;
+    Object window=data.get("windowed");
+    long count=exampleCount(data.get("num_forecasts"));
+    if(entity==null || entity.isBlank() || kind==null
+        || !java.util.Set.of("regression","binary_classification","multiclass_classification","temporal_link_prediction","forecasting").contains(kind)
+        || !(window instanceof Boolean temporal)
+        || temporal != (kind.equals("forecasting") || kind.equals("temporal_link_prediction"))
+        || (!kind.equals("forecasting") && count!=1)) throw invalidExamples();
+    return new ExampleFacts(entity,kind,(Boolean)window,count);
+  }
+
+  /** Decode an exact positive contract u32, including when reading a saved request. */
+  public static long exampleCount(Object value) {
+    long count;
+    try {
+      if(value instanceof Integer n) count=n.longValue();
+      else if(value instanceof Long n) count=n;
+      else if(value instanceof java.math.BigInteger n) count=n.longValueExact();
+      else throw invalidExamples();
+    } catch(ArithmeticException error) { throw invalidExamples(); }
+    if(count<1 || count>0xffff_ffffL) throw invalidExamples();
+    return count;
+  }
+
+  private static StructuredDataException invalidExamples() {
+    return new StructuredDataException("invalid supplied example metadata", "INVALID_REQUEST", Map.of(), null);
+  }
+
   /** What the core resolved of a query (the contract's {@code QueryFacts}). */
   public record QueryFacts(
-      String entityTable, String problemType, boolean windowed, long numForecasts, String text) {}
+      String entityTable, String problemType, boolean windowed, long numForecasts, String text) implements RequestFacts {}
 
   /** One diagnostic of a query: its code, message and severity. */
   public record Diagnostic(String code, String message, String severity) {}
@@ -47,7 +81,7 @@ public final class Results {
       long version, int payload, int query, List<Batch> batches, boolean inParts) {}
 
   /** {@code materialize}'s result. */
-  public record Gathered(State state, QueryFacts query) {}
+  public record Gathered(State state, QueryFacts query, ExampleFacts examples) {}
 
   /** {@code predict}'s result. */
   public record Predicted(
@@ -106,7 +140,7 @@ public final class Results {
         case "validate_query" -> validated(result);
         case "describe_source" -> described(result);
         case "edit_schema" -> new Edited(count(result, "schema"), map(result.get("declared")));
-        case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")));
+        case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")), exampleFacts(result.get("examples")));
         case "predict" -> predicted(result);
         default -> throw new IllegalArgumentException("an operation this host does not know");
       };
