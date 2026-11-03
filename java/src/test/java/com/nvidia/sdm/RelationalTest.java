@@ -53,7 +53,7 @@ class RelationalTest {
     assertEquals(report, request.sanitizationReport());
   }
 
-  @Test void sanitizationCountsDuplicateBeforeNullTime() {
+  @Test void sanitizationCountsDuplicateBeforeNullTime() throws Exception {
     try (RootAllocator allocator = new RootAllocator();
         BigIntVector ids = new BigIntVector("user_id", allocator);
         Float8Vector values = new Float8Vector("value", allocator);
@@ -71,6 +71,10 @@ class RelationalTest {
         Request request = PredictiveQuery.parse(SCALAR).materialize(schema, options(1L, 2L).build());
         assertEquals(List.of(new TableSanitizationReport("users", 100, 98, 0, 1, 1)),
             request.sanitizationReport().tables());
+        var bytes = new java.io.ByteArrayOutputStream();
+        request.writeTo(bytes);
+        Request restored = Request.readFrom(new java.io.ByteArrayInputStream(bytes.toByteArray()));
+        assertEquals(request.sanitizationReport(), restored.sanitizationReport());
       }
     }
   }

@@ -443,6 +443,13 @@ def test_sanitization_exclusive_drop_precedence_and_no_key_table():
     assert tables['users'].output_rows == 20
     assert any('4 of 30 rows dropped' in str(w.message) for w in emitted)
 
+    # Nonzero reasons must survive persistence too, not just clean zero counts.
+    import pickle
+
+    restored = pickle.loads(pickle.dumps(request))
+    assert restored.sanitization_report == request.sanitization_report
+    assert restored.payloads == request.payloads
+
 
 def test_legacy_saved_requests_report_unavailable_or_not_applicable():
     import pickle

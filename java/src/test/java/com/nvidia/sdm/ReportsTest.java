@@ -113,4 +113,36 @@ class ReportsTest {
     assertNull(result.explanationView().raw().get("unknown"));
     assertEquals(0, result.rows());
   }
+  @Test @SuppressWarnings("unchecked")
+  void sharedAccessorPrecedenceAndLazyErrors() throws Exception {
+    var fixtures = (List<Map<String, Object>>) com.nvidia.sdm.internal.Json.read(java.nio.file.Files.readAllBytes(
+        java.nio.file.Path.of("../tests/fixtures/reports/accessors.json")));
+    for (var fixture : fixtures) {
+      var view = new ExplanationView((Map<String, Object>) fixture.get("payload"));
+      Map<String, java.util.function.Supplier<Object>> fields = Map.of(
+          "summary", view::summary, "warnings", view::warnings, "cohorts", view::cohorts, "subgraphs", view::subgraphs);
+      for (var field : fields.entrySet()) if (fixture.containsKey(field.getKey()))
+        assertEquals(fixture.get(field.getKey()), field.getValue().get(), fixture.get("name").toString());
+      if (fixture.containsKey("error_field")) {
+        var error = assertThrows(StructuredDataException.class, () -> fields.get(fixture.get("error_field")).get());
+        assertEquals("INVALID_REQUEST", error.code());
+        assertEquals(fixture.get("error_path"), error.details().get("path"));
+      }
+    }
+  }
+
+  @Test void explanationDepthBoundaryAndReusedContainers() {
+    List<Object> shared = new ArrayList<>(List.of(1));
+    var view = new ExplanationView(Map.of("left", shared, "right", shared));
+    shared.add(2);
+    assertEquals(List.of(1), view.raw().get("left"));
+    assertEquals(List.of(1), view.raw().get("right"));
+    Map<String, Object> payload = Collections.singletonMap("child", null);
+    for (int i = 1; i < 128; i++) payload = Map.of("child", payload);
+    assertNotNull(new ExplanationView(payload));
+    Map<String, Object> tooDeep = Map.of("child", payload);
+    var error = assertThrows(StructuredDataException.class, () -> new ExplanationView(tooDeep));
+    assertEquals("INVALID_REQUEST", error.code());
+    assertEquals("$" + ".child".repeat(129), error.details().get("path"));
+  }
 }
