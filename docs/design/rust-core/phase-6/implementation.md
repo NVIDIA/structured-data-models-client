@@ -83,12 +83,16 @@ A new goal covers these three efforts; prior restoration evidence remains valid 
 
 | Effort | Implementation branch | Status |
 |---|---|---|
-| Connection rebinding | `rust-core-phase-6-rebinding` | Agent investigating exact Python/Java ownership and validation contract |
-| Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Agent investigating context identity, lifecycle and retry contract |
-| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Agent investigating host APIs and explicit summarizer integration |
+| Connection rebinding | `rust-core-phase-6-rebinding` | Contract approved: detached `with_source` / `withSource`, same backend/namespace/source kind; implementing |
+| Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Contract approved: supplied batch-size control, identical-context session reuse, bounded recovery and centralized retries; implementing |
+| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Contract approved: immutable inference options and explicitly configured host summarizer; implementing |
 
 Each agent submits its precise API/boundary proposal before substantial implementation.
 The coordinator reviews proposals, serializes native contract versions/builds and arranges reciprocal implementation review.
 Tests cover independently expected public behavior, focused old-client comparisons, ownership/errors and real provider/model journeys where applicable.
 Controlled HTTP endpoints exercise failures and lifecycle behavior that live services cannot reliably reproduce.
 Summary live validation uses only an existing authorized endpoint and synthetic data; any external validation limit is recorded explicitly.
+
+Native contract allocation: rebinding 66 first, batching 67 after integration; settings/summaries are host adapters.
+Rebinding owns the shared native target initially; other agents develop without competing native builds.
+No authorized live summarizer endpoint was found in the existing model configuration; controlled HTTP tests are required and real-provider validation remains explicitly unclaimed.
