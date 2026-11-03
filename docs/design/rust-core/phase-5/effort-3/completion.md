@@ -6,6 +6,9 @@
 
 **Final CI and artifact validation passed; publication and merge remain on hold.**
 
+**Subsequent API audit found capability gaps outside the tested facade.**
+See [deleted API audit](../api-removal-audit/audit.md) before treating this report as overall merge readiness.
+
 | Area | Current evidence / remaining work |
 |---|---|
 | Integration | Candidate includes `main` at `12955d397` and `rust-core` at `2b9e6ea88`; verified against refreshed remote refs |

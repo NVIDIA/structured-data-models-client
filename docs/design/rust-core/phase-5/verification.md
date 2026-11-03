@@ -207,3 +207,9 @@ Two independent reviews found no additional implementation or artifact blocker.
 Final CI completed successfully with 81 successful jobs, including all ten JDK 17/21 platform loading checks and Java behavior/provider suites; the targeted-only PQL job was intentionally skipped.
 Final independent evidence review accepted RC preparation for `d494b2e76`, with no remaining acceptance gap in the approved scope.
 Publication, tags and merge remain on hold by owner instruction.
+
+## Subsequent deleted-API audit
+
+The [API removal audit](api-removal-audit/audit.md) found legacy-engine capabilities absent from the maintained facade, including visualization and diagnostics.
+The CI and distribution evidence above remains valid for its tested scope, but does not establish full legacy capability parity.
+These gaps require explicit disposition and targeted coverage before merge readiness is reasserted.
