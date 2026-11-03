@@ -410,7 +410,8 @@ class _TableShape:
             and _as_key_tuple(self.primary_key)
             == _as_key_tuple(other.primary_key)
             and self.time_column == other.time_column
-            and getattr(self, 'end_time_column', None) == getattr(other, 'end_time_column', None)
+            and getattr(self, 'end_time_column', None)
+            == getattr(other, 'end_time_column', None)
             and getattr(self, 'source_name', None)
             == getattr(other, 'source_name', None)
         )
@@ -440,7 +441,10 @@ class _TableShape:
 
             if edits.table(self, key, value):
                 return
-        if key in ('primary_key', 'time_column', 'end_time_column') and 'columns' in self.__dict__:
+        if (
+            key in ('primary_key', 'time_column', 'end_time_column')
+            and 'columns' in self.__dict__
+        ):
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
             # `__post_init__` (which runs after the fields are assigned), so
@@ -1725,7 +1729,12 @@ def _copy_table(table: _T) -> _T:
     )
     if getattr(table, '_core_origin', None) == 'frames':
         object.__setattr__(copied, '_core_origin', 'frames')
-    for carried in ('primary_key', 'time_column', 'end_time_column', 'duplicate_keys'):
+    for carried in (
+        'primary_key',
+        'time_column',
+        'end_time_column',
+        'duplicate_keys',
+    ):
         object.__setattr__(copied, carried, getattr(table, carried, None))
     for column in copied.columns.values():
         object.__setattr__(column, '_table', copied)

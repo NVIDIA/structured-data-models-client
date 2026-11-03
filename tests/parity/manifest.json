@@ -3767,9 +3767,32 @@
       },
       "gate": "local",
       "note": "Shared independent scalar/temporal/link/forecast labels across memory and SQLite/DuckDB; no model call; live warehouse read-only proof is separate."
+    },
+    {
+      "id": "end-time",
+      "apis": {
+        "python": [
+          "Table.end_time_column",
+          "SourceTable.end_time_column"
+        ],
+        "java": [
+          "Schema.withEndTimeColumn",
+          "Schema.withoutEndTimeColumn",
+          "Table.endTimeColumn"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_end_time.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/EndTimeTest.java"
+        ]
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "0226f12683ee7b755c82e5ee99276169fc6767b7e978624bd0a6ad85c0299b51",
+  "public_api_snapshot_sha256": "bc4ece70899e87cd6fa6659e24b79347436daad7888526668401c2181cdef1c8",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4422,6 +4445,15 @@
       },
       "sdm_connectors.resolve_sql": {
         "capability": "sql-helpers"
+      },
+      "sdm_client.SourceTable.end_time_column": {
+        "capability": "end-time"
+      },
+      "sdm_client.Table.end_time_column": {
+        "capability": "end-time"
+      },
+      "sdm_client.TableMetadata.end_time_column": {
+        "capability": "end-time"
       }
     },
     "java": {
@@ -5795,6 +5827,21 @@
       },
       "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timestampsColumn(java.lang.String);": {
         "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withEndTimeColumn(java.lang.String, java.lang.String);": {
+        "capability": "end-time"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutEndTimeColumn(java.lang.String);": {
+        "capability": "end-time"
+      },
+      "com.nvidia.sdm.Table#public java.util.Optional<java.lang.String> endTimeColumn();": {
+        "capability": "end-time"
+      },
+      "com.nvidia.sdm.TableMetadata#public com.nvidia.sdm.TableMetadata(java.lang.String, java.util.List<com.nvidia.sdm.ColumnMetadata>, java.util.List<java.lang.String>, java.lang.String, java.lang.String);": {
+        "capability": "end-time"
+      },
+      "com.nvidia.sdm.TableMetadata#public java.lang.String endTimeColumn();": {
+        "capability": "end-time"
       }
     }
   },
@@ -6109,12 +6156,12 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_inventory",
-      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features."
+      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "public_api_snapshot_sha256",
-      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained."
+      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
@@ -6154,7 +6201,12 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "live_api_tests",
-      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint."
+      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/end-time",
+      "reason": "Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
     }
   ],
   "capabilities": [
@@ -7790,6 +7842,11 @@
     {
       "api_contract": "labels-only",
       "test": "packages/structured-data-models-client/tests/test_labels_warehouse.py::test_live_ground_truth_without_a_model",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "end-time",
+      "test": "packages/structured-data-models-client/tests/test_end_time_warehouse.py::test_live_end_time_selection_masking_and_prediction",
       "evidence_level": "live-required"
     }
   ]

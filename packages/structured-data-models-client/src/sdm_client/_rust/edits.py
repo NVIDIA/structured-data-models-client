@@ -201,7 +201,9 @@ def _store(
             key = None if not keys else keys[0] if len(keys) == 1 else keys
             object.__setattr__(table, 'primary_key', key)
         object.__setattr__(table, 'time_column', given['time_column'])
-        object.__setattr__(table, 'end_time_column', given.get('end_time_column'))
+        object.__setattr__(
+            table, 'end_time_column', given.get('end_time_column')
+        )
         repeated = given.get('duplicate_keys')
         object.__setattr__(
             table,

@@ -5,7 +5,7 @@
 # Tell the engine when an entity stops being active
 
 **Implemented for review: Python and Java end-time declarations, Rust expiry handling and protection against future-data leakage.**
-Live warehouse/model validation and final integration checks remain pending.
+Local and live validation passed; coordinator review and branch integration remain.
 
 ## What users lose today
 
@@ -83,10 +83,17 @@ Providers use existing projections and reads; warehouse sampling SQL is unchange
 | Rust schema and engine suites | Passed |
 | No-end exact ordering/random-state and malformed validity lengths | Passed |
 | Explicit-ID forecast rendering | Passed |
-| Real warehouse and endpoint | Pending |
+| Real warehouse and endpoint | Databricks SQL and Snowflake: eligibility, masking and real relational prediction passed; existing fixtures unchanged |
+| Adjacent regressions | 60 Python schema/labels tests and 107 forecast/decomposition tests passed |
+| Static checks | Affected Rust crates clippy, Python lint/format/types, contract lock and API ledger passed |
 
 Forecast parts change target windows, not the prediction anchor: a future closing date stays hidden in every part.
 A separate request at a later anchor may expose that date once it is known.
 Explicit forecast IDs bypass initial eligibility, as in the old client; automatic forecast selection checks eligibility at its first anchor.
 A reproduced existing Rust bug dropped explicit `FOR` IDs when rendering forecast parts; the fix reuses the existing entity-clause renderer, preserving IDs and filters.
 The no-end invariant applies to unaffected sampling, not that demonstrated forecast bug.
+
+The pinned old client independently returned eligible IDs 3, 4 and 5 for the shared account fixture.
+Its sampler also confirmed the repeated account's end is hidden on January 4 and visible on January 5, while an explicitly scored expired account retains its known end.
+An unrelated clock table supplies the old client's required global time bounds; account rows are unchanged.
+Live checks are maintained in `test_end_time_warehouse.py` and opt in through `SDM_END_TIME_CONFIG`; credentials are not stored in the repository.
