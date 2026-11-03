@@ -9,7 +9,7 @@ Python and Java share Rust validation and gathering; providers execute calculate
 
 ## What the two gaps mean
 
-| Workflow | Intended use and old support | What is missing today |
+| Workflow | Intended use and old support | Gap before restoration |
 |---|---|---|
 | Calculated SQL column | `Table.add_column(s)` with `ColumnSpec(expr=...)`; for example, `line_total = unit_price_usd * quantity` | A public way to add that column to a source-backed schema without creating a warehouse view |
 | Custom relational examples | `TaskTable` plus `predict_task()` accepted caller-supplied labels, entity IDs, timestamps and task type | Predict using externally supplied relational labels, rather than requiring labels derived from a PQL target |
@@ -23,7 +23,7 @@ Automatic batching already exists, but does not replace external relational labe
 
 ## A. Add a calculated SQL column
 
-Proposed shape in both languages: `schema.with_sql_column(table, name, expression)` / `withSqlColumn(...)`, returning a new schema.
+Public shape in both languages: `schema.with_sql_column(table, name, expression)` / `withSqlColumn(...)`, returning a new schema.
 Expressions are caller-supplied SQL in the source dialect.
 Start with new names and expressions over existing physical columns; reject overwrites.
 Providers validate against physical source columns; composing calculated aliases is initially unsupported.
@@ -49,14 +49,14 @@ SQLite refuses a calculated alias named `rowid`, which would shadow its existing
 Existing live-source schemas and their prepared requests cannot be persisted because they retain open connections (verified unchanged on contract 63); this work does not serialize credentials or connections.
 
 Old support covered DuckDB, SQLite, PostgreSQL, Databricks and Snowflake.
-Today only Databricks/Snowflake advertise derived-relation support, so the other three need provider projection work and tests.
+Previously only Databricks/Snowflake advertised derived-relation support; this restoration added and tested provider projections for the other three.
 This extends connector rendering, not the sampling algorithm.
 In-memory expressions were explicitly unsupported by the old client: users should still calculate columns with pandas or Arrow before schema admission.
 Destructive column editing remains outside this proposal; the old removal method could leave dangling links.
 
 ## B. Prepare a request from supplied examples
 
-Proposed shape: `schema.materialize_examples(task, context, predict, ...)` / `materializeExamples(...)`, returning the existing `Request`.
+Public shape: `schema.materialize_examples(task, context, predict, ...)` / `materializeExamples(...)`, returning the existing `Request`.
 Use an explicit task descriptor built from existing task/target concepts: task kind, entity table/key, target type and link destination where needed.
 No PQL is required.
 Use immutable `RelationalTask(kind, entity_table, link_target_table=None, step_size_ns=None, num_forecasts=None)` and `materialize_examples(task, context, predict, *, num_neighbors=None, random_seed=42, inference=None)`.
@@ -131,7 +131,7 @@ Rust requires every expected row/step response exactly once and keeps the origin
 The latest dated graph time supplies missing static anchors; timeless inputs use the correct negative sentinel, fixing a demonstrated old overflow.
 
 Verification: seven shared task fixtures cover label order, overlaps, repeated entities, precision and ownership; malformed labels/IDs/options and sliced Arrow lists are rejected or preserved as appropriate.
-Python local SQLite/DuckDB preparation and existing fit/predict/close pass.
+Python and Java local SQLite/DuckDB preparation pass; Python also verifies the existing fit/predict/close path.
 PostgreSQL, Databricks and Snowflake read-only preparation each preserve supplied labels and produce live predictions.
 Real endpoints pass regression, binary/multiclass, temporal-link, and native forecasting with horizons one and three across two prediction batches.
 Java passes the same seven fixtures, multi-batch forecast response alignment, ownership/persistence and malformed snapshot checks.

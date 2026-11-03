@@ -4,7 +4,7 @@
 
 # Restore missing user capabilities
 
-**Status: the first eight restorations, including end-time support, are complete and merged into `rust-core-phase-6`.**
+**Status: the nine scoped restorations are complete and merged into `rust-core-phase-6`.**
 Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
@@ -42,7 +42,8 @@ See [completion evidence](../../phase-6/completion.md).
 
 ## Implementation order and tracker
 
-The first eight rows are complete.
+The nine rows below are complete.
+See [final restoration evidence](../../phase-6/final-restorations.md) for end-time, SQL columns and supplied examples.
 See [restoration completion](../../phase-6/restoration-completion.md) for the latest evidence.
 See the [implementation tracker](../../phase-6/implementation.md) for validation status.
 Effort is relative, not an ETA.
@@ -58,17 +59,17 @@ Names below describe proposed API placement, not frozen signatures.
 | 2 / Complete | [Time-series builder](timeseries/design.md) | Hosts expose a preparation recipe; bounded Rust Arrow transformation handles row/time correctness; existing schema/PQL validates outputs | Moderate |
 | 2 / Complete | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
 | 3 / Complete | [End-time column](end-time/design.md) | Both hosts declare the role; Rust handles sampled eligibility and hides future end dates through existing provider reads | Substantive |
-| 3 / In progress | [SQL columns and custom relational examples](expressions-tasks/design.md) | Providers execute dialect SQL; Rust admits schema changes and supplied relational examples; hosts adapt/slice inputs | Substantive; two bounded workflows |
+| 3 / Complete | [SQL columns and custom relational examples](expressions-tasks/design.md) | Providers execute dialect SQL; Rust admits schema changes and supplied relational examples; hosts adapt/slice inputs | Substantive; two bounded workflows |
 
 **Sampling impact:** presentation, reports and loaders need no sampler changes.
 Inference/edit conveniences reuse existing algorithms; warehouse metadata previews may be reread.
 Labels-only requires a distinct labeling mode, without neighbor gathering or model inference.
 End-time support changes sampled eligibility and masks future end dates after existing provider reads; explicit prediction IDs have separate semantics.
-SQL columns extend provider projections, including three connectors that currently refuse derived relations.
+SQL columns extend provider projections across the five SQL connectors.
 Custom examples reuse graph gathering with supplied IDs/labels.
 These need focused push-down regression checks, not a sampling-algorithm rewrite.
 
-## Contracts to preserve or settle for the remaining work
+## Preserved contracts
 
 - **Presentation:** preserve offline HTML and Mermaid source; explicitly distinguish network-backed image export, keep rendering safe, and restore bundled-asset notices/security checks.
   Notebook display is language-specific; shared diagram content and file export should be available in both languages.
@@ -106,4 +107,4 @@ Task narrowing was used internally to cap context rows and split prediction batc
 Tests also constructed `TaskTable` objects with explicit labels/entity IDs/timestamps and passed them to `predict_task()`.
 Source docstrings document these APIs; the search of tracked Markdown/notebooks found no user tutorial for general task editing.
 The direct `Request` constructor is Tabular-only and does not restore custom relational labels.
-The new proposal restores supplied relational examples; users slice their input tables before admission rather than mutate a prepared task.
+The implemented APIs restore supplied relational examples; users slice their input tables before admission rather than mutate a prepared task.

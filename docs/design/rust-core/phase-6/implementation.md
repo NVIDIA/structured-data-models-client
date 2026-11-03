@@ -57,12 +57,12 @@ Contract lock policy retains merged entries and only the newest unmerged version
 | Work | Branch | Status |
 |---|---|---|
 | End-time roles and future-value masking | `rust-core-phase-6-end-time` | Reviewed and merged (`b4292b660`); local suites, old-client comparison and live Databricks/Snowflake predictions passed |
-| SQL columns and custom relational examples | `rust-core-phase-6-examples` | SQL columns reviewed and merged (`3a413d0ab`); 12 Python / 2 Java tests and 5 real warehouse-to-model journeys passed; supplied custom examples in progress under contract 65 |
+| SQL columns and custom relational examples | `rust-core-phase-6-examples` | Reviewed and merged (`3a413d0ab`, `1f7c191a9`); SQL and supplied examples passed local, real warehouse/model and final combined artifact checks |
 | Deeper original-four coverage | `rust-core-phase-6-coverage2` | Stopped under the replacement goal; unmerged work preserved |
 
 The authoritative designs are `phase-5/api-removal-audit/end-time/design.md` and `expressions-tasks/design.md`.
 Use independent expected answers and focused old-client comparisons; do not preserve demonstrated bugs or introduce an exhaustive differential framework.
-Contracts 63 and 64 are merged; the examples agent owns the warm target for supplied-example contract 65.
+Contracts 63, 64 and 65 are merged; the warm target is released.
 Native supplied forecasting was verified against the existing forecast endpoint: one prediction example per batch, with the horizon no larger than the context count.
 The client will preserve caller row/forecast-step alignment while batching; no deployment change or regression decomposition is needed.
 The replacement goal assigns implementation and testing to the two feature agents only.
@@ -70,6 +70,8 @@ The coordinator reviews boundaries and integration; the feature agents also revi
 The separate original-four coverage branch is preserved but is outside this goal.
 All implementations require independent review, affected checks and integration into Phase 6 only.
 
-Supplied-example contract 65 is implemented in the feature branch and passes Rust and Java compilation; runtime validation is pending.
+Supplied-example contract 65 is complete and merged; final production artifacts passed 145 local Python checks, six live model cases and 22 Java tests.
 Its shared Python/Java expectations live in `tests/fixtures/custom-examples/`; the fixture documents the old timeless-anchor overflow that the new implementation must avoid.
 Independent review covers explicit task metadata without fabricated PQL, authoritative labels, unchanged sampling, checked forecast response alignment and input ownership.
+
+See [final restoration evidence](final-restorations.md) for the completed scope, validation and limitations.
