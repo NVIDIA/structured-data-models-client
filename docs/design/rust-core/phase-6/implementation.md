@@ -41,3 +41,6 @@ The coverage worker audits actual tests for the first four features, closes mean
 Prioritize real execution over mocks where it exercises the feature; use model endpoints only for workflows that actually predict.
 All changes receive independent review and merge into Phase 6; no publication or merge into `rust-core`/`main`.
 The coordinator serializes contract-version allocation and warm-target ownership to avoid conflicting native builds.
+
+Current allocation: time-series preparation owns contract 60 and the warm native target.
+Inference/labels may develop isolated logic and tests, but must integrate the preceding contract before generating their own version.
