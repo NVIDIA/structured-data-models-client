@@ -291,6 +291,19 @@ def test_readings_that_are_not_what_the_schema_says_are_refused(anomaly):
             )
 
 
+def test_a_structured_data_models_without_this_model_still_answers(
+    sdm, monkeypatch
+):
+    """Every published release predates `KumoAnomaly`, and this is asked of
+    every model handed to the client, including ones it does not serve. It
+    has to answer no there rather than raise the import."""
+    monkeypatch.delattr(sdm.models, 'KumoAnomaly', raising=False)
+
+    with pytest.raises(StructuredDataError) as caught:
+        SDMClient.in_process(object())
+    assert caught.value.code == 'INVALID_CONFIGURATION'
+
+
 def test_another_model_is_not_asked_this_question(tabular):
     """`anomaly_detection` is a task only one model here answers."""
     with SDMClient.in_process(tabular) as client:

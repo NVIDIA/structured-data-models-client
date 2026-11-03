@@ -52,15 +52,21 @@ class Anomaly:
 
     @staticmethod
     def load(device: Any) -> Any:
-        from sdm.models import KumoAnomaly
-
-        return KumoAnomaly(device=device)
+        return _model_type()(device=device)
 
     @staticmethod
     def accepts(model: Any) -> bool:
-        from sdm.models import KumoAnomaly
+        r"""Whether ``model`` is this one.
 
-        return isinstance(model, KumoAnomaly)
+        Asked of every model handed to the client, including ones this does
+        not serve, so an installed structured-data-models that predates
+        ``KumoAnomaly`` has to answer no rather than raise. Every published
+        release predates it today.
+        """
+        try:
+            return isinstance(model, _model_type())
+        except StructuredDataError:
+            return False
 
     def check_inference(
         self,
@@ -215,3 +221,17 @@ class Anomaly:
             )
             for index, score in enumerate(scores)
         ]
+
+
+def _model_type() -> Any:
+    r"""``sdm.models.KumoAnomaly``, or why it could not be reached."""
+    try:
+        from sdm.models import KumoAnomaly
+    except ImportError as error:
+        raise StructuredDataError(
+            'this structured-data-models carries no KumoAnomaly. The model '
+            'is on its main and in no release, so until one ships it is '
+            'reached by installing that package from source',
+            code='MODEL_NOT_READY',
+        ) from error
+    return KumoAnomaly
