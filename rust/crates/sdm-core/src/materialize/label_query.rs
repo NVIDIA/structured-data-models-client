@@ -319,6 +319,9 @@ pub(crate) async fn extract(
     if let Some(time) = &entity.time_column {
         columns.insert(time.clone());
     }
+    if let Some(end) = &entity.end_time_column {
+        columns.insert(end.clone());
+    }
     asked.target.entity_columns(&mut columns);
     for shape in &asked.choosing {
         shape.entity_columns(&mut columns);
@@ -332,6 +335,7 @@ pub(crate) async fn extract(
     } else {
         None
     };
+    let explicit_forecast = explicit.is_some();
     let sampled = if let Some(frame) = &frames {
         match &explicit {
             Some(keys) => frame.lookup(entity, keys, &columns)?,
@@ -393,8 +397,25 @@ pub(crate) async fn extract(
             Ok::<_, CoreError>(kept.iter().map(|i| values[*i]).collect::<Vec<_>>())
         })
         .transpose()?;
+    let entity_end = entity
+        .end_time_column
+        .as_ref()
+        .map(|end| {
+            let values = times_ns(named(&sampled, end)?, end)?;
+            Ok::<_, CoreError>(kept.iter().map(|&i| values[i]).collect::<Vec<_>>())
+        })
+        .transpose()?;
+    let validity = sample::Validity {
+        start: entity_time.as_deref(),
+        end: entity_end.as_deref(),
+    };
     let mut rng = default_rng(&entropy);
-    let mut examples = if inputs.anchor_entity {
+    let mut examples = if explicit_forecast {
+        sample::Examples {
+            index: (0..kept.len()).collect(),
+            anchors: vec![anchor; kept.len()],
+        }
+    } else if inputs.anchor_entity {
         sample::entity_examples(
             &mut rng,
             kept.len(),
@@ -402,7 +423,7 @@ pub(crate) async fn extract(
             sample::MISSING_ANCHOR,
         )
     } else {
-        sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), anchor)
+        sample::static_examples_with_validity(&mut rng, kept.len(), validity, anchor)?
     };
     if examples.index.is_empty() {
         return Err(invalid_option(

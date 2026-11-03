@@ -63,6 +63,7 @@ fn table(name: &str, columns: Vec<DescribedColumn>, key: Option<&str>) -> Descri
         columns,
         primary_key: key.map(Into::into).into_iter().collect(),
         time_column: None,
+        end_time_column: None,
         time_column_inferred: None,
         duplicate_keys: Some(Scalar::UInt64(0)),
     }

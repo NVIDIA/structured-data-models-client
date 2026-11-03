@@ -4,15 +4,14 @@
 
 # Tell the engine when an entity stops being active
 
-**Proposal: restore end-time declarations in Python and Java, including expiry handling and protection against future-data leakage.**
-Approved for implementation with contract review and independent code review.
+**Complete: reviewed Python/Java end-time support is integrated into Phase 6.**
+Local and live validation passed; see the evidence below.
 
-## What users lose today
+## The restored behavior
 
 A closed account should stop being chosen as an active example after its closing date.
 When predicting earlier in history, its future closing date must not be shown to the model.
-Today the public schema cannot declare that role, and the engine does not implement those two behaviors.
-An optional field in the query contract is not working end-time support.
+Previously the public schema could not declare that role, and an optional query-contract field did not implement it.
 
 Illustrative example, predicting as of January 4:
 
@@ -26,7 +25,7 @@ The old client supported this through `Table.end_time_column` and constructor ar
 It documented the role in source docstrings and tested it, but no exact usage example was found in tracked Markdown or notebooks.
 Its test explicitly predicts an expired entity while excluding expired entities from sampled context: explicit IDs must not silently disappear.
 
-## Proposed API and ownership
+## API and ownership
 
 Python follows the existing `time_column` property pattern: `schema['accounts'].end_time_column = 'closed_at'`.
 Java adds the corresponding immutable schema edit, `withEndTimeColumn(table, column)`.
@@ -76,3 +75,32 @@ Run focused old-client comparisons to establish semantics, not an exhaustive dif
 Investigate each discrepancy: preserve useful behavior, fix demonstrated bugs, and record the changed expectation with a regression test.
 Verify real provider execution and relevant model predictions; mocks alone do not establish end-to-end support.
 Finish with cross-language contract checks, independent implementation review and combined production-artifact validation.
+
+## Implementation checkpoint
+
+Contract 63 adds optional `end_time_column` to held/described tables and an end-role schema edit; old records default to no end role.
+Python uses the existing table property/constructor pattern; Java uses `withEndTimeColumn` and `withoutEndTimeColumn`.
+Rust validates distinct timestamp roles, selects valid examples before random draws and masks copied features after sampling.
+Providers use existing projections and reads; warehouse sampling SQL is unchanged.
+
+| Check | Result |
+|---|---|
+| Public Python: memory, SQLite, DuckDB, metadata, persistence, invalid edits, timezones, fit preparation, forecast | 16 passed |
+| Public Java: same shared fixture, memory, SQLite, DuckDB | 3 passed |
+| Rust schema and engine suites | Passed |
+| No-end exact ordering/random-state and malformed validity lengths | Passed |
+| Explicit-ID forecast rendering | Passed |
+| Real warehouse and endpoint | Databricks SQL and Snowflake: eligibility, masking and real relational prediction passed; existing fixtures unchanged |
+| Adjacent regressions | 60 Python schema/labels tests and 107 forecast/decomposition tests passed |
+| Static checks | Affected Rust crates clippy, Python lint/format/types, contract lock and API ledger passed |
+
+Forecast parts change target windows, not the prediction anchor: a future closing date stays hidden in every part.
+A separate request at a later anchor may expose that date once it is known.
+Explicit forecast IDs bypass initial eligibility, as in the old client; automatic forecast selection checks eligibility at its first anchor.
+A reproduced existing Rust bug dropped explicit `FOR` IDs when rendering forecast parts; the fix reuses the existing entity-clause renderer, preserving IDs and filters.
+The no-end invariant applies to unaffected sampling, not that demonstrated forecast bug.
+
+The pinned old client independently returned eligible IDs 3, 4 and 5 for the shared account fixture.
+Its sampler also confirmed the repeated account's end is hidden on January 4 and visible on January 5, while an explicitly scored expired account retains its known end.
+An unrelated clock table supplies the old client's required global time bounds; account rows are unchanged.
+Live checks are maintained in `test_end_time_warehouse.py` and opt in through `SDM_END_TIME_CONFIG`; credentials are not stored in the repository.

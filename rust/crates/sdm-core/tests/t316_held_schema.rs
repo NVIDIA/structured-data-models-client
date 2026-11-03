@@ -158,6 +158,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
                 ],
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
+                end_time_column: None,
                 duplicate_keys: None,
             },
             HeldTable {
@@ -166,6 +167,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
                 columns: users,
                 primary_key: vec!["user_id".into()],
                 time_column: None,
+                end_time_column: None,
                 duplicate_keys: None,
             },
         ],

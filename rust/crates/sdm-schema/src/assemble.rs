@@ -388,6 +388,7 @@ fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> Describe
             .collect(),
         primary_key: table.primary_key,
         time_column: table.time_column,
+        end_time_column: None,
         time_column_inferred: None,
         duplicate_keys: duplicates,
     }

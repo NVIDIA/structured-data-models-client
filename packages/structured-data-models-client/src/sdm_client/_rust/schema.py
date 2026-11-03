@@ -220,6 +220,9 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             None if not keys else keys[0] if len(keys) == 1 else keys,
         )
         object.__setattr__(table_shape, 'time_column', table['time_column'])
+        object.__setattr__(
+            table_shape, 'end_time_column', table.get('end_time_column')
+        )
         duplicates = table['duplicate_keys']
         object.__setattr__(
             table_shape,

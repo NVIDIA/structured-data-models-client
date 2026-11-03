@@ -240,15 +240,45 @@ fn heapsort_indices(v: &[i64], a: &mut [usize]) {
     }
 }
 
+/// Declared entity interval. A null end is unbounded; the end is exclusive.
+#[derive(Clone, Copy, Default)]
+pub struct Validity<'a> {
+    pub start: Option<&'a [Option<i64>]>,
+    pub end: Option<&'a [Option<i64>]>,
+}
+
+impl Validity<'_> {
+    fn indices(self, entities: usize, anchor: i64) -> Result<Vec<usize>, CoreError> {
+        if self.start.is_some_and(|v| v.len() != entities)
+            || self.end.is_some_and(|v| v.len() != entities)
+        {
+            return Err(sdm_contract::CoreError::new(
+                sdm_contract::Sentence::SchemaRefinement,
+                "entity validity does not align with rows",
+            )
+            .with_field(
+                "reason",
+                sdm_contract::Detail::text("entity validity does not align with rows"),
+            ));
+        }
+        Ok((0..entities)
+            .filter(|&i| {
+                self.start.is_none_or(|v| v[i].is_some_and(|t| t <= anchor))
+                    && self.end.is_none_or(|v| v[i].is_none_or(|t| t > anchor))
+            })
+            .collect())
+    }
+}
+
 /// `sample_target`'s walk back in time for a temporal query: at each
 /// anchor, from `anchor` back by `step` while the anchor is not before
 /// `earliest`, the entities valid then (all of them, or those whose time
 /// is not after the anchor), shuffled by `rng` and cut to `trials`, until
 /// `trials` examples are collected; then cut to `trials`.
-pub fn temporal_examples(
+pub fn temporal_examples_with_validity(
     rng: &mut Pcg64,
     entities: usize,
-    entity_time: Option<&[Option<i64>]>,
+    validity: Validity<'_>,
     anchor: i64,
     step: i128,
     earliest: i64,
@@ -258,15 +288,7 @@ pub fn temporal_examples(
     let mut anchors = Vec::new();
     let mut at = anchor;
     loop {
-        let mut valid: Vec<usize> = match entity_time {
-            None => (0..entities).collect(),
-            Some(times) => times
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| t.is_some_and(|t| t <= at))
-                .map(|(i, _)| i)
-                .collect(),
-        };
+        let mut valid = validity.indices(entities, at)?;
         rng.shuffle(&mut valid);
         valid.truncate(trials);
         anchors.extend(std::iter::repeat_n(at, valid.len()));
@@ -288,6 +310,42 @@ pub fn temporal_examples(
 /// examples between context and prediction: the entities valid at `anchor`
 /// (all of them, or those whose time is not after it), shuffled by `rng`,
 /// each at `anchor`.
+pub fn static_examples_with_validity(
+    rng: &mut Pcg64,
+    entities: usize,
+    validity: Validity<'_>,
+    anchor: i64,
+) -> Result<Examples, CoreError> {
+    let mut index = validity.indices(entities, anchor)?;
+    rng.shuffle(&mut index);
+    let anchors = vec![anchor; index.len()];
+    Ok(Examples { index, anchors })
+}
+
+/// Start-only compatibility helper; absent end roles preserve the same draws.
+pub fn temporal_examples(
+    rng: &mut Pcg64,
+    entities: usize,
+    entity_time: Option<&[Option<i64>]>,
+    anchor: i64,
+    step: i128,
+    earliest: i64,
+    trials: usize,
+) -> Result<Examples, CoreError> {
+    temporal_examples_with_validity(
+        rng,
+        entities,
+        Validity {
+            start: entity_time,
+            end: None,
+        },
+        anchor,
+        step,
+        earliest,
+        trials,
+    )
+}
+
 pub fn static_examples(
     rng: &mut Pcg64,
     entities: usize,

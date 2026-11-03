@@ -32,6 +32,8 @@ fn snapshot() -> (Edge, Snapshot) {
                 columns: vec![],
                 primary_key: Some("id".into()),
                 time_column: None,
+
+                end_time_column: None,
             },
             Table {
                 name: "orders".into(),
@@ -39,6 +41,8 @@ fn snapshot() -> (Edge, Snapshot) {
                 columns: vec![],
                 primary_key: Some("id".into()),
                 time_column: Some("time".into()),
+
+                end_time_column: None,
             },
         ],
         edges: vec![edge.clone()],
@@ -200,6 +204,8 @@ fn a_temporal_self_edge_keeps_initial_seeds_then_new_nodes_per_example() {
             columns: vec![],
             primary_key: Some("id".into()),
             time_column: Some("time".into()),
+
+            end_time_column: None,
         }],
         edges: vec![edge.clone()],
     };
@@ -342,6 +348,8 @@ fn no_primary_key_tables_count_only_time_drops_and_clean_tables_do_not_warn() {
             columns: vec![],
             primary_key: None,
             time_column: Some("time".into()),
+
+            end_time_column: None,
         }],
         edges: vec![],
     };

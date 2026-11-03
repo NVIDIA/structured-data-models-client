@@ -71,10 +71,9 @@ pub fn settle(schema: &mut SourceDescription, state: &SchemaInference) {
             } else {
                 choice.column.clone()
             };
-            if chosen
-                .as_ref()
-                .is_some_and(|c| table.primary_key.contains(c))
-            {
+            if chosen.as_ref().is_some_and(|c| {
+                table.primary_key.contains(c) || table.end_time_column.as_ref() == Some(c)
+            }) {
                 continue;
             }
             table.time_column = chosen;
@@ -134,10 +133,10 @@ pub fn infer(
             };
             if table.primary_key.is_empty()
                 && !state.key_declared.contains(&table.name)
-                && !fresh
-                    .primary_key
-                    .iter()
-                    .any(|key| table.time_column.as_ref() == Some(key))
+                && !fresh.primary_key.iter().any(|key| {
+                    table.time_column.as_ref() == Some(key)
+                        || table.end_time_column.as_ref() == Some(key)
+                })
                 && fresh
                     .primary_key
                     .iter()
@@ -153,10 +152,11 @@ pub fn infer(
                     .as_ref()
                     .and_then(|s| s.times.get(&table.name))
                 && choice.column.as_ref().is_none_or(|name| {
-                    table
-                        .columns
-                        .iter()
-                        .any(|column| &column.name == name && column.stype == Stype::Timestamp)
+                    table.columns.iter().any(|column| {
+                        &column.name == name
+                            && column.stype == Stype::Timestamp
+                            && table.end_time_column.as_ref() != Some(name)
+                    })
                 })
             {
                 state.times.insert(table.name.clone(), choice.clone());

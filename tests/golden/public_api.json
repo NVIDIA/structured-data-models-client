@@ -461,6 +461,7 @@
         "kind": "class",
         "public_attributes": [
           "duplicate_keys",
+          "end_time_column",
           "primary_key",
           "time_column"
         ],
@@ -468,7 +469,7 @@
           "metadata_report": "(self) -> 'TableMetadata'",
           "print_metadata": "(self) -> 'None'"
         },
-        "signature": "(name: 'str', source_name: 'str', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+        "signature": "(name: 'str', source_name: 'str', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None, end_time_column: 'str | None' = None) -> None"
       },
       "Split": {
         "bases": [],
@@ -493,6 +494,7 @@
         "kind": "class",
         "public_attributes": [
           "duplicate_keys",
+          "end_time_column",
           "primary_key",
           "time_column"
         ],
@@ -500,20 +502,22 @@
           "metadata_report": "(self) -> 'TableMetadata'",
           "print_metadata": "(self) -> 'None'"
         },
-        "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+        "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None, end_time_column: 'str | None' = None) -> None"
       },
       "TableMetadata": {
         "bases": [
           "sdm_client.reports._Printable"
         ],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "end_time_column"
+        ],
         "public_methods": {
           "print": "(self) -> 'None'",
           "to_pandas": "(self) -> 'pd.DataFrame'",
           "to_text": "(self) -> 'str'"
         },
-        "signature": "(name: 'str', columns: 'tuple[ColumnMetadata, ...]', primary_key: 'tuple[str, ...]', time_column: 'str | None') -> None"
+        "signature": "(name: 'str', columns: 'tuple[ColumnMetadata, ...]', primary_key: 'tuple[str, ...]', time_column: 'str | None', end_time_column: 'str | None' = None) -> None"
       },
       "TableSanitizationReport": {
         "bases": [],

@@ -826,6 +826,7 @@ fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
+                end_time_column: table.end_time_column.clone(),
                 duplicate_keys: None,
             })
             .collect(),
