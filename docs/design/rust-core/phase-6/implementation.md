@@ -57,12 +57,14 @@ Contract lock policy retains merged entries and only the newest unmerged version
 | Work | Branch | Status |
 |---|---|---|
 | End-time roles and future-value masking | `rust-core-phase-6-end-time` | Reviewed and merged (`b4292b660`); local suites, old-client comparison and live Databricks/Snowflake predictions passed |
-| SQL columns and custom relational examples | `rust-core-phase-6-examples` | SQL projection draft reviewed; integrating contract 63 before runtime tests; supplied custom examples follow in contract 65 |
+| SQL columns and custom relational examples | `rust-core-phase-6-examples` | SQL columns reviewed and merged (`3a413d0ab`); 12 Python / 2 Java tests and 5 real warehouse-to-model journeys passed; supplied custom examples in progress under contract 65 |
 | Deeper original-four coverage | `rust-core-phase-6-coverage2` | Stopped under the replacement goal; unmerged work preserved |
 
 The authoritative designs are `phase-5/api-removal-audit/end-time/design.md` and `expressions-tasks/design.md`.
 Use independent expected answers and focused old-client comparisons; do not preserve demonstrated bugs or introduce an exhaustive differential framework.
-Contract 63 is merged; the examples agent owns the warm target for SQL contract 64 and supplied-example contract 65.
+Contracts 63 and 64 are merged; the examples agent owns the warm target for supplied-example contract 65.
+Native supplied forecasting was verified against the existing forecast endpoint: one prediction example per batch, with the horizon no larger than the context count.
+The client will preserve caller row/forecast-step alignment while batching; no deployment change or regression decomposition is needed.
 The replacement goal assigns implementation and testing to the two feature agents only.
 The coordinator reviews boundaries and integration; the feature agents also review each other’s changes.
 The separate original-four coverage branch is preserved but is outside this goal.
