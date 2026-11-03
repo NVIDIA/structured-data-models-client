@@ -1658,7 +1658,9 @@ name = "sdm-data"
 version = "2.0.0-rc.1"
 dependencies = [
  "arrow-array",
+ "arrow-cast",
  "arrow-schema",
+ "arrow-select",
  "fancy-regex",
  "sdm-contract",
  "serde_json",

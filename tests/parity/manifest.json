@@ -3688,9 +3688,33 @@
           "java/src/test/java/com/nvidia/sdm/ReportsTest.java"
         ]
       }
+    },
+    {
+      "id": "timeseries-preparation",
+      "apis": {
+        "python": [
+          "build_timeseries",
+          "ForecastInput"
+        ],
+        "java": [
+          "TimeSeries.build",
+          "TimeSeriesOptions",
+          "ForecastInput"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_timeseries.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/TimeSeriesTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Shared history fixtures; public materialization; owned outputs and invalid inputs. One resulting live forecast separately verified."
     }
   ],
-  "public_api_snapshot_sha256": "8402e785f958938ebea8fe7a32547ef4d8dc07c5b8a49285d5385ffb3aaac6d8",
+  "public_api_snapshot_sha256": "a4f1748feea6c8d2fda49bf9e267fe823198268eae79d3403c0b88c775c621b8",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4307,6 +4331,12 @@
       },
       "sdm_client.TableMetadata.to_text": {
         "capability": "metadata-explanation-reports"
+      },
+      "sdm_client.ForecastInput": {
+        "capability": "timeseries-preparation"
+      },
+      "sdm_client.build_timeseries": {
+        "capability": "timeseries-preparation"
       }
     },
     "java": {
@@ -5551,6 +5581,63 @@
       },
       "com.nvidia.sdm.TableMetadata#public java.util.List<java.lang.String> primaryKey();": {
         "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.ForecastInput": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.ForecastInput(com.nvidia.sdm.Schema, com.nvidia.sdm.PredictiveQuery, java.time.Instant);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.PredictiveQuery query();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public com.nvidia.sdm.Schema schema();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public final boolean equals(java.lang.Object);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public final int hashCode();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public final java.lang.String toString();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ForecastInput#public java.time.Instant anchorTime();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeries": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeries#public static com.nvidia.sdm.ForecastInput build(org.apache.arrow.vector.table.Table, com.nvidia.sdm.TimeSeriesOptions);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions#public static com.nvidia.sdm.TimeSeriesOptions$Builder builder(java.lang.String);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions build();": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder anchorTime(java.time.Instant);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder entityColumn(java.lang.String);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder numTimeframes(int);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timeDelta(java.time.Duration);": {
+        "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timestampsColumn(java.lang.String);": {
+        "capability": "timeseries-preparation"
       }
     }
   },
@@ -5871,6 +5958,11 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "public_api_snapshot_sha256",
       "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/timeseries-preparation",
+      "reason": "Restore reviewed Python/Java history-to-forecast builder using shared Rust Arrow preparation."
     }
   ],
   "capabilities": [

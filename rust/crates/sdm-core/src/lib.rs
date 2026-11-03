@@ -64,5 +64,6 @@ pub use materialize::frames::FrameGraph;
 
 mod frame_schema;
 mod frame_session;
+mod timeseries;
 
 mod split;
