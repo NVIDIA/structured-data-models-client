@@ -231,3 +231,48 @@ def test_source_table_metadata_does_not_read_rows_or_call_native(monkeypatch):
         table.metadata_report().to_text()
         == 'events\n  id: int64, ID (primary key)'
     )
+
+
+def test_shared_accessor_precedence_and_lazy_errors():
+    import json
+    from collections.abc import Mapping
+    from pathlib import Path
+
+    def plain(value):
+        if isinstance(value, Mapping):
+            return {key: plain(item) for key, item in value.items()}
+        if isinstance(value, tuple):
+            return [plain(item) for item in value]
+        return value
+
+    path = (
+        Path(__file__).resolve().parents[3]
+        / 'tests/fixtures/reports/accessors.json'
+    )
+    for case in json.loads(path.read_text()):
+        view = result(case['payload']).explanation_view
+        for field in ('summary', 'warnings', 'cohorts', 'subgraphs'):
+            if field in case:
+                assert plain(getattr(view, field)) == case[field], case['name']
+        if 'error_field' in case:
+            with pytest.raises(StructuredDataError) as caught:
+                getattr(view, case['error_field'])
+            assert caught.value.code == 'INVALID_REQUEST', case['name']
+            assert caught.value.details['path'] == case['error_path'], case[
+                'name'
+            ]
+
+
+def test_explanation_depth_boundary_and_reused_containers():
+    shared = {'value': [1]}
+    view = result({'left': shared, 'right': shared}).explanation_view
+    shared['value'].append(2)
+    assert view.raw['left']['value'] == view.raw['right']['value'] == (1,)
+    payload = None
+    for _ in range(128):
+        payload = {'child': payload}
+    assert result(payload).explanation_view is not None
+    with pytest.raises(StructuredDataError) as caught:
+        _ = result({'child': payload}).explanation_view
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert caught.value.details['path'] == '$' + '.child' * 129

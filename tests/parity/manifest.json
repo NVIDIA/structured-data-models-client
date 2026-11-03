@@ -3622,13 +3622,15 @@
           "packages/structured-data-models-client/tests/test_relbench.py::test_corrupt_offline_and_unknown",
           "packages/structured-data-models-client/tests/test_relbench.py::test_all_pins_have_valid_metadata",
           "packages/structured-data-models-client/tests/test_relbench.py::test_http_download_cache_and_failure_recovery",
-          "packages/structured-data-models-client/tests/test_relbench.py::test_unsafe_manifest_path_rejected"
+          "packages/structured-data-models-client/tests/test_relbench.py::test_unsafe_manifest_path_rejected",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_loaded_schema_composes_reports_exports_and_persisted_requests"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#offlineOwnedSchemaPreservesRowsAndDeclarations",
           "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#corruptOfflineCacheAndUnknownNameAreStructured",
           "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#registryIsPackagedAndUnsafePathsFail",
-          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#httpCacheReuseAndFailedDownloadRecovery"
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#httpCacheReuseAndFailedDownloadRecovery",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#loadedSchemaComposesReportsExportsAndPersistedRequests"
         ]
       },
       "gate": "local"
