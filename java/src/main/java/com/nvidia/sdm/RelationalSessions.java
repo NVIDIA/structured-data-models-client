@@ -80,7 +80,7 @@ final class RelationalSessions {
     input.put("inference_asked", request.inferenceAsked());
     try (Host.Finished finished = run(client, input, request, null)) {
       Map<String, Object> result = ArrowTabular.value(finished);
-      return new FittedModel(client, result, finished.bytes(((Number) result.get("pinned")).intValue()));
+      return new FittedModel(client, result, finished.bytes(((Number) result.get("pinned")).intValue()), request.sanitizationReport());
     }
   }
 

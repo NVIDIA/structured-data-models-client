@@ -34,6 +34,7 @@ from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
 from sdm_client.request import Request, Split, Target, Task
 from sdm_client.result import PredictionResult
+from sdm_client.sanitization import SanitizationReport, TableSanitizationReport
 from sdm_client.schema import (
     Column,
     Relationship,
@@ -57,6 +58,8 @@ __all__ = [
     'Relationship',
     'Request',
     'Schema',
+    'SanitizationReport',
+    'TableSanitizationReport',
     'Split',
     'SDMClient',
     'SourceTable',

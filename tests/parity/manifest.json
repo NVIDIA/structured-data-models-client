@@ -3559,9 +3559,39 @@
       },
       "gate": "in-process",
       "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate."
+    },
+    {
+      "id": "sanitization-reports",
+      "apis": {
+        "python": [
+          "Request.sanitization_report",
+          "FittedModel.sanitization_report",
+          "SanitizationReport",
+          "TableSanitizationReport"
+        ],
+        "java": [
+          "Request.sanitizationReport",
+          "FittedModel.sanitizationReport",
+          "SanitizationReport",
+          "TableSanitizationReport"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_exclusive_drop_precedence_and_no_key_table",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_sanitization_report_survives_prediction_and_close"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sanitizationReportSurvivesRequestPersistence",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sanitizationCountsDuplicateBeforeNullTime",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession"
+        ]
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "73a05cddb755f97bc1e97ae58bdf21bd00498ff6e7a93ceae5b1f400b2fe63e4",
+  "public_api_snapshot_sha256": "94ca6a1f859ce2b4545b418d620b7ebc361fea5487dc2db80eee9b4bd647b040",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4040,6 +4070,21 @@
       },
       "sdm_client.SDMClient.in_process": {
         "capability": "in-process-models"
+      },
+      "sdm_client.FittedModel.sanitization_report": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.Request.sanitization_report": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.SanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.SanitizationReport.tables": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.TableSanitizationReport": {
+        "capability": "sanitization-reports"
       }
     },
     "java": {
@@ -4963,6 +5008,66 @@
       },
       "com.nvidia.sdm.Table#public java.util.OptionalLong duplicateKeys();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.FittedModel#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public com.nvidia.sdm.SanitizationReport(java.lang.String, java.util.List<com.nvidia.sdm.TableSanitizationReport>);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final boolean equals(java.lang.Object);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final int hashCode();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final java.lang.String toString();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public java.lang.String status();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public java.util.List<com.nvidia.sdm.TableSanitizationReport> tables();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public com.nvidia.sdm.TableSanitizationReport(java.lang.String, long, long, long, long, long);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public final boolean equals(java.lang.Object);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public final int hashCode();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public final java.lang.String toString();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public java.lang.String table();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long duplicatePrimaryKeyRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long inputRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long nullPrimaryKeyRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long nullTimeRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long outputRows();": {
+        "capability": "sanitization-reports"
       }
     }
   },

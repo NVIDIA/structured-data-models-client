@@ -38,6 +38,52 @@ import org.junit.jupiter.api.Test;
 
 /** Public multi-table journeys through Java, JNI, the shared sampler and an HTTP endpoint. */
 class RelationalTest {
+  @Test void sanitizationReportSurvivesRequestPersistence() throws Exception {
+    Schema schema = fixture(false, false);
+    Request request = PredictiveQuery.parse(SCALAR).materialize(schema, options(1L, 2L).build());
+    SanitizationReport report = request.sanitizationReport();
+    assertEquals("available", report.status());
+    assertFalse(report.tables().isEmpty());
+    assertTrue(report.tables().stream().allMatch(row -> row.inputRows() == row.outputRows()));
+    assertThrows(UnsupportedOperationException.class, () -> report.tables().clear());
+    java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+    request.writeTo(bytes);
+    Request restored = Request.readFrom(new java.io.ByteArrayInputStream(bytes.toByteArray()));
+    assertEquals(report, restored.sanitizationReport());
+    assertEquals(report, request.sanitizationReport());
+  }
+
+  @Test void sanitizationCountsDuplicateBeforeNullTime() {
+    try (RootAllocator allocator = new RootAllocator();
+        BigIntVector ids = new BigIntVector("user_id", allocator);
+        Float8Vector values = new Float8Vector("value", allocator);
+        TimeStampMilliVector times = new TimeStampMilliVector("time", allocator)) {
+      ids.allocateNew(100); values.allocateNew(100); times.allocateNew(100);
+      for (int i = 0; i < 100; i++) {
+        ids.setSafe(i, i == 99 ? 98 : i); values.setSafe(i, i + 0.25);
+        if (i >= 98) times.setNull(i); else times.setSafe(i, 1704067200000L + i * 86400000L);
+      }
+      ids.setValueCount(100); values.setValueCount(100); times.setValueCount(100);
+      try (Table table = new Table(List.of(ids, values, times))) {
+        Schema schema = Schema.fromData(Map.of("users", table))
+            .withPrimaryKey("users", "user_id").withTimeColumn("users", "time")
+            .withStype("users", "value", "numerical");
+        Request request = PredictiveQuery.parse(SCALAR).materialize(schema, options(1L, 2L).build());
+        assertEquals(List.of(new TableSanitizationReport("users", 100, 98, 0, 1, 1)),
+            request.sanitizationReport().tables());
+      }
+    }
+  }
+
+  @Test void malformedSavedSanitizationReportUsesSnapshotError() {
+    assertThrows(java.io.IOException.class,
+        () -> SanitizationReport.restored(Map.of("status", "unknown", "tables", List.of())));
+    assertThrows(java.io.IOException.class,
+        () -> SanitizationReport.restored(Map.of("status", "available", "tables", List.of(Map.of(
+            "table", "users", "input_rows", 1, "output_rows", 2, "null_primary_key_rows", 0,
+            "duplicate_primary_key_rows", 0, "null_time_rows", 0)))));
+  }
+
   static final String SCALAR = "PREDICT users.value FOR EACH users.user_id";
   static final String TEMPORAL = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id";
   static final String LINK = "PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id";
@@ -345,10 +391,12 @@ class RelationalTest {
     try (Endpoint endpoint = new Endpoint()) {
       SdmClient client = endpoint.client();
       FittedModel first = client.fit(request, SdmClient.KUMO_RELATIONAL);
+      assertEquals(request.sanitizationReport(), first.sanitizationReport());
       endpoint.deleteFailures.set(1);
       assertThrows(StructuredDataException.class, first::close);
       assertFalse(first.isClosed()); first.close(); first.close();
       assertTrue(first.isClosed()); assertEquals(2, endpoint.deletes.get());
+      assertEquals(request.sanitizationReport(), first.sanitizationReport());
       FittedModel second = client.fit(request, SdmClient.KUMO_RELATIONAL);
       FittedModel third = client.fit(request, SdmClient.KUMO_RELATIONAL);
       endpoint.deleteFailures.set(1);

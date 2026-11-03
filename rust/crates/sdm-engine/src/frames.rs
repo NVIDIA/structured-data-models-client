@@ -120,6 +120,7 @@ pub struct Snapshot {
     graph: Graph,
     tables: BTreeMap<String, Table>,
     adjacency: Vec<Adjacency>,
+    /// Accounting for every prepared table, including tables with zero drops.
     pub dropped: Vec<DroppedRows>,
 }
 
@@ -424,15 +425,13 @@ impl Snapshot {
                     }),
                 ));
             }
-            if null_keys + duplicate_keys + null_times > 0 {
-                dropped.push(DroppedRows {
-                    table: table.name.clone(),
-                    input: rows.num_rows(),
-                    null_keys,
-                    duplicate_keys,
-                    null_times,
-                });
-            }
+            dropped.push(DroppedRows {
+                table: table.name.clone(),
+                input: rows.num_rows(),
+                null_keys,
+                duplicate_keys,
+                null_times,
+            });
             let bounds = time.as_ref().map(|time| {
                 let values = valid.iter().filter_map(|&row| time[row]);
                 (values.clone().min(), values.max())
@@ -515,6 +514,7 @@ impl Snapshot {
         let detail = self
             .dropped
             .iter()
+            .filter(|row| row.null_keys + row.duplicate_keys + row.null_times > 0)
             .map(|row| {
                 let mut causes = Vec::new();
                 if row.null_keys > 0 {
@@ -539,7 +539,7 @@ impl Snapshot {
             })
             .collect::<Vec<_>>()
             .join("; ");
-        Some(format!("[{detail}]"))
+        (!detail.is_empty()).then(|| format!("[{detail}]"))
     }
 
     /// The graph's valid nanosecond values, before second sampler cuts.

@@ -165,6 +165,7 @@ def fit(
         pinned_over_a_window=state['windowed'],
         question=request._question,
     )
+    fitted._sanitization_report = request.sanitization_report
     fitted._relational_session = state
     fitted._relational_session_pinned = bytes(finished.take(accepted['pinned']))
     client._pinned.add(fitted)

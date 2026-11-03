@@ -88,4 +88,6 @@ class RelationalMaterializer:
             },
         )
         request._core = retained
+        if self.schema.source is None:
+            request._sanitization_report = self._sanitization_report
         return request

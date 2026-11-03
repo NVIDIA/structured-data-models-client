@@ -4,7 +4,7 @@
 
 # 3. Structured sanitization reports
 
-**Status: assigned for contract-first implementation. Support both Python and Java through the same Rust report.**
+**Status: implemented and reviewed for Python and Java; ready for Phase 6 integration.**
 Expose counts Rust already computes when preparing an in-memory relational graph.
 This adds observability, not a new data-cleaning policy.
 For example: 100 input rows, three excluded for missing keys and two for duplicate keys, leaving 95 usable rows.
@@ -25,19 +25,36 @@ Input Arrow tables → existing Rust graph preparation
 | `sdm-contract` / `sdm-core` | Include the report in graph-preparation results and propagate it through materialization/session preparation |
 | Python / Java | Read-only report accessors; optional text/pandas presentation |
 
-## Proposed contract
+## Exact contract for review
 
-Expose `sanitization_report` / `sanitizationReport()` on prepared relational requests and fitted handles, tied to the preparation that produced them.
-Use a report status plus per-table input rows, output rows, null-primary-key drops, duplicate-key drops and null-time drops.
-Retain zero-drop tables and existing exclusive reason precedence: a row must not be counted twice.
-Current `Snapshot.dropped` stores only tables with nonzero drops.
-Extend accounting to include clean-table input/output counts where filtering already occurs; do not scan the data again.
+`Request.sanitization_report` and `FittedModel.sanitization_report` return an immutable `SanitizationReport` in Python.
+Java exposes equivalent `sanitizationReport()` accessors and immutable `SanitizationReport` / `TableSanitizationReport` records.
+Python exports frozen dataclasses with the same names; `tables` is a tuple in Python and a defensively copied list in Java.
 
-Warehouse preparations return an explicit unavailable status when no counts were collected; never imply that unavailable means zero drops.
-Define the non-relational case explicitly rather than manufacturing relational statistics for Tabular requests.
-Reports describe prepared snapshots, not subsequent edits to the original input.
-Copy the small report into the host result so reading it does not depend on a live native handle.
-Keep existing warnings and filtering behavior unchanged.
+| Report field | Meaning |
+|---|---|
+| `status` | `available` for prepared in-memory relational graphs; `unavailable` for warehouse or older saved requests; `not_applicable` for Tabular |
+| `tables` | Ordered table records; empty unless status is `available` |
+| Per table | `table`, `input_rows`, `output_rows`, `null_primary_key_rows`, `duplicate_primary_key_rows`, `null_time_rows` |
+
+Counts describe discarded rows, not missing cells or endpoint holdouts.
+Every prepared table appears, including clean tables.
+Each discarded row has exactly one reason: missing key first, duplicate key second, missing time third.
+A first occurrence with missing time still reserves its key, matching the current engine behavior.
+`output_rows = input_rows - null_primary_key_rows - duplicate_primary_key_rows - null_time_rows`.
+Tables without a primary key have zero key-drop counts.
+Preparation failures continue to raise the existing error and produce no successful request/report.
+
+Contract version **58** adds typed available table records to `PreparedFrameGraph` alongside its graph attachment.
+Rust collects counts in the existing filtering pass, including clean tables, and derives the existing warning from nonzero records only.
+There is no report-fetch operation, no extra table read, and no new sampling or cleaning policy.
+Host adapters only decode immutable values and classify paths where graph preparation does not run.
+
+The materializer copies the preparation report onto each request made from its cached graph.
+A fitted handle retains its fit request's report independently of native graph/session lifetime; prediction does not replace it.
+Closing a handle or mutating the original source does not change the report.
+Existing request persistence retains reports; restoring older snapshots yields `unavailable`, never invented zero counts.
+Tabular stays `not_applicable`, including its fitted handles.
 
 ## Acceptance
 
@@ -55,3 +72,16 @@ Finish with independent code review, address findings, and run affected tests be
 
 Implementation anchors: `sdm-engine/src/frames.rs` owns `Snapshot.dropped`; `sdm-core/src/materialize/frames.rs` currently emits a warning; `sdm-contract/src/frames.rs` returns the graph handle.
 Extend that preparation result, not a separate reporting service or warning parser.
+
+## Usage and verification
+
+Read `request.sanitization_report.tables` in Python or `request.sanitizationReport().tables()` in Java.
+Fitted handles expose the same report, including after close.
+These counts describe graph preparation, not the rows selected into an individual prediction context.
+
+Focused checks cover Rust filtering accounting, Python/Java materialization and sessions, request persistence, immutable reports, warehouse unavailability and Tabular non-applicability.
+The maintained API ledger maps the new surface to these tests under `sanitization-reports`.
+Java admission rejects missing primary keys before graph preparation; Java public tests exercise duplicate/time overlap, while shared Rust and Python tests cover missing-key precedence.
+No model inference algorithm or warehouse query was changed.
+
+Validation: 321 Rust tests, 73 Python lifecycle/materialization tests plus the legacy-snapshot check, Java relational lifecycle tests and malformed-snapshot check, API-ledger checks, Ruff and mypy passed.
