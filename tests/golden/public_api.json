@@ -125,11 +125,13 @@
       "Request",
       "SDMClient",
       "SDMWarning",
+      "SanitizationReport",
       "Schema",
       "SourceTable",
       "Split",
       "StructuredDataError",
       "Table",
+      "TableSanitizationReport",
       "Target",
       "Task",
       "UnknownModelError",
@@ -154,6 +156,7 @@
         "kind": "class",
         "public_attributes": [
           "model",
+          "sanitization_report",
           "session_id"
         ],
         "public_methods": {
@@ -266,6 +269,7 @@
           "predict",
           "predict_rows",
           "query",
+          "sanitization_report",
           "target_moves_with_time"
         ],
         "public_methods": {
@@ -299,6 +303,15 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": null
+      },
+      "SanitizationReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "tables"
+        ],
+        "public_methods": {},
+        "signature": "(status: Literal['available', 'unavailable', 'not_applicable'], tables: tuple[sdm_client.sanitization.TableSanitizationReport, ...] = ()) -> None"
       },
       "Schema": {
         "bases": [],
@@ -361,6 +374,13 @@
         ],
         "public_methods": {},
         "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+      },
+      "TableSanitizationReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(table: str, input_rows: int, output_rows: int, null_primary_key_rows: int, duplicate_primary_key_rows: int, null_time_rows: int) -> None"
       },
       "Target": {
         "bases": [],

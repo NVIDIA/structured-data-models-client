@@ -117,7 +117,9 @@ def test_warehouse_public_lifecycle_preserves_rows_and_related_holdout(
     opening = gather(warehouse, [1, 2])
     before = copy.deepcopy(opening.payloads)
     with SDMClient(URL, max_retries=0) as client:
+        assert opening.sanitization_report.status == 'unavailable'
         fitted = client.fit(opening, model=KumoRelational(), holdout=[3, 4])
+        assert fitted.sanitization_report == opening.sanitization_report
         assert fitted._relational_session is not None
         assert opening.payloads == before
         uploaded = created[0]

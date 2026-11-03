@@ -13,15 +13,20 @@ public final class FittedModel implements AutoCloseable {
   private final SdmClient client;
   private Map<String, Object> session;
   private byte[] relationalPinned;
+  private SanitizationReport sanitizationReport = SanitizationReport.notApplicable();
+
+  /** Fit preparation facts, retained after close. */
+  public SanitizationReport sanitizationReport() { return sanitizationReport; }
 
   FittedModel(SdmClient client, Map<String, Object> session) {
     this.client = client;
     this.session = session;
   }
 
-  FittedModel(SdmClient client, Map<String, Object> session, byte[] pinned) {
+  FittedModel(SdmClient client, Map<String, Object> session, byte[] pinned, SanitizationReport report) {
     this(client, session);
     this.relationalPinned = pinned;
+    this.sanitizationReport = report;
   }
 
   @SuppressWarnings("unchecked")

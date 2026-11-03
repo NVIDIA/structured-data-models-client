@@ -43,6 +43,7 @@ import pandas as pd
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
+from sdm_client.sanitization import SanitizationReport
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
@@ -335,6 +336,19 @@ class Request:
     # the core did not materialize, which predict on the core predicts from
     # what it holds, as the old client does (T3.26).
     _core: CoreRequest | None = None
+
+    @property
+    def sanitization_report(self) -> SanitizationReport:
+        """Row exclusions recorded during preparation, independent of prediction."""
+        return getattr(
+            self,
+            '_sanitization_report',
+            SanitizationReport(
+                'not_applicable'
+                if getattr(self, '_context', None) is not None
+                else 'unavailable'
+            ),
+        )
 
     def __init__(
         self,

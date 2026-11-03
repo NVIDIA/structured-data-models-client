@@ -60,6 +60,7 @@ pub struct FrameCall {
 #[serde(deny_unknown_fields)]
 pub struct PreparedFrameGraph {
     pub graph: AttachmentId,
+    pub sanitization: Vec<TableSanitizationReport>,
 }
 
 /// Inferred frame columns plus observed time populations and caller overrides.
@@ -84,4 +85,16 @@ pub struct FrameKeyCount {
     pub missing: u64,
     pub missing_columns: Vec<String>,
     pub example: Option<Vec<Scalar>>,
+}
+
+/// Exclusive row exclusions observed during in-memory graph preparation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TableSanitizationReport {
+    pub table: String,
+    pub input_rows: u64,
+    pub output_rows: u64,
+    pub null_primary_key_rows: u64,
+    pub duplicate_primary_key_rows: u64,
+    pub null_time_rows: u64,
 }

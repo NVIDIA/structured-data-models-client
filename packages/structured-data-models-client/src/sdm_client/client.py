@@ -43,6 +43,7 @@ from sdm_client.request import (
     Request,
 )
 from sdm_client.result import PredictionResult
+from sdm_client.sanitization import SanitizationReport
 from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
@@ -101,6 +102,7 @@ class FittedModel:
     _held_back: int
     _pinned: dict[str, Any]
     _question: Question | None
+    _sanitization_report: SanitizationReport
     _closed: bool
     _tabular_session: dict[str, Any] | None
     _tabular_session_keys: bytes
@@ -141,12 +143,18 @@ class FittedModel:
         fitted._held_back = held_back
         fitted._pinned = pinned or {}
         fitted._question = question
+        fitted._sanitization_report = SanitizationReport('not_applicable')
         fitted._closed = False
         fitted._tabular_session = None
         fitted._tabular_session_keys = b''
         fitted._relational_session = None
         fitted._relational_session_pinned = b''
         return fitted
+
+    @property
+    def sanitization_report(self) -> SanitizationReport:
+        """Preparation report retained after this fitted handle is closed."""
+        return self._sanitization_report
 
     @property
     def session_id(self) -> str:
