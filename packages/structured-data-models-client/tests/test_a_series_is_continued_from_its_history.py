@@ -36,10 +36,19 @@ def history(rows: int = 200) -> pd.DataFrame:
     return pd.DataFrame({'flow': np.sin(step / 9), 'temp': np.cos(step / 7)})
 
 
-def forecast_of(model, frame: pd.DataFrame, horizon: int = 6, **inference):
+def forecast_of(
+    model,
+    frame: pd.DataFrame,
+    horizon: int = 6,
+    target: str = 'flow',
+    **inference,
+):
     with SDMClient.in_process(model) as client:
         request = Request.forecast(
-            frame, target='flow', horizon=horizon, inference=inference or None
+            frame,
+            target=target,
+            horizon=horizon,
+            inference=inference or None,
         )
         return client.predict(request, model=KumoForecast()).to_pandas()
 
@@ -78,6 +87,26 @@ def test_a_series_with_nothing_measured_alongside_it_is_forecast(forecast):
     frame = history()[['flow']]
 
     assert len(forecast_of(forecast, frame, horizon=4)) == 4
+
+
+def test_a_series_whose_values_are_unique_is_still_the_series(forecast):
+    """Schema inference reads a column of unique values as the table's key,
+    and a key names a step rather than measuring anything. Naming it as the
+    target settles what it is, and dropping it left nothing to forecast."""
+    frame = pd.DataFrame({'grid': np.arange(40, dtype=float) * 1.5})
+
+    answer = forecast_of(forecast, frame, horizon=3, target='grid')
+
+    assert len(answer) == 3
+
+
+def test_a_key_that_is_not_the_target_is_still_a_key(forecast):
+    """The premise of the test above: only the named series is rescued."""
+    frame = history().assign(sensor_id=np.arange(len(history())))
+
+    assert forecast_of(forecast, frame)['prediction'].tolist() == (
+        pytest.approx(forecast_of(forecast, history())['prediction'].tolist())
+    )
 
 
 def test_the_supervised_constructor_will_not_build_this_question(forecast):

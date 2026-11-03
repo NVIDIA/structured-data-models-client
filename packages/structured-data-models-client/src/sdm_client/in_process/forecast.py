@@ -126,7 +126,12 @@ class Forecast:
                 f'series being forecast',
                 code='INVALID_REQUEST',
             )
-        keys = key_columns(spec)
+        # A key names the step rather than measuring anything, so it is not
+        # history. The target is the exception: it was named as the series to
+        # forecast, and a series of values that happen to be unique is
+        # inferred as a key, which would drop the very column being asked
+        # about.
+        keys = key_columns(spec) - {target}
         stypes = {
             name: stype_of(name, spec['columns'][name])
             for name in table['columns']

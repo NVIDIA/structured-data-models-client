@@ -702,6 +702,14 @@ class Request:
             )
         if schema is None:
             schema = Schema.from_data({entity_table: history})
+            # A series whose values happen to be unique is inferred as the
+            # table's key, and a key names a row rather than measuring
+            # anything. The caller named this column as the series to
+            # forecast, which settles what it is.
+            table = schema[entity_table]
+            if target in _as_key_tuple(table.primary_key):
+                table.primary_key = None
+                table[target].stype = 'numerical'
         _check_scored_values_mean_what_the_schema_says(
             history, schema, entity_table
         )
