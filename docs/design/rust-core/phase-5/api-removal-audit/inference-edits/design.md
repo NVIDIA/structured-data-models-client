@@ -51,6 +51,15 @@ Shared Python/Java fixtures cover declarations, ambiguity, repeated inference, t
 Warehouse inference may read metadata/previews through existing providers; sampling SQL and algorithms remain unchanged.
 Check one materialization after an edit in memory and via a warehouse provider.
 
+## Test standard: parity or an explained improvement
+
+Run small public workflows through the old Python client, new Python and Java using identical input data.
+Compare keys, time choices, relationships and resulting materialized rows; compare semantics rather than printed text or object classes.
+Independently assert declared choices survive, removing a table leaves no dangling links, repeated inference is stable and failed edits are atomic.
+Cover both in-memory data and provider metadata/previews; compare existing warehouse prediction queries before/after to detect unintended sampling changes.
+When old output violates an invariant, record the small reproduction, corrected expected output and intentional difference in the maintained test fixture.
+Add one live prediction after inferred/edited schema preparation; it verifies integration, not whether the model predicts the exact same floating-point value.
+
 ## Verified code anchors
 
 Old source at `12955d397`: engine `rfm/graph.py:2579,2647,2996,3188` and `rfm/base/table.py:970` under `packages/structured-data-models-relational-engine/src/sdm_relational_engine/`.

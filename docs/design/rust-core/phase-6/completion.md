@@ -41,3 +41,18 @@ Feature-importance normalization uses signed totals divided by their absolute ma
 
 This completes the four-feature goal, not every remaining Phase 6 restoration.
 Inference/edits, the time-series builder, labels-only operations, end-time eligibility and scoped expression/task editing remain in the [broader audit](../phase-5/api-removal-audit/design.md).
+
+## What the first four tests prove
+
+The checks above test restored workflows and explicit invariants, not a complete side-by-side run of every old API.
+Old source/tests informed the contracts; identical old/new behavior across every input is not established.
+
+| Feature | Verified benefit / retained behavior | Limit of evidence |
+|---|---|---|
+| Visualization | Both languages; hostile labels stay inert, offline output and export-error redaction | Real browser checked; notebook/image HTTP behavior largely mocked, not every deployed notebook/service |
+| Reports | Detached immutable views; signed absolute-mass normalization, zero/nonfinite/overflow handling; no eager prediction work | Numeric policy intentionally differs from old signed-total normalization; no performance benchmark claim |
+| Sanitization | Structured counts for clean and dropped tables, preserved across sessions, persistence and split requests | Extends observability without changing filtering; warehouse reports explicitly unavailable |
+| RelBench | Python/Java matching rows and metadata, pinned catalog retained, cache integrity/recovery and ownership tested | One real dataset, not the whole catalog; raw endpoint text limitation remains |
+
+Java support is added capability relative to the old Python-only engine.
+Security/validation improvements are backed by focused tests; they are not a claim that every old release was vulnerable or that the new client is faster.

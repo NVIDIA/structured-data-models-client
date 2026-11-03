@@ -64,6 +64,16 @@ Fix that rather than preserving it.
 Shared fixtures compare generated rows, timestamps, schema and query in both languages, including mismatches and irregular histories.
 Run one resulting forecasting request against the model endpoint; push-down sampling is untouched.
 
+## Test standard: parity or an explained improvement
+
+Feed the old builder, new Python and Java the same histories; compare generated rows, keys, times, effective interval and parsed query meaning.
+Use hand-calculated tiny examples as an independent oracle, so agreement between implementations is not the only check.
+Include per-entity length mismatches whose total lengths happen to match: old concatenation can misalign them; new clients must reject them before admission.
+Cover explicit/synthetic times, zero/duplicate intervals, irregular histories, nulls, empty histories, ID collisions, timezone differences and overflow.
+Assert input buffers are unchanged and returned Java data survives temporary input closure.
+Run one resulting forecast against the endpoint; ordinary transformation/error fixtures stay fast and local in CI.
+Record each deliberate old/new difference with its reason and regression test; do not inherit old accidental behavior just to make comparison green.
+
 ## Verified code anchors
 
 Old source at `12955d397`: engine `rfm/graph.py:2306–2510`, under `packages/structured-data-models-relational-engine/src/sdm_relational_engine/`.

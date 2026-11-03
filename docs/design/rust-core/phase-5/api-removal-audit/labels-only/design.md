@@ -57,6 +57,16 @@ Warehouse label queries are required; preserve existing prediction sampling SQL,
 GPU testing is unnecessary for this operation.
 The cited old tests establish scalar/temporal label behavior; forecast/link output layouts still need explicit fixtures before claiming restoration parity for those shapes.
 
+## Test standard: parity or an explained improvement
+
+For each supported target shape, calculate expected labels independently on tiny data, then compare old Python, new Python and Java.
+Use all eligible entities for exact comparisons; test bounded/random subsets separately for size, membership, seed reproducibility and trial limits.
+Cover classification/regression, temporal windows, entity-time anchors, default forecast-horizon adjustment, link/forecast layouts, nulls and empty outcomes.
+Run the same fixtures through memory, SQLite/DuckDB and supported warehouse providers, retaining explicit connector limitations.
+Assert no model transport calls or neighborhood feature gathering occur; inspect provider calls and preserve existing prediction-sampling behavior.
+An old-client discrepancy is investigated against the query definition and expected labels, then kept as a documented corrected regression, not copied automatically.
+These are public end-to-end data-to-label tests; no GPU endpoint is involved because this API never calls a model.
+
 ## Verified code anchors
 
 Old source at `12955d397`: engine `rfm/rfm.py:1801` under `packages/structured-data-models-relational-engine/src/sdm_relational_engine/`.
