@@ -38,6 +38,7 @@ import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
@@ -1125,6 +1126,24 @@ class Schema:
             time_columns=time_columns,
             relationships=relationships,
         )
+
+    @classmethod
+    def from_relbench(
+        cls,
+        name: str,
+        *,
+        cache_dir: str | Path | None = None,
+        offline: bool = False,
+    ) -> Schema:
+        """Load a pinned RelBench dataset with its declared keys, times and links.
+
+        Downloads are cached and SHA-256 verified on every use.
+        ``offline=True`` requires a complete valid cache and never uses HTTP.
+        The default cache is ``~/.cache/sdm/relbench``.
+        """
+        from sdm_client._relbench import load
+
+        return load(cls, name, cache_dir=cache_dir, offline=offline)
 
     @classmethod
     def from_source(

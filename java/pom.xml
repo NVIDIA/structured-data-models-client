@@ -195,6 +195,11 @@
   <build>
     <resources>
       <resource>
+        <directory>${project.basedir}/../packages/structured-data-models-client/src/sdm_client/assets/relbench</directory>
+        <targetPath>com/nvidia/sdm/relbench</targetPath>
+        <includes><include>*.json</include></includes>
+      </resource>
+      <resource>
         <directory>${sdm.natives}</directory>
         <targetPath>com/nvidia/sdm/native</targetPath>
         <includes>
