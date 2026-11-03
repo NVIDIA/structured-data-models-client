@@ -233,6 +233,13 @@ class Forecast:
             PredictionItem(row_index=0, forecast_step=step, prediction=value)
             for step, value in enumerate(forecast.tolist(), start=1)
         ]
+        if 'explanation' in fields:
+            self._refuse_where_retrieval_answered(
+                model,
+                alpha,
+                len(payload['context']['instance_table']['rows']),
+                horizon,
+            )
         if 'explanation' in fields and items:
             items[0] = replace(
                 items[0],
@@ -275,6 +282,33 @@ class Forecast:
             horizon=horizon,
             forecast=forecast.detach().cpu().numpy(),
             feature_axis=bool(options.get('feature_axis', False)),
+        )
+
+    @staticmethod
+    def _refuse_where_retrieval_answered(
+        model: Any, alpha: float, history: int, horizon: int
+    ) -> None:
+        r"""Refuse to explain a forecast retrieval had a hand in.
+
+        The attribution describes the model's own forward pass. Where
+        retrieval contributes, the forecast returned is a blend of that pass
+        and windows pulled from history, and attributing the pass would
+        describe a number nobody was given.
+        """
+        if alpha >= 1.0:
+            return
+        needed = model.model.context_size + max(
+            model.model.prediction_size, horizon
+        )
+        if history < needed:
+            return
+        raise StructuredDataError(
+            f'alpha={alpha} blends retrieved history into this forecast, and '
+            f"an explanation describes the model's own forward pass only. "
+            f'Explaining it would describe a forecast that was not returned. '
+            f'Ask for the explanation with alpha=1, or ask for the forecast '
+            f'without one',
+            code='UNSUPPORTED_REQUEST',
         )
 
     @staticmethod

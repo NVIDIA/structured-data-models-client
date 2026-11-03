@@ -78,7 +78,7 @@ def forecast_report(
         heatmap_path=None,
         topk_rows=topk_rows,
         top_k=top_k,
-        context_len=_context_len(carried),
+        context_len=_context_len(carried, attributions.shape[1]),
         forecast_horizon=attributions.shape[1],
         channel_labels=_channels(carried),
     )
@@ -107,18 +107,41 @@ def _explanation(carried: dict[str, Any]) -> Any:
     )
 
     block = carried.get('explanation') or {}
+    # Serialised under `feature_axis`, not beside the lag arrays. Reading it
+    # flat found nothing and the page that draws it was skipped although it
+    # had been computed, which costs minutes.
+    feature_axis = block.get('feature_axis') or {}
+    diagnostics = block.get('diagnostics') or {}
 
-    def array(name: str) -> Any:
-        value = block.get(name)
+    def array(source: dict[str, Any], name: str) -> Any:
+        value = source.get(name)
         return None if value is None else np.asarray(value, dtype=float)
 
+    def scalar(name: str) -> float | None:
+        value = diagnostics.get(name)
+        return None if value is None else float(value)
+
     return ForecastExplanation(
-        baseline_forecast=array('baseline_forecast'),
-        lag_horizon_scores=array('lag_horizon_scores'),
-        lag_horizon_attributions=array('lag_horizon_attributions'),
-        flow_magnitudes=array('flow_magnitudes'),
-        latent_trajectory=array('latent_trajectory'),
-        channel_horizon_attributions=array('channel_horizon_attributions'),
+        baseline_forecast=array(block, 'baseline_forecast'),
+        lag_horizon_scores=array(block, 'lag_horizon_scores'),
+        lag_horizon_attributions=array(block, 'lag_horizon_attributions'),
+        flow_magnitudes=array(block, 'flow_magnitudes'),
+        latent_trajectory=array(block, 'latent_trajectory'),
+        channel_horizon_attributions=array(
+            feature_axis, 'channel_horizon_attributions'
+        ),
+        per_channel_flow=array(feature_axis, 'per_channel_flow'),
+        channel_flow_method=feature_axis.get('method'),
+        flow_ratio_forecast_vs_history=scalar('flow_ratio_forecast_vs_history'),
+        flow_variance_ratio_forecast_vs_history=scalar(
+            'flow_variance_ratio_forecast_vs_history'
+        ),
+        curvature_ratio_forecast_vs_history=scalar(
+            'curvature_ratio_forecast_vs_history'
+        ),
+        latent_diag_mahalanobis_ratio_forecast_vs_history=scalar(
+            'latent_diag_mahalanobis_ratio_forecast_vs_history'
+        ),
     )
 
 
@@ -143,7 +166,16 @@ def _channels(carried: dict[str, Any]) -> list[str] | None:
     return None if labels is None else [str(name) for name in labels]
 
 
-def _context_len(carried: dict[str, Any]) -> int | None:
+def _context_len(carried: dict[str, Any], horizon: int) -> int | None:
+    r"""How many of the trajectory's steps are history.
+
+    The trajectory runs the context and then the horizon, so its length is
+    both put together. Reading it as the context alone told the page every
+    transition was history and none was forecast.
+    """
     block = (carried.get('explanation') or {}).get('diagnostics') or {}
     shape = block.get('latent_trajectory_shape')
-    return None if not shape else int(shape[0])
+    if not shape:
+        return None
+    steps = int(shape[0]) - horizon
+    return steps if steps > 0 else None

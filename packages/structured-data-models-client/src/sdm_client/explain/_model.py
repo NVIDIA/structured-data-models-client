@@ -12,6 +12,13 @@ has both, under its own names, so what stands between them is this.
 The embedding is the model's own, the one it builds retrieval keys from. An
 attribution is a statement about what the model did, so reducing its encoder
 output some other way here would attribute something the model never computed.
+
+The windows it is handed are padded, and which steps are padding arrives as a
+mask. structured-data-models' forecaster takes no mask: it reads an
+unobserved step as ``NaN``, and its normalisation ignores those when it takes
+a window's statistics. So the mask is applied as ``NaN`` here. Dropping it
+instead made padding into observed zeros, and a flat series then showed the
+latent trajectory moving when it had not.
 """
 
 from __future__ import annotations
@@ -56,15 +63,17 @@ class Forecaster:
         self, *, x_enc: torch.Tensor, input_mask: torch.Tensor | None = None
     ) -> _Forecast:
         r"""The forecast for ``x_enc`` of shape ``[B, C, R]``."""
-        return _Forecast(forecast=self._inner(x_enc))
+        return _Forecast(forecast=self._inner(_observed(x_enc, input_mask)))
 
     def embed(
         self, *, x_enc: torch.Tensor, input_mask: torch.Tensor | None = None
     ) -> _Embedding:
         r"""One embedding per window of ``x_enc``, shaped ``[B, D]``."""
-        return _Embedding(embeddings=self.embed_tensor(x_enc))
+        return _Embedding(embeddings=self.embed_tensor(x_enc, input_mask))
 
-    def embed_tensor(self, x_enc: torch.Tensor) -> torch.Tensor:
+    def embed_tensor(
+        self, x_enc: torch.Tensor, input_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
         r"""The embedding as a plain tensor, differentiably.
 
         Kept apart from :meth:`embed` because integrated gradients needs the
@@ -73,5 +82,27 @@ class Forecaster:
         """
         from sdm.models.kumo.timeseries.forecast.darr import embed
 
-        encoded, _, _ = self._inner.encode(x_enc)
+        encoded, _, _ = self._inner.encode(_observed(x_enc, input_mask))
         return embed(encoded)
+
+
+def _observed(x: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
+    r"""``x`` with the steps the mask calls padding marked unobserved.
+
+    The forecaster has no mask argument and reads ``NaN`` as unobserved: its
+    normalisation takes a window's statistics over what is there, and zeroes
+    what is not once they are taken.
+    """
+    if mask is None:
+        return x
+    keep = torch.as_tensor(mask, device=x.device).bool()
+    if keep.all():
+        return x
+    # The mask's last axis is steps and anything before it is the window it
+    # belongs to; the readings have a channel axis between the two. It is one
+    # mask for every channel of a window, so the channel axis is where the
+    # singleton goes.
+    keep = keep.unsqueeze(-2)
+    while keep.ndim < x.ndim:
+        keep = keep.unsqueeze(0)
+    return x.masked_fill(~keep.expand_as(x), float('nan'))

@@ -82,6 +82,122 @@ def test_a_forecast_asked_without_one_does_not_pay_for_it(forecast):
     assert result.explanation is None
 
 
+def test_a_flat_series_has_almost_nowhere_to_move(forecast):
+    """The trajectory builder pads its windows and says which steps are
+    padding. Reading the padding as observed zeros made a constant series
+    look like it moved."""
+    flat = pd.DataFrame({'flow': np.full(600, 10.0)})
+    with SDMClient.in_process(forecast) as client:
+        result = client.predict(
+            Request.forecast(flat, target='flow', horizon=4),
+            model=KumoForecast(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    flow = np.asarray(result.explanation['explanation']['flow_magnitudes'])
+    assert float(flow.sum()) < 0.5
+
+
+def test_a_forecast_retrieval_had_a_hand_in_is_not_explained(forecast):
+    """The attribution describes the model's own forward pass. Where
+    retrieval contributes, explaining that pass describes a number the
+    caller was never given."""
+    history_long = history(600)
+    with SDMClient.in_process(forecast) as client:
+        with pytest.raises(StructuredDataError) as caught:
+            client.predict(
+                Request.forecast(
+                    history_long,
+                    target='flow',
+                    horizon=4,
+                    inference={'alpha': 0.0},
+                ),
+                model=KumoForecast(),
+                outputs=['prediction', 'explanation'],
+            )
+    assert 'alpha' in str(caught.value)
+
+
+def test_the_attribution_reads_the_model_s_own_scale(forecast):
+    """The model standardises before it reads anything, so the attribution
+    works there too. Handing it raw readings attributed a model being fed
+    numbers it never sees."""
+    from sdm_client.explain._explain import _standardised
+
+    raw = np.array([[1.0, 2.0, 3.0]])
+    standardised = _standardised(forecast, raw)
+
+    assert not np.allclose(standardised, raw)
+    assert np.allclose(
+        standardised, (raw + 5.671202659606934) / 8.693312644958496, atol=1e-4
+    )
+
+
+def test_what_is_drawn_is_in_the_readings_own_scale(explained):
+    """The attribution works standardised; a reader does not."""
+    baseline = np.asarray(
+        explained.explanation['explanation']['baseline_forecast']
+    )
+
+    assert np.abs(baseline).max() < 5.0
+
+
+def test_the_feature_axis_needs_a_horizon_one_pass_reaches(forecast):
+    """It reads a single forward pass, which covers the model's own horizon
+    and no more."""
+    with SDMClient.in_process(forecast) as client:
+        with pytest.raises(StructuredDataError) as caught:
+            client.predict(
+                Request.forecast(
+                    history(600),
+                    target='flow',
+                    horizon=80,
+                    inference={'feature_axis': True},
+                ),
+                model=KumoForecast(),
+                outputs=['prediction', 'explanation'],
+            )
+    assert 'feature-axis' in str(caught.value)
+
+
+def test_the_diagnostics_survive_being_written_and_read(explained):
+    """They are computed, serialised, and read back for the page that prints
+    them, which printed n/a for every one of them."""
+    from sdm_client.reporting.forecast import _explanation
+
+    restored = _explanation(explained.explanation)
+
+    assert restored.flow_ratio_forecast_vs_history is not None
+    assert restored.curvature_ratio_forecast_vs_history is not None
+
+
+def test_the_top_lags_are_ranked_from_the_scores(explained):
+    """That helper differences a cumulative score into a per-step weight.
+    Handing it the normalised attribution ranked the lags near-backwards."""
+    from sdm_client.explain._kumo_ts import pages
+
+    block = explained.explanation['explanation']
+    scores = np.asarray(block['lag_horizon_scores'])
+    attributions = np.asarray(block['lag_horizon_attributions'])
+    _, from_scores = pages._topk_lag_steps_per_horizon(scores, top_k=3)
+    _, from_attributions = pages._topk_lag_steps_per_horizon(
+        attributions, top_k=3
+    )
+
+    assert from_scores != from_attributions
+
+
+def test_the_history_the_page_is_told_about_excludes_the_forecast(explained):
+    """The trajectory runs the context and then the horizon. Reading its
+    length as the context said every transition was history."""
+    from sdm_client.reporting.forecast import _context_len
+
+    block = explained.explanation['explanation']
+    steps = block['diagnostics']['latent_trajectory_shape'][0]
+
+    assert _context_len(explained.explanation, 4) == steps - 4
+
+
 def test_a_report_is_drawn_from_an_explanation(explained, tmp_path):
     written = forecast_report(explained, tmp_path / 'forecast.pdf')
 

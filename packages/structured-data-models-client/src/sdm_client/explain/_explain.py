@@ -12,6 +12,7 @@ dict it returns is what travels as the ``explanation`` output field.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
@@ -62,7 +63,19 @@ def explanation_of(
             f'history is {history.shape[-1]}',
             code='UNSUPPORTED_SHAPE',
         )
-    window = history[..., -forecaster.context_size :]
+    # Standardised first, as the model's own path standardises before it
+    # reads anything. The attribution then works in the space the model works
+    # in; handing it raw readings attributed a model being fed numbers it
+    # never sees.
+    if feature_axis and horizon > forecaster.prediction_size:
+        raise StructuredDataError(
+            f'feature-axis attribution reads one forward pass, which covers '
+            f'{forecaster.prediction_size} steps, and this forecast is '
+            f'{horizon}. Ask for it over a horizon the model reaches in one '
+            f'pass, or ask for the explanation without it',
+            code='UNSUPPORTED_SHAPE',
+        )
+    window = _standardised(model, history[..., -forecaster.context_size :])
     explanation = explain_forecast(
         forecaster,
         x_context_ct=np.ascontiguousarray(window, dtype='float32'),
@@ -76,10 +89,40 @@ def explanation_of(
         channel_target=channels.index(target) if feature_axis else None,
         channel_output_aware=feature_axis,
     )
-    return _as_dict(explanation, channels, target, horizon, forecast)
+    return _as_dict(model, explanation, channels, target, horizon, forecast)
+
+
+def _standardised(model: Any, window: np.ndarray) -> np.ndarray:
+    r"""``window`` through the model's own frozen standardisation."""
+    import pandas as pd
+    from sdm import TableTensor
+
+    frame = pd.DataFrame(
+        {str(i): row for i, row in enumerate(np.asarray(window, dtype=float))}
+    )
+    table = TableTensor.from_pandas(
+        frame, dict.fromkeys(frame.columns, 'numerical')
+    )
+    standardised = model.default_recipe().target.transform(table)
+    return standardised.numerical.detach().cpu().numpy().T
+
+
+def _in_original_scale(model: Any, values: np.ndarray) -> np.ndarray:
+    r"""The inverse of :func:`_standardised`, for what is drawn."""
+    import pandas as pd
+    from sdm import TableTensor
+
+    array = np.asarray(values, dtype=float)
+    frame = pd.DataFrame({str(i): row for i, row in enumerate(array)})
+    table = TableTensor.from_pandas(
+        frame, dict.fromkeys(frame.columns, 'numerical')
+    )
+    restored = model.default_recipe().target.inverse_transform(table)
+    return restored.numerical.detach().cpu().numpy().T
 
 
 def _as_dict(
+    model: Any,
     explanation: Any,
     channels: list[str],
     target: str,
@@ -93,6 +136,15 @@ def _as_dict(
     """
     from sdm_client.explain._kumo_ts.pages import _explanation_to_dict
 
+    # The attribution works standardised, so what it calls the baseline
+    # forecast is standardised too. The report draws it beside readings, so
+    # it is put back in their scale before it travels.
+    explanation = replace(
+        explanation,
+        baseline_forecast=_in_original_scale(
+            model, np.asarray(explanation.baseline_forecast)
+        ),
+    )
     frame = pd.DataFrame(
         {
             'forecast_step': range(1, horizon + 1),

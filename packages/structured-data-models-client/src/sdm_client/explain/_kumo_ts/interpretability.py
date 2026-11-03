@@ -1482,8 +1482,10 @@ def fit_horizon_surrogates(
     # the parallel path opt in via ``n_jobs`` (typically the OS CPU count
     # divided by the number of GPU workers, so threads do not oversubscribe
     # cores in a multi-GPU run).
-    if n_jobs is not None and int(n_jobs) > 1 and len(work_items) > 1:
-        from sdm_client.explain._parallel import parallel_apply_threads
+    # Kumo-TS threads this across cores with a helper this port leaves
+    # behind, because it exists to feed several GPUs. The branch below does
+    # the same work in order.
+    if False:  # pragma: no cover - the threaded path is not ported
 
         for c_idx, h_idx, b, a0 in parallel_apply_threads(
             _solve_one, work_items, n_jobs=int(n_jobs)
