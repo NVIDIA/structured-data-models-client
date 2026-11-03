@@ -84,8 +84,8 @@ A new goal covers these three efforts; prior restoration evidence remains valid 
 | Effort | Implementation branch | Status |
 |---|---|---|
 | Connection rebinding | `rust-core-phase-6-rebinding` | Reviewed and integrated; 23 local Python / 3 local Java tests, five live Python warehouse/model journeys and one live Java journey passed |
-| Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Contract approved: supplied batch-size control, identical-context session reuse, bounded recovery and centralized retries; implementing |
-| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Reviewed and integrated; 22 Python / 6 Java checks passed; final combined inventory and validation pending |
+| Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Reviewed and integrated; 92 Rust / 129 local Python / 44 local Java tests and live Python/Java endpoint workflows passed |
+| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Reviewed and integrated; 22 Python / 6 Java checks passed; final combined inventory and validation passed |
 
 Each agent submits its precise API/boundary proposal before substantial implementation.
 The coordinator reviews proposals, serializes native contract versions/builds and arranges reciprocal implementation review.
@@ -94,5 +94,7 @@ Controlled HTTP endpoints exercise failures and lifecycle behavior that live ser
 Summary live validation uses only an existing authorized endpoint and synthetic data; any external validation limit is recorded explicitly.
 
 Native contract allocation: rebinding 66 first, batching 67 after integration; settings/summaries are host adapters.
-Rebinding released the shared native target after production 66; batching owns it for production 67 and final lifecycle validation.
+Production 67 is integrated and verified; the shared native target is released.
 No authorized live summarizer endpoint was found in the existing model configuration; controlled HTTP tests are required and real-provider validation remains explicitly unclaimed.
+
+See [follow-up completion evidence](followup-completion.md) for the final combined artifact checks and the explicit external summarizer validation limit.

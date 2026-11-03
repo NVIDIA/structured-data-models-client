@@ -4,7 +4,8 @@
 
 # Restore missing user capabilities
 
-**Status: the nine scoped restorations are complete and merged into `rust-core-phase-6`.**
+**Status: the nine scoped restorations and three approved follow-ups are complete and merged into `rust-core-phase-6`.**
+See [follow-up evidence](../../phase-6/followup-completion.md) for rebinding, batching/retries, typed settings and optional summaries.
 Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
@@ -95,7 +96,8 @@ Obtain independent contract/design review before substantive changes, then imple
 Document replacement usage and explicitly resolve the audit's partial mappings: task editing, connection rebinding, retry/batch scoping and old typed configuration/explanation imports.
 Lagged prediction features already exist through `lag_timesteps`; test/document that route rather than creating another computation path.
 Standalone Python PQL/engine internals remain retired; package-retirement approval must not be reused as blanket approval to omit user capabilities.
-Merge readiness remains open until every missing/partial capability has implementation evidence or an explicit accepted retirement decision.
+The approved partial mappings are resolved by the replacements in [the current API explanation](../../phase-6/remaining-api-mappings.md).
+This completes the approved Phase 6 scope; it does not authorize merging into `rust-core`/`main` or publishing.
 
 ## Clarification from the old implementation
 

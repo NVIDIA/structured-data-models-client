@@ -49,7 +49,7 @@ Expose those counts without changing which rows survive; capture clean-table cou
 The nine scoped restorations, including end-time, SQL columns and supplied relational examples, are complete.
 See [final restoration evidence](final-restorations.md) and the earlier linked completion records.
 The owner has approved the [connection and execution follow-up](remaining-api-mappings.md): rebinding, batch/session convenience, typed settings and optional explanation summaries.
-These follow-up capabilities require reviewed APIs, implementation and verified Python/Java behavior before the remaining mappings are closed.
+These follow-ups are now reviewed, implemented and verified in Python/Java; see [completion evidence](followup-completion.md).
 Do not silently expand restoration into unsupported old behavior: the old in-memory table API rejected generic expressions.
 
 Use the existing compatibility manifest for Python/Java mappings and targeted tests, including capability-level coverage outside the old facade snapshot.
