@@ -108,6 +108,7 @@ def test_tabular_notebook_checks_the_model_after_a_pending_update(
 
     workspace = Mock()
     workspace.serving_endpoints.get.return_value = SimpleNamespace(
+        state=None,
         config=config(active_model, '1'),
         pending_config=config('catalog.schema.tabular', '1'),
     )
@@ -165,6 +166,7 @@ def test_tabular_deploy_checks_active_and_pending_config(
 
     workspace = Mock()
     workspace.serving_endpoints.get.return_value = SimpleNamespace(
+        state=None,
         config=config(active),
         pending_config=config(pending) if pending else None,
     )
@@ -197,7 +199,8 @@ def test_tabular_deploy_checks_active_and_pending_config(
 def test_tabular_failed_update_checks_active_deployment(
     failure, ready, model, version, expected
 ):
-    from databricks.sdk.errors import OperationFailed
+    class OperationFailed(Exception):
+        pass
 
     cell = next(
         c
@@ -208,7 +211,15 @@ def test_tabular_failed_update_checks_active_deployment(
     error = OperationFailed(failure)
     workspace.serving_endpoints.wait_get_serving_endpoint_not_updating.side_effect = error
     workspace.serving_endpoints.get.return_value = SimpleNamespace(
-        state=SimpleNamespace(ready=SimpleNamespace(value=ready)),
+        state=SimpleNamespace(
+            ready=SimpleNamespace(value=ready),
+            config_update=SimpleNamespace(value=failure),
+        ),
+        pending_config=SimpleNamespace(
+            served_entities=[
+                SimpleNamespace(entity_name='other', entity_version='2')
+            ]
+        ),
         config=SimpleNamespace(
             served_entities=[
                 SimpleNamespace(entity_name=model, entity_version=version)
@@ -226,6 +237,18 @@ def test_tabular_failed_update_checks_active_deployment(
         SDMClient=SimpleNamespace(for_databricks_serving=factory),
         KumoTabular=Mock(),
     )
+    if expected is None:
+        # Run the initial deployment check too: failed pending config must not
+        # prevent recovery of the matching active deployment.
+        namespace.update(
+            WorkspaceClient=lambda: workspace, NotFound=LookupError
+        )
+        deploy = next(
+            c
+            for c in _cells(EXAMPLES / 'kumo_tabular_quickstart.ipynb', 'code')
+            if 'workspace = WorkspaceClient()' in c
+        )
+        exec(deploy, namespace)
     if expected:
         with pytest.raises(expected) as caught:
             exec(cell, namespace)
