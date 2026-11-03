@@ -3653,12 +3653,14 @@
         "python": [
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_exclusive_drop_precedence_and_no_key_table",
-          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_sanitization_report_survives_prediction_and_close"
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_sanitization_report_survives_prediction_and_close",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_decomposed_requests_retain_sanitization_report"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sanitizationReportSurvivesRequestPersistence",
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sanitizationCountsDuplicateBeforeNullTime",
-          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession"
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#decomposedRequestsRetainSanitizationReport"
         ]
       },
       "gate": "local"

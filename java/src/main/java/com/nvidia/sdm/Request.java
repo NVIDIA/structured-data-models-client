@@ -281,7 +281,8 @@ public final class Request {
         Results.Validated validated = (Results.Validated) Results.expect(finished.result(), "validate_query");
         if (!validated.accepted() || validated.query() == null)
           throw new StructuredDataException("core produced an invalid request part", "INTERNAL_ERROR", Map.of(), null);
-        result.add(new Request(schema, part, text, validated.query(), inferenceAsked));
+        result.add(new Request(schema, part, text, validated.query(), inferenceAsked)
+            .withSanitizationReport(sanitizationReport));
       }
     }
     return Optional.of(List.copyOf(result));

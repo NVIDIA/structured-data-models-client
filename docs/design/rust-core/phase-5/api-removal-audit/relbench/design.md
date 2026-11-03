@@ -4,7 +4,7 @@
 
 # 4. RelBench dataset loading
 
-**Status: implemented and tested; coordinator review before integration.**
+**Status: implemented, independently reviewed and merged into `rust-core-phase-6`.**
 Load a named, pinned dataset into the maintained `Schema`, with its keys, relationships and time metadata.
 This restores a convenience loader, not a second sampling path.
 Independent boundary review is incorporated below; this document is the implementation contract.
