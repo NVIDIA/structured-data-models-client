@@ -8,12 +8,13 @@ It reads a context and fits nothing. The history, the series to continue and
 the number of steps all travel on every call, and the model answers from them
 in one pass, so there is no fitted context to hold and no session over it.
 
-The rows to score carry the series being asked about and nothing in it: one
-unknown value per step. The model reads no column of them and takes the
-horizon from how many there are. It discards a future covariate with a
-warning nobody is obliged to see, so `Request.forecast` gives no way to
-supply one; a column the caller cannot pass is one they cannot believe was
-used.
+There is one row to score, carrying the series being asked about and nothing
+in it, and `task.num_forecasts` says how many steps of it are wanted. That is
+the contract's own shape for a forecast: one answer per scored row per
+horizon, each naming its step from one. The model discards a future covariate
+with a warning nobody is obliged to see, so `Request.forecast` gives no way
+to supply one; a column the caller cannot pass is one they cannot believe
+was used.
 """
 
 from __future__ import annotations
@@ -145,7 +146,14 @@ class Forecast:
         history = Shape.of(spec, {target: stypes[target]}).tensor(
             table, 'the history'
         )
-        alongside = Shape.of(spec, measured).tensor(table, 'the history')
+        # A series with nothing measured alongside it is the ordinary case,
+        # and an empty shape has no column to read a length from, so the
+        # history's own length is what says how long it is.
+        alongside = (
+            Shape.of(spec, measured).tensor(table, 'the history')
+            if measured
+            else history[..., :0]
+        )
         return history, alongside
 
     @staticmethod
@@ -165,11 +173,16 @@ class Forecast:
         generator: Any = None,
     ) -> list[PredictionItem]:
         r"""Continue the series for as many steps as were asked for."""
+        import torch
+
         target = payload['task']['target']['column_name']
         history, alongside = self.series(payload, target)
-        horizon = len(payload['predict']['instance_table']['rows'])
-        if horizon == 0:
-            return []
+        horizon = int(payload['task'].get('num_forecasts') or 0)
+        if horizon < 1:
+            raise StructuredDataError(
+                'a forecast asks for num_forecasts steps, and this names none',
+                code='INVALID_REQUEST',
+            )
         options = payload.get('inference') or {}
         alpha = float(options.get('alpha', _ALPHA))
         self._warn_where_retrieval_does_nothing(
@@ -178,13 +191,19 @@ class Forecast:
             len(payload['context']['instance_table']['rows']),
             horizon,
         )
+        device = history.device
         if generator is not None:
-            history = history.to(generator.device)
-            alongside = alongside.to(generator.device)
+            device = generator.device
+            history = history.to(device)
+            alongside = alongside.to(device)
+        # How many rows the query has is the horizon, and it does not depend
+        # on how long the history is: slicing the history to length capped a
+        # long forecast at the number of steps already seen.
+        steps = torch.empty(horizon, 0, device=device)
         out = model(
             alongside,
             history,
-            alongside[:horizon, ..., :0],
+            steps,
             alpha=alpha,
             k=int(options.get('k', _NEIGHBOURS)),
             temperature=options.get('temperature', _TEMPERATURE),
@@ -195,9 +214,11 @@ class Forecast:
                 'the model answered with a malformed output',
                 code='INTERNAL_ERROR',
             )
+        # One row is scored, and one answer per step of it. `forecast_step`
+        # counts from one, which is what the contract declares it as.
         return [
-            PredictionItem(row_index=step, forecast_step=step, prediction=value)
-            for step, value in enumerate(forecast.tolist())
+            PredictionItem(row_index=0, forecast_step=step, prediction=value)
+            for step, value in enumerate(forecast.tolist(), start=1)
         ]
 
     @staticmethod

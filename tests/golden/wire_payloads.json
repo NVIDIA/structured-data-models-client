@@ -340,12 +340,6 @@
           "rows": [
             [
               null
-            ],
-            [
-              null
-            ],
-            [
-              null
             ]
           ]
         }
@@ -373,6 +367,7 @@
       },
       "task": {
         "kind": "forecasting",
+        "num_forecasts": 3,
         "target": {
           "column_name": "age",
           "dtype": "float64"

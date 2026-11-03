@@ -154,6 +154,18 @@ class ForecastAdapter:
                 f'the sampled payloads that model reads; '
                 f'{self.spec.model_id} is asked with Request.forecast(...)'
             )
+        horizon = getattr(request, 'horizon', None)
+        if horizon is None:
+            # Built by the constructor that takes a half to score. Those rows
+            # are the future, and this model reads nothing about the future:
+            # it would discard every value in them and answer from the count
+            # alone, which is a different question answered quietly.
+            raise UnsupportedRequestError(
+                f'{self.spec.model_id} forecasts from a history and a number '
+                f'of steps, and reads nothing about the steps themselves. '
+                f'Build the request with '
+                f'Request.forecast(history, target=..., horizon=...)'
+            )
         request.schema.check_consistent()
 
         table = request.schema[request.entity_table]
@@ -203,6 +215,7 @@ class ForecastAdapter:
                     'column_name': target,
                     'dtype': dtypes[target],
                 },
+                'num_forecasts': horizon,
             },
             'schema': {'instance_table': instance_schema},
             'context': {'instance_table': encode_table(history, dtypes)},

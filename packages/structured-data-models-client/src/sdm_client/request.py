@@ -703,18 +703,16 @@ class Request:
                 dtype=schema[entity_table][target].dtype,
                 table_name=entity_table,
             ),
+            options={'num_forecasts': horizon},
         )
         request.horizon = horizon
-        # The history is what the model is shown, which is the context. The
-        # half to score is one row per step, carrying the series being asked
-        # about and nothing in it: those are the steps whose value is not
-        # known, which is the question. A table of no columns would say the
-        # same and is not a table the contract has.
+        # The history is what the model is shown, which is the context. One
+        # row is scored, carrying the series being asked about and nothing in
+        # it, and the horizon travels as `task.num_forecasts`: the contract's
+        # own shape is one answer per scored row per horizon.
         request._context = Split(instance_table=history)
         request._predict = Split(
-            instance_table=pd.DataFrame(
-                {target: [None] * horizon}, dtype='object'
-            )
+            instance_table=pd.DataFrame({target: [None]}, dtype='object')
         )
         request.inference = dict(inference or {})
         request.requested_inference = dict(inference or {})

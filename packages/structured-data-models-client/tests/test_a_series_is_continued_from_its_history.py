@@ -48,7 +48,10 @@ def test_one_row_per_step_comes_back_in_order(forecast):
     answer = forecast_of(forecast, history(), horizon=6)
 
     assert list(answer.columns) == ['row_index', 'forecast_step', 'prediction']
-    assert answer['forecast_step'].tolist() == list(range(6))
+    # One row is scored, and the step counts from one, which is what the
+    # contract declares `forecast_step` as.
+    assert answer['row_index'].tolist() == [0] * 6
+    assert answer['forecast_step'].tolist() == list(range(1, 7))
     assert np.isfinite(answer['prediction']).all()
 
 
@@ -57,6 +60,47 @@ def test_the_horizon_is_how_many_steps_are_asked_for(forecast, horizon):
     """Beyond the model's own 72 the forecast is extended autoregressively,
     which is still the horizon that was asked for."""
     assert len(forecast_of(forecast, history(), horizon=horizon)) == horizon
+
+
+def test_a_horizon_longer_than_the_history_is_answered_in_full(forecast):
+    """How many steps were asked for does not depend on how many were seen.
+    Reading the horizon off the history capped a long forecast at its length.
+    """
+    answer = forecast_of(forecast, history(10), horizon=15)
+
+    assert len(answer) == 15
+    assert answer['forecast_step'].tolist() == list(range(1, 16))
+
+
+def test_a_series_with_nothing_measured_alongside_it_is_forecast(forecast):
+    """The ordinary case. Reading the covariates as a shape of no columns
+    left nothing to take a length from, and the request failed."""
+    frame = history()[['flow']]
+
+    assert len(forecast_of(forecast, frame, horizon=4)) == 4
+
+
+def test_the_supervised_constructor_will_not_build_this_question(forecast):
+    """Its scored half is the future, and this model reads nothing about the
+    future: every value in those rows would be discarded and the answer come
+    from the count alone."""
+    frame = history()
+    future = pd.DataFrame({'temp': [0.0] * 4})
+
+    with SDMClient.in_process(forecast) as client:
+        with pytest.raises(
+            (UnsupportedRequestError, StructuredDataError)
+        ) as caught:
+            client.predict(
+                Request(
+                    context=frame,
+                    predict=future,
+                    target='flow',
+                    task='forecasting',
+                ),
+                model=KumoForecast(),
+            )
+    assert 'Request.forecast' in str(caught.value)
 
 
 def test_the_answer_is_the_one_the_model_gives_when_called_directly(
