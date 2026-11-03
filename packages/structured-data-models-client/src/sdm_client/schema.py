@@ -64,6 +64,8 @@ if TYPE_CHECKING:
     from sdm_connectors import Source
 
     from sdm_client._rust.results import SourceFacts
+    from sdm_client.relational_task import RelationalTask
+    from sdm_client.request import Request
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -964,6 +966,34 @@ class Schema:
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
         self._conversion_notes: tuple[str, ...] = ()
+
+    def materialize_examples(
+        self,
+        task: RelationalTask,
+        context: Any,
+        predict: Any,
+        *,
+        num_neighbors: Sequence[int] | None = None,
+        random_seed: int = 42,
+        inference: Mapping[str, Any] | None = None,
+    ) -> Request:
+        """Gather a Relational request from supplied labels and entity IDs.
+
+        Use RelationalTask for task meaning and DataFrame/Arrow example tables.
+        Context has ENTITY, TARGET and optional ANCHOR_TIMESTAMP; predictions
+        omit TARGET. Rust validates and snapshots every input before returning.
+        """
+        from sdm_client._rust.examples import materialize
+
+        return materialize(
+            self,
+            task,
+            context,
+            predict,
+            num_neighbors=num_neighbors,
+            random_seed=random_seed,
+            inference=inference,
+        )
 
     def with_sql_column(self, table: str, name: str, expression: str) -> Schema:
         """Return a schema with a provider-dialect SQL column over physical source columns.

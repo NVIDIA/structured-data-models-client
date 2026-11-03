@@ -35,7 +35,7 @@ public final class RelationalMaterializer implements AutoCloseable {
         "an in-memory materializer needs Schema.fromData()", "INVALID_REQUEST", Map.of(), null);
   }
 
-  private NativeFrameGraph graph() {
+  NativeFrameGraph graph() {
     if (graph != null) return graph;
     List<String> names = new ArrayList<>(schema.data().keySet());
     List<Integer> ids = new ArrayList<>();
@@ -52,6 +52,8 @@ public final class RelationalMaterializer implements AutoCloseable {
       return graph;
     }
   }
+
+  SanitizationReport sanitization() { return sanitizationReport; }
 
   synchronized Request materialize(PredictiveQuery query, MaterializeOptions options) {
     if (closed) throw new StructuredDataException("this materializer was closed", "INVALID_CONFIGURATION", Map.of(), null);

@@ -39,6 +39,7 @@ pub enum Operation {
     LabelsFrames(crate::labels::LabelsFrames),
     LabelsSource(crate::labels::LabelsSource),
     AddSqlColumn(crate::sql_column::SqlColumn),
+    MaterializeExamples(crate::examples::MaterializeExamples),
     FrameSession(crate::frame_session::FrameSessionOperation),
     DescribeFrameTables(crate::frames::DescribeFrameTables),
     PrepareFrameGraph(crate::frames::PrepareFrameGraph),
@@ -129,6 +130,7 @@ impl Operation {
             Operation::LabelsFrames(_) => "labels_frames",
             Operation::LabelsSource(_) => "labels_source",
             Operation::AddSqlColumn(_) => "add_sql_column",
+            Operation::MaterializeExamples(_) => "materialize_examples",
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::FeatureImportance(_) => "feature_importance",
             Operation::PlanResultMerge(_) => "plan_result_merge",
@@ -266,6 +268,21 @@ impl Operation {
                 vec![(v.graph, AttachmentKind::FrameGraph), (v.input, Bytes)]
             }
             Operation::LabelsSource(v) => vec![(v.schema, Bytes), (v.input, Bytes)],
+            Operation::MaterializeExamples(v) => {
+                let mut parts = vec![(v.input, Bytes), (v.context, Arrow), (v.predict, Arrow)];
+                match &v.source {
+                    crate::examples::ExampleSource::Frames { graph } => {
+                        parts.push((*graph, AttachmentKind::FrameGraph))
+                    }
+                    crate::examples::ExampleSource::Sql { schema, .. } => {
+                        parts.push((*schema, Bytes))
+                    }
+                }
+                if let Some(id) = v.inference {
+                    parts.push((id, Bytes));
+                }
+                parts
+            }
             Operation::AddSqlColumn(v) => vec![(v.schema, Bytes), (v.input, Bytes)],
             Operation::PrepareFrameGraph(v) => {
                 let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
@@ -1499,6 +1516,8 @@ impl JsonSchema for Seed {
 #[serde(deny_unknown_fields)]
 pub struct Materialized {
     pub state: RequestState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub examples: Option<crate::examples::ExampleFacts>,
     /// What the core resolved of the query it gathered (contract v26,
     /// T2.18), which a host reads instead of resolving the query itself:
     /// the core resolves a query naming any column (KO2-36), which a host's
@@ -1985,6 +2004,7 @@ pub struct Attachments {
     #[schemars(rename = "Labels.input")]
     pub labels_input: crate::labels::LabelsCall,
     pub sql_column_input: crate::sql_column::SqlColumnCall,
+    pub example_input: crate::examples::ExampleCall,
     #[schemars(rename = "MaterializeFrames.input")]
     pub materialize_frames_input: crate::frames::FrameCall,
     #[schemars(rename = "ObserveDirectSchema.input")]

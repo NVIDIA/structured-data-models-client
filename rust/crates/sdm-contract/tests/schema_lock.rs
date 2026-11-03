@@ -447,6 +447,14 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
+    ("Operation/add_sql_column.input", "sql_column_input"),
+    ("Operation/add_sql_column.schema", "Materialize.schema"),
+    ("Operation/materialize_examples.input", "example_input"),
+    (
+        "Operation/materialize_examples.inference",
+        "Materialize.values",
+    ),
+    ("ExampleSource/sql.schema", "Materialize.schema"),
     ("Operation/labels_frames.input", "Labels.input"),
     ("Operation/labels_source.input", "Labels.input"),
     ("Operation/labels_source.schema", "Materialize.schema"),
@@ -844,6 +852,15 @@ const JSON: &[(&str, &str)] = &[
 
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: &[(&str, &str)] = &[
+    (
+        "Operation/materialize_examples.context",
+        "Arrow examples with their schema",
+    ),
+    (
+        "Operation/materialize_examples.predict",
+        "Arrow examples with their schema",
+    ),
+    ("ExampleSource/frames.graph", "the prepared frame graph"),
     (
         "Operation/read_result_items.table",
         "normalized Arrow result",

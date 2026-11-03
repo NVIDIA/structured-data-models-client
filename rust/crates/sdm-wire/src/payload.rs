@@ -107,6 +107,10 @@ pub struct Task<T = Target> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "u32")]
     pub top_k: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_size: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_forecasts: Option<u32>,
 }
 
 /// The label column of the instance table: a regression's.
@@ -419,6 +423,22 @@ pub struct RegressionTask {
     pub top_k: Option<u32>,
 }
 
+kind_name!(ForecastKind, "ForecastKind", ["forecasting"]);
+
+/// Supplied forecasting keeps scalar history labels and an explicit fixed step.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct ForecastTask {
+    #[schemars(with = "ForecastKind")]
+    pub kind: String,
+    pub target: Target,
+    pub entity_table_names: Vec<String>,
+    pub anchor_time_column: String,
+    pub step_size: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_forecasts: Option<u32>,
+}
+
 /// A binary task's label column: its classes and positive class.
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -481,6 +501,7 @@ pub struct MulticlassTask {
 #[serde(untagged)]
 #[schemars(rename = "Task")]
 pub enum AnyTask {
+    Forecast(ForecastTask),
     TemporalLink(TemporalLinkTask),
     Regression(RegressionTask),
     Binary(BinaryTask),

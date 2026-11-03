@@ -626,6 +626,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
         let payload = asker.attach(Attachment::Bytes(b"payload".to_vec()))?;
         let query = asker.attach(json(&"PREDICT users.age FOR EACH users.user_id"))?;
         Ok(OperationResult::Materialize(Materialized {
+            examples: None,
             state: RequestState {
                 version: sdm_contract::ops::REQUEST_STATE_VERSION,
                 payload,

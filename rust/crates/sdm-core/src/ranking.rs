@@ -253,6 +253,7 @@ pub(crate) async fn materialize(
     }
     let first = attached.remove(0);
     Ok(OperationResult::Materialize(Materialized {
+        examples: None,
         state: RequestState {
             version: REQUEST_STATE_VERSION,
             payload: first.payload,

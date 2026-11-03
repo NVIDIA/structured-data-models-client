@@ -277,7 +277,8 @@
           null,
           "2024-01-05"
         ],
-        "preserve_context_prediction_overlap": true
+        "preserve_context_prediction_overlap": true,
+        "use_prediction_time": false
       }
     },
     {
@@ -380,7 +381,8 @@
           null,
           "2024-01-05"
         ],
-        "preserve_context_prediction_overlap": true
+        "preserve_context_prediction_overlap": true,
+        "use_prediction_time": false
       }
     },
     {
@@ -483,7 +485,8 @@
           null,
           "2024-01-05"
         ],
-        "preserve_context_prediction_overlap": true
+        "preserve_context_prediction_overlap": true,
+        "use_prediction_time": false
       }
     },
     {
@@ -611,7 +614,8 @@
           null,
           "2024-01-05"
         ],
-        "preserve_context_prediction_overlap": true
+        "preserve_context_prediction_overlap": true,
+        "use_prediction_time": false
       }
     },
     {
@@ -718,7 +722,8 @@
           "ENTITY",
           "ANCHOR_TIMESTAMP",
           "FORECAST_STEP"
-        ]
+        ],
+        "use_prediction_time": false
       },
       "additional_prediction_examples": {
         "columns": [
@@ -830,7 +835,8 @@
           null,
           null,
           null
-        ]
+        ],
+        "use_prediction_time": false
       }
     },
     {
@@ -888,7 +894,8 @@
           0
         ],
         "preserve_context_prediction_overlap": true,
-        "default_anchor_ns": -9223372036854775807
+        "default_anchor_ns": -9223372036854775807,
+        "use_prediction_time": false
       },
       "schema_variant": "timeless"
     }

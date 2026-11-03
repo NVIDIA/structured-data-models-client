@@ -146,9 +146,6 @@ pub fn distinct_identifiers(
     bounds: Bounds<'_>,
     kept: Option<&[bool]>,
 ) -> Result<LinkLabels, CoreError> {
-    use arrow_array::cast::AsArray;
-    use arrow_array::types::*;
-    use arrow_schema::DataType;
     if times.len() != batch.len()
         || bounds.ends.len() != examples
         || bounds.starts.is_some_and(|values| values.len() != examples)
@@ -156,6 +153,22 @@ pub fn distinct_identifiers(
     {
         return Err(invalid());
     }
+    let values = identifier_values(array)?;
+    group_values(examples, batch, values, |row, at| {
+        kept.is_none_or(|values| values[row])
+            && times[row].is_some_and(|time| {
+                time <= bounds.ends[at] && bounds.starts.is_none_or(|values| time > values[at])
+            })
+    })
+}
+
+/// Read identifiers without grouping or deduplicating caller-supplied labels.
+pub fn identifier_values(
+    array: &arrow_array::ArrayRef,
+) -> Result<Vec<Option<LinkValue>>, CoreError> {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::*;
+    use arrow_schema::DataType;
     macro_rules! values {
         ($ty:ty, $map:expr) => {
             array
@@ -207,12 +220,7 @@ pub fn distinct_identifiers(
         }
         _ => return Err(crate::not_yet("frame_link_identifier_type")),
     };
-    group_values(examples, batch, values, |row, at| {
-        kept.is_none_or(|values| values[row])
-            && times[row].is_some_and(|time| {
-                time <= bounds.ends[at] && bounds.starts.is_none_or(|values| time > values[at])
-            })
-    })
+    Ok(values)
 }
 
 #[cfg(test)]

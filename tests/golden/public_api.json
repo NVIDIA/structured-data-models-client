@@ -129,6 +129,7 @@
       "NimRequestError",
       "PredictionResult",
       "PredictiveQuery",
+      "RelationalTask",
       "Relationship",
       "RelationshipOrigin",
       "Request",
@@ -347,6 +348,17 @@
         },
         "signature": "(query: 'str', data: 'Schema | Mapping[str, pd.DataFrame]') -> 'None'"
       },
+      "RelationalTask": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "link_target_table",
+          "num_forecasts",
+          "step_size_ns"
+        ],
+        "public_methods": {},
+        "signature": "(kind: Literal['regression', 'binary_classification', 'multiclass_classification', 'temporal_link_prediction', 'forecasting'], entity_table: str, link_target_table: str | None = None, step_size_ns: int | None = None, num_forecasts: int | None = None) -> None"
+      },
       "Relationship": {
         "bases": [],
         "kind": "class",
@@ -441,6 +453,7 @@
           "infer_links": "(self) -> 'Schema'",
           "infer_metadata": "(self) -> 'Schema'",
           "link_report": "(self) -> 'LinkReport'",
+          "materialize_examples": "(self, task: 'RelationalTask', context: 'Any', predict: 'Any', *, num_neighbors: 'Sequence[int] | None' = None, random_seed: 'int' = 42, inference: 'Mapping[str, Any] | None' = None) -> 'Request'",
           "metadata_report": "(self) -> 'MetadataReport'",
           "print_links": "(self) -> 'None'",
           "print_metadata": "(self) -> 'None'",

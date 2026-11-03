@@ -386,6 +386,14 @@ def unpack(
             'the core gathered a query and said nothing of it',
             code='INTERNAL_ERROR',
         )
+    payloads, retained = unpack_state(finished, state)
+    return payloads, gathered.query, retained
+
+
+def unpack_state(
+    finished: Any, state: results.GatheredState
+) -> tuple[tuple[dict[str, Any], ...], CoreRequest]:
+    """Decode common request state for PQL and supplied-example materialization."""
     payload = json.loads(finished.take(state.payload))
     query = json.loads(finished.take(state.query))
     payloads = [payload]
@@ -441,7 +449,6 @@ def unpack(
         )
     return (
         tuple(payloads),
-        gathered.query,
         results.CoreRequest(
             version=state.version, batches=batches, parts=parts
         ),

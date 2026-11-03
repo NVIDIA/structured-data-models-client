@@ -57,6 +57,7 @@
 //! P1B-3), and the requests and policies it needs of its provider before
 //! anything is fetched.
 
+pub(crate) mod examples;
 pub(crate) mod frames;
 pub(crate) mod label_query;
 
@@ -2816,6 +2817,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                     });
                 }
                 Ok(OperationResult::Materialize(Materialized {
+                    examples: None,
                     state: RequestState {
                         version: REQUEST_STATE_VERSION,
                         payload,
@@ -2922,6 +2924,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     }
     let first = attached.remove(0);
     Ok(OperationResult::Materialize(Materialized {
+        examples: None,
         state: RequestState {
             version: REQUEST_STATE_VERSION,
             payload: first.payload,
@@ -4065,19 +4068,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .map_err(|_| internal("the entity rows do not make one batch"))?;
 
         // The neighbors of each example's entity, hop by hop.
-        let mut walked = if let Some(frames) = &frames {
-            frames.walk(
-                &graph,
-                frames::SeedRows {
-                    entity,
-                    keys: &all_keys,
-                    anchors: &anchors,
-                },
-                &walk_hops,
-                &excluded,
-                (!unseeded).then(|| seed.to_u128()).flatten(),
-            )?
-        } else {
+        let walked = walk_examples(
             crate::subgraph::Walk {
                 link_entity: match &asked.target {
                     Shape::Links(window) => graph.edges.iter().find_map(|edge| {
@@ -4095,11 +4086,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 neighbors: &walk_hops,
                 excluded: &excluded,
                 lookback: &lookback,
-            }
-            .run(entity_rows)
-            .await?
-        };
-        mask_future_end_times(&graph, &mut walked, &anchors)?;
+            },
+            frames.as_ref(),
+            &all_keys,
+            entity_rows,
+            (!unseeded).then(|| seed.to_u128()).flatten(),
+        )
+        .await?;
         keep_stored_times(&mut memo, &read_times);
         // The subgraph carries at most as many tables as the endpoint
         // reads, refused as the reference's engine refuses it
@@ -5281,6 +5274,35 @@ fn label_examples(
         labelled.labels = labelled.labels.kept(&keep);
     }
     Ok(labelled)
+}
+
+/// Shared sampling boundary for PQL-derived and caller-supplied examples.
+async fn walk_examples(
+    walk: crate::subgraph::Walk<'_>,
+    frames: Option<&frames::FrameGraph>,
+    keys: &ArrayRef,
+    entity_rows: RecordBatch,
+    seed: Option<u128>,
+) -> Result<crate::subgraph::Walked, CoreError> {
+    let graph = walk.graph;
+    let anchors = walk.anchors;
+    let mut sampled = if let Some(frames) = frames {
+        frames.walk(
+            graph,
+            frames::SeedRows {
+                entity: walk.entity,
+                keys,
+                anchors,
+            },
+            walk.neighbors,
+            walk.excluded,
+            seed,
+        )?
+    } else {
+        walk.run(entity_rows).await?
+    };
+    mask_future_end_times(graph, &mut sampled, anchors)?;
+    Ok(sampled)
 }
 
 #[cfg(test)]

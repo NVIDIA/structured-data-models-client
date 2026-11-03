@@ -879,22 +879,151 @@ fn link_target_cells(
         .collect()
 }
 
+/// Validate caller labels before graph/provider work begins.
+pub fn validate_supplied_target(
+    kind: Kind,
+    labels: &ArrayRef,
+    float_text: fn(f64) -> String,
+) -> Result<(), CoreError> {
+    supplied_target(kind, labels, float_text).map(|_| ())
+}
+
+fn supplied_target(
+    kind: Kind,
+    labels: &ArrayRef,
+    float_text: fn(f64) -> String,
+) -> Result<(Dtype, Vec<Value>, Vec<String>), CoreError> {
+    let dtype = wire_dtype(labels)?;
+    let finite = match labels.data_type() {
+        DataType::Float32 => labels
+            .as_primitive::<Float32Type>()
+            .iter()
+            .all(|v| v.is_some_and(f32::is_finite)),
+        DataType::Float64 => labels
+            .as_primitive::<Float64Type>()
+            .iter()
+            .all(|v| v.is_some_and(f64::is_finite)),
+        _ => true,
+    };
+    if !finite {
+        return Err(invalid(
+            Sentence::SchemaRefinement,
+            "supplied labels must be finite",
+            TARGET,
+        ));
+    }
+
+    if labels.null_count() != 0 {
+        return Err(invalid(
+            Sentence::SchemaRefinement,
+            "supplied labels must not be null",
+            TARGET,
+        ));
+    }
+    if kind == Kind::Binary {
+        let values = labels.as_boolean_opt().ok_or_else(|| {
+            invalid(
+                Sentence::SchemaRefinement,
+                "binary labels must be booleans",
+                TARGET,
+            )
+        })?;
+        return target(
+            kind,
+            &Labels::Bool(values.values().iter().collect()),
+            float_text,
+        );
+    }
+    if kind == Kind::Multiclass && dtype == Dtype::Bool {
+        return target(
+            kind,
+            &Labels::Bool(labels.as_boolean().values().iter().collect()),
+            float_text,
+        );
+    }
+    if kind == Kind::Regression && !matches!(dtype, Dtype::Int64 | Dtype::Float32 | Dtype::Float64)
+    {
+        return Err(invalid(
+            Sentence::SchemaRefinement,
+            "regression and forecast labels must be numeric",
+            TARGET,
+        ));
+    }
+    let cells = (0..labels.len())
+        .map(|row| cell(labels, row, TARGET, dtype))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut classes = Vec::new();
+    if kind == Kind::Multiclass {
+        let mut seen = BTreeSet::new();
+        for (row, value) in cells.iter().enumerate() {
+            let (identity, text) = match labels.data_type() {
+                DataType::Float32 => {
+                    let v = f64::from(labels.as_primitive::<Float32Type>().value(row));
+                    ((v + 0.0).to_bits().to_string(), float_text(v))
+                }
+                DataType::Float64 => {
+                    let v = labels.as_primitive::<Float64Type>().value(row);
+                    ((v + 0.0).to_bits().to_string(), float_text(v))
+                }
+                _ => {
+                    let text = match value {
+                        Value::Text(v) | Value::Number(v) => v.clone(),
+                        _ => {
+                            return Err(invalid(
+                                Sentence::SchemaRefinement,
+                                "unsupported classification labels",
+                                TARGET,
+                            ));
+                        }
+                    };
+                    (text.clone(), text)
+                }
+            };
+            if seen.insert(identity) {
+                classes.push(text);
+            }
+        }
+    }
+    Ok((dtype, cells, classes))
+}
+
 /// Link encoding for either source; scalar task labels are unused.
 pub fn build_links(sampled: &Sampled, target: &LinkTarget) -> Result<Built, CoreError> {
-    build_mode(sampled, Some(target))
+    build_mode(sampled, Some(target), None)
 }
 
 /// The payload of one batch's request, as the reference's engine builds it
 /// (`predict_request_to_json`) and its client then sends it, the context
 /// that answers the question taken out.
 pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
-    build_mode(sampled, None)
+    build_mode(sampled, None, None)
 }
 
-fn build_mode(sampled: &Sampled, link: Option<&LinkTarget>) -> Result<Built, CoreError> {
+/// Caller-provided labels are retained, including overlapping context examples.
+pub struct Supplied<'a> {
+    pub labels: &'a ArrayRef,
+    pub forecast: Option<(i64, u32)>,
+}
+
+pub fn build_supplied(
+    sampled: &Sampled,
+    link: Option<&LinkTarget>,
+    supplied: &Supplied<'_>,
+) -> Result<Built, CoreError> {
+    build_mode(sampled, link, Some(supplied))
+}
+
+fn build_mode(
+    sampled: &Sampled,
+    link: Option<&LinkTarget>,
+    supplied: Option<&Supplied<'_>>,
+) -> Result<Built, CoreError> {
     let examples = sampled.num_train + sampled.num_test;
     if sampled.anchors.len() != examples
-        || link.map_or_else(|| sampled.labels.len(), |link| link.labels.len()) != sampled.num_train
+        || link.map_or_else(
+            || supplied.map_or_else(|| sampled.labels.len(), |s| s.labels.len()),
+            |link| link.labels.len(),
+        ) != sampled.num_train
     {
         return Err(internal("the examples, anchors and labels do not align"));
     }
@@ -1032,7 +1161,10 @@ fn build_mode(sampled: &Sampled, link: Option<&LinkTarget>) -> Result<Built, Cor
             link_target_cells(link, sampled.float_text)?,
             Vec::new(),
         ),
-        None => target(kind, &sampled.labels, sampled.float_text)?,
+        None => match supplied {
+            Some(s) => supplied_target(kind, s.labels, sampled.float_text)?,
+            None => target(kind, &sampled.labels, sampled.float_text)?,
+        },
     };
     target_cells.resize(examples, Value::Null);
     instance.columns.push(FrameColumn {
@@ -1227,13 +1359,17 @@ fn build_mode(sampled: &Sampled, link: Option<&LinkTarget>) -> Result<Built, Cor
 
     // The context that answers the question, taken out of both the
     // instance table and the related rows that hang off it.
-    let answered = answering(
-        &instance,
-        num_train,
-        sampled.windowed,
-        anchor_column.as_deref(),
-        &reference,
-    )?;
+    let answered = if supplied.is_some() {
+        BTreeSet::new()
+    } else {
+        answering(
+            &instance,
+            num_train,
+            sampled.windowed,
+            anchor_column.as_deref(),
+            &reference,
+        )?
+    };
     let half = |context: bool| -> Half {
         let in_half = |instance: usize| {
             (instance < num_train) == context && !(context && answered.contains(&instance))
@@ -1277,7 +1413,14 @@ fn build_mode(sampled: &Sampled, link: Option<&LinkTarget>) -> Result<Built, Cor
     macro_rules! task {
         ($target:expr) => {
             Task {
-                kind: kind.wire_name().to_owned(),
+                kind: if supplied.is_some_and(|s| s.forecast.is_some()) {
+                    "forecasting".into()
+                } else {
+                    kind.wire_name().to_owned()
+                },
+                step_size: supplied.and_then(|s| s.forecast.map(|f| f.0)),
+                num_forecasts: supplied
+                    .and_then(|s| s.forecast.and_then(|f| (f.1 != 1).then_some(f.1))),
                 target: $target,
                 entity_table_names: vec![sampled.entity_table.clone()],
                 anchor_time_column: anchor_column.clone(),

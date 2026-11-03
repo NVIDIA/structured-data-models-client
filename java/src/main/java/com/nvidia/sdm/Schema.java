@@ -415,6 +415,16 @@ public final class Schema {
     return edited(edit);
   }
 
+  /** Gather a Relational request from caller-supplied ENTITY/ANCHOR_TIMESTAMP/TARGET examples. */
+  public Request materializeExamples(RelationalTask task, org.apache.arrow.vector.table.Table context, org.apache.arrow.vector.table.Table predict) {
+    return materializeExamples(task,context,predict,ExamplesOptions.builder().build());
+  }
+
+  /** Supplied examples with explicit sampling/inference options; Arrow inputs remain caller-owned. */
+  public Request materializeExamples(RelationalTask task, org.apache.arrow.vector.table.Table context, org.apache.arrow.vector.table.Table predict, ExamplesOptions options) {
+    return Examples.materialize(this,task,context,predict,options);
+  }
+
   /** Return a schema with a new provider-dialect SQL column over physical source columns.
    * SQL is executed under the source credentials; no warehouse table is modified.
    */

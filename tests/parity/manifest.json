@@ -3810,9 +3810,32 @@
         ]
       },
       "gate": "local"
+    },
+    {
+      "id": "custom-examples",
+      "apis": {
+        "python": [
+          "RelationalTask",
+          "Schema.materialize_examples"
+        ],
+        "java": [
+          "RelationalTask",
+          "ExamplesOptions",
+          "Schema.materializeExamples"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_custom_examples.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/CustomExamplesTest.java"
+        ]
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "91e44f3e4987a6af53c4fe662152edab964b3485b35945893ef30442ba862525",
+  "public_api_snapshot_sha256": "f5a28934ff3ca943c6c3c1baf5c767214f7af38ca7dc8bdba04d2af11dad006c",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4477,6 +4500,21 @@
       },
       "sdm_client.Schema.with_sql_column": {
         "capability": "sql-columns"
+      },
+      "sdm_client.Schema.materialize_examples": {
+        "capability": "custom-examples"
+      },
+      "sdm_client.RelationalTask.num_forecasts": {
+        "capability": "custom-examples"
+      },
+      "sdm_client.RelationalTask.link_target_table": {
+        "capability": "custom-examples"
+      },
+      "sdm_client.RelationalTask": {
+        "capability": "custom-examples"
+      },
+      "sdm_client.RelationalTask.step_size_ns": {
+        "capability": "custom-examples"
       }
     },
     "java": {
@@ -5868,6 +5906,102 @@
       },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSqlColumn(java.lang.String, java.lang.String, java.lang.String);": {
         "capability": "sql-columns"
+      },
+      "com.nvidia.sdm.ExamplesOptions": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder numNeighbors(java.util.List<java.lang.Integer>);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public final int hashCode();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask forecast(java.lang.String, long, int);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder inference(java.util.Map<java.lang.String, java.lang.Object>);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static com.nvidia.sdm.RelationalTask$Kind[] values();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public com.nvidia.sdm.RelationalTask(com.nvidia.sdm.RelationalTask$Kind, java.lang.String, java.lang.String, java.lang.Long, java.lang.Integer);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.Integer numForecasts();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask regression(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind TEMPORAL_LINK_PREDICTION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public final boolean equals(java.lang.Object);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.Long stepSizeNs();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask link(java.lang.String, java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask binary(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder randomSeed(long);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind FORECASTING;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Request materializeExamples(com.nvidia.sdm.RelationalTask, org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table, com.nvidia.sdm.ExamplesOptions);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions#public static com.nvidia.sdm.ExamplesOptions$Builder builder();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static com.nvidia.sdm.RelationalTask$Kind valueOf(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Request materializeExamples(com.nvidia.sdm.RelationalTask, org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public com.nvidia.sdm.RelationalTask$Kind kind();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind MULTICLASS_CLASSIFICATION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.String entityTable();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask multiclass(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions build();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind REGRESSION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind BINARY_CLASSIFICATION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public final java.lang.String toString();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.String linkTargetTable();": {
+        "capability": "custom-examples"
       }
     }
   },
@@ -6182,12 +6316,12 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_inventory",
-      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
+      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "public_api_snapshot_sha256",
-      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
+      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
@@ -6227,7 +6361,7 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "live_api_tests",
-      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
+      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
@@ -6238,6 +6372,11 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/sql-columns",
       "reason": "Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/custom-examples",
+      "reason": "Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
     }
   ],
   "capabilities": [
@@ -7883,6 +8022,16 @@
     {
       "api_contract": "sql-columns",
       "test": "packages/structured-data-models-client/tests/test_sql_columns_warehouse.py::test_live_calculated_column_values_refresh_and_prediction",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "custom-examples",
+      "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_live_supplied_examples",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "custom-examples",
+      "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_live_warehouse_supplied_examples",
       "evidence_level": "live-required"
     }
   ]

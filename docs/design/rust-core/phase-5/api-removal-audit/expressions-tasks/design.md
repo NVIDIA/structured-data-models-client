@@ -4,8 +4,8 @@
 
 # Calculated columns and custom relational examples
 
-**Proposal: restore two narrow workflows, rather than a general mutable task editor.**
-Both have approved Python and Java boundaries; implementation is in progress.
+**Implemented: two narrow workflows, rather than a general mutable task editor.**
+Python and Java share Rust validation and gathering; providers execute calculated SQL.
 
 ## What the two gaps mean
 
@@ -115,4 +115,24 @@ Python and Java local SQLite/DuckDB checks pass, including values/nulls, repeate
 A filtered projection with a renamed UNIQUE-index key verifies alias-preserving discovery on both local SQL providers.
 PostgreSQL, Databricks SQL, Snowflake, Databricks metric views and Snowflake semantic views each produced the independently expected 24 labels and two live predictions.
 The old DuckDB calculated-column path produced the same 29 expected non-null fixture values and one null.
-The independent boundary review found no blocker; custom examples remain the next checkpoint.
+The independent boundary review found no blocker; the custom-examples checkpoint follows below.
+
+## Custom examples checkpoint (contract 65)
+
+`Schema.materialize_examples` / `materializeExamples` accepts an immutable `RelationalTask`, context examples and prediction examples without PQL.
+Rust validates task options, source IDs and scalar/list labels, then reuses the existing sampler and end-time masking.
+Python accepts DataFrame/Arrow; Java accepts Arrow Table and snapshots options and buffers.
+The returned ordinary Request supports prediction, fitted sessions and memory-backed persistence.
+Source-backed persistence retains the existing open-connection limitation.
+
+Native forecasting sends one prediction example per batch because the model requires it.
+Each supplied scalar label is preserved; horizon cannot exceed context rows.
+Rust requires every expected row/step response exactly once and keeps the original anchors.
+The latest dated graph time supplies missing static anchors; timeless inputs use the correct negative sentinel, fixing a demonstrated old overflow.
+
+Verification: seven shared task fixtures cover label order, overlaps, repeated entities, precision and ownership; malformed labels/IDs/options and sliced Arrow lists are rejected or preserved as appropriate.
+Python local SQLite/DuckDB preparation and existing fit/predict/close pass.
+PostgreSQL, Databricks and Snowflake read-only preparation each preserve supplied labels and produce live predictions.
+Real endpoints pass regression, binary/multiclass, temporal-link, and native forecasting with horizons one and three across two prediction batches.
+Java passes the same seven fixtures, multi-batch forecast response alignment, ownership/persistence and malformed snapshot checks.
+The independent boundary review found no remaining blocker; affected Python regressions (56), Rust engine/request unit tests (132), type checking and clippy pass.

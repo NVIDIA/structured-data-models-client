@@ -421,12 +421,21 @@ class GatheredState:
 
 
 @dataclasses.dataclass(frozen=True)
+class ExampleFacts:
+    entity_table: str
+    kind: str
+    windowed: bool
+    num_forecasts: int
+
+
+@dataclasses.dataclass(frozen=True)
 class Gathered:
     r"""``materialize``'s result: the request state, and what the core
     resolved of the query."""
 
     state: GatheredState
     query: QueryFacts | None
+    examples: ExampleFacts | None = None
 
 
 def _state(value: Any) -> GatheredState:
@@ -683,8 +692,11 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),
-        ('query',),
+        ('query', 'examples'),
         lambda read: Gathered(
+            examples=None
+            if read['examples'] is None
+            else ExampleFacts(**read['examples']),
             state=_state(read['state']),
             query=(
                 None

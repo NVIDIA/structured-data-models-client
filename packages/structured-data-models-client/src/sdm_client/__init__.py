@@ -32,6 +32,7 @@ from sdm_client.errors import (
 )
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
+from sdm_client.relational_task import RelationalTask
 from sdm_client.reports import (
     ColumnMetadata,
     ExplanationView,
@@ -55,6 +56,7 @@ from sdm_client.schema import (
 )
 
 __all__ = [
+    'RelationalTask',
     'ForecastInput',
     'build_timeseries',
     'ColumnMetadata',

@@ -105,11 +105,11 @@ public final class Request {
   private final Schema schema;
   private final List<byte[]> payloads;
   private final String query;
-  private final Results.QueryFacts facts;
+  private final Results.RequestFacts facts;
   private final List<String> inferenceAsked;
 
   Request(Schema schema, com.nvidia.sdm.internal.MaterializedRequest materialized, String query,
-      Results.QueryFacts facts, List<String> inferenceAsked) {
+      Results.RequestFacts facts, List<String> inferenceAsked) {
     this.schema = schema; this.materialized = materialized; this.payloads = materialized.payloads();
     this.query = query; this.facts = facts; this.inferenceAsked = List.copyOf(inferenceAsked);
   }
@@ -122,6 +122,7 @@ public final class Request {
     Map<String, Object> saved = new java.util.LinkedHashMap<>();
     saved.put("sanitization_report", sanitizationReport.saved());
     saved.put("schema", schema.saved(writer));
+    if(facts instanceof Results.ExampleFacts e) saved.put("example_facts", Map.of("entity_table",e.entityTable(),"kind",e.problemType(),"windowed",e.windowed(),"num_forecasts",e.numForecasts()));
     saved.put("query", query); saved.put("inference", inference); saved.put("task_options", taskOptions);
     if (direct()) {
       saved.put("kind", "direct_request"); saved.put("input", direct);
@@ -178,6 +179,12 @@ public final class Request {
         }
       }
       validateStateAttachments(state, attachments);
+      if(saved.containsKey("example_facts")) {
+        Results.ExampleFacts ef=Results.exampleFacts(saved.get("example_facts"));
+        if(ef==null) throw Snapshots.invalid("snapshot example metadata is missing", null);
+        validateExampleFacts(ef,state,attachments);
+        request=new Request(schema, com.nvidia.sdm.internal.MaterializedRequest.restored(state, attachments),query,ef,Snapshots.texts(saved.get("inference_asked")));
+      } else {
       Map<String, Object> operation = Map.of("op", "validate_query", "query", 1, "schema", 2,
           "profile", Map.of("name", "RELATIONAL"));
       try (Host.Finished finished = Host.run(operation,
@@ -187,6 +194,7 @@ public final class Request {
         request = new Request(schema, com.nvidia.sdm.internal.MaterializedRequest.restored(state, attachments),
             query, result.query(), Snapshots.texts(saved.get("inference_asked")));
       }
+      }
     }
     if (saved.containsKey("sanitization_report")) {
       request.sanitizationReport = SanitizationReport.restored(saved.get("sanitization_report"));
@@ -195,6 +203,30 @@ public final class Request {
     request.taskOptions = taskOptions;
     reader.complete();
     return request;
+  }
+
+  private static void validateExampleFacts(Results.ExampleFacts facts, Map<String,Object> state,
+      Map<Integer,byte[]> attachments) throws java.io.IOException {
+    if(state.containsKey("forecast") || state.containsKey("ranking"))
+      throw Snapshots.invalid("supplied examples cannot contain query decomposition", null);
+    List<Map<String,Object>> parts=new ArrayList<>();
+    parts.add(state);
+    if(state.containsKey("batches"))
+      for(Object part:Snapshots.list(state.get("batches"))) parts.add(Snapshots.object(part));
+    Map<String,Object> firstTask=null;
+    for(Map<String,Object> part:parts) {
+      Map<String,Object> payload;
+      try { payload=Snapshots.object(Json.read(attachments.get(Snapshots.integer(part.get("payload"))))); }
+      catch(Json.JsonException malformed) { throw Snapshots.invalid("invalid request payload JSON", malformed); }
+      Map<String,Object> task=Snapshots.object(payload.get("task"));
+      long horizon=task.containsKey("num_forecasts") ? Results.exampleCount(task.get("num_forecasts")):1;
+      List<?> entities=Snapshots.list(task.get("entity_table_names"));
+      if(!facts.problemType().equals(task.get("kind")) || facts.numForecasts()!=horizon
+          || entities.isEmpty() || !facts.entityTable().equals(entities.get(0))
+          || (firstTask!=null && !firstTask.equals(task)))
+        throw Snapshots.invalid("snapshot example metadata disagrees with its request", null);
+      firstTask=task;
+    }
   }
 
   /** Framing and JSON shapes only; native RequestState remains the semantic authority. */
