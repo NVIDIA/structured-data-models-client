@@ -470,6 +470,10 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
 
     The whole answering path is driven here, because recording the right kind
     on the request proves nothing about which kind the merge then uses.
+
+    Assumptions:
+    - Each step is answered by the backend stand-in, which records the fields
+      that call was asked for; a regression's defaults are ``prediction``.
     """
     from sdm_api.generated.tfm_api import PredictionItem
 
@@ -503,8 +507,8 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
 
     asked_for = []
 
-    def regression(self, part, *, model, outputs=None, **rest):
-        asked_for.append(outputs)
+    def regression(adapter, payload, fields):
+        asked_for.append(fields)
         return PredictionResult(
             model='kumo-relational',
             request_id='r',
@@ -515,11 +519,11 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
             outputs=('prediction',),
         )
 
-    monkeypatch.setattr(SDMClient, 'predict', regression)
     client = SDMClient('http://127.0.0.1:9', api_key='none')
-    answer = client._answer_in_parts(request, 'kumo-relational', None)
+    monkeypatch.setattr(client._backend, 'predict', regression)
+    answer = client.predict(request, model='kumo-relational')
 
-    assert asked_for == [None, None], (
+    assert asked_for == [('prediction',), ('prediction',)], (
         'a regression part was asked for a probability, which is what the '
         'ranking path does'
     )
@@ -686,6 +690,10 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
     The fields were dropped on the way down, so a caller who asked for them
     got a series back with only its predictions and no sign that the rest of
     the request had been ignored.
+
+    Assumptions:
+    - Each step is answered by the backend stand-in, which records the fields
+      that call was asked for.
     """
     pytest.importorskip('sdm_relational_engine')
     from sdm_api.generated.tfm_api import PredictionItem
@@ -701,8 +709,8 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
 
     asked_for = []
 
-    def regression(self, part, *, model, outputs=None, **rest):
-        asked_for.append(tuple(outputs) if outputs else None)
+    def regression(adapter, payload, fields):
+        asked_for.append(tuple(fields))
         return PredictionResult(
             model='kumo-relational',
             request_id='r',
@@ -710,10 +718,10 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
             outputs=('prediction', 'quantiles'),
         )
 
-    monkeypatch.setattr(SDMClient, 'predict', regression)
     client = SDMClient('http://127.0.0.1:9', api_key='none')
-    answer = client._answer_in_parts(
-        request, 'kumo-relational', ['prediction', 'quantiles']
+    monkeypatch.setattr(client._backend, 'predict', regression)
+    answer = client.predict(
+        request, model='kumo-relational', outputs=['prediction', 'quantiles']
     )
 
     assert asked_for == [
