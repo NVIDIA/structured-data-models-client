@@ -57,14 +57,16 @@ Names below describe proposed API placement, not frozen signatures.
 | 2 / Complete | [Explicit inference and safe edits](inference-edits/design.md) | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
 | 2 / Complete | [Time-series builder](timeseries/design.md) | Hosts expose a preparation recipe; bounded Rust Arrow transformation handles row/time correctness; existing schema/PQL validates outputs | Moderate |
 | 2 / Complete | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
-| 3 | End-time-column configuration | Carry through both facades, shared schema, engine graph, provider projections and eligibility | Substantive |
-| 3 | Generic expression-column and task editing | Define useful edits first; Rust validates expressions, dependencies, entity references and row alignment; providers execute source expressions | Substantive; scope review required |
+| 3 / Proposed | [End-time column](end-time/design.md) | Both hosts declare the role; Rust handles sampled eligibility and hides future end dates through existing provider reads | Substantive |
+| 3 / Proposed | [SQL columns and custom relational examples](expressions-tasks/design.md) | Providers execute dialect SQL; Rust admits schema changes and supplied relational examples; hosts adapt/slice inputs | Substantive; two bounded workflows |
 
 **Sampling impact:** presentation, reports and loaders need no sampler changes.
 Inference/edit conveniences reuse existing algorithms; warehouse metadata previews may be reread.
 Labels-only requires a distinct labeling mode, without neighbor gathering or model inference.
-End-time support changes entity eligibility, including warehouse selection.
-Generic expression editing changes source projection/planning; these two items need focused push-down regression coverage.
+End-time support changes sampled eligibility and masks future end dates after existing provider reads; explicit prediction IDs have separate semantics.
+SQL columns extend provider projections, including three connectors that currently refuse derived relations.
+Custom examples reuse graph gathering with supplied IDs/labels.
+These need focused push-down regression checks, not a sampling-algorithm rewrite.
 
 ## Contracts to preserve or settle for the remaining work
 
@@ -76,7 +78,8 @@ Generic expression editing changes source projection/planning; these two items n
 - **Labels:** zero training rows, at most `size` output labels, bounded trials, correct default anchor/forecast horizon and explicit empty-result behavior.
   The existing test-only labels operation is not equivalent and must not simply be exposed.
 - **End time:** eligibility includes `end > anchor OR end IS NULL`; the existing optional contract field alone does not implement this behavior.
-- **Expressions/tasks:** choose explicit operations such as adding a validated derived column or selecting aligned rows; do not resurrect arbitrary mutable engine task objects.
+- **Expressions/tasks:** keep SQL text in the provider dialect; Rust validates schema structure and task/ID/label alignment.
+  Restore external relational labels without requiring PQL; do not resurrect mutable engine task objects.
 - **Loaders/transforms:** preserve RelBench key/link/time metadata and dataset overrides; define empty/mismatched histories, timestamps, timezones and dtype handling for the time-series builder.
 
 ## Completion checks
@@ -102,4 +105,5 @@ Adding an in-memory expression language would therefore be new functionality, no
 Task narrowing was used internally to cap context rows and split prediction batches (`rfm.py`), with direct tests in `test_task_table.py`.
 Tests also constructed `TaskTable` objects with explicit labels/entity IDs/timestamps and passed them to `predict_task()`.
 Source docstrings document these APIs; the search of tracked Markdown/notebooks found no user tutorial for general task editing.
-Restore demonstrated workflows before committing to a general task editor; existing automatic batching does not itself require exposing task mutation.
+The direct `Request` constructor is Tabular-only and does not restore custom relational labels.
+The new proposal restores supplied relational examples; users slice their input tables before admission rather than mutate a prepared task.
