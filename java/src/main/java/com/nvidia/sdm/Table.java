@@ -38,6 +38,11 @@ public final class Table {
     this.duplicateKeys = duplicateKeys;
   }
 
+  /** Snapshot metadata locally, without reading rows. */
+  public TableMetadata metadataReport() {
+    return new TableMetadata(name, columns.stream().map(c -> new ColumnMetadata(c.name(), c.dtype(), c.stype())).toList(), primaryKey, timeColumn);
+  }
+
   /** The table's name in the schema, which queries use. */
   public String name() {
     return name;

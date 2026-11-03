@@ -223,6 +223,12 @@ public final class PredictionResult {
     return count;
   }
 
+  /** An immutable local explanation view, without reading prediction rows. */
+  public ExplanationView explanationView() {
+    Map<String, Object> raw = explanation();
+    return raw == null ? null : new ExplanationView(raw);
+  }
+
   /**
    * The explanation, when it was asked for and the model gave one; null otherwise, as Python's
    * {@code explanation}.

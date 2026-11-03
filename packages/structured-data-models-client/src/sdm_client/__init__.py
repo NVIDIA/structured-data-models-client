@@ -32,6 +32,16 @@ from sdm_client.errors import (
 )
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
+from sdm_client.reports import (
+    ColumnMetadata,
+    ExplanationView,
+    FeatureImportance,
+    FeatureImportanceRow,
+    LinkMetadata,
+    LinkReport,
+    MetadataReport,
+    TableMetadata,
+)
 from sdm_client.request import Request, Split, Target, Task
 from sdm_client.result import PredictionResult
 from sdm_client.schema import (
@@ -43,6 +53,14 @@ from sdm_client.schema import (
 )
 
 __all__ = [
+    'ColumnMetadata',
+    'TableMetadata',
+    'MetadataReport',
+    'LinkMetadata',
+    'LinkReport',
+    'ExplanationView',
+    'FeatureImportance',
+    'FeatureImportanceRow',
     'SDMWarning',
     'Column',
     'FittedModel',
