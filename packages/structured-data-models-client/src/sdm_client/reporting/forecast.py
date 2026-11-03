@@ -2,12 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A forecast explanation, drawn as Kumo-TS draws it.
+r"""A forecast explanation, drawn as it was written to be drawn.
 
-The pages come from that package. What is new is that they are drawn from an
-explanation that travelled as data: the client carries one as the contract's
-``explanation`` field, plain JSON, because that is what an output field is.
-The arrays the pages read are all in it, so the drawing reads them back.
+What is new is that the pages are drawn from an explanation that travelled as
+data: the client carries one as the contract's ``explanation`` field, plain
+JSON, because that is what an output field is. The arrays the pages read are
+all in it, so the drawing reads them back.
 
 A page whose data is not there is not drawn. Feature-axis attribution is the
 one that is usually absent, because it costs several times the rest and is
@@ -56,6 +56,25 @@ def forecast_report(
         MissingExtraError: If matplotlib is not installed.
         StructuredDataError: If the answer carries no explanation.
 
+    The feature axis sets the forecast series' own effect aside rather than
+    measuring it, and it arrives as a zero. Left in, the page ranks it among
+    measured channels and has called it the most influential of them, so it
+    is taken out along with its label: a row that is not a measurement does
+    not belong in a matrix of measurements.
+
+    The lags are ranked from the scores rather than from the attributions.
+    That helper differences a cumulative score into a per-step weight, and
+    handing it the normalised attribution ranked the lags in very nearly the
+    opposite order. It returns those per-step weights, which are what the
+    heatmap's own caption describes; drawn from the cumulative scores
+    instead, the heatmap read a run of flat history as the most influential
+    part of the window while the table beside it ranked the newest step
+    first.
+
+    Each artifact is written where the data behind it was computed, because
+    the pages name those files and a report that draws the pages and writes
+    none of them points a reader at nothing.
+
     >>> result = client.predict(
     ...     request, model=KumoForecast(),
     ...     outputs=['prediction', 'explanation'],
@@ -74,23 +93,10 @@ def forecast_report(
     pages = _pages()
     frame, target, step = _forecast_frame(carried)
     explanation = _explanation(carried)
-    # The feature axis sets the forecast series' own effect aside rather than
-    # measuring it, and it reaches here as a zero. Left in, the page ranks it
-    # among measured channels and has called it the most influential of them.
-    # A row that is not a measurement does not belong in a matrix of
-    # measurements, so it is taken out along with its label.
     explanation, channels = _without_the_unmeasured(
         explanation, _channels(carried), carried
     )
     attributions = np.asarray(explanation.lag_horizon_attributions)
-    # Scores, not attributions. That helper differences a cumulative score
-    # into a per-step weight, and handing it the normalised attribution
-    # ranked the lags in very nearly the opposite order.
-    # That helper returns the per-step weights it ranks from, and those are
-    # what the heatmap's own caption describes. Drawn from the cumulative
-    # scores instead, it read a run of flat history as the most influential
-    # part of the window while the table beside it ranked the newest step
-    # first.
     marginal, topk_rows = pages._topk_lag_steps_per_horizon(
         np.asarray(explanation.lag_horizon_scores), top_k=top_k
     )
@@ -104,9 +110,6 @@ def forecast_report(
             per_step,
             np.asarray(explanation.lag_horizon_scores),
         )
-        # The pages name these files, so a report that draws the pages and
-        # writes none of them points a reader at nothing. Each is written
-        # where the data behind it was computed.
         horizon = attributions.shape[1]
         context = _context_len(carried, horizon)
         if explanation.flow_magnitudes is not None and context:
@@ -152,7 +155,7 @@ def forecast_report(
 
 def _pages() -> Any:
     try:
-        from sdm_client.explain._kumo_ts import pages
+        from sdm_client.explain._attribution import pages
     except ImportError as error:  # pragma: no cover - the extra is absent
         raise MissingExtraError('report', 'matplotlib') from error
     return pages
@@ -164,15 +167,16 @@ def _explanation(carried: dict[str, Any]) -> Any:
     Only the arrays the pages read are restored. A field the explanation did
     not carry stays absent, and the page that would have drawn it is not
     drawn, which is what "this was not computed" looks like on paper.
+
+    The channel attribution is serialised under ``feature_axis`` rather than
+    beside the lag arrays. Read flat it was found nowhere, and the page that
+    draws it was skipped although it had been computed, which costs minutes.
     """
-    from sdm_client.explain._kumo_ts.interpretability import (
+    from sdm_client.explain._attribution.interpretability import (
         ForecastExplanation,
     )
 
     block = carried.get('explanation') or {}
-    # Serialised under `feature_axis`, not beside the lag arrays. Reading it
-    # flat found nothing and the page that draws it was skipped although it
-    # had been computed, which costs minutes.
     feature_axis = block.get('feature_axis') or {}
     diagnostics = block.get('diagnostics') or {}
 
@@ -210,7 +214,7 @@ def _explanation(carried: dict[str, Any]) -> Any:
 
 def _smoothness(carried: dict[str, Any]) -> Any:
     r"""How smoothly the latent state moved, read back from the data."""
-    from sdm_client.explain._kumo_ts.interpretability import (
+    from sdm_client.explain._attribution.interpretability import (
         TrajectoryStabilityReport,
     )
 
@@ -253,7 +257,7 @@ def _stability(carried: dict[str, Any]) -> Any:
     aside. Rebuilt with the channel labels of the explanation instead, the
     two would be the same length and name different channels.
     """
-    from sdm_client.explain._kumo_ts.channel_stability import (
+    from sdm_client.explain._attribution.channel_stability import (
         PerChannelEmbeddingStabilityReport,
     )
 

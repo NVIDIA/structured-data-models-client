@@ -23,7 +23,7 @@ import pytest
 
 pytest.importorskip('torch', reason='the ported attribution runs on torch')
 
-PORTED = 'sdm_client.explain._kumo_ts'
+PORTED = 'sdm_client.explain._attribution'
 NAMES = sorted(
     found.name
     for found in pkgutil.iter_modules(importlib.import_module(PORTED).__path__)

@@ -2,11 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from NVIDIA/Kumo-TS, Kumo-Forecast/sdk/forecasting.py
-# at af74798bbf7d020d3298f545fb9be383560a18ce: the pages of the forecast
-# report, the artifacts written beside it, and the explanation as JSON.
+r"""Drawing a forecast explanation, as it was written to be drawn.
 
-r"""Drawing a forecast explanation, as Kumo-TS draws it."""
+The pages of the forecast report, the artifacts written beside them, and the
+explanation as JSON.
+"""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ import numpy as np
 import pandas as pd
 import torch
 
-from sdm_client.explain._kumo_ts.channel_stability import (
+from sdm_client.explain._attribution.channel_stability import (
     PerChannelEmbeddingStabilityReport,
 )
-from sdm_client.explain._kumo_ts.interpretability import (
+from sdm_client.explain._attribution.interpretability import (
     ForecastExplanation,
     TrajectoryStabilityReport,
 )
@@ -817,7 +817,7 @@ def _compute_integrated_gradients_report(
     grad_through_norm: bool,
 ) -> dict[str, Any]:
     """Run embedding integrated gradients for the current SDK context window."""
-    from sdm_client.explain._kumo_ts.integrated_gradients import (
+    from sdm_client.explain._attribution.integrated_gradients import (
         integrated_gradients_embedding,
     )
 

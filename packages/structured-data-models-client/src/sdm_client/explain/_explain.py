@@ -82,10 +82,29 @@ def explanation_of(
             the model's gradients rather than watching its output move.
 
     Raises:
-        StructuredDataError: If the history is shorter than the model reads.
+        StructuredDataError: If the history is shorter than the model reads,
+            if the forecaster cannot mix channels while more than one
+            travelled, or, for the feature axis, if the window it reads has
+            a gap in it or the horizon runs past one forward pass.
+
+    Without channel mixing and without retrieval, a column measured
+    alongside the series cannot reach the forecast at all, while the
+    embedding still pools it, so an attribution would move when it moves and
+    report an influence the forecast does not have. Feature-axis attribution
+    replaces a channel with its own average over the window it reads, and a
+    gap makes that average undefined, which reads as a channel with no
+    influence: a confident answer about a column nothing was learnt about.
+    Both are refused rather than reported.
+
+    The window is standardised first, as the model's own path standardises
+    before it reads anything, so the attribution works in the space the
+    model works in. Handing it raw readings attributed a model being fed
+    numbers it never sees.
     """
 
-    from sdm_client.explain._kumo_ts.interpretability import explain_forecast
+    from sdm_client.explain._attribution.interpretability import (
+        explain_forecast,
+    )
     from sdm_client.explain._model import Forecaster
 
     forecaster = Forecaster(model)
@@ -96,15 +115,7 @@ def explanation_of(
             f'history is {history.shape[-1]}',
             code='UNSUPPORTED_SHAPE',
         )
-    # Standardised first, as the model's own path standardises before it
-    # reads anything. The attribution then works in the space the model works
-    # in; handing it raw readings attributed a model being fed numbers it
-    # never sees.
     if len(channels) > 1 and not forecaster.mixes_channels:
-        # Without channel mixing and without retrieval, a covariate cannot
-        # reach the forecast at all. The embedding still pools every channel,
-        # so an attribution would move when one of them moves and report an
-        # influence the forecast does not have.
         raise StructuredDataError(
             'this forecaster does not mix channels, so nothing measured '
             'alongside the series can reach the forecast, and an attribution '
@@ -115,11 +126,6 @@ def explanation_of(
         )
     window_only = history[..., -forecaster.context_size :]
     if feature_axis and not np.isfinite(window_only).all():
-        # Feature-axis attribution perturbs a channel towards its own mean
-        # over the window, and that mean is NaN if any reading in it is
-        # missing. The channel then reads as inactive and is given no
-        # influence at all, which is a confident answer about a column
-        # nothing was learnt about. Refused rather than reported.
         raise StructuredDataError(
             f'feature-axis attribution replaces a channel with its own '
             f'average over the window it reads, which a gap in that window '
@@ -180,7 +186,7 @@ def _smoothness_of(explanation: Any, context_size: int) -> Any:
     second walk over the history alone would produce, because each one is the
     window ending at its own step and the forecast is not in any of them.
     """
-    from sdm_client.explain._kumo_ts.interpretability import (
+    from sdm_client.explain._attribution.interpretability import (
         summarize_trajectory_stability,
     )
 
@@ -202,7 +208,7 @@ def _stability_of(forecaster: Any, window: np.ndarray, device: Any) -> Any:
     import warnings
 
     from sdm_client.core.warnings import SDMWarning
-    from sdm_client.explain._kumo_ts.channel_stability import (
+    from sdm_client.explain._attribution.channel_stability import (
         compute_per_channel_embedding_stability,
     )
 
@@ -276,7 +282,7 @@ def _gradients_of(
     since it looks for a method this forecaster spells another way; the flag
     it records is true either way, and true.
     """
-    from sdm_client.explain._kumo_ts.pages import (
+    from sdm_client.explain._attribution.pages import (
         _compute_integrated_gradients_report,
     )
 
@@ -311,14 +317,25 @@ def _as_dict(
 ) -> dict[str, Any]:
     r"""The explanation as the contract carries one: plain JSON data.
 
-    Rendered by the code that drew it upstream, so a report built from this
-    and one built there say the same things in the same words.
-    """
-    from sdm_client.explain._kumo_ts.pages import _explanation_to_dict
+    Rendered by the code that drew it, so a report built from this and one
+    built where that code came from say the same things in the same words.
 
-    # The attribution works standardised, so what it calls the baseline
-    # forecast is standardised too. The report draws it beside readings, so
-    # it is put back in their scale before it travels.
+    The attribution works standardised, so what it calls the baseline
+    forecast is standardised too, and the report draws it beside readings;
+    it is put back in their scale before it travels. The channel labels
+    travel with every explanation rather than only with the feature axis,
+    which is where that code keeps them: the client knows them either way,
+    and a report that cannot say which channel is which is harder to read
+    than one that can.
+
+    The feature axis perturbs each channel and watches the forecast move.
+    Perturbing the series being forecast moves it by construction, so that
+    channel's own effect is set aside rather than measured and reaches the
+    page as a zero beside measured numbers. Saying which channel that was is
+    what keeps a reader from taking it for the least influential one.
+    """
+    from sdm_client.explain._attribution.pages import _explanation_to_dict
+
     explanation = replace(
         explanation,
         baseline_forecast=_in_original_scale(
@@ -341,16 +358,7 @@ def _as_dict(
         feature_axis_embedding_stability_report=stability,
         integrated_gradients_report=gradients,
     )
-    # Upstream keeps the labels only where feature-axis attribution ran, and
-    # they name the channels of every explanation. The client knows them
-    # either way, and a report that cannot say which channel is which is
-    # harder to read than one that can.
     rendered.setdefault('metadata', {})['channel_labels'] = list(channels)
-    # The feature axis perturbs each channel and watches the forecast move.
-    # Perturbing the series being forecast moves it by construction, so that
-    # channel's own effect is set aside rather than measured, and it reaches
-    # the page as a zero beside measured numbers. Saying so is what keeps a
-    # reader from taking it for the least influential channel.
     if rendered.get('explanation', {}).get('feature_axis'):
         rendered['metadata']['feature_axis_excludes'] = target
     return rendered

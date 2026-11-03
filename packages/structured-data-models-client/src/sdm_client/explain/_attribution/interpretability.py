@@ -2,9 +2,6 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from NVIDIA/Kumo-TS, Kumo-Forecast/interpretability.py
-# at af74798bbf7d020d3298f545fb9be383560a18ce.
-
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -47,7 +44,7 @@ import numpy as np
 import torch
 
 if TYPE_CHECKING:
-    from sdm_client.explain._kumo_ts.channel_flow import ChannelFlowConfig
+    from sdm_client.explain._attribution.channel_flow import ChannelFlowConfig
 
 Array = np.ndarray
 
@@ -1478,9 +1475,6 @@ def fit_horizon_surrogates(
 
     work_items = [(c, h) for c in range(C) for h in range(H)]
 
-    # Kumo-TS threads this across cores with a helper this port leaves
-    # behind, because it exists to feed several GPUs. `n_jobs` is read and
-    # kept for the signature it came with; the work is done in order.
     for item in work_items:
         c_idx, h_idx, b, a0 = _solve_one(item)
         coef[c_idx, h_idx] = b
@@ -1638,7 +1632,7 @@ def explain_forecast(
     chan_resid_mean = None
     chan_resid_p95 = None
     if channel_axis:
-        from sdm_client.explain._kumo_ts.channel_flow import (  # local import avoids circular dependency at module load
+        from sdm_client.explain._attribution.channel_flow import (  # local import avoids circular dependency at module load
             ChannelFlowConfig,
             channel_horizon_marginal,
             compute_per_channel_flow,

@@ -2,9 +2,6 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from NVIDIA/Kumo-TS, Kumo-Forecast/integrated_gradients.py
-# at af74798bbf7d020d3298f545fb9be383560a18ce.
-
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 

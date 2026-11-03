@@ -48,12 +48,12 @@ target-version = "py310"
 # illustrated.
 extend-exclude = [
     "packages/structured-data-models-pql/src/predictive_query/grammar",
-    # Kumo-TS's forecast attribution, vendored as that package wrote it, down
+    # The forecast attribution, kept as it was written, down
     # to putting `from __future__` above its own module docstrings. Excluded
     # from mypy for the same reason; the two lists move together. Checked for
     # the lints that are not style first: an undefined name here would be a
     # line this move dropped, and two were.
-    "packages/structured-data-models-client/src/sdm_client/explain/_kumo_ts",
+    "packages/structured-data-models-client/src/sdm_client/explain/_attribution",
     "packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py",
     "*.md",
 ]
@@ -92,10 +92,10 @@ exclude = [
     # ANTLR's output, regenerated from the grammar rather than edited. Excluded
     # from ruff for the same reason; the two lists move together.
     "packages/structured-data-models-pql/src/predictive_query/grammar/",
-    # Kumo-TS's forecast attribution, vendored as that package wrote it. An
+    # The forecast attribution, kept as it was written. An
     # attribution is a statement about what a model did, so the arithmetic
     # that makes it is not this repository's to retype.
-    "packages/structured-data-models-client/src/sdm_client/explain/_kumo_ts/",
+    "packages/structured-data-models-client/src/sdm_client/explain/_attribution/",
 ]
 
 # --- Baseline recorded 2026-09-17 -------------------------------------------

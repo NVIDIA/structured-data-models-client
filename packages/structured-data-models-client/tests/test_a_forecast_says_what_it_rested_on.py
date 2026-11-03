@@ -207,7 +207,7 @@ def test_the_top_lags_are_ranked_from_the_scores(explained, tmp_path):
     said nothing about the call that draws the page, and passed while the
     report still handed over the wrong array.
     """
-    from sdm_client.explain._kumo_ts import pages
+    from sdm_client.explain._attribution import pages
     from sdm_client.reporting import forecast as module
 
     seen = []
@@ -331,7 +331,7 @@ def test_the_heatmap_shows_what_its_caption_says(explained, tmp_path):
     scores those are differenced out of, so a flat run read as the most
     influential part of the window while the table ranked the newest first.
     """
-    from sdm_client.explain._kumo_ts import pages
+    from sdm_client.explain._attribution import pages
 
     seen = []
     original = pages._save_lag_horizon_artifacts
@@ -493,10 +493,10 @@ def test_the_smoothness_is_the_history_walked_once(explained, forecast):
     than walked again, so it has to be what a second walk would say."""
     import torch
 
-    from sdm_client.explain._explain import _standardised
-    from sdm_client.explain._kumo_ts.interpretability import (
+    from sdm_client.explain._attribution.interpretability import (
         compute_trajectory_stability,
     )
+    from sdm_client.explain._explain import _standardised
     from sdm_client.explain._model import Forecaster
 
     carried = explained.explanation

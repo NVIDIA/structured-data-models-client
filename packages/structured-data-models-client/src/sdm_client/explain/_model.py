@@ -151,16 +151,17 @@ def _observed(x: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
     The forecaster has no mask argument and reads ``NaN`` as unobserved: its
     normalisation takes a window's statistics over what is there, and zeroes
     what is not once they are taken.
+
+    The mask's last axis is steps and anything before it is the window the
+    steps belong to; the readings have a channel axis between the two. It is
+    one mask for every channel of a window, so the channel axis is where the
+    singleton goes.
     """
     if mask is None:
         return x
     keep = torch.as_tensor(mask, device=x.device).bool()
     if keep.all():
         return x
-    # The mask's last axis is steps and anything before it is the window it
-    # belongs to; the readings have a channel axis between the two. It is one
-    # mask for every channel of a window, so the channel axis is where the
-    # singleton goes.
     keep = keep.unsqueeze(-2)
     while keep.ndim < x.ndim:
         keep = keep.unsqueeze(0)

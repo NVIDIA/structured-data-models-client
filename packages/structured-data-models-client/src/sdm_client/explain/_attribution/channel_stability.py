@@ -2,9 +2,6 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from NVIDIA/Kumo-TS, Kumo-Forecast/channel_stability.py
-# at af74798bbf7d020d3298f545fb9be383560a18ce.
-
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -69,8 +66,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from sdm_client.explain._kumo_ts.channel_flow import _embed_windows_batched
-from sdm_client.explain._kumo_ts.interpretability import (
+from sdm_client.explain._attribution.channel_flow import _embed_windows_batched
+from sdm_client.explain._attribution.interpretability import (
     Array,
     ForecastModel,
     _rolling_window_sources,
