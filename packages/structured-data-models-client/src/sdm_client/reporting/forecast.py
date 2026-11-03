@@ -16,6 +16,9 @@ asked for separately.
 
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +36,7 @@ def forecast_report(
     *,
     dataset_name: str | None = None,
     top_k: int = 5,
+    artifacts_dir: str | Path | None = None,
 ) -> Path:
     r"""Draw why ``result`` is the forecast it is.
 
@@ -43,6 +47,10 @@ def forecast_report(
         output_path: Where to write the PDF.
         dataset_name: A name for the run, shown on the first page.
         top_k: How many lags to list per horizon.
+        artifacts_dir: Where to keep the CSVs and images the pages are drawn
+            from. They are written either way, because the attribution
+            heatmap is a page drawn from an image on disk; naming a
+            directory is what keeps them afterwards.
 
     Raises:
         MissingExtraError: If matplotlib is not installed.
@@ -67,21 +75,32 @@ def forecast_report(
     frame, target, step = _forecast_frame(carried)
     explanation = _explanation(carried)
     attributions = np.asarray(explanation.lag_horizon_attributions)
-    _, topk_rows = pages._topk_lag_steps_per_horizon(attributions, top_k=top_k)
-    drawn = pages._build_pdf_report(
-        Path(output_path),
-        dataset_name=dataset_name,
-        forecast_df=frame,
-        explanation=explanation,
-        target_column=target,
-        timestamp_column=step,
-        heatmap_path=None,
-        topk_rows=topk_rows,
-        top_k=top_k,
-        context_len=_context_len(carried, attributions.shape[1]),
-        forecast_horizon=attributions.shape[1],
-        channel_labels=_channels(carried),
+    # Scores, not attributions. That helper differences a cumulative score
+    # into a per-step weight, and handing it the normalised attribution
+    # ranked the lags in very nearly the opposite order.
+    _, topk_rows = pages._topk_lag_steps_per_horizon(
+        np.asarray(explanation.lag_horizon_scores), top_k=top_k
     )
+    with _artifacts(artifacts_dir) as out_dir:
+        heatmap = pages._save_lag_horizon_artifacts(
+            out_dir,
+            attributions,
+            np.asarray(explanation.lag_horizon_scores),
+        )
+        drawn = pages._build_pdf_report(
+            Path(output_path),
+            dataset_name=dataset_name,
+            forecast_df=frame,
+            explanation=explanation,
+            target_column=target,
+            timestamp_column=step,
+            heatmap_path=heatmap,
+            topk_rows=topk_rows,
+            top_k=top_k,
+            context_len=_context_len(carried, attributions.shape[1]),
+            forecast_horizon=attributions.shape[1],
+            channel_labels=_channels(carried),
+        )
     if drawn is None:  # pragma: no cover - matplotlib is present by here
         raise MissingExtraError('report', 'matplotlib')
     return drawn
@@ -179,3 +198,20 @@ def _context_len(carried: dict[str, Any], horizon: int) -> int | None:
         return None
     steps = int(shape[0]) - horizon
     return steps if steps > 0 else None
+
+
+@contextmanager
+def _artifacts(named: str | Path | None) -> Iterator[Path]:
+    r"""Where the images and CSVs the pages read are written.
+
+    The attribution heatmap is a page drawn from a file, so there is always
+    somewhere for it to be. A caller who named a directory keeps what was
+    written there; one who did not gets a temporary one that goes away.
+    """
+    if named is not None:
+        out_dir = Path(named)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        yield out_dir
+        return
+    with tempfile.TemporaryDirectory(prefix='sdm-forecast-') as temporary:
+        yield Path(temporary)

@@ -67,6 +67,19 @@ def explanation_of(
     # reads anything. The attribution then works in the space the model works
     # in; handing it raw readings attributed a model being fed numbers it
     # never sees.
+    if feature_axis and not np.isfinite(history).all():
+        # Feature-axis attribution perturbs a channel towards its own mean
+        # over the window, and that mean is NaN if any reading in it is
+        # missing. The channel then reads as inactive and is given no
+        # influence at all, which is a confident answer about a column
+        # nothing was learnt about. Refused rather than reported.
+        raise StructuredDataError(
+            'feature-axis attribution replaces a channel with its own '
+            'average, which a gap in the readings makes undefined, and the '
+            'channel is then reported as having no influence. Fill the gaps, '
+            'or ask for the explanation without the feature axis',
+            code='UNSUPPORTED_SHAPE',
+        )
     if feature_axis and horizon > forecaster.prediction_size:
         raise StructuredDataError(
             f'feature-axis attribution reads one forward pass, which covers '

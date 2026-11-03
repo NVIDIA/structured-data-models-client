@@ -171,20 +171,33 @@ def test_the_diagnostics_survive_being_written_and_read(explained):
     assert restored.curvature_ratio_forecast_vs_history is not None
 
 
-def test_the_top_lags_are_ranked_from_the_scores(explained):
-    """That helper differences a cumulative score into a per-step weight.
-    Handing it the normalised attribution ranked the lags near-backwards."""
+def test_the_top_lags_are_ranked_from_the_scores(explained, tmp_path):
+    """That helper differences a cumulative score into a per-step weight, so
+    handing it the normalised attribution ranks the lags near-backwards.
+
+    Asserted on what the report passes. Comparing the helper against itself
+    said nothing about the call that draws the page, and passed while the
+    report still handed over the wrong array.
+    """
     from sdm_client.explain._kumo_ts import pages
+    from sdm_client.reporting import forecast as module
+
+    seen = []
+    original = pages._topk_lag_steps_per_horizon
+
+    def watched(scores, **kwargs):
+        seen.append(np.asarray(scores))
+        return original(scores, **kwargs)
+
+    pages._topk_lag_steps_per_horizon = watched
+    try:
+        module.forecast_report(explained, tmp_path / 'f.pdf')
+    finally:
+        pages._topk_lag_steps_per_horizon = original
 
     block = explained.explanation['explanation']
-    scores = np.asarray(block['lag_horizon_scores'])
-    attributions = np.asarray(block['lag_horizon_attributions'])
-    _, from_scores = pages._topk_lag_steps_per_horizon(scores, top_k=3)
-    _, from_attributions = pages._topk_lag_steps_per_horizon(
-        attributions, top_k=3
-    )
-
-    assert from_scores != from_attributions
+    assert len(seen) == 1
+    assert np.allclose(seen[0], np.asarray(block['lag_horizon_scores']))
 
 
 def test_the_history_the_page_is_told_about_excludes_the_forecast(explained):
@@ -196,6 +209,49 @@ def test_the_history_the_page_is_told_about_excludes_the_forecast(explained):
     steps = block['diagnostics']['latent_trajectory_shape'][0]
 
     assert _context_len(explained.explanation, 4) == steps - 4
+
+
+def test_the_attribution_heatmap_is_drawn(explained, tmp_path):
+    """It is a page drawn from an image on disk, and hardcoding no image
+    dropped it from every report although the matrix was right there."""
+    artifacts = tmp_path / 'artifacts'
+    written = forecast_report(
+        explained, tmp_path / 'f.pdf', artifacts_dir=artifacts
+    )
+
+    assert (artifacts / 'lag_horizon_heatmap.png').exists()
+    assert pages(written) >= 4
+
+
+def test_the_artifacts_are_kept_only_where_a_place_was_named(
+    explained, tmp_path
+):
+    """They are written either way, because a page reads one of them."""
+    before = set(tmp_path.iterdir())
+    forecast_report(explained, tmp_path / 'f.pdf')
+
+    assert set(tmp_path.iterdir()) - before == {tmp_path / 'f.pdf'}
+
+
+def test_a_channel_with_a_gap_is_not_called_uninfluential(forecast):
+    """The feature axis replaces a channel with its own average, which a gap
+    makes undefined; the channel then reads as having no influence at all."""
+    frame = history(600)
+    frame.loc[5, 'temp'] = np.nan
+
+    with SDMClient.in_process(forecast) as client:
+        with pytest.raises(StructuredDataError) as caught:
+            client.predict(
+                Request.forecast(
+                    frame,
+                    target='flow',
+                    horizon=4,
+                    inference={'feature_axis': True},
+                ),
+                model=KumoForecast(),
+                outputs=['prediction', 'explanation'],
+            )
+    assert 'gap' in str(caught.value)
 
 
 def test_a_report_is_drawn_from_an_explanation(explained, tmp_path):
