@@ -100,6 +100,7 @@ fn attachments_of(operation: &Operation) -> Attachments {
             (
                 m.schema,
                 json(&SourceDescription {
+                    inference: None,
                     tables: vec![],
                     links: vec![],
                 }),

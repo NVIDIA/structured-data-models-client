@@ -798,6 +798,7 @@ fn each_metric_view_converts_as_the_old_client_converted_it_on_a_sql_warehouse()
 fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
     use sdm_contract::ops::{HeldColumn, HeldSchema, HeldTable, SourceFacts};
     HeldSchema {
+        inference: None,
         tables: description
             .tables
             .iter()

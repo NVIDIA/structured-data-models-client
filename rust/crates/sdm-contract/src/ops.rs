@@ -20,7 +20,7 @@
 //! documentation names the type. No inline field grows with column, table or
 //! row count.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,7 @@ pub enum Operation {
     ReadRequestSplit(crate::split::ReadRequestSplit),
     MergeResults(crate::result::MergeResults),
     FeatureImportance(crate::direct::DirectInput),
+    PrepareTimeSeries(crate::frames::PrepareTimeSeries),
     PlanResultMerge(crate::direct::DirectInput),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
@@ -121,6 +122,7 @@ impl Operation {
     /// The operation's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
+            Operation::PrepareTimeSeries(_) => "prepare_time_series",
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::FeatureImportance(_) => "feature_importance",
             Operation::PlanResultMerge(_) => "plan_result_merge",
@@ -194,6 +196,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::PrepareTimeSeries(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadResultItems(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
             Operation::MergeResults(v) => {
@@ -752,6 +755,9 @@ impl ViewNote {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SourceDescription {
+    /// Engine-recorded inference choices; absent on older saved schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<SchemaInference>,
     pub tables: Vec<DescribedTable>,
     /// The relationships, each `[foreign key, referenced key]`, once: in a
     /// description `describe_source` answers, the declared foreign keys and
@@ -902,12 +908,49 @@ pub struct SchemaEdited {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HeldSchema {
+    /// Engine-recorded inference choices; absent on older saved schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<SchemaInference>,
     /// The host's tables as they stand, in its order, each by the name the
     /// schema gives it.
     pub tables: Vec<HeldTable>,
     /// The host's relationships as they stand, each
     /// `[foreign key, referenced key]`.
     pub links: Vec<Vec<ColumnRef>>,
+}
+
+/// Engine-owned inference provenance, retained without reconstructing history in hosts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaInference {
+    /// Older records have no evidence of whether missing choices were explicit.
+    pub unknown_tables: BTreeSet<String>,
+    pub key_declared: BTreeSet<String>,
+    pub time_declared: BTreeSet<String>,
+    pub times: BTreeMap<String, InferredTime>,
+    pub links: Vec<LinkOrigin>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InferredTime {
+    pub column: Option<String>,
+    pub only_unlinked: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceOrigin {
+    Declared,
+    Inferred,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LinkOrigin {
+    pub link: Vec<ColumnRef>,
+    pub origin: InferenceOrigin,
 }
 
 /// One table as the host holds it.
@@ -990,6 +1033,20 @@ pub struct SourceFacts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "edit", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SchemaEdit {
+    /// Merge fresh observations into missing metadata or infer missing links.
+    Infer {
+        candidate: HeldSchema,
+        links: bool,
+    },
+    RemoveTable {
+        table: String,
+    },
+    AddLink {
+        link: Vec<ColumnRef>,
+    },
+    RemoveLink {
+        link: Vec<ColumnRef>,
+    },
     /// Validate current meanings and links, restoring key roles without declaring meanings.
     Check {},
     /// A table's primary key set (`schema[table].primary_key = key`), its
@@ -1019,7 +1076,9 @@ pub enum SchemaEdit {
     /// The relationships replaced (`schema.relationships = links`), or
     /// edited as a list, as the list stands after the edit; each
     /// `[foreign key, referenced key]`.
-    Relationships { links: Vec<Given<Vec<ColumnRef>>> },
+    Relationships {
+        links: Vec<Given<Vec<ColumnRef>>>,
+    },
 }
 
 /// A value a caller gave an edit or `describe_source`: the value, as the
@@ -1804,6 +1863,10 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "PrepareTimeSeries.input")]
+    pub prepare_time_series_input: crate::frames::TimeSeriesOptions,
+    #[schemars(rename = "DirectValue.prepare_time_series")]
+    pub prepare_time_series_output: crate::frames::TimeSeriesPrepared,
     #[schemars(rename = "FeatureImportance.input")]
     pub feature_importance_input: crate::result::FeatureImportanceInput,
     #[schemars(rename = "DirectValue.feature_importance")]

@@ -224,6 +224,7 @@ def _schema(
     from sdm_client.schema import Column, Schema, Table
 
     made = Schema.__new__(Schema)
+    object.__setattr__(made, '_inference', held.get('inference'))
     tables = {}
     for definition in held['tables']:
         table = Table.__new__(Table)

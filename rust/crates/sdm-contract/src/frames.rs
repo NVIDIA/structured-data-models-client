@@ -5,6 +5,37 @@
 //! Source-less relational inputs. Graph state stays with its native owner;
 //! task plans and sampled contexts never round-trip through the host.
 use crate::Scalar;
+
+/// Bounded Arrow history preparation, without schema inference or sampling.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PrepareTimeSeries {
+    pub input: AttachmentId,
+    pub table: AttachmentId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TimeSeriesOptions {
+    pub history: String,
+    pub timestamps: Option<String>,
+    pub entity_key: Option<String>,
+    pub step_ns: Option<i64>,
+    pub anchor_ns: Option<i64>,
+    pub forecasts: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TimeSeriesPrepared {
+    pub entity: AttachmentId,
+    pub target: AttachmentId,
+    pub key: String,
+    pub step_ns: i64,
+    pub anchor_ns: Option<i64>,
+    pub forecasts: u32,
+}
+
 use crate::data::AttachmentId;
 use crate::ops::{GivenCandidate, Seed};
 use schemars::JsonSchema;

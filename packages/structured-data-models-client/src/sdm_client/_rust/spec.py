@@ -63,7 +63,11 @@ def held_schema(schema: Schema) -> dict[str, Any]:
         if repeated is not None:
             held['duplicate_keys'] = codec.integer('u64', int(repeated))
         tables.append(held)
-    return {'tables': tables, 'links': _links(schema)}
+    return {
+        'tables': tables,
+        'links': _links(schema),
+        'inference': getattr(schema, '_inference', None),
+    }
 
 
 def _links(schema: Schema) -> list[list[dict[str, str]]]:

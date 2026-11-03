@@ -108,6 +108,7 @@ fn shop(users_key: Option<ExactNumber>, orders_key: Option<ExactNumber>) -> Sour
     let column =
         |kind: Option<ExactNumber>| kind.map_or_else(|| int("user_id"), |k| exact("user_id", k));
     SourceDescription {
+        inference: None,
         tables: vec![
             table(
                 "users",

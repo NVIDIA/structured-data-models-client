@@ -48,12 +48,15 @@ from sdm_client.sanitization import SanitizationReport, TableSanitizationReport
 from sdm_client.schema import (
     Column,
     Relationship,
+    RelationshipOrigin,
     Schema,
     SourceTable,
     Table,
 )
 
 __all__ = [
+    'ForecastInput',
+    'build_timeseries',
     'ColumnMetadata',
     'TableMetadata',
     'MetadataReport',
@@ -74,6 +77,7 @@ __all__ = [
     'PredictionResult',
     'PredictiveQuery',
     'Relationship',
+    'RelationshipOrigin',
     'Request',
     'Schema',
     'SanitizationReport',
@@ -89,3 +93,5 @@ __all__ = [
     'UnsupportedRequestError',
     '__version__',
 ]
+
+from sdm_client.timeseries import ForecastInput, build_timeseries

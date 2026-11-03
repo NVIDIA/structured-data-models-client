@@ -86,6 +86,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> DescribedColumn {
 
 fn described() -> SourceDescription {
     SourceDescription {
+        inference: None,
         tables: vec![DescribedTable {
             name: "users".into(),
             source: "users".into(),
@@ -105,6 +106,7 @@ fn described() -> SourceDescription {
 
 fn held(description: &SourceDescription) -> HeldSchema {
     HeldSchema {
+        inference: None,
         tables: description
             .tables
             .iter()

@@ -658,6 +658,14 @@ const JSON: &[(&str, &str)] = &[
         "DirectValue.native_layout",
     ),
     (
+        "Operation/prepare_time_series.input",
+        "PrepareTimeSeries.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepare_time_series",
+    ),
+    (
         "Operation/feature_importance.input",
         "FeatureImportance.input",
     ),
@@ -874,6 +882,9 @@ const OTHER: &[(&str, &str)] = &[
     ("Operation/materialize.table", "Arrow table"),
     ("Operation/materialize_predict.table", "Arrow table"),
     ("Operation/materialize_predict.predict", "Arrow table"),
+    ("Operation/prepare_time_series.table", "Arrow table"),
+    ("TimeSeriesPrepared.entity", "Arrow table"),
+    ("TimeSeriesPrepared.target", "Arrow table"),
     ("Operation/fit.context", "Arrow table"),
     ("Operation/fit.predict", "Arrow table"),
     ("Operation/score.predict", "Arrow table"),

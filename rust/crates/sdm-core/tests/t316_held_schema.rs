@@ -125,6 +125,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
         users.push(held_column("ghost", Dtype::Float, Stype::Numerical, None));
     }
     HeldSchema {
+        inference: None,
         tables: vec![
             HeldTable {
                 name: "orders".into(),

@@ -370,7 +370,11 @@ fn read_with_frame_widths(
         });
     }
     Ok(Read {
-        description: SourceDescription { tables, links },
+        description: SourceDescription {
+            inference: held.inference,
+            tables,
+            links,
+        },
         unfacted,
         missing_dtypes,
         retyped,
@@ -395,6 +399,7 @@ pub fn held(
     retyped: &BTreeMap<ColumnAt, Dtype>,
 ) -> HeldSchema {
     HeldSchema {
+        inference: description.inference.clone(),
         tables: description
             .tables
             .iter()

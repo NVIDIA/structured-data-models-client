@@ -117,6 +117,7 @@
       "FeatureImportance",
       "FeatureImportanceRow",
       "FittedModel",
+      "ForecastInput",
       "KumoRelational",
       "KumoTabular",
       "LinkMetadata",
@@ -129,6 +130,7 @@
       "PredictionResult",
       "PredictiveQuery",
       "Relationship",
+      "RelationshipOrigin",
       "Request",
       "SDMClient",
       "SDMWarning",
@@ -144,7 +146,8 @@
       "Task",
       "UnknownModelError",
       "UnsupportedRequestError",
-      "__version__"
+      "__version__",
+      "build_timeseries"
     ],
     "members": {
       "Column": {
@@ -218,6 +221,13 @@
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
         "signature": "() -> 'None'"
+      },
+      "ForecastInput": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(schema: 'Schema', query: 'PredictiveQuery', anchor_time: 'pd.Timestamp | None') -> None"
       },
       "KumoRelational": {
         "bases": [
@@ -343,6 +353,18 @@
         "public_methods": {},
         "signature": "(source_table: 'str', source_column: 'str', target_table: 'str', target_column: 'str') -> None"
       },
+      "RelationshipOrigin": {
+        "bases": [
+          "builtins.tuple"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "origin",
+          "relationship"
+        ],
+        "public_methods": {},
+        "signature": "(relationship: ForwardRef('Relationship'), origin: ForwardRef('str'))"
+      },
       "Request": {
         "bases": [],
         "kind": "class",
@@ -406,6 +428,7 @@
         "kind": "class",
         "public_attributes": [
           "conversion_notes",
+          "link_origins",
           "source",
           "tables"
         ],
@@ -414,6 +437,8 @@
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
           "from_relbench": "(name: 'str', *, cache_dir: 'str | Path | None' = None, offline: 'bool' = False) -> 'Schema'",
           "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
+          "infer_links": "(self) -> 'Schema'",
+          "infer_metadata": "(self) -> 'Schema'",
           "link_report": "(self) -> 'LinkReport'",
           "metadata_report": "(self) -> 'MetadataReport'",
           "print_links": "(self) -> 'None'",
@@ -421,7 +446,10 @@
           "snapshot": "(self) -> 'Schema'",
           "to_html": "(self, show_columns: 'bool' = True) -> 'str'",
           "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
-          "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'"
+          "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'",
+          "with_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
+          "without_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
+          "without_table": "(self, name: 'str') -> 'Schema'"
         },
         "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"
       },
@@ -533,6 +561,10 @@
       "__version__": {
         "kind": "str",
         "value": "2.0.0rc1"
+      },
+      "build_timeseries": {
+        "kind": "callable",
+        "signature": "(frame: 'pd.DataFrame | pa.Table', timeseries_col: 'str', *, timestamps_col: 'str | None' = None, time_delta: 'pd.Timedelta | None' = None, anchor_time: 'pd.Timestamp | None' = None, entity_col: 'str | None' = None, num_timeframes: 'int' = 1) -> 'ForecastInput'"
       }
     }
   },

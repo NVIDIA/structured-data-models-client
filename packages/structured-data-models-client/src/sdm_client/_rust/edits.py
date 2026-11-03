@@ -190,7 +190,10 @@ def _store(
             table._own_columns()
     else:
         schema._own_tables()
+    object.__setattr__(schema, '_inference', answer.get('inference'))
     answered = {table['name']: table for table in answer['tables']}
+    for gone in set(schema.tables) - set(answered):
+        del schema._tables[gone]
     for name, table in schema.tables.items():
         given = answered[name]
         keys = tuple(given['primary_key'])

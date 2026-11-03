@@ -156,6 +156,7 @@ impl SchemaEdit {
 /// name and with what the source said of it.
 pub fn held(described: &SourceDescription) -> HeldSchema {
     HeldSchema {
+        inference: None,
         tables: described
             .tables
             .iter()
@@ -222,6 +223,7 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
         });
     }
     Some(SourceDescription {
+        inference: None,
         tables,
         links: held.links.clone(),
     })
