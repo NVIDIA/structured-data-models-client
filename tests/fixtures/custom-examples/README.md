@@ -37,3 +37,7 @@ The client must reject an oversized horizon before network access.
 
 This fixture stores semantic expectations, not model prediction numbers or credentials.
 No warehouse, model artifact or deployment was changed for this investigation.
+
+The old timeless default is `Timestamp.min`, but its local sampler rounds through whole seconds and overflows when converting back to nanoseconds.
+Execution produced a positive near-maximum timestamp instead of the negative sentinel.
+The timeless fixture intentionally requires the correct sentinel, improving this old bug rather than copying it.
