@@ -75,6 +75,10 @@ class ColumnExplanations:
         context = payload['context']
         instance = self._frame(context['instance_table'])
         target = instance[task['target']['column_name']]
+        # A hand-built context may hold rows with no label; only labelled
+        # rows are examples.
+        instance = instance[target.notna()].reset_index(drop=True)
+        target = instance[task['target']['column_name']]
         self._classes: list[Any] | None = None
         if task['kind'] == 'regression':
             outcome = pd.to_numeric(target).to_numpy(float)[:, None]
