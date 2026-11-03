@@ -87,6 +87,24 @@ def forecast_report(
             attributions,
             np.asarray(explanation.lag_horizon_scores),
         )
+        # The pages name these files, so a report that draws the pages and
+        # writes none of them points a reader at nothing. Each is written
+        # where the data behind it was computed.
+        horizon = attributions.shape[1]
+        context = _context_len(carried, horizon)
+        if explanation.flow_magnitudes is not None and context:
+            pages._save_semantic_flow_csv(
+                out_dir,
+                np.asarray(explanation.flow_magnitudes),
+                context_len=context,
+                forecast_horizon=horizon,
+            )
+        if explanation.channel_horizon_attributions is not None:
+            pages._save_channel_axis_artifacts(
+                out_dir,
+                np.asarray(explanation.channel_horizon_attributions),
+                channel_labels=_channels(carried),
+            )
         drawn = pages._build_pdf_report(
             Path(output_path),
             dataset_name=dataset_name,

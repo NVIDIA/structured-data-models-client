@@ -67,17 +67,20 @@ def explanation_of(
     # reads anything. The attribution then works in the space the model works
     # in; handing it raw readings attributed a model being fed numbers it
     # never sees.
-    if feature_axis and not np.isfinite(history).all():
+    window_only = history[..., -forecaster.context_size :]
+    if feature_axis and not np.isfinite(window_only).all():
         # Feature-axis attribution perturbs a channel towards its own mean
         # over the window, and that mean is NaN if any reading in it is
         # missing. The channel then reads as inactive and is given no
         # influence at all, which is a confident answer about a column
         # nothing was learnt about. Refused rather than reported.
         raise StructuredDataError(
-            'feature-axis attribution replaces a channel with its own '
-            'average, which a gap in the readings makes undefined, and the '
-            'channel is then reported as having no influence. Fill the gaps, '
-            'or ask for the explanation without the feature axis',
+            f'feature-axis attribution replaces a channel with its own '
+            f'average over the window it reads, which a gap in that window '
+            f'makes undefined, and the channel is then reported as having no '
+            f'influence. The window is the last {forecaster.context_size} '
+            f'steps; fill its gaps, or ask for the explanation without the '
+            f'feature axis',
             code='UNSUPPORTED_SHAPE',
         )
     if feature_axis and horizon > forecaster.prediction_size:
@@ -88,7 +91,7 @@ def explanation_of(
             f'pass, or ask for the explanation without it',
             code='UNSUPPORTED_SHAPE',
         )
-    window = _standardised(model, history[..., -forecaster.context_size :])
+    window = _standardised(model, window_only)
     explanation = explain_forecast(
         forecaster,
         x_context_ct=np.ascontiguousarray(window, dtype='float32'),
@@ -176,4 +179,11 @@ def _as_dict(
     # either way, and a report that cannot say which channel is which is
     # harder to read than one that can.
     rendered.setdefault('metadata', {})['channel_labels'] = list(channels)
+    # The feature axis perturbs each channel and watches the forecast move.
+    # Perturbing the series being forecast moves it by construction, so that
+    # channel's own effect is set aside rather than measured, and it reaches
+    # the page as a zero beside measured numbers. Saying so is what keeps a
+    # reader from taking it for the least influential channel.
+    if rendered.get('explanation', {}).get('feature_axis'):
+        rendered['metadata']['feature_axis_excludes'] = target
     return rendered

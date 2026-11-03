@@ -211,6 +211,39 @@ def test_the_history_the_page_is_told_about_excludes_the_forecast(explained):
     assert _context_len(explained.explanation, 4) == steps - 4
 
 
+def test_a_gap_outside_the_window_is_not_a_gap_in_it(forecast):
+    """The attribution reads the last 512 steps, so a reading missing before
+    them is not missing from what it reads. Checking the whole history
+    refused a question identical to one it answers."""
+    frame = history(600)
+    frame.loc[0, 'temp'] = np.nan
+
+    with SDMClient.in_process(forecast) as client:
+        result = client.predict(
+            Request.forecast(
+                frame,
+                target='flow',
+                horizon=4,
+                inference={'feature_axis': True},
+            ),
+            model=KumoForecast(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    assert result.explanation is not None
+
+
+def test_the_files_the_pages_name_are_written(explained, tmp_path):
+    """A page that names a file beside a report a reader cannot find points
+    them at nothing."""
+    artifacts = tmp_path / 'artifacts'
+    forecast_report(explained, tmp_path / 'f.pdf', artifacts_dir=artifacts)
+    written = {path.name for path in artifacts.iterdir()}
+
+    assert 'lag_horizon_heatmap.png' in written
+    assert 'semantic_flow.csv' in written
+
+
 def test_the_attribution_heatmap_is_drawn(explained, tmp_path):
     """It is a page drawn from an image on disk, and hardcoding no image
     dropped it from every report although the matrix was right there."""
@@ -237,7 +270,7 @@ def test_a_channel_with_a_gap_is_not_called_uninfluential(forecast):
     """The feature axis replaces a channel with its own average, which a gap
     makes undefined; the channel then reads as having no influence at all."""
     frame = history(600)
-    frame.loc[5, 'temp'] = np.nan
+    frame.loc[599, 'temp'] = np.nan
 
     with SDMClient.in_process(forecast) as client:
         with pytest.raises(StructuredDataError) as caught:
