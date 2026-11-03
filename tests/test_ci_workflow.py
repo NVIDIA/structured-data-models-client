@@ -2,16 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CI's workflow under decision E131 (``.github/workflows/ci.yml``).
+"""CI workflow structure, pinned images and installed-artifact checks.
 
-The landing job's step, its text as CI runs it (``bash -e``), against real
-temporary git repositories: it says skip for an empty landing commit pushed
-to a phase branch (``rust-core-phase-N``, any N; T2.0) or a branch under
-it, and for nothing else. Every other
-job is left out when it says skip, directly or through the jobs it needs.
-Every job has a timeout. Each image is named once and pinned by digest,
-and ``scripts/rust_core/pull_image.sh`` retries a pull, refuses an image
-not pinned by digest, and logs in to ghcr.io alone.
+Shell-step tests verify image pull retries, registry authentication and runtime
+installation without downloading images or contacting model endpoints.
 """
 
 from __future__ import annotations
@@ -31,18 +25,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / '.github/workflows/ci.yml'
 PULL = ROOT / 'scripts/rust_core/pull_image.sh'
-PHASE = 'rust-core-phase-1'
-LANE = 'rust-core-phase-1-lane-1a'
-SKIP = "needs.landing.outputs.skip != 'true'"
 DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
-GIT_ENV = {
-    'GIT_CONFIG_GLOBAL': os.devnull,
-    'GIT_CONFIG_NOSYSTEM': '1',
-    'GIT_AUTHOR_NAME': 'Test Person',
-    'GIT_AUTHOR_EMAIL': 'test@example.com',
-    'GIT_COMMITTER_NAME': 'Test Person',
-    'GIT_COMMITTER_EMAIL': 'test@example.com',
-}
 
 
 def _workflow() -> dict[str, Any]:
@@ -54,474 +37,15 @@ def _needs(job: dict[str, Any]) -> list[str]:
     return [needs] if isinstance(needs, str) else list(needs)
 
 
-def _landing_step() -> dict[str, Any]:
-    steps = _workflow()['jobs']['landing']['steps']
-    return next(s for s in steps if s.get('id') == 'landing')
-
-
-# --- the landing job's step ---------------------------------------------------
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ['git', '-C', str(repo), *args],
-        env={**os.environ, **GIT_ENV},
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-
-
-def _repo(tmp_path: Path) -> Path:
-    repo = tmp_path / 'repo'
-    repo.mkdir()
-    _git(repo, 'init', '-q', '-b', 'work')
-    (repo / 'a.txt').write_text('a\n')
-    _git(repo, 'add', 'a.txt')
-    _git(repo, 'commit', '-q', '-m', 'Land T1.1: the phase so far')
-    (repo / 'b.txt').write_text('b\n')
-    _git(repo, 'add', 'b.txt')
-    _git(repo, 'commit', '-q', '-m', 'T1.2: the candidate')
-    return repo
-
-
-#: The GitHub API as the skip step reaches it: ``gh`` (``gh run list`` or
-#: ``gh api``) and ``curl``, faked on PATH, answering from a file of runs.
-#: A run there: ``sha``, ``id``, ``branch``, ``event``, ``status``,
-#: ``conclusion``, ``created``, ``workflow`` (the file, ``ci.yml``).
-FAKE_API = r"""
-import json, os, re, subprocess, sys
-from urllib.parse import parse_qsl, urlparse
-
-WORKFLOWS = {'ci.yml': (1, 'CI'), 'publish.yml': (2, 'Publish')}
-
-
-def log(argv):
-    with open(os.environ['FAKE_CALLS'], 'a') as handle:
-        handle.write(json.dumps(argv) + '\n')
-
-
-def runs(sha=None, event=None, branch=None, status=None, workflow=None):
-    with open(os.environ['FAKE_RUNS']) as handle:
-        every = json.load(handle)
-    found = []
-    for run in every:
-        number, name = WORKFLOWS[run['workflow']]
-        if sha and run['sha'] != sha:
-            continue
-        if event and run['event'] != event:
-            continue
-        if branch and run['branch'] != branch:
-            continue
-        if workflow and workflow not in (
-            run['workflow'], '.github/workflows/' + run['workflow'],
-            name, str(number),
-        ):
-            continue
-        if status and status not in (run['status'], run['conclusion']):
-            continue
-        found.append(run)
-    return sorted(found, key=lambda run: run['created'], reverse=True)
-
-
-def rest(run):
-    number, name = WORKFLOWS[run['workflow']]
-    done = run['status'] == 'completed'
-    return {
-        'id': run['id'], 'run_number': run['id'], 'run_attempt': 1,
-        'head_sha': run['sha'], 'head_branch': run['branch'],
-        'event': run['event'], 'status': run['status'],
-        'conclusion': run['conclusion'] if done else None,
-        'created_at': run['created'], 'updated_at': run['created'],
-        'run_started_at': run['created'],
-        'path': '.github/workflows/' + run['workflow'], 'name': name,
-        'workflow_id': number, 'display_title': 'a commit',
-        'html_url': 'https://github.com/o/r/actions/runs/%d' % run['id'],
-        'url': 'https://api.github.com/repos/o/r/actions/runs/%d' % run['id'],
-    }
-
-
-def cli(run):
-    number, name = WORKFLOWS[run['workflow']]
-    done = run['status'] == 'completed'
-    return {
-        'databaseId': run['id'], 'number': run['id'], 'attempt': 1,
-        'headSha': run['sha'], 'headBranch': run['branch'],
-        'event': run['event'], 'status': run['status'],
-        'conclusion': run['conclusion'] if done else '',
-        'createdAt': run['created'], 'updatedAt': run['created'],
-        'startedAt': run['created'], 'name': name, 'workflowName': name,
-        'workflowDatabaseId': number, 'displayTitle': 'a commit',
-        'url': 'https://github.com/o/r/actions/runs/%d' % run['id'],
-    }
-
-
-def answer(path, query):
-    match = re.search(r'/actions/(?:workflows/([^/]+)/)?runs/?$', path)
-    if not match:
-        return None
-    found = runs(
-        sha=query.get('head_sha'), event=query.get('event'),
-        branch=query.get('branch'), status=query.get('status'),
-        workflow=match.group(1),
-    )
-    return {'total_count': len(found), 'workflow_runs': [rest(r) for r in found]}
-
-
-def emit(value, jq=None):
-    text = json.dumps(value)
-    if jq is None:
-        sys.stdout.write(text + '\n')
-        return 0
-    done = subprocess.run(
-        ['jq', '-r', jq], input=text, capture_output=True, text=True
-    )
-    sys.stdout.write(done.stdout)
-    sys.stderr.write(done.stderr)
-    return done.returncode
-
-
-def options(argv, valued):
-    flags, rest_ = {}, []
-    i = 0
-    while i < len(argv):
-        arg = argv[i]
-        key, eq, value = arg.partition('=')
-        if arg.startswith('-') and eq and key in valued:
-            flags.setdefault(key, []).append(value)
-        elif arg in valued and i + 1 < len(argv):
-            flags.setdefault(arg, []).append(argv[i + 1])
-            i += 1
-        elif arg.startswith('-'):
-            flags.setdefault(arg, []).append('')
-        else:
-            rest_.append(arg)
-        i += 1
-    return flags, rest_
-
-
-def first(flags, *names):
-    for name in names:
-        if flags.get(name):
-            return flags[name][-1]
-    return None
-
-
-def gh(argv):
-    if os.environ.get('FAKE_API_FAILS'):
-        sys.stderr.write('HTTP 502: Bad Gateway\n')
-        return 1
-    if argv[:2] == ['run', 'list']:
-        flags, _ = options(argv[2:], {
-            '--commit', '-c', '--branch', '-b', '--event', '-e', '--status',
-            '-s', '--workflow', '-w', '--limit', '-L', '--json', '--jq',
-            '-q', '--repo', '-R', '--user', '-u', '--created', '--template',
-            '-t',
-        })
-        found = runs(
-            sha=first(flags, '--commit', '-c'),
-            event=first(flags, '--event', '-e'),
-            branch=first(flags, '--branch', '-b'),
-            status=first(flags, '--status', '-s'),
-            workflow=first(flags, '--workflow', '-w'),
-        )
-        limit = first(flags, '--limit', '-L')
-        found = [cli(r) for r in found][: int(limit) if limit else 20]
-        fields = first(flags, '--json')
-        if fields:
-            keep = fields.split(',')
-            found = [{k: r[k] for k in keep if k in r} for r in found]
-        return emit(found, first(flags, '--jq', '-q'))
-    if argv[:1] == ['api']:
-        flags, rest_ = options(argv[1:], {
-            '-X', '--method', '-f', '-F', '--raw-field', '--field', '-H',
-            '--header', '--jq', '-q', '--hostname', '--template', '-t',
-            '--cache', '--input',
-        })
-        url = urlparse(rest_[0])
-        query = dict(parse_qsl(url.query))
-        for name in ('-f', '-F', '--raw-field', '--field'):
-            for field in flags.get(name, []):
-                key, _, value = field.partition('=')
-                query[key] = value
-        found = answer(url.path, query)
-        if found is None:
-            sys.stderr.write('gh: Not Found (HTTP 404)\n')
-            return 1
-        return emit(found, first(flags, '--jq', '-q'))
-    sys.stderr.write('fake gh: unsupported %r\n' % argv)
-    return 1
-
-
-def curl(argv):
-    flags, rest_ = options(argv, {
-        '-H', '--header', '-o', '--output', '-w', '--write-out', '-X',
-        '--request', '-d', '--data', '--data-urlencode', '-u', '--user',
-        '--retry', '--retry-delay', '--retry-max-time', '-m', '--max-time',
-        '--connect-timeout', '-A', '--user-agent', '--url',
-    })
-    urls = [a for a in rest_ if re.match(r'https?://', a)] + flags.get('--url', [])
-    fail = any(f in flags for f in ('-f', '--fail', '--fail-with-body', '-sf', '-fs', '-fsS', '-sSf', '-fsSL', '-sSfL'))
-    url = urlparse(urls[0])
-    api = os.environ.get('GITHUB_API_URL', 'https://api.github.com')
-    if url.netloc != urlparse(api).netloc:
-        sys.stderr.write('curl: (6) Could not resolve host: %s\n' % url.netloc)
-        return 6
-    query = dict(parse_qsl(url.query))
-    if '-G' in flags or '--get' in flags:
-        for name in ('-d', '--data', '--data-urlencode'):
-            for field in flags.get(name, []):
-                key, _, value = field.partition('=')
-                query[key] = value
-    if os.environ.get('FAKE_API_FAILS'):
-        found, code = {'message': 'Bad Gateway'}, 502
-    else:
-        found = answer(url.path, query)
-        code = 200 if found is not None else 404
-        if found is None:
-            found = {'message': 'Not Found'}
-    if code >= 400 and fail:
-        sys.stderr.write('curl: (22) The requested URL returned error: %d\n' % code)
-        return 22
-    body = json.dumps(found)
-    target = first(flags, '-o', '--output')
-    if target and target != '-':
-        with open(target, 'w') as handle:
-            handle.write(body)
-        body = ''
-    write = first(flags, '-w', '--write-out')
-    if write:
-        body += write.replace('%{http_code}', str(code)).replace('\\n', '\n')
-    sys.stdout.write(body)
-    return 0
-
-
-argv = sys.argv[1:]
-log([os.path.basename(sys.argv[0])] + argv)
-sys.exit(gh(argv) if os.path.basename(sys.argv[0]) == 'gh' else curl(argv))
-"""
-
-
-def _run(
-    sha: str,
-    run_id: int,
-    branch: str = LANE,
-    event: str = 'push',
-    status: str = 'completed',
-    conclusion: str = 'success',
-    created: str = '2026-10-14T00:00:00Z',
-    workflow: str = 'ci.yml',
-) -> dict[str, Any]:
-    return {
-        'sha': sha,
-        'id': run_id,
-        'branch': branch,
-        'event': event,
-        'status': status,
-        'conclusion': conclusion if status == 'completed' else None,
-        'created': created,
-        'workflow': workflow,
-    }
-
-
-def _decide(
-    repo: Path,
-    tmp_path: Path,
-    event: str,
-    ref: str,
-    runs: list[dict[str, Any]],
-    api_fails: bool = False,
-) -> tuple[str, list[list[str]]]:
-    r"""The skip step's answer, ``true`` or ``false``, or ``failed`` when
-    the step itself fails (closed), with the GitHub API faked to know
-    ``runs``; and the calls the fakes took."""
-    here = tmp_path / f'api-{len(list(tmp_path.glob("api-*")))}'
-    bin_dir = here / 'bin'
-    bin_dir.mkdir(parents=True)
-    for name in ('gh', 'curl'):
-        tool = bin_dir / name
-        tool.write_text(f'#!{sys.executable}\n{FAKE_API}')
-        tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
-    (here / 'runs.json').write_text(json.dumps(runs))
-    calls = here / 'calls'
-    calls.write_text('')
-    output = here / 'output'
-    output.write_text('')
-    head = _git(repo, 'rev-parse', 'HEAD')
-    event_file = here / 'event.json'
-    event_file.write_text(
-        json.dumps({'after': head, 'ref': f'refs/heads/{ref}'})
-    )
-    nowhere = 'http://127.0.0.1:9'
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if not k.startswith(('GITHUB_', 'GH_', 'RUNNER_'))
-    }
-    env.update(
-        {
-            **GIT_ENV,
-            'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
-            'HOME': str(here),
-            'GH_CONFIG_DIR': str(here / 'gh'),
-            'GH_TOKEN': 'fake-token',
-            'GITHUB_TOKEN': 'fake-token',
-            'GITHUB_ACTIONS': 'true',
-            'GITHUB_API_URL': 'https://api.github.com',
-            'GITHUB_SERVER_URL': 'https://github.com',
-            'GITHUB_REPOSITORY': 'o/r',
-            'GITHUB_REPOSITORY_OWNER': 'o',
-            'GITHUB_WORKFLOW_REF': f'o/r/.github/workflows/ci.yml@refs/heads/{ref}',
-            'GITHUB_RUN_ID': '999',
-            'GITHUB_SHA': head,
-            'GITHUB_REF': f'refs/heads/{ref}',
-            'GITHUB_EVENT_NAME': event,
-            'GITHUB_REF_NAME': ref,
-            'GITHUB_EVENT_PATH': str(event_file),
-            'GITHUB_OUTPUT': str(output),
-            'FAKE_RUNS': str(here / 'runs.json'),
-            'FAKE_CALLS': str(calls),
-            # Nothing reaches the network but through the fakes.
-            'HTTPS_PROXY': nowhere,
-            'HTTP_PROXY': nowhere,
-            'https_proxy': nowhere,
-            'http_proxy': nowhere,
-            'ALL_PROXY': nowhere,
-        }
-    )
-    if api_fails:
-        env['FAKE_API_FAILS'] = '1'
-    done = subprocess.run(
-        ['bash', '--noprofile', '--norc', '-eo', 'pipefail', '-c',
-         _landing_step()['run']],
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )  # fmt: skip
-    called = [json.loads(x) for x in calls.read_text().splitlines()]
-    if done.returncode != 0:
-        return 'failed', called
-    lines = [
-        x for x in output.read_text().splitlines() if x.startswith('skip=')
-    ]
-    assert len(lines) == 1, (output.read_text(), done.stdout, done.stderr)
-    return lines[0].removeprefix('skip='), called
-
-
-def _skip(repo: Path, tmp_path: Path, event: str, ref: str) -> str:
-    r"""The skip step's answer when every commit has a green push run on
-    the lane: the landing's shape alone decides (the evidence cases below
-    seed their runs one by one)."""
-    seeded = [
-        _run(sha, 100 + n)
-        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
-    ]
-    found, _ = _decide(repo, tmp_path, event, ref, seeded)
-    assert found in ('true', 'false'), found
-    return found
-
-
-def _landing(repo: Path, subject: str = 'Land T1.2: the candidate') -> None:
-    _git(
-        repo, 'commit', '-q', '--allow-empty', '-m',
-        f'{subject}\n\nBase-SHA: x\nCheckpoint-SHA: x',
-    )  # fmt: skip
-
-
-@pytest.mark.parametrize('ref', [PHASE, LANE, f'{PHASE}-t1.99'])
-def test_an_empty_landing_commit_pushed_under_the_phase_branch_skips(
-    tmp_path: Path, ref: str
-) -> None:
-    repo = _repo(tmp_path)
-    _landing(repo)
-    assert _skip(repo, tmp_path, 'push', ref) == 'true'
-
-
-@pytest.mark.parametrize(
-    ('event', 'ref'),
-    [('pull_request', PHASE), ('push', 'main'), ('push', 'rust-core')],
-)
-def test_elsewhere_a_landing_commit_runs_everything(
-    tmp_path: Path, event: str, ref: str
-) -> None:
-    repo = _repo(tmp_path)
-    _landing(repo)
-    assert _skip(repo, tmp_path, event, ref) == 'false'
-
-
-def test_a_candidate_runs_everything(tmp_path: Path) -> None:
-    repo = _repo(tmp_path)
-    assert _skip(repo, tmp_path, 'push', LANE) == 'false'
-
-
-def test_a_landing_commit_that_changes_a_file_runs_everything(
-    tmp_path: Path,
-) -> None:
-    repo = _repo(tmp_path)
-    (repo / 'b.txt').write_text('changed at landing\n')
-    _git(repo, 'commit', '-q', '-am', 'Land T1.2: the candidate')
-    assert _skip(repo, tmp_path, 'push', PHASE) == 'false'
-
-
-@pytest.mark.parametrize(
-    'subject', ['T1.2: an empty commit', 'Landed T1.2: x', 'land T1.2: x']
-)
-def test_an_empty_commit_not_a_landing_runs_everything(
-    tmp_path: Path, subject: str
-) -> None:
-    repo = _repo(tmp_path)
-    _landing(repo, subject)
-    assert _skip(repo, tmp_path, 'push', PHASE) == 'false'
-
-
-def test_a_merge_commit_runs_everything(tmp_path: Path) -> None:
-    repo = _repo(tmp_path)
-    _git(repo, 'checkout', '-q', '-b', 'side', 'HEAD^')
-    _git(repo, 'commit', '-q', '--allow-empty', '-m', 'T1.3: side')
-    _git(repo, 'checkout', '-q', 'work')
-    # A merge whose tree is its first parent's, with a landing's subject.
-    _git(repo, 'merge', '-q', '-s', 'ours', '-m', 'Land T1.2: merged', 'side')
-    assert _git(repo, 'rev-parse', 'HEAD^{tree}') == _git(
-        repo, 'rev-parse', 'HEAD^^{tree}'
-    )
-    assert _skip(repo, tmp_path, 'push', PHASE) == 'false'
-
-
-# --- every other job is left out on a landing commit -----------------------------
-
-
-def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
-    r"""A job is left out by its own condition on the landing job's
-    output, or by needing a job that is left out, with no status function
-    in its condition to run it anyway. The landing job itself runs."""
+def test_job_dependencies_exist_and_have_no_cycles() -> None:
     jobs = _workflow()['jobs']
-    assert 'landing' in jobs and not _needs(jobs['landing'])
-    left_out: set[str] = set()
-    # The nightly dispatch runs on the schedule alone, whose landing job
-    # says skip (the owner's "2026-10-22 evening: CI off the landing path").
-    assert jobs['nightly']['if'] == "github.event_name == 'schedule'"
-    pending = [name for name in jobs if name not in ('landing', 'nightly')]
+    visited: set[str] = set()
+    pending = set(jobs)
     while pending:
-        progressed = False
-        for name in list(pending):
-            job = jobs[name]
-            needs = set(_needs(job)) - {'landing'}
-            if not needs <= left_out:
-                continue
-            condition = str(job.get('if', ''))
-            if SKIP in condition:
-                assert 'landing' in _needs(job), name
-            else:
-                assert needs, f'{name} is not left out on a landing commit'
-                assert not re.search(
-                    r'always\(\)|cancelled\(\)|failure\(\)', condition
-                ), f'{name} runs on a landing commit: {condition}'
-            left_out.add(name)
-            pending.remove(name)
-            progressed = True
-        assert progressed, f'a cycle or an unknown job in {pending}'
+        ready = {name for name in pending if set(_needs(jobs[name])) <= visited}
+        assert ready, f'unknown dependencies or cycle: {sorted(pending)}'
+        visited.update(ready)
+        pending.difference_update(ready)
 
 
 #: The longest a job may run, in minutes: rust-test took 80.7 at most
@@ -534,12 +58,10 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 #: 14 to 17 minutes since T3.0's split, so 60 (P2-T2.16-14, P2-T2.1o-1);
 #: the checking tools' tests, split out of those (T3.0), take about 43.
 TIMEOUT_CEILINGS = {
-    'landing': 10,
+    'configuration': 10,
     'rust-test': 120,
     'test': 60,
     'contract-python-ref-pandas3': 60,
-    'engine': 60,
-    'tooling-contract': 90,
     'tooling-root': 90,
 }
 TIMEOUT_CEILING = 60
@@ -630,12 +152,15 @@ def test_each_image_is_named_once_and_pinned_by_digest() -> None:
     assert DIGEST.search(aarch64) and 'manylinux2014_aarch64:' in aarch64
     assert text.count(aarch64) == 1
     jobs = workflow['jobs']
-    landing = jobs['landing']['outputs']['postgres-image']
-    assert landing == '${{ env.POSTGRES_IMAGE }}'
-    for name in ('test', 'engine'):
+    configured = jobs['configuration']['outputs']['postgres-image']
+    assert configured == '${{ env.POSTGRES_IMAGE }}'
+    for name in ('test',):
         service = jobs[name]['services']['postgres']
-        assert service['image'] == '${{ needs.landing.outputs.postgres-image }}'
-        assert 'landing' in _needs(jobs[name])
+        assert (
+            service['image']
+            == '${{ needs.configuration.outputs.postgres-image }}'
+        )
+        assert 'configuration' in _needs(jobs[name])
         # GitHub refuses a credential that evaluates to an empty string:
         # credentials come, unconditional, with an image on ghcr.io.
         if env['POSTGRES_IMAGE'].startswith('ghcr.io/'):
@@ -757,35 +282,6 @@ def test_only_ghcr_io_is_logged_in_to_and_the_token_is_not_printed(
     assert seen['anonymous'] == [f'pull --quiet {GHCR}']
 
 
-# --- CI4: the independent test author's audit ----------------------------------
-#
-# Each ``test_ci4_*`` test is held by ``contract/tests/ci4_gate.py``: one
-# listed in ``ci4-pending.json`` must still fail, as when it was written.
-
-
-def _ci4_gate() -> Any:
-    import importlib.util
-    import sys
-
-    name = 'ci4_gate'
-    if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            name, ROOT / 'contract/tests/ci4_gate.py'
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-    return sys.modules[name]
-
-
-CI4 = _ci4_gate()
-
-
-def _held(request: pytest.FixtureRequest, check: Any) -> None:
-    CI4.held('workflow', f'py:{request.node.name}', check)
-
-
 def _expression(condition: object) -> str:
     text = str(condition).strip()
     if text.startswith('${{') and text.endswith('}}'):
@@ -795,170 +291,6 @@ def _expression(condition: object) -> str:
     if text.startswith(guard) and text.endswith(')'):
         text = text[len(guard) : -1]
     return text
-
-
-def test_ci4_the_pending_list_only_shrinks() -> None:
-    assert CI4.only_shrinks() == []
-    assert set(CI4.gating()['pending']) == {'ratchet', 'workflow'}
-
-
-def test_ci4_the_landing_job_always_runs_and_hands_on_its_step_s_answer(
-    request: pytest.FixtureRequest,
-) -> None:
-    def check() -> None:
-        landing = _workflow()['jobs']['landing']
-        # No condition and no needs: were it left out, every job would be.
-        assert 'if' not in landing and not _needs(landing)
-        assert landing['outputs']['skip'] == '${{ steps.landing.outputs.skip }}'
-        checkout = landing['steps'][0]
-        assert str(checkout['uses']).startswith('actions/checkout@')
-        # The commit pushed and its parent, and no other ref.
-        assert checkout['with'] == {'fetch-depth': 2}
-        ids = [s.get('id') for s in landing['steps']]
-        assert ids.count('landing') == 1
-
-    _held(request, check)
-
-
-def _clone(repo: Path, tmp_path: Path) -> Path:
-    r"""The repository as actions/checkout leaves it: HEAD and its parent."""
-    clone = tmp_path / 'clone'
-    subprocess.run(
-        ['git', 'clone', '-q', '--depth', '2', f'file://{repo}', str(clone)],
-        env={**os.environ, **GIT_ENV},
-        capture_output=True,
-        check=True,
-    )
-    return clone
-
-
-@pytest.mark.parametrize('empty', [True, False])
-def test_ci4_the_step_decides_alike_in_a_clone_of_depth_two(
-    tmp_path: Path, request: pytest.FixtureRequest, empty: bool
-) -> None:
-    def check() -> None:
-        repo = _repo(tmp_path)
-        if empty:
-            _landing(repo)
-        else:
-            (repo / 'b.txt').write_text('changed at landing\n')
-            _git(repo, 'commit', '-q', '-am', 'Land T1.2: the candidate')
-        clone = _clone(repo, tmp_path)
-        assert _git(clone, 'rev-parse', '--is-shallow-repository') == 'true'
-        wanted = 'true' if empty else 'false'
-        assert _skip(clone, tmp_path, 'push', PHASE) == wanted
-
-    _held(request, check)
-
-
-@pytest.mark.parametrize(
-    'event',
-    [
-        'pull_request',
-        'pull_request_target',
-        'workflow_dispatch',
-        'merge_group',
-        '',
-    ],
-)
-def test_ci4_an_empty_landing_commit_runs_everything_but_on_a_push(
-    tmp_path: Path, request: pytest.FixtureRequest, event: str
-) -> None:
-    def check() -> None:
-        repo = _repo(tmp_path)
-        _landing(repo)
-        for ref in (PHASE, LANE):
-            assert _skip(repo, tmp_path, event, ref) == 'false', ref
-
-    _held(request, check)
-
-
-@pytest.mark.parametrize(
-    'ref',
-    [
-        # Every phase's branches are phase branches (T2.0): what is not one.
-        'rust-core-phase-1x',
-        'rust-core-phase-01',
-        'rust-core-phase-2x-lane-a',
-        'xrust-core-phase-1',
-        'rust-core-phase-',
-        'refs/heads/rust-core-phase-1',
-    ],
-)
-def test_ci4_an_empty_landing_commit_runs_everything_off_the_phase_branch(
-    tmp_path: Path, request: pytest.FixtureRequest, ref: str
-) -> None:
-    def check() -> None:
-        repo = _repo(tmp_path)
-        _landing(repo)
-        assert _skip(repo, tmp_path, 'push', ref) == 'false'
-
-    _held(request, check)
-
-
-@pytest.mark.parametrize('ref', [PHASE, LANE])
-def test_ci4_an_empty_moved_landing_commit_runs_everything(
-    tmp_path: Path, request: pytest.FixtureRequest, ref: str
-) -> None:
-    r"""A landing carrying ``Moved-from`` (CI3's move) is judged by its
-    own runs against its own Base-SHA (fix round 1, P2-6): its candidate
-    never ran, and the commit it was moved from was judged against an
-    older checkpoint."""
-
-    def check() -> None:
-        repo = _repo(tmp_path)
-        _git(
-            repo, 'commit', '-q', '--allow-empty', '-m',
-            'Land T1.2: the candidate\n\nBase-SHA: x\nCheckpoint-SHA: x\n'
-            'Moved-from: ' + 'a' * 40 + '\nMoved-from-run: 4242',
-        )  # fmt: skip
-        assert _skip(repo, tmp_path, 'push', ref) == 'false'
-
-    _held(request, check)
-
-
-def test_ci4_a_root_commit_titled_land_runs_everything(
-    tmp_path: Path, request: pytest.FixtureRequest
-) -> None:
-    def check() -> None:
-        repo = tmp_path / 'repo'
-        repo.mkdir()
-        _git(repo, 'init', '-q', '-b', 'work')
-        _git(repo, 'commit', '-q', '--allow-empty', '-m', 'Land T1.1: root')
-        assert _skip(repo, tmp_path, 'push', PHASE) == 'false'
-
-    _held(request, check)
-
-
-def test_ci4_a_skip_condition_cannot_be_overridden(
-    request: pytest.FixtureRequest,
-) -> None:
-    r"""A job's own condition on the landing job's answer is one conjunct
-    of its condition: nothing joined with ``||`` can run it anyway. The
-    other conjuncts may only leave a job out more often: ``!cancelled()``,
-    and the landing job's plan (T3.0) saying the tooling jobs or the full
-    matrix are not wanted."""
-    allowed = (
-        SKIP,
-        '!cancelled()',
-        "needs.landing.outputs.tooling != 'false'",
-        "needs.landing.outputs.full != 'false'",
-    )
-
-    def check() -> None:
-        for name, job in _workflow()['jobs'].items():
-            condition = _expression(job.get('if', ''))
-            if SKIP not in condition:
-                continue
-            assert '||' not in condition, (name, condition)
-            parts = [p.strip() for p in condition.split('&&')]
-            assert SKIP in parts, (name, condition)
-            assert all(p in allowed for p in parts), (
-                name,
-                condition,
-            )
-
-    _held(request, check)
 
 
 def _images() -> list[str]:
@@ -1009,7 +341,7 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
             assert name == 'java-load' or 'container' not in job, name
             for service in (job.get('services') or {}).values():
                 assert service['image'] == (
-                    '${{ needs.landing.outputs.postgres-image }}'
+                    '${{ needs.configuration.outputs.postgres-image }}'
                 ), name
         # wheel-smoke's images, as wheel_smoke.py names them, by lane.
         lanes = [
@@ -1032,7 +364,7 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
             )
             assert DIGEST.search(done.stdout.strip()), (lane, done.stdout)
 
-    _held(request, check)
+    check()
 
 
 def test_ci4_every_container_ci_runs_is_pulled_first_by_pull_image_sh(
@@ -1071,15 +403,15 @@ def test_ci4_every_container_ci_runs_is_pulled_first_by_pull_image_sh(
                     ), (name, pulls)
         assert seen >= 3, seen
 
-    _held(request, check)
+    check()
 
 
 def _service_image(workflow: dict[str, Any], service: dict[str, Any]) -> str:
     r"""The image a service runs: POSTGRES_IMAGE when it takes the landing
     job's output, which must be that env value, or its literal image."""
     image = str(service['image'])
-    if image == '${{ needs.landing.outputs.postgres-image }}':
-        outputs = workflow['jobs']['landing']['outputs']
+    if image == '${{ needs.configuration.outputs.postgres-image }}':
+        outputs = workflow['jobs']['configuration']['outputs']
         assert outputs['postgres-image'] == '${{ env.POSTGRES_IMAGE }}'
         return str(workflow['env']['POSTGRES_IMAGE'])
     assert '${{' not in image, image
@@ -1098,21 +430,6 @@ GHCR_CREDENTIALS = {
 #: A secret or the workflow's token, however the workflow names it.
 TOKEN = r'secrets\.|github\.token'
 #: How the skip step may hold the token, for ``gh`` or ``curl``.
-API_TOKENS = [
-    (key, value)
-    for key in ('GH_TOKEN', 'GITHUB_TOKEN')
-    for value in ('${{ secrets.GITHUB_TOKEN }}', '${{ github.token }}')
-]
-
-
-def _api_only(key: str, value: object, run: str) -> None:
-    r"""The skip step's token goes to the GitHub API alone: held as gh
-    or curl read it, its text runs no container, logs in nowhere, and
-    names no host but the API's."""
-    assert (key, value) in API_TOKENS, (key, value)
-    assert 'docker' not in run and 'login' not in run, run
-    for host in re.findall(r'https?://([^/\s"\')]+)', run):
-        assert host == 'api.github.com', host
 
 
 def test_ci4_the_token_goes_only_to_ghcr_io(
@@ -1137,12 +454,7 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
         steps = services = artifact_downloads = 0
         for name, job in workflow['jobs'].items():
             assert not re.search(TOKEN, str(job.get('env'))), name
-            # Only the nightly dispatch writes: it starts runs (Actions).
-            assert job.get('permissions') == (
-                {'actions': 'write', 'contents': 'read'}
-                if name == 'nightly'
-                else None
-            ), name
+            assert job.get('permissions') is None, name
             # The JAR-load jobs' JDK containers (T3.11) are pulled
             # anonymously: a container named with no credentials.
             assert name == 'java-load' or 'container' not in job, name
@@ -1170,14 +482,6 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
                 for key, value in (step.get('env') or {}).items():
                     if not re.search(TOKEN, str(value)):
                         continue
-                    if name == 'landing' and step.get('id') == 'landing':
-                        _api_only(key, value, str(step['run']))
-                        continue
-                    # The timing guard reads the runs' jobs (T3.0), and the
-                    # nightly dispatches the workflow on each phase head.
-                    if name in ('timing-guard', 'nightly'):
-                        _api_only(key, value, str(step['run']))
-                        continue
                     steps += 1
                     assert (key, value) == (
                         'GITHUB_TOKEN',
@@ -1203,7 +507,7 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
         allowed = {
             'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}',
             'password: ${{ secrets.GITHUB_TOKEN }}',
-        } | {f'{key}: {value}' for key, value in API_TOKENS}
+        }
         artifact_token_lines = 0
         for line in CI.read_text(encoding='utf-8').splitlines():
             if re.search(TOKEN, line) and not line.strip().startswith('#'):
@@ -1218,7 +522,7 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             artifact_downloads,
         )
 
-    _held(request, check)
+    check()
 
 
 @pytest.mark.parametrize(
@@ -1240,30 +544,10 @@ def test_ci4_a_registry_that_only_looks_like_ghcr_io_gets_no_token(
         assert done.returncode == 0, done.stderr
         assert calls == [f'pull --quiet {image}']
 
-    _held(request, check)
+    check()
 
 
-# --- CI4: the landing job's phase-push check ----------------------------------
-#
-# Fix round 1 (P2-3): on every push to the phase branch the landing job
-# runs ``ratchet.py checkpoint --phase-push <previous tip>``, so a push that
-# does not land exactly one package as a fast-forward, its landing commit's
-# Base-SHA the previous tip, turns the run red even when every other job is
-# left out. The step's text runs here as CI runs it (``bash -eo pipefail``),
-# in a clone of depth 2 of a real temporary origin, with the event file a
-# push writes; its condition is evaluated for each event and branch.
-
-
-def _phase_check_step() -> tuple[int, dict[str, Any]]:
-    steps = _workflow()['jobs']['landing']['steps']
-    found = [
-        (i, s)
-        for i, s in enumerate(steps)
-        if 'ratchet.py checkpoint' in str(s.get('run', ''))
-    ]
-    assert len(found) == 1, found
-    return found[0]
-
+# Evaluate the supported workflow expressions in seeded event contexts.
 
 _TOKEN = re.compile(
     r"\s*(?:(?P<str>'(?:[^']|'')*')|(?P<op>==|!=|&&|\|\||!|\(|\)|,)"
@@ -1386,660 +670,28 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
 
 
 @pytest.mark.parametrize(
-    ('event', 'ref', 'runs'),
-    [
-        ('push', PHASE, True),
-        ('push', LANE, False),
-        ('push', f'{PHASE}-t1.99', False),
-        ('push', f'{PHASE}-archive-lane-a-t1.99', False),
-        # Every phase alike (T2.0), multi-digit ones included.
-        ('push', 'rust-core-phase-2', True),
-        ('push', 'rust-core-phase-10', True),
-        ('push', 'rust-core-phase-123', True),
-        ('push', 'rust-core-phase-2-lane-a', False),
-        ('push', 'rust-core-phase-10-lane-a', False),
-        ('push', 'rust-core-phase-10-t10.1', False),
-        ('push', 'rust-core-phase-10-archive-a-t10.1-abc1234', False),
-        # Names under the prefix that are no phase branch (fix 2).
-        ('push', 'rust-core-phase-', False),
-        ('push', 'rust-core-phase-two', False),
-        ('push', 'rust-core-phase-10x', False),
-        ('push', 'rust-core-phase-experiment', False),
-        ('push', 'main', False),
-        ('push', 'rust-core', False),
-        ('pull_request', PHASE, False),
-        ('pull_request', '7/merge', False),
-        ('pull_request_target', PHASE, False),
-        ('workflow_dispatch', PHASE, False),
-        ('merge_group', PHASE, False),
-    ],
+    'ref', ['main', 'rust-core', 'feature-x', 'rust-core-phase-5']
 )
-def test_ci4_the_phase_check_runs_on_every_phase_push_and_nowhere_else(
-    request: pytest.FixtureRequest, event: str, ref: str, runs: bool
-) -> None:
-    def check() -> None:
-        _, step = _phase_check_step()
-        condition = str(step.get('if', ''))
-        # Whatever the skip step said: a landing commit's push is checked.
-        assert 'skip' not in condition and 'steps.' not in condition
-        context = {
-            'github.event_name': event,
-            'github.ref_name': ref,
-            'github.ref': f'refs/heads/{ref}',
-            'github.base_ref': PHASE if event.startswith('pull') else '',
-            'github.head_ref': LANE if event.startswith('pull') else '',
-        }
-        assert _evaluate(condition, context) is runs, condition
-
-    _held(request, check)
-
-
-def test_ci4_a_failing_phase_check_turns_the_run_red(
-    request: pytest.FixtureRequest,
-) -> None:
-    r"""The step's failure is the landing job's, which nothing runs past:
-    the job always runs (no condition), nothing in it may fail quietly,
-    and the check comes after a checkout of the pushed commit."""
-
-    def check() -> None:
-        landing = _workflow()['jobs']['landing']
-        assert 'if' not in landing and not _needs(landing)
-        assert not landing.get('continue-on-error'), landing
-        at, step = _phase_check_step()
-        assert not step.get('continue-on-error'), step
-        assert 'shell' not in step or step['shell'] == 'bash', step
-        steps = landing['steps']
-        assert str(steps[0].get('uses', '')).startswith('actions/checkout@')
-        assert 'ref' not in (steps[0].get('with') or {})
-        assert at > 0
-        for earlier in steps[:at]:
-            assert not earlier.get('continue-on-error'), earlier
-        # The step runs the checkout's own ratchet.py and its phase-push
-        # check, never with a status or exit code swallowed.
-        run = str(step['run'])
-        assert 'scripts/rust_core/ratchet.py checkpoint' in run
-        assert 'scripts/rust_core/ratchet.py where' in run
-        assert '|| true' not in run and 'set +e' not in run
-        assert not re.search(r'\|\|\s*(true|:|exit 0)', run), run
-
-    _held(request, check)
-
-
-#: A landing commit's trailers, as land.py writes them.
-def _landing_message(subject: str, base: str, moved: str | None = None) -> str:
-    lines = [
-        subject,
-        '',
-        'Reviewed-by: independent reviewer and Codex',
-        'Protected-paths: none',
-        f'Base-SHA: {base}',
-        f'Checkpoint-SHA: {base}',
-    ]
-    if moved:
-        lines.append(f'Moved-from: {moved}')
-    return '\n'.join(lines)
-
-
-class _Phase:
-    r"""A bare origin whose phase branch starts at a landing carrying
-    ratchet.py, and a clone to push from."""
-
-    def __init__(self, tmp_path: Path) -> None:
-        self.tmp = tmp_path
-        self.origin = tmp_path / 'origin.git'
-        self.work = tmp_path / 'work'
-        _git(tmp_path, 'init', '-q', '--bare', str(self.origin))
-        _git(tmp_path, 'clone', '-q', str(self.origin), str(self.work))
-        _git(self.work, 'checkout', '-q', '-b', PHASE)
-        # ratchet.py and the branch names it reads (phases.py, T2.0).
-        for name in ('ratchet.py', 'phases.py'):
-            script = self.work / 'scripts/rust_core' / name
-            script.parent.mkdir(parents=True, exist_ok=True)
-            script.write_bytes((ROOT / 'scripts/rust_core' / name).read_bytes())
-        _git(self.work, 'add', '-A')
-        _git(
-            self.work, 'commit', '-q', '-m',
-            _landing_message('Land T1.13: the start', 'f' * 40),
-        )  # fmt: skip
-        self.l0 = self.push()
-
-    def package(self, name: str) -> str:
-        (self.work / f'{name}.txt').write_text(f'{name}\n')
-        _git(self.work, 'add', '-A')
-        _git(self.work, 'commit', '-q', '-m', f'{name}: the package')
-        return _git(self.work, 'rev-parse', 'HEAD')
-
-    def landing(self, name: str, base: str, moved: str | None = None) -> str:
-        message = _landing_message(f'Land {name}: the package', base, moved)
-        _git(self.work, 'commit', '-q', '--allow-empty', '-m', message)
-        return _git(self.work, 'rev-parse', 'HEAD')
-
-    def push(self) -> str:
-        # The test's own temporary origin; a "+" lets it seed a push that
-        # is not a fast-forward.
-        _git(self.work, 'push', '-q', 'origin', f'+HEAD:refs/heads/{PHASE}')
-        return _git(self.work, 'rev-parse', 'HEAD')
-
-    def run(
-        self, before: str, step: str
-    ) -> tuple[subprocess.CompletedProcess[str], Path]:
-        r"""The step's text in a fresh clone of depth 2 of the pushed
-        phase branch, as actions/checkout leaves it, with the push's event."""
-        clone = self.tmp / f'clone-{len(list(self.tmp.glob("clone-*")))}'
-        _git(
-            self.tmp, 'clone', '-q', '--depth', '2', '--branch', PHASE,
-            f'file://{self.origin}', str(clone),
-        )  # fmt: skip
-        event = self.tmp / 'event.json'
-        event.write_text(f'{{"before": "{before}"}}')
-        output = self.tmp / 'output'
-        output.write_text('')
-        done = subprocess.run(
-            ['bash', '--noprofile', '--norc', '-eo', 'pipefail', '-c', step],
-            cwd=clone,
-            env={
-                'PATH': os.environ['PATH'],
-                'HOME': str(self.tmp),
-                **GIT_ENV,
-                'GITHUB_EVENT_NAME': 'push',
-                'GITHUB_REF_NAME': PHASE,
-                'GITHUB_EVENT_PATH': str(event),
-                'GITHUB_OUTPUT': str(output),
-            },
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return done, clone
-
-
-def _phase_scenario(phase: _Phase, scenario: str) -> str:
-    r"""Seeds the push ``scenario`` names; returns its previous tip."""
-    before = phase.l0
-    if scenario in ('sound', 'wrong-base', 'moved'):
-        p = phase.package('T1.15')
-        base = {'sound': before, 'moved': before, 'wrong-base': p}[scenario]
-        phase.landing('T1.15', base, 'a' * 40 if scenario == 'moved' else None)
-    elif scenario in ('two-landings', 'unstacked'):
-        # A stack (T3.0) lands each package on the one before it.
-        phase.package('T1.15')
-        first = phase.landing('T1.15', before)
-        phase.package('T1.16')
-        phase.landing('T1.16', first if scenario == 'two-landings' else before)
-        # The stack's top is judged against the landing below it.
-        phase.judged_against = first
-    elif scenario == 'not-a-landing':
-        phase.package('T1.15')
-    elif scenario == 'not-a-fast-forward':
-        # The phase branch moved to another landing; this push replaces it.
-        phase.package('T1.14')
-        before = phase.landing('T1.14', phase.l0)
-        phase.push()
-        _git(phase.work, 'reset', '-q', '--hard', phase.l0)
-        phase.package('T1.15')
-        phase.landing('T1.15', before)
-    else:
-        raise AssertionError(scenario)
-    phase.push()
-    return before
-
-
-@pytest.mark.parametrize(
-    ('scenario', 'wanted'),
-    [
-        ('sound', None),
-        ('moved', None),
-        (
-            'wrong-base',
-            "the landing's Base-SHA is not the phase branch's previous tip",
-        ),
-        ('two-landings', None),
-        ('unstacked', 'does not stack on the landing before it'),
-        ('not-a-landing', 'its tip is none'),
-        ('not-a-fast-forward', 'not a fast-forward of the previous tip'),
-    ],
-)
-def test_ci4_the_phase_check_in_a_clone_of_depth_two(
-    tmp_path: Path,
-    request: pytest.FixtureRequest,
-    scenario: str,
-    wanted: str | None,
-) -> None:
-    def check() -> None:
-        phase = _Phase(tmp_path)
-        before = _phase_scenario(phase, scenario)
-        _, step = _phase_check_step()
-        done, clone = phase.run(before, str(step['run']))
-        message = done.stdout + done.stderr
-        if wanted is None:
-            assert done.returncode == 0, message
-            # Every other job is left out of a sound landing's run, and
-            # the check still ran: its output names the checkpoint.
-            checkpoint = getattr(phase, 'judged_against', before)
-            assert done.stdout.split()[:2] == [checkpoint, checkpoint], message
-            skip = _skip(clone, tmp_path, 'push', PHASE)
-            # A sound stack (T3.0) is left out like one landing.
-            assert skip == (
-                'true' if scenario in ('sound', 'two-landings') else 'false'
-            )
-        else:
-            assert done.returncode != 0, message
-            # A previous tip the push dropped is on no branch the clone
-            # fetches, so git's refusal, naming it, may come first.
-            named = scenario == 'not-a-fast-forward' and before in message
-            assert wanted in message or named, message
-
-    _held(request, check)
-
-
-def test_ci4_the_phase_check_reaches_a_previous_tip_past_the_clone_s_depth(
-    tmp_path: Path, request: pytest.FixtureRequest
-) -> None:
-    r"""A push of a package's two commits and its landing: the previous tip
-    is three commits down, past the checkout's depth of 2, and the step
-    deepens the clone to reach it."""
-
-    def check() -> None:
-        phase = _Phase(tmp_path)
-        before = phase.l0
-        phase.package('T1.15')
-        phase.package('T1.15 fix 1')
-        phase.landing('T1.15', before)
-        phase.push()
-        clone = tmp_path / 'shallow'
-        _git(
-            tmp_path, 'clone', '-q', '--depth', '2', '--branch', PHASE,
-            f'file://{phase.origin}', str(clone),
-        )  # fmt: skip
-        missing = subprocess.run(
-            ['git', '-C', str(clone), 'cat-file', '-e', f'{before}^{{commit}}'],
-            capture_output=True,
-            check=False,
-        )
-        assert missing.returncode != 0, 'the previous tip is in the clone'
-        _, step = _phase_check_step()
-        done, _ = phase.run(before, str(step['run']))
-        assert done.returncode == 0, done.stdout + done.stderr
-
-    _held(request, check)
-
-
-# --- CI4 round 4: a landing is skipped only on its candidate's evidence ---------
-#
-# Codex's P1 on cb46bc5a: the skip step decided on the landing's shape
-# alone, so an untested candidate (a failing test, never pushed alone) with
-# an empty ``Land`` commit on top, pushed together, skipped every job, and
-# the phase check passed. Owner decision 30 skips a tree that already
-# passed exact-SHA CI; it never infers that from a subject.
-#
-# Interface the cases hold the workflow to:
-# - The skip step (id ``landing``) says ``skip=true`` only when, besides the
-#   landing's shape, the underlying candidate has a green run: following
-#   empty landing commits down (one parent, its parent's tree, ``Land ``),
-#   the first commit that is not one; its newest run of ci.yml on its exact
-#   SHA that is a push to the phase branch or a branch under it (never an
-#   archive branch, never a pull request's) completed with conclusion
-#   success. A wrapper's own run is never evidence, whatever its
-#   conclusion: its jobs were left out.
-# - Missing, failed, cancelled or unfinished evidence, or an API that does
-#   not answer, never says skip: the step says ``skip=false`` (the full
-#   jobs run) or fails (closed).
-# - It reads the runs through ``gh`` or ``curl`` on PATH (here, fakes that
-#   answer from the seeded runs; the network is closed to anything else),
-#   holding the token as ``GH_TOKEN`` or ``GITHUB_TOKEN``; the workflow
-#   grants ``actions: read``. In a clone of depth 2 it deepens itself
-#   (``git fetch --deepen`` or ``--unshallow``) to follow wrappers down.
-# - A push that is no landing never needs the API: it says ``skip=false``
-#   and passes when the API is down.
-#
-# Each is held by ``contract/tests/ci4_gate.py``.
-
-#: Runs of the candidate, newest last, by case; ``C`` the candidate, ``L``
-#: the landing on it, ``W`` a second landing wrapping ``L``, ``P`` the
-#: candidate's parent.
-EVIDENCE: dict[str, tuple[bool, int, Any]] = {
-    # name: (skips, wrappers, runs)
-    'untested': (False, 1, lambda c: []),
-    'green': (True, 1, lambda c: [_run(c['C'], 1)]),
-    'green-on-a-topic-branch': (
-        True,
-        1,
-        lambda c: [_run(c['C'], 1, branch=f'{PHASE}-t1.99')],
-    ),
-    'red-after-green': (
-        False,
-        1,
-        lambda c: [
-            _run(c['C'], 1),
-            _run(
-                c['C'], 2, conclusion='failure', created='2026-10-14T01:00:00Z'
-            ),
-        ],
-    ),
-    'cancelled-after-green': (
-        False,
-        1,
-        lambda c: [
-            _run(c['C'], 1),
-            _run(
-                c['C'],
-                2,
-                conclusion='cancelled',
-                created='2026-10-14T01:00:00Z',
-            ),
-        ],
-    ),
-    'in-progress-after-green': (
-        False,
-        1,
-        lambda c: [
-            _run(c['C'], 1),
-            _run(
-                c['C'], 2, status='in_progress', created='2026-10-14T01:00:00Z'
-            ),
-        ],
-    ),
-    'queued': (False, 1, lambda c: [_run(c['C'], 1, status='queued')]),
-    'pull-request-only': (
-        False,
-        1,
-        lambda c: [_run(c['C'], 1, event='pull_request', branch=LANE)],
-    ),
-    'archive-branch-only': (
-        False,
-        1,
-        lambda c: [_run(c['C'], 1, branch=f'{PHASE}-archive-lane-1a-t1.99')],
-    ),
-    'main-only': (False, 1, lambda c: [_run(c['C'], 1, branch='main')]),
-    'another-workflow-only': (
-        False,
-        1,
-        lambda c: [_run(c['C'], 1, workflow='publish.yml')],
-    ),
-    'parent-only': (False, 1, lambda c: [_run(c['P'], 1)]),
-    'landing-run-only': (False, 1, lambda c: [_run(c['L'], 1)]),
-    'wrapped-green': (True, 2, lambda c: [_run(c['C'], 1)]),
-    'wrapped-wrapper-success-only': (
-        False,
-        2,
-        lambda c: [_run(c['L'], 1), _run(c['W'], 2)],
-    ),
-    'wrapped-wrapper-skipped-only': (
-        False,
-        2,
-        lambda c: [_run(c['L'], 1, conclusion='skipped')],
-    ),
-}
-
-
-def _untested_push(
-    tmp_path: Path, ref: str, wrappers: int
-) -> tuple[Path, dict[str, str]]:
-    r"""Codex's reproduction: a candidate adding a failing test, never
-    tested, an empty ``Land T1.99`` with correct trailers on it (and, for
-    ``wrappers`` 2, a second empty landing on that), pushed together to
-    ``ref``; and a clone of depth 2 of it, as actions/checkout leaves it."""
-    phase = _Phase(tmp_path)
-    test = phase.work / 'tests/test_ci4_fault.py'
-    test.parent.mkdir()
-    test.write_text('def test_new_code():\n    assert False\n')
-    _git(phase.work, 'add', '-A')
-    _git(phase.work, 'commit', '-q', '-m', 'T1.99: untested faulty candidate')
-    shas = {'P': phase.l0, 'C': _git(phase.work, 'rev-parse', 'HEAD')}
-    shas['L'] = phase.landing('T1.99', phase.l0)
-    if wrappers == 2:
-        shas['W'] = phase.landing('T1.99', phase.l0)
-    _git(phase.work, 'push', '-q', 'origin', f'HEAD:refs/heads/{ref}')
-    clone = tmp_path / 'clone'
-    _git(
-        tmp_path, 'clone', '-q', '--depth', '2', '--branch', ref,
-        f'file://{phase.origin}', str(clone),
-    )  # fmt: skip
-    return clone, shas
-
-
-@pytest.mark.parametrize('ref', [PHASE, LANE])
-@pytest.mark.parametrize('case', sorted(EVIDENCE))
-def test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run(
-    tmp_path: Path, request: pytest.FixtureRequest, case: str, ref: str
-) -> None:
-    def check() -> None:
-        skips, wrappers, runs = EVIDENCE[case]
-        clone, shas = _untested_push(tmp_path, ref, wrappers)
-        found, calls = _decide(clone, tmp_path, 'push', ref, runs(shas))
-        if skips:
-            assert found == 'true', (found, calls)
-        else:
-            assert found in ('false', 'failed'), (found, calls)
-
-    _held(request, check)
-
-
-@pytest.mark.parametrize('ref', [PHASE, LANE])
-def test_ci4_an_api_that_does_not_answer_never_skips(
-    tmp_path: Path, request: pytest.FixtureRequest, ref: str
-) -> None:
-    def check() -> None:
-        clone, shas = _untested_push(tmp_path, ref, 1)
-        green = [_run(shas['C'], 1)]
-        found, calls = _decide(clone, tmp_path, 'push', ref, green, True)
-        assert found in ('false', 'failed'), (found, calls)
-
-    _held(request, check)
-
-
-def test_ci4_a_push_that_is_no_landing_needs_no_api(
-    tmp_path: Path, request: pytest.FixtureRequest
-) -> None:
-    def check() -> None:
-        repo = _repo(tmp_path)
-        found, _ = _decide(repo, tmp_path, 'push', LANE, [], api_fails=True)
-        assert found == 'false'
-
-    _held(request, check)
-
-
-def test_ci4_the_skip_step_reads_runs_with_the_workflow_token(
-    request: pytest.FixtureRequest,
-) -> None:
-    r"""The skip step holds the token for gh or curl, and the workflow
-    may read Actions runs."""
-
-    def check() -> None:
-        workflow = _workflow()
-        assert workflow['permissions'] == {
-            'contents': 'read',
-            'packages': 'read',
-            'actions': 'read',
-        }
-        env = _landing_step().get('env') or {}
-        held = [(k, v) for k, v in env.items() if (k, v) in API_TOKENS]
-        assert held, env
-        run = str(_landing_step()['run'])
-        assert re.search(r'\b(gh|curl)\b', run), run
-
-    _held(request, check)
-
-
-# --- every phase alike (T2.0) ---------------------------------------------------
-#
-# The workflow names no phase: patterns match every rust-core-phase-N, and
-# where an expression cannot match a pattern (the concurrency, the phase
-# check's condition) a phase branch is a name under rust-core-phase-
-# holding no digit followed by "-", for any N.
-
-PHASE_2 = 'rust-core-phase-2'
-LANE_2 = f'{PHASE_2}-lane-a'
-
-
-def test_t20_the_workflow_names_no_one_phase() -> None:
-    text = CI.read_text(encoding='utf-8')
-    assert not re.search(r'rust-core-phase-[0-9]', text)
-    # The nightly finds every phase head by its pattern, for any N.
-    run = str(_workflow()['jobs']['nightly']['steps'][0]['run'])
-    assert "'^rust-core-phase-(0|[1-9][0-9]*)$'" in run, run
-
-
-def test_t32_ci_runs_nightly_on_each_phase_head_not_on_each_push(
-    tmp_path: Path,
-) -> None:
-    r"""CI off the landing path (the owner, 2026-10-22): a push runs the
-    workflow on main and rust-core only, never on a phase branch, a lane or
-    a topic; the schedule dispatches it, fresh, on each phase head and runs
-    nothing itself; a dispatch runs every job, and asks for fresh
-    dependencies by default."""
-    triggers = _workflow()[True]
-    assert triggers['push']['branches'] == ['main', 'rust-core']
-    assert set(triggers) == {
-        'pull_request',
-        'push',
-        'schedule',
-        'workflow_dispatch',
-    }
-    assert triggers['schedule'] and triggers['workflow_dispatch']['inputs'][
-        'fresh'
-    ] == {
-        'description': triggers['workflow_dispatch']['inputs']['fresh'][
-            'description'
-        ],
-        'type': 'boolean',
-        'default': True,
-    }
-    run = str(_workflow()['jobs']['nightly']['steps'][0]['run'])
-    assert 'gh workflow run ci.yml' in run and '-f fresh=true' in run, run
-    repo = _repo(tmp_path)
-    _landing(repo)
-    for ref in (PHASE, LANE, 'main'):
-        assert _skip(repo, tmp_path, 'schedule', ref) == 'true', ref
-        assert _skip(repo, tmp_path, 'workflow_dispatch', ref) == 'false', ref
-    # The fresh switch reaches the Rust jobs that resolve crates.
-    text = CI.read_text(encoding='utf-8')
-    assert (
-        text.count("- if: env.FRESH == 'true'\n        run: cargo update") == 2
-    )
-
-
-@pytest.mark.parametrize(
-    ('ref', 'cancels', 'saves'),
-    [
-        (PHASE, False, False),
-        (PHASE_2, False, False),
-        # A lane's newer push supersedes its run (T3.0).
-        (LANE, True, True),
-        (LANE_2, True, True),
-        ('rust-core-phase-7-lane-b', True, True),
-        (f'{PHASE_2}-t2.3', True, False),
-        # Multi-digit phases (T2.0 fix 1): no cap.
-        ('rust-core-phase-10', False, False),
-        ('rust-core-phase-10-lane-b', True, True),
-        ('rust-core-phase-10-t10.2', True, False),
-        ('rust-core-phase-123', False, False),
-        # No phase branch, so cancelled like any branch (fix 2).
-        ('rust-core-phase-', True, False),
-        ('rust-core-phase-two', True, False),
-        ('rust-core-phase-10x', True, False),
-        ('rust-core-phase-experiment', True, False),
-        ('rust-core', True, True),
-        ('main', True, True),
-        ('feature-x', True, False),
-    ],
-)
-def test_t20_concurrency_and_caches_alike_in_every_phase(
-    ref: str, cancels: bool, saves: bool
-) -> None:
+@pytest.mark.parametrize('event', ['push', 'pull_request', 'workflow_dispatch'])
+def test_superseded_runs_cancel_and_only_integration_pushes_save_caches(
+    ref, event
+):
     workflow = _workflow()
+    assert workflow['concurrency']['cancel-in-progress'] is True
     context = {
-        'github.event_name': 'push',
+        'github.event_name': event,
         'github.ref_name': ref,
         'github.ref': f'refs/heads/{ref}',
     }
-    condition = workflow['concurrency']['cancel-in-progress']
-    assert _evaluate(condition, context) is cancels, condition
-    condition = workflow['env']['SAVE_CACHES']
-    assert _evaluate(condition, context) is saves, condition
-
-
-@pytest.mark.parametrize('ref', [PHASE_2, LANE_2, f'{PHASE_2}-t2.3'])
-def test_t20_an_empty_landing_commit_under_phase_2_skips_on_its_green_run(
-    tmp_path: Path, ref: str
-) -> None:
-    repo = _repo(tmp_path)
-    _landing(repo)
-    seeded = [
-        _run(sha, 100 + n, branch=LANE_2)
-        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
-    ]
-    found, _ = _decide(repo, tmp_path, 'push', ref, seeded)
-    assert found == 'true'
-
-
-@pytest.mark.parametrize('ref', [PHASE_2, LANE_2])
-def test_t20_another_phase_s_green_run_is_no_evidence(
-    tmp_path: Path, ref: str
-) -> None:
-    # The candidate's only green run is on a Phase 1 lane: judged against
-    # Phase 1's checkpoint, it does not stand for a Phase 2 landing.
-    repo = _repo(tmp_path)
-    _landing(repo)
-    seeded = [
-        _run(sha, 100 + n, branch=LANE)
-        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
-    ]
-    found, _ = _decide(repo, tmp_path, 'push', ref, seeded)
-    assert found == 'false'
-
-
-@pytest.mark.parametrize(
-    'ref',
-    ['rust-core-phase-10', 'rust-core-phase-10-lane-a', 'rust-core-phase-123'],
-)
-def test_t20_a_multi_digit_phase_s_landing_skips_on_its_green_run(
-    tmp_path: Path, ref: str
-) -> None:
-    repo = _repo(tmp_path)
-    _landing(repo)
-    seeded = [
-        _run(sha, 100 + n, branch=f'{ref.split("-lane-")[0]}-lane-a')
-        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
-    ]
-    found, _ = _decide(repo, tmp_path, 'push', ref, seeded)
-    assert found == 'true'
-    # Control: with no green run of its own phase it runs everything.
-    found, _ = _decide(repo, tmp_path, 'push', ref, [])
-    assert found == 'false'
-
-
-@pytest.mark.parametrize('ref', ['RUST-CORE-PHASE-3', 'Rust-Core-Phase-12'])
-def test_t20_a_name_the_expression_lets_through_fails_the_phase_check_by_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
-) -> None:
-    r"""Fix 2: a name the step's condition lets through but is no phase
-    branch (one in capitals, as Actions compares names ignoring case; since
-    OF-7 a letter, a dot or a leading zero in the number is not let
-    through) makes the step itself fail, naming it, rather than on a
-    missing argument."""
-    _, step = _phase_check_step()
-    context = {
-        'github.event_name': 'push',
-        'github.ref_name': ref,
-        'github.ref': f'refs/heads/{ref}',
-        'github.base_ref': '',
-        'github.head_ref': '',
-    }
-    assert _evaluate(str(step.get('if', '')), context) is True
-    monkeypatch.setattr(sys.modules[__name__], 'PHASE', ref)
-    phase = _Phase(tmp_path)
-    before = _phase_scenario(phase, 'sound')
-    done, _ = phase.run(before, str(step['run']))
-    assert done.returncode == 1, done.stdout + done.stderr
-    assert (
-        f'{ref} is under rust-core-phase- but is no phase branch' in done.stdout
+    saves = event == 'push' and ref in ('main', 'rust-core')
+    assert _evaluate(workflow['env']['SAVE_CACHES'], context) is saves
+    assert _evaluate(workflow['env']['SAVE_PIP_CACHES'], context) is (
+        event == 'push' and ref == 'main'
     )
 
 
 # --- CI7: aarch64 wheels and the Databricks runtime cells (KO2-38, KO2-40) ---
 
-DESIGN = ROOT / 'docs/design/rust-core/phase-2/design.md'
 #: The jobs KO2-38 and KO2-40 promise, which the design's CI7 row names:
 #: the aarch64 native wheels beside x86_64, the two aarch64 smoke lanes,
 #: and the six runtime cells. The row names the cells only as "six
@@ -2099,23 +751,7 @@ def _job_names(job_id: str, job: dict[str, Any]) -> list[str]:
 
 
 def test_ci7_the_promised_jobs_are_jobs_of_the_workflow() -> None:
-    r"""The jobs KO2-38 and KO2-40 promise, as the design's CI7 row names
-    them, are jobs this workflow runs: the aarch64 native wheels and smoke
-    lanes, and exactly six runtime cells, each by name. Under KO2-76 check
-    10's CI part is judged by land.py's exact-SHA rule, so this, not a
-    locked-set pattern, keeps the jobs from going missing."""
-    [row] = [
-        line
-        for line in DESIGN.read_text().splitlines()
-        if line.startswith('| CI7 |')
-    ]
-    for promised in (
-        '`wheel-smoke (aarch64-floor)`',
-        '`(aarch64-newest)`',
-        'six `runtime-install (<runtime>)` jobs',
-        '`ubuntu-24.04-arm`',
-    ):
-        assert promised in row, promised
+    """Keep ARM wheel/smoke coverage and all six supported runtime cells."""
     names = [
         name
         for job_id, job in _workflow()['jobs'].items()
@@ -2278,7 +914,7 @@ def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
     assert line.removeprefix('%') in commands, line
     assert '$keep_numpy' in line
     job = _workflow()['jobs']['runtime-install']
-    assert set(job['needs']) == {'build', 'engine-wheels'}
+    assert _needs(job) == ['build']
     for entry in job['strategy']['matrix']['include']:
         pins = dict(p.split('==') for p in entry['preinstalled'].split())
         # 16.4's own pandas 1.5.3 has no wheel and no build on Python 3.12:
@@ -2392,12 +1028,10 @@ def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
         [
             'dist/structured_data_models_api-1.0.0-py3-none-any.whl',
             f'dist/{X86}',
-            'engine/structured_data_models_relational_engine-1.0.0-cp312-'
-            'cp312-manylinux_2_28_x86_64.whl',
         ]
     )
     assert calls == [
-        # The candidate's wheels first, the interpreter's engine alone.
+        # Install the candidate wheels before resolving connector extras.
         f'pip install --quiet --no-deps {candidate}',
         'pip install --only-binary=:all: '
         'structured-data-models-client[relational,databricks,databricks-serving] '
@@ -2440,129 +1074,12 @@ def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(
 # --- T2.0i: main's engine rows on every platform ------------------------------
 
 
-def test_t20i_every_engine_artifact_downloaded_is_one_engine_wheels_uploads() -> (
-    None
-):
-    r"""``main`` renamed the engine's artifacts to ``engine-wheels-<name>``
-    (``engine-wheels-linux-x86_64``), and a job that still downloads an old
-    name fails only once it runs; the aarch64 build image is the ghcr.io
-    copy of PyPA's, by the same digest (E131)."""
-    jobs = _workflow()['jobs']
-    rows = jobs['engine-wheels']['strategy']['matrix']['include']
-    uploaded = {f'engine-wheels-{row["name"]}' for row in rows}
-    downloaded = [
-        step['with']['name']
-        for job in jobs.values()
-        for step in job.get('steps', [])
-        if str(step.get('uses', '')).startswith('actions/download-artifact')
-        and str(step.get('with', {}).get('name', '')).startswith(
-            'engine-wheels'
-        )
-    ]
-    assert downloaded, 'no job downloads an engine artifact'
-    assert set(downloaded) <= uploaded, (sorted(downloaded), sorted(uploaded))
-    aarch64 = jobs['native-wheel-aarch64']['env']['MANYLINUX']
-    assert aarch64.startswith('ghcr.io/'), aarch64
-
-
 # --- T3.0: the judging-tool tests in a job of their own, the timing guard,
 # and the comparison base taken at push time ---------------------------------
 #
-# The names assumed until T3.0's second implementer's are relayed: the
-# pytest marker ``T30_MARKER``; a job of its own whose pytest runs select it
-# (``-m <marker>``), run only when an output of a job it needs, computed by
-# a ``run:`` step, says a path under scripts/rust_core/, contract/tools/,
-# contract/runners/ or the gate files changed; every other pytest run over
-# tests/ or contract/tests leaves it out (``not <marker>``). The timing
-# guard ``T30_TIMING`` (``--workflow FILE --durations FILE``, the durations
-# a list of runs, newest first, each ``{"run": id, "jobs": [{"name",
-# "minutes"}]}``), named by a step of the workflow. The comparison base: a
-# step that runs ``ratchet.py where`` reads the base from an output of a job
-# it needs, through its env. Listed in tests/t30-pending.json until done.
+# Tooling tests run separately from the supported Python version matrix.
 
 T30_MARKER = 'tooling'
-T30_TIMING = ROOT / 'scripts/rust_core/orchestration/ci_timing.py'
-T30_PHASE = 'rust-core-phase-3'
-T30_LANE = f'{T30_PHASE}-lane-a'
-T30_PENDING = ROOT / 'tests/t30-pending.json'
-T30_SPLIT = ROOT / 'scripts/rust_core/tooling_tests.py'
-
-
-def _t30_pending(test: Any) -> Any:
-    names = set(json.loads(T30_PENDING.read_text(encoding='utf-8'))['pending'])
-    if test.__name__ in names:
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.0: failing until implemented; once it passes, take '
-            'it out of tests/t30-pending.json pending',
-        )(test)
-    return test
-
-
-#: A test file that copies the contract into a temporary git repository
-#: and runs the ratchet there, as the judging-tool tests do. Its copy and
-#: init are filled in when it is written, so this file holds no builder of
-#: its own and stays unmarked.
-T30_COPYING = """\
-import shutil
-import subprocess
-from pathlib import Path
-{mark}
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_the_ratchet_on_a_copy(tmp_path):
-    shutil.{copy}(ROOT / 'contract', tmp_path / 'contract')
-    subprocess.run(['git', '{init}', '-q', str(tmp_path)], check=True)
-    subprocess.run(
-        ['python', str(ROOT / 'scripts/rust_core/ratchet.py'), 'check'],
-        cwd=tmp_path,
-    )
-"""
-
-
-def _t30_split(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(T30_SPLIT), *args],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-
-
-@_t30_pending
-def test_t30_every_gate_copying_test_carries_the_marker(tmp_path: Path) -> None:
-    r"""tooling_tests.py check passes on this tree, finds the families the
-    test-speed investigation names, and fails, naming it, on a copying
-    test file without the marker."""
-    pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
-    markers = pyproject.partition('[tool.pytest.ini_options]')[2]
-    assert re.search(rf'^\s*"{T30_MARKER}:', markers, re.M), 'not registered'
-    done = _t30_split('check')
-    assert done.returncode == 0, done.stdout + done.stderr
-    listed = _t30_split('list')
-    assert listed.returncode == 0, listed.stdout + listed.stderr
-    for name in ('test_gate_modes.py', 'test_contract_ratchet.py'):
-        assert name in listed.stdout, listed.stdout
-    root = tmp_path / 'root'
-    for suite in ('tests', 'contract/tests'):
-        (root / suite).mkdir(parents=True)
-    (root / 'tests/test_t30_unmarked_copy.py').write_text(
-        T30_COPYING.format(mark='', copy='copytree', init='init')
-    )
-    (root / 'tests/test_t30_marked_copy.py').write_text(
-        T30_COPYING.format(
-            mark='import pytest\n\npytestmark = pytest.mark.tooling\n',
-            copy='copytree',
-            init='init',
-        )
-    )
-    seeded = _t30_split('--root', str(root), 'check')
-    said = seeded.stdout + seeded.stderr
-    assert seeded.returncode == 1, said
-    assert 'test_t30_unmarked_copy.py' in said, said
-    assert 'test_t30_marked_copy.py' not in said, said
 
 
 def _t30_pytest_steps() -> list[tuple[str, str]]:
@@ -2612,8 +1129,9 @@ def _t30_tooling_jobs() -> dict[str, dict[str, Any]]:
     return {name: jobs[name] for name in names}
 
 
-@_t30_pending
 def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
+    markers = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    assert re.search(rf'^\s*"{T30_MARKER}:', markers, re.M)
     tooling = _t30_tooling_jobs()
     for name, job in tooling.items():
         matrix = job.get('strategy', {}).get('matrix', {})
@@ -2622,357 +1140,11 @@ def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
         r for n, r in _t30_pytest_steps() if n in tooling and _t30_selects(r)
     ]
     covered = [suite for run in runs for suite in sorted(_t30_suites(run))]
-    # Both suites, each once.
-    assert sorted(covered) == ['contract/tests', 'tests'], (covered, runs)
+    # Maintained tooling tests live in the root suite; contract tooling was retired.
+    assert covered == ['tests'], (covered, runs)
     for other, run in _t30_pytest_steps():
         if other not in tooling:
             assert f'not {T30_MARKER}' in run, f'{other} runs them: {run}'
-
-
-def _t30_substitute(text: str, values: dict[str, str]) -> str:
-    def one(match: re.Match[str]) -> str:
-        return values.get(match.group(1).strip(), '')
-
-    return re.sub(r'\$\{\{\s*(.*?)\s*\}\}', one, text)
-
-
-def _t30_output(
-    job_name: str,
-    output: str,
-    repo: Path,
-    tmp_path: Path,
-    values: dict[str, str],
-) -> str:
-    """A job's output, its producing step's text run in ``repo`` as CI
-    runs it, with GitHub's environment for a push of the lane."""
-    job = _workflow()['jobs'][job_name]
-    source = str(job.get('outputs', {}).get(output, ''))
-    found = re.search(r'steps\.([\w-]+)\.outputs\.([\w-]+)', source)
-    assert found, f'{job_name}.outputs.{output} is {source!r}, no step output'
-    step = next(s for s in job['steps'] if s.get('id') == found.group(1))
-    assert 'run' in step, f'{job_name}: step {found.group(1)} is no run: step'
-    out = tmp_path / f'output-{job_name}-{output}'
-    out.write_text('')
-    event = tmp_path / 'event.json'
-    event.write_text(json.dumps({'before': values['github.event.before']}))
-    env = {
-        **os.environ,
-        **GIT_ENV,
-        **{
-            k: _t30_substitute(str(v), values)
-            for k, v in {**job.get('env', {}), **step.get('env', {})}.items()
-        },
-        'GITHUB_OUTPUT': str(out),
-        'GITHUB_EVENT_NAME': 'push',
-        'GITHUB_REF_NAME': T30_LANE,
-        'GITHUB_REF': f'refs/heads/{T30_LANE}',
-        'GITHUB_EVENT_PATH': str(event),
-        'GITHUB_SHA': values['github.sha'],
-        'GITHUB_REPOSITORY': 'o/r',
-    }
-    done = subprocess.run(
-        ['bash', '--noprofile', '--norc', '-e', '-c',
-         _t30_substitute(step['run'], values)],
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )  # fmt: skip
-    assert done.returncode == 0, done.stdout + done.stderr
-    lines = dict(
-        line.partition('=')[::2]
-        for line in out.read_text().splitlines()
-        if '=' in line
-    )
-    return lines.get(found.group(2), '')
-
-
-@_t30_pending
-@pytest.mark.parametrize(
-    ('path', 'runs'),
-    [
-        ('scripts/rust_core/ratchet.py', True),
-        ('scripts/rust_core/gate.sh', True),
-        ('contract/tools/differential.py', True),
-        ('contract/runners/run_python.py', True),
-        ('.github/workflows/ci.yml', True),
-        ('docs/design/rust-core/migration-plan.md', False),
-        ('rust/crates/sdm-core/src/lib.rs', False),
-        ('packages/structured-data-models-client/README.md', False),
-    ],
-)
-def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
-    tmp_path: Path, path: str, runs: bool
-) -> None:
-    tooling = _t30_tooling_jobs()
-    conditions = {name: str(job.get('if', '')) for name, job in tooling.items()}
-    condition = ' && '.join(f'({c})' for c in conditions.values())
-    name = ', '.join(tooling)
-    referenced = sorted(
-        set(re.findall(r'needs\.([\w-]+)\.outputs\.([\w-]+)', condition))
-    )
-    assert any(o != 'skip' for _, o in referenced), f'{name} if: {condition!r}'
-    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
-    subprocess.run(
-        ['git', 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin)],
-        env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
-    )  # fmt: skip
-    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
-    # -B: run from lane a's own worktree, the clone already has that branch.
-    _git(
-        repo, 'checkout', '-q', '-B', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
-    )
-    base = _git(repo, 'rev-parse', 'HEAD')
-    _git(repo, 'push', '-q', 'origin', f'{base}:refs/heads/{T30_PHASE}')
-    _git(repo, 'fetch', '-q', 'origin')
-    target = repo / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open('a', encoding='utf-8') as handle:
-        handle.write('\n')
-    _git(repo, 'add', path)
-    _git(repo, 'commit', '-q', '-m', 'T3.99: one path')
-    head = _git(repo, 'rev-parse', 'HEAD')
-    values = {
-        'github.event.before': base,
-        'github.sha': head,
-        'github.ref_name': T30_LANE,
-        'github.ref': f'refs/heads/{T30_LANE}',
-        'github.event_name': 'push',
-        'github.repository': 'o/r',
-    }
-    context = dict(values)
-    for job_name, output in referenced:
-        key = f'needs.{job_name}.outputs.{output}'
-        context[key] = (
-            'false'
-            if output == 'skip'
-            else _t30_output(job_name, output, repo, tmp_path, values)
-        )
-    for job_name, each in conditions.items():
-        assert _evaluate(each, context) is runs, (job_name, each, context)
-
-
-def test_t30_a_train_below_the_top_runs_the_tooling_jobs_and_judges_the_top(
-    tmp_path: Path,
-) -> None:
-    # T3.0 fix 2 (Codex r2): the stack's top is pushed while the phase
-    # branch holds H; below it, a tooling train changed the comparator and
-    # was stacked (its landing L, not landed). The run judges the top
-    # against L (base) and runs the tooling jobs for the whole stack's
-    # change from H (tooling).
-    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
-    subprocess.run(
-        ['git', 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin)],
-        env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
-    )  # fmt: skip
-    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
-    _git(
-        repo, 'checkout', '-q', '-B', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
-    )
-    head = _git(repo, 'rev-parse', 'HEAD')
-    _git(repo, 'push', '-q', 'origin', f'{head}:refs/heads/{T30_PHASE}')
-    _git(repo, 'fetch', '-q', 'origin')
-    with (repo / 'scripts/rust_core/compare.py').open('a') as handle:
-        handle.write('\n')
-    _git(repo, 'commit', '-q', '-am', 'T3.98: the train')
-    _git(
-        repo, 'commit', '-q', '--allow-empty', '-m',
-        'Land T3.98: the train\n\nReviewed-by: r\nProtected-paths: none\n'
-        f'Base-SHA: {head}\nCheckpoint-SHA: {head}\nTrain: yes',
-    )  # fmt: skip
-    train = _git(repo, 'rev-parse', 'HEAD')
-    (repo / 'docs/t399.md').write_text('the product\n')
-    _git(repo, 'add', 'docs/t399.md')
-    _git(repo, 'commit', '-q', '-m', 'T3.99: the product above it')
-    values = {
-        'github.event.before': head,
-        'github.sha': _git(repo, 'rev-parse', 'HEAD'),
-        'github.ref_name': T30_LANE,
-        'github.ref': f'refs/heads/{T30_LANE}',
-        'github.event_name': 'push',
-        'github.repository': 'o/r',
-    }
-    assert _t30_output('landing', 'base', repo, tmp_path, values) == train
-    assert _t30_output('landing', 'tooling', repo, tmp_path, values) == 'true'
-
-
-def _t30_durations(tmp_path: Path, minutes: list[float]) -> Path:
-    """Runs newest first: rust-test (timeout 120, 80% is 96 minutes) at
-    these minutes, every other job at one minute."""
-    path = tmp_path / 'durations.json'
-    path.write_text(
-        json.dumps(
-            [
-                {
-                    'run': 1000 - n,
-                    'jobs': [
-                        {'name': 'rust-test', 'minutes': m},
-                        {'name': 'lint', 'minutes': 1.0},
-                    ],
-                }
-                for n, m in enumerate(minutes)
-            ]
-        )
-    )
-    return path
-
-
-@_t30_pending
-@pytest.mark.parametrize(
-    ('minutes', 'fails'),
-    [
-        ([100.0, 50.0, 97.0], True),
-        ([100.0, 97.0, 50.0], True),
-        ([100.0, 50.0, 50.0, 100.0], False),
-        ([95.0, 95.0, 95.0], False),
-    ],
-    ids=['two-of-three', 'the-last-two', 'once-in-three', 'under-80'],
-)
-def test_t30_the_timing_guard_fails_a_job_over_80_percent_twice_in_three(
-    tmp_path: Path, minutes: list[float], fails: bool
-) -> None:
-    named = [
-        step
-        for job in _workflow()['jobs'].values()
-        for step in job.get('steps', [])
-        if T30_TIMING.name in str(step.get('run', ''))
-    ]
-    assert named, f'no step of ci.yml runs {T30_TIMING.name}'
-    state = tmp_path / 'state'
-    done = subprocess.run(
-        [sys.executable, str(T30_TIMING), '--workflow', str(CI),
-         '--durations', str(_t30_durations(tmp_path, minutes))],
-        env={**os.environ, 'SDM_ORCH_STATE': str(state)},
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )  # fmt: skip
-    said = done.stdout + done.stderr
-    written = (
-        [
-            p
-            for p in state.rglob('*')
-            if p.is_file() and 'rust-test' in p.read_text()
-        ]
-        if state.exists()
-        else []
-    )
-    if fails:
-        assert done.returncode != 0, said
-        assert 'rust-test' in said and 'lint' not in said.replace(
-            'rust-test', ''
-        ), said
-        assert written, 'no fix item for the heartbeat'
-    else:
-        assert done.returncode == 0, said
-        assert not written
-
-
-def _t30_landing(repo: Path, package: str, base: str) -> str:
-    _git(
-        repo, 'commit', '-q', '--allow-empty', '-m',
-        f'Land {package}: a package\n\nBoth reviews approve it.\n\n'
-        f'Reviewed-by: two reviewers\nProtected-paths: none\n'
-        f'Base-SHA: {base}\nCheckpoint-SHA: {base}',
-    )  # fmt: skip
-    return _git(repo, 'rev-parse', 'HEAD')
-
-
-@_t30_pending
-def test_t30_comparison_jobs_take_the_base_recorded_at_push_time(
-    tmp_path: Path,
-) -> None:
-    r"""The candidate lands while its run is still going: the phase branch
-    now holds the candidate, so a base read from its tip at run time makes
-    the candidate its own checkpoint. Each step that runs ``ratchet.py
-    where`` takes the base recorded when the run started, from an output of
-    a job it needs, and judges against the head the candidate was pushed
-    on."""
-    jobs = _workflow()['jobs']
-    steps = [
-        (name, job, step)
-        for name, job in jobs.items()
-        for step in job.get('steps', [])
-        if 'ratchet.py where' in str(step.get('run', ''))
-        # The phase check judges a push to the phase branch on the push's
-        # own previous tip, already the base at push time.
-        and 'ratchet.py checkpoint' not in str(step.get('run', ''))
-    ]
-    assert steps, 'no step runs ratchet.py where'
-    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
-    _git(tmp_path, 'init', '-q', '--bare', str(origin))
-    _git(tmp_path, 'clone', '-q', str(origin), str(repo))
-    _git(repo, 'checkout', '-q', '-b', 'start')
-    (repo / 'a.txt').write_text('a\n')
-    _git(repo, 'add', 'a.txt')
-    _git(repo, 'commit', '-q', '-m', 'Merge Phase 2 into rust-core')
-    epic = _git(repo, 'rev-parse', 'HEAD')
-    pushed_on = _t30_landing(repo, 'T3.98', epic)
-    (repo / 'b.txt').write_text('b\n')
-    _git(repo, 'add', 'b.txt')
-    _git(repo, 'commit', '-q', '-m', 'T3.99: the candidate')
-    candidate = _git(repo, 'rev-parse', 'HEAD')
-    landed = _t30_landing(repo, 'T3.99', pushed_on)
-    _git(
-        repo, 'push', '-q', 'origin', f'{epic}:refs/heads/rust-core',
-        f'{landed}:refs/heads/{T30_PHASE}', f'{candidate}:refs/heads/{T30_LANE}',
-    )  # fmt: skip
-    _git(repo, 'checkout', '-q', '-B', T30_LANE, candidate)
-    _git(repo, 'fetch', '-q', 'origin')
-    event = tmp_path / 'event.json'
-    event.write_text(json.dumps({'before': '0' * 40}))
-    for name, job, step in steps:
-        env_text = {**job.get('env', {}), **step.get('env', {})}
-        recorded = {
-            k: v
-            for k, v in env_text.items()
-            if re.search(r'needs\.[\w-]+\.outputs\.', str(v))
-        }
-        assert recorded, f'{name}: the base is read from the branch at run time'
-        env = {
-            **os.environ,
-            **GIT_ENV,
-            **{k: _t30_substitute(str(v), {}) for k, v in env_text.items()},
-            **{
-                k: re.sub(r'\$\{\{.*?\}\}', pushed_on, str(v))
-                for k, v in recorded.items()
-            },
-            'GITHUB_EVENT_NAME': 'push',
-            'GITHUB_REF_NAME': T30_LANE,
-            'GITHUB_EVENT_PATH': str(event),
-            'SDM_PHASE_BRANCH': T30_PHASE,
-        }
-        where = subprocess.run(
-            [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py'), 'where',
-             '--repo', str(repo)],
-            env=env, capture_output=True, text=True, timeout=120,
-        )  # fmt: skip
-        assert where.returncode == 0, where.stdout + where.stderr
-        point = subprocess.run(
-            [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py'),
-             'checkpoint', '--repo', str(repo), *where.stdout.split()],
-            env=env, capture_output=True, text=True, timeout=120,
-        )  # fmt: skip
-        said = point.stdout + point.stderr
-        assert point.returncode == 0, f'{name}: {where.stdout} {said}'
-        assert point.stdout.split()[0] == pushed_on, f'{name}: {said}'
-
-
-def test_t32_the_nightly_runs_the_client_suite_with_every_route_forced() -> (
-    None
-):
-    # The owner's "2026-10-23 early: nightly forced-route run": the Phase 2
-    # flip dry run, every path the build routes onto the core forced there.
-    job = _workflow()['jobs']['forced-routes']
-    assert (
-        _expression(job['if'])
-        == "github.event_name == 'workflow_dispatch' && inputs.fresh"
-    )
-    script = '\n'.join(step.get('run', '') for step in job['steps'])
-    assert 'CORE_ROUTED' in script and 'export SDM_CORE_ROUTES' in script
-    assert 'packages/structured-data-models-client/tests' in script
-    assert '-rf' in script, 'the watchdog names failing tests from FAILED lines'
 
 
 def test_targeted_pql_runtime_cannot_enable_unrelated_ci_jobs() -> None:
@@ -2983,7 +1155,7 @@ def test_targeted_pql_runtime_cannot_enable_unrelated_ci_jobs() -> None:
     )
     for name, job in jobs.items():
         if name not in (
-            'landing',
+            'configuration',
             'nightly',
             'native-wheel-aarch64',
             'pql-runtime-aarch64',
@@ -3006,14 +1178,68 @@ def test_targeted_pql_runtime_cannot_enable_unrelated_ci_jobs() -> None:
         entry['python'] for entry in pql['strategy']['matrix']['include']
     } == {'3.10', '3.14'}
     assert 'inputs.pql_runtime_only' in pql['if']
-    phase_end = (
-        ROOT / 'scripts/rust_core/orchestration/phase_end.sh'
-    ).read_text()
-    assert (
-        '.displayTitle != "Targeted Arm PQL acceptance (not full CI)"'
-        in phase_end
+
+
+def test_ci_has_no_phase_branch_scheduler():
+    workflow = _workflow()
+    triggers = workflow[True]
+    assert set(triggers) == {'pull_request', 'push', 'workflow_dispatch'}
+    assert triggers['push']['branches'] == ['main', 'rust-core']
+    assert 'nightly' not in workflow['jobs']
+    assert 'gh workflow run' not in CI.read_text()
+
+
+def test_ci_configuration_never_skips_jobs_based_on_migration_commits():
+    workflow = _workflow()
+    job = workflow['jobs']['configuration']
+    assert set(job['outputs']) == {'pythons', 'postgres-image', 'version'}
+    assert 'needs.landing' not in CI.read_text()
+    assert json.loads(job['outputs']['pythons']) == [
+        '3.10',
+        '3.11',
+        '3.12',
+        '3.13',
+        '3.14',
+    ]
+    assert job['outputs']['postgres-image'] == '${{ env.POSTGRES_IMAGE }}'
+    assert not job.get('needs')
+    assert 'ratchet.py' not in str(job)
+    assert 'GH_TOKEN' not in str(job)
+
+
+def test_contract_observations_run_only_the_native_python_client():
+    jobs = _workflow()['jobs']
+    step = next(
+        step
+        for step in jobs['contract-python-ref-pandas3']['steps']
+        if step.get('name') == 'Native Python observations'
     )
-    assert (
-        'targeted PQL run $RUN cannot supply full phase-end CI evidence'
-        in phase_end
+    script = step['run']
+    assert '--mode python-core' in script
+    assert 'python-old' not in script
+    assert 'gate.sh' not in script
+    assert 'ratchet.py' not in script
+    assert 'check_observations.py' in script
+    assert '--expect contract/expected/duckdb-python.json' in script
+    assert '--cell "$CELL"' in script
+    assert '--reference' not in script
+    subprocess.run(['bash', '-n'], input=script, text=True, check=True)
+
+
+def test_database_observations_use_current_expectations_and_keep_sql():
+    jobs = _workflow()['jobs']
+    step = next(
+        step
+        for step in jobs['contract-python-ref-pandas3-sqlite']['steps']
+        if step.get('name')
+        == 'Native Python observations on the selected database'
     )
+    script = step['run']
+    assert 'check_observations.py' in script
+    assert 'contract/expected/$DATABASE-python.json' in script
+    assert '--out "$out/python-core.jsonl"' in script
+    assert '--commit "$GITHUB_SHA"' in script
+    assert '--native-sha256' in script
+    assert '--reference' not in script
+    assert 'ratchet.py' not in script
+    subprocess.run(['bash', '-n'], input=script, text=True, check=True)

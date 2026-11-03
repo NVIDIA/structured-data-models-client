@@ -3,9 +3,12 @@
 Kept in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) shape, and
 versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
-these packages. All five distributions share one version and one entry.
+these packages. The three Python distributions and Java library share one version.
 
 ## Unreleased
+
+Release candidate versions are `2.0.0rc1` for Python and Java and `2.0.0-rc.1` for Rust.
+The public API snapshot records this version update; publication remains pending.
 
 ### Added
 
@@ -16,19 +19,52 @@ these packages. All five distributions share one version and one entry.
   model, else the backend) and `Source.namespace_parts()` (the namespace's
   parts, outermost first, `None` where the connection's current one is
   meant).
-- The relational engine publishes wheels for macOS (Apple silicon and Intel)
-  and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
-  x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
-  installs on a laptop rather than on Linux only. The engine ships no source
-  distribution, so those wheels remain the full set of platforms it supports:
-  `structured-data-models-client` itself is pure Python and stays broader.
+- `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
+  Python process with structured-data-models, through the same calls as a NIM:
+  predictions, fitted sessions, rankings and forecasts. It loads each model
+  from its published weights on first use, or uses one passed in. The request
+  is prepared as it is for a NIM and the model run on it directly, the context
+  fitted as the NIM fits it. A request the model cannot answer is refused with
+  a `StructuredDataError` whose code says why. Install it with the
+  `in-process` extra.
+- A Snowflake session the client opens names itself to Snowflake as
+  `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
+  named any other way is kept: an `application` argument, one in the
+  `connections.toml` profile, `SF_PARTNER`, or the connector's own detection
+  of Streamlit and notebooks. A connection or Snowpark session you open
+  yourself is used as it is.
+- The client now contains the Rust core instead of depending on separate
+  relational-engine and Python PQL packages.
+  Python wheels and the Java JAR target Linux x86-64/ARM64, macOS
+  x86-64/ARM64 and Windows x86-64.
+  Native Windows ARM64 is deferred pending upstream Arrow dependencies.
 
 ### Changed
 
-- Every engine wheel is built on a machine of its own, native rather than
-  emulated, and each is smoke-tested on the architecture it targets. The
-  release no longer builds aarch64 under QEMU, which also takes a privileged
-  container image out of the release path.
+- Sampled Tabular context uses stable Rust index ordering, including duplicate labels and mixed numeric labels.
+  Equal labels retain sampled order; mixed numbers compare by their represented values.
+  Context order and predictions can differ from platform-specific NumPy ordering; sampled membership and warehouse sampling are unchanged.
+
+- Requests, sampling and result assembly run through Rust for both languages.
+  Local Python model execution uses the same prepared requests and responses.
+- Ordinary inference options are validated in Rust before local or remote model
+  execution, including fitted sessions, for both Python and Java.
+  NumPy scalar options are accepted at Python request admission.
+
+### Fixed
+
+- A predictive query longer than 1,024 characters is answered. A relational
+  request carries the query in `metadata.source_query` for logging, which the
+  contract caps at 1,024 characters, so a NIM refused a longer one with
+  `VALIDATION_FAILED`. The logged copy is now cut to fit.
+- `read_table` reads DuckDB results through a relation, avoiding the extra
+  copy and warning introduced by the DuckDB 2.0 DB-API cursor.
+- A relational prediction over a graph without a time column works on pandas
+  3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
+  take even an empty date offset from it.
+- A request's description leaves out a wire table carrying an integer past
+  the float range on every pandas release. pandas 3.1 had started to build
+  a frame around one, where earlier releases refused it.
 
 ## 1.0.0 - 2026-10-15
 

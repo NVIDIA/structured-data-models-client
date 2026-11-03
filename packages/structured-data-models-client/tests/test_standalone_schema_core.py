@@ -147,7 +147,7 @@ def test_bulk_binding_does_not_reenter_standalone_checks(
     if source_kind == 'frames':
         schema = Schema.from_data({'items': pd.DataFrame({'id': [1, 2]})})
     else:
-        duckdb = pytest.importorskip('duckdb')
+        import duckdb
         from sdm_connectors import DuckDBSource
 
         with duckdb.connect() as connection:
@@ -163,7 +163,7 @@ def test_bulk_binding_does_not_reenter_standalone_checks(
 def test_source_schema_declarations_and_missing_dtype(
     monkeypatch, catalog_facts
 ):
-    duckdb = pytest.importorskip('duckdb')
+    import duckdb
     from sdm_connectors import DuckDBSource
 
     from sdm_client.schema import _described_on_the_core

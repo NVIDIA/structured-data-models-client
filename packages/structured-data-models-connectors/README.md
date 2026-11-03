@@ -79,7 +79,7 @@ pip install "structured-data-models-connectors[sqlite]"      # or [duckdb] / [po
 ```
 
 Consumers depend on it and surface these extras under their own name, e.g.
-`structured-data-models-client[snowflake]` and `structured-data-models-relational-engine[databricks]` both resolve the corresponding
+`structured-data-models-client[snowflake]` and `structured-data-models-client[databricks]` both resolve the corresponding
 `structured-data-models-connectors` extra.
 
 ## Local development
@@ -94,5 +94,5 @@ wire, so they need `structured-data-models-client` as well. They skip without it
 to run them:
 
 ```bash
-pip install -e ../structured-data-models-api -e ../structured-data-models-pql -e ../structured-data-models-client
+RUSTUP_TOOLCHAIN=1.97.0 CARGO_BUILD_JOBS=2 pip install -e ../structured-data-models-api -e ../structured-data-models-client
 ```

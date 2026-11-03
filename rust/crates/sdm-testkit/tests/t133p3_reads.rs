@@ -2,43 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T1.33 part 3, held from outside the implementation (the package's
-//! independent test author) to `contract/t133p3-vectors.json`, on the
-//! owner's answers of 2026-10-14:
-//!
-//! The types' rows are `contract/type-set-vectors.json`'s with `cells`
-//! (one source of truth with T1.33 part 2's type set); this file's own
-//! rows are controls and the `text_time` rows.
-//!
-//! - Item 26 (P1B-43): support, not skip, the types a lossless DuckDB
-//!   connection hands over. A UUID and a BIT are read as text (the
-//!   canonical lower-case 8-4-4-4-12 and the '0'/'1' string), a TIMETZ as a
-//!   time of day as a TIME is today (`time.control`), and lossless JSON
-//!   stays text. A HUGEINT, a UHUGEINT and a VARINT (with or without the
-//!   setting) follow the big-integer rule (the orchestrator's, 2026-10-14):
-//!   received as `int64` where every value fits it, else as
-//!   `decimal128(38, 0)` where every value fits 38 digits, else as text
-//!   (`utf8`), each cell DuckDB's exact text in every case.
-//! - Item 24 (text_time): a column whose name says time but whose values
-//!   are no times is text, not refused (rel-trial's `time_frame`, "up to
-//!   12 weeks"); one whose values read as times stays the time column.
-//!
-//! Each row's `witness` adds its column to `shop`'s `users`, and
-//! `nested.list-int`'s case runs on this host through real DuckDB, to
-//! `predict`. The row holds the column's description (its data type as
-//! the wire names it, and its semantic type and the table's time column
-//! where given) and, in the model call's body, each `users` row's cell of
-//! the column: `cast`, equal to DuckDB's own `CAST(column AS VARCHAR)` for
-//! that user, read on a connection of the same base and witness (a
-//! number's cell as its text, so each value is exact); `null`, every
-//! cell null.
-//!
-//! Gating: `contract/tests/t133p3-pending.json`'s `pending["rust-host"]`
-//! lists the rows that failed here when the test was written. Each must
-//! still fail (strict: one that passes must be taken out of the list),
-//! and the list may only shrink: it stays within `authored["rust-host"]`.
-//! The implementer removes ids as they pass and changes nothing else of
-//! this file or the vectors.
+//! Lossless DuckDB reads preserve types, exact cells, joins and labels.
+//! Expected cells are checked against independent SQL reads.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -52,7 +17,6 @@ use sdm_testkit::duck;
 use sdm_testkit::host::{self, Answer, Observed};
 use serde_json::{Value, json};
 
-const PENDING: &str = "contract/tests/t133p3-pending.json";
 const VECTORS: &str = "contract/t133p3-vectors.json";
 const TYPE_SET: &str = "contract/type-set-vectors.json";
 
@@ -92,15 +56,6 @@ fn rows() -> Vec<Value> {
     assert_eq!(all["format"], "sdm-t133p3-vectors/1");
     found.extend(all["rows"].as_array().unwrap().iter().cloned());
     found
-}
-
-fn ids(value: &Value) -> BTreeSet<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_owned())
-        .collect()
 }
 
 fn witness(row: &Value) -> Vec<String> {
@@ -493,24 +448,7 @@ fn joined_elsewhere(body: &Value) -> Option<String> {
 }
 
 #[test]
-fn the_pending_list_only_shrinks() {
-    let pending = read_json(PENDING);
-    let now = ids(&pending["pending"]["rust-host"]);
-    let authored = ids(&pending["authored"]["rust-host"]);
-    assert!(
-        now.is_subset(&authored),
-        "pending ids added: {:?}",
-        now.difference(&authored)
-    );
-    let all: BTreeSet<String> = rows()
-        .iter()
-        .map(|r| r["id"].as_str().unwrap().to_owned())
-        .collect();
-    assert!(now.is_subset(&all), "pending ids that are no row");
-}
-
-#[test]
-fn each_row_is_read_as_the_owner_decided() {
+fn each_row_preserves_lossless_values_and_relationships() {
     let contract = root().join("contract");
     let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
     let template = loaded
@@ -520,21 +458,13 @@ fn each_row_is_read_as_the_owner_decided() {
         .case
         .clone();
     let bases = bases::load(&contract.join("bases.yaml")).unwrap();
-    let pending = ids(&read_json(PENDING)["pending"]["rust-host"]);
     let mut failures = Vec::new();
-    let mut passing_but_pending = Vec::new();
     for row in rows() {
-        let id = row["id"].as_str().unwrap().to_owned();
-        match (problem(&row, &bases, &template), pending.contains(&id)) {
-            (None, true) => passing_but_pending.push(id),
-            (Some(why), false) => failures.push(format!("{id}: {why}")),
-            _ => {}
+        let id = row["id"].as_str().unwrap();
+        if let Some(why) = problem(&row, &bases, &template) {
+            failures.push(format!("{id}: {why}"));
         }
     }
-    assert!(
-        passing_but_pending.is_empty(),
-        "these pass now: take them out of {PENDING}'s pending[\"rust-host\"]: {passing_but_pending:?}"
-    );
     assert!(
         failures.is_empty(),
         "{} rows differ:\n{}",

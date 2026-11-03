@@ -1,21 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The query and option long tail on the core, against the old route (T2.13).
-
-The implementer's own tests, beside the test author's cases in
-``contract/cases``: on a DuckDB source forced onto the core, each holds the
-core route's outcome to the old route's in the same process.
-
-- ``EVALUATE`` and ``EXPLAIN``, and the entities ``FOR t.c = 1`` or
-  ``FOR t.c IN (...)`` names, gather the request the same query without
-  them gathers, but for the query text the payload carries.
-- An inference option given as text is read as the engine's validation
-  reads it, and a null target transform is written as null.
-- An item's explanation and its own metadata are carried, and the result's
-  explanation is the first item's that holds one.
-- A day-first date literal read before the error a query ends with keeps
-  its warning (carried row U1).
+"""Public query prefixes, normalized inference options and response fields.
+DuckDB materialization and local HTTP prediction use explicit expectations,
+including metadata, explanations and warning ordering.
 """
 
 from __future__ import annotations
@@ -32,9 +20,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-# The old route these tests compare against runs the relational engine,
-# which the jobs without it do not install.
-pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 
 from sdm_connectors import DuckDBSource  # noqa: E402
@@ -46,54 +31,22 @@ from sdm_client import (  # noqa: E402
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 from sdm_client.query import RELATIONAL  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
-MATERIALIZE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
-)
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
 COUNT = 'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id'
 SUM = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 
 
-@pytest.fixture(autouse=True)
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-
-
 def _shop() -> list[str]:
-    lines = (
-        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8').splitlines()
-    )
-    start = lines.index('  shop:') + 1
-    statements = []
-    for line in lines[start:]:
-        if not line.startswith('  - '):
-            break
-        statements.append(line[len('  - ') :])
-    return statements
+    return json.loads((Path(__file__).parent / 'data/shop.json').read_text())[
+        'statements'
+    ]
 
 
-def _gathered(
-    monkeypatch: pytest.MonkeyPatch,
-    routes: str | None,
-    query: str,
-    **options: Any,
-) -> Request | StructuredDataError:
-    r"""``query`` materialized over the shop base on ``routes`` (the old
-    route where none), for users 0 and 1 unless ``options`` name others,
-    or the error it raised."""
-    if routes is None:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    else:
-        monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+def _gathered(query: str, **options: Any) -> Request | StructuredDataError:
+    """Materialize the shop query for users 0 and 1, unless overridden."""
     connection = duckdb.connect()
     for statement in _shop():
         connection.execute(statement)
@@ -110,8 +63,6 @@ def _gathered(
             )
     except StructuredDataError as error:
         return error
-    finally:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _payloads(request: Request | StructuredDataError) -> list[Any]:
@@ -129,12 +80,10 @@ def _payloads(request: Request | StructuredDataError) -> list[Any]:
     ],
 )
 def test_a_prefix_or_the_entities_named_gather_the_plain_query_s_request(
-    query: str, monkeypatch: pytest.MonkeyPatch
+    query: str,
 ) -> None:
-    core = _payloads(_gathered(monkeypatch, MATERIALIZE, query))
-    old = _payloads(_gathered(monkeypatch, None, query))
-    plain = _payloads(_gathered(monkeypatch, MATERIALIZE, COUNT))
-    assert core == old
+    core = _payloads(_gathered(query))
+    plain = _payloads(_gathered(COUNT))
     # The query as written is the only difference from the plain query's.
     assert [p['metadata'].pop('source_query') for p in core] == [query]
     for payload in plain:
@@ -154,22 +103,37 @@ def test_a_prefix_or_the_entities_named_gather_the_plain_query_s_request(
         (SUM, {'num_estimators': '5'}),
     ],
 )
-def test_an_inference_option_given_as_text_is_read_as_the_engine_reads_it(
-    query: str, config: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_inference_text_options_have_explicit_normalized_values(
+    query: str, config: dict[str, Any]
 ) -> None:
-    core = _gathered(monkeypatch, MATERIALIZE, query, inference_config=config)
-    old = _gathered(monkeypatch, None, query, inference_config=config)
-    if isinstance(old, StructuredDataError):
-        assert isinstance(core, StructuredDataError), core
-        assert (type(core), core.code) == (type(old), old.code)
-        # Said with the option it is about, never the value given.
-        assert repr(next(iter(config))) in str(core)
+    request = _gathered(query, inference_config=config)
+    invalid = (
+        config.get('num_estimators') in ('x', '5')
+        or config.get('column_shuffle') == ' yes'
+    )
+    if invalid:
+        assert isinstance(request, StructuredDataError), request
+        assert request.code == 'INVALID_REQUEST'
+        assert repr(next(iter(config))) in str(request)
         assert all(
-            not isinstance(v, str) or v not in str(core)
+            not isinstance(v, str) or v not in str(request)
             for v in config.values()
         )
         return
-    assert _payloads(core) == _payloads(old)
+    payload = _payloads(request)[0]
+    expected = {
+        'num_estimators': {' 3 ': 3, '2.00': 2},
+        'column_shuffle': {'yes': True},
+        'hop_shuffle': {'OFF': False},
+        'class_shuffle': {'On': True},
+        'category_shuffle': {'0': False},
+    }
+    for key, value in config.items():
+        assert payload['inference']['inference_config'][key] == (
+            ['quantile', None]
+            if key == 'target_transforms'
+            else expected[key][value]
+        )
 
 
 @contextmanager
@@ -221,34 +185,19 @@ def _answer(*items: dict[str, Any]) -> bytes:
 
 
 def _predicted(
-    monkeypatch: pytest.MonkeyPatch,
-    request: Request,
-    body: bytes,
-    outputs: list[str],
-) -> tuple[Any, Any]:
-    r"""The predict call's outcome on the core and on the old route, each
-    the result, or the error raised, with the warnings shown."""
-    outcomes = []
-    for routes in (CORE, None):
-        if routes is None:
-            monkeypatch.setenv(_routing.ENVIRONMENT, '')
-        else:
-            monkeypatch.setenv(_routing.ENVIRONMENT, routes)
-        with (
-            _answering(body) as url,
-            warnings.catch_warnings(record=True) as shown,
-        ):
-            warnings.simplefilter('always')
-            try:
-                with SDMClient(url, max_retries=0) as client:
-                    outcome: Any = client.predict(
-                        request, model=KumoRelational(), outputs=outputs
-                    )
-            except StructuredDataError as error:
-                outcome = error
-        outcomes.append((outcome, [type(w.message).__name__ for w in shown]))
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    return outcomes[0], outcomes[1]
+    request: Request, body: bytes, outputs: list[str]
+) -> tuple[Any, list[str]]:
+    """Public HTTP prediction and the warning classes it emits."""
+    with _answering(body) as url, warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        try:
+            with SDMClient(url, max_retries=0) as client:
+                outcome: Any = client.predict(
+                    request, model=KumoRelational(), outputs=outputs
+                )
+        except StructuredDataError as error:
+            outcome = error
+    return outcome, [type(w.message).__name__ for w in shown]
 
 
 @pytest.mark.parametrize(
@@ -261,12 +210,12 @@ def _predicted(
         (None, None),
     ],
 )
-def test_an_item_s_explanation_and_metadata_are_the_old_route_s(
-    explanation: Any, metadata: Any, monkeypatch: pytest.MonkeyPatch
+def test_response_item_metadata_and_explanation_are_preserved(
+    explanation: Any, metadata: Any
 ) -> None:
-    request = _gathered(monkeypatch, MATERIALIZE, COUNT, indices=[0])
+    request = _gathered(COUNT, indices=[0])
     assert isinstance(request, Request), request
-    item: dict[str, Any] = {
+    item = {
         'id': _instance(request),
         'row_index': 0,
         'prediction': 'true',
@@ -274,16 +223,31 @@ def test_an_item_s_explanation_and_metadata_are_the_old_route_s(
         'explanation': explanation,
         'metadata': metadata,
     }
+    expected_explanation = None if explanation is None else dict(explanation)
+    expected_metadata = None if metadata is None else dict(metadata)
     for outputs in (['prediction', 'explanation'], ['prediction']):
-        (core, core_shown), (old, old_shown) = _predicted(
-            monkeypatch, request, _answer(item), outputs
+        result, shown = _predicted(request, _answer(item), outputs)
+        assert not isinstance(result, Exception), result
+        assert len(result.items) == 1
+        actual = result.items[0]
+        assert actual.explanation == expected_explanation
+        assert actual.metadata == expected_metadata
+        assert actual.row_index == 0
+        assert actual.probabilities == {'False': 0.25, 'True': 0.75}
+        assert result.to_pandas()[
+            ['probability_False', 'probability_True']
+        ].values.tolist() == [[0.25, 0.75]]
+        assert result.to_pandas()['id'].tolist() == [0]
+        assert result.to_pandas()['prediction'].tolist() == [True]
+        assert result.metadata == {'served_by': 'a'}
+        assert result.explanation == (expected_explanation or None)
+        missing = (
+            ('explanation',)
+            if 'explanation' in outputs and not expected_explanation
+            else ()
         )
-        assert not isinstance(core, Exception), core
-        assert core_shown == old_shown
-        assert core.items == old.items
-        assert core.explanation == old.explanation
-        assert core.absent(outputs) == old.absent(outputs)
-        pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+        assert result.absent(outputs) == missing
+        assert shown == (['SDMWarning'] if missing else [])
 
 
 @pytest.mark.parametrize(
@@ -295,10 +259,10 @@ def test_an_item_s_explanation_and_metadata_are_the_old_route_s(
         ('metadata', [[['a'], 1]]),
     ],
 )
-def test_an_item_field_that_is_no_mapping_is_refused_as_on_the_old_route(
-    field: str, value: Any, monkeypatch: pytest.MonkeyPatch
+def test_non_mapping_response_item_field_is_refused(
+    field: str, value: Any
 ) -> None:
-    request = _gathered(monkeypatch, MATERIALIZE, COUNT, indices=[0])
+    request = _gathered(COUNT, indices=[0])
     assert isinstance(request, Request), request
     item = {
         'id': _instance(request),
@@ -306,29 +270,21 @@ def test_an_item_field_that_is_no_mapping_is_refused_as_on_the_old_route(
         'prediction': 'true',
         field: value,
     }
-    (core, _), (old, _) = _predicted(
-        monkeypatch, request, _answer(item), ['prediction']
-    )
+    core, _ = _predicted(request, _answer(item), ['prediction'])
     assert isinstance(core, StructuredDataError), core
-    assert isinstance(old, StructuredDataError), old
-    assert (type(core), core.code) == (type(old), old.code)
     assert core.code == 'INVALID_RESPONSE'
     assert core.details['field'] == f'prediction.{field}'
     assert f"item's {field}" in str(core)
 
 
-def test_an_explanation_of_two_entities_is_refused_as_on_the_old_route(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = _gathered(monkeypatch, MATERIALIZE, COUNT)
+def test_explanation_of_two_entities_is_refused() -> None:
+    request = _gathered(COUNT)
     assert isinstance(request, Request), request
-    (core, _), (old, _) = _predicted(
-        monkeypatch, request, _answer(), ['prediction', 'explanation']
-    )
+    core, _ = _predicted(request, _answer(), ['prediction', 'explanation'])
     assert isinstance(core, StructuredDataError), core
-    assert isinstance(old, StructuredDataError), old
-    assert (type(core), core.code) == (type(old), old.code)
-    assert str(core).endswith(str(old).split('] ', 1)[-1]), (core, old)
+    assert core.code == 'UNSUPPORTED_REQUEST'
+    assert 'explanation' in str(core).lower()
+    assert 'one' in str(core).lower() or 'single' in str(core).lower()
 
 
 def _shown_on_the_core(text: str) -> tuple[list[str], str | None]:
@@ -350,18 +306,9 @@ def _shown_on_the_core(text: str) -> tuple[list[str], str | None]:
     return [str(w.message) for w in shown], code
 
 
-def test_a_day_first_literal_read_before_an_error_keeps_its_warning(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_day_first_literal_read_before_an_error_keeps_its_warning() -> None:
     # U1: the literal read before a packed one, which the core refuses by
     # name (decision E79), is warned of before the error.
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(
-            _routing.FROM_SOURCE_DUCKDB
-            + ('query.validate/accept/any', 'query.validate/refuse/any')
-        ),
-    )
     shown, code = _shown_on_the_core(
         'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024 AND orders.ts '
         '< 20240101-01-01, 0, 30, days) FOR EACH users.user_id'

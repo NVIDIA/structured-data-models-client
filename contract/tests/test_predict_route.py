@@ -2,106 +2,18 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""base.regression predicted on the core against the reference (T1.11d).
+"""The public regression workflow preserves native state, payloads and results."""
 
-Run where the contract tests run (CI's ``engine`` job until T1.18):
-
-    python -m pytest contract/tests -q
-
-On ``python-core`` the call's ``predict`` runs on the core: the request
-state ``materialize`` answered comes back with the ``predict`` start, the
-core writes the call, the client's own transport sends it to the scripted
-endpoint, and the core reads the answer and lays out the result. Each
-claim and what holds it:
-
-- The model request and its result are the reference's: python-core's
-  public projection (outcome at the ``predict`` stage, warning classes,
-  schema, every request the endpoint received, parsed with each number as
-  its text, the result through ``to_pandas()``: its columns, dtypes, row
-  count and rows' digest, and the query-log counts) equals the committed
-  reference observation's, with ``capture_check.projection``, whose one
-  exclusion is the value of ``metadata.request_id`` (decision E35,
-  approved by the owner on 2026-10-10, ``contract/compare-policy.yaml``'s
-  one exclusion; the field must be present alike with a value of the
-  same type).
-- The request the endpoint received is the call the core wrote, and the
-  state predict was started with is the one materialize answered: the
-  request state crossed runs as the host held it.
-- The two core hosts agree: python-core's inputs (predict's included), its
-  call, with the same one value left out, and its result are the ones
-  ``contract/pinned/base.regression.core.json`` pins, which ``sdm-testkit``'s
-  ``tests/duckdb_provider.rs`` holds rust-host to; the pin is checked to
-  hold the call's 112 context and 2 predicted rows and the result's two
-  rows, each a prediction of 1.0 for its entity.
-
-The case is diagnostic until T1.29 (``compare.py`` reports, and gates
-none of, its differences); these tests gate the claims above in CI.
-"""
-
-from __future__ import annotations
-
-import importlib.util
 import json
 import struct
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
 CASE = ROOT / 'contract/cases/s1/base.regression.json'
-REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
-PINNED = ROOT / 'contract/pinned/base.regression.core.json'
-
-
-def _module(name: str) -> ModuleType:
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, RUNNERS / f'{name}.py')
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-capture_check = _module('capture_check')
-
-
-def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
-    r"""``observation``'s projection (``capture_check.py``), its query log's
-    statements counted without those the core marked as plan B's reads of
-    a table as it stands (``compare.py``'s ``LOCATE``, the one rule,
-    register P3A-1)."""
-    path = ROOT / 'scripts/rust_core/compare.py'
-    if 'compare' not in sys.modules:
-        spec = importlib.util.spec_from_file_location('compare', path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules['compare'] = module
-        spec.loader.exec_module(module)
-    locate = sys.modules['compare'].LOCATE
-    reads = sum(
-        1
-        for statement in observation['driver']['capture']['statements']
-        if statement.get('purpose') == locate
-    )
-    projection = capture_check.projection(observation)
-    logged = projection['query_log']
-    return {
-        **projection,
-        'query_log': {**logged, 'statements': logged['statements'] - reads},
-    }
-
-
-def _reference() -> dict[str, Any]:
-    for line in REFERENCE.read_text().splitlines():
-        observation = json.loads(line)
-        if observation['case'] == 'base.regression':
-            return observation
-    raise AssertionError('no reference observation of base.regression')
 
 
 def _core(tmp_path: Path) -> dict[str, Any]:
@@ -130,72 +42,45 @@ def _float(bits: dict[str, str]) -> float:
     return float(struct.unpack('>d', bytes.fromhex(bits['f64_bits']))[0])
 
 
-def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
-    tmp_path: Path,
-) -> None:
-    reference = _reference()
+def test_regression_materializes_and_predicts_through_native_core(tmp_path):
     core = _core(tmp_path)
+    assert core['identity']['native_loaded']
     assert core['identity']['operations'] == [
         'describe_source',
+        'edit_schema',
+        'validate_query',
         'materialize',
         'predict',
+        'read_result_items',
     ]
     assert core['core']['error'] is None
-    assert core['outcome'] == reference['outcome']
-    assert core['outcome']['stage'] == 'predict'
-    # Not vacuous: one request reached the endpoint, and the result has the
-    # reference's two rows of three columns.
+    assert core['outcome'] == {
+        'result': 'success',
+        'stage': 'predict',
+        'error': None,
+        'code': None,
+    }
     [payload] = core['public']['payloads']
-    assert len(payload['parsed']['context']['instance_table']['rows']) == 112
-    assert core['public']['result']['rows'] == 2
+    sent = payload['parsed']
+    assert len(sent['context']['instance_table']['rows']) == 112
+    assert len(sent['predict']['instance_table']['rows']) == 2
+    assert isinstance(sent['metadata']['request_id'], str)
+    materialized = core['core']['materialized']
+    assert materialized['query'] == json.loads(CASE.read_text())['input']['pql']
+    for section in ('task', 'schema', 'context', 'predict'):
+        assert sent[section] == materialized['payload'][section]
+    predicted = core['core']['predicted']
+    assert predicted['body'] == sent
+    [started] = [i for i in core['core']['inputs'] if i['op'] == 'predict']
+    assert started['state'] == materialized
+    assert started['model'] == 'kumo-relational'
     assert [c['name'] for c in core['public']['result']['columns']] == [
         'row_index',
         'id',
         'prediction',
     ]
-    assert core['public']['result'] == reference['public']['result']
-    assert _without_plan_b_reads(core) == capture_check.projection(reference)
-
-    # The request the endpoint received is the call the core wrote, and the
-    # state predict started with is the one materialize answered.
-    predicted = core['core']['predicted']
-    assert predicted['body'] == payload['parsed']
-    [started] = [i for i in core['core']['inputs'] if i['op'] == 'predict']
-    materialized = core['core']['materialized']
-    assert started['state'] == materialized
-    assert started['model'] == 'kumo-relational'
-
-    # The two core hosts agree, against the pin rust-host is held to.
-    pinned = json.loads(PINNED.read_text())
-    assert core['core']['inputs'] == pinned['inputs']
-    assert {
-        **predicted,
-        'body': capture_check.masked(predicted['body']),
-    } == pinned['predicted']
-
-
-def test_the_pin_holds_a_whole_call_and_result() -> None:
-    pinned = json.loads(PINNED.read_text())
-    predicted = pinned['predicted']
-    body = predicted['body']
-    assert len(body['context']['instance_table']['rows']) == 112
-    assert len(body['predict']['instance_table']['rows']) == 2
-    assert body['model'] == 'kumo-relational'
-    assert body['output'] == {
-        'fields': ['prediction'],
-        'prediction_statistic': 'median',
-    }
-    # E35's one value: present, a string, its value left out.
-    assert body['metadata']['request_id'] == {
-        'excluded value of type': 'string'
-    }
-    # The caller set no inference option, so the call carries no config:
-    # the reference's 26ecdd28, ported at T2.0c (only the options the
-    # caller set are sent, sdm-core's tests/predict.rs).
-    assert 'inference_config' not in body['inference']
+    assert core['public']['result']['rows'] == 2
     result = predicted['result']
-    # From T1.28b each answer's place in the endpoint's order is the last
-    # column (answer_index).
     assert [c['name'] for c in result['columns']] == [
         'row_index',
         'id',
@@ -212,9 +97,3 @@ def test_the_pin_holds_a_whole_call_and_result() -> None:
         for row in result['rows']
     ]
     assert rows == [(0, 0, 1.0, 0), (1, 1, 1.0, 1)]
-    assert [i['op'] for i in pinned['inputs']] == [
-        'describe_source',
-        'materialize',
-        'predict',
-    ]
-    assert pinned['inputs'][2]['state'] == pinned['materialized']

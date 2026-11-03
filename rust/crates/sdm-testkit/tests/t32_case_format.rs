@@ -2,27 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T3.2's case-format exits on the Rust loader (the package's test
-//! author's), beside `tests/test_t32_case_format.py`, which holds the
-//! Python loader to the same vectors:
-//!
-//! - `the_rust_loader_takes_and_refuses_the_warehouse_vectors`: every
-//!   change of `contract/tests/t32-case-format-vectors.json` (`warehouses`,
-//!   `input.view`, `input.connect`, `num_context_samples`; design choice 1
-//!   and the dry run's gaps) is taken or refused by `case::load` as the
-//!   file lists it;
-//! - `the_rust_loader_refuses_the_texts_json_cannot_hold`:
-//!   `contract/tests/malformed-cases.json`'s `refused_texts` (P2-T2.1i-1: a
-//!   `fail_call` of `-0`, a `rows_per_call` of NaN, Infinity or -Infinity)
-//!   are refused; the Rust loader refused them before T3.2, and this holds
-//!   it there while the Python loader is aligned.
-//!
-//! Gating: `contract/tests/t32-pending.json`'s `pending` names, as
-//! `rust:<test>`, the tests that failed when written. Each pending test
-//! must still fail (strict); once one passes it fails, naming itself,
-//! until it is taken out.
+//! Case-format acceptance and rejection using shared malformed-input vectors.
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use sdm_testkit::case;
@@ -36,30 +17,10 @@ fn read_json(relative: &str) -> Value {
     serde_json::from_str(&std::fs::read_to_string(root().join(relative)).unwrap()).unwrap()
 }
 
-/// The `rust:` names of the pending file's `list`.
-fn named(list: &str) -> BTreeSet<String> {
-    read_json("contract/tests/t32-pending.json")[list]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|n| n.as_str().unwrap().strip_prefix("rust:"))
-        .map(str::to_owned)
-        .collect()
-}
-
-/// Runs `check` and holds it to the pending file: a pending test must
-/// fail, any other must pass.
-fn gated(name: &str, check: impl FnOnce() -> Vec<String>) {
-    assert!(named("authored").contains(name), "{name} is not authored");
+/// Assert all case-format checks, reporting every mismatch.
+fn check_cases(name: &str, check: impl FnOnce() -> Vec<String>) {
     let problems = check();
-    if named("pending").contains(name) {
-        assert!(
-            !problems.is_empty(),
-            "{name} passes now: take rust:{name} out of contract/tests/t32-pending.json pending"
-        );
-    } else {
-        assert!(problems.is_empty(), "{name}:\n{}", problems.join("\n"));
-    }
+    assert!(problems.is_empty(), "{name}:\n{}", problems.join("\n"));
 }
 
 /// A scratch directory of this test's own.
@@ -118,7 +79,7 @@ fn changed(case: &Value, change: &Value) -> Value {
 
 #[test]
 fn the_rust_loader_takes_and_refuses_the_warehouse_vectors() {
-    gated(
+    check_cases(
         "the_rust_loader_takes_and_refuses_the_warehouse_vectors",
         || {
             let vectors = read_json("contract/tests/t32-case-format-vectors.json");
@@ -146,7 +107,7 @@ fn the_rust_loader_takes_and_refuses_the_warehouse_vectors() {
 
 #[test]
 fn the_rust_loader_refuses_the_texts_json_cannot_hold() {
-    gated("the_rust_loader_refuses_the_texts_json_cannot_hold", || {
+    check_cases("the_rust_loader_refuses_the_texts_json_cannot_hold", || {
         const PLACEHOLDER: &str = "\u{1}t32-the-text\u{1}";
         let listed = read_json("contract/tests/malformed-cases.json");
         let case: Value = read_json(listed["case"].as_str().unwrap());

@@ -2,55 +2,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.32g part 2e: an interval's values in canonical form.
+"""Interval observations preserve exact fields from shared vectors.
 
-Written by the package's independent test author, before the change.
-
-    python -m pytest contract/tests/test_t132g_interval_values.py -q
-
-``compare.py``'s ``sql.result`` rule fails every result holding an
-unencodable value, even against itself, and both encoders write Arrow's
-``month_day_nano_interval`` as unencodable (E111(b) left it so).
-time.feature-interval holds one in ``from_source`` statement 6, the
-reference's sample of ``users``, so it fails on every pairing of runners.
-The orchestrator's decision: a canonical form, as part 2c gave maps and
-unions one.
-
-``contract/t132g-p2e-vectors.json`` spells it out (its ``about``): an
-interval is ``["interval", months, days, nanoseconds]``, months and days
-JSON integers (int32), nanoseconds a decimal string (int64, as each
-64-bit count of the form is: ``i``, ``ts``, ``dur``), a null interval
-``null``; alike inside a list, a struct, a map or a chosen union member.
-Each vector, run on DuckDB (``sql``) or built as Arrow (``build``: the
-fields' limits; a ``date64``, which the form still does not hold), must
-read as the vector says through ``run_python.arrow_values`` here and
-through ``sdm_testkit::values`` in ``rust/crates/sdm-testkit/tests/
-t132g_interval_values.rs``. Arrow's year-month and day-time intervals,
-which neither DuckDB nor pyarrow writes, stay unencodable (the Rust test
-builds them).
-
-- the comparator: an interval result equals itself, and differs from one
-  with other months, days or nanoseconds, another sign, or a zero for a
-  null;
-- part 2c's vector that kept an interval unencodable in a map and a
-  chosen union member takes the form (``contract/t132g-p2c-vectors.json``,
-  updated here; its test is 2c's); ``contract/result-vectors.json``'s
-  interval vectors take it too;
-- an interval read as rows (``fetchall``) stays unencodable;
-- the committed reference's time.feature-interval sample compares equal to
-  itself, and is the new encoder's reading of that sample run again on
-  DuckDB: its line recorded again (an entry naming it on python-ref, the
-  owner's, under the ratchet's reference rule).
-
-Gating (``contract/tests/t132g_gate.py``): a test named in
-``t132g-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
-when written. It still runs and must still fail; once it passes it fails,
-naming itself, until it is taken out of the list.
+The Rust testkit consumes the same vectors; no historical comparator is needed.
 """
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import importlib.util
 import json
@@ -63,12 +21,10 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
-import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / 'contract/t132g-p2e-vectors.json'
 OLD_VECTORS = ROOT / 'contract/result-vectors.json'
-CASE = 'time.feature-interval'
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -82,13 +38,7 @@ def _module(name: str, path: Path) -> ModuleType:
     return module
 
 
-G = _module('t132g_gate', ROOT / 'contract/tests/t132g_gate.py')
 run_python = _module('run_python', ROOT / 'contract/runners/run_python.py')
-compare = _module('compare', ROOT / 'scripts/rust_core/compare.py')
-maps = _module(
-    't132g_map_union_tests',
-    ROOT / 'contract/tests/test_t132g_map_union_values.py',
-)
 
 
 def _vectors() -> list[dict[str, Any]]:
@@ -211,7 +161,7 @@ def test_the_built_vectors_are_the_arrow_they_say() -> None:
 
 @pytest.mark.parametrize('vector', _vectors(), ids=lambda v: v['name'])
 def test_arrow_reads_intervals_as_the_vector_says(
-    vector: dict[str, Any], request: pytest.FixtureRequest
+    vector: dict[str, Any],
 ) -> None:
     table, types = _read(vector)
     assert [
@@ -221,7 +171,7 @@ def test_arrow_reads_intervals_as_the_vector_says(
     def reads() -> None:
         assert run_python.arrow_values(table, types) == vector['values']
 
-    G.held('exits', f'py:{request.node.name}', reads)
+    reads()
 
 
 @pytest.mark.parametrize(
@@ -243,9 +193,7 @@ def test_an_interval_read_as_rows_stays_unencodable(
     assert read['unencodable']
 
 
-def test_the_older_interval_vectors_take_the_form(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_the_older_interval_vectors_take_the_form() -> None:
     r"""``contract/result-vectors.json``'s interval vectors, which both
     encoders are held to as well, spell the same form."""
     older = {
@@ -265,133 +213,4 @@ def test_the_older_interval_vectors_take_the_form(
         ]
         assert nested['values']['unencodable'] == []
 
-    G.held('exits', f'py:{request.node.name}', taken)
-
-
-# --- the comparator ------------------------------------------------------------------
-
-
-INTERVALS = (
-    "SELECT INTERVAL '1 month 2 days 3 microseconds' AS i, "
-    '[INTERVAL 1 DAY, NULL] AS l'
-)
-
-
-def test_the_comparator_takes_an_interval_result_as_equal_to_itself(
-    tmp_path: Path, request: pytest.FixtureRequest
-) -> None:
-    def equal() -> None:
-        found = maps._sql_result_texts(
-            maps._compared(tmp_path, INTERVALS, INTERVALS)
-        )
-        assert found == [], found
-
-    G.held('exits', f'py:{request.node.name}', equal)
-
-
-DIFFERENT = {
-    'other months': (
-        "SELECT INTERVAL '2 month 2 days 3 microseconds' AS i, "
-        '[INTERVAL 1 DAY, NULL] AS l'
-    ),
-    'other days': (
-        "SELECT INTERVAL '1 month 3 days 3 microseconds' AS i, "
-        '[INTERVAL 1 DAY, NULL] AS l'
-    ),
-    'other nanoseconds': (
-        "SELECT INTERVAL '1 month 2 days 4 microseconds' AS i, "
-        '[INTERVAL 1 DAY, NULL] AS l'
-    ),
-    'another sign': (
-        "SELECT -INTERVAL '1 month 2 days 3 microseconds' AS i, "
-        '[INTERVAL 1 DAY, NULL] AS l'
-    ),
-    'a zero for a null': (
-        "SELECT INTERVAL '1 month 2 days 3 microseconds' AS i, "
-        '[INTERVAL 1 DAY, INTERVAL 0 DAY] AS l'
-    ),
-    'thirty days for a month': (
-        "SELECT INTERVAL '30 days 2 days 3 microseconds' AS i, "
-        '[INTERVAL 1 DAY, NULL] AS l'
-    ),
-}
-
-
-@pytest.mark.parametrize('seed', sorted(DIFFERENT))
-def test_the_comparator_takes_a_different_interval_as_different(
-    tmp_path: Path, seed: str, request: pytest.FixtureRequest
-) -> None:
-    def different() -> None:
-        found = maps._sql_result_texts(
-            maps._compared(tmp_path, INTERVALS, DIFFERENT[seed])
-        )
-        assert found, found
-        assert all('canonical form does not hold' not in t for t in found)
-        assert any('rows differ' in t for t in found), found
-
-    G.held('exits', f'py:{request.node.name}', different)
-
-
-# --- the reference's sample ----------------------------------------------------------
-
-
-def test_the_interval_reference_sample_compares_equal_to_itself(
-    tmp_path: Path, request: pytest.FixtureRequest
-) -> None:
-    [path] = (ROOT / 'contract/cases').glob(f'*/{CASE}.json')
-    reference = maps._reference_of(CASE)
-    observation = copy.deepcopy(reference)
-    observation['identity']['runner'] = 'python-old'
-    observation['identity']['reference'] = None
-    paths = []
-    for name, line in (('python-ref', reference), ('python-old', observation)):
-        written = tmp_path / f'{name}.jsonl'
-        written.write_text(json.dumps(line) + '\n', encoding='utf-8')
-        paths.append(written)
-
-    def equal() -> None:
-        report = compare.compare([path], paths[0], paths[1:])
-        # A diagnostic case reports rather than fails: both count.
-        said = [t for _, t in report.failures] + list(report.notes)
-        assert not [t for t in said if 'sql.result' in t or 'canonical' in t]
-
-    G.held('exits', f'py:{request.node.name}', equal)
-
-
-def test_the_interval_reference_sample_is_the_new_encoder_s_reading(
-    request: pytest.FixtureRequest,
-) -> None:
-    r"""The sample (``from_source`` statement 6, ``users`` read as Arrow)
-    run again on DuckDB, from the case's base and setup, and read by the
-    new encoder, is the reference line's: the line recorded again."""
-    case = json.loads(
-        next((ROOT / 'contract/cases').glob(f'*/{CASE}.json')).read_text()
-    )
-    bases = yaml.safe_load((ROOT / 'contract/bases.yaml').read_text())
-    connection = duckdb.connect()
-    for statement in [
-        *bases['bases'][case['input']['base']],
-        *case['input']['setup'],
-    ]:
-        connection.execute(statement)
-    recorded = [
-        s
-        for s in maps._reference_of(CASE)['driver']['capture']['statements']
-        if s['stage'] == 'from_source'
-    ][6]
-    [read] = recorded['results']
-    assert read['method'] == 'to_arrow_table'
-    cursor = connection.cursor()
-    cursor.execute(recorded['sql'])
-    types = [str(column[1]) for column in cursor.description]
-    table = cursor.to_arrow_table()
-    assert 'month_day_nano_interval' in [str(f.type) for f in table.schema]
-    assert [
-        {'name': f.name, 'type': str(f.type)} for f in table.schema
-    ] == read['schema']
-
-    def recorded_again() -> None:
-        assert run_python.arrow_values(table, types) == read['values']
-        assert read['values']['unencodable'] == []
-
-    G.held('exits', f'py:{request.node.name}', recorded_again)
+    taken()

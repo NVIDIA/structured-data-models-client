@@ -2,23 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A Snowflake source through the public API on both routes (T3.6), the
-warehouse a connector connection answering the old client's recorded
-statements (T3.20's ``contract/captures``, Snowflake leg): each statement
-by its text and parameters, ``SHOW`` and ``DESCRIBE`` as rows only, as the
-connector gives them, a recorded failure as the connector raises it.
-
-- ``Schema.from_source`` describes the source on the core as on the old
-  route: both parts named, the database alone (the session read once,
-  ``SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()``), a Snowpark session.
-- The spelling retry (``SNOW/table.py:123-158``): a table named in lower
-  case and stored in upper case is found upper-cased, and every later
-  statement of the run names it so; an all-upper name is tried once; a
-  failure that is not errno 2003 (a login, a permission) tries no second
-  spelling.
-- Plan B (the owner, 2026-10-24): each run reads the session and resolves
-  each table's spelling again; nothing outlives the run.
-- ``materialize`` on the core sends the old route's payloads.
+"""Snowflake public schema and materialization regressions.
+A local connector stub replays recorded SQL results, including rows-only
+metadata, spelling retries, session refresh and hybrid-key enforcement.
+Schema and payload expectations come from frozen captures, not the candidate.
+These are local connector tests, not live Snowflake/model validation.
 """
 
 from __future__ import annotations
@@ -49,7 +37,6 @@ from sdm_client import (
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -301,21 +288,6 @@ class Session:
         self.connection = connection
 
 
-def _core(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(
-            _routing.FROM_SOURCE_SNOWFLAKE
-            + _routing.FROM_SOURCE_SNOWFLAKE_TABLES
-            + _routing.MATERIALIZE_SNOWFLAKE
-        ),
-    )
-
-
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-
-
 def _projection(schema: Schema) -> dict[str, Any]:
     return {
         'tables': {
@@ -337,13 +309,41 @@ def _projection(schema: Schema) -> dict[str, Any]:
     }
 
 
+def _assert_recorded_schema(
+    schema: Schema, case: str, *, selected: set[str] | None = None
+) -> None:
+    expected = json.loads((_capture_dir(case) / 'capture.json').read_text())[
+        'reference'
+    ]['public']['schema']
+    if selected is not None:
+        expected['tables'] = [
+            t for t in expected['tables'] if t['name'] in selected
+        ]
+        expected['links'] = [
+            r
+            for r in expected['links']
+            if r[0] in selected and r[2] in selected
+        ]
+    actual = _projection(schema)
+    assert actual['links'] == expected['links']
+    assert actual['tables'] == {
+        table['name']: {
+            'source_name': table['name'],
+            'columns': [
+                [col['name'], col['dtype'], col['stype']]
+                for col in table['columns']
+            ],
+            'primary_key': table['primary_key'],
+            'time_column': table['time_column'],
+        }
+        for table in expected['tables']
+    }
+
+
 def _described(
-    route: str,
-    monkeypatch: pytest.MonkeyPatch,
     warehouse: _Warehouse,
     **given: Any,
 ) -> Schema:
-    (_core if route == 'core' else _old)(monkeypatch)
     tables = given.pop('tables', None)
     source = SnowflakeSource(warehouse, **given)
     if tables is None:
@@ -366,19 +366,15 @@ _TABLES = {'users': 'users', 'orders': 'orders'}
     ],
     ids=lambda value: value if isinstance(value, str) else '',
 )
-def test_a_source_is_described_on_the_core_as_on_the_old_route(
-    case: str, given: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_a_source_matches_recorded_schema(
+    case: str, given: dict[str, Any]
 ) -> None:
-    on_the_core = _described('core', monkeypatch, _Warehouse(case), **given)
-    on_the_old_route = _described('old', monkeypatch, _Warehouse(case), **given)
-    assert _projection(on_the_core) == _projection(on_the_old_route)
+    _assert_recorded_schema(_described(_Warehouse(case), **given), case)
 
 
-def test_a_source_naming_its_database_alone_reads_the_session_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_source_naming_its_database_alone_reads_the_session_once() -> None:
     warehouse = _Warehouse('snowflake.name.database-only')
-    _described('core', monkeypatch, warehouse, database=DB)
+    _described(warehouse, database=DB)
     sessions = [
         text
         for text in warehouse.asked()
@@ -390,19 +386,10 @@ def test_a_source_naming_its_database_alone_reads_the_session_once(
     assert f'FROM "{DB}".INFORMATION_SCHEMA.TABLES' in warehouse.calls[1][0]
 
 
-def test_a_snowpark_session_is_described_through_its_own_connection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_snowpark_session_is_described_through_its_own_connection() -> None:
     warehouse = _Warehouse('base.binary')
-    _core(monkeypatch)
-    on_the_core = Schema.from_source(
-        SnowflakeSource(Session(warehouse), **_NAMED)
-    )
-    _old(monkeypatch)
-    on_the_old_route = Schema.from_source(
-        SnowflakeSource(Session(_Warehouse('base.binary')), **_NAMED)
-    )
-    assert _projection(on_the_core) == _projection(on_the_old_route)
+    schema = Schema.from_source(SnowflakeSource(Session(warehouse), **_NAMED))
+    _assert_recorded_schema(schema, 'base.binary')
     assert warehouse.calls
 
 
@@ -416,21 +403,10 @@ def _describes(warehouse: _Warehouse, since: int = 0) -> list[str]:
     ]
 
 
-def test_a_table_stored_upper_cased_is_found_upper_cased_and_read_so(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_table_stored_upper_cased_is_found_upper_cased_and_read_so() -> None:
     upper = _Warehouse('snowflake.name.upper-case-folded')
-    on_the_core = _described(
-        'core', monkeypatch, upper, **_NAMED, tables=_TABLES
-    )
-    on_the_old_route = _described(
-        'old',
-        monkeypatch,
-        _Warehouse('snowflake.name.upper-case-folded'),
-        **_NAMED,
-        tables=_TABLES,
-    )
-    assert _projection(on_the_core) == _projection(on_the_old_route)
+    on_the_core = _described(upper, **_NAMED, tables=_TABLES)
+    _assert_recorded_schema(on_the_core, 'snowflake.name.upper-case-folded')
     # Each table as given, then all three parts upper-cased.
     describes = _describes(upper)
     assert describes.index(f'DESCRIBE TABLE "{DB}"."{SCHEMA}"."users"') < (
@@ -455,46 +431,40 @@ def test_a_table_stored_upper_cased_is_found_upper_cased_and_read_so(
     ],
     ids=['base.binary', 'declared-key', 'upper-case-folded'],
 )
-def test_each_spelling_is_described_once_as_on_the_old_route(
-    case: str, given: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_each_spelling_is_described_once(
+    case: str, given: dict[str, Any]
 ) -> None:
-    r"""One DESCRIBE TABLE per spelling tried, its columns and its keys
-    read from that one answer (``SNOW/table.py:123-170``)."""
-    asked = {}
-    for route in ('core', 'old'):
-        warehouse = _Warehouse(case)
-        _described(route, monkeypatch, warehouse, **dict(given))
-        asked[route] = _describes(warehouse)
-    assert asked['core'] == asked['old']
+    warehouse = _Warehouse(case)
+    _described(warehouse, **dict(given))
+    asked = _describes(warehouse)
+    expected = [
+        f'DESCRIBE TABLE "{DB}"."{SCHEMA}"."{name}"'
+        for name in ('users', 'orders')
+    ]
+    if case == 'snowflake.name.upper-case-folded':
+        expected += [
+            f'DESCRIBE TABLE {_UPPER}."{name}"' for name in ('USERS', 'ORDERS')
+        ]
+    assert sorted(asked) == sorted(expected)
 
 
-def test_an_all_upper_name_is_tried_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_an_all_upper_name_is_tried_once() -> None:
     r"""Database, schema and table named in upper case, as the recording's
     were: the one spelling, as given."""
-    refusals = {}
-    for route in ('core', 'old'):
-        warehouse = _Warehouse('snowflake.name.all-upper-once')
-        with pytest.raises(StructuredDataError) as refused:
-            _described(
-                route,
-                monkeypatch,
-                warehouse,
-                database=DB.upper(),
-                schema=SCHEMA.upper(),
-                tables={'users': 'USERS', 'orders': 'orders'},
-            )
-        refusals[route] = (refused.value.code, str(refused.value))
-        assert set(_describes(warehouse)) == {
-            f'DESCRIBE TABLE {_UPPER}."USERS"'
-        }
-    assert refusals['core'] == refusals['old']
-    assert refusals['core'][0] == 'INVALID_REQUEST'
+    warehouse = _Warehouse('snowflake.name.all-upper-once')
+    with pytest.raises(StructuredDataError) as refused:
+        _described(
+            warehouse,
+            database=DB.upper(),
+            schema=SCHEMA.upper(),
+            tables={'users': 'USERS', 'orders': 'orders'},
+        )
+    assert set(_describes(warehouse)) == {f'DESCRIBE TABLE {_UPPER}."USERS"'}
+    assert refused.value.code == 'INVALID_REQUEST'
     assert (
         f"Table '{DB.upper()}.{SCHEMA.upper()}.USERS' does not exist in the "
         'remote data backend'
-    ) in refusals['core'][1]
+    ) in str(refused.value)
 
 
 @pytest.mark.parametrize(
@@ -509,14 +479,13 @@ def test_an_all_upper_name_is_tried_once(
     ],
     ids=['token-expired', 'no-privilege'],
 )
-@pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_failure_that_is_not_a_missing_object_tries_no_other_spelling(
-    route: str, failure: Exception, monkeypatch: pytest.MonkeyPatch
+    failure: Exception,
 ) -> None:
     warehouse = _Warehouse('base.binary')
     warehouse.fail[f'DESCRIBE TABLE "{DB}"."{SCHEMA}"."users"'] = failure
-    with pytest.raises(Exception):  # noqa: B017, PT011 - each route's own
-        _described(route, monkeypatch, warehouse, **_NAMED, tables=_TABLES)
+    with pytest.raises(Exception):  # noqa: B017, PT011 - connector failure
+        _described(warehouse, **_NAMED, tables=_TABLES)
     assert '"USERS"' not in ' '.join(_describes(warehouse))
 
 
@@ -535,20 +504,15 @@ def _missing_schema_once() -> _Warehouse:
     return warehouse
 
 
-def test_a_failure_whose_message_says_does_not_exist_tries_the_upper_spelling(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_failure_whose_message_says_does_not_exist_tries_the_upper_spelling() -> (
+    None
+):
     r"""The old client retries on errno 2003 or a message saying "does not
-    exist" (``SNOW/table.py:34-45``), and so does the core: both routes
-    find the tables upper-cased and describe them alike."""
-    described = {}
-    for route in ('core', 'old'):
-        warehouse = _missing_schema_once()
-        described[route] = _projection(
-            _described(route, monkeypatch, warehouse, **_NAMED, tables=_TABLES)
-        )
-        assert f'DESCRIBE TABLE {_UPPER}."USERS"' in _describes(warehouse)
-    assert described['core'] == described['old']
+    exist" (``SNOW/table.py:34-45``), and the current client preserves that behavior."""
+    warehouse = _missing_schema_once()
+    schema = _described(warehouse, **_NAMED, tables=_TABLES)
+    _assert_recorded_schema(schema, 'base.binary')
+    assert f'DESCRIBE TABLE {_UPPER}."USERS"' in _describes(warehouse)
 
 
 class _MaskedHybrid(_Warehouse):
@@ -582,25 +546,20 @@ class _MaskedHybrid(_Warehouse):
         return found
 
 
-def test_a_hybrid_tables_enforced_key_is_not_counted_on_either_route(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_hybrid_tables_enforced_key_is_not_counted() -> None:
     r"""The old client lists the schema's hybrid tables once before it
     counts a key holding a declared primary key, and counts no key a hybrid
     table enforces (``SNOW/table.py:219-285``): a masked enforced key keeps
-    its table's key on both routes, never refused as repeating."""
-    described = {}
-    for route in ('core', 'old'):
-        warehouse = _MaskedHybrid()
-        schema = _described(
-            route, monkeypatch, warehouse, **_NAMED, tables={'users': 'users'}
-        )
-        described[route] = _projection(schema)
-        assert schema['users'].primary_key == 'uid'
-        asked = warehouse.asked()
-        assert asked.count(f'SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}"') == 1
-        assert not [text for text in asked if 'COUNT(DISTINCT "uid")' in text]
-    assert described['core'] == described['old']
+    its table's key, never refused as repeating."""
+    warehouse = _MaskedHybrid()
+    schema = _described(warehouse, **_NAMED, tables={'users': 'users'})
+    _assert_recorded_schema(
+        schema, 'snowflake.forecast.catalog-keys', selected={'users'}
+    )
+    assert schema['users'].primary_key == 'uid'
+    asked = warehouse.asked()
+    assert asked.count(f'SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}"') == 1
+    assert not [text for text in asked if 'COUNT(DISTINCT "uid")' in text]
 
 
 class _NoSession(_Warehouse):
@@ -637,22 +596,17 @@ class _NoSession(_Warehouse):
 def test_a_database_named_on_a_session_with_none_is_kept_and_the_schema_refused(
     tables: dict[str, str] | None,
     words: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""The old client keeps the database the source names
     (``database or result[0]``, ``RE/graph.py:1030-1031``) and refuses the
     missing schema in its words (``:1035-1040``, ``SNOW/table.py:88-93``):
     so does the core, as a StructuredDataError (P3D-5)."""
-    said = {}
-    for route in ('core', 'old'):
-        given: dict[str, Any] = {'database': DB}
-        if tables is not None:
-            given['tables'] = tables
-        with pytest.raises(Exception) as refused:  # noqa: PT011
-            _described(route, monkeypatch, _NoSession(), **given)
-        said[route] = str(refused.value)
-    assert words in said['core']
-    assert words in said['old']
+    given: dict[str, Any] = {'database': DB}
+    if tables is not None:
+        given['tables'] = tables
+    with pytest.raises(Exception) as refused:  # noqa: PT011
+        _described(_NoSession(), **given)
+    assert words in str(refused.value)
 
 
 class _TypedEmpty(_Warehouse):
@@ -672,22 +626,14 @@ class _TypedEmpty(_Warehouse):
         return found
 
 
-def test_an_empty_table_is_refused_at_describe_on_both_routes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""Parity row 26: an empty table is refused at describe on both routes,
-    its words the old client's; the class and code differ (P3D-15)."""
-    raised = {}
-    for route in ('core', 'old'):
-        with pytest.raises(Exception) as refused:  # noqa: PT011
-            _described(route, monkeypatch, _TypedEmpty(), **_NAMED)
-        raised[route] = refused.value
-    assert f"Table '{DB}.{SCHEMA}.orders' is empty" in str(raised['old'])
-    assert type(raised['old']).__name__ == 'RuntimeError'
-    assert isinstance(raised['core'], StructuredDataError)
-    assert raised['core'].code == 'INVALID_REQUEST'
-    assert 'orders' in str(raised['core'])
-    assert 'is empty' in str(raised['core'])
+def test_an_empty_table_is_refused_at_describe() -> None:
+    r"""An empty table is refused with a structured, actionable error."""
+    with pytest.raises(Exception) as refused:  # noqa: PT011
+        _described(_TypedEmpty(), **_NAMED)
+    assert isinstance(refused.value, StructuredDataError)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'orders' in str(refused.value)
+    assert 'is empty' in str(refused.value)
 
 
 def _materialize(schema: Schema, query: str | None = None) -> Any:
@@ -707,16 +653,12 @@ def _materialize_reads(schema: Schema) -> None:
         pass
 
 
-def test_each_materialize_resolves_each_tables_spelling_again(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_each_materialize_resolves_each_tables_spelling_again() -> None:
     r"""Plan B: a table described as given and stored upper-cased since is
     found upper-cased at the next run, and the run after reads it as given
     again once it is back; no spelling outlives its run."""
     warehouse = _Warehouse('base.binary')
-    schema = _described(
-        'core', monkeypatch, warehouse, **_NAMED, tables=_TABLES
-    )
+    schema = _described(warehouse, **_NAMED, tables=_TABLES)
     assert '"USERS"' not in ' '.join(warehouse.asked())
     warehouse.upper = {'users'}
     mark = len(warehouse.calls)
@@ -734,11 +676,9 @@ def test_each_materialize_resolves_each_tables_spelling_again(
     assert '"USERS"' not in ' '.join(warehouse.asked(mark))
 
 
-def test_each_materialize_reads_the_session_again(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_each_materialize_reads_the_session_again() -> None:
     warehouse = _Warehouse('snowflake.name.database-only')
-    schema = _described('core', monkeypatch, warehouse, database=DB)
+    schema = _described(warehouse, database=DB)
     for _ in range(2):
         mark = len(warehouse.calls)
         _materialize_reads(schema)
@@ -753,11 +693,9 @@ def test_each_materialize_reads_the_session_again(
         )
 
 
-def test_row_counts_name_the_exact_object(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_row_counts_name_the_exact_object() -> None:
     warehouse = _Warehouse('base.binary')
-    schema = _described('core', monkeypatch, warehouse, **_NAMED)
+    schema = _described(warehouse, **_NAMED)
     mark = len(warehouse.calls)
     _materialize_reads(schema)
     asked = warehouse.calls[mark:]
@@ -769,13 +707,9 @@ def test_row_counts_name_the_exact_object(
     assert not any(text.startswith('SHOW TABLES LIKE') for text, _ in asked)
 
 
-def test_a_view_materializes_when_counted_exactly(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_view_materializes_when_counted_exactly() -> None:
     warehouse = _Warehouse('snowflake.rowcount.view-as-table')
     schema = _described(
-        'core',
-        monkeypatch,
         warehouse,
         **_NAMED,
         tables={'users': 'users_v', 'orders': 'orders'},
@@ -790,8 +724,26 @@ def test_a_view_materializes_when_counted_exactly(
     )
 
 
-def _payloads(request: Any) -> str:
-    return json.dumps(request.payloads, sort_keys=True, default=str)
+def _assert_recorded_payloads(request: Any, case: str) -> None:
+    reference = json.loads((_capture_dir(case) / 'capture.json').read_text())[
+        'reference'
+    ]['public']['payloads']
+
+    def numbers(value: Any) -> Any:
+        if isinstance(value, dict):
+            if set(value) == {'number'}:
+                return json.loads(value['number'])
+            return {key: numbers(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [numbers(item) for item in value]
+        return value
+
+    expected = [numbers(item['parsed']) for item in reference]
+    assert request.payloads is not None
+    assert len(request.payloads) == len(expected)
+    for actual, recorded in zip(request.payloads, expected, strict=True):
+        for key in ('context', 'predict', 'schema', 'task'):
+            assert actual[key] == recorded[key], key
 
 
 @pytest.mark.parametrize(
@@ -815,58 +767,37 @@ def _payloads(request: Any) -> str:
     ],
     ids=['base.binary', 'upper-case-folded', 'database-only'],
 )
-def test_materialize_on_the_core_sends_the_old_routes_payloads(
-    case: str,
-    given: dict[str, Any],
-    query: str,
-    monkeypatch: pytest.MonkeyPatch,
+def test_materialize_matches_recorded_payloads(
+    case: str, given: dict[str, Any], query: str
 ) -> None:
-    sent = {}
-    for route in ('core', 'old'):
-        schema = _described(route, monkeypatch, _Warehouse(case), **dict(given))
-        with warnings.catch_warnings(record=True) as shown:
-            warnings.simplefilter('always')
-            sent[route] = (
-                _payloads(_materialize(schema, query)),
-                # The core's warnings carry their code first.
-                sorted(
-                    re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
-                    for w in shown
-                    if 'seeded random sampling' in str(w.message)
-                ),
-            )
-    assert sent['core'][0] == sent['old'][0]
-    assert sent['core'][1] == []
-    # ``SAMPLE ROW`` takes no seed, and the old client says so once.
-    assert sent['old'][1] == [
-        "The 'snowflake' backend does not support seeded random sampling, "
-        "so 'random_seed' is ignored when drawing in-context examples. "
-        'Repeated calls with the same seed may return different predictions.'
-    ]
+    schema = _described(_Warehouse(case), **dict(given))
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        request = _materialize(schema, query)
+    _assert_recorded_payloads(request, case)
+    assert not [w for w in shown if 'seeded random sampling' in str(w.message)]
 
 
-def test_every_statement_names_the_database_and_schema_in_double_quotes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_every_statement_names_the_database_and_schema_in_double_quotes() -> (
+    None
+):
     warehouse = _Warehouse('base.binary')
-    _described('core', monkeypatch, warehouse, **_NAMED)
+    _described(warehouse, **_NAMED)
     for text, _ in warehouse.calls:
         for found in re.findall(r'"([^"]*)"\."([^"]*)"\."([^"]*)"', text):
             assert found[:2] == (DB, SCHEMA), text
 
 
-def test_no_current_database_is_a_named_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_no_current_database_is_a_named_error() -> None:
     with pytest.raises(StructuredDataError) as refused:
-        _described('core', monkeypatch, _NoSession())
+        _described(_NoSession())
     assert refused.value.code == 'INVALID_REQUEST'
     assert "No current 'database' set" in str(refused.value)
 
 
 @pytest.mark.parametrize('listing', ['failed', 'malformed', 'other-case'])
 def test_hybrid_enforcement_requires_exact_optional_evidence(
-    listing: str, monkeypatch: pytest.MonkeyPatch
+    listing: str,
 ) -> None:
     class Warehouse(_MaskedHybrid):
         def answer(self, text: str, parameters: list[Any]) -> pa.Table:
@@ -879,19 +810,14 @@ def test_hybrid_enforcement_requires_exact_optional_evidence(
                 return pa.table({'NAME': ['USERS'], 'IS_HYBRID': ['Y']})
             return super().answer(text, parameters)
 
-    for route in ('core', 'old'):
-        warehouse = Warehouse()
-        with pytest.raises(Exception):  # noqa: B017, PT011 - each route's error
-            _described(
-                route,
-                monkeypatch,
-                warehouse,
-                **_NAMED,
-                tables={'users': 'users'},
-            )
-        assert any(
-            'COUNT(DISTINCT "uid")' in text for text, _ in warehouse.calls
+    warehouse = Warehouse()
+    with pytest.raises(Exception):  # noqa: B017, PT011 - connector failure
+        _described(
+            warehouse,
+            **_NAMED,
+            tables={'users': 'users'},
         )
+    assert any('COUNT(DISTINCT "uid")' in text for text, _ in warehouse.calls)
 
 
 @pytest.mark.parametrize(
@@ -899,18 +825,16 @@ def test_hybrid_enforcement_requires_exact_optional_evidence(
     [('base.binary', 'TIMESTAMP_NTZ'), ('time.timestamptz', 'TIMESTAMP_LTZ')],
 )
 def test_described_timestamp_facts_keep_the_current_catalog_type(
-    case: str, kind: str, monkeypatch: pytest.MonkeyPatch
+    case: str, kind: str
 ) -> None:
-    schema = _described('core', monkeypatch, _Warehouse(case), **_NAMED)
+    schema = _described(_Warehouse(case), **_NAMED)
     facts = schema['orders']['ts']._source
     assert facts is not None
     assert facts.declared_type is not None
     assert facts.declared_type.startswith(kind)
 
 
-def test_a_missing_anchor_keeps_its_entity_and_other_entities_history(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_missing_anchor_keeps_its_entity_and_other_entities_history() -> None:
     class Warehouse(_Warehouse):
         def __init__(self) -> None:
             super().__init__('sample.anchor-entity.null-time')
@@ -1000,7 +924,7 @@ def test_a_missing_anchor_keeps_its_entity_and_other_entities_history(
             return found
 
     warehouse = Warehouse()
-    schema = _described('core', monkeypatch, warehouse, **_NAMED)
+    schema = _described(warehouse, **_NAMED)
     request = PredictiveQuery(
         'PREDICT users.country FOR EACH users.user_id', schema
     ).materialize(indices=[0, 1], anchor_time='entity')
@@ -1052,15 +976,13 @@ def _capture_runner() -> Any:
     return sys.modules[name]
 
 
-def test_public_schema_records_successful_rows_only_metadata(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_public_schema_records_successful_rows_only_metadata() -> None:
     run = _capture_runner()
     warehouse = _Warehouse('base.binary')
     log = run.DriverLog()
     log.stage = 'from_source'
     captured = run._CapturedSnowflake(warehouse, log)
-    schema = _described('core', monkeypatch, captured, **_NAMED)
+    schema = _described(captured, **_NAMED)
     assert set(schema.tables) == {'users', 'orders'}
     metadata = [
         statement
@@ -1082,13 +1004,11 @@ def test_public_schema_records_successful_rows_only_metadata(
     assert any(event['event'] == 'close' for event in log.events)
 
 
-def test_public_materialize_keeps_the_reference_large_key_refusal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_public_materialize_keeps_the_reference_large_key_refusal() -> None:
     from decimal import Decimal
 
     warehouse = _Warehouse('snowflake.key.number-38-0.past-int64')
-    schema = _described('core', monkeypatch, warehouse, **_NAMED)
+    schema = _described(warehouse, **_NAMED)
     query = PredictiveQuery(
         'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
         schema,
@@ -1106,7 +1026,7 @@ def test_public_materialize_keeps_the_reference_large_key_refusal(
 
 @pytest.mark.parametrize('misaligned', [False, True])
 def test_public_wide_decimal_feature_keeps_the_reference_journey(
-    monkeypatch: pytest.MonkeyPatch, misaligned: bool
+    misaligned: bool,
 ) -> None:
     class Warehouse(_Warehouse):
         def __init__(self) -> None:
@@ -1142,33 +1062,28 @@ def test_public_wide_decimal_feature_keeps_the_reference_journey(
                 replacement,
             )
 
-    requests = {}
-    projections = {}
     endpoint = _capture_runner()._sibling('scripted_endpoint')
-    for route in ('old', 'core'):
-        warehouse = Warehouse()
-        schema = _described(route, monkeypatch, warehouse, **_NAMED)
-        if route == 'core':
-            # Exercise the production default through materialize and predict.
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-        projections[route] = _projection(schema)
-        request = _materialize(
-            schema,
-            'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
-        )
-        requests[route] = _payloads(request)
-        assert warehouse.decimal_answers
-        users = request.payloads[0]['predict']['related_tables']['users']
-        feature = users['columns'].index('f')
-        key = users['columns'].index('user_id')
-        assert {row[key]: row[feature] for row in users['rows']} == {
-            0: '12345678901234567890123456789',
-            1: '12345678901234567890123456790',
-        }
-        with endpoint.serve() as (url, received):
-            with SDMClient(url, max_retries=0) as client:
-                result = client.predict(request, model=KumoRelational())
-            assert len(result.to_pandas()) == 2
-            assert len(received.requests) == 1
-    assert projections['old'] == projections['core']
-    assert requests['old'] == requests['core']
+    warehouse = Warehouse()
+    schema = _described(warehouse, **_NAMED)
+    request = _materialize(
+        schema,
+        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+    )
+    _assert_recorded_schema(schema, 'decimal.feature-38-0-wide')
+    _assert_recorded_payloads(request, 'decimal.feature-38-0-wide')
+    assert request.payloads[0]['schema']['related_tables']['users']['columns'][
+        'f'
+    ] == {'dtype': 'string', 'stype': 'categorical'}
+    assert warehouse.decimal_answers
+    users = request.payloads[0]['predict']['related_tables']['users']
+    feature = users['columns'].index('f')
+    key = users['columns'].index('user_id')
+    assert {row[key]: row[feature] for row in users['rows']} == {
+        0: '12345678901234567890123456789',
+        1: '12345678901234567890123456790',
+    }
+    with endpoint.serve() as (url, received):
+        with SDMClient(url, max_retries=0) as client:
+            result = client.predict(request, model=KumoRelational())
+        assert result.to_pandas()['id'].tolist() == [0, 1]
+        assert len(received.requests) == 1

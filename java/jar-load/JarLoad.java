@@ -6,8 +6,12 @@ import com.nvidia.sdm.internal.Profile;
 import com.nvidia.sdm.internal.QuerySchema;
 import com.nvidia.sdm.internal.QueryValidation;
 import com.nvidia.sdm.internal.NativeCore;
+import com.nvidia.sdm.Schema;
 import java.util.List;
 import java.util.Map;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.BigIntVector;
+import org.apache.arrow.vector.table.Table;
 
 /**
  * The JAR-load test (T3.11, locked check 14): the JAR and its runtime dependencies alone, on a JDK
@@ -46,6 +50,20 @@ public final class JarLoad {
             .accepted();
     if (!accepted) {
       throw new IllegalStateException("the core refused a valid query");
+    }
+    // Exercise the public Arrow boundary too: loading our JNI alone does not
+    // prove that Arrow's own native dependency exists for this platform.
+    try (RootAllocator allocator = new RootAllocator();
+        BigIntVector ids = new BigIntVector("id", allocator)) {
+      ids.allocateNew(3);
+      for (int i = 0; i < 3; i++) ids.setSafe(i, i + 1);
+      ids.setValueCount(3);
+      try (Table table = new Table(List.of(ids))) {
+        Schema described = Schema.fromData(Map.of("users", table));
+        if (described.tables().size() != 1) {
+          throw new IllegalStateException("public Arrow schema description failed");
+        }
+      }
     }
     System.out.println("loaded " + NativeCore.platform() + " contract " + info.get("contract"));
   }

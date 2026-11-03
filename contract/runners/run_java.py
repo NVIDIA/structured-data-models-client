@@ -105,8 +105,8 @@ UNSAID = {
     'wording.key-number': 'a primary key named by a number',
     'wording.time-number': 'a time column named by a number',
 }
-#: The paths Java's manifest names, for the slices it gates.
-JAVA_MANIFEST = REPO / 'docs/design/rust-core/phase-0/scope-java.yaml'
+#: Paths implemented by this SQL observation runner.
+JAVA_PATHS = REPO / 'contract/fixtures/java-sql-runner-paths.json'
 #: How long one Java run may take, in seconds.
 TIMEOUT = 900
 
@@ -116,14 +116,9 @@ class RunnerFailure(Exception):
 
 
 def java_paths() -> frozenset[str]:
-    r"""The S0, S1 and S2 paths of Java's manifest."""
-    import yaml
-
-    manifest = yaml.safe_load(JAVA_MANIFEST.read_text(encoding='utf-8'))
+    """Case paths implemented by this runner, independent of public API scope."""
     return frozenset(
-        str(item['id'])
-        for item in manifest['paths']
-        if item['slice'] in ('S0', 'S1', 'S2')
+        json.loads(JAVA_PATHS.read_text(encoding='utf-8'))['paths']
     )
 
 
@@ -187,12 +182,11 @@ def s1_call(
     given = case['input']
     validate = None
     if 'validate_query' in case.get('core', {}):
-        # The case's validation, which the Python runner's forced route
-        # asks before materialize, as rust-host asks the case's core
-        # operations: the schema the case names as it is stored there.
+        # Validate the schema using the fixture database's stored types,
+        # just as the other native hosts do before materializing.
         spec = case['core']['validate_query']
         validate = {
-            'schema': _compare().stored_schema(
+            'schema': run_python._sibling('databases').stored_schema(
                 spec['schema'], case, bases, database
             ),
             'profile': spec['profile'],
@@ -219,28 +213,14 @@ def s1_call(
     }
 
 
-def _compare() -> Any:
-    r"""The comparator beside the runner, whose ``stored_schema`` gives the
-    schema a case's validation is handed on a database."""
-    import importlib.util
-
-    path = REPO / 'scripts/rust_core/compare.py'
-    spec = importlib.util.spec_from_file_location('sdm_compare', path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault('sdm_compare', module)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _capture_run() -> Any:
+def _live_guard() -> Any:
     r"""The existing live loader/driver guard installer."""
     import importlib.util
 
-    name = 'sdm_java_capture_run'
+    name = 'sdm_java_live_guard'
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(
-            name, REPO / 'scripts/live/capture_run.py'
+            name, REPO / 'scripts/live/runner_guard.py'
         )
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
@@ -306,7 +286,7 @@ def source_configuration(
 
 def check_sql(sql: str) -> None:
     r"""The existing validator, narrowed to reads for the Java connection."""
-    guard = _capture_run().load_guard()
+    guard = _live_guard().load_guard()
     try:
         own = guard.WriteGuard('databricks')
         items = guard.tokens(sql, 'databricks')
@@ -793,7 +773,7 @@ def loaded(
         connect = jdbc_configuration(spec, names)
         resolved = run_python.resolve_placeholders(case)
         connect['source'] = source_configuration(resolved, names)
-        capture = _capture_run()
+        capture = _live_guard()
         guard = capture.load_guard()
         undo = capture.install_guard(
             database, guard, run_python._sibling('databases')

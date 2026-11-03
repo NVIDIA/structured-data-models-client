@@ -1,26 +1,19 @@
 # Prerequisites
 
-- **Python** 3.10 to 3.14, for every distribution. The relational engine is a
-  native build publishing CPython wheels and no source distribution, so it
-  supports an interpreter only once it has built wheels for it, and PyPy not
-  at all: on a Python newer than that,
-  `pip install 'structured-data-models-client[relational]'` does not resolve while plain
-  `pip install structured-data-models-client` does. It is reported as `No matching
-  distribution found for structured-data-models-relational-engine`, which
-  names the package and not the reason.
+- **CPython 3.10 through 3.14** with a compatible client wheel.
 - **A reachable NIM** serving `kumo-tabular` or `kumo-relational`. The client
-  runs no model and downloads no weights.
-- **No GPU** on the client. The NIM owns that.
+  runs no model and downloads no weights. The one exception is a client
+  opened with `SDMClient.in_process()`, which runs the model itself; see the
+  [quickstart](quickstart.md#a-model-in-this-process).
+- **No GPU** on the client. The NIM owns that. A client opened with
+  `SDMClient.in_process()` uses one when there is one, and the CPU otherwise.
 
 ## Platforms
 
-The client, the language and the connectors are pure Python and install
-anywhere. The relational engine is a native build: it compiles a neighbour
-sampler, and published wheels are `manylinux_2_28` for x86-64 and aarch64,
-macOS 11 or newer for Apple silicon and Intel, and 64-bit Windows, on CPython
-only. Both models work on a laptop. What has no wheel has nothing to fall back
-on, since the engine ships no source distribution: musl, a glibc older than
-2.28, a 32-bit interpreter, or Windows on Arm.
+Both models use the native Rust core included in the client wheel.
+Release builds target Linux x86-64 and aarch64, macOS Apple silicon and Intel, and 64-bit Windows.
+A matching CPython wheel is required; PyPy, musl Linux, 32-bit interpreters and Windows on Arm are not supported release targets.
+The API types and connector distributions are pure Python, but using the client still requires its native wheel.
 
 ## Getting a NIM
 

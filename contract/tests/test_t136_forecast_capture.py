@@ -75,7 +75,7 @@ def _module(name: str, path: Path) -> ModuleType:
 RUNNER = _module('run_python', ROOT / 'contract/runners/run_python.py')
 EN = _module('empty_null_record', ROOT / 'contract/tools/empty_null_record.py')
 SERVE = _module(
-    'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
+    'scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
 ).serve
 
 
@@ -152,14 +152,10 @@ def _ask(
         PredictiveQuery,
         Schema,
         SDMClient,
-        _routing,
     )
     from sdm_client._rust import run
     from sdm_connectors import DuckDBSource
 
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', ','.join(list(_routing.S0) + EN.core_routes({}))
-    )
     # Each run starts from the binding itself; whatever a capture installs
     # is undone after the test.
     monkeypatch.setattr(run, 'native', _unwrapped(run.native))

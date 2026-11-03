@@ -9,9 +9,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from sdm_api.generated.tfm_api import PredictionItem
+from test_adapter_and_result import envelope as public_envelope
+from test_entity_id_parity import StubTransport, predict_response
 
 from sdm_client import PredictionResult, Request
-from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
 
 
@@ -35,7 +36,7 @@ def request_for(task: str = 'classification', **kwargs) -> Request:
 
 
 def envelope(task: str = 'classification', outputs=('prediction',)) -> dict:
-    return next(TabularAdapter().prediction_plan(request_for(task), outputs))
+    return public_envelope(request_for(task), outputs)
 
 
 def test_the_envelope_carries_every_section_the_contract_requires():
@@ -106,7 +107,7 @@ def test_a_text_column_is_sent_as_categorical_because_tabular_cannot_read_text()
     request = _text_request()
     assert request.schema['instance']['code'].stype == 'text'
     with pytest.warns(UserWarning, match='cannot read a text column'):
-        body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+        body = public_envelope(request)
     columns = body['schema']['instance_table']['columns']
     assert columns['code']['stype'] == 'categorical'
     assert columns['code']['dtype'] == 'string'
@@ -117,7 +118,7 @@ def test_the_warning_names_every_rewritten_column_once():
     request = _text_request()
     request.schema['instance']['region'].stype = 'text'
     with pytest.warns(UserWarning) as caught:
-        next(TabularAdapter().prediction_plan(request, ('prediction',)))
+        public_envelope(request)
     messages = [
         str(w.message) for w in caught if 'cannot read a text' in str(w.message)
     ]
@@ -130,15 +131,65 @@ def test_the_task_kind_is_sent_as_given_and_never_narrowed():
 
 
 def test_a_session_pins_the_context_and_scoring_sends_only_the_rows():
-    adapter = TabularAdapter()
-    request = request_for()
-    pinned = adapter.session_plan(request, ('prediction',))
-    assert set(pinned) == {'model', 'task', 'schema', 'context', 'metadata'}
-    assert 'predict' not in pinned
+    from sdm_client import SDMClient
 
-    scoring = next(adapter.session_prediction_plan(request, ('prediction',)))
+    request = request_for()
+    transport = StubTransport(
+        {
+            'id': 'answer',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [
+                {'row_index': i, 'prediction': 0} for i in range(2)
+            ],
+        }
+    )
+
+    class SessionTransport(StubTransport):
+        def close(self):
+            pass
+
+    transport = SessionTransport(transport.response)
+    with SDMClient(url='http://localhost:8000') as client:
+        client._transport.close()
+        client._transport = transport
+        with client.fit(request, model='kumo-tabular') as fitted:
+            fitted.predict(request)
+    pinned = transport.created
+    assert set(pinned) == {'model', 'task', 'schema', 'context', 'metadata'}
+    (scoring,) = transport.scored
     assert set(scoring) == {'predict', 'output', 'metadata'}
-    assert 'context' not in scoring
+
+
+@pytest.mark.parametrize('task', ['classification', 'regression'])
+def test_session_scoring_does_not_encode_the_context(monkeypatch, task):
+    from sdm_client import SDMClient
+    from sdm_client._rust import sessions
+
+    request = request_for(task)
+    response = {
+        'id': 'answer',
+        'model': 'kumo-tabular',
+        'metadata': {},
+        'predictions': [{'row_index': i, 'prediction': 0} for i in range(2)],
+    }
+    transport = StubTransport(response)
+    with SDMClient(url='http://localhost:8000') as client:
+        client._transport.close()
+        client._transport = transport
+        with client.fit(request, model='kumo-tabular') as fitted:
+            encode = sessions.encode_table
+            encoded = []
+
+            def scoring_only(frame, columns, half):
+                assert half != 'context'
+                encoded.append(half)
+                return encode(frame, columns, half)
+
+            monkeypatch.setattr(sessions, 'encode_table', scoring_only)
+            fitted.predict(request)
+    assert encoded
+    assert all('context' not in payload for payload in transport.scored)
 
 
 def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
@@ -148,7 +199,7 @@ def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
 def test_inference_knobs_travel_only_when_given():
     assert 'inference' not in envelope()
     request = request_for(inference={'num_context_samples': 500})
-    body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    body = public_envelope(request)
     assert body['inference'] == {'num_context_samples': 500}
 
 
@@ -247,16 +298,16 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
     """A body that does not match the contract is still this client's failure."""
     from sdm_client.errors import StructuredDataError
 
-    adapter = TabularAdapter()
     with pytest.raises(StructuredDataError) as error:
-        adapter.normalize(
+        predict_response(
             {'model': 'kumo-tabular', 'predictions': [], 'metadata': {}},
             ('prediction',),
+            request_for(),
         )
     assert error.value.code == 'INVALID_RESPONSE'
 
     with pytest.raises(StructuredDataError):
-        adapter.normalize(
+        predict_response(
             {
                 'id': 'r',
                 'model': 'kumo-tabular',
@@ -264,53 +315,58 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
                 'metadata': {},
             },
             ('prediction',),
+            request_for(),
         )
 
 
 def forecast_through_the_client(explanations, requested):
-    """Drive the decomposed route itself, so what is proved is the wiring."""
+    """Materialize a real forecast and send it through the public client."""
+    import json
     import warnings
-    from types import SimpleNamespace
 
-    from sdm_api.generated.tfm_api import PredictionItem
+    from test_materialize_options import _materialize
+    from test_tabular_direct_core import Endpoint, client
 
-    from sdm_client.client import SDMClient
-    from sdm_client.decompose import Decomposition
-    from sdm_client.result import PredictionResult
-
-    rewritten = Decomposition(
-        'forecast', tuple((f'q{i}', i) for i in range(1, len(explanations) + 1))
+    request = _materialize(
+        indices=[0],
+        query=f'PREDICT COUNT(orders.*, 0, 30, days) FORECAST {len(explanations)} TIMEFRAMES FOR EACH users.user_id',
     )
-    request = SimpleNamespace(
-        _decomposition=rewritten,
-        parts=tuple(SimpleNamespace(payloads=()) for _ in explanations),
-    )
-    answers = [
-        PredictionResult(
-            model='kumo-relational',
-            request_id='r',
-            items=[
-                PredictionItem(row_index=0, prediction=1.0, forecast_step=None)
-            ],
-            outputs=tuple(requested),
-            explanation=held,
-        )
-        for held in explanations
-    ]
-    client = SDMClient.__new__(SDMClient)
-    handed = iter(answers)
-    client.predict = lambda part, model, outputs: next(handed)
 
+    class ForecastEndpoint(Endpoint):
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(payload)
+            table = payload['predict']['instance_table']
+            instance_id = table['rows'][0][
+                table['columns'].index('instance_id')
+            ]
+            return json.dumps(
+                {
+                    'id': 'answer',
+                    'model': 'kumo-relational',
+                    'metadata': {},
+                    'predictions': [
+                        {
+                            'row_index': 0,
+                            'id': str(instance_id),
+                            'prediction': 1.0,
+                            'explanation': explanations[len(self.calls) - 1],
+                        }
+                    ],
+                }
+            ).encode()
+
+    endpoint = ForecastEndpoint()
     with (
-        pytest.MonkeyPatch.context() as patched,
         warnings.catch_warnings(record=True) as caught,
+        client(endpoint) as model_client,
     ):
-        # The synthetic parts exercise the legacy Python aggregation helper.
-        patched.setenv('SDM_CORE_ROUTES', '')
         warnings.simplefilter('always')
-        SDMClient._answer_in_parts(
-            client, request, 'kumo-relational', list(requested)
+        result = model_client.predict(
+            request, model='kumo-relational', outputs=requested
         )
+    assert len(endpoint.calls) == len(explanations)
+    assert len(result) == len(explanations)
     return [str(item.message) for item in caught]
 
 

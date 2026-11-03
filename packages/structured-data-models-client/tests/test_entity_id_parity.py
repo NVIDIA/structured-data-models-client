@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-
 """``id`` holds the caller's key, whichever model answered.
 
 `result` tells callers to join on the key when it is there. The relational
@@ -18,8 +17,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from sdm_client import PredictiveQuery, Schema
-from sdm_client.adapters.tabular import TabularAdapter
+from sdm_client import KumoTabular, PredictiveQuery, Request, Schema
 from sdm_client.errors import StructuredDataError
 
 QUERY = 'PREDICT users.churn FOR EACH users.user_id'
@@ -41,12 +39,8 @@ def schema_for(keys: list[int] | list[str]) -> Schema:
     return schema
 
 
-def payload_for(schema: Schema, indices: list) -> dict:
-    request = PredictiveQuery(QUERY, schema).materialize(indices=indices)
-    adapter = TabularAdapter()
-    plans = list(adapter.prediction_plan(request, ('prediction',)))
-    assert len(plans) == 1
-    return plans[0]
+def request_for(schema: Schema, indices: list) -> Request:
+    return PredictiveQuery(QUERY, schema).materialize(indices=indices)
 
 
 def answer(ids: list[str], *, row_indices: list[int] | None = None) -> dict:
@@ -64,33 +58,26 @@ def answer(ids: list[str], *, row_indices: list[int] | None = None) -> dict:
     }
 
 
-# --- the key the caller asked about comes back ------------------------------
-
-
 def test_the_endpoints_stringified_list_becomes_the_key():
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
-    result = TabularAdapter().normalize(
-        answer(['[3]', '[7]']), ('prediction',), payload
-    )
+    payload = request_for(schema, [3, 7])
+    result = predict_response(answer(['[3]', '[7]']), ('prediction',), payload)
     assert [item.id for item in result.items] == [3, 7]
 
 
 def test_the_frame_joins_back_onto_the_rows_that_were_scored():
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
-    frame = (
-        TabularAdapter()
-        .normalize(answer(['[3]', '[7]']), ('prediction',), payload)
-        .to_pandas()
-    )
+    payload = request_for(schema, [3, 7])
+    frame = predict_response(
+        answer(['[3]', '[7]']), ('prediction',), payload
+    ).to_pandas()
     assert list(frame['id']) == [3, 7]
 
 
 def test_a_string_key_is_returned_as_that_string():
     schema = schema_for(['a', 'b', 'c', 'd'])
-    payload = payload_for(schema, ['b', 'd'])
-    result = TabularAdapter().normalize(
+    payload = request_for(schema, ['b', 'd'])
+    result = predict_response(
         answer(["['b']", "['d']"]), ('prediction',), payload
     )
     assert [item.id for item in result.items] == ['b', 'd']
@@ -103,25 +90,20 @@ def test_a_key_beyond_the_safe_integer_range_stays_exact():
     against the int64 column it came from."""
     wide = 9007199254740993
     schema = schema_for([wide + index for index in range(20)])
-    payload = payload_for(schema, [wide, wide + 1])
-    result = TabularAdapter().normalize(
+    payload = request_for(schema, [wide, wide + 1])
+    result = predict_response(
         answer([f'[{wide}]', f'[{wide + 1}]']), ('prediction',), payload
     )
     assert [item.id for item in result.items] == [wide, wide + 1]
     assert result.items[0].id == 9007199254740993
 
 
-# --- rewriting an id must not misattribute an answer ------------------------
-
-
 def test_a_row_index_outside_the_batch_is_refused():
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
-            answer(['[3]', '[7]'], row_indices=[0, 9]),
-            ('prediction',),
-            payload,
+        predict_response(
+            answer(['[3]', '[7]'], row_indices=[0, 9]), ('prediction',), payload
         )
     assert error.value.code == 'INVALID_RESPONSE'
 
@@ -130,12 +112,10 @@ def test_the_same_row_answered_twice_is_refused():
     """Named for the repeat rather than for the row it leaves unanswered as a
     consequence, so this pins the duplicate guard and not the later one."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
-            answer(['[3]', '[3]'], row_indices=[0, 0]),
-            ('prediction',),
-            payload,
+        predict_response(
+            answer(['[3]', '[3]'], row_indices=[0, 0]), ('prediction',), payload
         )
     assert error.value.code == 'INVALID_RESPONSE'
     assert 'more than once' in str(error.value)
@@ -143,15 +123,12 @@ def test_the_same_row_answered_twice_is_refused():
 
 def test_an_answer_with_no_row_index_is_refused():
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     response = answer(['[3]', '[7]'])
     response['predictions'][0].pop('row_index')
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(response, ('prediction',), payload)
+        predict_response(response, ('prediction',), payload)
     assert error.value.code == 'INVALID_RESPONSE'
-
-
-# --- when there is no key to put back, nothing is invented ------------------
 
 
 def test_rows_supplied_without_the_key_keep_the_endpoints_id():
@@ -159,9 +136,8 @@ def test_rows_supplied_without_the_key_keep_the_endpoints_id():
     request = PredictiveQuery(QUERY, schema).materialize(
         predict=pd.DataFrame({'tenure': [3.0, 4.0]})
     )
-    adapter = TabularAdapter()
-    payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
-    result = adapter.normalize(answer(['x', 'y']), ('prediction',), payload)
+    payload = request
+    result = predict_response(answer(['x', 'y']), ('prediction',), payload)
     assert [item.id for item in result.items] == ['x', 'y']
 
 
@@ -178,20 +154,11 @@ def test_a_row_whose_key_is_null_keeps_the_endpoints_id():
     request = PredictiveQuery(QUERY, schema).materialize(
         predict=pd.DataFrame({'user_id': [None, 902], 'tenure': [3.0, 4.0]})
     )
-    adapter = TabularAdapter()
-    payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
-    result = adapter.normalize(
+    payload = request
+    result = predict_response(
         answer(['[None]', '[902]']), ('prediction',), payload
     )
     assert [item.id for item in result.items] == ['[None]', 902]
-
-
-def test_a_response_read_without_its_payload_is_unchanged():
-    result = TabularAdapter().normalize(answer(['[3]']), ('prediction',), None)
-    assert [item.id for item in result.items] == ['[3]']
-
-
-# --- a session answers the same way a one-shot call does --------------------
 
 
 class StubTransport:
@@ -212,6 +179,9 @@ class StubTransport:
     def delete_session(self, session_id: str) -> None:
         return None
 
+    def close(self) -> None:
+        pass
+
 
 def fitted_on(schema: Schema, response: dict):
     from sdm_client import SDMClient
@@ -220,7 +190,7 @@ def fitted_on(schema: Schema, response: dict):
     transport = StubTransport(response)
     client._transport = transport
     request = PredictiveQuery(QUERY, schema).materialize(indices=[3, 7])
-    return client.fit(request, model='kumo-tabular'), transport, request
+    return (client.fit(request, model='kumo-tabular'), transport, request)
 
 
 def test_a_session_returns_the_same_key_a_one_shot_call_does():
@@ -241,45 +211,24 @@ def test_a_session_scoring_call_still_sends_only_what_the_contract_allows():
     }
 
 
-def test_the_adapter_reads_the_answer_against_the_whole_request(monkeypatch):
-    """The pinned half names the task and schema. Without them an adapter
-    cannot tell a forecast's repeated rows from a duplicate answer, nor say
-    which column an id stands for."""
-    # This observer specifically exercises the retained Python adapter.
-    monkeypatch.setenv('SDM_CORE_ROUTES', '')
+def test_session_checks_response_keys_against_the_scoring_request():
     schema = schema_for(list(range(1, 21)))
-    seen: list[dict] = []
-
-    class Recording(TabularAdapter):
-        def normalize(self, response, outputs, payload=None):
-            seen.append(payload or {})
-            return super().normalize(response, outputs, payload)
-
-    from sdm_client import SDMClient
-
-    client = SDMClient(url='http://localhost:8000')
-    client._transport = StubTransport(answer(['[3]', '[7]']))
-    client._adapters['kumo-tabular'] = Recording()
-    request = PredictiveQuery(QUERY, schema).materialize(indices=[3, 7])
-    fitted = client.fit(request, model='kumo-tabular')
-    fitted.predict(request)
-
-    assert seen, 'normalize was never reached'
-    assert 'task' in seen[0]
-    assert 'schema' in seen[0]
-    assert 'predict' in seen[0]
-
-
-# --- row_index is trusted only as far as it can be checked ------------------
+    fitted, transport, request = fitted_on(schema, answer(['[7]', '[3]']))
+    assert 'schema' in transport.created and 'task' in transport.created
+    with pytest.raises(StructuredDataError) as error:
+        fitted.predict(request)
+    assert error.value.code == 'INVALID_RESPONSE'
+    assert len(transport.scored) == 1
+    assert 'predict' in transport.scored[0]
 
 
 def test_a_batch_left_partly_unanswered_is_refused():
     """Relabelling by row_index assumes the batch was answered in full;
     a short response would silently drop the rows it omitted."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
+        predict_response(
             answer(['[3]'], row_indices=[0]), ('prediction',), payload
         )
     assert error.value.code == 'INVALID_RESPONSE'
@@ -290,11 +239,9 @@ def test_an_answer_carrying_another_rows_key_is_refused():
     different row of this batch, row_index and id disagree and relabelling by
     row_index would attach the answer to the wrong entity."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
-            answer(['[7]', '[3]']), ('prediction',), payload
-        )
+        predict_response(answer(['[7]', '[3]']), ('prediction',), payload)
     assert error.value.code == 'INVALID_RESPONSE'
 
 
@@ -303,9 +250,9 @@ def test_an_answer_carrying_another_rows_bare_key_is_refused():
     one. That is the shape the relational endpoint uses. Both are keys this
     batch can be checked against."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(answer(['7', '3']), ('prediction',), payload)
+        predict_response(answer(['7', '3']), ('prediction',), payload)
     assert error.value.code == 'INVALID_RESPONSE'
 
 
@@ -313,8 +260,8 @@ def test_an_id_in_a_shape_this_client_does_not_recognise_is_left_to_row_index():
     """Only a recognisable key can disagree. An endpoint that formats its id
     some other way is not second-guessed."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
-    result = TabularAdapter().normalize(
+    payload = request_for(schema, [3, 7])
+    result = predict_response(
         answer(['row-0', 'row-1']), ('prediction',), payload
     )
     assert [item.id for item in result.items] == [3, 7]
@@ -335,60 +282,55 @@ def test_rows_sharing_a_key_are_each_answered_under_it():
     with pytest.warns(UserWarning):
         query = PredictiveQuery(QUERY, {'users': frame})
     request = query.materialize(indices=[6])
-    adapter = TabularAdapter()
-    payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
-    scored = len(payload['predict']['instance_table']['rows'])
+    payload = request
+    scored = payload.predict_rows
     assert scored == 3
-
-    result = adapter.normalize(
+    result = predict_response(
         answer(['[6]'] * scored), ('prediction',), payload
     )
     assert [item.id for item in result.items] == [6] * scored
 
 
-# --- checking the batch does not depend on having a key to put back ---------
-
-
-def keyless_payload() -> dict:
+def keyless_request() -> Request:
     """Two rows to score, supplied without the key column."""
     schema = schema_for(list(range(1, 21)))
     request = PredictiveQuery(QUERY, schema).materialize(
         predict=pd.DataFrame({'tenure': [3.0, 4.0]})
     )
-    return list(TabularAdapter().prediction_plan(request, ('prediction',)))[0]
+    return request
 
 
 def test_a_keyless_batch_left_partly_unanswered_is_still_refused():
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
-            answer(['x'], row_indices=[0]), ('prediction',), keyless_payload()
+        predict_response(
+            answer(['x'], row_indices=[0]), ('prediction',), keyless_request()
         )
     assert error.value.code == 'INVALID_RESPONSE'
 
 
 def test_a_keyless_batch_answered_twice_for_one_row_is_still_refused():
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
+        predict_response(
             answer(['x', 'y'], row_indices=[0, 0]),
             ('prediction',),
-            keyless_payload(),
+            keyless_request(),
         )
     assert error.value.code == 'INVALID_RESPONSE'
 
 
 def test_a_keyless_batch_naming_a_row_outside_it_is_still_refused():
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
+        predict_response(
             answer(['x', 'y'], row_indices=[0, 5]),
             ('prediction',),
-            keyless_payload(),
+            keyless_request(),
         )
     assert error.value.code == 'INVALID_RESPONSE'
 
 
 def test_a_keyless_batch_answered_in_full_keeps_every_id():
-    result = TabularAdapter().normalize(
-        answer(['x', 'y']), ('prediction',), keyless_payload()
+    result = predict_response(
+        answer(['x', 'y']), ('prediction',), keyless_request()
     )
     assert [item.id for item in result.items] == ['x', 'y']
 
@@ -396,11 +338,11 @@ def test_a_keyless_batch_answered_in_full_keeps_every_id():
 def test_a_batch_the_endpoint_answers_without_an_id_keeps_none():
     """With no key column supplied the endpoint sends no id at all, and there
     is none to invent. `result` tells callers to join on row_index there."""
-    payload = keyless_payload()
+    payload = keyless_request()
     response = answer(['x', 'y'])
     for item in response['predictions']:
         item.pop('id')
-    result = TabularAdapter().normalize(response, ('prediction',), payload)
+    result = predict_response(response, ('prediction',), payload)
     assert [item.id for item in result.items] == [None, None]
     assert 'id' not in result.to_pandas().columns
 
@@ -410,22 +352,18 @@ def test_an_answer_carrying_a_key_from_outside_the_batch_is_refused():
     client can read. That it names no row of this batch makes it more wrong
     than a permuted one, not less."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
-            answer(['[999]', '[998]']), ('prediction',), payload
-        )
+        predict_response(answer(['[999]', '[998]']), ('prediction',), payload)
     assert error.value.code == 'INVALID_RESPONSE'
 
 
 def test_the_key_for_a_row_has_to_be_that_rows_key():
     """One right answer and one wrong one is still a wrong response."""
     schema = schema_for(list(range(1, 21)))
-    payload = payload_for(schema, [3, 7])
+    payload = request_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
-        TabularAdapter().normalize(
-            answer(['[3]', '[999]']), ('prediction',), payload
-        )
+        predict_response(answer(['[3]', '[999]']), ('prediction',), payload)
     assert error.value.code == 'INVALID_RESPONSE'
 
 
@@ -447,8 +385,48 @@ def test_a_key_that_has_to_be_escaped_is_still_its_own_key(awkward):
     for refuses a correct answer for any key carrying one."""
     keys = [awkward] + [f'k{index}' for index in range(19)]
     schema = schema_for(keys)
-    payload = payload_for(schema, [awkward])
-    result = TabularAdapter().normalize(
+    payload = request_for(schema, [awkward])
+    result = predict_response(
         answer([str([awkward])]), ('prediction',), payload
     )
     assert [item.id for item in result.items] == [awkward]
+
+
+def predict_response(response, outputs, request):
+    from test_tabular_direct_core import Endpoint, client
+
+    endpoint = Endpoint(response)
+    with client(endpoint) as model_client:
+        return model_client.predict(
+            request, model=KumoTabular(), outputs=outputs
+        )
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_relational_request_without_entity_reference_keeps_service_ids(
+    requests_mock, reverse
+):
+    from sdm_client import KumoRelational, SDMClient
+
+    request = PredictiveQuery(
+        QUERY, schema_for(list(range(1, 21)))
+    ).materialize(indices=[3, 7], model=KumoRelational(), random_seed=7)
+    table = request.payloads[0]['predict']['instance_table']
+    position = table['columns'].index('__kumo_entity_ref_0')
+    del table['columns'][position]
+    for row in table['rows']:
+        del row[position]
+    id_position = table['columns'].index('instance_id')
+    ids = [str(row[id_position]) for row in table['rows']]
+    positions = [1, 0] if reverse else [0, 1]
+    response = answer([ids[i] for i in positions], row_indices=positions)
+    response['model'] = 'kumo-relational'
+    posted = requests_mock.post(
+        'http://localhost/v1/predictions', json=response
+    )
+    with SDMClient('http://localhost', max_retries=0) as model_client:
+        result = model_client.predict(request, model=KumoRelational())
+    sent = posted.last_request.json()['predict']['instance_table']
+    assert not any(c.startswith('__kumo_entity_ref') for c in sent['columns'])
+    assert [item.id for item in result.items] == [ids[i] for i in positions]
+    assert [item.row_index for item in result.items] == positions

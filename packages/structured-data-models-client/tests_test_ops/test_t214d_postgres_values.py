@@ -38,12 +38,6 @@ as.
 - Each rule of the provider is declared ``moved`` naming T2.14d in the
   bridge freeze's declarations (``scripts/rust_core/bridge_changes.json``).
 
-Gating: ``contract/tests/t214b-pending.json``'s ``pending`` names, as
-``pg-values:<test>:<column or rule>``, the keys whose test failed when
-written. Each must still fail (strict); once one passes it fails, naming
-itself, until it is taken out. Where ``SDM_POSTGRES_TEST_DSN`` names no
-server and ``SDM_REQUIRE_POSTGRES`` is not set, the tests that need a
-server return without asserting; with it set, a missing server fails (H26).
 """
 
 from __future__ import annotations
@@ -54,7 +48,7 @@ import json
 import os
 import struct
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
@@ -64,7 +58,6 @@ import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-PENDING = ROOT / 'contract/tests/t214b-pending.json'
 VECTORS = json.loads(
     (ROOT / 'contract/l5-vectors.json').read_text(encoding='utf-8')
 )['postgres_values']
@@ -119,31 +112,6 @@ def recorder() -> ModuleType:
         't214d_postgres_values_record',
         ROOT / 'contract/tools/postgres_values_record.py',
     )
-
-
-def held(name: str, check: Callable[[], None]) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t214b-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: this file's keys in ``pending`` are keys it authored, and
-    ``authored`` holds exactly this file's keys under its prefix."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    mine = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert mine == set(KEYS)
-    assert {k for k in gating['pending'] if k.startswith(PREFIX)} <= mine
 
 
 def test_the_vectors_are_the_reference_s_for_these_inputs() -> None:
@@ -316,7 +284,7 @@ def test_each_value_the_core_takes_is_the_reference_s(
                 None if c is None else _decimal(c) for c in vector['driver']
             ]
 
-    held(f'{PREFIX}core:{column}', check)
+    check()
 
 
 def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
@@ -408,7 +376,7 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
             VECTORS['seed_times']['reference']
         )
 
-    held(f'{PREFIX}seed-times', check)
+    check()
 
 
 # --- the provider only moves the driver's rows -------------------------------
@@ -485,27 +453,4 @@ def test_the_provider_hands_the_core_the_driver_s_values(
         ]
         assert not unfaithful, f'{field}: {unfaithful}'
 
-    held(f'{PREFIX}driver-rows:{column}', check)
-
-
-@pytest.mark.parametrize('rule', RULES)
-def test_each_provider_rule_is_declared_moved_into_the_core(rule: str) -> None:
-    r"""T2.14d's exit "each moved rule declared ``moved`` naming T2.14d"
-    (or T2.14b, the landing it rides in):
-    the bridge freeze's declarations name each of the provider's value
-    rules at T2.14a's ledger moved by T2.14d."""
-
-    def check() -> None:
-        changes = json.loads(
-            (ROOT / 'scripts/rust_core/bridge_changes.json').read_text(
-                encoding='utf-8'
-            )
-        )['changes']
-        declared = changes.get(f'{PROVIDER_FILE}::{rule}')
-        assert declared is not None, f'{rule}: not declared'
-        # T2.14d lands within T2.14b (the owner's granularity decision), so
-        # the declaration may name either.
-        moved = str(declared.get('moved', ''))
-        assert 'T2.14d' in moved or 'T2.14b' in moved, declared
-
-    held(f'{PREFIX}moved:{rule}', check)
+    check()

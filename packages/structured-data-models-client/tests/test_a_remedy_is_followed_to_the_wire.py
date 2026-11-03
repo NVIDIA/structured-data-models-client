@@ -25,6 +25,7 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 import pytest
+from test_adapter_and_result import envelope as _prediction_envelope
 
 from sdm_client import (
     KumoRelational,
@@ -154,15 +155,14 @@ def test_a_text_target_within_the_class_limit_still_gets_the_remedy() -> None:
     assert 'classifies at most' not in said
 
 
-def test_an_anchor_time_remedy_is_a_call_that_parses() -> None:
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_relational_engine.rfm.rfm import _a_conversion_that_works
+@pytest.mark.parametrize('anchor', ['not a date', 12345, pd.NaT])
+def test_invalid_anchor_values_are_refused_at_materialization(anchor) -> None:
+    from test_materialize_options import _anchored
 
-    assert _a_conversion_that_works('not a date') == ''
-    assert _a_conversion_that_works(12345) == ''
-    suggested = _a_conversion_that_works('2025-03-01')
-    assert suggested == "; try pd.Timestamp('2025-03-01')"
-    assert pd.Timestamp('2025-03-01') == pd.Timestamp(year=2025, month=3, day=1)
+    with pytest.raises(StructuredDataError) as raised:
+        _anchored(anchor)
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert 'anchor_time' in str(raised.value)
 
 
 def test_indices_naming_nothing_is_refused_in_this_package_s_own_voice() -> (
@@ -249,27 +249,6 @@ def test_a_holdout_given_as_one_string_is_refused_not_spelled_out() -> None:
     assert "pass ['abc']" in str(raised.value)
 
 
-def test_the_relational_default_context_budget_is_said_out_loud() -> None:
-    from sdm_client.materializers.relational import (
-        _warn_of_a_context_the_default_mode_capped,
-    )
-
-    class Task:
-        def __init__(self, gathered: int) -> None:
-            self.num_context_examples = gathered
-
-    with warnings.catch_warnings(record=True) as heard:
-        warnings.simplefilter('always')
-        _warn_of_a_context_the_default_mode_capped(Task(1_000), None)
-    assert any('num_context_samples' in str(one.message) for one in heard)
-
-    for task, asked in ((Task(999), None), (Task(1_000), 1_000)):
-        with warnings.catch_warnings(record=True) as heard:
-            warnings.simplefilter('always')
-            _warn_of_a_context_the_default_mode_capped(task, asked)
-        assert not heard
-
-
 def test_the_limits_page_records_the_default_the_code_has() -> None:
     from pathlib import Path
 
@@ -280,22 +259,11 @@ def test_the_limits_page_records_the_default_the_code_has() -> None:
     assert '1,000 by default, up to 10,000 with `num_context_samples`' in page
 
 
-def test_a_timestamp_that_parses_to_nothing_is_not_suggested() -> None:
-    """Parsing without raising is not enough: `pd.Timestamp('NaT')` returns
-    `NaT`, which the check the remedy is meant to satisfy still refuses."""
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_relational_engine.rfm.rfm import (
-        _a_conversion_that_works,
-        _check_anchor_time,
-    )
+def test_a_concrete_timestamp_materializes() -> None:
+    from test_materialize_options import _anchored
 
-    assert _a_conversion_that_works('NaT') == ''
-    with pytest.raises(TypeError):
-        _check_anchor_time(pd.Timestamp('NaT'), 'anchor_time')
-
-    suggested = _a_conversion_that_works('2025-03-01')
-    assert suggested
-    _check_anchor_time(pd.Timestamp('2025-03-01'), 'anchor_time')
+    payload = _anchored(pd.Timestamp('2024-03-01'))
+    assert payload['predict']['instance_table']['rows']
 
 
 def test_the_leak_warning_counts_rows_and_not_keys() -> None:
@@ -390,7 +358,6 @@ def test_the_warning_agrees_with_the_wire_on_every_way_of_writing_a_key(
     """Approximating the encoder with `str()` disagreed with it: a key held as
     1.0 in the context and 1 in the rows being scored reaches the model as one
     value, and nothing was said. The encoder is asked instead of imitated."""
-    from sdm_client.adapters.tabular import TabularAdapter
 
     context = pd.DataFrame(
         {
@@ -418,9 +385,7 @@ def test_the_warning_agrees_with_the_wire_on_every_way_of_writing_a_key(
         warn_of_rows_scored_from_their_own_answers(request)
     warned = any('rows being scored' in str(one.message) for one in heard)
 
-    envelope = next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
+    envelope = _prediction_envelope(request)
     halves = {}
     for half in ('context', 'predict'):
         table = envelope[half]['instance_table']
@@ -435,7 +400,6 @@ def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:
     context and '1' in the rows being scored, is one column, encoded one
     way, so values that differ in python are the same value by the time the
     model reads them."""
-    from sdm_client.adapters.tabular import TabularAdapter
 
     context = pd.DataFrame(
         {'tenant': [1, 2], 'id': [10, 20], 'x': [0.1, 0.2], 'y': [0, 1]}
@@ -462,9 +426,7 @@ def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:
             for one in heard
             if 'rows being scored' in str(one.message)
         ]
-        envelope = next(
-            iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-        )
+        envelope = _prediction_envelope(request)
         halves = {}
         for half in ('context', 'predict'):
             table = envelope[half]['instance_table']
@@ -493,7 +455,6 @@ def test_the_warning_uses_the_adapter_s_own_widening_rule() -> None:
     fresh inference does not, so a second rule written here chose float64
     where the adapter chose int64, could not encode a wide value the adapter
     encodes fine, and reported no leak where there was one."""
-    from sdm_client.adapters.tabular import TabularAdapter
 
     context = pd.DataFrame(
         {
@@ -522,9 +483,7 @@ def test_the_warning_uses_the_adapter_s_own_widening_rule() -> None:
         )
         warn_of_rows_scored_from_their_own_answers(request)
 
-    envelope = next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
+    envelope = _prediction_envelope(request)
     halves = {}
     for half in ('context', 'predict'):
         table = envelope[half]['instance_table']
@@ -556,7 +515,6 @@ def test_one_dtype_for_the_request_not_one_for_each_half(
     """Settled per half, the same entity came out `1.0` on the side read from
     the context and `1` on the side being scored, so the warning both missed
     real overlaps and reported ones the encoded request does not have."""
-    from sdm_client.adapters.tabular import TabularAdapter
     from sdm_client.request import (
         warn_of_rows_scored_from_their_own_answers,
     )
@@ -583,9 +541,7 @@ def test_one_dtype_for_the_request_not_one_for_each_half(
         warn_of_rows_scored_from_their_own_answers(request)
     warned = any('rows being scored' in str(one.message) for one in heard)
 
-    envelope = next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
+    envelope = _prediction_envelope(request)
     halves = {}
     for half in ('context', 'predict'):
         table = envelope[half]['instance_table']

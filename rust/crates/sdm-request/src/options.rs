@@ -425,7 +425,7 @@ pub fn top_k(given: &Value) -> Result<u32, CoreError> {
 /// `1`, `on`, `t`, `true`, `y` or `yes` in any case of letters; anything
 /// else, none included, `INVALID_REQUEST` naming the option
 /// (`not_a_boolean`).
-fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError> {
+pub(crate) fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError> {
     const FALSE: [&str; 6] = ["0", "off", "f", "false", "n", "no"];
     const TRUE: [&str; 6] = ["1", "on", "t", "true", "y", "yes"];
     let refused = || mistyped(Sentence::OptionNotABoolean, field, "not_a_boolean");

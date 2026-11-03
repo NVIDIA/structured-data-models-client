@@ -105,10 +105,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
-import platform
-import subprocess
 import sys
-import tempfile
 from collections import Counter
 from decimal import Context, Decimal, localcontext
 from pathlib import Path
@@ -763,8 +760,8 @@ def core_anchor(anchor: str | None) -> Any:
     return {'t': 'ts', 'v': str(nanoseconds), 'unit': 'ns', 'zone': None}
 
 
-#: T1.32a's recorder: the entities as the host's natural Arrow column.
-K = _module('key_cast_record', ROOT / 'contract/tools/key_cast_record.py')
+#: Encode fixture entities as typed Arrow scalars.
+K = _module('scalar_fixture', ROOT / 'contract/tools/scalar_fixture.py')
 
 
 def core_indices(indices: list[Any]) -> list[dict[str, Any]]:
@@ -775,16 +772,13 @@ def core_indices(indices: list[Any]) -> list[dict[str, Any]]:
     return list(K.host_arrow(list(indices))['values'])
 
 
-def case_for(vector: dict[str, Any], core: bool = False) -> dict[str, Any]:
-    r"""The vector as a case: ``decimal.feature-38-0-wide``'s, its setup,
-    question, entities, anchor time and tables the vector's; with ``core``,
-    forced onto the core's routes (T1.32d's ``core_routes``), and otherwise
-    on none (the runner's own choice, as the reference has)."""
+def case_for(vector: dict[str, Any]) -> dict[str, Any]:
+    """Build a current-client case from the vector setup and inputs."""
     template = json.loads(TEMPLATE.read_text(encoding='utf-8'))
     case = copy.deepcopy(template)
     case['id'] = CASE_PREFIX + vector['id']
     case['status'] = 'diagnostic'
-    case['routes'] = E.core_routes(vector) if core else []
+    case['routes'] = []
     case['cells'] = []
     case['input']['setup'] = list(vector['setup'])
     case['input']['pql'] = vector.get('pql', QUESTION)
@@ -807,44 +801,6 @@ def case_for(vector: dict[str, Any], core: bool = False) -> dict[str, Any]:
     case['source'] = 'contract/tools/decimal_record.py'
     case.pop('register', None)
     return case
-
-
-def run(
-    mode: str,
-    vectors: list[dict[str, Any]],
-    directory: Path,
-    *,
-    core: bool = False,
-    reference: Path | None = None,
-    capture: bool = True,
-) -> dict[str, dict[str, Any]]:
-    r"""``vectors`` as cases through ``run_python.py --mode mode``, in this
-    interpreter, from ``directory``, forced onto the core with ``core``:
-    each observation by vector id."""
-    cases = directory / 'cases'
-    cases.mkdir(parents=True, exist_ok=True)
-    for vector in vectors:
-        case = case_for(vector, core)
-        (cases / f'{case["id"]}.json').write_text(
-            json.dumps(case, indent=1), encoding='utf-8'
-        )
-    out = directory / f'{mode}{"" if capture else "-off"}.jsonl'
-    command = [sys.executable, '-I', str(RUNNER), '--mode', mode]
-    if reference is not None:
-        command += ['--reference', str(reference)]
-    if not capture:
-        command.append('--no-capture')
-    command += ['--out', str(out), str(cases)]
-    done = subprocess.run(
-        command, capture_output=True, text=True, cwd=ROOT, check=False
-    )
-    if done.returncode != 0:
-        raise RuntimeError(f'{mode} run failed:\n{done.stdout}\n{done.stderr}')
-    observed = {}
-    for line in out.read_text(encoding='utf-8').splitlines():
-        observation = json.loads(line)
-        observed[observation['case'][len(CASE_PREFIX) :]] = observation
-    return observed
 
 
 # --- the public answer ---------------------------------------------------------
@@ -935,22 +891,6 @@ def project(
     answer = E.project(observation, vector)
     answer['columns'] = columns_projection(observation, vector)
     return answer
-
-
-def statements(observation: dict[str, Any]) -> dict[str, int]:
-    r"""The statements a run ran per public call, as ``compare.py`` counts
-    them, its capture complete against DuckDB's query log
-    (``capture_check.py``'s ``complete``)."""
-    compare = _module('compare', ROOT / 'scripts/rust_core/compare.py')
-    capture = _module(
-        'capture_check', ROOT / 'contract/runners/capture_check.py'
-    )
-    problems = capture.complete(observation)
-    if problems:
-        raise ValueError(f'{observation["case"]}: {problems}')
-    counted = compare.counts(observation)
-    assert counted is not None
-    return dict(counted)
 
 
 #: The family's cases and their decimal columns, projected as the vectors'
@@ -1052,94 +992,3 @@ def duckdb_holds(vector: dict[str, Any]) -> dict[str, Any]:
         return out
     finally:
         connection.close()
-
-
-def main() -> int:
-    import duckdb
-    import numpy as np
-    import pandas as pd
-    import pyarrow as pa
-
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    only = sys.argv[1:]
-    chosen = [
-        v
-        for v in VECTORS
-        if not only or any(v['id'].startswith(o) for o in only)
-    ]
-    with tempfile.TemporaryDirectory(prefix='t132b-record-') as tmp:
-        observed = run('python-ref', chosen, Path(tmp), reference=reference)
-    vectors = []
-    for vector in chosen:
-        answer = project(observed[vector['id']], vector)
-        why = register(answer)
-        entry = {key: copy.deepcopy(value) for key, value in vector.items()}
-        # What the core is handed, as the bridge builds it: rust-host
-        # reads these, python-core's bridge derives them itself.
-        entry['core_indices'] = core_indices(vector.get('indices', INDICES))
-        entry['core_anchor'] = core_anchor(vector.get('anchor_time', ANCHOR))
-        entry['duckdb'] = duckdb_holds(vector)
-        entry['reference'] = answer
-        # The statements the reference ran per public call (compare.py's
-        # counts), its capture held complete against DuckDB's query log.
-        entry['statements'] = statements(observed[vector['id']])
-        entry['register'] = {'required': bool(why), 'why': why}
-        vectors.append(entry)
-        outcome = answer['outcome']
-        print(
-            vector['id'],
-            outcome['result'],
-            outcome['stage'],
-            outcome['error'] or '',
-            outcome['code'] or '',
-            answer['warnings'],
-            '(register)' if why else '',
-            file=sys.stderr,
-        )
-    if only:
-        print(json.dumps(vectors, indent=1))
-        return 0
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/decimal_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'environment': {
-            'python': platform.python_version(),
-            'pandas': pd.__version__,
-            'pyarrow': pa.__version__,
-            'numpy': np.__version__,
-            'duckdb': duckdb.__version__,
-        },
-        'template': 'contract/cases/s1/decimal.feature-38-0-wide.json',
-        'question': QUESTION,
-        'indices': INDICES,
-        'anchor_time': ANCHOR,
-        'register_ref': REGISTER_REF,
-        'payload_exclusions': E.exclusions(),
-        'cases': cases_projection(),
-        'vectors': vectors,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    required = sum(v['register']['required'] for v in vectors)
-    print(
-        f'{len(vectors)} vectors written to {OUT.relative_to(ROOT)}, '
-        f'{required} marked register entry required',
-        file=sys.stderr,
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

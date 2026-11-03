@@ -5,6 +5,7 @@
 """Public materialized-frame sessions use Rust policy and existing transport."""
 
 import copy
+import dataclasses
 
 import pandas as pd
 import pytest
@@ -14,7 +15,6 @@ from sdm_client import (
     PredictiveQuery,
     Schema,
     SDMClient,
-    _routing,
 )
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.keys import _named_by, keys_in
@@ -64,8 +64,7 @@ class Endpoint:
 
 
 @pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.FRAME_ROUTES))
+def client():
     endpoint = Endpoint()
     client = SDMClient.__new__(SDMClient)
     client._start(endpoint)
@@ -267,3 +266,48 @@ def test_session_unsupported_endpoint_is_explained(client, monkeypatch):
     with pytest.raises(StructuredDataError) as refused:
         client.fit(gather(query(), [1, 2]), model=KumoRelational())
     assert refused.value.code == 'SESSIONS_UNSUPPORTED'
+
+
+@dataclasses.dataclass
+class SavedRegressionConfig:
+    output_type: str = 'median'
+    num_estimators: int = 1
+
+
+@pytest.mark.parametrize('restored', [False, True])
+def test_saved_dataclass_defaults_allow_public_session_calls(client, restored):
+    model_client, endpoint = client
+    request = gather(query(), [1, 2])
+    request.requested_inference['inference_config'] = SavedRegressionConfig()
+    if restored:
+        request._core = None
+    with model_client.fit(request, model=KumoRelational()) as fitted:
+        result = fitted.predict(request)
+    assert result.to_pandas()['prediction'].tolist() == [5.0, 6.0]
+    assert len(endpoint.created) == len(endpoint.scored) == 1
+    assert endpoint.deleted == ['frames-1']
+    assert 'inference_config' not in endpoint.created[0].get('inference', {})
+    assert 'inference_config' not in endpoint.scored[0].get('inference', {})
+
+
+@pytest.mark.parametrize('when', ['fit', 'predict'])
+def test_saved_explicit_dataclass_option_is_refused_before_transport(
+    client, when
+):
+    model_client, endpoint = client
+    request = gather(query(), [1, 2])
+    request._core = None
+    config = SavedRegressionConfig(output_type='mean')
+    if when == 'fit':
+        request.requested_inference['inference_config'] = config
+        with pytest.raises(StructuredDataError, match='output_type'):
+            model_client.fit(request, model=KumoRelational())
+        assert endpoint.created == []
+    else:
+        with model_client.fit(request, model=KumoRelational()) as fitted:
+            request.requested_inference['inference_config'] = config
+            with pytest.raises(StructuredDataError, match='output_type'):
+                fitted.predict(request)
+        assert len(endpoint.created) == 1
+        assert endpoint.deleted == ['frames-1']
+    assert endpoint.scored == []

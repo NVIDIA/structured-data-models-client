@@ -15,8 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec, results, spec
+from sdm_client._rust import NativeBoundaryError, codec, results, spec
 from sdm_client._rust import predict as prediction
 from sdm_client._rust.direct_io import DirectOperations
 from sdm_client._rust.run import Finished, run
@@ -109,7 +108,7 @@ def _table(frame: pd.DataFrame) -> Any:
             or timestamp
             or decimal
         ):
-            raise RouteError(
+            raise NativeBoundaryError(
                 'this direct column needs native storage observations'
             )
         array = pa.array(
@@ -119,8 +118,10 @@ def _table(frame: pd.DataFrame) -> Any:
         )
         if categorical:
             array = array.dictionary_decode()
-            if pa.types.is_large_string(array.type):
-                array = array.cast(pa.string())
+        # Older Arrow may ignore type=string for pandas Arrow-backed strings.
+        # Admit the actual array in the Utf8 storage promised to Rust.
+        if (string or categorical) and pa.types.is_large_string(array.type):
+            array = array.cast(pa.string())
         storage: dict[str, Any]
         if timestamp:
             storage = {
@@ -344,6 +345,10 @@ def construct(
         native = direct_schema.preparation_requires(
             context
         ) or direct_schema.preparation_requires(predict)
+        if native and schema is not None:
+            native = not direct_schema.passive_numeric_preparation(
+                context, predict
+            )
     shape: dict[str, Any] = {
         'task': task,
         'target': target,
@@ -622,6 +627,11 @@ def predict(
                 'kind': 'deferred_options',
                 'body': body,
                 'inference_present': inference_present,
+                'inference': (
+                    direct_options.encode(observed_options)
+                    if direct_options.can_encode(observed_options)
+                    else None
+                ),
             }
         direct = {'input': 1, 'payload': 2}
     operation = {

@@ -2,10 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# On the Rust core's epic branch the client carries the core, the native
-# module `sdm_client._native` built from rust/bindings/sdm-py, so maturin is
-# its build backend (decision B-D3) and the wheel is one cp310-abi3 build per
-# platform. `main` keeps setuptools until the epic merges.
+# The client carries sdm_client._native, built from rust/bindings/sdm-py.
+# Maturin produces one cp310-abi3 wheel per supported platform.
 [build-system]
 requires = ["maturin>=1.15,<2"]
 build-backend = "maturin"
@@ -14,7 +12,7 @@ build-backend = "maturin"
 name = "structured-data-models-client"
 # maturin reads the version from sdm-py's Cargo.toml, the workspace's
 # version; `_version.py` still holds the same literal for code that reads it,
-# and a test holds the two, and the other four distributions, equal.
+# and a test holds these and the other two distributions equal.
 dynamic = ["version"]
 description = "One Python client for NVIDIA's structured-data foundation model NIMs"
 readme = "README.md"
@@ -37,17 +35,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-# What the base install carries: the wire vocabulary, the language, an HTTP
-# session, and frames. A model that does heavy client-side work brings its own
-# runtime through an extra instead. pyarrow is the core's way in and out
-# (decision E16): Arrow crosses through the PyCapsule interface, which pyarrow
-# has from 14.0.1.
+# Both models use the bundled Rust core. Arrow carries columnar data across
+# the native boundary through the PyCapsule interface (available since 14.0.1).
 dependencies = [
-    "structured-data-models-api==1.0.0",
-    "structured-data-models-pql==1.0.0",
+    "structured-data-models-api==2.0.0rc1",
     "pandas>=2.2.2",
     "numpy>=1.23.5",
     "pyarrow>=14.0.1",
+    # IANA zones must also be available on Windows and minimal containers.
+    "tzdata>=2024.1",
     # The existing relational validator floor also supplies its error formatter.
     "pydantic>=2.7",
     "requests>=2.28",
@@ -61,34 +57,32 @@ Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 Changelog = "https://github.com/NVIDIA/structured-data-models-client/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-# A model that does heavy client-side work brings its own runtime; a warehouse
-# driver is opt-in the same way, through the shared connectors package.
-#
-# `relational` stays narrower than this distribution. The engine is a
-# native build, publishing CPython wheels for 3.10-3.14 on Linux, macOS and
-# Windows and no sdist, so the extra stops at 3.15 and on PyPy, while this
-# distribution is pure Python and admits each later interpreter as it
-# arrives. pip reports the gap as "No matching distribution found for
-# structured-data-models-relational-engine", which names the symptom and not
-# the reason, so it is written down here and in the installation guide.
-relational = ["structured-data-models-relational-engine==1.0.0"]
-sqlite = ["structured-data-models-connectors[sqlite]==1.0.0"]
-duckdb = ["structured-data-models-connectors[duckdb]==1.0.0"]
-snowflake = ["structured-data-models-connectors[snowflake]==1.0.0"]
-databricks = ["structured-data-models-connectors[databricks]==1.0.0"]
-postgres = ["structured-data-models-connectors[postgres]==1.0.0"]
-lakebase = ["structured-data-models-connectors[lakebase]==1.0.0"]
-s3 = ["structured-data-models-connectors[s3]==1.0.0"]
+# Keep the existing installation spelling; both models now use the base runtime.
+relational = []
+# Warehouse drivers remain opt-in through the shared connectors package.
+sqlite = ["structured-data-models-connectors[sqlite]==2.0.0rc1"]
+duckdb = ["structured-data-models-connectors[duckdb]==2.0.0rc1"]
+snowflake = ["structured-data-models-connectors[snowflake]==2.0.0rc1"]
+databricks = ["structured-data-models-connectors[databricks]==2.0.0rc1"]
+postgres = ["structured-data-models-connectors[postgres]==2.0.0rc1"]
+lakebase = ["structured-data-models-connectors[lakebase]==2.0.0rc1"]
+s3 = ["structured-data-models-connectors[s3]==2.0.0rc1"]
 # Reaching a model served on Databricks Model Serving. The one extra that names
 # a third-party package directly: the transport that imports it lives in this
 # distribution, not in the engine or the connectors. It is a way to reach a
 # model rather than a backend to read, so `all` does not carry it; ask for it by
 # name.
 databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
+# Running the models in this process rather than reaching a NIM. Like
+# `databricks-serving` it is a way to reach a model, and it brings PyTorch, so
+# `all` does not carry it. structured-data-models needs Python 3.11; on 3.10
+# the extra installs nothing, and `SDMClient.in_process()` says why. The marker
+# is also what lets the workspace lock resolve.
+in-process = ["structured-data-models>=0.2.1,<0.3; python_version >= '3.11'"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
-test = ["pytest", "pytest-xdist", "pytz", "requests-mock", "jsonschema>=4.18", "pyyaml"]
+test = ["psutil; sys_platform == 'win32'", "pytest", "pytest-xdist", "pytz", "requests-mock", "jsonschema>=4.18", "pyyaml"]
 
 # The Python package is src/sdm_client, py.typed and _native.pyi included;
 # the extension module lands beside them. The shipped build has the

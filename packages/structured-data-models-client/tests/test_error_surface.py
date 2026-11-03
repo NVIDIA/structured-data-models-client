@@ -246,17 +246,8 @@ def relational_schema(child: pd.DataFrame) -> Schema:
     return schema
 
 
-@pytest.mark.parametrize('route', ['old', 'core'])
-def test_an_empty_related_table_is_supported_by_the_core(route, monkeypatch):
-    """Preserve the legacy refusal while permitting a valid empty neighbor set."""
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client import _routing
-
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(_routing.FRAME_ROUTES) if route == 'core' else '',
-    )
-
+def test_an_empty_related_table_is_supported():
+    """An empty child has no neighbors and does not invalidate its parents."""
     schema = relational_schema(
         pd.DataFrame(
             {
@@ -273,23 +264,13 @@ def test_an_empty_related_table_is_supported_by_the_core(route, monkeypatch):
             indices=[1], num_context_samples=2, model=KumoRelational()
         )
 
-    if route == 'old':
-        with pytest.raises(StructuredDataError) as raised:
-            materialize()
-        assert raised.value.code == 'INVALID_REQUEST'
-        assert 'empty' in str(raised.value).lower()
-    else:
-        # An empty child has no neighbors; it need not invalidate its parents.
-        request = materialize()
-        assert (
-            len(request.payloads[0]['predict']['instance_table']['rows']) == 1
-        )
+    request = materialize()
+    assert len(request.payloads[0]['predict']['instance_table']['rows']) == 1
 
 
 def test_a_working_graph_is_not_affected():
     """The child needs a key of its own; a table whose primary key is also the
     link column is refused for a different reason."""
-    pytest.importorskip('sdm_relational_engine')
 
     parent = pd.DataFrame({'ID': range(40), 'label': ['a', 'b'] * 20})
     child = pd.DataFrame(
@@ -364,7 +345,6 @@ def test_a_relational_request_reports_the_rows_it_carries():
     zero-row request without sending, so a relational request that claims to
     have no rows gets an empty answer and never reaches the endpoint.
     """
-    pytest.importorskip('sdm_relational_engine')
 
     parent = pd.DataFrame({'ID': range(40), 'label': ['a', 'b'] * 20})
     child = pd.DataFrame(

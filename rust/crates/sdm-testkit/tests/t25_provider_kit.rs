@@ -59,10 +59,6 @@
 //! `DataRequest::check`, each withheld name is an `OptionalRequest` and
 //! each fallback a `FallbackLimits`.
 //!
-//! Gating: `contract/tests/t25-pending.json`'s `pending` names, as
-//! `rust:<test>`, the tests that failed when written. Each must still fail
-//! (strict); once one passes it fails, naming itself, until it is taken
-//! out.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -75,7 +71,6 @@ use sdm_contract::data::{
 };
 use serde_json::{Value, json};
 
-const PENDING: &str = "contract/tests/t25-pending.json";
 const FORMAT: &str = "sdm-provider-kit/1";
 
 fn root() -> PathBuf {
@@ -84,38 +79,6 @@ fn root() -> PathBuf {
 
 fn read_json(path: &Path) -> Value {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-fn pending(test: &str) -> bool {
-    read_json(&root().join(PENDING))["pending"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|t| t == &Value::from(format!("rust:{test}")))
-}
-
-/// Runs `check`; a pending test must fail, any other must pass.
-fn gated(test: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome, pending(test)) {
-        (Ok(()), true) => panic!("{test} passes now: take rust:{test} out of {PENDING}'s pending"),
-        (Err(failure), false) => std::panic::resume_unwind(failure),
-        _ => {}
-    }
-}
-
-#[test]
-fn the_pending_list_only_shrinks() {
-    let gating = read_json(&root().join(PENDING));
-    let names = |key: &str| -> BTreeSet<String> {
-        gating[key]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|n| n.as_str().unwrap().to_owned())
-            .collect()
-    };
-    assert!(names("pending").is_subset(&names("authored")));
 }
 
 // --- the cases, resolved ----------------------------------------------------
@@ -537,12 +500,12 @@ fn passes(database: &str) {
 
 #[test]
 fn the_kit_passes_on_duckdb() {
-    gated("the_kit_passes_on_duckdb", || passes("duckdb"));
+    passes("duckdb");
 }
 
 #[test]
 fn the_kit_passes_on_sqlite() {
-    gated("the_kit_passes_on_sqlite", || passes("sqlite"));
+    passes("sqlite");
 }
 
 // --- T2.6: the in-memory fallback -----------------------------------------------
@@ -574,16 +537,12 @@ fn fallback_answers(database: &str) {
 
 #[test]
 fn the_fallback_gives_the_pushdown_s_answer_on_duckdb() {
-    gated("the_fallback_gives_the_pushdown_s_answer_on_duckdb", || {
-        fallback_answers("duckdb")
-    });
+    fallback_answers("duckdb");
 }
 
 #[test]
 fn the_fallback_gives_the_pushdown_s_answer_on_sqlite() {
-    gated("the_fallback_gives_the_pushdown_s_answer_on_sqlite", || {
-        fallback_answers("sqlite")
-    });
+    fallback_answers("sqlite");
 }
 
 fn limits_named(database: &str) {
@@ -603,18 +562,12 @@ fn limits_named(database: &str) {
 
 #[test]
 fn a_fallback_limit_exceeded_is_a_named_error_on_duckdb() {
-    gated(
-        "a_fallback_limit_exceeded_is_a_named_error_on_duckdb",
-        || limits_named("duckdb"),
-    );
+    limits_named("duckdb");
 }
 
 #[test]
 fn a_fallback_limit_exceeded_is_a_named_error_on_sqlite() {
-    gated(
-        "a_fallback_limit_exceeded_is_a_named_error_on_sqlite",
-        || limits_named("sqlite"),
-    );
+    limits_named("sqlite");
 }
 
 // --- round 1's regressions -------------------------------------------------------
@@ -648,34 +601,22 @@ const SIGNED_ZERO: &[&str] = &[
 
 #[test]
 fn r1_the_byte_limit_stops_at_the_page_that_passes_it_on_duckdb() {
-    gated(
-        "r1_the_byte_limit_stops_at_the_page_that_passes_it_on_duckdb",
-        || cases_pass("duckdb", BYTES_AT_THE_PAGE),
-    );
+    cases_pass("duckdb", BYTES_AT_THE_PAGE);
 }
 
 #[test]
 fn r1_the_byte_limit_stops_at_the_page_that_passes_it_on_sqlite() {
-    gated(
-        "r1_the_byte_limit_stops_at_the_page_that_passes_it_on_sqlite",
-        || cases_pass("sqlite", BYTES_AT_THE_PAGE),
-    );
+    cases_pass("sqlite", BYTES_AT_THE_PAGE);
 }
 
 #[test]
 fn r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_duckdb() {
-    gated(
-        "r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_duckdb",
-        || cases_pass("duckdb", SIGNED_ZERO),
-    );
+    cases_pass("duckdb", SIGNED_ZERO);
 }
 
 #[test]
 fn r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_sqlite() {
-    gated(
-        "r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_sqlite",
-        || cases_pass("sqlite", SIGNED_ZERO),
-    );
+    cases_pass("sqlite", SIGNED_ZERO);
 }
 
 // --- T2.5: the seeded faults ----------------------------------------------------
@@ -700,16 +641,12 @@ fn truncation_fails(database: &str) {
 
 #[test]
 fn a_seeded_truncation_fails_the_kit_on_duckdb() {
-    gated("a_seeded_truncation_fails_the_kit_on_duckdb", || {
-        truncation_fails("duckdb")
-    });
+    truncation_fails("duckdb");
 }
 
 #[test]
 fn a_seeded_truncation_fails_the_kit_on_sqlite() {
-    gated("a_seeded_truncation_fails_the_kit_on_sqlite", || {
-        truncation_fails("sqlite")
-    });
+    truncation_fails("sqlite");
 }
 
 fn silent_capability_fails(database: &str) {
@@ -744,16 +681,10 @@ fn silent_capability_fails(database: &str) {
 
 #[test]
 fn a_seeded_silent_capability_failure_fails_the_kit_on_duckdb() {
-    gated(
-        "a_seeded_silent_capability_failure_fails_the_kit_on_duckdb",
-        || silent_capability_fails("duckdb"),
-    );
+    silent_capability_fails("duckdb");
 }
 
 #[test]
 fn a_seeded_silent_capability_failure_fails_the_kit_on_sqlite() {
-    gated(
-        "a_seeded_silent_capability_failure_fails_the_kit_on_sqlite",
-        || silent_capability_fails("sqlite"),
-    );
+    silent_capability_fails("sqlite");
 }

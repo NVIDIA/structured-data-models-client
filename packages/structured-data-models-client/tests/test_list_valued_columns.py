@@ -22,9 +22,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from test_adapter_and_result import envelope as public_envelope
 
 from sdm_client import Request, Schema
-from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.dtypes import require_scalar_cells
 
@@ -113,7 +113,7 @@ def test_a_list_present_only_in_the_rows_to_score_is_refused():
         task='classification',
     )
     with pytest.raises(StructuredDataError) as error:
-        list(TabularAdapter().prediction_plan(request, ('prediction',)))
+        public_envelope(request)
     assert 'tags' in str(error.value)
 
 
@@ -234,9 +234,7 @@ def test_an_ordinary_request_still_encodes():
     request = Request(
         context=context(), predict=scored(), target='y', task='classification'
     )
-    plan = next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
+    plan = public_envelope(request)
     assert plan['predict']['instance_table']['rows'] == [[900, 1.0]]
 
 

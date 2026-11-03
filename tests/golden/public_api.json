@@ -285,6 +285,7 @@
           "fit": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None, holdout: 'Iterable[Any] | None' = None) -> 'FittedModel'",
           "for_databricks_serving": "(endpoint: 'str', *, workspace_client: 'Any | None' = None, timeout: 'float | None' = None) -> 'SDMClient'",
           "health_ready": "(self) -> 'bool'",
+          "in_process": "(*models: 'Any', device: 'Any' = None) -> 'SDMClient'",
           "models": "(self) -> 'list[str]'",
           "predict": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None) -> 'PredictionResult'"
         },
@@ -396,7 +397,7 @@
       },
       "__version__": {
         "kind": "str",
-        "value": "1.0.0"
+        "value": "2.0.0rc1"
       }
     }
   },
@@ -554,7 +555,7 @@
       },
       "__version__": {
         "kind": "str",
-        "value": "1.0.0"
+        "value": "2.0.0rc1"
       },
       "quote_ident": {
         "kind": "callable",

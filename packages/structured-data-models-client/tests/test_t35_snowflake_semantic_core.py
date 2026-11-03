@@ -4,7 +4,7 @@
 
 """Snowflake semantic models through the public API and installed native core.
 
-The fake provider feeds the genuine S2 Snowflake catalog/preview observations
+The fake provider feeds the preserved Snowflake catalog/preview fixtures
 back to the native run, and supports the bounded single-table key reads in
 this test. It executes no SQL and reaches no account or old engine.
 """
@@ -20,12 +20,12 @@ import pytest
 from sdm_connectors import SnowflakeSource
 from sdm_connectors.providers import text as binding_text
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError, _routing
+from sdm_client import PredictiveQuery, Schema, StructuredDataError
 from sdm_client._rust import providers
 
-CAPTURE = (
+FIXTURE = (
     Path(__file__).resolve().parents[3]
-    / 'contract/captures/s2/snowflake/view.semantic.from-source'
+    / 'tests/fixtures/semantic-models/snowflake'
 )
 
 
@@ -34,7 +34,7 @@ def _public_text(value: str) -> str:
 
 
 def _recorded_rows(path: str) -> pa.Table:
-    with (CAPTURE / path).open('rb') as stream:
+    with (FIXTURE / path).open('rb') as stream:
         table = pa.ipc.open_stream(stream).read_all()
     for at, column in enumerate(table.columns):
         if pa.types.is_string(column.type) or pa.types.is_large_string(
@@ -68,21 +68,15 @@ _Connection.__name__ = 'SnowflakeConnection'
 class _RecordedSemanticProvider:
     def __init__(self, connection: _Connection) -> None:
         self.connection = connection
-        capture = json.loads((CAPTURE / 'capture.json').read_text())
-        self.catalogs: dict[str, pa.Table] = {}
-        self.previews: dict[str, pa.Table] = {}
-        for statement in capture['statements']:
-            sql = _public_text(statement['text'])
-            rows = _recorded_rows(statement['result'])
-            if 'SYSTEM$READ_YAML' in sql:
-                self.definition = rows
-            for table in ('ORDERS', 'USERS'):
-                if sql.startswith('DESCRIBE TABLE') and sql.endswith(
-                    f'."{table}"'
-                ):
-                    self.catalogs[table] = rows
-                elif ' LIMIT 1000' in sql and f'."{table}"' in sql:
-                    self.previews[table] = rows
+        self.definition = _recorded_rows('definition.arrows')
+        self.catalogs = {
+            table: _recorded_rows(f'{table.lower()}-catalog.arrows')
+            for table in ('ORDERS', 'USERS')
+        }
+        self.previews = {
+            table: _recorded_rows(f'{table.lower()}-preview.arrows')
+            for table in ('ORDERS', 'USERS')
+        }
 
     def __call__(self, step: dict[str, Any], keys: Any = None) -> pa.Table:
         request = step['request']
@@ -154,11 +148,6 @@ def _source(
     database: str | None = 'DB',
     schema: str | None = 'SHOP',
 ) -> tuple[_Connection, Any]:
-    paths = (
-        _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
-        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
-    )
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(paths))
     monkeypatch.setattr(
         providers, 'SnowflakeProvider', _RecordedSemanticProvider
     )

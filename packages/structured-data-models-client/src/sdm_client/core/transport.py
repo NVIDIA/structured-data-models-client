@@ -60,12 +60,6 @@ def redact_url(url: str | None) -> str | None:
     a repr it goes through here first, so the credential does not travel
     with the diagnosis into a log aggregator or a bug report.
 
-    Mirrors ``sdm_relational_engine.client.client.redact_url``, which guards
-    the same credential on the Kumo Relational path. The two cannot share one
-    implementation:
-    this package must not import the optional driver, and the package both
-    depend on is a SQL-connector package with no URL handling. Keep them in
-    step.
     """
     if not url:
         return url
@@ -506,8 +500,9 @@ class EndpointFailed(Exception):  # noqa: N818 - says what happened
 class WireTransport(Protocol):
     r"""What a client needs from whatever carries its requests.
 
-    A NIM reached over HTTP is one; a Databricks Model Serving endpoint is
-    another. The client asks only this of either.
+    A NIM reached over HTTP, a Databricks serving endpoint and a local Python
+    model runtime each implement this boundary. Rust owns request preparation
+    and result assembly for all three.
     """
 
     #: Whether the endpoint can pin a context. A client refuses ``fit()`` up

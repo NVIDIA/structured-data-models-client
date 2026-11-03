@@ -2,37 +2,18 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T3.11's CI jobs, read from the workflow (exits 1 and 4, and locked check
-14's CI line, ``java (<jdk>, <platform>, <database or leg>)``).
-
-The brief names the S0 jobs ``java (17, linux-x86_64, s0)``, ``java (21,
-linux-x86_64, s0)``, ``java (21, linux-aarch64, s0)``, ``java (21,
-macos-arm64, s0)`` and ``java (21, macos-x86_64, s0)`` (its "Open
-questions", item 3: ``s0`` for the leg), each on its platform's runner
-(macOS on ``macos-15`` and ``macos-15-intel``, as the engine wheels), and
-JAR-load jobs on the same JDKs and platforms, run where no Rust toolchain
-is: in a container on Linux, and with no Rust set up on macOS.
-A job's name is read with its matrix expanded.
-
-ASSUMED until the implementer relays it: a load job's name holds ``load``
-and its ``(<jdk>, <platform>`` as the S0 jobs spell them.
-
-Gating (``contract/tests/t311_gate.py``): each test named in
-``contract/tests/t311-pending.json``'s ``pending`` failed when written and
-must still fail until the implementer takes it out; once it passes it
-fails, naming itself.
-"""
+"""Java CI exercises supported JDKs, platforms and clean JAR loading."""
 
 from __future__ import annotations
 
-import importlib.util
+import hashlib
 import itertools
+import json
 import re
-import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,19 +35,6 @@ RUNNERS = {
 }
 #: A step that sets Rust up.
 RUST = re.compile(r'rust-toolchain|rustup|\bcargo\b|maturin')
-
-
-def _module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-G = _module('t311_gate', ROOT / 'contract/tests/t311_gate.py')
-#: A test held by the gate.
-held = G.gated()
 
 
 def _combinations(
@@ -145,7 +113,6 @@ def _runs_on(job: dict[str, Any], values: dict[str, Any]) -> str:
     return str(label)
 
 
-@held
 def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
     # Exit 1's CI line and exit 4's platforms: one java (<jdk>, <platform>,
     # s0) job each, on its platform's runner.
@@ -169,7 +136,6 @@ def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
     assert legs <= {'s0', 'duckdb', 'sqlite', 'postgres'}, legs
 
 
-@held
 def test_t311_the_jar_load_jobs_run_on_each_jdk_and_platform_without_rust() -> (
     None
 ):
@@ -201,19 +167,113 @@ def test_t311_the_jar_load_jobs_run_on_each_jdk_and_platform_without_rust() -> (
         assert rust == [], (name, rust)
 
 
-def test_t311_a_changed_java_test_is_one_of_the_package_s_own_tests(
-    tmp_path: Path,
-) -> None:
-    # The handoff's own tests (owner, 2026-10-23: lint and the package's own
-    # tests) run the Java library's tests when a Java test source changes:
-    # Maven runs them all, once.
-    sys.path.insert(0, str(ROOT / 'scripts/rust_core'))
-    handoff = _module('t311_handoff', ROOT / 'scripts/rust_core/handoff.py')
-    tests = [
-        'java/src/test/java/com/nvidia/sdm/internal/WordingTest.java',
-        'java/src/test/java/com/nvidia/sdm/internal/RunTest.java',
+def test_each_parser_platform_runs_behavioral_assertions():
+    jobs = [
+        job
+        for name, job, _ in _expanded()
+        if name.startswith('java (') and name.endswith(', s0)')
     ]
-    for path in tests:
-        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / path).write_text('class T {}\n')
-    assert handoff.own_suites(tmp_path, tests) == [handoff.affected.JAVA]
+    assert len(jobs) == len(S0_JOBS)
+    for job in jobs:
+        commands = '\n'.join(str(step.get('run', '')) for step in job['steps'])
+        assert '-Dtest=PredictiveQueryTest test' in commands
+        assert '-Dsdm.natives=' in commands
+
+
+def test_windows_java_builds_are_packaged_and_loaded():
+    workflow = yaml.safe_load(CI.read_text(encoding='utf-8'))
+    jobs = workflow['jobs']
+    builds = jobs['java-native']['strategy']['matrix']['include']
+    loads = jobs['java-load']['strategy']['matrix']['include']
+    pom = (ROOT / 'java/pom.xml').read_text()
+    required_loads = {
+        (jdk, platform)
+        for jdk in ['17', '21']
+        for platform in [
+            'linux-x86_64',
+            'linux-aarch64',
+            'macos-x86_64',
+            'macos-arm64',
+            'windows-x86_64',
+        ]
+    }
+    actual_loads = [(row['jdk'], row['platform']) for row in loads]
+    assert set(actual_loads) == required_loads
+    assert len(actual_loads) == len(required_loads)
+    assert '<include>*/sdm_jni.dll</include>' in pom
+    for arch, runner in [
+        ('x86_64', 'windows-latest'),
+    ]:
+        platform = f'windows-{arch}'
+        assert {'platform': platform, 'runner': runner} in builds
+        for jdk in ['17', '21']:
+            assert any(
+                row['platform'] == platform
+                and row['jdk'] == jdk
+                and row['runner'] == runner
+                for row in loads
+            )
+        assert f'${{sdm.natives}}/{platform}/sdm_jni.dll' in pom
+    commands = '\n'.join(
+        step.get('run', '') for step in jobs['java-load']['steps']
+    )
+    assert "separator=';'" in commands
+
+
+@pytest.mark.parametrize(
+    'corruption', [None, 'commit', 'digest', 'missing', 'version']
+)
+def test_java_release_rejects_mismatched_artifacts(
+    tmp_path, monkeypatch, corruption
+):
+    document = yaml.safe_load(
+        (ROOT / '.github/workflows/publish.yml').read_text()
+    )
+    step = next(
+        step
+        for step in document['jobs']['build']['steps']
+        if step.get('name') == 'Verify and assemble the tested Java artifacts'
+    )
+    code = step['run'].split("python - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('GITHUB_SHA', 'candidate')
+    monkeypatch.setenv('GITHUB_REF_NAME', 'v2.3.4')
+    root = tmp_path / 'java-release'
+    root.mkdir()
+    (tmp_path / 'dist').mkdir()
+    stem = 'structured-data-models-client-2.3.4'
+    jar = root / (stem + '.jar')
+    jar.write_bytes(b'tested artifact fixture')
+    pom = root / (stem + '.pom')
+    version = '2.3.5' if corruption == 'version' else '2.3.4'
+    pom.write_text(
+        f'<project xmlns="http://maven.apache.org/POM/4.0.0"><version>{version}</version></project>'
+    )
+    files = {
+        p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [jar, pom]
+    }
+    if corruption == 'digest':
+        jar.write_bytes(b'changed after testing')
+    if corruption == 'missing':
+        del files[pom.name]
+    record = {
+        'commit': 'other' if corruption == 'commit' else 'candidate',
+        'files': files,
+    }
+    (root / 'java-artifacts.json').write_text(json.dumps(record))
+    if corruption:
+        with pytest.raises(AssertionError):
+            exec(compile(code, '<release artifact check>', 'exec'), {})
+    else:
+        exec(compile(code, '<release artifact check>', 'exec'), {})
+        assert (tmp_path / 'dist' / jar.name).read_bytes() == jar.read_bytes()
+        assert (tmp_path / 'dist' / pom.name).read_bytes() == pom.read_bytes()
+
+
+def test_java_release_paths_follow_the_pom_version():
+    ci = CI.read_text()
+    live = (ROOT / '.github/workflows/parity-live.yml').read_text()
+    assert 'structured-data-models-client-1.0.0.jar' not in ci + live
+    assert "ET.parse('java/pom.xml')" in ci
+    assert "ET.parse('java/pom.xml')" in live
+    assert 'SDM_JAVA_VERSION' in live

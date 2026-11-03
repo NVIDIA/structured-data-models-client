@@ -1,54 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The canary test over the empty, null and refuse family's error paths
-(T1.32d's exit "the canary test covers the family's error paths", T1.32a's
-exits applied to this family; decision H17: diagnostics carry no input
-values).
-
-Written by the package's independent test author, before the
-implementation. It drives each path of the family through the canary of
-``test_the_canary.py`` (its sentinels, its watch over the core's error,
-``str``, ``repr``, the details, the traceback, every warning, every log
-record at DEBUG, stderr and stdout, and its check that none of them holds a
-sentinel), on the core route, ``Schema.from_source``, ``materialize`` and,
-where the path goes on, ``SDMClient.predict`` against the scripted
-endpoint. The data around each path holds the canary's data sentinel (two
-users' countries) and a number sentinel of our own, ``NUMBER`` (an order's
-price), so a message quoting the data it read holds one:
-
-- describe: an empty fact table, an empty entity table and an empty third
-  table (the reference fails each unnamed, ``Table '...' is empty``; the
-  core refuses by name, rule ``empty_table``, P1B-11); a null key named
-  in ``primary_keys`` (refused INVALID_REQUEST by the core, as by the
-  reference: from T1.32e the core counts keys by the reference's rules),
-  and the same null key inferred, which, below 99% distinct, leaves
-  ``users`` keyless, so the host's query resolution refuses ``FOR EACH
-  users.user_id`` (not a primary key) as the reference does;
-- describe and materialize: an all-null feature, null foreign keys, null
-  times, an all-null target (the reference warns that every context row
-  has the same answer, naming no value), and an entity with no facts, its
-  row holding the data sentinel;
-- materialize: an empty entity list and an entity the table does not hold
-  (each refused with INVALID_REQUEST by the reference), and a question
-  naming a column the schema does not hold;
-- predict: a classification whose every context row answers the same
-  (UNSUPPORTED_REQUEST at predict on the reference).
-
-Whatever the package settles for a path, a refusal or a success, nothing
-written may hold a sentinel. A refusal must be the core's (the canary saw
-the core's error), except where the host refuses as the reference does:
-the query's validation and the context judged before it is sent
-(``HOST_MAY_REFUSE``). Which refusal it is, is not this test's to
-judge: ``contract/tests/test_t132d_empty_null_vectors.py`` and
-``t132d_empty_null_vectors.rs`` hold each path's outcome to the reference
-and the register.
-
-Gating (``contract/tests/t132d_gate.py``): a scenario named in
-``t132d-pending.json``'s ``pending["exits"]`` (as ``canary:<scenario>``)
-failed when written. It still runs and must still fail; once it passes it
-fails, naming itself, until it is taken out of the list.
-"""
+"""Native value conversion must not expose planted data through errors or logs."""
 
 from __future__ import annotations
 
@@ -71,7 +24,6 @@ from sdm_client import (
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -89,16 +41,10 @@ def _module(name: str, path: Path) -> Any:
 
 
 C = _module('test_the_canary', HERE / 'test_the_canary.py')
-G = _module('t132d_gate', ROOT / 'contract/tests/t132d_gate.py')
 DATA = C.DATA
 #: Our number sentinel: digits no statement, code or field holds by chance.
 NUMBER = '73400917'
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
 #: The entities of the scenarios that name one past the shop's keys,
 #: holding no sentinel (an error may name the caller's own, KO2-86).
 NO_FACTS = 999
@@ -175,11 +121,9 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 
 
 #: The paths the host refuses on the core route, as the reference does:
-#: the query's validation (``contract/refusal-maps/refusal.json``'s entry
-#: ``materialize/unknown_column``: python-core validates the query in the
-#: host; and, from T1.32e, an entity column left without a key by a null
-#: in it) and the context the host judges before it sends. Every other
-#: refusal must be the core's.
+#: query validation, an entity column left without a key by a null,
+#: and context validation before sending. Every other refusal must come
+#: from the core.
 HOST_MAY_REFUSE = {
     'describe: a null key, inferred',
     'materialize: a column the schema does not hold',
@@ -231,7 +175,6 @@ def _answered(seen: Any, call: Callable[[], Any]) -> StructuredDataError | None:
 
 @pytest.fixture(autouse=True)
 def _core_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     # Our number is a sentinel too, for this file's scenarios.
     monkeypatch.setattr(C, 'SENTINELS', (*C.SENTINELS, NUMBER))
 
@@ -252,7 +195,7 @@ def test_no_sentinel_of_the_family_reaches_anything_written(
                 f'{name}: refused outside the core ({error.code})'
             )
 
-    G.held('exits', f'canary:{name}', check)
+    check()
 
 
 def test_each_sentinel_is_on_the_path() -> None:

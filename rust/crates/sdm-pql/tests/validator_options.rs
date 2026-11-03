@@ -5,7 +5,7 @@
 //! The validator's two options no profile reaches, `allow_array_targets`
 //! and `allow_timestamp_arrays` (`tests/validator-options.json`): each row
 //! the reference's `PredictiveQueryValidator` answered with the options
-//! set (`sdm-core/tests/pql/record_quirks.py`), held here to the same
+//! set, retained as frozen expectations for the same
 //! validity and the same error codes and spans, in order.
 
 #![allow(

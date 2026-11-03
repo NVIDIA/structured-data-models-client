@@ -2,41 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.11's ``unseeded`` exit on ``python-core`` (the package's test
-author's): an unseeded sample judged by its properties (the owner,
-2026-10-20, KO2-76), not row by row.
-
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t211_unseeded.py -q
-
-``random_seed=None`` draws anew on every call, on every database, so no
-request of the reference can be compared row by row. The cases,
-``contract/tests/t211-unseeded/*.json`` (out of ``contract/cases/``, whose
-every request the gate compares row by row), run on DuckDB, SQLite and
-Postgres; ``contract/t211-unseeded-vectors.json``, recorded from the
-reference by ``contract/tools/t211_unseeded_record.py``, holds what does not
-change from draw to draw. python-core must:
-
-- end as the reference does (a success through predict, one request);
-- draw the right number of rows: as many context examples, the same
-  entities asked about at the same anchor with as many rows of each table
-  around them, the same request schema and the same result;
-- draw anew on each call: a second run's context examples differ;
-- draw only rows the source holds: every context example's entity is a
-  user, its label is that user's at its anchor time (the orders in the 30
-  days after it, the rule the recorder checked against the reference's
-  draws), and every sampled row of every table is a row of that table;
-- and give the same rows when a seed is given: ``sample.seed-7``'s
-  request is the reference's row by row (``test_t211_sampling.py``).
-
-The core refuses an unseeded sample today by name (``UNSUPPORTED_REQUEST``,
-rule ``unseeded``). Gating: ``t211-pending.json``'s ``pending`` names, as
-``unseeded-py:<case key>``, the keys whose test failed when written; each
-must still fail (strict) until it is taken out.
-"""
+"""Unseeded native sampling: fresh draws, valid source rows and labels."""
 
 from __future__ import annotations
 
+import datetime
 import functools
 import importlib.util
 import json
@@ -52,10 +22,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-RECORDER = ROOT / 'contract/tools/t211_unseeded_record.py'
 CASES = ROOT / 'contract/tests/t211-unseeded'
 VECTORS = ROOT / 'contract/t211-unseeded-vectors.json'
-PENDING = Path(__file__).with_name('t211-pending.json')
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 CASE_IDS = tuple(sorted(path.stem for path in CASES.glob('*.json')))
 
@@ -74,11 +42,109 @@ def runner() -> ModuleType:
     return _module('t211u_run_python', RUNNER)
 
 
-def recorder() -> ModuleType:
-    return _module('t211u_record', RECORDER)
-
-
 KEYS_ALL = tuple(runner().case_key(c, d) for d in DATABASES for c in CASE_IDS)
+
+
+FEATURES = {
+    'users': ('user_id', 'age', 'country'),
+    'orders': ('price', 'ts'),
+    'lines': ('qty',),
+}
+
+
+def written(value: Any) -> Any:
+    r"""A value as a request writes it, read back: a number as a float, a
+    timestamp as its ISO text with microseconds and a Z, text as itself."""
+    if isinstance(value, dict) and set(value) == {'number'}:
+        return float(value['number'])
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, datetime.datetime):
+        return value.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    return value
+
+
+def label(case: dict[str, Any], entity: Any, anchor: str) -> float:
+    r"""The label of ``entity`` at ``anchor`` read from the source: the
+    query's SUM(orders.price, 0, 30, days), the orders after the anchor up
+    to 30 days later."""
+    import duckdb
+
+    assert case['input']['pql'].startswith('PREDICT SUM(orders.price, 0, 30')
+    connection = duckdb.connect()
+    try:
+        for statement in [
+            *runner().load_bases()[case['input']['base']],
+            *case['input'].get('setup', []),
+        ]:
+            connection.execute(statement)
+        found = connection.execute(
+            'SELECT COALESCE(SUM(price), 0) FROM orders WHERE user_id = ? '
+            'AND ts > CAST(? AS TIMESTAMP) '
+            "AND ts <= CAST(? AS TIMESTAMP) + INTERVAL '30 days'",
+            [int(entity), anchor[:26], anchor[:26]],
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    return float(found)
+
+
+def sent(line: dict[str, Any]) -> dict[str, Any]:
+    r"""The one request a line's endpoint received, parsed."""
+    payloads = line['public']['payloads']
+    assert len(payloads) == 1, len(payloads)
+    return payloads[0]['parsed']
+
+
+def properties(line: dict[str, Any]) -> dict[str, Any]:
+    r"""What an unseeded line holds that does not change from draw to
+    draw."""
+    outcome = line['outcome']
+    found: dict[str, Any] = {
+        'outcome': {
+            'result': outcome['result'],
+            'stage': outcome['stage'],
+            'error': outcome.get('error'),
+            'code': outcome.get('code'),
+        }
+    }
+    if outcome['result'] != 'success':
+        return found
+    request = sent(line)
+    predict = request['predict']
+    found.update(
+        {
+            'schema': request['schema'],
+            'predict': {
+                'instance_table': predict['instance_table'],
+                'rows': {
+                    table: len(held['rows'])
+                    for table, held in sorted(predict['related_tables'].items())
+                },
+            },
+            'context_rows': len(request['context']['instance_table']['rows']),
+            'context_tables': sorted(request['context']['related_tables']),
+            'result': line['public']['result'],
+        }
+    )
+    return found
+
+
+def examples(line: dict[str, Any]) -> list[tuple[Any, str, Any]]:
+    r"""Each context example of a line's request: its entity, anchor time
+    and label."""
+    table = sent(line)['context']['instance_table']
+    at = {name: i for i, name in enumerate(table['columns'])}
+    return [
+        (
+            written(row[at['__kumo_entity_ref_0']]),
+            row[at['__kumo_anchor_time']],
+            written(row[at['TARGET']]),
+        )
+        for row in table['rows']
+    ]
 
 
 @functools.cache
@@ -96,37 +162,11 @@ def cases() -> dict[str, dict[str, Any]]:
     }
 
 
-def held(name: str, check: Any) -> None:
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if f'unseeded-py:{name}' not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take unseeded-py:{name} out of '
-        'contract/tests/t211-pending.json pending'
-    )
-
-
-def test_the_unseeded_keys_are_authored() -> None:
-    r"""Control: ``authored`` names every unseeded case's key on each
-    database on python-core, and on DuckDB and SQLite on rust-host."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    authored = {k for k in gating['authored'] if k.startswith('unseeded')}
-    assert authored == {f'unseeded-py:{k}' for k in KEYS_ALL} | {
-        f'unseeded-rust:{k}' for k in KEYS_ALL if not k.endswith('@postgres')
-    }
-
-
 @pytest.mark.parametrize('case_id', CASE_IDS)
 def test_each_case_asks_for_an_unseeded_sample(case_id: str) -> None:
     r"""Exit "``unseeded``": the case passes ``random_seed=None`` through
-    predict on all three databases, and the reference drew different
-    context rows on two runs of it on each, so it exercises an unseeded
-    draw; its seeded twin is ``sample.seed-7``."""
+    predict on all three databases; fixed fixture expectations describe
+    successful distinct draws. Its seeded twin is ``sample.seed-7``."""
     case = cases()[case_id]
     assert case['input']['materialize']['random_seed'] is None
     assert case['until'] == 'predict'
@@ -188,9 +228,9 @@ def problems(
 ) -> list[str]:
     r"""Each property of an unseeded draw ``line`` breaks."""
     found = []
-    got = recorder().properties(line)
+    got = properties(line)
     if got['outcome'] != want['outcome']:
-        return [f'{got["outcome"]} where the reference has {want["outcome"]}']
+        return [f'{got["outcome"]} where the fixture expects {want["outcome"]}']
     for name in (
         'schema',
         'predict',
@@ -199,41 +239,41 @@ def problems(
         'result',
     ):
         if got.get(name) != want.get(name):
-            found.append(f"its {name} is not the reference draws'")
+            found.append(f'its {name} differs from the fixed sampling contract')
     case = cases()[case_id]
     given = vectors()['cases'][case_id]
     entities = set(given['entities'])
-    for entity, anchor, target in recorder().examples(line):
+    for entity, anchor, target in examples(line):
         if entity not in entities:
             found.append(f'a context example of no user: {entity}')
-        elif target != recorder().label(case, entity, anchor):
+        elif target != label(case, entity, anchor):
             found.append(f'user {entity} at {anchor} labelled {target}')
-    request = recorder().sent(line)
+    request = sent(line)
     for section in ('context', 'predict'):
         for table, sampled in request[section]['related_tables'].items():
-            columns = recorder().FEATURES.get(table)
+            columns = FEATURES.get(table)
             if columns is None:
                 found.append(f'{section} samples {table}, which it cannot')
                 continue
             rows = {json.dumps(r) for r in given['source'][table]}
             at = [sampled['columns'].index(c) for c in columns]
             for row in sampled['rows']:
-                values = [recorder().written(row[i]) for i in at]
+                values = [written(row[i]) for i in at]
                 if json.dumps(values) not in rows:
                     found.append(f'{section} {table} row {values} is not in it')
     return found[:8]
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties(
+def test_native_unseeded_draws_preserve_source_rows_and_labels(
     case_key: str,
 ) -> None:
     r"""Exit "``unseeded``", judged by properties (KO2-76): python-core
-    answers the case on the database on the core route as the reference
-    does, drawing the right number of rows, each from the source."""
+    executes on the native route, drawing the expected number of rows,
+    each from the source."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test server not configured')
 
     def check() -> None:
         run = core_run(database)
@@ -246,11 +286,14 @@ def test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties(
             case_key.split('@')[0], line, vectors()['keys'][case_key]
         )
         # A new sample each call: a second run draws other context
-        # examples, as the reference's two runs did (draws_differ).
-        again = core_run(database, 1).get(case_key)
-        if not found and again is not None:
-            if recorder().examples(line) == recorder().examples(again):
+        # examples; the source has many more candidates than the sample.
+        second = core_run(database, 1)
+        assert '' not in second, second.get('')
+        again = second[case_key]
+        assert again['outcome']['result'] == 'success', again['outcome']
+        if not found:
+            if examples(line) == examples(again):
                 found.append('two runs drew the same context')
         assert not found, f'{case_key}: ' + '; '.join(found)
 
-    held(case_key, check)
+    check()

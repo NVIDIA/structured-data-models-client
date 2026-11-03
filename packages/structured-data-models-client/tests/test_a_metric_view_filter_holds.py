@@ -19,14 +19,8 @@ import warnings
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 import pytest
-
-pytest.importorskip('sdm_relational_engine.relationallib')
-pytest.importorskip('databricks.sql')
-pa = pytest.importorskip('pyarrow')
-pytest.importorskip('yaml')
-
-from databricks.sql.client import Connection  # noqa: E402
 from sdm_connectors import DatabricksSource  # noqa: E402
 
 from sdm_client import (  # noqa: E402
@@ -34,13 +28,6 @@ from sdm_client import (  # noqa: E402
     Schema,
     StructuredDataError,
 )
-
-
-@pytest.fixture(autouse=True)
-def _legacy_sampler(monkeypatch: pytest.MonkeyPatch) -> None:
-    """These driver fakes answer the legacy sampler's SQL shapes."""
-    monkeypatch.setenv('SDM_CORE_ROUTES', '')
-
 
 _FILTER = "source.status = 'VALID'"
 _FACT = '`cat`.`sch`.`order_lines`'
@@ -139,6 +126,7 @@ class _Cursor:
         self._warehouse.statements.append(sql)
         self._rows, self._arrow = [], None
         sql = sql.strip()
+        self._sql = sql
         if sql.upper().startswith('DESCRIBE TABLE EXTENDED'):
             self._rows = _describe(self._warehouse.definition)
             return
@@ -188,6 +176,9 @@ class _Cursor:
 
     @staticmethod
     def _relation(sql: str) -> pd.DataFrame:
+        if _FACT in sql:
+            assert sql.count(_FACT) == sql.count(f'WHERE ({_FILTER})'), sql
+            return _KEPT
         found = [name for name in _RELATIONS if name in sql]
         assert len(found) == 1, f'reads no single known relation: {sql}'
         return _RELATIONS[found[0]]
@@ -197,10 +188,12 @@ class _Cursor:
         r"""A `_by_pkey`, `_by_fkey` or `_by_time` statement: the rows of
         ``frame`` each requested id joins, numbered by its position.
         """
-        start = 'as __KUMO_BATCH__, '
+        start = 'AS `__kumo_batch__`, '
         projection = sql[sql.index(start) + len(start) : sql.index('FROM TMP')]
-        key = re.search(r'ON `(\w+)` = TMP.__KUMO_ID__', sql)[1]
-        time = re.search(r'AND `(\w+)` <= TMP.__KUMO_END_TIME__', sql)
+        has_matches = '__kumo_matches__' in projection
+        projection = projection.split(', COUNT(*)')[0]
+        key = re.search(r'ON t\.`(\w+)` = s\.`key`', sql)[1]
+        time = re.search(r'AND t\.`(\w+)` <= s\.`end`', sql)
         most = re.search(r'\) <= (\d+)\n', sql)
         parts = []
         for position, row in enumerate(rows):
@@ -217,10 +210,12 @@ class _Cursor:
                 match = match.sort_values(time[1], ascending=False)
                 match = match.head(int(most[1]))
             parts.append(
-                match[_names(projection)].assign(__KUMO_BATCH__=position)
+                match[_names(projection)].assign(__kumo_batch__=position)
             )
         out = pd.concat(parts, ignore_index=True)
-        out = out[['__KUMO_BATCH__', *_names(projection)]]
+        out = out[['__kumo_batch__', *_names(projection)]]
+        if has_matches:
+            out['__kumo_matches__'] = 1
         return pa.Table.from_pandas(out, preserve_index=False)
 
     def fetchall(self) -> list:
@@ -230,10 +225,42 @@ class _Cursor:
         return self._rows[0]
 
     def fetchall_arrow(self) -> Any:
-        return self._arrow
+        if self._arrow is not None:
+            return self._arrow
+        if not self._rows:
+            return pa.table({})
+        if self._sql.upper().startswith('DESCRIBE'):
+            names = ['col_name', 'data_type', 'comment']
+        elif 'information_schema.columns' in self._sql:
+            names = [
+                'column_name',
+                'full_data_type',
+                'is_nullable',
+                'table_catalog',
+                'table_schema',
+                'table_name',
+                'table_type',
+            ]
+        elif 'as table_index' in self._sql:
+            names = ['table_index', 'min_date', 'max_date']
+        elif 'AS k, COUNT' in self._sql:
+            names = ['k', 'n', 'd', 'z']
+        else:
+            names = ['count']
+        return pa.table(
+            {
+                name: pa.array(
+                    [row[i] for row in self._rows],
+                    pa.int32() if name in ('k', 'table_index') else None,
+                )
+                for i, name in enumerate(names)
+            }
+        )
 
 
-class _Warehouse(Connection):
+class _Warehouse:
+    __module__ = 'databricks.sql.client'
+
     def __init__(self, definition: str = _VIEW) -> None:
         self.definition = definition
         self.statements: list[str] = []
@@ -246,6 +273,9 @@ class _Warehouse(Connection):
 
     def __del__(self) -> None:
         pass
+
+
+_Warehouse.__name__ = 'Connection'
 
 
 def test_every_read_of_the_source_table_goes_through_the_filter() -> None:
@@ -272,7 +302,7 @@ def test_every_read_of_the_source_table_goes_through_the_filter() -> None:
     for shape, marker in shapes.items():
         assert any(marker in sql for sql in reads), f'no {shape} was read'
     for sql in reads:
-        assert sql.count(_FACT) == sql.count(_FILTERED), sql
+        assert sql.count(_FACT) == sql.count(f'WHERE ({_FILTER})'), sql
 
     # Only kept rows reach the request, as context and as the question:
     sent: set[int] = set()

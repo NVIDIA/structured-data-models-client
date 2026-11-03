@@ -2,92 +2,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T3.2's recording mode (design choice 2, "What C-1 records") and the
-capture checks it is judged by, one test per change (the package's test
-author's). The recording mode is ``run_python.py --mode python-ref`` on a
-warehouse leg: the driver capture (``capture``, ``DriverLog``) records
-what the old client sent and got back, and the statement log
-(``StatementLog``) is its query log, the twin ``capture_check.py``'s
-``complete`` holds the capture's counts to (T2.1a fix 4).
-
-- The capture on each warehouse leg (the brief's "Reference code to
-  port"): ``capture(connection, DriverLog(), leg)`` records each statement
-  with its parameters and each Arrow result read, through the Databricks
-  SQL connector (``cursor.execute``, ``fetchall_arrow``), Snowflake's
-  connector (``execute`` with ``qmark`` parameters, ``fetch_arrow_all``)
-  and a Spark session (``spark.sql``, ``DataFrame.toArrow``, classic and
-  Spark Connect, which serverless runs), and hands the source a connection
-  the reference's dispatch reads as that warehouse
-  (``sdm_connectors/source.py:51-85``).
-- The statement log on each warehouse leg logs those drivers' statements,
-  whatever object calls them; on Postgres and Lakebase it also logs
-  psycopg's ``copy`` and ``stream`` (P2-T2.1a-2), and the runner enters it
-  only as a context, so it is undone when a case fails (P2-T2.1a-2's
-  "entered outside a ``try``/``finally``").
-- The runner runs an S2 case on its ``warehouses`` only, keyed
-  ``<case>@<leg>``.
-- The placeholders a case writes for private names (``{catalog}``,
-  ``{schema}`` and the three existing views' names, T3.2's brief, the S2
-  test authors' list) are resolved from the environment for a live run,
-  and a placeholder with nothing set refuses by its name.
-- Each case's input hash covers what the old client's answer depends on
-  (``input``, ``until`` and the base's statements) and nothing else (T3.4's
-  brief: adding ``core`` must not make a case pending live).
-- ``capture_check.py captures``: a capture of an unknown format version is
-  refused; a case whose input hash differs from the one recorded, or with
-  no capture on a leg it runs on, is listed pending live; ``--locked``
-  fails on any pending one (locked check 1).
-- ``capture_check.py commit``: a captures-only commit after the final run
-  passes only when every capture it changes names the final candidate as
-  its recording commit (the live-test plan; T3.10's landing check).
-- ``contract/captures/**`` is a protected path.
-- P2-MID2-7: the runner refuses an installed client whose contract version
-  is not the checkout's.
-
-Interfaces assumed (T3.2 defines them; this file is their first reader):
-
-- ``run_python.WAREHOUSES == ('databricks-sql', 'databricks-spark',
-  'snowflake', 'lakebase')``; ``run_python.capture`` and ``StatementLog``
-  take each; ``run_python.case_databases(case)`` gives an S2 case's
-  ``warehouses``;
-- ``run_python.resolve_placeholders(case, environ)``: the case with each
-  ``{name}`` in its ``input`` replaced by ``environ['SDM_CAPTURE_' +
-  name.upper()]``, a ``RunnerFailure`` naming ``{name}`` (never a value)
-  when one is unset;
-- ``run_python.input_hash(case, bases=None)``: a hex SHA-256; ``bases`` as
-  ``load_bases`` gives them, this checkout's by default;
-- ``run_python.contract_refusal(installed, root=REPO)``: None when the
-  installed contract version is the one ``rust/crates/sdm-contract``
-  declares at ``root``, else why, naming both;
-- a capture's manifest, a JSON file the capture writer (T3.3) writes beside
-  the recorded tables: ``{"format": "sdm-capture/1", "recording_commit":
-  SHA, "reference_commit": SHA, "legs": {LEG: {...versions}}, "cases":
-  {"<case>@<leg>": {"input_hash": HEX, ...}}}``;
-- ``capture_check.py captures --cases DIR [--locked] MANIFEST...``: exit 1
-  naming a refused manifest; each pending item as a line ``pending live:
-  <case>@<leg>``; exit 0 unless refused, or ``--locked`` with one pending;
-- ``capture_check.py commit --candidate SHA REV``, run in the repository:
-  exit 0 when REV changes only ``contract/captures/**`` and every manifest
-  it adds or changes names SHA as its ``recording_commit``, else 1.
-
-Each test listed in ``contract/tests/t32-pending.json`` failed when written,
-before the implementation, and is held to failing (the ``pending``
-decorator, as T2.10's ``held``) until the implementer takes it out of
-``pending``; ``pending`` stays within
-``authored``, the test author's list.
-"""
+"""Warehouse recording preserves driver values, lifecycle and input identity."""
 
 from __future__ import annotations
 
 import ast
 import copy
-import functools
 import importlib
 import importlib.util
 import json
-import os
 import re
-import subprocess
 import sys
 import types
 from collections.abc import Iterator
@@ -98,41 +22,12 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
 RUNNER = ROOT / 'contract/runners/run_python.py'
-CAPTURE_CHECK = ROOT / 'contract/runners/capture_check.py'
-RATCHET = ROOT / 'scripts/rust_core/ratchet.py'
+
 VECTORS = ROOT / 'contract/tests/t32-case-format-vectors.json'
-PENDING_FILE = ROOT / 'contract/tests/t32-pending.json'
+
 WAREHOUSES = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
-QUIET = {'GH_PROMPT_DISABLED': '1', 'GIT_TERMINAL_PROMPT': '0'}
-
-
-def _pending_names(key: str) -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))[key])
-
-
-def pending(test: Any) -> Any:
-    """Holds ``test`` to failing while ``contract/tests/t32-pending.json``
-    lists it, as T2.10's ``held`` does: a pending test passes only by
-    failing, and once it passes it fails, naming itself, until the
-    implementer takes it out of ``pending``."""
-    assert test.__name__ in _pending_names('authored'), test.__name__
-
-    @functools.wraps(test)
-    def held(*arguments: Any, **keywords: Any) -> None:
-        if test.__name__ not in _pending_names('pending'):
-            test(*arguments, **keywords)
-            return
-        try:
-            test(*arguments, **keywords)
-        except Exception:  # noqa: BLE001 - pending: failing, as when written
-            return
-        raise AssertionError(
-            f'{test.__name__} passes now: take it out of '
-            'contract/tests/t32-pending.json pending'
-        )
-
-    return held
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -156,15 +51,6 @@ def _s2_case(leg: str = 'databricks-sql') -> dict[str, Any]:
     )
     case['warehouses'] = [leg]
     return case
-
-
-# --- fake drivers --------------------------------------------------------------
-#
-# The warehouse drivers are not in the test environment (the recording runs
-# in the reference's environment, and Spark's in a serverless job). Each
-# fake stands where the real one is imported from, with the real class
-# names and call signatures, and answers a fixed table; the capture and the
-# statement log find them by import as they find the real ones.
 
 
 def _table() -> Any:
@@ -296,9 +182,6 @@ def _spark(monkeypatch: pytest.MonkeyPatch, connect: bool) -> Any:
     return SparkSession()
 
 
-#: Each warehouse's statement, its parameters as the reference passes them
-#: (Databricks SQL and Spark a list of ``?`` markers' values, Snowflake a
-#: ``qmark`` tuple), and how the leg runs it and reads Arrow back.
 STATEMENT = 'SELECT user_id FROM orders WHERE user_id > ?'
 
 
@@ -358,11 +241,6 @@ def _dispatched_as(value: Any, prefix: str) -> bool:
     )
 
 
-def test_t32_the_pending_list_only_shrinks_here() -> None:
-    assert _pending_names('pending') <= _pending_names('authored')
-
-
-@pending
 def test_t32_the_capture_records_each_warehouse_driver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,7 +273,6 @@ def test_t32_the_capture_records_each_warehouse_driver(
     ]
 
 
-@pending
 def test_t32_the_statement_log_logs_each_warehouse_driver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -422,7 +299,6 @@ class _PsycopgSelf:
     r"""Stands for a psycopg cursor in a call to the class's method."""
 
 
-@pending
 @pytest.mark.parametrize('database', ['postgres', 'lakebase'])
 def test_t32_the_statement_log_takes_psycopg_s_copy_and_stream(
     monkeypatch: pytest.MonkeyPatch, database: str
@@ -454,7 +330,6 @@ def test_t32_the_statement_log_takes_psycopg_s_copy_and_stream(
     assert psycopg.Cursor.copy is copy_ and psycopg.Cursor.stream is stream
 
 
-@pending
 def test_t32_the_statement_log_is_entered_only_as_a_context() -> None:
     r"""P2-T2.1a-2: the runner enters the statement log only in a ``with``,
     so a case that fails mid-call leaves the driver's classes as they were
@@ -486,7 +361,6 @@ def test_t32_the_statement_log_is_entered_only_as_a_context() -> None:
     assert not entered, entered
 
 
-@pending
 def test_t32_an_s2_case_runs_on_its_warehouses_only() -> None:
     r"""Choice 1: an S2 case runs only on the legs its ``warehouses``
     names, keyed ``<case>@<leg>``; an S1 case without ``databases`` still
@@ -507,7 +381,6 @@ def test_t32_an_s2_case_runs_on_its_warehouses_only() -> None:
     assert run.case_databases(s1)[:3] == ('duckdb', 'sqlite', 'postgres')
 
 
-@pending
 def test_t32_placeholders_resolve_from_the_environment() -> None:
     r"""The S2 test authors' gap: ``{catalog}``, ``{schema}`` and the
     existing views' placeholders in a case's input are resolved from the
@@ -541,7 +414,6 @@ def test_t32_placeholders_resolve_from_the_environment() -> None:
     assert 'cat_t32' not in str(refused.value)
 
 
-@pending
 def test_t32_the_input_hash_follows_the_input_and_base_only() -> None:
     r"""A case's input hash changes with its ``input``, its ``until`` and
     its base's statements, which the old client's answer depends on, and
@@ -596,202 +468,6 @@ def test_t32_the_input_hash_follows_the_input_and_base_only() -> None:
     assert run.input_hash(kept) == first
 
 
-# --- capture_check.py --------------------------------------------------------------
-
-
-def _manifest(
-    path: Path, hashes: dict[str, str], commit: str = 'a' * 40, **over: Any
-) -> Path:
-    manifest = {
-        'format': 'sdm-capture/1',
-        'recording_commit': commit,
-        'reference_commit': '43e55f4f58924384c3cb52f67c8ed2e73ba45fa1',
-        'legs': {
-            'databricks-sql': {
-                'runtime': 'sql-warehouse',
-                'python': '3.12.13',
-                'pandas': '3.0.6',
-                'driver': '4.0.0',
-            }
-        },
-        'cases': {key: {'input_hash': value} for key, value in hashes.items()},
-        **over,
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest, indent=1), encoding='utf-8')
-    return path
-
-
-def _cases_dir(tmp_path: Path) -> tuple[Path, list[dict[str, Any]]]:
-    r"""Two S2 cases on the SQL warehouse, written as case files."""
-    cases = tmp_path / 'cases'
-    cases.mkdir()
-    made = []
-    for name in ('t32.capture.one', 't32.capture.two'):
-        case = _s2_case()
-        case['id'] = name
-        (cases / f'{name}.json').write_text(json.dumps(case), encoding='utf-8')
-        made.append(case)
-    return cases, made
-
-
-def _capture_check(
-    *arguments: str, cwd: Path = ROOT
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(CAPTURE_CHECK), *arguments],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=cwd,
-        stdin=subprocess.DEVNULL,
-        env={**os.environ, **QUIET},
-        timeout=600,
-    )
-
-
-@pending
-def test_t32_capture_check_refuses_an_unknown_capture_format(
-    tmp_path: Path,
-) -> None:
-    r"""A capture in a format version the checker does not read is refused
-    by name; ``sdm-capture/1`` is read."""
-    cases, made = _cases_dir(tmp_path)
-    run = runner()
-    hashes = {
-        f'{case["id"]}@databricks-sql': run.input_hash(case) for case in made
-    }
-    good = _manifest(tmp_path / 'good/capture.json', hashes)
-    done = _capture_check('captures', '--cases', str(cases), str(good))
-    assert done.returncode == 0, done.stdout + done.stderr
-    bad = _manifest(
-        tmp_path / 'bad/capture.json', hashes, format='sdm-capture/9'
-    )
-    done = _capture_check('captures', '--cases', str(cases), str(bad))
-    assert done.returncode == 1, done.stdout + done.stderr
-    assert 'sdm-capture/9' in done.stdout + done.stderr
-    assert 'Traceback' not in done.stderr
-
-
-@pending
-def test_t32_capture_check_lists_a_case_changed_or_missing_as_pending_live(
-    tmp_path: Path,
-) -> None:
-    r"""Choice 2, "When the capture runs": a case whose input hash is not
-    the one recorded, or that runs on a leg the capture does not hold, is
-    pending live: listed, not passed, and failing a locked run; a case
-    whose hash matches is not listed."""
-    cases, made = _cases_dir(tmp_path)
-    run = runner()
-    one, two = (f'{case["id"]}@databricks-sql' for case in made)
-    current = run.input_hash(made[0])
-    manifest = _manifest(tmp_path / 'c/capture.json', {one: current})
-    done = _capture_check('captures', '--cases', str(cases), str(manifest))
-    assert done.returncode == 0, done.stdout + done.stderr
-    listed = re.findall(r'pending live: ([\w.@-]+)', done.stdout)
-    assert listed == [two], done.stdout
-    stale = _manifest(
-        tmp_path / 'd/capture.json',
-        {one: 'f' * 64, two: run.input_hash(made[1])},
-    )
-    done = _capture_check('captures', '--cases', str(cases), str(stale))
-    assert re.findall(r'pending live: ([\w.@-]+)', done.stdout) == [one], (
-        done.stdout
-    )
-    locked = _capture_check(
-        'captures', '--locked', '--cases', str(cases), str(stale)
-    )
-    assert locked.returncode == 1, locked.stdout + locked.stderr
-    whole = _manifest(
-        tmp_path / 'e/capture.json',
-        {one: current, two: run.input_hash(made[1])},
-    )
-    done = _capture_check(
-        'captures', '--locked', '--cases', str(cases), str(whole)
-    )
-    assert done.returncode == 0, done.stdout + done.stderr
-    assert 'pending live' not in done.stdout
-
-
-def _git(repo: Path, *arguments: str) -> str:
-    return subprocess.run(
-        ['git', '-C', str(repo), *arguments],
-        capture_output=True,
-        text=True,
-        check=True,
-        stdin=subprocess.DEVNULL,
-        env={
-            **os.environ,
-            **QUIET,
-            'GIT_AUTHOR_NAME': 't32',
-            'GIT_AUTHOR_EMAIL': 't32@example.invalid',
-            'GIT_COMMITTER_NAME': 't32',
-            'GIT_COMMITTER_EMAIL': 't32@example.invalid',
-        },
-        timeout=120,
-    ).stdout.strip()
-
-
-@pending
-def test_t32_capture_check_holds_a_captures_only_commit_to_the_final_candidate(
-    tmp_path: Path,
-) -> None:
-    r"""The live-test plan's one exception: a commit on the final candidate
-    changing only ``contract/captures/**``, whose captures all name the
-    final candidate as their recording commit, passes; one naming another
-    commit, or changing a path outside the captures, is refused."""
-    repo = tmp_path / 'repo'
-    repo.mkdir()
-    _git(repo, 'init', '-q', '-b', 'main')
-    (repo / 'contract/cases').mkdir(parents=True)
-    (repo / 'contract/cases/a.json').write_text('{}\n')
-    _git(repo, 'add', '-A')
-    _git(repo, 'commit', '-q', '-m', 'the final candidate')
-    candidate = _git(repo, 'rev-parse', 'HEAD')
-    results = {}
-    for name, commit, outside in (
-        ('names the candidate', candidate, False),
-        ('names another commit', 'b' * 40, False),
-        ('changes a case too', candidate, True),
-    ):
-        _git(repo, 'checkout', '-q', '-B', name.replace(' ', '-'), candidate)
-        _manifest(
-            repo / 'contract/captures/e1/capture.json',
-            {'x@databricks-sql': 'c' * 64},
-            commit=commit,
-        )
-        if outside:
-            (repo / 'contract/cases/a.json').write_text('{"changed": 1}\n')
-        _git(repo, 'add', '-A')
-        _git(repo, 'commit', '-q', '-m', name)
-        done = _capture_check(
-            'commit', '--candidate', candidate, 'HEAD', cwd=repo
-        )
-        assert 'Traceback' not in done.stderr, done.stderr
-        results[name] = done.returncode
-    assert results == {
-        'names the candidate': 0,
-        'names another commit': 1,
-        'changes a case too': 1,
-    }
-
-
-@pending
-def test_t32_captures_are_a_protected_path() -> None:
-    r"""Choice 2: ``contract/captures/**`` is protected, so a capture
-    changes only in a landing whose trailer names it."""
-    ratchet = _module('t32_recording_ratchet', RATCHET)
-    rules = ratchet.patterns(
-        (ROOT / 'contract/protected-paths.txt').read_text(encoding='utf-8')
-    )
-    for path in (
-        'contract/captures/c1/capture.json',
-        'contract/captures/c1/databricks-sql/tables/orders.arrow',
-    ):
-        assert ratchet.protects(rules, path), path
-
-
-@pending
 def test_t32_the_runner_refuses_a_client_of_another_contract_version() -> None:
     r"""P2-MID2-7: a stale installed wheel is refused by the runner, which
     names the installed contract version and the checkout's."""

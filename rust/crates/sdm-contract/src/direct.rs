@@ -400,6 +400,9 @@ pub enum DirectPrediction {
     DeferredOptions {
         body: EncodedDirectBody,
         inference_present: bool,
+        /// Ordinary options are admitted by Rust before a native transport call.
+        #[serde(default)]
+        inference: Option<DirectInference>,
     },
     Empty {
         bound: BoundDirectCall,

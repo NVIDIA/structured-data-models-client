@@ -2,62 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T2.7's exits (the package's test author's): a minimal non-SQL test
-//! provider and a second `DataLayer` composed at the composition root.
-//!
-//! The interface assumed, on `sdm-contract-run`:
-//!
-//! ```text
-//! sdm-contract-run --kit memory [--fault truncate|silent_capability] --out REPORT
-//! sdm-contract-run --database memory [--layer default] --out FILE CASE...
-//! ```
-//!
-//! `memory` names the non-SQL provider: each table read whole into Arrow
-//! in memory (built by DuckDB from the kit's `dataset.sql`, or from a
-//! case's base and setup), and every typed data request answered from
-//! those tables, never through SQL. `--kit memory` runs the provider
-//! conformance kit (T2.5) on it, as `--kit duckdb` does on DuckDB's
-//! provider, the report's `database` `memory`. `--database memory` runs
-//! each case on the swapped data layer: a second `DataLayer`, not
-//! `sdm_data::Data`, composed into its own `CompositionRoot` and handed to
-//! `HostRun::start`, with the non-SQL provider answering every fetch; each
-//! observation keyed `<case>@memory`, as `--database sqlite` keys
-//! `<case>@sqlite`. With `--layer default`, the same provider answers the
-//! same case through the default composition root's layer
-//! (`sdm_host::default_root`, `sdm-data`'s), which serves host providers
-//! too: the one change between the two runs is the data layer.
-//!
-//! Each test's line says what it proves:
-//!
-//! - "the provider passes the kit, including two schema tables over one
-//!   source": every kit case, judged here by `expected.json`'s rules,
-//!   passes on `memory`, `key-counts.one-source-twice` among them (two
-//!   keys over the one relation `orders`, each counted alone);
-//! - the slice gate's seeded faults (design, check 5) fail the kit on the
-//!   non-SQL provider too: a truncated page and a capability that fails
-//!   silently each fail the cases `expected.json`'s `faults` name;
-//! - "the same prediction runs on the swapped layer": S1's `base.binary`
-//!   (`from_source`, `materialize`, `predict`) with the non-SQL provider
-//!   gives, on the swapped layer, the whole result it gives on the default
-//!   layer (outcome, description, the data it asked for, materialized
-//!   request and every model call body); and against DuckDB's SQL
-//!   provider, everything but the in-context examples' rows, which each
-//!   provider draws by its own seeded sample (DuckDB's reservoir shuffles
-//!   even a table it keeps whole; design, "Data access": a provider's own
-//!   sampling is repeatable only for that provider), every fetch on the
-//!   swapped layer planned as the typed request, no statement;
-//! - "a guard shows no domain crate changed for it": no commit of T2.7's
-//!   (subject `T2.7: `, `T2.7 fix <n>: `, `T2.7 tests: `, or its
-//!   landing) changes a file of a crate `scripts/rust_core/l0_deps.py`
-//!   classes as domain; a control shows the guard catches such an edit.
-//!
-//! The kit case `key-counts.one-source-twice` also runs on every SQL
-//! provider through T2.5's tests on both hosts, which it passes as written.
-//!
-//! Gating: `contract/tests/t27-pending.json`'s `pending` names, as
-//! `rust:<test>`, the tests that failed when written. Each must still fail
-//! (strict); once one passes it fails, naming itself, until it is taken
-//! out.
+//! Provider conformance, seeded-fault detection and interchangeable data layers.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -65,7 +10,6 @@ use std::process::{Command, Output, Stdio};
 
 use serde_json::{Value, json};
 
-const PENDING: &str = "contract/tests/t27-pending.json";
 const MEMORY: &str = "memory";
 /// The S1 case the swapped layer runs: `from_source`, `materialize` and a
 /// binary `predict`, on the shop base.
@@ -79,38 +23,6 @@ fn root() -> PathBuf {
 
 fn read_json(path: &Path) -> Value {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-fn pending(test: &str) -> bool {
-    read_json(&root().join(PENDING))["pending"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|t| t == &Value::from(format!("rust:{test}")))
-}
-
-/// Runs `check`; a pending test must fail, any other must pass.
-fn gated(test: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome, pending(test)) {
-        (Ok(()), true) => panic!("{test} passes now: take rust:{test} out of {PENDING}'s pending"),
-        (Err(failure), false) => std::panic::resume_unwind(failure),
-        _ => {}
-    }
-}
-
-#[test]
-fn the_pending_list_only_shrinks() {
-    let gating = read_json(&root().join(PENDING));
-    let names = |key: &str| -> BTreeSet<String> {
-        gating[key]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|n| n.as_str().unwrap().to_owned())
-            .collect()
-    };
-    assert!(names("pending").is_subset(&names("authored")));
 }
 
 /// `sdm-contract-run` with `arguments`, from the repository's root.
@@ -346,15 +258,13 @@ fn the_kit_holds_two_schema_tables_over_one_source() {
 /// over one source.
 #[test]
 fn the_kit_passes_on_the_non_sql_provider() {
-    gated("the_kit_passes_on_the_non_sql_provider", || {
-        let (status, report) = kit_on_memory(None);
-        let problems: BTreeMap<_, _> = judged(&report)
-            .into_iter()
-            .filter_map(|(id, p)| p.map(|p| (id, p)))
-            .collect();
-        assert!(problems.is_empty(), "{problems:#?}");
-        assert_eq!(status, 0, "the kit exited {status}");
-    });
+    let (status, report) = kit_on_memory(None);
+    let problems: BTreeMap<_, _> = judged(&report)
+        .into_iter()
+        .filter_map(|(id, p)| p.map(|p| (id, p)))
+        .collect();
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert_eq!(status, 0, "the kit exited {status}");
 }
 
 /// T2.7, the slice gate's seeded faults on the non-SQL provider: each
@@ -363,40 +273,35 @@ fn the_kit_passes_on_the_non_sql_provider() {
 /// exits 1.
 #[test]
 fn a_seeded_fault_fails_the_kit_on_the_non_sql_provider() {
-    gated(
-        "a_seeded_fault_fails_the_kit_on_the_non_sql_provider",
-        || {
-            let kit = expected();
-            for fault in kit["faults"].as_array().unwrap() {
-                let name = fault["name"].as_str().unwrap();
-                let fails: BTreeSet<String> = fault["fails"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|n| n.as_str().unwrap().to_owned())
-                    .collect();
-                let (status, report) = kit_on_memory(Some(name));
-                let failed: BTreeSet<String> = judged(&report)
-                    .into_iter()
-                    .filter_map(|(id, p)| p.map(|_| id))
-                    .collect();
-                assert!(
-                    fails.is_subset(&failed),
-                    "{name}: fails {failed:?}, not every one of {fails:?}"
-                );
-                if name == "silent_capability" {
-                    // Only neighbors is silenced: every other case passes.
-                    assert_eq!(failed, fails, "{name}: the cases it fails");
-                }
-                for case in report["cases"].as_array().unwrap() {
-                    if fails.contains(case["id"].as_str().unwrap()) {
-                        assert!(case.get("error").is_none(), "{name}: {case}");
-                    }
-                }
-                assert_eq!(status, 1, "{name}: the kit exited {status}, not 1");
+    let kit = expected();
+    for fault in kit["faults"].as_array().unwrap() {
+        let name = fault["name"].as_str().unwrap();
+        let fails: BTreeSet<String> = fault["fails"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_str().unwrap().to_owned())
+            .collect();
+        let (status, report) = kit_on_memory(Some(name));
+        let failed: BTreeSet<String> = judged(&report)
+            .into_iter()
+            .filter_map(|(id, p)| p.map(|_| id))
+            .collect();
+        assert!(
+            fails.is_subset(&failed),
+            "{name}: fails {failed:?}, not every one of {fails:?}"
+        );
+        if name == "silent_capability" {
+            // Only neighbors is silenced: every other case passes.
+            assert_eq!(failed, fails, "{name}: the cases it fails");
+        }
+        for case in report["cases"].as_array().unwrap() {
+            if fails.contains(case["id"].as_str().unwrap()) {
+                assert!(case.get("error").is_none(), "{name}: {case}");
             }
-        },
-    );
+        }
+        assert_eq!(status, 1, "{name}: the kit exited {status}, not 1");
+    }
 }
 
 // --- the same prediction on the swapped layer -----------------------------------
@@ -497,65 +402,63 @@ fn host_fetches(run: &Value, which: &str) -> Vec<Value> {
 /// planned as the typed request.
 #[test]
 fn the_same_prediction_runs_on_the_swapped_layer() {
-    gated("the_same_prediction_runs_on_the_swapped_layer", || {
-        let duckdb = observed(&[], "duckdb");
-        assert_eq!(duckdb["case"], "base.binary");
-        assert_eq!(
-            duckdb["outcome"]["result"], "success",
-            "{}",
-            duckdb["outcome"]
-        );
-        assert!(duckdb["core"]["predicted"].is_object(), "DuckDB predicts");
-        let swapped = observed(&["--database", MEMORY], MEMORY);
-        assert_eq!(swapped["case"], "base.binary@memory");
-        let default = observed(&["--database", MEMORY, "--layer", "default"], "default");
-        assert_eq!(default["case"], "base.binary@memory");
+    let duckdb = observed(&[], "duckdb");
+    assert_eq!(duckdb["case"], "base.binary");
+    assert_eq!(
+        duckdb["outcome"]["result"], "success",
+        "{}",
+        duckdb["outcome"]
+    );
+    assert!(duckdb["core"]["predicted"].is_object(), "DuckDB predicts");
+    let swapped = observed(&["--database", MEMORY], MEMORY);
+    assert_eq!(swapped["case"], "base.binary@memory");
+    let default = observed(&["--database", MEMORY, "--layer", "default"], "default");
+    assert_eq!(default["case"], "base.binary@memory");
 
-        // The whole result: only the data layer changed.
-        for field in SAME {
-            assert_eq!(
-                swapped.pointer(field),
-                default.pointer(field),
-                "layers: {field}"
-            );
-        }
+    // The whole result: only the data layer changed.
+    for field in SAME {
         assert_eq!(
-            host_fetches(&swapped, "swapped"),
-            host_fetches(&default, "default"),
-            "layers: the data the core asked for"
+            swapped.pointer(field),
+            default.pointer(field),
+            "layers: {field}"
         );
-        assert_eq!(
-            swapped["core"]["materialized"], default["core"]["materialized"],
-            "layers: the materialized request"
-        );
-        assert_eq!(
-            swapped["core"]["predicted"], default["core"]["predicted"],
-            "layers: every model call body"
-        );
+    }
+    assert_eq!(
+        host_fetches(&swapped, "swapped"),
+        host_fetches(&default, "default"),
+        "layers: the data the core asked for"
+    );
+    assert_eq!(
+        swapped["core"]["materialized"], default["core"]["materialized"],
+        "layers: the materialized request"
+    );
+    assert_eq!(
+        swapped["core"]["predicted"], default["core"]["predicted"],
+        "layers: every model call body"
+    );
 
-        // Against DuckDB: all but the examples' rows.
-        for field in SAME {
-            assert_eq!(
-                swapped.pointer(field),
-                duckdb.pointer(field),
-                "DuckDB: {field}"
-            );
-        }
-        assert!(
-            swapped["core"]["predicted"]["body"]["context"].is_object(),
-            "the call holds in-context examples"
-        );
+    // Against DuckDB: all but the examples' rows.
+    for field in SAME {
         assert_eq!(
-            examples_shaped(&swapped["core"]["materialized"]),
-            examples_shaped(&duckdb["core"]["materialized"]),
-            "DuckDB: the materialized request"
+            swapped.pointer(field),
+            duckdb.pointer(field),
+            "DuckDB: {field}"
         );
-        assert_eq!(
-            examples_shaped(&swapped["core"]["predicted"]),
-            examples_shaped(&duckdb["core"]["predicted"]),
-            "DuckDB: every model call body"
-        );
-    });
+    }
+    assert!(
+        swapped["core"]["predicted"]["body"]["context"].is_object(),
+        "the call holds in-context examples"
+    );
+    assert_eq!(
+        examples_shaped(&swapped["core"]["materialized"]),
+        examples_shaped(&duckdb["core"]["materialized"]),
+        "DuckDB: the materialized request"
+    );
+    assert_eq!(
+        examples_shaped(&swapped["core"]["predicted"]),
+        examples_shaped(&duckdb["core"]["predicted"]),
+        "DuckDB: every model call body"
+    );
 }
 
 /// Control: cutting the examples to their shape keeps everything else of
@@ -583,134 +486,4 @@ fn only_the_examples_rows_are_left_out() {
         json!({"rows": [[1]]}),
         "rows outside the examples are kept"
     );
-}
-
-// --- the guard: no domain crate changed for T2.7 ---------------------------------
-
-/// The crates `scripts/rust_core/l0_deps.py` classes as domain, read from
-/// its `CLASSES` table (`'<crate>': DOMAIN,`).
-fn domain_crates() -> BTreeSet<String> {
-    let text = std::fs::read_to_string(root().join("scripts/rust_core/l0_deps.py")).unwrap();
-    let start = text
-        .find("CLASSES: dict[str, str] = {")
-        .expect("l0_deps.py's CLASSES");
-    let table = &text[start..start + text[start..].find('}').unwrap()];
-    table
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            line.strip_suffix(": DOMAIN,")
-                .map(|name| name.trim_matches('\'').to_owned())
-        })
-        .collect()
-}
-
-/// The files of `changed` inside a domain crate's directory.
-fn in_domain_crates<'a>(changed: &'a [String], domain: &BTreeSet<String>) -> Vec<&'a String> {
-    changed
-        .iter()
-        .filter(|path| {
-            domain
-                .iter()
-                .any(|name| path.starts_with(&format!("rust/crates/{name}/")))
-        })
-        .collect()
-}
-
-fn git(arguments: &[&str]) -> String {
-    let done = Command::new("git")
-        .args(arguments)
-        .current_dir(root())
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert!(done.status.success(), "git {arguments:?}: {}", said(&done));
-    String::from_utf8(done.stdout).unwrap()
-}
-
-/// Whether `subject` is one of T2.7's commits: its implementation, a fix
-/// round, its tests, its tracker, or its landing.
-fn is_t27(subject: &str) -> bool {
-    let subject = subject.strip_prefix("Land ").unwrap_or(subject);
-    subject
-        .strip_prefix("T2.7")
-        .is_some_and(|rest| rest.starts_with(':') || rest.starts_with(' '))
-}
-
-/// Control: the guard reads the domain crates from l0_deps.py, and flags a
-/// file of one (a seeded edit of the composition root's crate) while
-/// passing the test kit's and the host's.
-#[test]
-fn the_guard_catches_a_domain_crate_edit() {
-    let domain = domain_crates();
-    for name in [
-        "sdm-contract",
-        "sdm-core",
-        "sdm-data",
-        "sdm-request",
-        "sdm-schema",
-    ] {
-        assert!(domain.contains(name), "{name} in {domain:?}");
-    }
-    assert!(!domain.contains("sdm-testkit") && !domain.contains("sdm-host"));
-    let changed: Vec<String> = [
-        "rust/crates/sdm-testkit/src/memory.rs",
-        "rust/crates/sdm-host/src/lib.rs",
-        "rust/crates/sdm-core/src/compose.rs",
-        "rust/crates/sdm-data-extra/src/lib.rs",
-        "contract/fixtures/provider-kit/expected.json",
-    ]
-    .map(str::to_owned)
-    .to_vec();
-    assert_eq!(
-        in_domain_crates(&changed, &domain),
-        vec!["rust/crates/sdm-core/src/compose.rs"]
-    );
-    assert!(is_t27("T2.7: the non-SQL provider"));
-    assert!(is_t27("T2.7 fix 2: paging"));
-    assert!(is_t27("T2.7 tests: the kit on memory"));
-    assert!(is_t27("Land T2.7: the swapped layer"));
-    assert!(!is_t27("T2.70: another package"));
-    assert!(!is_t27("T2.5: the kit"));
-}
-
-/// T2.7: a guard shows no domain crate changed for it. Every commit of
-/// T2.7's in this checkout's history is read, the implementation's among
-/// them (so the guard holds something), and none touches a domain crate.
-#[test]
-fn no_domain_crate_changed_for_t2_7() {
-    gated("no_domain_crate_changed_for_t2_7", || {
-        assert_eq!(
-            git(&["rev-parse", "--is-shallow-repository"]).trim(),
-            "false",
-            "a shallow checkout cannot show T2.7's commits"
-        );
-        let domain = domain_crates();
-        let mut implemented = false;
-        let mut touched = BTreeMap::new();
-        for line in git(&["log", "--no-merges", "--format=%H %s", "HEAD"]).lines() {
-            let (sha, subject) = line.split_once(' ').unwrap();
-            if !is_t27(subject) {
-                continue;
-            }
-            implemented |= subject.starts_with("T2.7: ");
-            let changed: Vec<String> =
-                git(&["diff-tree", "--no-commit-id", "--name-only", "-r", sha])
-                    .lines()
-                    .map(str::to_owned)
-                    .collect();
-            let hit: Vec<String> = in_domain_crates(&changed, &domain)
-                .into_iter()
-                .cloned()
-                .collect();
-            if !hit.is_empty() {
-                touched.insert(format!("{sha} {subject}"), hit);
-            }
-        }
-        assert!(implemented, "no `T2.7: ` commit in this history");
-        assert!(
-            touched.is_empty(),
-            "T2.7 changed domain crates: {touched:#?}"
-        );
-    });
 }

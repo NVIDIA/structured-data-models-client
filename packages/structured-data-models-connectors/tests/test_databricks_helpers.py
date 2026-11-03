@@ -16,13 +16,17 @@ from typing import Any
 
 import pytest
 
+from sdm_connectors import __version__
+from sdm_connectors._databricks_partner import databricks_product_version
 from sdm_connectors.databricks import lakebase, warehouse
 from sdm_connectors.sql import ConnectorError
 
 ENDPOINT = 'projects/p/branches/b/endpoints/e'
 
 #: What Databricks requires on every connection structured-data-models-client opens.
-PARTNER = 'nvidia_structured-data-models-client/1.0.0'
+PARTNER = 'nvidia_structured-data-models-client/' + databricks_product_version(
+    __version__
+)
 #: The bytes of an ``application_name`` left after the identifier and a space.
 ROOM = 63 - len(PARTNER.encode()) - 1
 SAMPLING = 'structured_data_models_client_purpose:sampling'

@@ -124,7 +124,7 @@ pub enum ColumnType {
 }
 
 /// The cell vocabulary of the scope manifests: one name per type, with
-/// timestamps split by unit and zone (`phase-0/scope-format.md`). Generated
+/// timestamps split by unit and zone (the stable cell vocabulary). Generated
 /// from [`ColumnType::cell_type`], so the manifests and the code cannot
 /// disagree.
 pub fn cell_types() -> Vec<&'static str> {

@@ -169,7 +169,6 @@ def test_a_gathered_request_always_names_its_rows() -> None:
     """The gathered envelope spells the entity as a transport reference rather
     than as the schema's key, so asking whether the predict half carries the
     key answered no about requests whose every answer names its entity."""
-    pytest.importorskip('sdm_relational_engine')
 
     import numpy as np
 
@@ -213,30 +212,20 @@ def test_a_gathered_request_always_names_its_rows() -> None:
     assert list(built.columns) == ['row_index', 'id', 'prediction']
 
 
-def test_an_empty_forecast_still_says_which_step_it_is_about() -> None:
-    """`forecast_step` is put on the items as the parts are joined, so with no
-    items there was nothing to read it from and an empty forecast lost the
-    column that says which step an answer is about."""
-    from sdm_client.client import _by_step
-    from sdm_client.result import PredictionItem, PredictionResult
+def test_an_empty_relational_forecast_names_the_step_that_cannot_gather() -> (
+    None
+):
+    from test_decomposition_is_faithful import shop
 
-    class Rewritten:
-        parts = [(None, 1), (None, 2)]
+    from sdm_client import PredictiveQuery, StructuredDataError
 
-    def parts_with(items: tuple) -> list[PredictionResult]:
-        return [
-            PredictionResult(
-                model='m', request_id='r', items=items, outputs=('prediction',)
-            )
-            for _ in range(2)
-        ]
-
-    full = _by_step(
-        parts_with((PredictionItem(row_index=0, id='a', prediction=1.0),)),
-        Rewritten(),
-    ).to_pandas()
-    empty = _by_step(parts_with(()), Rewritten()).to_pandas()
-
-    assert list(full.columns) == list(empty.columns)
-    assert 'forecast_step' in empty.columns
-    assert empty.empty
+    query = PredictiveQuery(
+        'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES FOR EACH users.uid',
+        shop(),
+    )
+    with pytest.raises(
+        StructuredDataError, match='indices names no entity'
+    ) as raised:
+        query.materialize(indices=[])
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert 'forecast step 1 of 2' in str(raised.value)

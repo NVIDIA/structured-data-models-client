@@ -50,16 +50,8 @@ from sdm_client.errors import StructuredDataError, UnknownModelError
 # that names the limit. See the architecture note on inference knobs:
 # `run_mode` is derived from these rather than being set.
 #
-# `predict_rows_max` and `predict_rows_temporal_link_prediction` restate the
-# engine's own `_MAX_PRED_SIZE`, which defaults to the first and holds the
-# second for `TaskType.TEMPORAL_LINK_PREDICTION`
-# (sdm_relational_engine/rfm/rfm.py). The duplication predates this client,
-# and it is load-bearing: this value is what the client asks the engine to
-# batch at, so a drift would gather batches the endpoint refuses, or ask for
-# smaller ones than it would take, and the engine's own refusal names a
-# `batch_size=` argument this client's callers have not got. Change them
-# together; `test_the_two_ceilings_are_the_engine_s_own` fails if they move
-# apart.
+# Prediction row limits also bound the batches requested from the Rust core.
+# Keep endpoint limits and batching consistent so each batch is accepted.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'context_rows_max': 10_000,

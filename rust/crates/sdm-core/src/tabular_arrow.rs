@@ -533,6 +533,9 @@ async fn fit(
         "metadata",
         object([("request_id", Value::Text(input.prediction.request_id))]),
     );
+    check_options(&input.prediction.request.inference)?;
+    // Validate the request's options without adding unsupported create-session fields.
+    tabular::typed_inference(input.prediction.request.inference.clone())?;
     let answer = session_call(asker, Endpoint::CreateSession, payload).await?;
     let session_id = answer
         .get("session_id")

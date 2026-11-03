@@ -148,3 +148,19 @@ fn decimal_infinity_keeps_float_signals_and_infinite_equality() {
         );
     }
 }
+
+#[test]
+fn stable_decimal_ties_preserve_selected_order() {
+    let mut input = facts(
+        (0..40).map(|i| decimal(&(i % 2).to_string(), 0)).collect(),
+        false,
+        false,
+        true,
+    );
+    input.profile = Profile::Stable;
+    let Outcome::Sorted { positions, .. } = order_sampled(&input).unwrap() else {
+        panic!("ordinary decimal values must sort");
+    };
+    let expected: Vec<_> = (0..40).step_by(2).chain((1..40).step_by(2)).collect();
+    assert_eq!(positions, expected);
+}

@@ -259,10 +259,9 @@ def test_pytest_tripwire_wraps_fixture_setup_and_teardown(
     # conftest uses the exact permanent hook, not a hand-written approximation.
     (tmp_path / 'conftest.py').write_text((HERE / 'conftest.py').read_text())
     (tmp_path / 'test_probe.py').write_text("""import pytest
-import predictive_query
 @pytest.fixture
 def data():
-    predictive_query.validate(None)
+    import predictive_query
     return 1
 @pytest.mark.parity_default_routes
 def test_public(data):
@@ -275,7 +274,7 @@ def test_public(data):
         capture_output=True,
     )
     assert ran.returncode != 0
-    assert 'legacy policy executed' in ran.stdout + ran.stderr
+    assert 'retired runtime imported' in ran.stdout + ran.stderr
 
 
 def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
@@ -293,6 +292,13 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'public-serving-refusals',
         'result-items',
         'request-inspection',
+        'sessions',
+        'errors',
+        'wire-vocabulary',
+        'sql-helpers',
+        'release-metadata',
+        'relational-materialization',
+        'in-process-models',
     }
 
 
@@ -717,32 +723,51 @@ def test_derived_reference_alignment_precedes_identity_proof_without_hiding_chan
         )
 
 
-def test_snowflake_platform_probe_requires_exact_command_and_driver_origin():
+@pytest.mark.parametrize('linked_system_tool', [False, True])
+def test_snowflake_platform_probe_requires_exact_command_and_driver_origin(
+    linked_system_tool,
+):
     pytest.importorskip('snowflake.connector')
     code = """
 import json, subprocess
 from routes import LegacyGuard
 with LegacyGuard({}) as guard:
     import snowflake.connector
-assert guard.report['unobserved_subprocesses'] == []
-assert [item['command'] for item in guard.report['observed_subprocesses']] == [['uname', '-p']]
+assert guard.report['unobserved_subprocesses'] == [], guard.report
+assert all(item['command'] == ['uname', '-p'] for item in guard.report['observed_subprocesses'])
 with LegacyGuard({}) as outside:
     subprocess.run(['uname', '-p'], check=True, capture_output=True)
 assert outside.report['observed_subprocesses'] == []
 assert outside.report['unobserved_subprocesses'] == ['subprocess.Popen']
 print(json.dumps(guard.report))
 """
+    if linked_system_tool:
+        code = (
+            """
+from pathlib import Path
+original_resolve = Path.resolve
+def system_resolve(self, *args, **kwargs):
+    resolved = original_resolve(self, *args, **kwargs)
+    if resolved == Path('/usr/bin/uname'):
+        return Path('/usr/lib/cargo/bin/coreutils/uname')
+    return resolved
+Path.resolve = system_resolve
+"""
+            + code
+        )
     ran = subprocess.run(
         [sys.executable, '-c', code],
         cwd=HERE,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    assert ran.returncode == 0, ran.stderr
     observed = json.loads(ran.stdout)['observed_subprocesses']
-    assert (
-        observed[0]['origin']
+    assert all(
+        item['origin']
         == 'snowflake.connector.description -> platform._Processor.from_subprocess'
+        for item in observed
     )
 
 
@@ -1280,3 +1305,34 @@ def test_date_inspection_and_list_null_proofs_do_not_erase_times_or_numbers():
             a['reader']['users']['data']['rows'][0][2][0] = {'float': 'nan'}
         equivalent_raw_observations(a, b, fixture)
         assert a != b
+
+
+@pytest.mark.parametrize(
+    'module', ['predictive_query', 'sdm_relational_engine']
+)
+def test_default_guard_blocks_retired_package_imports(module):
+    import importlib
+
+    with LegacyGuard(raise_caught=False) as guard:
+        with pytest.raises(AssertionError, match='retired runtime imported'):
+            importlib.import_module(module)
+    assert guard.report['legacy_hits'] == [module]
+    assert guard.report['installed']
+
+
+@pytest.mark.parametrize(
+    'module', ['predictive_query', 'sdm_relational_engine']
+)
+def test_default_guard_rejects_preloaded_retired_packages(module, monkeypatch):
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, module, types.ModuleType(module))
+    guard = LegacyGuard()
+    with pytest.raises(
+        AssertionError, match='retired runtime already imported'
+    ):
+        with guard:
+            pytest.fail('a preloaded retired package must prevent the journey')
+    assert guard.report['legacy_hits'] == [module]
+    assert not guard.report['installed']

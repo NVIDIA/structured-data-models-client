@@ -39,9 +39,6 @@ The case ``rank.repeated-candidates`` holds the repeats on all three
 databases on python-core here and on rust-host (``sdm-testkit``'s
 ``tests/t214b_host.rs``), where no Python decides them.
 
-Gating: ``t214b-pending.json``'s ``pending`` names, as ``host:<name>``, the
-tests that failed when written. Each must still fail (strict); once one
-passes it fails, naming itself, until it is taken out.
 """
 
 from __future__ import annotations
@@ -67,7 +64,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/tools/t214b_host_record.py'
 CASES = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t214b-pending.json')
+
 PREFIX = 'host:'
 REPEATS_CASE = 'rank.repeated-candidates'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
@@ -106,58 +103,7 @@ def endpoint() -> ModuleType:
 CASE_KEYS = tuple(runner().case_key(REPEATS_CASE, d) for d in DATABASES)
 
 
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert name in gating['authored'], f'{name} is not authored'
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t214b-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    this file's authored keys are its named tests and the repeats case on
-    each database, python-core's and rust-host's (rust-host's on DuckDB and
-    SQLite: its Postgres pass replays python-core's fetches)."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    mine = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert mine == (
-        {f'{PREFIX}{name}' for name in NAMED}
-        | {f'{PREFIX}py:{k}' for k in CASE_KEYS}
-        | {f'{PREFIX}rust:{k}' for k in CASE_KEYS if '@postgres' not in k}
-    )
-
-
 # --- on the core route, in process -------------------------------------------
-
-
-@contextmanager
-def on_the_core() -> Iterator[None]:
-    from sdm_client import _routing
-
-    before = os.environ.get('SDM_CORE_ROUTES')
-    os.environ['SDM_CORE_ROUTES'] = ','.join(
-        _routing.FROM_SOURCE_DUCKDB
-        + _routing.MATERIALIZE_DUCKDB
-        + _routing.PREDICT_DUCKDB
-    )
-    try:
-        yield
-    finally:
-        if before is None:
-            os.environ.pop('SDM_CORE_ROUTES', None)
-        else:
-            os.environ['SDM_CORE_ROUTES'] = before
 
 
 class _Spy:
@@ -274,12 +220,9 @@ def test_the_core_reads_the_endpoint_s_answer_as_the_bytes_it_sent(
     spy.install(monkeypatch)
 
     def check() -> None:
-        with on_the_core():
-            request = recorder()._materialize(
-                _schema(), recorder().QUERIES[query]
-            )
-            with compact_endpoint() as (url, received, written):
-                _predict(request, url)
+        request = recorder()._materialize(_schema(), recorder().QUERIES[query])
+        with compact_endpoint() as (url, received, written):
+            _predict(request, url)
         assert len(received.requests) == (2 if query == 'forecast' else 1)
         assert len(written) == len(received.requests)
         assert spy.answers == written, (
@@ -288,7 +231,7 @@ def test_the_core_reads_the_endpoint_s_answer_as_the_bytes_it_sent(
             f'{written[0][:80]!r}'
         )
 
-    held(f'{PREFIX}response-bytes', check)
+    check()
 
 
 def test_the_answer_re_encoding_is_gone() -> None:
@@ -306,7 +249,7 @@ def test_the_answer_re_encoding_is_gone() -> None:
         ]
         assert not left, f'still in _rust/predict.py: {left}'
 
-    held(f'{PREFIX}no-re-encoding', check)
+    check()
 
 
 def test_the_request_carries_the_facts_the_core_resolved(
@@ -330,12 +273,11 @@ def test_the_request_carries_the_facts_the_core_resolved(
     spy = _Spy(edit=other_facts)
 
     def check() -> None:
-        with on_the_core():
-            schema = _schema()
-            spy.install(monkeypatch)
-            request = recorder()._materialize(
-                schema, recorder().QUERIES['windowed']
-            )
+        schema = _schema()
+        spy.install(monkeypatch)
+        request = recorder()._materialize(
+            schema, recorder().QUERIES['windowed']
+        )
         assert (request.entity_table, bool(request._windowed)) == (
             'orders',
             False,
@@ -345,7 +287,7 @@ def test_the_request_carries_the_facts_the_core_resolved(
             "core's facts"
         )
 
-    held(f'{PREFIX}facts-from-the-core', check)
+    check()
 
 
 # --- against the reference -----------------------------------------------------------
@@ -358,7 +300,7 @@ def vectors() -> dict[str, Any]:
 
 @functools.cache
 def core_observed() -> dict[str, Any]:
-    return recorder().observe(core=True)
+    return recorder().observe()
 
 
 def test_the_vectors_are_the_reference_s() -> None:
@@ -466,20 +408,17 @@ def test_another_request_state_version_is_refused_by_name() -> None:
     one the core accepts."""
     from sdm_client import StructuredDataError
 
-    with on_the_core():
-        request = recorder()._materialize(
-            _schema(), recorder().QUERIES['windowed']
-        )
-        import dataclasses
+    request = recorder()._materialize(_schema(), recorder().QUERIES['windowed'])
+    import dataclasses
 
-        assert isinstance(request._core.version, int)
-        request._core = dataclasses.replace(
-            request._core, version=request._core.version + 40
-        )
-        state = {'version': request._core.version}
-        with endpoint().serve() as (url, received):
-            with pytest.raises(StructuredDataError) as refused:
-                _predict(request, url)
+    assert isinstance(request._core.version, int)
+    request._core = dataclasses.replace(
+        request._core, version=request._core.version + 40
+    )
+    state = {'version': request._core.version}
+    with endpoint().serve() as (url, received):
+        with pytest.raises(StructuredDataError) as refused:
+            _predict(request, url)
     assert received.requests == []
     error = refused.value
     assert error.code == 'INVALID_REQUEST'
@@ -491,7 +430,7 @@ def test_another_request_state_version_is_refused_by_name() -> None:
         assert 'not one the core accepts' not in text, text
         assert 'version' in text and str(state['version']) in text, text
 
-    held(f'{PREFIX}state-version-named', check)
+    check()
 
 
 # --- the repeats case on python-core ---------------------------------------------------
@@ -606,4 +545,4 @@ def test_python_core_asks_the_repeats_case_as_the_reference(
         assert _payloads(line) == _payloads(want)
         assert line['public']['result'] == want['public']['result']
 
-    held(f'{PREFIX}py:{case_key}', check)
+    check()

@@ -5,7 +5,7 @@
 //! `sdm-contract-run`: the pure-Rust host over contract cases.
 //!
 //! ```text
-//! sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --providers
 //! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --replay RECORDING --replay-leg LEG --out FILE CASE_OR_DIRECTORY...
@@ -57,16 +57,12 @@
 //! observations are written only when every case was recorded. The
 //! identity's commit is the checkout the command runs in.
 //!
-//! `--pre-given-specs` reads every case's `core.describe_source.source` as
-//! contract 22's, written before T1.32h, and runs it as the current shape
-//! ([`sdm_testkit::pre_given`]); a bundle frozen before then cannot be
-//! rewritten. Without it, a spec in that shape is a runner failure.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
-use sdm_testkit::{bases, case, host, observation, pre_given, replay};
+use sdm_testkit::{bases, case, host, observation, replay};
 
 /// Whether `case`'s operations read data: it names `describe_source`.
 fn reads_data(case: &case::Case) -> bool {
@@ -76,10 +72,6 @@ fn reads_data(case: &case::Case) -> bool {
 }
 
 fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
-    let (pre_given_specs, arguments) = match arguments {
-        [flag, rest @ ..] if flag == "--pre-given-specs" => (true, rest),
-        _ => (false, arguments),
-    };
     let (database, arguments) = match arguments {
         [flag, database, rest @ ..]
             if flag == "--database" && (database == "sqlite" || database == "memory") =>
@@ -141,7 +133,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
         _ => bail!(
-            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --database memory [--layer default] | --replay RECORDING [--replay-leg LEG]] --out FILE CASE_OR_DIRECTORY..."
+            "usage: sdm-contract-run [--database sqlite | --database memory [--layer default] | --replay RECORDING [--replay-leg LEG]] --out FILE CASE_OR_DIRECTORY..."
         ),
     };
     let mut partial = out.clone().into_os_string();
@@ -175,11 +167,6 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     });
     if loaded.is_empty() {
         bail!("no case runs on the database asked for");
-    }
-    if pre_given_specs {
-        for each in &mut loaded {
-            pre_given::upgrade(&mut each.case)?;
-        }
     }
     let here = std::env::current_dir()?;
     let identity = observation::Identity::new(&here)?;

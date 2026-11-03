@@ -163,11 +163,13 @@ pub(crate) fn schema(held: &HeldSchema) -> Result<sdm_schema::held::Read, CoreEr
     // Preserve the concrete wire width beside the generic language family.
     for table in &mut read.description.tables {
         if let Some(native) = held.tables.iter().find(|native| native.name == table.name) {
+            let mut columns = BTreeMap::new();
+            for column in &native.columns {
+                // Preserve the previous first-match behavior for duplicate names.
+                columns.entry(column.name.as_str()).or_insert(column);
+            }
             for column in &mut table.columns {
-                if let Some(native) = native
-                    .columns
-                    .iter()
-                    .find(|native| native.name == column.name)
+                if let Some(native) = columns.get(column.name.as_str())
                     && let Some(dtype) = &native.dtype
                     && let Ok(dtype) =
                         serde_json::from_value(serde_json::Value::String(dtype.clone()))
@@ -764,6 +766,7 @@ pub(crate) async fn predict(
         DirectPrediction::DeferredOptions {
             body,
             inference_present,
+            inference,
         } => {
             sdm_request::direct::bound(&body.bound)?;
             if direct.payload != Some(body.payload) {
@@ -777,9 +780,13 @@ pub(crate) async fn predict(
             };
             let payload = crate::predict::payload(&bytes)?;
             tabular::check_body(&payload, &body, &body.bound.outputs)?;
-            let mut payload =
-                tabular::complete_body(payload, &request.request_id, DirectInference::default())?;
-            if inference_present {
+            let unencoded = inference.is_none();
+            let mut payload = tabular::complete_body(
+                payload,
+                &request.request_id,
+                inference.unwrap_or_default(),
+            )?;
+            if inference_present && unencoded {
                 payload.set("inference", Value::Null);
             }
             (body.bound, payload, true)

@@ -18,28 +18,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_the_general_client_matrix_has_the_legacy_route_dependency() -> None:
-    jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
-        'jobs'
-    ]
-    job = jobs['test']
-    commands = '\n'.join(step.get('run', '') for step in job['steps'])
-    assert '[test,relational]' in commands
-    assert 'packages/structured-data-models-relational-engine' in commands
-
-
-@pytest.mark.parametrize('name', ['installed-wheel', 'forced-routes'])
-def test_legacy_client_suites_install_the_candidate_engine(name: str) -> None:
-    jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
-        'jobs'
-    ]
-    job = jobs[name]
-    commands = '\n'.join(step.get('run', '') for step in job['steps'])
-    assert 'packages/structured-data-models-relational-engine' in commands
-    extras = re.findall(r'structured-data-models-client\[([^]]+)\]', commands)
-    assert any('relational' in value.split(',') for value in extras)
-
-
 def test_runtime_client_tests_install_the_schema_validator() -> None:
     jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
         'jobs'

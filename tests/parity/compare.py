@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Compare frozen Python to each installed language and render evidence, fail closed."""
+"""Validate installed-client evidence and compare language behavior, fail closed."""
 
 import argparse
 import json
@@ -499,8 +499,20 @@ def equivalent_derived_entity_refs(old_payloads, new_payloads, fixture):
 
 
 def assess(
-    data, baseline, candidate, *, live=True, selected=None, candidate_commit
+    data,
+    baseline,
+    candidate,
+    *,
+    live=True,
+    selected=None,
+    candidate_commit,
+    comparison='historical',
 ):
+    if comparison not in {'historical', 'current-clients'}:
+        raise ValueError('unknown comparison mode')
+    current = comparison == 'current-clients'
+    if current:
+        baseline = candidate
     scenarios = {case['id']: case for case in data['scenarios']}
     required = set(cells(data))
     unknown = set(candidate) - required
@@ -549,10 +561,39 @@ def assess(
         case = effective_case(scenarios[cell[0]], cell[1])
         old = baseline.get((*cell[:3], 'python'))
         new = candidate.get(cell)
+        if current and cell[3] == 'python':
+            if new is None:
+                continue
+            problem = evidence_problem(new, case, 'candidate', live)
+            expected = expectation(case, cell[2], 'python')
+            wanted = expected.get(
+                'outcome',
+                'refused' if expected['status'] == 'refused' else 'passed',
+            )
+            if problem:
+                row['reason'] = problem
+            elif new.get('status') != wanted or (
+                expected['status'] == 'refused'
+                and any(
+                    new.get('error', {}).get(name) != expected[name]
+                    for name in ('stage', 'code', 'rule')
+                )
+            ):
+                row.update(
+                    status='failed',
+                    reason='unexpected current-client outcome or refusal',
+                )
+            else:
+                row.update(
+                    status='passed',
+                    verdict='Current contract verified',
+                    reason='artifact, route, lifecycle and manifest checks passed; no historical comparison',
+                )
+            continue
         if old is None or new is None:
             continue
         problem = evidence_problem(
-            old, case, 'baseline', live
+            old, case, 'candidate' if current else 'baseline', live
         ) or evidence_problem(new, case, 'candidate', live)
         if problem:
             row['reason'] = problem
@@ -564,7 +605,9 @@ def assess(
             row['reason'] = 'different model versions or transports'
             continue
         expected = expectation(case, cell[2], cell[3])
-        baseline_expected = expectation(case, cell[2])
+        baseline_expected = expectation(
+            case, cell[2], 'python' if current else None
+        )
         wanted = expected.get(
             'outcome',
             'refused' if expected['status'] == 'refused' else 'passed',
@@ -579,10 +622,14 @@ def assess(
                 reason='unexpected outcome or missing baseline behavior',
             )
             continue
-        if expected['status'] == 'refused':
+        if (
+            expected['status'] == 'refused'
+            or baseline_expected['status'] == 'refused'
+        ):
             if any(
                 record.get('error', {}).get(name) != spec[name]
                 for record, spec in ((old, baseline_expected), (new, expected))
+                if spec['status'] == 'refused'
                 for name in ('stage', 'code', 'rule')
             ):
                 row.update(
@@ -590,6 +637,21 @@ def assess(
                     reason='unexpected baseline/candidate refusal stage/code/rule',
                 )
                 continue
+
+        if (
+            current
+            and expected['status'] == baseline_expected['status'] == 'refused'
+            and any(
+                expected[name] != baseline_expected[name]
+                for name in ('stage', 'code', 'rule')
+            )
+        ):
+            row.update(
+                status='passed',
+                verdict='Declared language difference',
+                reason='each language matches its explicit manifest expectation; no agreement claimed',
+            )
+            continue
 
         # Differences must have executable case-specific policies before they
         # can waive anything. A prose difference ID alone never grants a pass.
@@ -614,7 +676,8 @@ def assess(
         improved_entity_ref = False
         improved_decimal = False
         if (
-            cell[:3] == ('types.numeric.provider', 'duckdb', 'relational')
+            not current
+            and cell[:3] == ('types.numeric.provider', 'duckdb', 'relational')
             and wanted == 'passed'
         ):
             from contract import HERE
@@ -624,7 +687,11 @@ def assess(
                 new_semantic['request'],
                 json.loads((HERE / case['fixture']).read_text()),
             )
-        if cell[0] == 'relational.temporal-link' and wanted == 'passed':
+        if (
+            not current
+            and cell[0] == 'relational.temporal-link'
+            and wanted == 'passed'
+        ):
             from contract import HERE
 
             fixture = json.loads((HERE / case['fixture']).read_text())
@@ -769,7 +836,7 @@ def assess(
                                 for c in (before, after)
                             ]
                         if op in {'predict', 'fit'}:
-                            if cell[:3] == (
+                            if not current and cell[:3] == (
                                 'types.numeric.provider',
                                 'duckdb',
                                 'relational',
@@ -889,6 +956,8 @@ def assess(
             if integer_encoding
             else 'matching evidence',
         )
+        if current and not changed:
+            row['verdict'] = 'Cross-language agreement'
     scoped = [
         row
         for row in result
@@ -905,6 +974,7 @@ def assess(
         'scope_complete': complete(scoped),
         'goal_complete': live and complete(result),
         'coverage_mode': 'live' if live else 'local',
+        'comparison': comparison,
         'candidate_commit': candidate_commit,
         'cells': result,
     }
@@ -923,7 +993,9 @@ def label(row, mode):
 def matrix(report):
     indexed = {tuple(row['cell']): row for row in report['cells']}
     lines = [
-        '# Prediction parity evidence',
+        '# Prediction compatibility evidence'
+        if report.get('comparison') == 'current-clients'
+        else '# Prediction parity evidence',
         '',
         '<!-- Generated by tests/parity/compare.py; do not edit. -->',
         '',
@@ -957,7 +1029,12 @@ def main():
         type=Path,
         default=Path(__file__).with_name('manifest.json'),
     )
-    parser.add_argument('--baseline', type=Path, required=True)
+    parser.add_argument('--baseline', type=Path)
+    parser.add_argument(
+        '--comparison',
+        choices=('current-clients', 'historical'),
+        default='current-clients',
+    )
     parser.add_argument('--candidate-commit', required=True)
     parser.add_argument('--candidate', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
@@ -966,6 +1043,10 @@ def main():
     for axis in ('case', 'connector', 'model', 'language'):
         parser.add_argument('--' + axis, action='append')
     args = parser.parse_args()
+    if args.comparison == 'historical' and args.baseline is None:
+        parser.error('historical comparison requires --baseline')
+    if args.comparison == 'current-clients' and args.baseline is not None:
+        parser.error('current-client comparison does not use --baseline')
     data = manifest(args.manifest)
     selected = {
         cell
@@ -977,11 +1058,12 @@ def main():
     }
     report = assess(
         data,
-        records(args.baseline),
+        records(args.baseline) if args.baseline is not None else {},
         records(args.candidate),
         live=not args.local,
         selected=selected,
         candidate_commit=args.candidate_commit,
+        comparison=args.comparison,
     )
     args.out.write_text(json.dumps(report, indent=2) + '\n')
     if args.matrix:

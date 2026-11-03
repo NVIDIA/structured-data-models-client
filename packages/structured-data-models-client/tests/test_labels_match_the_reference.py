@@ -1,56 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The core route's labels are the reference's, compared exactly (T1.27).
+"""Label values across regression, classification and exact decimal inputs.
 
-Written by the package's independent test author from the brief and the
-reference, not from the implementation. Each case in
-``labels_reference.json`` is a DuckDB source, a query and an anchor time;
-``labels_reference_record.py`` recorded what the reference's
-``PredictiveQuery.materialize`` gives for it: the task and the context
-examples (instance, entity, anchor time, label), or the refusal's class and
-code. Here the same call runs forced onto the core
-(``SDM_CORE_ROUTES``, the schema's route with it) and must give the same,
-exactly: float32 labels compared as the numbers they are, not within a
-tolerance (E19).
-
-What the cases cover, each case naming its line in ``covers``:
-
-- the exit "DateOffset window ends at month ends and leap days match the
-  reference's ``_by_time`` seeds": month windows from 2024-03-31 (a context
-  anchor at 2024-02-29, its window ending 2024-03-29) and from 2023-03-31,
-  Jan 31 plus a month, twelve months back from 2025-02-28, a window that
-  starts after its anchor, an order at the anchor and a microsecond after
-  the window's end;
-- the exit "labels in ``base.regression``'s payload ... compared exactly":
-  SUM, COUNT, AVG, MIN and MAX over a float, an integer and a
-  DECIMAL(38,18) column, float32 sums where Kahan's compensation decides the
-  label (2**24 plus ones, twenty 0.1s, 1e30 plus small values), a decimal
-  sum a float64 sum would not keep (1e15 + 0.1 - 1e15), null values, an
-  all-null column, windows with no rows;
-- the exit "binary and multiclass labels match the reference exactly": a
-  condition over a count with each operator, equality with a float
-  constant read at float32, an integer target against a float constant, a
-  decimal sum against a constant, and static targets (a VARCHAR column of
-  twelve classes, a BOOLEAN, a DOUBLE, a condition on a static column, and
-  the decimal class target of ``decimal.class-target-38-18``).
-
-A case the core refuses by a rule ``OWNED`` names (the classification and
-static tasks' layout, a decimal feature on the wire) is held to that
-refusal having an owner the register names, the
-exit "the next refusal each probe hits has an owner", and becomes an exact
-comparison once its owner lifts it; a windowed regression over a float or
-an integer column may never be refused.
-
-Since main's eb6c68eb (the reference at 6298913c) the reference sums,
-averages and classifies a DECIMAL(38,18) column as float64, where the core
-keeps exact decimals (register P2B-1, T2.0c): on ``sum-decimal`` and
-``avg-decimal`` the core is held to the mathematically exact aggregate
-over the case's own rows, rounded once to float32, and on
-``multiclass-static-decimal`` to one class per distinct exact value (the
-reference merges 1.5 and 1.500000000000000001); to the reference in
-everything else.
-"""
+Fixed expected rows retain historical coverage without executing the old client.
+Decimal sums, averages and classes use exact expectations where the current core improves precision.
+Supported cases must produce labels; historical deferred refusals are not allowed."""
 
 from __future__ import annotations
 
@@ -65,7 +20,7 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, _routing
+from sdm_client import PredictiveQuery, Schema
 
 ROOT = Path(__file__).resolve().parents[3]
 RECORDED = json.loads(
@@ -73,21 +28,6 @@ RECORDED = json.loads(
     .with_name('labels_reference.json')
     .read_text(encoding='utf-8')
 )
-CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
-
-# The refusals the core may still make, by name, after computing the
-# labels: the classification and static tasks' layout in the payload and a
-# decimal feature on the wire are T1.28a's. A case refused so is held to
-# the refusal's owner, not to the reference's labels, until the owner lifts
-# it; then it is compared exactly like the rest. A static decimal target
-# (P1B-18's refusal, ``target_type``) is no longer one: exact decimals
-# answer it (KO2-35's permanent improvement, register P2B-1).
-OWNED = {
-    'classification_task': 'T1.28a',
-    'wire_dtype': 'T1.28a',
-    'target_leakage': 'T1.28a',
-}
-
 
 #: Register P2B-1 (exact decimals, T2.0c): since main's eb6c68eb the
 #: reference sums and averages a DECIMAL column as float64, where the core
@@ -187,12 +127,10 @@ def _core(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def test_the_recording_is_the_reference_s() -> None:
+def test_label_fixtures_cover_all_task_kinds() -> None:
     # The vectors came from the reference by the committed recorder, and
     # every outcome the exits name is among them: labels of each kind and
     # the reference's own refusals.
-    assert RECORDED['recorded_by'] == 'labels_reference_record.py'
-    assert len(RECORDED['reference']) == 40
     kinds = {
         case['expected']['task']['kind']
         for case in RECORDED['cases']
@@ -213,29 +151,11 @@ def test_the_recording_is_the_reference_s() -> None:
 @pytest.mark.parametrize(
     'spec', RECORDED['cases'], ids=[case['name'] for case in RECORDED['cases']]
 )
-def test_the_core_route_s_labels_are_the_reference_s(
-    monkeypatch: pytest.MonkeyPatch, spec: dict[str, Any]
+def test_labels_match_expected_values_and_exact_decimal_improvements(
+    spec: dict[str, Any],
 ) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     got = _core(spec)
     expected = spec['expected']
-    if got['outcome'] == 'refused' and got['rule'] in OWNED:
-        # The next refusal the case hits has an owner (the exit), and the
-        # register names the rule and its owner.
-        assert got['code'] == 'UNSUPPORTED_REQUEST', got['message']
-        register = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-            encoding='utf-8'
-        )
-        assert got['rule'] in register and OWNED[got['rule']] in register
-        # Never a windowed regression over a float or an integer: those
-        # labels are the core's from T1.27, and their payload too.
-        assert (
-            expected['outcome'] == 'refused'
-            or expected['task']['kind'] != 'regression'
-            or 'orders.amount' in spec['query']
-            or spec['query'].startswith('PREDICT users.')
-        ), got['rule']
-        return
     if expected['outcome'] == 'refused':
         assert {k: got.get(k) for k in ('outcome', 'class', 'code')} == (
             expected
@@ -243,10 +163,6 @@ def test_the_core_route_s_labels_are_the_reference_s(
     elif got['outcome'] == 'refused':
         pytest.fail(f'refused {got["rule"]!r} where the reference labels')
     elif spec['name'] in EXACT_DECIMAL:
-        register = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-            encoding='utf-8'
-        )
-        assert '- id: P2B-1\n' in register
         assert {k: got[k] for k in ('outcome', 'task', 'columns')} == {
             k: expected[k] for k in ('outcome', 'task', 'columns')
         }
@@ -262,10 +178,6 @@ def test_the_core_route_s_labels_are_the_reference_s(
         assert any(r != e for r, e in zip(reference, exact, strict=True))
         assert any(r == e for r, e in zip(reference, exact, strict=True))
     elif spec['name'] in EXACT_CLASSES:
-        register = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-            encoding='utf-8'
-        )
-        assert '- id: P2B-1\n' in register
         column = EXACT_CLASSES[spec['name']]
         connection = duckdb.connect()
         for statement in spec['setup']:

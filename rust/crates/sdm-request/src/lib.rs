@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod inference;
 pub mod options;
 pub mod payload;
 pub mod predict;

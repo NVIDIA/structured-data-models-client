@@ -26,12 +26,6 @@ import pandas as pd
 import pytest
 
 from sdm_client import KumoRelational, PredictiveQuery, Relationship, Schema
-from sdm_client.materializers.relational import (
-    _drop_context_that_answers_the_question,
-    _entities_at_anchors,
-    _instances_matching,
-    _remove_instances,
-)
 
 STATIC = 'PREDICT users.label FOR EACH users.uid'
 WINDOWED = 'PREDICT SUM(events.amt, 0, 30, days) FOR EACH users.uid'
@@ -89,18 +83,31 @@ def same_anchor_overlap(request) -> list:
     payload = request.payloads[0]
     context = payload['context']['instance_table']
     predict = payload['predict']['instance_table']
-    asked = _entities_at_anchors(predict)
+    anchor_name = payload['task'].get('anchor_time_column')
+    predicted_columns = predict['columns']
+    predicted_ref = predicted_columns.index('__kumo_entity_ref_0')
+    predicted_anchor = (
+        predicted_columns.index(anchor_name) if anchor_name else None
+    )
+    asked = {
+        (
+            row[predicted_ref],
+            row[predicted_anchor] if predicted_anchor is not None else None,
+        )
+        for row in predict['rows']
+    }
     columns = context['columns']
     reference = next(
         i
         for i, n in enumerate(columns)
         if str(n).startswith('__kumo_entity_ref')
     )
-    anchor = columns.index('__kumo_anchor_time')
+    anchor = columns.index(anchor_name) if anchor_name else None
     return [
         row[reference]
         for row in context['rows']
-        if (row[reference], row[anchor]) in asked
+        if (row[reference], row[anchor] if anchor is not None else None)
+        in asked
     ]
 
 
@@ -108,7 +115,6 @@ def same_anchor_overlap(request) -> list:
 
 
 def test_a_static_target_leaves_no_row_answering_its_own_question():
-    pytest.importorskip('sdm_relational_engine')
 
     request, _ = gathered(STATIC)
     assert same_anchor_overlap(request) == []
@@ -117,14 +123,12 @@ def test_a_static_target_leaves_no_row_answering_its_own_question():
 def test_removing_them_is_said_out_loud():
     """The context is smaller than it would otherwise have been, and that is a
     change to what the model sees."""
-    pytest.importorskip('sdm_relational_engine')
 
     _, said = gathered(STATIC)
     assert any('being scored' in s for s in said), said
 
 
 def test_the_rows_removed_are_counted():
-    pytest.importorskip('sdm_relational_engine')
 
     _, said = gathered(STATIC)
     complaint = next(s for s in said if 'being scored' in s)
@@ -139,7 +143,6 @@ def test_the_rows_removed_are_counted():
 def test_an_aggregation_keeps_the_entity_at_earlier_anchors():
     """Those rows are earlier examples, with features cut at their own anchor
     and a label window that closes before the prediction window opens."""
-    pytest.importorskip('sdm_relational_engine')
 
     request, said = gathered(WINDOWED)
     payload = request.payloads[0]
@@ -158,14 +161,12 @@ def test_an_aggregation_keeps_the_entity_at_earlier_anchors():
 
 
 def test_an_aggregation_keeps_every_context_row_it_gathered():
-    pytest.importorskip('sdm_relational_engine')
 
     request, _ = gathered(WINDOWED)
     assert len(request.payloads[0]['context']['instance_table']['rows']) > 300
 
 
 def test_a_static_target_keeps_everything_that_is_not_the_answer():
-    pytest.importorskip('sdm_relational_engine')
 
     request, _ = gathered(STATIC)
     rows = request.payloads[0]['context']['instance_table']['rows']
@@ -178,7 +179,6 @@ def test_a_static_target_keeps_everything_that_is_not_the_answer():
 def test_related_rows_of_a_removed_instance_go_with_it():
     """Each half carries its own `instance_id` space, so a context row left
     behind by its instance is an orphan."""
-    pytest.importorskip('sdm_relational_engine')
 
     request, _ = gathered(STATIC)
     context = request.payloads[0]['context']
@@ -192,7 +192,6 @@ def test_related_rows_of_a_removed_instance_go_with_it():
 
 
 def test_the_predict_half_is_untouched():
-    pytest.importorskip('sdm_relational_engine')
 
     request, _ = gathered(STATIC)
     predict = request.payloads[0]['predict']
@@ -200,57 +199,6 @@ def test_the_predict_half_is_untouched():
 
 
 # --- the pieces, directly ---------------------------------------------------
-
-
-def table(columns, rows) -> dict:
-    return {'columns': list(columns), 'rows': [list(r) for r in rows]}
-
-
-def test_an_entity_at_a_different_anchor_is_not_matched():
-    predict = table(
-        ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time'],
-        [[0, 7, 'T2']],
-    )
-    context = table(
-        ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time'],
-        [[10, 7, 'T1'], [11, 7, 'T2'], [12, 8, 'T2']],
-    )
-    matched = _instances_matching(context, _entities_at_anchors(predict))
-    assert matched == {11}
-
-
-@pytest.mark.parametrize(
-    'missing',
-    [
-        {'columns': ['instance_id'], 'rows': [[1]]},
-        {'columns': [], 'rows': []},
-        {'rows': [[1]]},
-        {},
-        None,
-    ],
-)
-def test_a_table_without_the_columns_matches_nothing(missing):
-    assert _entities_at_anchors(missing) == set()
-    assert _instances_matching(missing, {(1, 'T')}) == set()
-
-
-def test_removing_from_a_table_without_instance_ids_does_nothing():
-    plain = table(['a'], [[1], [2]])
-    _remove_instances(plain, {1})
-    assert plain['rows'] == [[1], [2]]
-
-
-def test_a_payload_with_no_predict_half_is_left_alone():
-    payload = {
-        'context': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time'],
-                [[1, 7, 'T']],
-            )
-        }
-    }
-    _drop_context_that_answers_the_question((payload,))
-    assert len(payload['context']['instance_table']['rows']) == 1
 
 
 # --- a static label does not move with the anchor --------------------------
@@ -261,7 +209,6 @@ def test_a_static_target_removes_the_entity_at_any_anchor():
     every anchor, so the same entity at an earlier one carries the answer just
     as plainly. Matching on the anchor alone let that straight through, and a
     caller reaches it by setting `context_anchor_time`."""
-    pytest.importorskip('sdm_relational_engine')
 
     request, said = gathered(
         STATIC,
@@ -275,7 +222,6 @@ def test_a_static_target_removes_the_entity_at_any_anchor():
 def test_an_aggregation_keeps_earlier_anchors_even_when_they_are_chosen():
     """The same option on a windowed target is asking for earlier examples,
     which is the thing this must not delete."""
-    pytest.importorskip('sdm_relational_engine')
 
     request, said = gathered(
         WINDOWED,
@@ -287,98 +233,12 @@ def test_an_aggregation_keeps_earlier_anchors_even_when_they_are_chosen():
 
 
 def test_a_static_target_removes_the_entity_from_the_default_gather_too():
-    pytest.importorskip('sdm_relational_engine')
 
     request, _ = gathered(STATIC)
     assert entities_in_context(request).isdisjoint({1, 2, 3, 4, 5})
 
 
 # --- the anchor column is read, not assumed --------------------------------
-
-
-def test_a_suffixed_anchor_column_is_still_found():
-    """The engine suffixes the name when it would collide with a real column,
-    and looking only for the bare name went blind on exactly those graphs."""
-    payload = {
-        'task': {'anchor_time_column': '__kumo_anchor_time_1'},
-        'predict': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time_1'],
-                [[0, 7, 'T2']],
-            )
-        },
-        'context': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time_1'],
-                [[10, 7, 'T1'], [11, 7, 'T2'], [12, 8, 'T2']],
-            ),
-            'related_tables': {
-                'users': table(
-                    ['instance_id', 'v'], [[10, 1], [11, 2], [12, 3]]
-                )
-            },
-        },
-    }
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        _drop_context_that_answers_the_question((payload,), windowed=True)
-
-    kept = [row[0] for row in payload['context']['instance_table']['rows']]
-    assert kept == [10, 12]
-    assert [
-        row[0] for row in payload['context']['related_tables']['users']['rows']
-    ] == [
-        10,
-        12,
-    ]
-
-
-def test_a_static_target_with_a_suffixed_anchor_removes_every_anchor():
-    payload = {
-        'task': {'anchor_time_column': '__kumo_anchor_time_1'},
-        'predict': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time_1'],
-                [[0, 7, 'T2']],
-            )
-        },
-        'context': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time_1'],
-                [[10, 7, 'T1'], [11, 7, 'T2'], [12, 8, 'T2']],
-            )
-        },
-    }
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        _drop_context_that_answers_the_question((payload,), windowed=False)
-
-    assert [row[0] for row in payload['context']['instance_table']['rows']] == [
-        12
-    ]
-
-
-def test_a_task_naming_no_anchor_column_falls_back_to_the_plain_name():
-    payload = {
-        'predict': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time'],
-                [[0, 7, 'T2']],
-            )
-        },
-        'context': {
-            'instance_table': table(
-                ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time'],
-                [[10, 7, 'T1'], [11, 7, 'T2']],
-            )
-        },
-    }
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        _drop_context_that_answers_the_question((payload,), windowed=True)
-    assert [row[0] for row in payload['context']['instance_table']['rows']] == [
-        10
-    ]
 
 
 # --- what the documented window actually covers ----------------------------
@@ -400,7 +260,6 @@ def test_the_window_opens_after_the_anchor_and_closes_on_its_last_day(
     which is the right edge of that window rather than the left edge of this
     one.
     """
-    pytest.importorskip('sdm_relational_engine')
 
     anchor = pd.Timestamp('2023-06-01')
     rows = []
@@ -487,7 +346,6 @@ def test_an_entity_filter_says_it_does_not_narrow_the_scored_rows():
     """The filter selects the labelled examples and leaves the named rows
     alone, so a filter matching a quarter of them still scores all of them and
     the answers look entirely ordinary."""
-    pytest.importorskip('sdm_relational_engine')
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -503,7 +361,6 @@ def test_an_entity_filter_says_it_does_not_narrow_the_scored_rows():
 
 
 def test_a_query_with_no_entity_filter_says_nothing():
-    pytest.importorskip('sdm_relational_engine')
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -519,7 +376,6 @@ def test_both_tabular_routes_build_the_same_context(recwarn):
     contexts: one route left out the rows with no label and the other did
     not, so `predict=<frame>` shipped rows that teach nothing and take up
     room in a context the endpoint caps."""
-    pytest.importorskip('sdm_relational_engine')
 
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(

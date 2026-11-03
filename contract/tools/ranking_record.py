@@ -50,7 +50,6 @@ from __future__ import annotations
 import json
 import math
 import struct
-import subprocess
 import sys
 import threading
 import warnings
@@ -1041,65 +1040,3 @@ def controls() -> list[dict[str, Any]]:
             }
         )
     return out
-
-
-def main() -> int:
-    import sdm_client
-
-    reference = Path.home() / 'code/sdmc-reference'
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("run with the reference checkout's interpreter", file=sys.stderr)
-        return 2
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    recorded = []
-    for spec in VECTORS:
-        expected = observe(spec)
-        recorded.append({**spec, 'expected': expected})
-        print(
-            spec['name'],
-            expected['stage'],
-            expected['outcome'],
-            expected.get('class'),
-            expected.get('code'),
-            len(expected['calls']),
-            file=sys.stderr,
-        )
-    recorded_controls = controls()
-    for each in recorded_controls:
-        print(
-            each['case'],
-            each['refused'].get('code'),
-            each['control']['outcome'],
-            each['control'].get('code'),
-            file=sys.stderr,
-        )
-    OUT.write_text(
-        json.dumps(
-            {
-                'format': 'sdm-ranking-vectors/1',
-                'recorded_by': 'contract/tools/ranking_record.py',
-                'reference': commit,
-                'database': 'duckdb',
-                'data_case': DATA_CASE,
-                'exits': EXITS,
-                'vectors': recorded,
-                'controls': recorded_controls,
-            },
-            indent=1,
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-        + '\n',
-        encoding='utf-8',
-    )
-    print(f'{len(recorded)} vectors to {OUT}', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

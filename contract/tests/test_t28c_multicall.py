@@ -49,13 +49,6 @@ each call scores, the result's rows, a refusal's details, the answers
 carried on it, its first sentence and the 30 MiB body's remedy), which
 ``python-core`` is observed against by the same code.
 
-Gating: ``t28c-pending.json``'s ``pending`` names, as ``py:<case key>``
-(the line) and ``py-carried:<case key>`` (the vectors), the keys whose
-test failed when written. Each must still fail (strict); once one passes
-it fails, naming itself, until it is taken out. ``pending`` stays within
-``authored``. Where ``SDM_POSTGRES_TEST_DSN`` names no server and
-``SDM_REQUIRE_POSTGRES`` is not set, the Postgres keys have nothing to hold
-and return without asserting; with it set, a missing server fails (H26).
 """
 
 from __future__ import annotations
@@ -79,7 +72,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/tools/multicall_record.py'
 CASES = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t28c-pending.json')
+
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
 EIGHT = list(range(8))
@@ -201,39 +194,6 @@ RAISED = {
     'multicall.forecast.one-call': {'parts_answered': 1},
 }
 RAISED_KEYS = tuple(key(c, d) for d in DATABASES for c in RAISED)
-
-
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t28c-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    ``authored`` is every case's key on each database on python-core, line
-    and vectors, and on DuckDB and SQLite on rust-host (its Postgres pass
-    replays python-core's fetches, which ``cross-host (postgres)``
-    holds), and each raising case's key on python-core
-    (``py-raised:``)."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    assert set(gating['authored']) == (
-        {f'py:{k}' for k in KEYS_ALL}
-        | {f'py-carried:{k}' for k in KEYS_ALL}
-        | {f'rust:{k}' for k in KEYS_ALL if not k.endswith('@postgres')}
-        | {f'py-raised:{k}' for k in RAISED_KEYS}
-    )
 
 
 def test_every_multi_call_case_is_named_here() -> None:
@@ -661,7 +621,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         found = differences(want['public']['result'], line['public']['result'])
         assert not found, f'{case_key}: the result differs: ' + '; '.join(found)
 
-    held(f'py:{case_key}', check)
+    check()
 
 
 @functools.cache
@@ -669,7 +629,7 @@ def core_carried(case_key: str) -> dict[str, Any]:
     r"""python-core's observation of the case, by the recorder's code."""
     case_id, _, database = case_key.partition('@')
     case, _ = cases()[case_id]
-    return recorder().observe(case, database or 'duckdb', core=True)
+    return recorder().observe(case, database or 'duckdb')
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
@@ -725,7 +685,7 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
                 f'{got["opening"]!r:.200}'
             )
 
-    held(f'py-carried:{case_key}', check)
+    check()
 
 
 # --- a call raising an error that is not the client's own ---------------------------
@@ -787,7 +747,6 @@ def test_python_core_keeps_the_answers_when_a_call_raises(
         got = recorder().observe(
             case,
             database or 'duckdb',
-            core=True,
             raise_on_call=recorder().RAISED[case_id],
         )
         outcome = (
@@ -810,4 +769,4 @@ def test_python_core_keeps_the_answers_when_a_call_raises(
         found = differences(want['answered'], got['answered'], '/answered')
         assert not found, f'{case_key}: ' + '; '.join(found)
 
-    held(f'py-raised:{case_key}', check)
+    check()

@@ -81,10 +81,6 @@ the contract loader.
 Postgres runs where ``SDM_POSTGRES_TEST_DSN`` names a server, and fails,
 never stands down, where ``SDM_REQUIRE_POSTGRES`` asks for one (H26).
 
-Gating: ``t25-pending.json``'s ``pending`` names, as ``py:<test>`` (with
-``[<database>]``), the tests that failed when written. Each must still
-fail (strict); once one passes it fails, naming itself, until it is taken
-out. ``pending`` stays within ``authored``. Nothing is skipped.
 """
 
 from __future__ import annotations
@@ -97,7 +93,6 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -107,7 +102,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 KIT_DIR = ROOT / 'contract/fixtures/provider-kit'
 KIT = ROOT / 'contract/runners/provider_kit.py'
-PENDING = Path(__file__).with_name('t25-pending.json')
+
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 FAULTS = ('truncate', 'silent_capability')
 OPTIONAL = (
@@ -138,23 +133,6 @@ EXPECTED: dict[str, Any] = json.loads(
 )
 BY_ID: dict[str, dict[str, Any]] = {c['id']: c for c in EXPECTED['cases']}
 PAGE_ROWS: int = EXPECTED['page_rows']
-
-
-def held(name: str, check: Callable[[], None]) -> None:
-    r"""Runs ``check``: it must pass, or, while ``py:<name>`` is pending,
-    fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if f'py:{name}' not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take py:{name} out of '
-        'contract/tests/t25-pending.json pending'
-    )
 
 
 def reachable(database: str) -> bool:
@@ -365,12 +343,6 @@ def judged(report: dict[str, Any]) -> dict[str, list[str]]:
 # --- controls -----------------------------------------------------------------
 
 
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only tests the test author wrote."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-
-
 def test_the_expected_answers_are_the_dataset_s() -> None:
     r"""Control: every committed answer is the one ``record.py`` computes
     from the dataset, and each says how it was checked (``hand``, with why,
@@ -471,7 +443,7 @@ def test_the_kit_passes_on_each_python_provider(database: str) -> None:
         )
         assert status == 0, f'the kit exited {status}'
 
-    held(f'test_the_kit_passes_on_each_python_provider[{database}]', check)
+    check()
 
 
 # --- T2.6: the in-memory fallback ---------------------------------------------
@@ -495,7 +467,7 @@ def test_the_fallback_gives_the_pushdown_s_answer(database: str) -> None:
         pushdown = {BY_ID[k]['same_as'] for k in fallback}
         assert not {k: problems[k] for k in pushdown if problems[k]}
 
-    held(f'test_the_fallback_gives_the_pushdown_s_answer[{database}]', check)
+    check()
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -516,7 +488,7 @@ def test_a_fallback_limit_exceeded_is_a_named_error(database: str) -> None:
         )
         assert not {k: problems[k] for k in named if problems[k]}
 
-    held(f'test_a_fallback_limit_exceeded_is_a_named_error[{database}]', check)
+    check()
 
 
 # --- round 1's regressions -----------------------------------------------------
@@ -542,10 +514,7 @@ def test_r1_the_byte_limit_stops_at_the_page_that_passes_it(
         'fallback.bytes-on-the-first-page',
         'fallback.bytes-before-a-failing-page',
     )
-    held(
-        f'test_r1_the_byte_limit_stops_at_the_page_that_passes_it[{database}]',
-        lambda: _cases_pass(database, names),
-    )
+    (lambda: _cases_pass(database, names))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -563,11 +532,7 @@ def test_r1_a_signed_zero_through_the_fallback_is_the_pushdown_s(
         'fallback.key-counts-signed-zero',
         'fallback.repeated-key-signed-zero',
     )
-    held(
-        'test_r1_a_signed_zero_through_the_fallback_is_the_pushdown_s'
-        f'[{database}]',
-        lambda: _cases_pass(database, names),
-    )
+    (lambda: _cases_pass(database, names))()
 
 
 # --- T2.5: the seeded faults --------------------------------------------------
@@ -597,7 +562,7 @@ def test_a_seeded_truncation_fails_the_kit(database: str) -> None:
             assert len(got['answer']['rows']) < wanted, (name, got)
         assert status == 1, f'the kit exited {status}, not 1'
 
-    held(f'test_a_seeded_truncation_fails_the_kit[{database}]', check)
+    check()
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -625,7 +590,4 @@ def test_a_seeded_silent_capability_failure_fails_the_kit(
         assert not others, others
         assert status == 1, f'the kit exited {status}, not 1'
 
-    held(
-        f'test_a_seeded_silent_capability_failure_fails_the_kit[{database}]',
-        check,
-    )
+    check()

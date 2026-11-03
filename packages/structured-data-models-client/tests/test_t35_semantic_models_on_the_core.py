@@ -1,16 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""A semantic model on the core route, the Python host's part (T3.5,
-design S6): the provider choice names the model (``view``) on the source
-it is kept in, a metric view's calls route as their own paths, the
-conversion notes the core gives at describe are said as the schema holds
-its tables, and the model is named as the old client named it in what the
-core says of it (``{host.semantic_model!r}``, old-behaviour rows 5 and 9).
-
-The core's sentences are the table the binding exports; the view entries
-these tests read are written here as ``sdm_contract::wording`` writes them
-(T3.27), so the tests hold the host's part whatever binding is built.
+"""Semantic-model host boundaries: provider selection, conversion notes,
+and model-specific diagnostics returned by Rust.
+These local checks require neither a retired runtime nor route switches.
 """
 
 from __future__ import annotations
@@ -19,11 +12,9 @@ import json
 import warnings
 from typing import Any
 
-import pytest
 from sdm_connectors import DatabricksSource, SnowflakeSource
 from sdm_connectors.backends.spark import SparkConnection
 
-from sdm_client import _routing
 from sdm_client._rust import errors, providers, results
 from sdm_client._rust.providers.databricks import (
     DatabricksSparkProvider,
@@ -95,9 +86,7 @@ def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
     assert 'view' not in choice
 
 
-def test_a_snowflake_semantic_view_uses_its_source_provider_and_own_paths(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_snowflake_semantic_view_uses_its_source_provider() -> None:
     model = SnowflakeSource(
         _snowflake(), database='SALES', schema='PUBLIC'
     ).semantic_model('SALES_SEMANTICS')
@@ -110,53 +99,6 @@ def test_a_snowflake_semantic_view_uses_its_source_provider_and_own_paths(
     }
     assert type(provider) is providers.SnowflakeProvider
     assert provider._connection is model.source.connection
-    paths = (
-        _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
-        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
-        + _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW
-    )
-    assert set(paths) <= _routing.CORE_ROUTED
-    assert set(paths) <= set(_routing.PATHS)
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(paths))
-    for group in (
-        _routing.FROM_SOURCE,
-        _routing.FROM_SOURCE_TABLES,
-        _routing.MATERIALIZE,
-        _routing.PREDICT,
-    ):
-        assert _routing.on_the_core(model, group)
-        assert not _routing.on_the_core(model.source, group)
-
-
-def test_a_metric_view_s_calls_route_as_their_own_paths(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sources = _sources()
-    groups = (
-        _routing.FROM_SOURCE,
-        _routing.FROM_SOURCE_TABLES,
-        _routing.MATERIALIZE,
-        _routing.PREDICT,
-    )
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    for paths in groups:
-        assert _routing.on_the_core(sources['model'], paths)
-    assert _routing.FROM_SOURCE['databricks-metric-view'] == (
-        'schema.from-source/semantic-model/databricks-metric-view',
-    )
-    forced = (
-        _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
-        + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
-        + _routing.PREDICT_DATABRICKS_METRIC_VIEW
-    )
-    assert set(forced) <= _routing.CORE_ROUTED
-    assert set(forced) <= set(_routing.PATHS)
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(forced))
-    for paths in groups:
-        # Either connection's model, and never the warehouse's tables.
-        assert _routing.on_the_core(sources['model'], paths)
-        assert _routing.on_the_core(sources['trusted'], paths)
-        assert not _routing.on_the_core(sources['warehouse'], paths)
 
 
 def _text(value: str) -> dict[str, str]:

@@ -236,7 +236,7 @@ def test_a_wheel_with_no_native_library_is_no_control(
         smoke.without_native(wheel, tmp_path / 'control')
 
 
-COUNTS = {'test_binding.py': {'passed': 12}}
+COUNTS = {'test_binding.py': {'passed': len(smoke.EXPECTED['test_binding.py'])}}
 ITEMS = [
     f'rust/bindings/sdm-py/tests/test_binding.py::{name}'
     for name in smoke.EXPECTED['test_binding.py']
@@ -530,7 +530,7 @@ def _tree(root: pathlib.Path, version: int) -> pathlib.Path:
         f'{BINDING_TESTS}/conftest.py': f'# the conftest of {label}\n',
         f'{BINDING_TESTS}/getenv_shim.c': f'/* the shim of {label} */\n',
         'packages/structured-data-models-api/pyproject.toml': '[project]\n',
-        'packages/structured-data-models-pql/pyproject.toml': '[project]\n',
+        'packages/structured-data-models-connectors/pyproject.toml': '[project]\n',
     }
     for name in (
         'test_binding.py',
@@ -1300,7 +1300,7 @@ def test_a_failing_binding_still_fails_when_the_inputs_patch_pytest_s_report(
 #: and the contract inputs.
 TAKEN = (
     'packages/structured-data-models-api',
-    'packages/structured-data-models-pql',
+    'packages/structured-data-models-connectors',
     *INPUTS,
 )
 
@@ -1320,8 +1320,12 @@ def _repository(root: pathlib.Path) -> tuple[pathlib.Path, str]:
     """A real git checkout of a fake tree, committed clean, with a file
     under ``docs/`` and one ignored there; with its HEAD."""
     _tree(root, 20)
-    (root / 'packages/structured-data-models-pql/src').mkdir(parents=True)
-    (root / 'packages/structured-data-models-pql/src/pql.py').write_text('')
+    (root / 'packages/structured-data-models-connectors/src').mkdir(
+        parents=True
+    )
+    (root / 'packages/structured-data-models-connectors/src/pql.py').write_text(
+        ''
+    )
     (root / 'docs').mkdir()
     (root / 'docs/notes.md').write_text('# notes\n')
     (root / '.gitignore').write_text('docs/ignored.txt\n')
@@ -1355,7 +1359,9 @@ def test_an_untracked_file_under_the_pql_distribution_is_refused_by_name(
     """In a directory of its own, so only a status listing every untracked
     file (not the directory alone) names it."""
     inputs, head = _repository(tmp_path / 'inputs')
-    extra = inputs / 'packages/structured-data-models-pql/src/added/extra.py'
+    extra = (
+        inputs / 'packages/structured-data-models-connectors/src/added/extra.py'
+    )
     extra.parent.mkdir()
     extra.write_text('print("taken into the sibling wheel")\n')
     with pytest.raises(smoke.SmokeFailed) as refused:
@@ -1461,7 +1467,7 @@ def test_the_inputs_are_held_clean_at_the_commit_before_any_environment(
     assert built == [mode]
     built.clear()
     # Untracked under the PQL distribution.
-    extra = inputs / 'packages/structured-data-models-pql/src/extra.py'
+    extra = inputs / 'packages/structured-data-models-connectors/src/extra.py'
     extra.write_text('')
     assert smoke.main(arguments) != 0
     assert built == []
@@ -1497,7 +1503,9 @@ def test_without_a_commit_the_inputs_are_not_held(
 
 #: A file the commit holds although an ignore pattern matches it (added
 #: with ``--force``): the export takes it, as the commit holds it.
-FORCED = 'packages/structured-data-models-pql/src/predictive_query/kept.orig'
+FORCED = (
+    'packages/structured-data-models-connectors/src/predictive_query/kept.orig'
+)
 
 #: Each ignored file, how it is ignored, and the ignore rule: in the
 #: committed ``.gitignore`` at the root, in a ``.gitignore`` the PQL
@@ -1506,7 +1514,7 @@ FORCED = 'packages/structured-data-models-pql/src/predictive_query/kept.orig'
 #: wheel; the last two beside the stub and the contract sources.
 IGNORED: dict[str, tuple[str, str, str]] = {
     'a .py in the PQL distribution, by a pattern': (
-        'packages/structured-data-models-pql/src/predictive_query/extra.py',
+        'packages/structured-data-models-connectors/src/predictive_query/extra.py',
         '.gitignore',
         'extra.py',
     ),
@@ -1516,9 +1524,9 @@ IGNORED: dict[str, tuple[str, str, str]] = {
         'packages/structured-data-models-api/src/generated/',
     ),
     'a .py ignored by the PQL distribution s own .gitignore': (
-        'packages/structured-data-models-pql/src/predictive_query/'
+        'packages/structured-data-models-connectors/src/predictive_query/'
         'settings.local.py',
-        'packages/structured-data-models-pql/.gitignore',
+        'packages/structured-data-models-connectors/.gitignore',
         '*.local.py',
     ),
     'a setup.py in the API distribution, by .git/info/exclude': (
@@ -1551,7 +1559,7 @@ def _ignoring_repository(
     inputs, _ = _repository(root)
     path, rules, rule = IGNORED[ignored]
     for module in (
-        'packages/structured-data-models-pql/src/predictive_query/__init__.py',
+        'packages/structured-data-models-connectors/src/predictive_query/__init__.py',
         'packages/structured-data-models-api/src/api.py',
     ):
         (inputs / module).parent.mkdir(parents=True, exist_ok=True)
@@ -1693,3 +1701,25 @@ def test_with_a_commit_the_smoke_runs_on_the_export_not_the_given_tree(
     assert extra.read_text() == 'raise SystemExit("not the commit s")\n'
     # The tree the run took was a temporary one, gone with the run.
     assert not seen[0].exists()
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='Linux smoke policy')
+def test_only_the_windows_process_check_is_inapplicable_on_linux(tmp_path):
+    report = tmp_path / 'junit.xml'
+    report.write_text(
+        '<testsuite><testcase classname="test_binding" name="normal"/>'
+        '<testcase classname="test_binding" '
+        'name="test_windows_import_preserves_process_state">'
+        '<skipped message="Windows process observations"/>'
+        '</testcase></testsuite>'
+    )
+    counts = smoke.junit_verdict(report, ('test_binding.py',))
+    assert counts['test_binding.py']['passed'] == 1
+    assert counts['test_binding.py']['inapplicable'] == 1
+    report.write_text(
+        report.read_text().replace(
+            'test_windows_import_preserves_process_state', 'unexpected_skip'
+        )
+    )
+    with pytest.raises(smoke.SmokeFailed):
+        smoke.junit_verdict(report, ('test_binding.py',))

@@ -29,9 +29,6 @@ That is the whole reason candidates must be named rather than assumed.
 
 from __future__ import annotations
 
-import contextlib
-import math
-from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -39,12 +36,10 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.wire.dtypes import _decimal_dtype, _is_missing
+from sdm_client.wire.dtypes import _decimal_dtype
 
 if TYPE_CHECKING:
-    from predictive_query import ValidatedPredictiveQuery
-
-    from sdm_client.schema import Schema
+    pass
 
 #: More parts than this and the fan-out is the cost of the call, not a detail
 #: of it. A caller who means it can raise it; nobody discovers it by accident.
@@ -66,61 +61,6 @@ class Decomposition:
     kind: str
     parts: tuple[tuple[str, Any], ...]
     top: int | None = None
-
-
-def parts_of(
-    query: ValidatedPredictiveQuery,
-    text: str,
-    candidates: list[Any] | None,
-    options: Mapping[str, Any],
-    schema: Schema | None = None,
-) -> Decomposition | None:
-    r"""The queries this one is asked as, or nothing if it is asked as itself.
-
-    Returns query text paired with what the part is about: the candidate it
-    asks after, or the step it covers. The pair matters: reading the candidate
-    back out of the text it was written into loses its type and trusts a
-    string the caller chose.
-
-    Each part is gathered like any other query, which is what gives it the
-    context its own labels need.
-    """
-    # Imported here because how many candidates to rank is settled by the
-    # relational materializer, which is built on the request this returns.
-    from sdm_client.materializers.relational import _candidates_to_rank
-
-    kind = str(getattr(query, 'problem_type', ''))
-    if kind.endswith('RANK'):
-        if 'prediction_statistic' in options:
-            # Said here: each part is a classification, and refusing there
-            # would name a binary_classification the caller never wrote.
-            raise StructuredDataError(
-                'prediction_statistic applies only to a regression, and this '
-                'question is a ranking, ordered by how likely each candidate '
-                'is; ask it without prediction_statistic',
-                code='INVALID_REQUEST',
-            )
-        return Decomposition(
-            RANKING,
-            tuple(_per_candidate(query, candidates, schema)),
-            _candidates_to_rank(query, options),
-        )
-    if candidates is not None:
-        raise StructuredDataError(
-            f'candidates are the rows a ranking is over, and {text!r} does '
-            f'not rank anything. Ask it without candidates, or rank with '
-            f'"RANK TOP k", which is the question they are for',
-            code='INVALID_REQUEST',
-        )
-    if kind.endswith('FORECAST'):
-        if 'top_k' in options:
-            raise StructuredDataError(
-                'top_k is how many candidates a ranking keeps, and a forecast '
-                'ranks nothing; it gives back one value per step',
-                code='INVALID_REQUEST',
-            )
-        return Decomposition(FORECAST, tuple(_per_step(query)))
-    return None
 
 
 def _ended(message: Any) -> str:
@@ -237,193 +177,6 @@ def said_as_parts_are(
     if candidates is not None and isinstance(details.get('candidate'), int):
         details['candidate'] = candidates[details['candidate']]
     return error
-
-
-def _for_each(query: ValidatedPredictiveQuery) -> str:
-    r"""The entity clause as it was written, filter and all.
-
-    An entity filter chooses which rows become labelled examples rather than
-    which rows are scored, so a part that drops it is answered from a
-    different population than the one asked about.
-    """
-    return f'{query.for_each} {query.entity_ast}'
-
-
-def _window(query: ValidatedPredictiveQuery) -> tuple[int, int, str]:
-    span = query.get_final_target_aggregation().date_offset_range
-    return int(span.start), int(span.end), str(span.unit)
-
-
-def _per_candidate(
-    query: ValidatedPredictiveQuery,
-    candidates: list[Any] | None,
-    schema: Schema | None = None,
-) -> list[tuple[str, Any]]:
-    r"""One binary question per candidate, ordered by how sure the answer is.
-
-    The endpoint has no ranking task, and a ranking it could serve would still
-    be over whatever the sampler reached. Asking per candidate makes the set
-    the caller's, which is the only version of this question with a knowable
-    answer.
-    """
-    aggregation = query.get_final_target_aggregation()
-    if aggregation is None:
-        raise StructuredDataError(
-            'a ranking is asked one candidate at a time, about what an '
-            'entity reaches in a window, and this one ranks a column '
-            'instead. Rank a LIST_DISTINCT over a foreign key.',
-            code='INVALID_REQUEST',
-        )
-    ranked = str(aggregation.target)
-    if ' WHERE ' in ranked:
-        raise StructuredDataError(
-            f'the rows to rank are chosen by a filter ({ranked!r}), and each '
-            f'candidate is asked about with a filter of its own, so the two '
-            f'would have to be combined into one question this cannot write. '
-            f'Rank without the filter, or narrow the rows before building the '
-            f'schema.',
-            code='INVALID_REQUEST',
-        )
-    table, _, column = ranked.partition('.')
-    if candidates is None:
-        raise StructuredDataError(
-            f'a ranking is over a set of candidates, and this model has no '
-            f'ranking task to choose them with, so they have to be named: '
-            f'materialize(..., candidates=frame[{column!r}]). '
-            f'One call is made per candidate.',
-            code='INVALID_REQUEST',
-        )
-    unique = list(dict.fromkeys(candidates))
-    if not unique:
-        raise StructuredDataError(
-            'candidates is empty, so there is nothing to rank',
-            code='INVALID_REQUEST',
-        )
-    _refuse_too_many(len(unique), 'candidates')
-    dtype = _how_the_column_travels(schema, table, column)
-    start, end, unit = _window(query)
-    return [
-        (
-            f'PREDICT COUNT({table}.* WHERE {ranked}='
-            f'{_as_literal(value, dtype)}, '
-            f'{start}, {end}, {unit}) > 0 {_for_each(query)}',
-            value,
-        )
-        for value in unique
-    ]
-
-
-def _per_step(query: ValidatedPredictiveQuery) -> list[tuple[str, Any]]:
-    r"""One question per step, each about the window that step covers.
-
-    The aggregation is rebuilt from what it aggregates, which carries any
-    filter it had: `COUNT(buys.* WHERE channel="web", ...)` keeps its channel.
-    Only the window moves.
-    """
-    steps = int(getattr(query, 'num_forecasts', 1) or 1)
-    _refuse_too_many(steps, 'forecast steps')
-    aggregation = query.get_final_target_aggregation()
-    start, end, unit = _window(query)
-    span = end - start
-    return [
-        (
-            f'PREDICT {aggregation.aggr}({aggregation.target}, '
-            f'{start + step * span}, {end + step * span}, {unit}) '
-            f'{_for_each(query)}',
-            # The contract numbers steps from one.
-            step + 1,
-        )
-        for step in range(steps)
-    ]
-
-
-def _refuse_too_many(many: int, what: str) -> None:
-    if many <= MOST_PARTS:
-        return
-    raise StructuredDataError(_too_many(many, what), code='INVALID_REQUEST')
-
-
-def _too_many(many: int, what: str) -> str:
-    return (
-        f'{many} {what} means {many} calls, one for each, because the model '
-        f'has no task that answers them together. That is past the {MOST_PARTS} '
-        f'this will do without being told to; ask about fewer, or raise '
-        f'sdm_client.decompose.MOST_PARTS if the wait is what you want.'
-    )
-
-
-def _how_the_column_travels(
-    schema: Schema | None, table: str, column: str
-) -> str | None:
-    r"""The dtype the schema computed for the column being ranked.
-
-    How a candidate is written is the column's question, not the value's: a key
-    column straddling int64 travels as text, and so must a small key from it.
-    """
-    if schema is None or table not in schema:
-        return None
-    described = schema[table]
-    if column not in described:
-        return None
-    return str(described[column].dtype)
-
-
-def _as_literal(value: Any, dtype: str | None = None) -> str:
-    r"""``value`` as the query language writes it.
-
-    A candidate is a key, and a key that cannot be written as one is refused
-    rather than escaped into something that parses as a different question.
-    """
-    # Candidates usually come out of a frame, where a whole number is a numpy
-    # integer and not an ``int``, and the two have to be written alike.
-    if hasattr(value, 'item'):
-        with contextlib.suppress(AttributeError, ValueError):
-            value = value.item()
-    if _is_missing(value):
-        raise StructuredDataError(
-            'a candidate names a row, and a missing value names none',
-            code='INVALID_REQUEST',
-        )
-    if isinstance(value, bool):
-        raise StructuredDataError(
-            'a candidate names a row, and True and False do not',
-            code='INVALID_REQUEST',
-        )
-    if isinstance(value, Decimal):
-        written = _decimal_as_typed(value, dtype)
-        if isinstance(written, (int, float)) and Decimal(written) != value:
-            raise StructuredDataError(
-                f'the candidate {value} names no row of a column of '
-                f'{dtype or "numbers"}: written as one it becomes {written}, '
-                f'which is a different row',
-                code='INVALID_REQUEST',
-            )
-        value = written
-    if dtype == 'string' and isinstance(value, (int, float)):
-        if isinstance(value, float) and not math.isfinite(value):
-            raise StructuredDataError(
-                f'{value!r} cannot name a row to rank',
-                code='INVALID_REQUEST',
-            )
-        value = format(Decimal(str(value)), 'f')
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        if not math.isfinite(value) or value != int(value):
-            raise StructuredDataError(
-                f'{value!r} cannot name a row to rank',
-                code='INVALID_REQUEST',
-            )
-        return str(int(value))
-    text = str(value)
-    if any(character in text for character in '"\'\\,()') or not text.strip():
-        raise StructuredDataError(
-            f'the candidate {value!r} cannot be written into a query: a key '
-            f'holding a quote, a comma, a bracket or nothing at all would '
-            f'read as part of the question rather than as the row it names',
-            code='INVALID_REQUEST',
-        )
-    return f'"{text}"'
 
 
 def _decimal_as_typed(value: Decimal, dtype: str | None = None) -> Any:

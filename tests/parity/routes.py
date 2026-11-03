@@ -67,14 +67,17 @@ TARGETS = {
 }
 
 
-def owner(name):
+def owner(name, *, missing_ok=False):
     try:
         return importlib.import_module(name)
     except ModuleNotFoundError as error:
         if error.name != name:
             raise
         module, attr = name.rsplit('.', 1)
-        return getattr(importlib.import_module(module), attr)
+        loaded = importlib.import_module(module)
+        return (
+            getattr(loaded, attr, None) if missing_ok else getattr(loaded, attr)
+        )
 
 
 def snowflake_platform_probe(event, args):
@@ -90,7 +93,10 @@ def snowflake_platform_probe(event, args):
     ):
         return False
     program = shutil.which('uname')
-    if program is None or Path(program).resolve() != Path('/usr/bin/uname'):
+    if (
+        program is None
+        or Path(program).resolve() != Path('/usr/bin/uname').resolve()
+    ):
         return False
     description = sys.modules.get('snowflake.connector.description')
     if description is None:
@@ -115,6 +121,7 @@ def snowflake_platform_probe(event, args):
 
 class LegacyGuard(contextlib.AbstractContextManager):
     def __init__(self, targets=None, *, raise_caught=True):
+        self.default_targets = targets is None
         self.targets = TARGETS if targets is None else targets
         self.report = {
             'installed': False,
@@ -135,11 +142,19 @@ class LegacyGuard(contextlib.AbstractContextManager):
         if os.environ.get('SDM_CORE_ROUTES'):
             raise AssertionError('parity requires unmodified default routes')
         for name, methods in self.targets.items():
-            obj = owner(name)
+            if self.default_targets and name == 'predictive_query':
+                # The retired distribution must not be imported to install
+                # a guard. Imports are blocked for the whole journey below.
+                continue
+            obj = owner(name, missing_ok=self.default_targets)
+            if obj is None:
+                # A deleted legacy owner has no callable path to intercept.
+                continue
             for method in methods:
-                original = getattr(
-                    obj, method
-                )  # Missing tripwires fail closed.
+                if self.default_targets and not hasattr(obj, method):
+                    continue
+                original = getattr(obj, method)
+
                 label = name + '.' + method
                 if hasattr(original, '__code__'):
                     self.codes[original.__code__] = label
@@ -149,6 +164,19 @@ class LegacyGuard(contextlib.AbstractContextManager):
                     raise AssertionError('legacy policy executed: ' + _label)
 
                 self.stack.enter_context(patch.object(obj, method, fail))
+        if self.default_targets:
+            for name in sys.modules:
+                if name.split('.', 1)[0] in (
+                    'predictive_query',
+                    'sdm_relational_engine',
+                ):
+                    self.report['legacy_hits'].append(name)
+                    self.stack.close()
+                    raise AssertionError(
+                        'retired runtime already imported: ' + name
+                    )
+            sys.meta_path.insert(0, self)
+            self.stack.callback(sys.meta_path.remove, self)
         self.previous = sys.getprofile()
         self.thread_previous = threading.getprofile()
         self.workers.add(f'{os.getpid()}:{threading.get_ident()}')
@@ -163,6 +191,15 @@ class LegacyGuard(contextlib.AbstractContextManager):
         _ACTIVE = self
         self.report['installed'] = True
         return self
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.', 1)[0] in (
+            'predictive_query',
+            'sdm_relational_engine',
+        ):
+            self.report['legacy_hits'].append(fullname)
+            raise AssertionError('retired runtime imported: ' + fullname)
+        return None
 
     def audit(self, event, args):
         if self.active and event in (

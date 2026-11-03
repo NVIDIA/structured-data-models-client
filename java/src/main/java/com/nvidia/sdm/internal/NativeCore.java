@@ -31,7 +31,8 @@ import java.util.Map;
 public final class NativeCore {
   /** The platforms this JAR is built with a library for. */
   public static final List<String> PLATFORMS =
-      List.of("linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64");
+      List.of("linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64",
+          "windows-x86_64");
 
   /** The system property naming a library file to load in place of the JAR's. */
   public static final String LIBRARY_PROPERTY = "sdm.native.library";
@@ -46,7 +47,9 @@ public final class NativeCore {
   public static String platform() {
     String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
     String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
-    String osName = os.startsWith("linux") ? "linux" : os.startsWith("mac") ? "macos" : os;
+    String osName = os.startsWith("linux") ? "linux"
+        : os.startsWith("mac") ? "macos"
+        : os.startsWith("windows") ? "windows" : os;
     String archName =
         switch (arch) {
           case "amd64", "x86_64", "x64" -> "x86_64";
@@ -104,7 +107,8 @@ public final class NativeCore {
       return;
     }
     String platform = platform();
-    String file = platform.startsWith("macos") ? "libsdm_jni.dylib" : "libsdm_jni.so";
+    String file = platform.startsWith("macos") ? "libsdm_jni.dylib"
+        : platform.startsWith("windows") ? "sdm_jni.dll" : "libsdm_jni.so";
     String resource = "/com/nvidia/sdm/native/" + platform + "/" + file;
     try (InputStream in = NativeCore.class.getResourceAsStream(resource)) {
       if (in == null) {

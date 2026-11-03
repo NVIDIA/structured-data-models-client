@@ -50,7 +50,7 @@ def writer() -> ModuleType:
     name = 't214b_write_request_pickles'
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(
-            name, PICKLES / 'write.py'
+            name, ROOT / 'tests/support/pickle_observations.py'
         )
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
@@ -72,7 +72,17 @@ def test_every_pickle_the_reference_wrote_is_listed() -> None:
     r"""Control: the fixtures are the writer's, of the reference commit the
     contract names, each with what the reference read back."""
     written = {path.stem for path in PICKLES.glob('*.pkl')}
-    assert written == set(EXPECTED['objects']) == set(writer().NAMES)
+    assert (
+        written
+        == set(EXPECTED['objects'])
+        == {
+            'request-one-call',
+            'request-forecast',
+            'request-ranking',
+            'request-frames',
+            'schema-notes',
+        }
+    )
     env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
     assert f'reference: {EXPECTED["reference"]}' in env
     assert EXPECTED['protocol'] == 4
@@ -83,6 +93,44 @@ def test_every_pickle_the_reference_wrote_is_listed() -> None:
     assert len(objects['request-ranking']['projection']['parts']) == 3
     assert objects['request-frames']['projection']['payloads'] is None
     assert objects['schema-notes']['projection']['conversion_notes']
+
+
+def _stable_projection(projection: dict[str, Any]) -> dict[str, Any]:
+    """Keep frozen metadata and wire digests; validate payload-backed views separately."""
+    result = dict(projection)
+    if result.get('payloads'):
+        result.pop('context')
+        result.pop('predict')
+    if 'parts' in result:
+        result['parts'] = [_stable_projection(part) for part in result['parts']]
+    return result
+
+
+def _assert_wire_views(request: Any) -> None:
+    for part in getattr(request, 'parts', None) or ():
+        _assert_wire_views(part)
+    payloads = getattr(request, 'payloads', None)
+    if not payloads:
+        return
+    for half in ('context', 'predict'):
+        frame = getattr(request, half).instance_table
+        assert len(frame) == sum(
+            len(p[half]['instance_table']['rows']) for p in payloads
+        )
+        if len(payloads) == 1:
+            table = payloads[0][half]['instance_table']
+            expected = pd.DataFrame(table['rows'], columns=table['columns'])
+            target = request.task.target.column_name
+            if half == 'predict' and target not in expected:
+                assert frame[target].isna().all()
+                frame = frame.drop(columns=[target])
+            if '__kumo_anchor_time' in expected:
+                expected['__kumo_anchor_time'] = pd.to_datetime(
+                    expected['__kumo_anchor_time'], utc=True
+                ).dt.tz_localize(None)
+            pd.testing.assert_frame_equal(
+                frame.reset_index(drop=True), expected, check_dtype=False
+            )
 
 
 @pytest.mark.parametrize('name', sorted(EXPECTED['objects']))
@@ -99,9 +147,13 @@ def test_a_pickle_the_reference_wrote_loads_as_the_reference_reads_it(
     assert shown == [], [str(w.message) for w in shown]
     want = EXPECTED['objects'][name]['projection']
     assert type(loaded).__name__ == want['kind']
-    assert writer().projection(loaded) == want
+    assert _stable_projection(
+        writer().projection(loaded)
+    ) == _stable_projection(want)
+    _assert_wire_views(loaded)
     again = pickle.loads(pickle.dumps(loaded, protocol=4))
-    assert writer().projection(again) == want
+    assert writer().projection(again) == writer().projection(loaded)
+    _assert_wire_views(again)
 
 
 @pytest.mark.parametrize(

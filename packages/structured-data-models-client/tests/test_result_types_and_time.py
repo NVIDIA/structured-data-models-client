@@ -137,11 +137,16 @@ def test_a_time_column_that_is_already_timestamps_is_untouched():
     assert on_the_wire(graph(TRUTH))[0] == '2020-01-02'
 
 
-def test_an_empty_time_column_is_not_refused():
-    from sdm_client.materializers.relational import _to_time
-
-    values = pd.Series([None, None], dtype=object)
-    assert _to_time(values, 't.ts') is values
+def test_a_table_with_no_valid_key_time_pairs_is_refused():
+    schema = graph(pd.Series([None] * 120, dtype=object))
+    with pytest.raises(
+        StructuredDataError, match="Found no valid rows in table 'events'"
+    ) as raised:
+        PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema
+        ).materialize(indices=[1, 2], model=KumoRelational())
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert 'primary key and time column pairs' in str(raised.value)
 
 
 # --- a composite key the language cannot read -------------------------------
@@ -211,58 +216,6 @@ def test_a_single_column_key_is_not_mentioned():
 
 
 # --- the relational path puts the key back with its type too ---------------
-
-
-def test_the_relational_key_keeps_the_type_it_was_sent_as():
-    """Both adapters restore the caller's key; both used to stringify it, so
-    both had to stop."""
-    import dataclasses
-
-    from sdm_client.adapters.relational import _named_entities
-
-    @dataclasses.dataclass
-    class Item:
-        id: str
-        row_index: int
-        forecast_step: int | None = None
-
-    payload = {
-        'predict': {
-            'instance_table': {
-                'columns': ['instance_id', '__kumo_entity_ref_0'],
-                'rows': [[300, 7], [301, 11]],
-            }
-        },
-        'task': {'kind': 'regression'},
-    }
-    named = _named_entities((Item('300', 0), Item('301', 1)), payload)
-
-    assert [item.id for item in named] == [7, 11]
-
-
-def test_the_relational_key_is_left_alone_when_it_is_text():
-    import dataclasses
-
-    from sdm_client.adapters.relational import _named_entities
-
-    @dataclasses.dataclass
-    class Item:
-        id: str
-        row_index: int
-        forecast_step: int | None = None
-
-    payload = {
-        'predict': {
-            'instance_table': {
-                'columns': ['instance_id', '__kumo_entity_ref_0'],
-                'rows': [[300, 'ATL'], [301, 'ORD']],
-            }
-        },
-        'task': {'kind': 'regression'},
-    }
-    named = _named_entities((Item('300', 0), Item('301', 1)), payload)
-
-    assert [item.id for item in named] == ['ATL', 'ORD']
 
 
 # --- the date check reads whole values, and all of them --------------------
@@ -358,22 +311,15 @@ def test_only_a_class_label_is_given_the_targets_type(kind, expected):
 # --- a column of date objects is not text ----------------------------------
 
 
-def test_an_object_column_of_datetimes_is_not_read_as_text():
-    """`infer_tfm_dtype` already calls these `timestamp[us]`. Reading the
-    dtype alone sent them down the text path and refused them for an ambiguity
-    they do not have."""
+@pytest.mark.parametrize('kind', ['datetime', 'date'])
+def test_an_object_column_of_datetimes_is_not_read_as_text(kind):
     import datetime
 
-    from sdm_client.materializers.relational import _holds_text
-
-    assert not _holds_text(
-        pd.Series(
-            [datetime.datetime(2020, 1, 2), datetime.datetime(2020, 2, 2)]
-        )
-    )
-    assert not _holds_text(pd.Series([datetime.date(2020, 1, 2)]))
-    assert not _holds_text(pd.Series(pd.to_datetime(['2020-01-02'])))
-    assert _holds_text(pd.Series(['2020-01-02']))
+    values = [datetime.datetime(2020, (i % 12) + 1, 2) for i in range(120)]
+    if kind == 'date':
+        values = [value.date() for value in values]
+    objects = pd.Series(values, dtype=object)
+    assert on_the_wire(graph(objects)) == on_the_wire(graph(TRUTH))
 
 
 def test_a_time_column_of_date_objects_materializes():
@@ -385,67 +331,40 @@ def test_a_time_column_of_date_objects_materializes():
     assert on_the_wire(graph(objects))[0] == '2020-01-02'
 
 
-def test_the_relational_path_reads_a_wide_key_back_exactly():
-    """The reference column is declared `string` because it is a transport key,
-    so the dtype has to come from the table it points at."""
-    import dataclasses
+@pytest.mark.parametrize(
+    'keys',
+    [
+        list(range(20)),
+        [f'city-{i}' for i in range(20)],
+        [2**53 + 1 + i for i in range(20)],
+    ],
+)
+def test_relational_predictions_restore_exact_entity_keys(keys):
+    from test_entity_id_parity import schema_for
+    from test_tabular_direct_core import Endpoint, client
 
-    from sdm_client.adapters.relational import _key_dtype, _named_entities
-
-    wide = 9007199254740993
-
-    @dataclasses.dataclass
-    class Item:
-        id: str
-        row_index: int
-        forecast_step: int | None = None
-
-    payload = {
-        'task': {'kind': 'regression'},
-        'schema': {
-            'relationships': [
-                {
-                    'source_columns': ['__kumo_entity_ref_0'],
-                    'target_table': 'users',
-                    'target_columns': ['user_id'],
-                }
+    schema = schema_for(keys)
+    request = PredictiveQuery(
+        'PREDICT users.churn FOR EACH users.user_id', schema
+    ).materialize(indices=keys[:2], model=KumoRelational())
+    table = request.payloads[0]['predict']['instance_table']
+    position = table['columns'].index('instance_id')
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-relational',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [
+                {'id': str(row[position]), 'row_index': i, 'prediction': 'yes'}
+                for i, row in enumerate(table['rows'])
             ],
-            'related_tables': {
-                'users': {'columns': {'user_id': {'dtype': 'int64'}}}
-            },
-        },
-        'predict': {
-            'instance_table': {
-                'columns': ['instance_id', '__kumo_entity_ref_0'],
-                'rows': [[300, str(wide)], [301, str(wide + 1)]],
-            }
-        },
-    }
-    assert _key_dtype(payload, '__kumo_entity_ref_0') == 'int64'
-
-    named = _named_entities((Item('300', 0), Item('301', 1)), payload)
-
-    assert [each.id for each in named] == [wide, wide + 1]
-
-
-def test_a_reference_with_no_relationship_is_left_as_it_came():
-    from sdm_client.adapters.relational import _key_dtype
-
-    assert _key_dtype({'schema': {}}, '__kumo_entity_ref_0') is None
-    assert (
-        _key_dtype(
-            {
-                'schema': {
-                    'relationships': [
-                        {
-                            'source_columns': ['__kumo_entity_ref_0'],
-                            'target_table': 'users',
-                            'target_columns': ['a', 'b'],
-                        }
-                    ]
-                }
-            },
-            '__kumo_entity_ref_0',
-        )
-        is None
+        }
     )
+    with client(endpoint) as model_client:
+        result = model_client.predict(
+            request, model=KumoRelational(), outputs=('prediction',)
+        )
+    assert [item.id for item in result.items] == keys[:2]
+    assert [type(item.id) for item in result.items] == [
+        type(key) for key in keys[:2]
+    ]

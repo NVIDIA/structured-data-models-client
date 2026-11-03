@@ -1,11 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: on the core route, predict's host-held rules (design,
-# "Host-held semantics"): the model and output checks, the empty answer,
-# the merge of the parts and the notice of an absent output; their use on
-# the core route is deleted in Phase 1 by T1.28b, and the old route's own
-# goes in Phase 5.
 
 r"""One connection to one NIM, serving every model it can reach.
 
@@ -21,10 +16,9 @@ the endpoint and credential of the client that started it.
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import warnings
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -32,34 +26,26 @@ from sdm_client.base import (
     ModelAdapter,
     ModelCapabilities,
     ModelSpec,
-    check_request_against_model,
-    describe,
 )
 from sdm_client.core.transport import Transport, WireTransport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import (
     RANKING,
-    Decomposition,
     about_the_part,
 )
 from sdm_client.errors import (
     StructuredDataError,
     UnknownModelError,
-    UnsupportedRequestError,
 )
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
     Request,
-    _envelope_rows,
-    warn_of_rows_scored_from_their_own_answers,
 )
 from sdm_client.result import PredictionResult
 from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
-    keys_in,
-    scored_rows,
     without_the_keys,
 )
 
@@ -201,36 +187,9 @@ class FittedModel:
             from sdm_client._rust import sessions
 
             return sessions.predict(self, request)
-        asked = getattr(request, '_question', None)
-        if self._question is not None and asked is not None:
-            _refuse_a_question_the_session_did_not_pin(self._question, asked)
-        if request.nothing_to_score:
-            return _empty_answer(self.model, self._outputs, request)
-        _warn_scoring_what_was_pinned(
-            request,
-            self._pinned_keys,
-            self._pinned_over_a_window,
-            _pinned_dtypes(self._pinned),
-        )
-        parts = _numbered_across_calls(
-            self._adapter.session_prediction_plan(
-                request, self._outputs, self._pinned
-            ),
-            lambda payload: self._adapter.normalize(
-                self._client._transport.session_predict(
-                    self._session_id, payload
-                ),
-                self._outputs,
-                {**self._pinned, **payload},
-            ),
-        )
-        if not parts:
-            raise StructuredDataError(
-                'the adapter produced no scoring call for this request',
-                code='INVALID_REQUEST',
-            )
-        return _report_absent(
-            PredictionResult.merge(parts), self._named_outputs, self.model
+        raise StructuredDataError(
+            'this fitted model has no native session state; fit again',
+            code='INVALID_CONFIGURATION',
         )
 
     def close(self) -> None:
@@ -346,6 +305,21 @@ class SDMClient:
         self._pinned: set[FittedModel] = set()
 
     @classmethod
+    def in_process(cls, *models: Any, device: Any = None) -> SDMClient:
+        """Run models locally using the same Rust preparation and result path.
+
+        Pass loaded structured-data-models models, or omit them to load weights
+        on first use. The optional ``in-process`` extra requires Python 3.11+.
+        ``device`` controls models loaded by this client; supplied models keep
+        their placement. Local refusals carry no HTTP status.
+        """
+        from sdm_client.in_process import InProcessBackend
+
+        client = cls.__new__(cls)
+        client._start(InProcessBackend(models, device))
+        return client
+
+    @classmethod
     def for_databricks_serving(
         cls,
         endpoint: str,
@@ -430,15 +404,9 @@ class SDMClient:
         live connection, and it is not the endpoint's own answer. Use
         :meth:`models` for that.
         """
-        from sdm_client import _routing
+        from sdm_client._rust.capabilities import described
 
-        spec = self._spec(model)
-        if _routing.route(_routing.CAPABILITIES) == 'core':
-            # The core's table, the one both hosts describe a model from.
-            from sdm_client._rust.capabilities import described
-
-            return described(spec.model_id)
-        return describe(spec)
+        return described(self._spec(model).model_id)
 
     def health_ready(self) -> bool:
         r"""Whether the NIM answers ``GET /v1/health/ready`` with 200."""
@@ -473,34 +441,8 @@ class SDMClient:
         _require_output_names(outputs)
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
-        # On the core route the model and output checks, the answer to a
-        # request with no rows, the context's checks, the merge and the
-        # notice of an absent output are the core's (T1.28b).
-        on_the_core = _predicts_on_the_core(request)
-        if on_the_core is not None:
-            return on_the_core.predict(self, request, model, outputs)
-        adapter, fields = self._prepare(request, model, outputs)
-        if request.nothing_to_score:
-            return _empty_answer(adapter.spec.model_id, fields, request)
-        # Asked here, where both halves of the request travel together, which
-        # is the only call at which the pairing is a leak.
-        warn_of_rows_scored_from_their_own_answers(request)
-        # Every call's rows are kept. A request past the endpoint's per-call
-        # cap is split by the adapter, and each call answers about its own
-        # rows, so returning only the last would drop the earlier batches.
-        parts = _numbered_across_calls(
-            adapter.prediction_plan(request, fields),
-            lambda payload: adapter.normalize(
-                self._send(adapter, payload), fields, payload
-            ),
-        )
-        if not parts:
-            raise StructuredDataError(
-                'the adapter produced no call for this request',
-                code='INVALID_REQUEST',
-            )
-        return _report_absent(
-            PredictionResult.merge(parts), outputs, adapter.spec.model_id
+        return _prediction_handler(request).predict(
+            self, request, model, outputs
         )
 
     def _answer_in_parts(
@@ -519,142 +461,19 @@ class SDMClient:
         """
         rewritten = request._decomposition
         assert rewritten is not None
-        ranking = rewritten.kind == RANKING
-        on_the_core = (
-            None
-            if not request.parts
-            else _predicts_on_the_core(request.parts[0])
-        )
-        if on_the_core is not None:
-            # A forecast or a ranking, which the core predicts part by part
-            # and puts together (T1.36 fix 21, T2.8), whether the core
-            # gathered it or not (T3.26), its refusals said of the part they
-            # name, as each part's is below.
-            try:
-                merged = on_the_core.predict(self, request, model, outputs)
-            except StructuredDataError as error:
-                raise _said_of_the_part(error, request) from error
-            if ranking:
-                return merged
-            return _report_absent(merged, outputs, spec_for(model).model_id)
-        unscored: frozenset[int] = frozenset()
-        if ranking:
-            _refuse_outputs_a_ranking_cannot_give(outputs)
-            unscored = self._candidates_no_context_teaches(
-                request, model, rewritten
+        if not request.parts:
+            raise StructuredDataError(
+                'a decomposed request must contain at least one question',
+                code='INVALID_REQUEST',
             )
-        # A ranking needs how sure each answer was, which is what orders the
-        # candidates, and the fields it gives back are the merge's own. A step
-        # of a forecast is an ordinary regression, so the caller's fields are
-        # what each part is asked for.
-        wanted = _RANKING_PARTS if ranking else outputs
-        answers: list[PredictionResult] = []
-        answered: list[int] = []
-        for position, (part, (_, about)) in enumerate(
-            zip(request.parts or (), rewritten.parts, strict=True)
-        ):
-            if position in unscored:
-                continue
-            answered.append(position)
-            try:
-                answers.append(self.predict(part, model=model, outputs=wanted))
-            except Exception as error:
-                answered.pop()
-                _carry_the_steps_already_paid_for(
-                    error, answers, rewritten, answered, ranking
-                )
-                if not isinstance(error, StructuredDataError):
-                    raise
-                raise about_the_part(error, rewritten, about) from error
-        if ranking:
-            parts = rewritten.parts
-            scored = [part for i, part in enumerate(parts) if i not in unscored]
-            return _ranked(
-                answers,
-                dataclasses.replace(rewritten, parts=tuple(scored)),
-                outputs,
-                unscored=[parts[i][1] for i in sorted(unscored)],
-            )
-        merged = _by_step(answers, rewritten)
-        _warn_of_steps_that_carry_no_explanation(
-            answers, rewritten, outputs, spec_for(model).model_id
-        )
+        handler = _prediction_handler(request.parts[0])
+        try:
+            merged = handler.predict(self, request, model, outputs)
+        except StructuredDataError as error:
+            raise _said_of_the_part(error, request) from error
+        if rewritten.kind == RANKING:
+            return merged
         return _report_absent(merged, outputs, spec_for(model).model_id)
-
-    def _candidates_no_context_teaches(
-        self,
-        request: Request,
-        model: str | Model,
-        rewritten: Decomposition,
-    ) -> frozenset[int]:
-        r"""Which of a ranking's parts ask about a one-class candidate.
-
-        The endpoint refuses a classification whose context holds one class,
-        so such a candidate cannot be scored. Checking every part before any
-        call sends none for those, names them all at once, and refuses a
-        ranking with nothing left before it spends a call.
-
-        A candidate is scored or not for the whole ranking, because each
-        candidate is one call: a part is never batched, and a ranking over
-        more entities than one call scores is refused when it is gathered.
-        Were a part ever split, the engine would sample a context per batch,
-        and one cold batch would drop the candidate from every row rather
-        than from its own, since ``unscored_candidates`` names a candidate
-        for the whole result rather than per row.
-        """
-        positions = []
-        for position, (part, (_, about)) in enumerate(
-            zip(request.parts or (), rewritten.parts, strict=True)
-        ):
-            try:
-                adapter, fields = self._prepare(part, model, _RANKING_PARTS)
-                for _ in adapter.prediction_plan(part, fields):
-                    pass
-            except StructuredDataError as error:
-                details = getattr(error, 'details', None) or {}
-                if details.get('classes_in_context') != 1:
-                    raise about_the_part(error, rewritten, about) from error
-                positions.append(position)
-        if not positions:
-            return frozenset()
-        cold = [rewritten.parts[position][1] for position in positions]
-        many = len(cold) > 1
-        named = ', '.join(repr(candidate) for candidate in cold[:-1])
-        if len(cold) == len(rewritten.parts):
-            which = (
-                f'the contexts gathered for candidates {named} and '
-                f'{cold[-1]!r} each hold'
-                if many
-                else f'the context gathered for candidate {cold[0]!r} holds'
-            )
-            raise UnsupportedRequestError(
-                f'{which} one answer only, and a classification needs at '
-                f'least two classes to learn from, so there is nothing to '
-                f'rank and nothing was sent. {_SCORE_THE_UNSCORED}',
-                details={
-                    'model': spec_for(model).model_id,
-                    'candidates': cold,
-                    'classes_in_context': 1,
-                },
-            )
-        which = (
-            f'candidates {named} and {cold[-1]!r} are'
-            if many
-            else f'candidate {cold[0]!r} is'
-        )
-        them = 'them' if many else 'it'
-        warnings.warn(
-            f'{which} left out of this ranking, unscored: the context '
-            f'sampled for {"each" if many else "it"} holds one answer only, '
-            f'nearly always because no entity in it linked to the candidate '
-            f'in the window, and a classification needs two to learn from. '
-            f'No call was sent for {them}, so each row ranks only the rest, '
-            f"and the result's unscored_candidates names {them}. "
-            f'{_SCORE_THE_UNSCORED}',
-            category=SDMWarning,
-            stacklevel=caller_stacklevel(),
-        )
-        return frozenset(positions)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -745,110 +564,14 @@ class SDMClient:
         _require_a_request(request)
         _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
-        from sdm_client import _routing
-
-        if (
-            self._spec(model).model_id == 'kumo-tabular'
-            and _routing.route(_routing.TABULAR_SESSIONS) == 'core'
-        ):
+        spec = self._spec(model)
+        if spec.model_id == 'kumo-tabular':
             from sdm_client._rust import sessions
 
             return sessions.fit(self, request, model, outputs, holdout)
-        if self._spec(model).model_id == 'kumo-relational' and (
-            (
-                request.schema.source is None
-                and _routing.on_frames(_routing.FRAME_SESSIONS)
-            )
-            or _routing.on_the_core(
-                request.schema.source, _routing.WAREHOUSE_SESSIONS
-            )
-        ):
-            from sdm_client._rust import frame_sessions
+        from sdm_client._rust import frame_sessions
 
-            return frame_sessions.fit(self, request, model, outputs, holdout)
-        adapter, fields = self._prepare(request, model, outputs)
-        payload = adapter.session_plan(request, fields)
-        held = _held_back(payload, holdout)
-        try:
-            try:
-                created = self._transport.create_session(payload)
-            except StructuredDataError as error:
-                explained = adapter.explain_error(error, payload)
-                if explained is error:
-                    raise
-                raise explained from error
-        except Exception as error:
-            status = getattr(error, 'status_code', None)
-            if status in _SESSIONS_UNSUPPORTED:
-                raise StructuredDataError(
-                    f'this endpoint does not serve sessions (HTTP {status}); '
-                    f'use predict() instead, which sends the context with '
-                    f'every call',
-                    code='SESSIONS_UNSUPPORTED',
-                ) from error
-            raise
-        session_id = created.get('session_id') or created.get('id')
-        if not session_id:
-            raise StructuredDataError(
-                'the endpoint created a session but named no session id',
-                code='INVALID_RESPONSE',
-                details={'response_keys': sorted(created)},
-            )
-        fitted = FittedModel._open(
-            self,
-            adapter,
-            str(session_id),
-            fields,
-            {key: value for key, value in payload.items() if key != 'context'},
-            named_outputs=outputs,
-            pinned_keys=keys_in(
-                payload, 'context', with_anchor=request.target_moves_with_time
-            ),
-            held_back=held,
-            pinned_over_a_window=request.target_moves_with_time,
-            question=request._question,
-        )
-        self._pinned.add(fitted)
-        return fitted
-
-    def _prepare(
-        self,
-        request: Request,
-        model: str | Model,
-        outputs: Sequence[str] | None,
-    ) -> tuple[ModelAdapter, tuple[str, ...]]:
-        r"""Resolve the adapter and output fields, and refuse early.
-
-        Every check that can be made without the network is made here, so a
-        request the model cannot answer fails with a message naming the model
-        rather than as an opaque 422.
-        """
-        _require_a_request(request)
-        _require_output_names(outputs)
-        spec = self._spec(model)
-        adapter = self._adapters.get(spec.model_id)
-        if adapter is None:
-            adapter = _adapter_for(spec)
-            self._adapters[spec.model_id] = adapter
-
-        fields = (
-            tuple(outputs)
-            if outputs is not None
-            else adapter.default_output(request)
-        )
-        if not fields:
-            raise StructuredDataError(
-                'outputs must name at least one field',
-                code='INVALID_REQUEST',
-            )
-        if isinstance(outputs, (str, bytes)):
-            raise StructuredDataError(
-                f'outputs must be a sequence of field names, not a single '
-                f'string; pass [{outputs!r}]',
-                code='INVALID_REQUEST',
-            )
-        check_request_against_model(request, spec, fields)
-        return adapter, fields
+        return frame_sessions.fit(self, request, model, outputs, holdout)
 
     @staticmethod
     def _spec(model: str | Model) -> ModelSpec:
@@ -896,35 +619,15 @@ class SDMClient:
         return f'SDMClient(url={redact_url(self._transport.url)!r})'
 
 
-def _predicts_on_the_core(request: Request) -> Any | None:
-    r"""The core's ``predict`` bridge, when this call runs on the core.
-
-    Covered database and warehouse sources predict on the core by default.
-    The migration's explicit routing override can select the old route for
-    comparisons; other sources retain their route until implemented.
-    A request the core did not materialize is predicted from what it holds
-    (T3.26).
-    """
-    schema = getattr(request, 'schema', None)
-    source = getattr(schema, 'source', None)
+def _prediction_handler(request: Request) -> Any:
+    """Choose the native adapter for direct arrays or materialized payloads."""
     if not request.payloads:
-        from sdm_client import _routing
+        from sdm_client._rust import direct
 
-        if _routing.route(_routing.DIRECT_PREDICT) == 'core':
-            from sdm_client._rust import direct
+        return direct
+    from sdm_client._rust import predict
 
-            return direct
-        return None
-    from sdm_client import _routing
-
-    if source is None:
-        if not _routing.on_frames(_routing.FRAME_PREDICT):
-            return None
-    elif not _routing.on_the_core(source, _routing.PREDICT):
-        return None
-    from sdm_client._rust import predict as on_the_core
-
-    return on_the_core
+    return predict
 
 
 def _said_of_the_part(
@@ -974,124 +677,6 @@ def _said_of_the_part(
     if position is not None and not of_the_core:
         return about_the_part(error, rewritten, by_position[position])
     return error
-
-
-def _numbered_across_calls(
-    plan: Iterable[dict[str, Any]],
-    answer: Callable[[dict[str, Any]], PredictionResult],
-) -> list[PredictionResult]:
-    r"""Answer each call, numbering its rows from where the last call's ended.
-
-    The endpoint numbers every call's rows from zero, so a request sent in
-    several calls would otherwise give each ``row_index`` once per call, and
-    ``to_pandas()``, which orders by it, would interleave the batches.
-
-    Every call is counted before the first is sent, because a call whose rows
-    cannot be counted leaves the ones after it unnumberable, and finding that
-    out between two sends spends calls on an answer that cannot be returned.
-
-    A call that fails ends the request, and the answers already paid for are
-    carried on the error as ``details['answered']``, with the rows they cover
-    as ``details['rows_answered']``: the caller can keep them and ask again
-    for the rest rather than resend the whole population.
-    """
-    calls = list(plan)
-    counted = [_envelope_rows(payload, 'predict') for payload in calls]
-    if any(rows is None for rows in counted[:-1]):
-        raise StructuredDataError(
-            'a request sent in several calls has a call whose rows could not '
-            'be counted, so the rows of the calls after it cannot be numbered',
-            code='INTERNAL_ERROR',
-        )
-    answers: list[PredictionResult] = []
-    start = 0
-    for payload, rows in zip(calls, counted, strict=True):
-        try:
-            answers.append(_numbered_from(answer(payload), start))
-        except Exception as error:
-            _carry_the_answers_already_paid_for(error, answers, start)
-            raise
-        start += rows or 0
-    return answers
-
-
-def _carry_the_steps_already_paid_for(
-    error: BaseException,
-    answers: list[PredictionResult],
-    rewritten: Decomposition,
-    answered: Sequence[int],
-    ranking: bool,
-) -> None:
-    r"""Record on ``error`` the parts answered before the one that failed.
-
-    A forecast's steps are kept as the answer they would have been: numbered
-    by step, since a step's rows are numbered from its own zero and only the
-    step tells two of them apart.
-
-    A ranking's are counted and not kept. Its parts are not an answer until
-    they are all in: what a caller asked for is an order over the candidates,
-    and an order over some of them is a different claim, not a partial one.
-    """
-    if not answers:
-        return
-    held = getattr(error, 'details', None)
-    error.details = {  # type: ignore[attr-defined]
-        **(held if isinstance(held, dict) else {}),
-        'parts_answered': len(answers),
-        **(
-            {}
-            if ranking
-            else {
-                'answered': _by_step(
-                    answers,
-                    dataclasses.replace(
-                        rewritten,
-                        parts=tuple(rewritten.parts[at] for at in answered),
-                    ),
-                )
-            }
-        ),
-    }
-
-
-def _carry_the_answers_already_paid_for(
-    error: BaseException, answers: list[PredictionResult], rows: int
-) -> None:
-    r"""Record on ``error`` the calls that were answered before it.
-
-    A request sent in fifty calls that fails on the thirty-seventh has
-    thirty-six answers the endpoint was already paid for. Dropping them makes
-    the caller buy them again; the error keeps its own type and code, so
-    nothing branching on either has to know they are there.
-
-    The same holds of a question asked in parts, where what was answered is
-    whole parts rather than batches of one. ``about_the_part`` copies the
-    error's ``__dict__``, so what is recorded here survives being said of the
-    part it happened in.
-    """
-    if not answers:
-        return
-    # Not every failure is this client's own: the Databricks transport lets
-    # its OAuth refresh raise, and those calls were paid for too.
-    held = getattr(error, 'details', None)
-    error.details = {  # type: ignore[attr-defined]
-        **(held if isinstance(held, dict) else {}),
-        'answered': PredictionResult.merge(answers),
-        'calls_answered': len(answers),
-        'rows_answered': rows,
-    }
-
-
-def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
-    r"""``result`` with each row numbered ``start`` places further on."""
-    if start:
-        result.items = tuple(
-            dataclasses.replace(item, row_index=item.row_index + start)
-            if item.row_index is not None
-            else item
-            for item in result.items
-        )
-    return result
 
 
 def _report_absent(
@@ -1230,61 +815,6 @@ def _report_held_back(removed: int, named: int) -> None:
         )
 
 
-def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
-    r"""The dtypes a session pinned, read back off the envelope it sent.
-
-    The pinned keys were written with these, so the scored ones have to be
-    read with them or the same entity has two names.
-    """
-    columns = ((pinned.get('schema') or {}).get('instance_table') or {}).get(
-        'columns'
-    )
-    if not isinstance(columns, Mapping):
-        return None
-    return {
-        name: str(described['dtype'])
-        for name, described in columns.items()
-        if isinstance(described, Mapping) and described.get('dtype')
-    }
-
-
-def _warn_scoring_what_was_pinned(
-    request: Request,
-    pinned: frozenset[Any],
-    over_a_window: bool = False,
-    dtypes: Mapping[str, str] | None = None,
-) -> None:
-    r"""Say when a call scores rows the pinned context already answers.
-
-    A session pins the context gathered by the `fit()` request, which excluded
-    the rows *that* request named. Every later call names different rows, and
-    nothing excluded those, so they sit in the pinned context with their target
-    values and the model is asked to predict what it has been shown. Measured
-    on a target that is pure noise, a session scored 0.595 where the same rows
-    scored one-shot came back 0.455, against a chance rate of 0.5.
-
-    It cannot be fixed here: the context lives on the endpoint and the rows
-    cannot be taken out of it. Nor can the caller fix it after the fact. The
-    equivalent of the one-shot remedy is to blank the targets before `fit()`,
-    which means knowing every row the session will ever score, and a caller who
-    knows that has no reason to open a session. So it is reported, with the two
-    things that do work.
-
-    An entity asked about over a window is only given away at the moment it
-    was pinned at, so there the moment is part of what is compared. Comparing
-    the entity alone called every later call about the same entity a leak,
-    which under warnings-as-errors is a working session that stops working.
-    """
-    if not pinned:
-        return
-    # Rows, not the keys among them: two rows asking about one entity are two
-    # rows being scored, and a set had already lost one of them before either
-    # number was taken.
-    scored = scored_rows(request, with_anchor=over_a_window, dtypes=dtypes)
-    shown = sum(1 for named in scored if named in pinned)
-    _report_pinned_overlap(shown, len(scored))
-
-
 def _report_pinned_overlap(shown: int, total: int) -> None:
     """Present overlap already computed by the active implementation."""
     if not shown:
@@ -1304,229 +834,7 @@ def _report_pinned_overlap(shown: int, total: int) -> None:
 
 #: What a ranking's parts are asked for: how sure each answer was is what
 #: orders the candidates, not which side of the line it fell.
-_RANKING_PARTS = ('prediction', 'probabilities')
-_RANKING_OUTPUTS = ('prediction', 'rankings')
 #: What can still rank a candidate whose sampled context holds one answer.
-_SCORE_THE_UNSCORED = (
-    'Gather a wider context with num_context_samples if other entities in '
-    'the data answer differently, or ask over a table of (entity, '
-    'candidate) pairs, which scores every candidate from its features.'
-)
-
-
-def _ranked(
-    answers: list[PredictionResult],
-    rewritten: Decomposition,
-    outputs: Sequence[str] | None,
-    unscored: Sequence[Any] = (),
-) -> PredictionResult:
-    r"""The candidates each entity reached, likeliest first.
-
-    Ordered by how sure the answer to that candidate's question was, which is
-    what a ranking is: the questions were asked separately and only their
-    order matters between them.
-
-    Each entity keeps the row it was asked about on, so the answer joins back
-    onto the frame the caller scored. The candidates are the values the caller
-    named, not what they looked like once written into a query.
-
-    ``rewritten`` holds only the parts that were asked. The candidates that
-    were not are carried beside the ranking, never in it, since any score
-    given to them would be invented.
-    """
-
-    from sdm_api.generated.tfm_api import PredictionItem
-
-    # Keyed by the row, not by the entity on it: the same entity may be asked
-    # about more than once, at different moments, and folding those together
-    # would answer with one row where two were asked and could put the same
-    # candidate in it twice.
-    scores: dict[Any, list[tuple[float, Any]]] = {}
-    asked_about: dict[Any, tuple[int | None, Any]] = {}
-    for answer, (_, candidate) in zip(answers, rewritten.parts, strict=True):
-        for item in answer.items:
-            where = (item.row_index, item.id)
-            scores.setdefault(where, []).append(
-                (_how_sure(item, candidate), candidate)
-            )
-            asked_about.setdefault(where, (item.row_index, item.id))
-
-    top = rewritten.top
-    wanted = tuple(outputs or _RANKING_OUTPUTS)
-    items = []
-    for position, (where, scored) in enumerate(scores.items()):
-        row, entity = asked_about[where]
-        # Sort only on the score: candidates are of the caller's type and two
-        # of them need not be comparable to each other.
-        scored.sort(key=lambda pair: pair[0], reverse=True)
-        chosen = scored[:top] if top else scored
-        items.append(
-            PredictionItem(
-                row_index=position if row is None else row,
-                id=entity,
-                prediction=(
-                    [candidate for _, candidate in chosen]
-                    if 'prediction' in wanted
-                    else None
-                ),
-                rankings=(
-                    tuple(
-                        {'candidate': candidate, 'score': score}
-                        for score, candidate in chosen
-                    )
-                    if 'rankings' in wanted
-                    else None
-                ),
-            )
-        )
-    return PredictionResult(
-        model=answers[0].model if answers else '',
-        request_id=answers[0].request_id if answers else '',
-        items=items,
-        outputs=wanted,
-        unscored_candidates=unscored,
-    )
-
-
-def _how_sure(item: Any, candidate: Any) -> float:
-    r"""How sure the endpoint was that this entity reaches this candidate.
-
-    A ranking is nothing but the order of these, so a missing one cannot be
-    read as zero: that would sort a candidate the endpoint was confident about
-    to the bottom and give back an order that looks like an answer.
-    """
-    given = item.probabilities or {}
-    for spelling in ('true', 'True', 'TRUE', '1'):
-        if spelling in given:
-            return float(given[spelling])
-    raise StructuredDataError(
-        f'the endpoint answered the question about candidate {candidate!r} '
-        f'without saying how sure it was, and a ranking is only the order of '
-        f'those. It gave back {sorted(given) or "no probabilities"}, and this '
-        f'client knows a positive class spelled "true", "True", "TRUE" or '
-        f'"1".',
-        code='INTERNAL_ERROR',
-    )
-
-
-def _top_k_of(asked: str) -> int | None:
-    r"""How many a ranking asked for, as the query says."""
-    import re
-
-    found = re.search(r'\bRANK\s+TOP\s+(\d+)', asked, flags=re.IGNORECASE)
-    return int(found.group(1)) if found else None
-
-
-def _warn_of_steps_that_carry_no_explanation(
-    answers: list[PredictionResult],
-    rewritten: Decomposition,
-    requested: Sequence[str] | None,
-    model: str,
-) -> None:
-    """Say which steps of a forecast came back without an explanation.
-
-    Each step is explained on its own, so some can carry one and others not.
-    The merged answer holds whatever came back, and a check that asks only
-    whether the whole result carries an explanation sees the ones that did and
-    says nothing about the ones that did not.
-    """
-    if not requested or 'explanation' not in requested:
-        return
-    missing = [
-        step
-        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        if answer.explanation is None
-    ]
-    if not missing or len(missing) == len(answers):
-        return
-    warnings.warn(
-        f'{model} explained {len(answers) - len(missing)} of '
-        f'{len(answers)} forecast steps, and step '
-        f'{", ".join(str(step) for step in missing)} carries none, so '
-        f'the explanation this request asked for is not there for every step.',
-        category=SDMWarning,
-        stacklevel=caller_stacklevel(),
-    )
-
-
-def _by_step(
-    answers: list[PredictionResult], rewritten: Decomposition
-) -> PredictionResult:
-    r"""What each step holds, in the order the steps come.
-
-    `forecast_step` is the field the contract already carries for this, so a
-    reader of the frame gets the series it asked for without knowing that it
-    arrived as several answers. It is a column of every such answer, so an
-    empty one carries it too. An entity keeps its own row across the steps:
-    the pair of row and step is what names a point in the series, which is how
-    the contract reads it.
-
-    Each step is explained on its own, so the explanations are kept under the
-    step they belong to. Dropping them left the result saying it carried an
-    explanation while holding none.
-    """
-    items = [
-        dataclasses.replace(item, forecast_step=step)
-        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        for item in answer.items
-    ]
-    by_step = {
-        step: answer.explanation
-        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        if answer.explanation is not None
-    }
-    built = PredictionResult(
-        model=answers[0].model if answers else '',
-        request_id=answers[0].request_id if answers else '',
-        items=items,
-        outputs=tuple(answers[0].outputs) if answers else (),
-        explanation={'by_forecast_step': by_step} if by_step else None,
-    )
-    # `forecast_step` is put on the items above, so with no items there is
-    # nothing to read it from and an empty forecast lost the column that says
-    # which step an answer is about, just as `id` loses the column that
-    # says which row.
-    built._names_its_step = True
-    built._names_its_rows = all(part._names_its_rows for part in answers)
-    return built
-
-
-_WHAT_DIFFERS = (
-    ('query', 'the query'),
-    ('kind', 'the task kind'),
-    ('target', 'the target column'),
-    ('dtype', "the target column's dtype"),
-    ('entity_table', 'the entity table'),
-)
-
-
-def _refuse_a_question_the_session_did_not_pin(
-    pinned: Question, asked: Question
-) -> None:
-    r"""Require a scoring call to use the pinned question.
-
-    Said field by field: the rest of the request is identical, so printing both
-    whole does not show which one differs.
-    """
-    if pinned == asked:
-        return
-    for field_name, described in _WHAT_DIFFERS:
-        mine = getattr(pinned, field_name)
-        theirs = getattr(asked, field_name)
-        if mine != theirs:
-            said = f'{described} pinned is {mine!r} and this asks {theirs!r}'
-            break
-    else:
-        said = (
-            'the context pinned is not the one this request carries, and the '
-            'context is what the answer is learnt from'
-        )
-    raise StructuredDataError(
-        f'this session pinned a different question: {said}. Only the rows '
-        f'travel on a scoring call, so the pinned question is the one that '
-        f'would be answered. Fit again to ask something else',
-        code='INVALID_REQUEST',
-    )
 
 
 def _require_a_request(request: Any) -> None:
@@ -1588,33 +896,3 @@ def _refuse_to_pin_a_rewritten_question(request: Request) -> None:
         f'the answers back together.',
         code='INVALID_REQUEST',
     )
-
-
-def _refuse_outputs_a_ranking_cannot_give(
-    outputs: Sequence[str] | None,
-) -> None:
-    r"""A ranking gives back an order, and the fields that describe one.
-
-    The parts it was asked as are classifications, so their fields are the
-    endpoint's; the merged answer's fields are this client's, and asking it
-    for one it does not build would otherwise be answered with a result that
-    names the field and does not carry it.
-
-    Naming none is refused the way every other request refuses it. A ranking
-    was the one shape that read an empty list as *give me the usual*, so the
-    one caller who had said what they wanted was the one who did not get it.
-    """
-    if outputs is not None and not outputs:
-        raise StructuredDataError(
-            'outputs must name at least one field', code='INVALID_REQUEST'
-        )
-    unknown = [name for name in outputs or () if name not in _RANKING_OUTPUTS]
-    if unknown:
-        raise StructuredDataError(
-            f'a ranking gives back {", ".join(_RANKING_OUTPUTS)}, and '
-            f'{", ".join(repr(name) for name in unknown)} '
-            f'{"are" if len(unknown) > 1 else "is"} not among them. The '
-            f'per-candidate questions it is asked as are classifications; ask '
-            f'one of those directly for the fields a classification gives.',
-            code='INVALID_REQUEST',
-        )

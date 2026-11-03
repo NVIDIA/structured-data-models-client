@@ -38,10 +38,6 @@ so ``python-core`` is run by the same code.
 from __future__ import annotations
 
 import importlib.util
-import json
-import os
-import platform
-import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -167,41 +163,3 @@ def run(vector: dict[str, Any]) -> dict[str, Any]:
         }
     finally:
         cleanup()
-
-
-def main() -> int:
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    if not os.environ.get('SDM_POSTGRES_TEST_DSN'):
-        print('SDM_POSTGRES_TEST_DSN names no server', file=sys.stderr)
-        return 1
-    recorded = []
-    for vector in vectors():
-        recorded.append({**vector, 'reference': run(vector)})
-        print(vector['id'], recorded[-1]['reference']['code'], file=sys.stderr)
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/column_name_regressions_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'environment': {'python': platform.python_version()},
-        'twin': N.TWIN,
-        'vectors': recorded,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    print(f'{len(recorded)} vectors written', file=sys.stderr)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

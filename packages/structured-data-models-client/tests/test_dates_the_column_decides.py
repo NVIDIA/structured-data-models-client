@@ -169,28 +169,31 @@ def test_a_conversion_writes_itself_as_the_call_it_is(conversion, written):
 # --- a column that says one thing is not called ambiguous -------------------
 
 
-def time_column(values):
-    pytest.importorskip('sdm_relational_engine')
+def time_column(values, *, anchor='2021-06-01'):
 
     from sdm_client import PredictiveQuery, Schema
     from sdm_client.schema import Relationship
 
     users = pd.DataFrame({'uid': range(40)})
     events = pd.DataFrame(
-        {'uid': [i % 40 for i in range(len(values))], 'when': values}
+        {
+            'event_id': range(len(values)),
+            'uid': [i % 40 for i in range(len(values))],
+            'when': values,
+        }
     )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_data(
             {'users': users, 'events': events},
-            primary_keys={'users': 'uid'},
+            primary_keys={'users': 'uid', 'events': 'event_id'},
             time_columns={'events': 'when'},
             relationships=[Relationship('events', 'uid', 'users', 'uid')],
         )
         return PredictiveQuery(
             'PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.uid',
             schema,
-        ).materialize(indices=[1, 2], anchor_time=pd.Timestamp('2021-06-01'))
+        ).materialize(indices=[1, 2], anchor_time=pd.Timestamp(anchor))
 
 
 def test_a_year_first_column_with_a_named_zone_is_read():
@@ -227,12 +230,6 @@ def test_a_column_that_will_not_read_is_not_called_ambiguous(values, said):
     coercing the second leaves the rows that read, and coercing the first
     leaves a column of NaT, which this client refuses for a reason of its own.
     """
-    if 'CST' in values[0] and int(pd.__version__.split('.')[0]) < 3:
-        # pandas 2 reads the zone it does not know as no zone at all
-        # (`13:24:26 CST` is 13:24:26), so on this old route every value
-        # reads and the column is a time axis; pandas 3 reads none of them.
-        assert time_column(values) is not None
-        return
     with pytest.raises(StructuredDataError) as raised:
         time_column(values)
 
@@ -442,16 +439,14 @@ UNREADABLE_ISO = ['2021-13-45']
 
 
 def which_arm(values) -> str:
-    """Which account `_to_time` gives of a column, or that it read it."""
-    from sdm_client.materializers.relational import _to_time
+    """Which diagnostic public materialization gives, or that it read it."""
 
     try:
-        _to_time(pd.Series(values), 't.when')
+        time_column(values, anchor='2025-01-01')
         return 'read'
     except StructuredDataError as raised:
         said = str(raised)
     for key, arm in (
-        ('written two ways', 'two shapes'),
         ('none of its', 'none read'),
         ('do not read as a date', 'some unread'),
         ('does not say unambiguously', 'ambiguous'),
@@ -470,8 +465,8 @@ def which_arm(values) -> str:
         (DAY_FIRST, 'read'),
         (MONTH_FIRST, 'read'),
         (UNDECIDED, 'ambiguous'),
-        (ISO[:14] + DAY_FIRST[:14], 'two shapes'),
-        (ISO[:14] + UNDECIDED[:14], 'two shapes'),
+        (ISO[:14] + DAY_FIRST[:14], 'read'),
+        (ISO[:14] + UNDECIDED[:14], 'ambiguous'),
         (ISO + JUNK, 'some unread'),
         (ISO + SLASH_JUNK, 'some unread'),
         (ISO + UNREADABLE_ISO, 'some unread'),
@@ -486,9 +481,7 @@ def which_arm(values) -> str:
     ids=lambda v: v if isinstance(v, str) else '',
 )
 def test_every_shape_of_column_gets_the_account_that_is_true_of_it(values, arm):
-    """`_to_time` has five arms and their order is load-bearing. A column
-    written day-first with one value that is not a date was called ambiguous,
-    where the same column written year-first was reported correctly."""
+    """Invalid values, ambiguous dates and readable mixtures stay distinct."""
     assert which_arm(values) == arm
 
 
@@ -526,58 +519,49 @@ def test_space_around_a_value_is_not_part_of_its_shape(values):
 
 
 @pytest.mark.parametrize(
-    ('values', 'arm', 'names'),
+    ('values', 'arm'),
     [
         (
             ['13/02/2020 00:00 +0100', '14/02/2020 00:00 -0800', 'not a date'],
             'some unread',
-            'not a date',
         ),
         (
             ['2020-01-01', '2020-01-02 00:00 +0100', 'not a date'],
             'some unread',
-            'not a date',
         ),
         (
             [f'{d:02d}/02/2021' for d in range(1, 29)] + ['not a date'],
             'some unread',
-            'not a date',
         ),
     ],
     ids=['mixed-offset slash', 'partial zone', 'day-first'],
 )
-def test_what_does_not_read_is_counted_by_the_one_reading_that_answers(
-    values, arm, names
+def test_invalid_dates_identify_the_column_and_offer_explicit_conversion(
+    values, arm
 ):
     """Three places asked whether a value reads and answered three ways: one
     raised on mixed offsets, one counted valid day-first dates as unread, and
     one sent the column to the ambiguity arm."""
-    from sdm_client.materializers.relational import _to_time
 
     padded = values if len(values) > 20 else values * 10
     assert which_arm(padded) == arm
 
     with pytest.raises(StructuredDataError) as raised:
-        _to_time(pd.Series(padded), 't.when')
+        time_column(padded)
     said = str(raised.value)
-    assert names in said
-    assert f'{padded.count("not a date")} of {len(padded)}' in said
+    assert 'events.when contains values that do not read as a date' in said
+    assert 'explicit format' in said
+    assert "errors='coerce'" in said
 
 
 def _account_the_facts_call_for(values) -> str:
-    """Which arm a column's shape and readability say it belongs on.
-
-    Written from the facts rather than from the branch order, so it disagrees
-    with `_to_time` whenever the order is wrong. It shares the two primitives,
-    so it checks the routing rather than re-deciding what reads.
-    """
+    """Classify single-format fixtures from readability and day/month facts."""
     from sdm_client.core import dates
 
     column = pd.Series(values)
     reads = dates.reads_as_a_date(column)
     shapes = dates.shapes_written(column)
-    if len(shapes) > 1:
-        return 'two shapes'
+    assert len(shapes) <= 1, 'mixed-format behavior has separate public tests'
     if not reads.any():
         return 'none read'
     if not reads.all():
@@ -617,32 +601,23 @@ def test_the_arm_a_column_lands_on_follows_from_what_it_holds(
     assert which_arm(values) == _account_the_facts_call_for(values)
 
 
-def test_a_column_with_both_faults_is_told_about_both():
-    """Coercing is what the unreadable-values message offers, and coercing a
-    column written two ways throws away every row of the shape it does not
-    settle on, measured at 10 of 30 here, so the shapes are named first,
-    and the values that do not read are named too."""
-    from sdm_client.materializers.relational import _to_time
-
+def test_mixed_spellings_still_refuse_invalid_values():
     values = ['2021-02-01', '13/02/2021', 'not a date'] * 10
-
     with pytest.raises(StructuredDataError) as raised:
-        _to_time(pd.Series(values), 't.when')
+        time_column(values)
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert 'events.when contains values that do not read as a date' in str(
+        raised.value
+    )
 
-    said = str(raised.value)
-    assert 'written two ways' in said
-    assert '10 of its values do not read as a date either' in said
 
-
-def test_a_column_written_two_ways_and_nothing_else_says_only_that():
-    from sdm_client.materializers.relational import _to_time
-
-    with pytest.raises(StructuredDataError) as raised:
-        _to_time(pd.Series(['2021-02-01', '13/02/2021'] * 10), 't.when')
-
-    said = str(raised.value)
-    assert 'written two ways' in said
-    assert 'do not read as a date either' not in said
+def test_mixed_unambiguous_spellings_preserve_both_dates():
+    request = time_column(['2021-02-01', '13/02/2021'] * 20)
+    events = request.context.related_tables['events']
+    assert set(pd.to_datetime(events['when']).dt.strftime('%Y-%m-%d')) == {
+        '2021-02-01',
+        '2021-02-13',
+    }
 
 
 def test_coercing_a_column_written_two_ways_would_lose_the_other_half():

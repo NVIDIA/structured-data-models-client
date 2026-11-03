@@ -100,6 +100,7 @@ fn send(endpoint: Endpoint, payload: Vec<u8>, response: Value) -> Value {
             })
         },
         &SendTabularSession {
+            inference: None,
             endpoint: endpoint.clone(),
             payload: AttachmentId(71),
         },

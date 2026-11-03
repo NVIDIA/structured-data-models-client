@@ -1,18 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""``SDMClient.predict`` through a Databricks Model Serving endpoint on the
-core (T3.13).
-
-On the core route the core writes the endpoint's envelope, weighs it
-against the caller's limit and reads every answer; the serving transport
-posts the core's bytes as they are through the workspace's SDK client
-(``api_client.do``, the real one here, against a local workspace) and hands
-back the bytes it was answered with, or the SDK's failure. Each outcome is
-the old route's for the same endpoint answering the same way: the result,
-the refusal's class, status, code and message, a failure the served model
-answered with, the limit, and a call the SDK retried, whose byte body is
-sent again whole.
+"""Databricks serving transport through its real SDK and local HTTP.
+Check wire envelopes, entity attribution, retries, request limits,
+sanitized failures and debug logs without retired runtime comparisons.
+No live Databricks service or model endpoint is used.
 """
 
 from __future__ import annotations
@@ -41,7 +33,6 @@ from sdm_client import (
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 from sdm_client.core.databricks_serving import DatabricksServingTransport
 from sdm_client.errors import NimRequestError
@@ -53,14 +44,6 @@ ENDPOINT = 'kumo-rfm-serving'
 INVOCATIONS = f'/serving-endpoints/{ENDPOINT}/invocations'
 SECRET = 'Sup3rSecret-CustomerValue-9f2a'
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-MATERIALIZE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
-)
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
 
 
 def _scripted() -> Any:
@@ -68,7 +51,7 @@ def _scripted() -> Any:
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(
-        name, ROOT / 'contract/runners/scripted_endpoint.py'
+        name, ROOT / 'tests/support/scripted_endpoint.py'
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -78,8 +61,7 @@ def _scripted() -> Any:
 
 
 @pytest.fixture(autouse=True)
-def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
+def _local_network(monkeypatch: pytest.MonkeyPatch) -> None:
     # A proxied runner would otherwise send these local requests to its
     # proxy.
     for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
@@ -89,23 +71,13 @@ def _old(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _shop() -> list[str]:
-    lines = (
-        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8').splitlines()
-    )
-    start = lines.index('  shop:') + 1
-    statements = []
-    for line in lines[start:]:
-        if not line.startswith('  - '):
-            break
-        statements.append(line[len('  - ') :])
-    return statements
+    return json.loads((Path(__file__).parent / 'data/shop.json').read_text())[
+        'statements'
+    ]
 
 
-def _materialized(
-    monkeypatch: pytest.MonkeyPatch, *, unicode_feature: bool = False
-) -> Request:
+def _materialized(*, unicode_feature: bool = False) -> Request:
     r"""base.regression's request, materialized on the core."""
-    monkeypatch.setenv(_routing.ENVIRONMENT, MATERIALIZE)
     connection = duckdb.connect()
     for statement in _shop():
         connection.execute(statement)
@@ -117,7 +89,6 @@ def _materialized(
         request = PredictiveQuery(QUERY, schema).materialize(
             indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
         )
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return request
 
 
@@ -208,53 +179,18 @@ def _client(workspace: Any, max_request_bytes: int | None = None) -> SDMClient:
 
 
 def _predict(
-    monkeypatch: pytest.MonkeyPatch,
     request: Request,
-    routes: str | None,
     *replies: Reply | Callable[[bytes], Reply],
     max_request_bytes: int | None = None,
 ) -> tuple[Any, list[tuple[str, bytes, dict[str, str]]]]:
-    r"""The call's outcome on ``routes`` (the old route with none), the
-    result or the exception raised, and what the workspace received."""
-    if routes is None:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    else:
-        monkeypatch.setenv(_routing.ENVIRONMENT, routes)
-    try:
-        with _workspace(*replies) as (workspace, received):
-            with _client(workspace, max_request_bytes) as client:
-                try:
-                    outcome: Any = client.predict(
-                        request, model=KumoRelational()
-                    )
-                except StructuredDataError as error:
-                    outcome = error
-    finally:
-        monkeypatch.setenv(_routing.ENVIRONMENT, '')
+    """Public prediction through the real SDK against a local HTTP server."""
+    with _workspace(*replies) as (workspace, received):
+        with _client(workspace, max_request_bytes) as client:
+            try:
+                outcome: Any = client.predict(request, model=KumoRelational())
+            except StructuredDataError as error:
+                outcome = error
     return outcome, received
-
-
-def _both(
-    monkeypatch: pytest.MonkeyPatch,
-    request: Request,
-    *replies: Reply | Callable[[bytes], Reply],
-    max_request_bytes: int | None = None,
-) -> tuple[Any, Any, list[Any], list[Any]]:
-    core, on_core = _predict(
-        monkeypatch,
-        request,
-        CORE,
-        *replies,
-        max_request_bytes=max_request_bytes,
-    )
-    old, on_old = _predict(
-        monkeypatch,
-        request,
-        None,
-        *replies,
-        max_request_bytes=max_request_bytes,
-    )
-    return core, old, on_core, on_old
 
 
 def _call(body: bytes) -> dict[str, Any]:
@@ -264,58 +200,58 @@ def _call(body: bytes) -> dict[str, Any]:
     return call
 
 
-def _same_refusal(core: Any, old: Any) -> None:
-    assert isinstance(old, NimRequestError), old
-    assert type(core) is type(old), core
-    assert (core.status_code, core.code, core.message) == (
-        old.status_code,
-        old.code,
-        old.message,
-    )
-    # Every detail the old route gives, the core route gives alike.
-    for name, value in old.details.items():
-        assert core.details[name] == value, name
-    shown = str(core) + json.dumps(core.details, default=str)
+def _assert_refusal(error: Any, status: int, code: str | None) -> None:
+    assert isinstance(error, NimRequestError), error
+    assert (error.status_code, error.code) == (status, code)
+    assert error.details['endpoint'] == ENDPOINT
+    if code in (
+        'INVALID_SCHEMA',
+        'INVALID_REQUEST',
+        'UNSUPPORTED_TASK',
+    ):
+        expected_message = (
+            f'serving endpoint {ENDPOINT!r} refused the request ({code})'
+        )
+    else:
+        suffix = f' ({code})' if code else ''
+        expected_message = (
+            f'serving endpoint {ENDPOINT!r} request failed{suffix}'
+        )
+    assert error.message == expected_message
+    shown = str(error) + json.dumps(error.details, default=str)
     assert SECRET not in shown
-    assert core.__cause__ is None
+    assert error.__cause__ is None
 
 
-def test_the_core_s_envelope_is_posted_through_the_sdk_and_its_row_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = _materialized(monkeypatch)
-    core, old, on_core, on_old = _both(monkeypatch, request)
-    assert not isinstance(core, Exception), core
-    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
-    assert core.items == old.items
-    assert (core.model, core.metadata, core.outputs) == (
-        old.model,
-        old.metadata,
-        old.outputs,
-    )
-    [(path, body, headers)] = on_core
-    [(old_path, old_body, old_headers)] = on_old
-    assert path == old_path == INVOCATIONS
-    # The same logical call, posted as the core's shared wire codec writes it.
-    assert _call(body) == _call(old_body)
+def test_envelope_passes_through_sdk_and_result_keeps_entity_ids() -> None:
+    request = _materialized()
+    result, received = _predict(request)
+    assert not isinstance(result, Exception), result
+    assert result.to_pandas()['id'].tolist() == [0, 1]
+    assert result.to_pandas()['prediction'].tolist() == [1.0, 1.0]
+    [(path, body, headers)] = received
+    assert path == INVOCATIONS
+    call = _call(body)
+    for field in ('context', 'predict', 'schema', 'task'):
+        assert call[field] == request.payloads[0][field], field
+    assert call['model'] == result.model == 'kumo-relational'
+    assert result.metadata == {}
+    assert result.outputs == tuple(call['output']['fields'])
+    assert [item.row_index for item in result.items] == [0, 1]
     assert body.startswith(b'{"dataframe_records":[{"request_json":"{')
     assert headers['Content-Type'] == 'application/json'
-    # The workspace's own client, naming this one, as on the old route.
-    assert headers['User-Agent'] == old_headers['User-Agent']
     assert 'structured-data-models-client' in headers['User-Agent']
     assert headers['Authorization'] == 'Bearer dapi-test'
 
 
-def test_a_call_the_sdk_retries_sends_the_same_bytes_again(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = _materialized(monkeypatch)
+def test_a_call_the_sdk_retries_sends_the_same_bytes_again() -> None:
+    request = _materialized()
     busy: Reply = (
         429,
         {'error_code': 'REQUEST_LIMIT_EXCEEDED', 'message': 'slow down'},
         {'Retry-After': '0'},
     )
-    core, received = _predict(monkeypatch, request, CORE, busy)
+    core, received = _predict(request, busy)
     assert not isinstance(core, Exception), core
     assert len(core) == 2
     [(_, first, _), (_, again, _)] = received
@@ -371,13 +307,30 @@ def test_a_call_the_sdk_retries_sends_the_same_bytes_again(
         'unparsed',
     ],
 )
-def test_an_endpoint_s_failure_is_the_old_route_s_refusal(
-    monkeypatch: pytest.MonkeyPatch, reply: Reply
-) -> None:
-    request = _materialized(monkeypatch)
-    core, old, on_core, on_old = _both(monkeypatch, request, reply)
-    _same_refusal(core, old)
-    assert len(on_core) == len(on_old) == 1
+def test_endpoint_failure_is_sanitized_and_classified(reply: Reply) -> None:
+    error, received = _predict(_materialized(), reply)
+    status, body, _ = reply
+    if isinstance(body, dict):
+        provider_code = body['error_code']
+        code = {
+            'BAD_REQUEST': 'INVALID_SCHEMA'
+            if body['message'].startswith('INVALID_SCHEMA:')
+            else 'BAD_REQUEST',
+            'INTERNAL_ERROR': 'INVALID_REQUEST',
+            'RESOURCE_DOES_NOT_EXIST': 'RESOURCE_DOES_NOT_EXIST',
+        }[provider_code]
+        _assert_refusal(error, 503 if status == 500 else status, code)
+        assert error.details['provider_code'] == provider_code
+        if provider_code == 'INTERNAL_ERROR':
+            assert error.details['diagnosis'] == 'EMPTY_CONTEXT'
+            assert error.details['endpoint_code'] == 'INTERNAL_ERROR'
+    else:
+        _assert_refusal(
+            error,
+            403 if status == 403 else 503,
+            'PERMISSION_DENIED' if status == 403 else None,
+        )
+    assert len(received) == 1
 
 
 @pytest.mark.parametrize(
@@ -393,17 +346,24 @@ def test_an_endpoint_s_failure_is_the_old_route_s_refusal(
     ],
     ids=['coded', 'uncoded', 'callers-fault'],
 )
-def test_a_failure_the_model_answered_with_is_the_old_route_s_refusal(
-    monkeypatch: pytest.MonkeyPatch, answer: dict[str, Any]
+def test_served_model_failure_is_sanitized_and_classified(
+    answer: dict[str, Any],
 ) -> None:
-    request = _materialized(monkeypatch)
     reply: Reply = (
         200,
         {'predictions': [{'response_json': json.dumps(answer)}]},
         {},
     )
-    core, old, _, _ = _both(monkeypatch, request, reply)
-    _same_refusal(core, old)
+    error, received = _predict(_materialized(), reply)
+    code = (
+        'INVALID_REQUEST'
+        if answer.get('code') == 'INTERNAL_ERROR'
+        else answer.get('code')
+    )
+    _assert_refusal(error, answer['status'], code)
+    if code == 'INVALID_REQUEST':
+        assert error.details['diagnosis'] == 'EMPTY_CONTEXT'
+    assert len(received) == 1
 
 
 @pytest.mark.parametrize(
@@ -416,63 +376,57 @@ def test_a_failure_the_model_answered_with_is_the_old_route_s_refusal(
     ],
     ids=['no-row', 'no-column', 'not-an-object', 'not-json'],
 )
-def test_an_answer_the_old_route_cannot_read_is_its_transport_error(
-    monkeypatch: pytest.MonkeyPatch, body: dict[str, Any]
+def test_malformed_serving_response_is_a_transport_error(
+    body: dict[str, Any],
 ) -> None:
-    request = _materialized(monkeypatch)
-    core, old, _, _ = _both(monkeypatch, request, (200, body, {}))
-    assert isinstance(old, StructuredDataError), old
-    assert isinstance(core, StructuredDataError), core
-    assert core.code == old.code
-    if body == {'predictions': [{'response_json': '[1]'}]}:
-        assert core.details['got'] == 'array'
-        assert 'got list' in str(old)
-        assert old.details == {}
+    error, received = _predict(_materialized(), (200, body, {}))
+    assert isinstance(error, StructuredDataError), error
+    assert error.code == 'TRANSPORT_ERROR'
+    if body == {'predictions': []}:
+        expected = f'serving endpoint {ENDPOINT!r} did not return exactly one prediction row'
+    elif body == {'predictions': [{'other': 1}]}:
+        expected = f"serving endpoint {ENDPOINT!r} answered with a row that has no 'response_json' string column"
+    elif body == {'predictions': [{'response_json': '[1]'}]}:
+        assert error.details['got'] == 'array'
+        expected = f'expected a JSON object from serving endpoint {ENDPOINT!r}, got array'
     else:
-        assert str(core) == str(old)
+        expected = f'serving endpoint {ENDPOINT!r} answered with a response that is not JSON'
+    assert error.message == expected
+    assert len(received) == 1
 
 
-def test_a_call_past_the_caller_s_limit_is_refused_before_it_is_sent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = _materialized(monkeypatch)
-    _, received = _predict(monkeypatch, request, CORE)
+def test_a_call_past_the_caller_s_limit_is_refused_before_it_is_sent() -> None:
+    request = _materialized()
+    _, received = _predict(request)
     [(_, body, _)] = received
-    # Each route weighs the bytes it actually posts; encoded lengths may differ.
-    core, on_core = _predict(
-        monkeypatch, request, CORE, max_request_bytes=len(body) - 1
-    )
+    # The limit applies to the actual UTF-8 envelope posted to the SDK.
+    core, on_core = _predict(request, max_request_bytes=len(body) - 1)
     assert on_core == []
     assert isinstance(core, StructuredDataError), core
     assert core.details['limit'] == len(body) - 1
     assert core.details['bytes'] == len(body)
     # The size itself is admitted.
-    core, received = _predict(
-        monkeypatch, request, CORE, max_request_bytes=len(body)
-    )
+    core, received = _predict(request, max_request_bytes=len(body))
     assert not isinstance(core, Exception), core
     [(_, sent, _)] = received
     assert len(sent) == len(body)
     assert _call(sent) == _call(body)
 
 
-def test_utf8_serving_preserves_public_payload_and_measures_the_sent_body(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = _materialized(monkeypatch, unicode_feature=True)
-    core, old, on_core, on_old = _both(monkeypatch, request)
-    assert not isinstance(core, Exception), core
-    assert not isinstance(old, Exception), old
-    [(_, body, _)] = on_core
-    [(_, reference, _)] = on_old
+def test_utf8_serving_preserves_public_payload_and_measures_the_sent_body() -> (
+    None
+):
+    request = _materialized(unicode_feature=True)
+    result, received = _predict(request)
+    assert not isinstance(result, Exception), result
+    [(_, body, _)] = received
     assert 'é😀'.encode() in body
-    assert b'\\u00e9' in reference
-    assert _call(body) == _call(reference)
-    assert len(body) < len(reference)
-    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
-    refused, sent = _predict(
-        monkeypatch, request, CORE, max_request_bytes=len(body) - 1
-    )
+    call = _call(body)
+    for field in ('context', 'predict', 'schema', 'task'):
+        assert call[field] == request.payloads[0][field], field
+    assert result.to_pandas()['id'].tolist() == [0, 1]
+    assert result.to_pandas()['prediction'].tolist() == [1.0, 1.0]
+    refused, sent = _predict(request, max_request_bytes=len(body) - 1)
     assert isinstance(refused, StructuredDataError)
     assert sent == []
     assert refused.details['bytes'] == len(body)
@@ -485,14 +439,13 @@ def test_utf8_serving_preserves_public_payload_and_measures_the_sent_body(
     ids=['answered', 'unparsed-failure'],
 )
 def test_the_sdk_s_debug_log_carries_no_rows_on_the_core_route(
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     reply: Reply | None,
 ) -> None:
-    request = _materialized(monkeypatch)
+    request = _materialized()
     caplog.set_level(logging.DEBUG)
     replies = () if reply is None else (reply,)
-    outcome, received = _predict(monkeypatch, request, CORE, *replies)
+    outcome, received = _predict(request, *replies)
     assert received
     if reply is not None:
         assert isinstance(outcome, NimRequestError), outcome

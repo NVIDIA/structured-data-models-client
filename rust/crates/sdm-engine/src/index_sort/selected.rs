@@ -566,10 +566,26 @@ fn order_inner(
                     .filter_map(|(i, m)| (!m).then_some(i))
                     .collect();
                 let keys: Vec<_> = present.iter().map(|i| v[*i].clone()).collect();
-                let mut positions: Vec<_> = scalar(&keys, profile)
-                    .into_iter()
-                    .map(|i| present[i])
-                    .collect();
+                let ordered = if profile == Profile::Stable {
+                    let mut order: Vec<_> = (0..keys.len()).collect();
+                    if let Err((left, right)) = object_stable::sort(&mut order, |left, right| {
+                        compare_atom(keys[left].value, keys[right].value)
+                            .ok_or((present[left], present[right]))
+                    }) {
+                        return Ok(ResultOrder::Refused {
+                            levels: Vec::new(),
+                            reason: failure_reason(&values[left], &values[right]),
+                            left,
+                            right,
+                            numeric_diagnostics: Vec::new(),
+                            integer_destination: None,
+                        });
+                    }
+                    order
+                } else {
+                    scalar(&keys, profile)
+                };
+                let mut positions: Vec<_> = ordered.into_iter().map(|i| present[i]).collect();
                 positions.extend(mask.iter().enumerate().filter_map(|(i, m)| m.then_some(i)));
                 positions
             };

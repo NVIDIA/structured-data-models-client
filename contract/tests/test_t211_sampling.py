@@ -2,59 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.11's exits on ``python-core`` (the package's test author's): the
-sampling options.
-
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t211_sampling.py -q
-
-Written from the design's T2.11 row (each option an exit) and the
-reference (python-ref at ``contract/reference-env.txt``'s commit), before
-the implementation. ``sdm-testkit``'s ``tests/t211_sampling.rs`` holds
-``rust-host`` to the same exits, and ``test_t211_unseeded.py`` judges the
-unseeded sample by its properties (KO2-76).
-
-The cases, ``contract/cases/s1/sample.*.json``, each a few dozen rows of
-the shop base, run on DuckDB, SQLite and Postgres through ``predict``, each
-option with values the reference takes and values it refuses:
-
-- ``num_hops`` (1 over users, orders and lines, 3 over shipments too;
-  0, 7, 1.5, True and
-  '2' refused), ``num_neighbors`` ([4], [2, 2], [0], [-1], with num_hops; [], 5
-  and seven hops refused), ``max_pq_iterations`` (1 over a sparse label;
-  0 and 'x' refused), ``use_prediction_time`` (True, False),
-  ``return_embeddings`` and ``response_field`` for embeddings (an endpoint
-  answering embeddings, ``input.embeddings``), ``random_seed`` (7; -1
-  refused), ``exclude_cols_dict`` (a feature of each table, None; a list,
-  text, an unknown table, an unknown column and a key refused),
-  ``context_anchor_time`` (before and after the anchor; before the data
-  and 'entity' refused), ``anchor_time='entity'`` (``anchor_entity``: a
-  static question, the context anchored likewise; a context timestamp, a
-  windowed question and no time column refused);
-- ``parent_table``: an entity table that links to a parent (orders, a
-  windowed and a static question; RelBench's rel-stack votes per post and
-  rel-avito clicks per ad, the questions of ``contract/tools/relbench.py``
-  that reach it, in their shape and a few dozen rows), and over two
-  DECIMAL(20,0) keys one integer apart that one float64 holds (2**53 and 2**53 + 1), each account
-  reaching its own owner (KO2-35).
-
-The core refuses every one of these options today, by name
-(``UNSUPPORTED_REQUEST``: ``num_hops``, ``num_neighbors``,
-``context_anchor_time``, ``anchor_entity``, ``parent_table`` and the
-rest), where the reference answers or refuses it otherwise.
-
-Each test's one line says the exit it proves. Gating: ``t211-pending.json``'s
-``pending`` names, as ``py:<case key>``, the keys whose test failed when
-written. Each must still fail (strict); once one passes it fails, naming
-itself, until it is taken out. ``pending`` stays within ``authored``. Where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
-not set, the Postgres keys have nothing to hold and return without
-asserting; with it set, a missing server fails (H26).
-"""
+"""Current native sampling options, endpoint payloads and result fields."""
 
 from __future__ import annotations
 
-import copy
 import functools
 import importlib.util
 import json
@@ -63,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -72,7 +24,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 CASES = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t211-pending.json')
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 CASE_IDS = tuple(sorted(path.stem for path in CASES.glob('sample.*.json')))
 
@@ -96,57 +47,12 @@ def key(case_id: str, database: str) -> str:
 
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
-# KO3-44 lifts the old negative-neighbor refusal. Its original case
-# remains diagnostic metadata; its answers now follow each native source.
-DIAGNOSTIC_CASES = {'sample.num-neighbors.minus-one'}
-DECIDED_REFERENCE = {
-    'sample.num-neighbors.minus-one': ('success', None, None),
-    'sample.num-neighbors.minus-one@sqlite': ('success', None, None),
-    'sample.num-neighbors.minus-one@postgres': (
-        'refusal',
-        'StructuredDataError',
-        'INTERNAL_ERROR',
-    ),
-}
-
-
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``py:<name>`` is pending,
-    fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if f'py:{name}' not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take py:{name} out of '
-        'contract/tests/t211-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    ``authored`` is every case's key on each database on python-core, and
-    on DuckDB and SQLite on rust-host (its Postgres pass replays
-    python-core's fetches, which ``cross-host (postgres)`` holds), and the
-    unseeded cases' ``unseeded:`` keys."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    authored = {k for k in gating['authored'] if not k.startswith('unseeded')}
-    assert authored == {f'py:{k}' for k in KEYS_ALL} | {
-        f'rust:{k}' for k in KEYS_ALL if not k.endswith('@postgres')
-    }
-
-
 # --- the cases -------------------------------------------------------------------
 
 
 @functools.cache
 def cases() -> dict[str, tuple[dict[str, Any], str]]:
-    r"""The T2.11 cases by id, each with its digest, as the runner loads
+    r"""Sampling cases by id, each with its digest, as the runner loads
     them."""
     loaded = runner().load_cases([CASES / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}
@@ -167,8 +73,7 @@ OPTIONS = {
 
 def test_every_option_has_a_value_taken_and_a_value_refused() -> None:
     r"""Exit "cases per option": each option of the design's row is given
-    by its cases, with at least one value the reference takes and, for
-    every option the reference checks, one it refuses; ``anchor_entity``
+    by its cases, with both valid and invalid input examples; ``anchor_entity``
     and ``parent_table`` likewise."""
     by_option: dict[str, set[str]] = {}
     for case, _ in cases().values():
@@ -185,7 +90,7 @@ def test_every_option_has_a_value_taken_and_a_value_refused() -> None:
     assert set(by_option) == {*OPTIONS, 'anchor_entity'}
     for option, outcomes in by_option.items():
         if option in {'use_prediction_time', 'return_embeddings'}:
-            # The reference takes any value of these two.
+            # These cases exercise accepted boolean options.
             assert 'success' in outcomes, option
         else:
             assert outcomes == {'success', 'refusal'}, option
@@ -214,91 +119,29 @@ def test_each_case_is_small_and_runs_on_all_three_databases(
     an S1 acceptance case through predict on the shop base, on DuckDB,
     SQLite and Postgres, asking about a few entities."""
     case, _ = cases()[case_id]
-    # The original negative-neighbor case retains its diagnostic status;
-    # its actual native outcome and full payload are checked here.
-    assert case['status'] == (
-        'diagnostic' if case_id in DIAGNOSTIC_CASES else 'acceptance'
-    )
-    assert case['slice'] == 'S1'
-    if case_id in DIAGNOSTIC_CASES:
-        assert case['register'] == 'P2I-4'
     assert case['until'] == 'predict'
     assert case['input']['base'] == 'shop'
     assert runner().case_databases(case) == DATABASES
     assert len(case['input']['materialize']['indices']) <= 3
 
 
-# --- the reference ---------------------------------------------------------------
-
-
-@functools.cache
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    commit = next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-    path = ROOT / f'contract/reference/{commit}.jsonl'
-    found = {}
-    for line in path.read_text(encoding='utf-8').splitlines():
-        observed = json.loads(line)
-        if observed['case'].split('@')[0] in CASE_IDS:
-            found[observed['case']] = observed
-    return found
-
-
-def _outcome(line: dict[str, Any]) -> tuple[Any, ...]:
-    outcome = line['outcome']
-    return (
-        outcome['result'],
-        outcome['stage'],
-        outcome.get('error'),
-        outcome.get('code'),
-    )
-
-
-@pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_ref_s_line_is_at_its_case_file_and_ends_as_expected(
-    case_key: str,
-) -> None:
-    r"""Exit "cases per option" on each database: python-ref's line for
-    the case, recorded at the case file, ends as the case expects (a
-    success through predict with one request, or the refusal at
-    materialize with its code), so no case is vacuous."""
-    case, digest = cases()[case_key.split('@')[0]]
-    line = reference_lines().get(case_key)
-    assert line is not None, f'{case_key}: no python-ref line'
-    assert line['identity']['runner'] == 'python-ref'
-    assert line['identity']['inputs']['case'] == digest
-    expect = case['expect']
-    if case_key in DECIDED_REFERENCE:
-        # The reference's answer on each database, recorded as it is; the
-        # case expects its DuckDB one; KO3-44 restores native behavior.
-        result, error, code = DECIDED_REFERENCE[case_key]
-        outcome = _outcome(line)
-        assert (outcome[0], outcome[2], outcome[3]) == (result, error, code)
-        if '@' in case_key:
-            return
-    assert _outcome(line) == (
-        expect['outcome'],
-        expect['stage'],
-        expect.get('error'),
-        expect.get('code'),
-    )
-    if expect['outcome'] == 'success':
-        assert len(line['public']['payloads']) == 1
-
-
 def _sent(case_key: str) -> dict[str, Any]:
-    payload = reference_lines()[case_key]['public']['payloads'][0]['parsed']
+    database = case_key.partition('@')[2] or 'duckdb'
+    if database == 'postgres' and not _server():
+        pytest.skip('Postgres test server not configured')
+    run = core_run(database)
+    assert '' not in run, run.get('')
+    line = run[case_key]
+    assert line['outcome']['result'] == 'success', line['outcome']
+    assert line['outcome']['stage'] == 'predict'
+    assert len(line['public']['payloads']) == 1
+    payload = line['public']['payloads'][0]['parsed']
     assert isinstance(payload, dict)
     return payload
 
 
 def _number(value: Any) -> Any:
-    return float(value['number']) if isinstance(value, dict) else value
+    return Decimal(value['number']) if isinstance(value, dict) else value
 
 
 def _rows(section: dict[str, Any], table: str) -> list[dict[str, Any]]:
@@ -311,11 +154,11 @@ def _rows(section: dict[str, Any], table: str) -> list[dict[str, Any]]:
 
 
 @pytest.mark.parametrize('database', DATABASES)
-def test_the_reference_s_requests_show_each_option_s_effect(
+def test_native_requests_show_each_option_effect(
     database: str,
 ) -> None:
     r"""The cases exercise what they name (no vacuous seed): in
-    python-ref's request on each database, num_hops=1 leaves lines out and
+    the native request on each database, num_hops=1 leaves lines out and
     3 reaches shipments, three hops out; num_neighbors=[4] holds each
     scored user to 4 of its 10
     orders and [2, 2] each to 2; [0] leaves orders out; use_prediction_time
@@ -324,10 +167,8 @@ def test_the_reference_s_requests_show_each_option_s_effect(
     is each user's signup time; and each account reaches its own owner
     over decimal keys one float64 holds."""
     on = '' if database == 'duckdb' else f'@{database}'
-    if database == 'postgres' and f'sample.num-hops-1{on}' not in (
-        reference_lines()
-    ):
-        pytest.fail('no python-ref line on Postgres')
+    if database == 'postgres' and not _server():
+        pytest.skip('Postgres test server not configured')
 
     def sent(case_id: str) -> dict[str, Any]:
         return _sent(case_id + on)
@@ -350,7 +191,7 @@ def test_the_reference_s_requests_show_each_option_s_effect(
         not in sent('sample.num-neighbors.zero')['predict']['related_tables']
     )
     # num_neighbors=[-1]: no neighbour on DuckDB, every neighbour on SQLite
-    # (its LIMIT -1), a failure on Postgres (DECIDED_REFERENCE).
+    # (its LIMIT -1), a provider failure on Postgres.
     minus_one = 'sample.num-neighbors.minus-one'
     if database != 'postgres':
         reached = 'orders' in sent(minus_one)['predict']['related_tables']
@@ -416,39 +257,43 @@ def test_the_reference_s_requests_show_each_option_s_effect(
     ]
     predict = sent('sample.parent-table.decimal-keys')['predict']
     owners = {
-        _number(row['__node_id']): row['tier']
+        (_number(row['instance_id']), _number(row['__node_id'])): row['tier']
         for row in _rows(predict, 'owners')
     }
-    reached = {
-        row['account_id']['number']: owners[_number(row['owner_id'])]
-        for row in _rows(predict, 'accounts')
-        if row['owner_id'] is not None
-    }
-    assert reached == {'0': 'gold', '1': 'basic'}
+    witnessed = set()
+    # Check every instance separately; another occurrence must not hide a bad link.
+    for row in _rows(predict, 'accounts'):
+        if row['owner_id'] is None:
+            continue
+        account = row['account_id']['number']
+        tier = owners[(_number(row['instance_id']), _number(row['owner_id']))]
+        assert tier == ('gold' if int(account) % 2 == 0 else 'basic'), row
+        witnessed.add(account)
+    assert {'0', '1'} <= witnessed
 
 
 @pytest.mark.parametrize('database', DATABASES)
-def test_the_reference_answers_embeddings_where_asked(database: str) -> None:
+def test_native_results_include_requested_embeddings(database: str) -> None:
     r"""Exit "``response_field`` for embeddings": asked for embeddings, and
-    answered them, the reference's result carries an ``embeddings`` column;
+    answered them, the result carries an ``embeddings`` column;
     ``return_embeddings`` alone asks the endpoint for none."""
     on = '' if database == 'duckdb' else f'@{database}'
-    if database == 'postgres' and f'sample.embeddings-only{on}' not in (
-        reference_lines()
-    ):
-        pytest.fail('no python-ref line on Postgres')
+    if database == 'postgres' and not _server():
+        pytest.skip('Postgres test server not configured')
     for case_id in ('sample.embeddings-answered', 'sample.embeddings-only'):
-        line = reference_lines()[case_id + on]
+        _sent(case_id + on)
+        line = core_run(database)[case_id + on]
         names = [c['name'] for c in line['public']['result']['columns']]
         assert 'embeddings' in names, case_id
         assert 'embeddings' in _sent(case_id + on)['output']['fields']
-    line = reference_lines()['sample.return-embeddings' + on]
+    _sent('sample.return-embeddings' + on)
+    line = core_run(database)['sample.return-embeddings' + on]
     assert 'embeddings' not in [
         c['name'] for c in line['public']['result']['columns']
     ]
 
 
-# --- python-core against the reference ---------------------------------------------
+# --- current installed client -----------------------------------------------------
 
 
 def _server() -> bool:
@@ -501,97 +346,27 @@ def core_run(database: str) -> dict[str, Any]:
         }
 
 
-def payloads(line: dict[str, Any]) -> list[Any]:
-    r"""Each request the scripted endpoint received, parsed, as the
-    ``payload`` rule compares it: its request id, drawn at random for every
-    request, left out (``compare-policy.yaml``)."""
-    out = []
-    for payload in line['public']['payloads']:
-        parsed = copy.deepcopy(payload.get('parsed'))
-        if isinstance(parsed, dict) and isinstance(
-            parsed.get('metadata'), dict
-        ):
-            parsed['metadata'].pop('request_id', None)
-        out.append(parsed)
-    return out
-
-
-def differences(want: Any, got: Any, at: str = '') -> list[str]:
-    r"""Where ``got`` differs from ``want``, a few paths."""
-    if isinstance(want, dict) and isinstance(got, dict):
-        found = []
-        for name in sorted(set(want) | set(got)):
-            found += differences(want.get(name), got.get(name), f'{at}/{name}')
-        return found[:8]
-    if (
-        isinstance(want, list)
-        and isinstance(got, list)
-        and len(want) == len(got)
-    ):
-        found = []
-        for i, (w, g) in enumerate(zip(want, got, strict=True)):
-            found += differences(w, g, f'{at}[{i}]')
-        return found[:8]
-    if want != got:
-        if isinstance(want, list) and isinstance(got, list):
-            return [
-                f'{at}: {len(got)} items where the reference has {len(want)}'
-            ]
-        return [f'{at}: {got!r:.80} where the reference has {want!r:.80}']
-    return []
-
-
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_core_answers_each_case_as_the_reference_does(
-    case_key: str,
-) -> None:
-    r"""Exits "cases per option", "``parent_table`` on two decimal keys one
-    float64 apart" and "``response_field`` for embeddings": python-core
-    runs the case on the database on the core route (the native module
-    loaded, each of the case's core operations run), and its outcome (a
-    refusal's class and code), each request the scripted endpoint received
-    and the result (its columns and rows) are python-ref's."""
+def test_sampling_option_outcomes_and_native_operations(case_key: str) -> None:
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
-
-    def check() -> None:
-        run = core_run(database)
-        assert '' not in run, run.get('')
-        line = run.get(case_key)
-        assert line is not None, f'{case_key}: not observed'
-        case, _ = cases()[case_key.split('@')[0]]
-        identity = line['identity']
-        assert identity['native_loaded'] and line['core'] is not None
-        # Postgres rejects the negative native LIMIT during materialize;
-        # DuckDB and SQLite must now reach predict under KO3-44.
-        native_limit_refusal = (
-            case['id'] == 'sample.num-neighbors.minus-one'
-            and database == 'postgres'
-        )
-        named = set(case['core']) - (
-            {'predict'} if native_limit_refusal else set()
-        )
-        missing = sorted(named - set(identity['operations']))
-        assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = reference_lines()[case_key]
-        expected = _outcome(want)
-        if native_limit_refusal:
-            # The same source LIMIT error retains its stage/class; the
-            # shared provider mapping names it instead of INTERNAL_ERROR.
-            expected = (*expected[:-1], 'PROVIDER_ERROR')
-        assert _outcome(line) == expected, (
-            f'{case_key}: {_outcome(line)} where the native source has {expected}'
-        )
-        # P3F-2 alone permits scalar FK fills and their numeric dtype effect.
-        # The shared check retains all other fields and validates reached keys.
-        approved = _module(
-            'p3f2_payload', Path(__file__).with_name('_p3f2_payload.py')
-        )
-        found = approved.payload_problem(want, line, case_key)
-        assert found is None, f'{case_key}: the payload differs: {found}'
-        assert line['public']['result'] == want['public']['result'], (
-            f'{case_key}: the result differs'
-        )
-
-    held(case_key, check)
+        pytest.skip('Postgres test server not configured')
+    run = core_run(database)
+    assert '' not in run, run.get('')
+    line = run[case_key]
+    expected = json.loads(
+        (ROOT / f'contract/expected/{database}-python.json').read_text()
+    )['python-core'][case_key]
+    assert line['outcome'] == expected
+    assert line['identity']['native_loaded'] and line['core'] is not None
+    case, _ = cases()[case_key.split('@')[0]]
+    operations = set(case['core'])
+    if (
+        case['id'] == 'sample.num-neighbors.minus-one'
+        and database == 'postgres'
+    ):
+        operations.discard('predict')
+    assert operations <= set(line['identity']['operations'])
+    if expected['result'] == 'success':
+        _sent(case_key)
+        assert line['public']['result']['rows']

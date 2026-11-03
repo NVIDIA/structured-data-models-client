@@ -98,7 +98,7 @@ def test_a_failure_is_reported_redacted_with_no_traceback(
     smoke = _smoke()
     monkeypatch.setattr(smoke, '_quiet_the_world', lambda: None)
 
-    def failing(route: str) -> Any:
+    def failing() -> Any:
         raise RuntimeError(
             'could not reach my-serving-endpoint at '
             'https://dbc-a1b2c3d4-e5f6.cloud.databricks.com with token '
@@ -149,7 +149,7 @@ def test_the_dry_run_builds_the_core_s_request_with_no_connection() -> None:
         check=False,
     )
     assert run.returncode == 0, run.stdout + run.stderr
-    assert 'dry run, core route' in run.stdout
+    assert 'dry run:' in run.stdout
     assert 'context rows: 112, rows to predict: 2' in run.stdout
     assert 'smoke passed' in run.stdout
 
@@ -206,7 +206,7 @@ def _live_main(
 ) -> tuple[int, str]:
     smoke = _smoke()
     monkeypatch.setattr(smoke, '_quiet_the_world', lambda: None)
-    monkeypatch.setattr(smoke, 'build_request', lambda route: object())
+    monkeypatch.setattr(smoke, 'build_request', lambda: object())
     module = type(sys)('databricks.sdk')
     module.WorkspaceClient = sdk.WorkspaceClient  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, 'databricks.sdk', module)
@@ -311,7 +311,7 @@ def test_the_dry_run_reads_no_profile(
         smoke.ConfigParser, 'read', lambda self, *a, **k: read.append(a)
     )
 
-    def stop(route: str) -> Any:
+    def stop() -> Any:
         raise RuntimeError('stop here')
 
     monkeypatch.setattr(smoke, 'build_request', stop)

@@ -16,6 +16,7 @@ still a context to exclude it from.
 
 from __future__ import annotations
 
+import copy
 import warnings
 
 import numpy as np
@@ -28,15 +29,12 @@ from sdm_client import (
     Relationship,
     Schema,
 )
-from sdm_client.adapters.relational import RelationalAdapter
-from sdm_client.adapters.tabular import TabularAdapter
-from sdm_client.client import _held_back
 from sdm_client.wire.keys import _named_by, keys_in
 
 RNG = np.random.default_rng(9)
 
 
-def tabular_session() -> dict:
+def tabular_session():
     frame = pd.DataFrame(
         {
             'rid': range(600),
@@ -50,10 +48,10 @@ def tabular_session() -> dict:
         request = PredictiveQuery(
             'PREDICT t.label FOR EACH t.rid', schema
         ).materialize(indices=[1, 2], num_context_samples=600)
-    return TabularAdapter().session_plan(request, ('prediction',))
+    return request
 
 
-def relational_session() -> dict:
+def relational_session():
     users = pd.DataFrame({'uid': range(200), 'seg': RNG.choice([*'xy'], 200)})
     events = pd.DataFrame(
         {
@@ -75,261 +73,97 @@ def relational_session() -> dict:
         request = PredictiveQuery(
             'PREDICT users.seg FOR EACH users.uid', schema
         ).materialize(indices=[1, 2], model=KumoRelational())
-    return RelationalAdapter().session_plan(request, ('prediction',))
+    return request
 
 
-def test_the_named_rows_are_not_in_the_context_that_gets_pinned():
-    payload = tabular_session()
-    population = list(range(200, 260))
-    before = len(payload['context']['instance_table']['rows'])
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        removed = _held_back(payload, population)
-
-    after = keys_in(payload, 'context')
-    assert removed == 60
-    assert len(payload['context']['instance_table']['rows']) == before - 60
-    assert not after & frozenset(_named_by([key]) for key in population)
-
-
-def test_the_related_rows_go_with_the_instance_they_hang_off():
-    """A related row whose instance has gone describes nothing."""
-    pytest.importorskip('sdm_relational_engine')
-
-    payload = relational_session()
-    before = {
-        name: len(table['rows'])
-        for name, table in payload['context']['related_tables'].items()
-    }
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        removed = _held_back(payload, list(range(50, 90)))
-
-    after = {
-        name: len(table['rows'])
-        for name, table in payload['context']['related_tables'].items()
-    }
-    assert removed == 40
-    assert all(after[name] < before[name] for name in before)
-
-
-def test_how_many_were_held_back_is_said():
-    """A caller who names a population expects it gone, and silence would
-    look the same whether none went or all of them did."""
-    payload = tabular_session()
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        _held_back(payload, list(range(200, 260)))
-
-    said = ' '.join(str(w.message) for w in caught)
-    assert '60 of the rows named as holdout' in said
-
-
-def test_naming_nothing_changes_nothing():
-    payload = tabular_session()
-    before = len(payload['context']['instance_table']['rows'])
-
-    assert _held_back(payload, None) == 0
-    assert _held_back(payload, []) == 0
-    assert len(payload['context']['instance_table']['rows']) == before
-
-
-def test_naming_rows_that_are_not_in_the_context_says_it_held_nothing():
-    """Silence here looked exactly like silence after holding everything back,
-    and the commonest way to match nothing is a key of the wrong type, which
-    nothing else would have shown."""
-    payload = tabular_session()
-    before = len(payload['context']['instance_table']['rows'])
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        removed = _held_back(payload, [10_000, 10_001])
-
-    assert removed == 0
-    assert len(payload['context']['instance_table']['rows']) == before
-    assert [w for w in caught if 'matched a row' in str(w.message)]
-
-
-# --- and `fit()` has to be the thing that does it ---------------------------
-
-
-def test_fit_holds_the_population_back_before_it_pins(monkeypatch):
-    """Everything above tests the removal. This tests that opening a session
-    performs it, which is the only reason the removal exists."""
+def pin(request, model, holdout=None):
     from sdm_client import SDMClient
 
-    sent: dict = {}
-
     class Transport:
-        url = 'http://127.0.0.1:9'
+        url = 'http://localhost'
 
         def create_session(self, payload):
-            sent['payload'] = payload
-            return {'session_id': 's1'}
+            self.created = payload
+            return {'session_id': 'test-session'}
 
         def delete_session(self, session_id):
+            assert session_id == 'test-session'
+            self.deleted = True
+
+        def close(self):
             pass
 
-    frame = pd.DataFrame(
-        {
-            'rid': range(600),
-            'a': RNG.normal(0, 1, 600),
-            'label': RNG.choice([*'ab'], 600),
-        }
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data({'t': frame}, primary_keys={'t': 'rid'})
-        request = PredictiveQuery(
-            'PREDICT t.label FOR EACH t.rid', schema
-        ).materialize(indices=[1, 2], num_context_samples=600)
-
-    client = SDMClient('http://127.0.0.1:9', 'none')
-    monkeypatch.setattr(client, '_transport', Transport())
-    population = list(range(200, 260))
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        client.fit(request, model='kumo-tabular', holdout=population)
-
-    pinned = keys_in(sent['payload'], 'context')
-    assert pinned
-    assert not pinned & frozenset(_named_by([key]) for key in population)
-
-
-def test_fit_without_a_holdout_pins_what_it_gathered(monkeypatch):
-    from sdm_client import SDMClient
-
-    sent: dict = {}
-
-    class Transport:
-        url = 'http://127.0.0.1:9'
-
-        def create_session(self, payload):
-            sent['payload'] = payload
-            return {'session_id': 's1'}
-
-        def delete_session(self, session_id):
+    transport = Transport()
+    with SDMClient(url=transport.url) as client:
+        client._transport.close()
+        client._transport = transport
+        with client.fit(request, model=model, holdout=holdout):
             pass
+    assert transport.deleted
+    return transport.created
 
-    frame = pd.DataFrame(
-        {
-            'rid': range(600),
-            'a': RNG.normal(0, 1, 600),
-            'label': RNG.choice([*'ab'], 600),
-        }
+
+@pytest.fixture(params=['kumo-tabular', 'kumo-relational'])
+def session_input(request):
+    factory = (
+        tabular_session
+        if request.param == 'kumo-tabular'
+        else relational_session
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data({'t': frame}, primary_keys={'t': 'rid'})
-        request = PredictiveQuery(
-            'PREDICT t.label FOR EACH t.rid', schema
-        ).materialize(indices=[1, 2], num_context_samples=600)
-
-    client = SDMClient('http://127.0.0.1:9', 'none')
-    monkeypatch.setattr(client, '_transport', Transport())
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        client.fit(request, model='kumo-tabular')
-
-    pinned = keys_in(sent['payload'], 'context')
-    assert pinned & frozenset(_named_by([key]) for key in range(200, 260))
+    return factory(), request.param
 
 
-def test_a_holdout_edits_the_plan_and_not_the_request():
-    """The relational session plan named the gathered envelope's keys, so it
-    shared its context: a holdout edited the request, and a second fit of the
-    same request with no holdout pinned the already-reduced context."""
-    pytest.importorskip('sdm_relational_engine')
+def test_fit_excludes_holdout_and_does_not_mutate_request(session_input):
+    request, model = session_input
+    population = list(range(50, 90))
+    original = (
+        copy.deepcopy(request.payloads) if model == 'kumo-relational' else None
+    )
+    baseline = pin(request, model)
+    first_id = baseline['metadata']['request_id']
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        held = pin(request, model, population)
+    before = keys_in(baseline, 'context')
+    after = keys_in(held, 'context')
+    excluded = frozenset(_named_by([key]) for key in population)
+    assert before & excluded == excluded
+    assert after == before - excluded
+    assert (
+        len(held['context']['instance_table']['rows'])
+        == len(baseline['context']['instance_table']['rows']) - 40
+    )
+    assert any(
+        '40 of the rows named as holdout' in str(w.message) for w in caught
+    )
+    if model == 'kumo-relational':
+        for name, table in baseline['context']['related_tables'].items():
+            assert len(held['context']['related_tables'][name]['rows']) < len(
+                table['rows']
+            )
+    retried = pin(request, model)
+    assert retried['context'] == baseline['context']
+    assert retried['schema'] == baseline['schema']
+    assert retried['metadata']['request_id'] != first_id
+    assert baseline['metadata']['request_id'] == first_id
+    if original is not None:
+        assert request.payloads == original
 
-    from sdm_client import Schema
-    from sdm_client.request import Request
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data(
-            {'t': pd.DataFrame({'id': [1, 2, 3], 'y': [1.0, 2.0, 3.0]})},
-            primary_keys={'t': 'id'},
-        )
-    payload = {
-        'schema': {'instance_table': {'primary_key': 'id'}},
-        'task': {
-            'kind': 'regression',
-            'target': {'column_name': 'y', 'dtype': 'float64'},
-        },
-        'context': {
-            'instance_table': {
-                'columns': ['id', 'y'],
-                'rows': [[1, 1.0], [2, 2.0], [3, 3.0]],
-            }
-        },
-        'predict': {'instance_table': {'columns': ['id'], 'rows': [[1]]}},
-    }
-    request = Request.materialized(
-        payloads=(payload,),
-        schema=schema,
-        query='q',
-        indices=[1],
-        entity_table='t',
+@pytest.mark.parametrize('holdout', [None, []])
+def test_empty_holdout_preserves_context(session_input, holdout):
+    request, model = session_input
+    assert (
+        pin(request, model, holdout)['context']
+        == pin(request, model)['context']
     )
 
-    adapter = RelationalAdapter()
-    held = adapter.session_plan(request, ('prediction',))
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        assert _held_back(held, [2]) == 1
 
-    assert len(held['context']['instance_table']['rows']) == 2
-    assert len(request.payloads[0]['context']['instance_table']['rows']) == 3
-    retried = adapter.session_plan(request, ('prediction',))
-    assert len(retried['context']['instance_table']['rows']) == 3
-
-
-def test_planning_a_request_twice_does_not_rename_the_first_call():
-    """The gathered payload's metadata was shared, so writing the call's id
-    into it wrote it into the request: the envelope already handed out was
-    renamed, and the id a caller had recorded named a different call."""
-    pytest.importorskip('sdm_relational_engine')
-
-    from sdm_client import Schema
-    from sdm_client.request import Request
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data(
-            {'t': pd.DataFrame({'id': [1, 2, 3], 'y': [1.0, 2.0, 3.0]})},
-            primary_keys={'t': 'id'},
-        )
-    payload = {
-        'schema': {'instance_table': {'primary_key': 'id'}},
-        'task': {
-            'kind': 'regression',
-            'target': {'column_name': 'y', 'dtype': 'float64'},
-        },
-        'metadata': {'caller': 'kept'},
-        'context': {
-            'instance_table': {'columns': ['id', 'y'], 'rows': [[1, 1.0]]}
-        },
-        'predict': {'instance_table': {'columns': ['id'], 'rows': [[1]]}},
-    }
-    request = Request.materialized(
-        payloads=(payload,),
-        schema=schema,
-        query='q',
-        indices=[1],
-        entity_table='t',
-    )
-
-    adapter = RelationalAdapter()
-    first = next(iter(adapter.prediction_plan(request, ('prediction',))))
-    named = first['metadata']['request_id']
-    second = next(iter(adapter.prediction_plan(request, ('prediction',))))
-
-    assert first['metadata']['request_id'] == named
-    assert second['metadata']['request_id'] != named
-    assert first['metadata']['caller'] == 'kept'
-    assert request.payloads[0]['metadata'] == {'caller': 'kept'}
+def test_nonmatching_holdout_reports_no_match(session_input):
+    request, model = session_input
+    baseline = pin(request, model)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        held = pin(request, model, [10_000, 10_001])
+    assert held['context'] == baseline['context']
+    assert any('matched a row' in str(w.message) for w in caught)

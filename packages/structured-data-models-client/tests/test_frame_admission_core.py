@@ -11,13 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import pytest
 
-from sdm_client import KumoRelational, PredictiveQuery, Schema, _routing
+from sdm_client import KumoRelational, PredictiveQuery, Schema
 from sdm_client._rust import frame_materialize
-
-
-@pytest.fixture(autouse=True)
-def frame_routes(monkeypatch):
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.FRAME_ROUTES))
 
 
 def query():

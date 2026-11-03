@@ -3,46 +3,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what the Java host's tests hold it to in
-``contract/t311-java-vectors.json``, in two sections, each from its own
-interpreter.
+"""Record native binding vectors shared by Python and Java tests.
 
-Written by T3.11's test author. Run from this repository's root:
+Run with a test-ops Python installation:
+    python -I contract/tools/t311_java_record.py binding
 
-    <reference venv>/bin/python -I contract/tools/t311_java_record.py \
-        reference --reference <reference checkout>
-    $SDM_KIT_PYTHON -I contract/tools/t311_java_record.py binding
-
-- ``reference``: the reference's ``PredictiveQuery`` constructor, which
-  Java's ``PredictiveQuery.parse`` mirrors (T3.11 brief, "Open questions",
-  item 1): for each S0 case's query text and each blank text, whether the
-  constructor takes it, or the refusal's class and ``code``. The guard runs
-  before the first text and after the last.
-- ``binding``: what Python's binding (``sdm_client._native``, the test-ops
-  build of ``cells.sh``'s ``kit``) answers, so the Java binding over the same
-  core can be held to the same answers byte for byte (T3.11 brief, "Input
-  axes": text across JNI, every contract error code):
-
-  - ``validate``: each S0 case's ``validate_query``, started with the
-    inputs the case records (``core.validate_query``: its profile and
-    schema) and its query text, and a few texts no case holds (a NUL, a
-    character outside the BMP, non-ASCII letters); the operation and its
-    attachments as the bytes Python sent (base64), and the answer: the
-    SHA-256 of the done step's control bytes, ``accepted`` and the error
-    diagnostics' codes; the separate warning channel's complete ordered
-    controls and their raw-control digests are retained beside that terminal
-    outcome, including warnings from a run that raises;
-  - ``errors``: for every code of ``ERROR_CODES``, the test-only ``fail``
-    operation failing with an error of that code, the first kind the
-    contract allows it (found by asking the core) and the code's first
-    sentence in the core's table (``templates()``, T3.17), one naming no
-    field where the code has one, and what the binding raised: kind, code,
-    ``retryable``, the SHA-256 of the error's control bytes, and the
-    sentence's template.
-
-The start message is not recorded: the Java test writes it with the
-contract version its core reports and :data:`FACTS`, as Python's binding
-tests do (``rust/bindings/sdm-py/tests/messages.py``).
+Only the native binding section is updated.
+Existing historical reference metadata is preserved, never regenerated.
 """
 
 from __future__ import annotations
@@ -50,11 +17,8 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
-import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -112,15 +76,6 @@ def _texts() -> dict[str, str]:
     return {**found, **TEXTS}
 
 
-def _module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 def _load() -> dict[str, Any]:
     if OUT.is_file():
         found: dict[str, Any] = json.loads(OUT.read_text(encoding='utf-8'))
@@ -145,41 +100,6 @@ def _write(document: dict[str, Any]) -> None:
         + '\n',
         encoding='utf-8',
     )
-
-
-# --- reference ---------------------------------------------------------------
-
-
-def record_reference(reference: Path) -> dict[str, Any]:
-    run = _module('t311_run_python', ROOT / 'contract/runners/run_python.py')
-    guard = run._Guard(reference)
-    guard.check('before the first text')
-    run._require_reference_client(reference)
-    commit = run._git(reference)
-    if not commit['clean']:
-        raise SystemExit('the reference checkout is not clean')
-    import pandas as pd
-    from sdm_client import PredictiveQuery, StructuredDataError
-
-    data = {'users': pd.DataFrame({'user_id': [1, 2]})}
-    answers: dict[str, Any] = {}
-    for name, text in {**_texts(), **BLANKS}.items():
-        try:
-            PredictiveQuery(text, data)
-        except StructuredDataError as refused:
-            answers[name] = {
-                'taken': False,
-                'error': type(refused).__name__,
-                'code': refused.code,
-            }
-        else:
-            answers[name] = {'taken': True, 'error': None, 'code': None}
-    guard.check('after the last text')
-    return {
-        'reference': commit['sha'],
-        'texts': {name: text for name, text in BLANKS.items()},
-        'constructor': answers,
-    }
 
 
 # --- binding -----------------------------------------------------------------
@@ -358,15 +278,10 @@ def record_binding() -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sections = parser.add_subparsers(dest='section', required=True)
-    reference = sections.add_parser('reference')
-    reference.add_argument('--reference', type=Path, required=True)
     sections.add_parser('binding')
-    arguments = parser.parse_args(argv)
+    parser.parse_args(argv)
     document = _load()
-    if arguments.section == 'reference':
-        document['reference'] = record_reference(arguments.reference)
-    else:
-        document['binding'] = record_binding()
+    document['binding'] = record_binding()
     _write(document)
     return 0
 

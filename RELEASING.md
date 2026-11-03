@@ -1,6 +1,6 @@
 # Releasing
 
-Five distributions, one version, published together. A release is a tag, then
+Three Python distributions, one version, published together. A release is a tag, then
 an approval, then a publish. The tag builds everything. The `pypi` environment
 has required reviewers, so the job that creates the GitHub Release and attaches
 those distributions waits for one. Publishing them to PyPI is a third step,
@@ -22,20 +22,21 @@ published on the Releases page at all.
 
 ```bash
 # Everything that needs nothing running.
-python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+python -m pytest packages/structured-data-models-api/tests \
                  packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests \
   -q -m 'not live_nim and not live_warehouse'
 
-# The native engine, from its own directory.
-cd packages/structured-data-models-relational-engine && python -m pytest tests -q && cd -
+# Shared core and bindings (see CONTRIBUTING.md for native test setup).
+cargo test --manifest-path rust/Cargo.toml --workspace --locked
+python -m pytest rust/bindings/sdm-py/tests -q --native-build test-ops
+python tests/parity/check_junit.py --run
 
 ruff check . && ruff format --check .
-mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src \
-     packages/structured-data-models-client/src packages/structured-data-models-connectors/src \
-     packages/structured-data-models-relational-engine/src
+mypy packages/structured-data-models-api/src \
+     packages/structured-data-models-client/src packages/structured-data-models-connectors/src
 mypy packages/structured-data-models-connectors/tests/typing/check_sources.py
 python scripts/check_repo_hygiene.py all
-python scripts/mermaid_notices.py --check
+python scripts/rust_core/rust_notices.py --check
 ```
 
 Then, against running NIMs, because a release should not be the first time
@@ -46,9 +47,27 @@ SDM_TABULAR_URL=... SDM_RELATIONAL_URL=... \
   python -m pytest packages/structured-data-models-client/tests -m live_nim -q
 ```
 
+## Java artifacts
+
+The same successful CI run supplies the Java JAR and POM.
+The release workflow checks their source commit, version and SHA-256 hashes before attaching them to the GitHub Release.
+The JAR must contain Linux and macOS x86-64/ARM64 libraries plus Windows x86-64.
+Windows ARM64 is deferred for both languages because required Arrow binaries are not published upstream.
+
+Attaching a JAR is not Maven repository publication.
+The Java repository destination and release credentials remain to be configured before the first Java release; install the published coordinates in a clean consumer before marking Java publication complete.
+Keep the JAR, POM, Rust workspace and three Python distribution versions aligned.
+
+## Current release-candidate preparation
+
+Prepare `2.0.0rc1` for Python and Java; Rust uses the equivalent SemVer spelling `2.0.0-rc.1`.
+Publication and tagging are on hold until the owner explicitly authorizes them.
+Java initially targets GitHub Release assets; Maven Central is a follow-up.
+The existing publication workflow accepts final-release tags only; RC publication would need a separately reviewed prerelease path.
+
 ## Bumping the version
 
-One literal per distribution, in `_version.py`. All five must match, and
+One literal per distribution, in `_version.py`. All three must match, and
 `tests/test_release_contract.py` fails if they do not.
 
 ```bash
@@ -70,20 +89,16 @@ publishes.
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-That starts the release. `.github/workflows/publish.yml` builds the four
-pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
-(cp310 to cp314 on manylinux_2_28 x86-64 and aarch64, macOS arm64 and x86-64,
-and Windows AMD64, one runner each and every wheel smoke-tested, as set in
-the engine's `[tool.cibuildwheel]`), and then refuses to
-continue unless **all five** are present and agree with the tag. That check is
-not ceremony: `structured-data-models-client[relational]` pins the engine by exact version, so a
-release missing it publishes an extra nobody can install. It then generates the
-SBOM, and takes the release's notes from the changelog's entry for that
-version, refusing a tag that has none: notes that read like a diff are fixable
-afterwards and a distribution on PyPI is not, so both happen before anything is
-uploaded. It attaches every distribution and the SBOM to the GitHub Release for
-the tag, and stops there. **A green workflow means the artifacts are built and
-public, not that anything is on PyPI.**
+That starts the release workflow.
+It requires successful CI and live validation for the tagged commit, then builds the API and connector distributions.
+The client wheels come from that commit's successful CI run: Linux x86-64/aarch64, macOS x86-64/arm64 and Windows AMD64.
+Each client wheel uses CPython's stable ABI from Python 3.10 onward.
+The workflow verifies each wheel's source commit, clean-tree record, production features and digest before assembling the release.
+Expired or missing CI artifacts require rerunning CI; publication does not substitute an untested build.
+
+All three distributions must be present at the tagged version.
+The workflow also generates an SBOM from the exact wheels, reads the version's changelog entry and attaches distributions, build identities and the SBOM to the GitHub Release.
+**A green workflow means the artifacts are built and public, not that anything is on PyPI.**
 
 **Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
 NVIDIA's PyPI organization and this project's OSRB record commits to releasing
@@ -106,9 +121,8 @@ against the distribution name parsed from each filename, and each id is checked
 against the name it should carry before anything is sent, so a renamed or
 reassigned id fails early rather than being trusted. Every project that has
 something left to publish is validated and dry-run to a terminal state before
-*any* of them publishes, because the five distributions pin each other by exact
-version and a client live without its engine is worse than a release that never
-started. Kitmaker batches are sequential and not atomic, and a published file
+*any* of them publishes, because the three distributions pin each other by exact
+version and an incomplete release can leave the client uninstallable. Kitmaker batches are sequential and not atomic, and a published file
 cannot be recalled.
 
 The GitHub Release is created behind the protected `pypi` environment, because
@@ -141,7 +155,7 @@ what you want.
 ### If the publish fails partway
 
 The summary the publish writes is the record to read before doing anything
-else. It names each of the five projects. For any whose upload was requested it says
+else. It names each of the three projects. For any whose upload was requested it says
 what **PyPI** holds for this version, not what Portal reported: Portal's batches
 are not atomic, so a failure can follow files that already published, and a
 refusal is not proof that nothing did. Only the index knows. The other states
@@ -197,7 +211,7 @@ Two states it refuses to guess at, both needing a hand:
 
 ## After
 
-Check the five projects on pypi.org and confirm each shows NVIDIA organization
+Check the three projects on pypi.org and confirm each shows NVIDIA organization
 ownership. Portal reporting that a release completed is not the same as the
 package being installable, so install it the way a user would.
 

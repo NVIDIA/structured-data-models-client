@@ -1277,11 +1277,11 @@ fn an_output_named_and_left_out_is_noted() {
 /// with characters past ASCII counted as the bytes written.
 #[test]
 fn a_call_past_the_limit_is_refused_before_it_is_sent() {
-    // The payload with the query padded by `padding`, and the call's length.
+    // Pad a non-truncated metadata field; diagnostic query clipping is independent.
     let padded = |padding: &str| {
         payload_text().replace(
-            "\"source_query\":\"PREDICT",
-            &format!("\"source_query\":\"{padding}PREDICT"),
+            "\"metadata\":{",
+            &format!("\"metadata\":{{\"caller_note\":\"{padding}\","),
         )
     };
     let called = |payload: String| -> Result<usize, CoreError> {

@@ -1,48 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: from T1.32a it holds no rule of the request; the entities'
-# cast to the key's type, its last host-held rule (design, "Host-held
-# semantics"), is the core's. It passes the call's values and the source
-# to the core, and is deleted in Phase 5 with the old route.
-# Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
-r"""``materialize`` on the core: the request (T1.11c, T1.28a).
+"""Adapt warehouse materialization arguments to the shared Rust core.
 
-``PredictiveQuery.materialize`` with ``indices`` over the schema of a DuckDB
-or, from T2.2, a SQLite source comes here on the core route, in place of the relational
-materializer's own rules and gathering (``RelationalMaterializer
-.materialize``), once the client has checked the option names. From T1.28a the core holds the
-request's rules (design, "Host-held semantics"): the context size's bound
-and the run mode it selects, the entity count, the subgraph's and the
-payload's limits, the empty and reserved-name refusals, the statistic,
-checked and recorded, the inference options, the context that answers the
-question taken out, and the notices of what the request leaves out, each
-given as a code and fields this client words (:mod:`.errors`). This module
-passes the call's values as the caller gave them, each refused by the core
-where the client would refuse its type, and hands back the payload, from
-which ``RelationalMaterializer.materialize`` builds the ``Request``.
-
-The core's ``materialize`` samples the source through its backend's
-provider (:mod:`.providers`) and lays out the payload the engine lays out;
-this module hands it the schema as it stands, as plain data, each column
-with what the source said of it where the core described it (T3.16; the
-core reads from the source the facts of a column that carries none); and
-the entities to predict for as one Arrow column of the type pyarrow gives
-their values, which the core casts to the key's type (T1.32a). From T1.21d the core holds that schema to the reference's
-consistency check itself, marking the columns it joins on again from what
-each column means and meant before it was joined on (decision E55); this
-module checks none of it. Nothing here imports the relational engine.
-
-As built at T1.11c the core materializes a regression over a windowed
-``SUM``, with the sampling options' defaults or the anchor time and seed
-given; from T1.24 it samples tables named otherwise than the source names
-them, by their source names. Every option of the call passes through to
-the core (decision E61): the anchor time and seed in their fields, an
-unseeded sample, an anchor at each entity's own time and a context size as
-the contract says them, and the names of the rest; the core refuses with
-``UNSUPPORTED_REQUEST``, naming the rule, each it does not take yet, and
-and any schema it does not sample yet (register entry P1B-3).
+Python encodes the schema, entity keys and options, and supplies connector I/O
+through providers. Rust validates the request, plans push-down sampling and
+builds the model payload. This adapter returns that payload and its metadata
+for the public Request object.
 """
 
 from __future__ import annotations
@@ -60,8 +25,6 @@ from sdm_client._rust.spec import held_schema
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
-    from predictive_query import ValidatedPredictiveQuery
-
     from sdm_client.materializers.relational import RelationalMaterializer
 
 __all__ = ['CoreQuery', 'gather']
@@ -303,7 +266,7 @@ def _missing(value: Any) -> bool:
 
 def gather(
     materializer: RelationalMaterializer,
-    query: ValidatedPredictiveQuery,
+    query: CoreQuery,
     indices: Sequence[Any],
     num_context_samples: int | None,
     options: dict[str, Any],

@@ -160,9 +160,8 @@ def test_a_nanosecond_postgres_cannot_hold_is_refused_by_name() -> None:
     )
 
 
-def test_python_old_runs_on_duckdb_only(tmp_path: Path) -> None:
-    r"""Fix 4 (the orchestrator's decision): off DuckDB the reference side is
-    python-ref's committed lines, and the old route is refused by name."""
+def test_retired_python_route_is_rejected(tmp_path: Path) -> None:
+    """The maintained runner cannot execute the retired Python route."""
     import subprocess
 
     done = subprocess.run(
@@ -184,8 +183,8 @@ def test_python_old_runs_on_duckdb_only(tmp_path: Path) -> None:
         text=True,
         timeout=600,
     )
-    assert done.returncode == 1, done.stdout
-    assert 'python-old runs on DuckDB only' in done.stderr
+    assert done.returncode == 2, done.stdout
+    assert "invalid choice: 'python-old'" in done.stderr
     assert not (tmp_path / 'old.jsonl').exists()
 
 

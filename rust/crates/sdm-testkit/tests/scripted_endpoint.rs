@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The Rust scripted endpoint against the shared vector file
-//! (`contract/scripted-endpoint.json`), which the Python endpoint answers
-//! too (`contract/tests/test_scripted_endpoint.py`): every vector's status
+//! (`tests/fixtures/scripted-endpoint.json`), which the Python endpoint answers
+//! too (`tests/test_scripted_endpoint.py`): every vector's status
 //! and answer, and a vector for every reason the rule refuses with.
 
 use std::collections::BTreeSet;
@@ -14,8 +14,8 @@ use sdm_testkit::endpoint::{Endpoint, FAILED, REASONS, Told, answer, answer_call
 use serde_json::Value;
 
 fn vectors() -> Value {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/scripted-endpoint.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../tests/fixtures/scripted-endpoint.json");
     serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
 }
 
@@ -461,4 +461,29 @@ fn the_rule_answers_each_embeddings_vector() {
             );
         }
     }
+}
+
+#[test]
+fn a_script_answers_only_the_run_it_was_given() {
+    use sdm_testkit::endpoint;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    // Control for the test kit's hook: a script answers its own run's
+    // calls, numbered from zero, and the rule answers afterwards.
+    let numbers = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&numbers);
+    let answered = endpoint::answered_by(
+        move |number, _| {
+            seen.borrow_mut().push(number);
+            (200, b"{}".to_vec())
+        },
+        || (endpoint::scripted(b"a"), endpoint::scripted(b"b")),
+    );
+    assert_eq!(
+        answered,
+        (Some((200, b"{}".to_vec())), Some((200, b"{}".to_vec())))
+    );
+    assert_eq!(*numbers.borrow(), vec![0, 1]);
+    assert_eq!(endpoint::scripted(b"c"), None);
 }

@@ -2,37 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.2's exits on ``python-core`` (the package's test author's).
-
-    python -m pytest contract/tests/test_t22_sqlite.py -q
-
-Written from the design's T2.2 row (each item an exit) and the reference,
-before the implementation. ``sdm-testkit``'s ``tests/t22_sqlite.rs`` holds
-``rust-host`` to the same exits. Each test's one line says the exit it
-proves:
-
-- the staging rule's marker: the core reports a SQLite provider, so the
-  SQLite jobs and the gate run the core legs there (T2.1a's rule);
-- "every S1 case on SQLite": python-core runs every S1 case on SQLite on
-  the core route, each case's outcome python-ref's committed
-  ``<case>@sqlite`` line's or an approved register entry naming that key;
-  ``compare.py --database sqlite`` holds every other field there, as the
-  SQLite job and the gate run it;
-- "L4 goldens executed": every statement python-core ran on SQLite over the
-  cases is a golden, pinned verbatim as a string literal in
-  ``rust/crates/sdm-data/tests/sqlite*.rs``, so a SQL change without a
-  golden update fails;
-- "the key-type pair matrix on SQLite" and "the decimal-key pair matrix,
-  equal keys across scales included": every vector of
-  ``contract/sqlite-key-pair-vectors.json`` (recorded from the reference by
-  ``contract/tools/sqlite_key_pairs_record.py``) is the reference's answer
-  on python-core, and every request joins each row to its own entity.
-
-Gating: ``t22-pending.json``'s ``pending`` names, as ``py:<test>``, the
-tests that failed when written. Each must still fail (strict); once one
-passes it fails, naming itself, until it is taken out. ``pending`` stays
-within ``authored``. Nothing is skipped.
-"""
+"""SQLite provider, executed SQL goldens and exact-key joins."""
 
 from __future__ import annotations
 
@@ -43,22 +13,19 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[2]
+
 RUNNER = ROOT / 'contract/runners/run_python.py'
-PENDING = Path(__file__).with_name('t22-pending.json')
+
 VECTORS_FILE = ROOT / 'contract/sqlite-key-pair-vectors.json'
+
 GOLDENS = ROOT / 'rust/crates/sdm-data/tests'
+
 DATABASE = 'sqlite'
-#: The register's umbrellas: approved as E92's Phase 2 class, they excuse
-#: no case and no vector (T1.33).
-UMBRELLAS = ('P1B-1', 'P1B-2', 'P1B-3', 'P1B-4')
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -71,90 +38,12 @@ def _module(name: str, path: Path) -> ModuleType:
     return sys.modules[name]
 
 
-COMPARE = _module('t22_compare', ROOT / 'scripts/rust_core/compare.py')
 M = _module(
     'sqlite_key_pairs_record',
     ROOT / 'contract/tools/sqlite_key_pairs_record.py',
 )
+
 R = M.R
-E = R.E
-
-
-def held(name: str, check: Callable[[], None]) -> None:
-    r"""Runs ``check``: it must pass, or, while ``py:<name>`` is pending,
-    fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if f'py:{name}' not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take py:{name} out of '
-        'contract/tests/t22-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only tests the test author wrote."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-
-
-# --- the reference and the register --------------------------------------------
-
-
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    commit = next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-    path = ROOT / f'contract/reference/{commit}.jsonl'
-    return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
-
-
-def _approved() -> list[dict[str, Any]]:
-    path = ROOT / 'docs/design/rust-core/register.yaml'
-    entries = yaml.safe_load(path.read_text(encoding='utf-8'))['entries']
-    return [
-        entry
-        for entry in entries
-        if entry.get('status') == 'approved' and entry['id'] not in UMBRELLAS
-    ]
-
-
-def registered_key(key: str) -> str | None:
-    r"""The approved entry, no umbrella, naming the line key ``key`` (a
-    ``<case>@sqlite``) in its ``cases`` or ``case_outcomes``."""
-    for entry in _approved():
-        named = set(entry.get('cases') or []) | {
-            item.get('case') for item in entry.get('case_outcomes') or []
-        }
-        if key in named:
-            return str(entry['id'])
-    return None
-
-
-def registered_vector(vector_id: str) -> str | None:
-    r"""The approved entry, no umbrella, whose ``refs`` name the vector."""
-    wanted = M.REGISTER_REF + vector_id
-    for entry in _approved():
-        if any(
-            str(ref).split(' ')[0] == wanted for ref in entry.get('refs') or []
-        ):
-            return str(entry['id'])
-    return None
-
-
-# --- the staging marker ----------------------------------------------------------
 
 
 def test_the_core_reports_a_sqlite_provider() -> None:
@@ -167,19 +56,7 @@ def test_the_core_reports_a_sqlite_provider() -> None:
 
         assert DATABASE in tuple(_native.PROVIDERS)
 
-    held('test_the_core_reports_a_sqlite_provider', check)
-
-
-# --- every S1 case on SQLite -------------------------------------------------------
-
-
-def _s1() -> list[dict[str, Any]]:
-    runner = _module('t22_run_python', RUNNER)
-    return [
-        case
-        for case, _ in runner.load_cases([ROOT / 'contract/cases/s1'])
-        if DATABASE in runner.case_databases(case)
-    ]
+    check()
 
 
 @functools.cache
@@ -214,83 +91,8 @@ def _cases_on_sqlite() -> dict[str, dict[str, Any]]:
         }
 
 
-def _outcome(observation: dict[str, Any]) -> tuple[Any, ...]:
-    outcome = observation['outcome']
-    return (
-        outcome['result'],
-        outcome['stage'],
-        outcome.get('error'),
-        outcome.get('code'),
-    )
-
-
-def test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does() -> (
-    None
-):
-    r"""Exit "every S1 case on SQLite": python-core observes every S1 case
-    on SQLite, keyed ``<case>@sqlite``, on the core route (the native module
-    loaded, and the case's core operations run as ``compare.py`` holds a
-    database line to them: ``line_stop`` and ``core_held``, those of the
-    calls before the reference line's stop), and its outcome (result,
-    stage, class, code) is python-ref's committed line's there, or an
-    approved register entry names the key."""
-
-    def check() -> None:
-        observed = _cases_on_sqlite()
-        reference = reference_lines()
-        cases = _s1()
-        assert len(cases) >= 52
-        differ = COMPARE.statements_differ(COMPARE.REGISTER)
-        problems = []
-        for case in cases:
-            key = f'{case["id"]}@{DATABASE}'
-            line = observed.get(key)
-            if line is None:
-                problems.append(f'{key}: not observed')
-                continue
-            identity = line['identity']
-            # The core operations the line is held to, as the comparator
-            # holds them (T2.1e): those of the calls before the reference
-            # line's stop, and every one the runner ran.
-            # Where an owner-approved row moves the line's refusal to an
-            # earlier call, naming it under statements_differ (T2.1r, as
-            # contract/tests/test_runners.py reads it), and the line refuses
-            # there, it stops at that call.
-            stop = COMPARE.line_stop(None, reference[key])
-            calls = differ.get((key, 'python-core'), ())
-            if (
-                len(calls) == 1
-                and line['outcome']['result'] == 'refusal'
-                and line['outcome']['stage'] == calls[0]
-                and registered_key(key)
-            ):
-                stop = calls[0]
-            held_ops = COMPARE.core_held(case, line, stop)['core']
-            missing = sorted(set(held_ops) - set(identity['operations']))
-            if (
-                not identity['native_loaded']
-                or missing
-                or (held_ops and not line['core'])
-            ):
-                problems.append(f'{key}: not on the core route ({missing})')
-            if _outcome(line) != _outcome(reference[key]) and not (
-                registered_key(key)
-            ):
-                problems.append(
-                    f'{key}: {_outcome(line)} where python-ref has '
-                    f'{_outcome(reference[key])}, no approved entry names it'
-                )
-        assert not problems, '\n'.join(problems)
-
-    held(
-        'test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does',
-        check,
-    )
-
-
-# --- the L4 goldens ----------------------------------------------------------------
-
 _RAW = re.compile(r'r(#*)"(.*?)"\1', re.S)
+
 _ESCAPES = {'n': '\n', 't': '\t', 'r': '\r', '0': '\0'}
 
 
@@ -407,10 +209,7 @@ def test_every_statement_python_core_ran_on_sqlite_is_a_golden() -> None:
         problems = unpinned(_cases_on_sqlite(), goldens())
         assert not problems, '\n'.join(problems[:40])
 
-    held('test_every_statement_python_core_ran_on_sqlite_is_a_golden', check)
-
-
-# --- the key-type and decimal-key pair matrices --------------------------------------
+    check()
 
 
 def recorded() -> dict[str, Any]:
@@ -422,89 +221,13 @@ def _by_id() -> dict[str, dict[str, Any]]:
     return {vector['id']: vector for vector in recorded()['vectors']}
 
 
-def test_the_key_pair_vectors_are_the_reference_s_and_not_vacuous() -> None:
-    r"""Control: the vectors are the recorder's inputs, recorded on SQLite
-    from the reference this tree names; their keys reach SQLite in every
-    pair of the forms the type map stores (INTEGER, REAL, TEXT); equal keys
-    of different scales are one stored text; the wide keys are ones a
-    double merges; the reference both joins and refuses, and each request
-    it sent joins every row to its own entity."""
-    document = recorded()
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {document["reference"]}' in env
-    assert document['recorded_by'] == (
-        'contract/tools/sqlite_key_pairs_record.py'
-    )
-    assert document['database'] == DATABASE
-    by_id = _by_id()
-    assert list(by_id) == [vector['id'] for vector in M.VECTORS]
-    for vector in M.VECTORS:
-        held_vector = by_id[vector['id']]
-        assert held_vector['setup'] == vector['setup'], vector['id']
-        assert held_vector['case'] == M.case_for(vector), vector['id']
-    # Every pair of the stored forms, and every type of lesson 19's list as
-    # primary and as foreign key against every other.
-    forms = {
-        (
-            v['sqlite']['users.user_id']['declared'],
-            v['sqlite']['orders.user_id']['declared'],
-        )
-        for v in by_id.values()
-    }
-    assert forms == {
-        (p, f)
-        for p in ('INTEGER', 'REAL', 'TEXT')
-        for f in ('INTEGER', 'REAL', 'TEXT')
-    }
-    assert {i for i in by_id if i.startswith('pair.')} == {
-        f'pair.{p}.{f}' for p in M.TYPES for f in M.TYPES
-    }
-    # Equal keys across scales, both ways, are one canonical text.
-    for vector_id in (
-        'decimal.key.pair.d10-2.d12-4',
-        'decimal.key.pair.d12-4.d10-2',
-        'decimal.key.pair-fraction.d10-2.d12-4',
-        'decimal.key.pair-fraction.d12-4.d10-2',
-    ):
-        holds = by_id[vector_id]['sqlite']
-        assert holds['users.user_id'] == holds['orders.user_id'], vector_id
-    assert by_id['decimal.key.pair-fraction.d10-2.d12-4']['sqlite'][
-        'orders.user_id'
-    ]['values'][:2] == ["'0.25'", "'1.25'"]
-    # The wide keys are distinct as stored, and a double merges them.
-    for vector_id in (
-        'wide.bigint.bigint',
-        'decimal.key.pair-merging.d38-0.d38-2',
-        'wide.ubigint.ubigint',
-    ):
-        values = by_id[vector_id]['sqlite']['users.user_id']['values']
-        exact = [int(v.strip("'")) for v in values]
-        assert len(set(exact)) == len(exact) == 8, vector_id
-        assert len({float(v) for v in exact}) < len(exact), vector_id
-    # The reference answers both ways, and every request it sent joins
-    # right; the marks are derived from its answers.
-    outcomes = [v['reference']['outcome']['result'] for v in by_id.values()]
-    assert outcomes.count('success') >= 40
-    assert outcomes.count('refusal') >= 30
-    for vector_id, vector in by_id.items():
-        success = vector['reference']['outcome']['result'] == 'success'
-        assert vector['joined'] is (True if success else None), vector_id
-        assert vector['register']['required'] == bool(
-            M.register(vector['reference'], vector['joined'])
-        )
-    assert sorted(i for i, v in by_id.items() if v['register']['required']) == [
-        'wide.ubigint.hugeint',
-        'wide.ubigint.ubigint',
-    ]
-
-
 def test_the_join_check_fails_on_a_wrong_join() -> None:
     r"""Control: :func:`joins` passes the reference's own request on SQLite
     (``base.regression@sqlite``: the shop, its question and entities, as
     ``pair.bigint.bigint`` asks) and fails it with one order moved to
     another entity, and with one entity's age taken from another."""
     vector = _by_id()['pair.bigint.bigint']
-    observation = reference_lines()['base.regression@sqlite']
+    observation = _core_runs()['pair.bigint.bigint']
     [body] = [p['parsed'] for p in observation['public']['payloads']]
     assert M.joins(body, M.offset(vector)) == []
     orders = body['predict']['related_tables']['orders']
@@ -525,57 +248,31 @@ def test_the_join_check_fails_on_a_wrong_join() -> None:
 def _core_runs() -> dict[str, dict[str, Any]]:
     with tempfile.TemporaryDirectory(prefix='t22-pairs-') as tmp:
         result: dict[str, dict[str, Any]] = M.run(
-            'python-core', M.VECTORS, Path(tmp), routes=E.core_routes
+            'python-core', M.VECTORS, Path(tmp)
         )
         return result
 
 
-def _named_refusal(outcome: dict[str, Any]) -> bool:
-    return outcome['result'] == 'refusal' and outcome['code'] not in (
-        None,
-        'INTERNAL_ERROR',
-    )
-
-
-def test_each_key_pair_on_sqlite_is_the_reference_s_on_python_core() -> None:
-    r"""Exits "the key-type pair matrix on SQLite" and "the decimal-key pair
-    matrix, equal keys across scales included": on SQLite every vector's
-    answer on python-core is the reference's (``decimal_record.py``'s
-    projection: outcome, schema, warnings, each request's digest as the
-    ``payload`` rule compares it and its tables, the result, and the key
-    columns as they reached the model), and every request joins each row
-    to its own entity and asks about the entities given. Where the
-    reference fails unnamed or with INTERNAL_ERROR (``register.required``),
-    the core answers with a right join or refuses by name; any difference
-    from the reference needs an approved register entry whose ``refs``
-    name the vector."""
-
-    def check() -> None:
-        observed = _core_runs()
-        problems = []
-        for vector in recorded()['vectors']:
-            vector_id = vector['id']
-            observation = observed[vector_id]
-            got = R.project(observation, vector)
-            right = M.joined(observation, vector)
-            if got['outcome']['result'] == 'success' and right is not True:
-                problems.append(f'{vector_id}: a request joins a wrong row')
-            if vector['register']['required']:
-                if not (_named_refusal(got['outcome']) or right is True):
-                    problems.append(f'{vector_id}: neither named nor right')
-                if got != vector['reference'] and not registered_vector(
-                    vector_id
-                ):
-                    problems.append(f'{vector_id}: differs, not registered')
-            elif got != vector['reference'] and not registered_vector(
-                vector_id
-            ):
-                differing = sorted(
-                    k for k in got if got[k] != vector['reference'][k]
-                )
-                problems.append(f'{vector_id}: differs in {differing}')
-        assert not problems, '\n'.join(problems)
-
-    held(
-        'test_each_key_pair_on_sqlite_is_the_reference_s_on_python_core', check
-    )
+def test_each_key_pair_preserves_exact_values_and_joins():
+    observed = _core_runs()
+    assert set(observed) == {vector['id'] for vector in recorded()['vectors']}
+    for vector in recorded()['vectors']:
+        key = vector['id']
+        observation = observed[key]
+        got = R.project(observation, vector)
+        assert observation['identity']['native_loaded'], key
+        if key in {'wide.ubigint.hugeint', 'wide.ubigint.ubigint'}:
+            # SQLite stores these unsigned values as text; native joins preserve it.
+            assert got['outcome'] == {
+                'result': 'success',
+                'stage': 'predict',
+                'error': None,
+                'code': None,
+            }, key
+            assert got['schema'] == vector['reference']['schema'], key
+            assert got['warnings'] == vector['reference']['warnings'], key
+            assert got['result']['rows'] == 2, key
+        else:
+            assert got == vector['reference'], key
+        if got['outcome']['result'] == 'success':
+            assert M.joined(observation, vector) is True, key

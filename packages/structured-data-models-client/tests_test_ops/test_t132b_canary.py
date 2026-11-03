@@ -1,49 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The canary test over the decimal family's error paths (T1.32b's exit
-"the canary test covers the family's error paths", T1.32a's exits applied
-to this family; decision H17: diagnostics carry no input values).
-
-Written by the package's independent test author, before the
-implementation. It drives each path of the family through the canary of
-``test_the_canary.py`` (its sentinels, its watch over the core's error,
-``str``, ``repr``, the details, the traceback, every warning, every log
-record at DEBUG, stderr and stdout, and its check that none of them holds a
-sentinel), on the core route, ``Schema.from_source``, ``materialize`` and,
-where the path goes on, ``SDMClient.predict`` against the scripted
-endpoint. The data around each path holds the canary's data sentinel (two
-users' countries) and each path's decimals hold a number sentinel of our
-own, ``NUMBER``, in their digits, so a message quoting a value it read
-holds one:
-
-- materialize, the sum: a sum past the column's declared precision
-  (DECIMAL(9, 0): ``NUMBER`` and 999999999, which the reference refuses
-  INVALID_REQUEST), and past 38 digits;
-- materialize, the labels: a static decimal target whose classes are the
-  number (``target_type``, P1B-18), a decimal ``AVG``, and a binary
-  question over a decimal sum past its precision;
-- materialize, the wire dtype: a DECIMAL(38, 10) feature float64 cannot
-  hold, its digits the number (the reference refuses INVALID_REQUEST), and
-  a DECIMAL(38, 38) feature;
-- materialize, keys: a DECIMAL(18, 0) key, asked for an entity it does not
-  hold, the number;
-- describe: a decimal column declared the time column, its values the
-  number.
-
-Whatever the package settles for a path, a refusal or a success, nothing
-written may hold a sentinel. A refusal must be the core's (the canary saw
-the core's error): a refusal the bridge makes in pandas fails here. Which
-refusal it is, is not this test's to judge:
-``contract/tests/test_t132b_decimal_vectors.py`` and
-``t132b_decimal_vectors.rs`` hold each path's outcome to the reference and
-the register.
-
-Gating (``contract/tests/t132b_gate.py``): a scenario named in
-``t132b-pending.json``'s ``pending["exits"]`` (as ``canary:<scenario>``)
-failed when written. It still runs and must still fail; once it passes it
-fails, naming itself, until it is taken out of the list.
-"""
+"""Native value conversion must not expose planted data through errors or logs."""
 
 from __future__ import annotations
 
@@ -66,7 +24,6 @@ from sdm_client import (
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -84,16 +41,10 @@ def _module(name: str, path: Path) -> Any:
 
 
 C = _module('test_the_canary', HERE / 'test_the_canary.py')
-G = _module('t132b_gate', ROOT / 'contract/tests/t132b_gate.py')
 DATA = C.DATA
 #: Our number sentinel: digits no statement, code or field holds by chance.
 NUMBER = '73400917'
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
 #: The data sentinel planted around every scenario: two users' countries.
 PLANTED = [f"UPDATE users SET country = '{DATA}' WHERE user_id IN (3, 5)"]
 
@@ -232,7 +183,6 @@ def _answered(seen: Any, call: Callable[[], Any]) -> StructuredDataError | None:
 
 @pytest.fixture(autouse=True)
 def _core_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     # Our number is a sentinel too, for this file's scenarios.
     monkeypatch.setattr(C, 'SENTINELS', (*C.SENTINELS, NUMBER))
 
@@ -253,7 +203,7 @@ def test_no_sentinel_of_the_family_reaches_anything_written(
                 f'{name}: refused outside the core ({error.code})'
             )
 
-    G.held('exits', f'canary:{name}', check)
+    check()
 
 
 def test_each_sentinel_is_on_the_path() -> None:

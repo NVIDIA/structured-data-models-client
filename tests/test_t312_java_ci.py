@@ -2,15 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T3.12's CI jobs, read from the workflow: Java's S1 legs, ``java (<jdk>,
-<platform>, duckdb|sqlite|postgres)``, on JDK 17 and 21 on Linux x86_64 and
-JDK 21 on aarch64, each judged on its own against the reference with the
-effective expectations; L5 for Java beside the Postgres leg; the Java tests
-with the pinned Postgres service, required; and the JDBC drivers in the
-JAR's artifact. The macOS runners hold no client wheel for the runner's
-capture to read with, so the macOS Java jobs stay S0's (the brief's open
-question 3, read so: Postgres and the S1 legs where the runner has them).
-"""
+"""Java CI retains platform, JDBC packaging and provider-conversion coverage."""
 
 from __future__ import annotations
 
@@ -62,15 +54,24 @@ def test_t312_each_s1_leg_runs_on_its_jdk_and_platform() -> None:
     assert found == S1_LEGS
 
 
-def test_t312_each_s1_leg_runs_the_cases_and_judges_them_alone() -> None:
+def test_t312_each_s1_leg_runs_the_cases_with_its_drivers() -> None:
     jobs = _jobs()
     for jdk, platform, database in sorted(S1_LEGS):
         job, values = jobs[f'java ({jdk}, {platform}, {database})']
         text = _text(job)
         assert 'contract/runners/run_java.py --database' in text, database
         assert '--drivers jar/jdbc' in text
-        assert 'scripts/rust_core/ratchet.py effective' in text
-        assert 'scripts/rust_core/compare.py --cases java-cases' in text
+        assert (
+            '-Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest test'
+            in text
+        )
+        assert '-Dsdm.natives=' in text
+        behavioral = next(
+            step
+            for step in job['steps']
+            if step.get('name') == 'Java JDBC behavior on this platform'
+        )
+        assert behavioral['env']['SDM_REQUIRE_POSTGRES'] == '1'
         assert 'postgres' in (job.get('services') or {}), database
         assert job['env']['SDM_POSTGRES_TEST_DSN'].startswith('postgresql://')
 

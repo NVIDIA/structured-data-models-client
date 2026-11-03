@@ -2,49 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T1.33's type set, held from outside the implementation (the package's
-//! independent test author) to `contract/type-set-vectors.json`, which
-//! `contract/tests/test_t133_type_set.py` holds to the register and to its
-//! own shape.
-//!
-//! - Exit "each arrow-rs `DataType` classified as accepted, admitted or
-//!   refused by name": every variant of the `DataType` of the arrow-schema
-//!   version in `rust/Cargo.lock` has at least one vector ([`variant`] is
-//!   an exhaustive match, so a new variant fails to compile here until it
-//!   is placed), each parameterized family with its parameters (every time
-//!   unit, with and without a zone; every interval kind; both union modes;
-//!   every integer dictionary index; each decimal width; each list form;
-//!   each run-end width), and no type twice. Each vector's `class` is what
-//!   admission (`sdm_host::admitted_type` and `admit`, the table at
-//!   `sdm-host/src/admission.rs:9-22`) does with the type: `accepted` kept
-//!   as received, `admitted` widened to `admitted_as`, or `refused` with
-//!   `UNSUPPORTED_TYPE` naming the column (with its path through nested
-//!   types) and the Arrow type received there.
-//! - "With its received-type inference vector": each buildable vector's
-//!   three-row column `f` (a value, a null, a value), beside an `id`
-//!   column the catalog declares the primary key, arrives from the driver
-//!   in a real `describe_source` run of this host's core (`sdm_core::start`
-//!   with `default_root`) through a host provider, which answers the
-//!   catalog in the contract's own shape and the preview with the column,
-//!   each fetch reply admitted as `HostRun` admits it (`admit`, `runs.rs`).
-//!   `inference` is what that gives `f`: its data type in the description
-//!   (`dtype`), the data type its `COLUMNS_LEFT_OUT` warning names
-//!   (`left_out`), or the refusal by name: the
-//!   code and, for `UNSUPPORTED_REQUEST`, the rule, for `UNSUPPORTED_TYPE`
-//!   the column and the Arrow type. A panic, or a refusal naming no rule,
-//!   column or type, never passes: where the core gives one, the vector
-//!   expects the named refusal and is pending.
-//!
-//! The expected values are derived from the admission table, the closed
-//! set (`sdm-contract/src/types.rs` `from_arrow`) and inference's
-//! `dtype_of` (`sdm-schema/src/infer.rs`), never recorded from a run.
-//!
-//! Gating: `contract/tests/t133p2-pending.json`'s `pending["rust-host"]`
-//! lists the vectors that failed here when the test was written. Each
-//! must still fail (strict: one that passes must be taken out of the
-//! list), and the list may only shrink: it stays within
-//! `authored["rust-host"]`. The implementer removes ids as they pass and
-//! changes nothing else of this file or the vectors.
+//! Arrow type admission and inference against explicit type vectors.
+//! Every Arrow variant and parameterized family is represented.
+//! Buildable values exercise describe_source, including named refusals and warnings.
 
 #![allow(
     clippy::disallowed_methods,
@@ -92,7 +52,6 @@ use sdm_core::{ArrowData, Attachment, FetchResult};
 use sdm_host::{ZoneResolver, admit, admitted_type};
 use serde_json::{Value, json};
 
-const PENDING: &str = "contract/tests/t133p2-pending.json";
 const VECTORS: &str = "contract/type-set-vectors.json";
 /// The column every vector is.
 const COLUMN: &str = "f";
@@ -125,10 +84,6 @@ fn names(value: &Value) -> BTreeSet<String> {
         .iter()
         .map(|v| v.as_str().unwrap().to_owned())
         .collect()
-}
-
-fn pending() -> BTreeSet<String> {
-    names(&read_json(PENDING)["pending"]["rust-host"])
 }
 
 // --- the variants ----------------------------------------------------------
@@ -992,27 +947,6 @@ fn want(vector: &Value) -> BTreeMap<&'static str, Value> {
 // --- the tests ----------------------------------------------------------------
 
 #[test]
-fn the_pending_list_only_shrinks() {
-    let pending = read_json(PENDING);
-    let now = names(&pending["pending"]["rust-host"]);
-    let authored = names(&pending["authored"]["rust-host"]);
-    assert!(
-        now.is_subset(&authored),
-        "pending ids added: {:?}",
-        now.difference(&authored)
-    );
-    let all: BTreeSet<String> = vectors()
-        .iter()
-        .map(|v| v["id"].as_str().unwrap().to_owned())
-        .collect();
-    assert!(
-        now.is_subset(&all),
-        "pending ids that are no vector: {:?}",
-        now.difference(&all)
-    );
-}
-
-#[test]
 fn the_vectors_are_of_the_arrow_schema_the_workspace_locks() {
     let lock = std::fs::read_to_string(root().join("rust/Cargo.lock")).unwrap();
     let at = lock
@@ -1161,35 +1095,23 @@ fn each_parameterized_family_has_each_parameter() {
 
 #[test]
 fn each_type_is_admitted_and_inferred_as_its_vector_says() {
-    let pending = pending();
     let mut failures = Vec::new();
-    let mut passing_but_pending = Vec::new();
     for vector in vectors() {
         let id = vector["id"].as_str().unwrap();
         let got = observe(&vector);
         let want = want(&vector);
-        let ok = got == want;
-        match (ok, pending.contains(id)) {
-            (true, true) => passing_but_pending.push(id.to_owned()),
-            (false, false) => {
-                let differ: BTreeMap<_, _> = want
-                    .iter()
-                    .filter(|(k, v)| got.get(*k) != Some(*v))
-                    .map(|(k, v)| (*k, json!({"want": v, "got": got.get(k)})))
-                    .collect();
-                failures.push(format!(
-                    "{id}: {}",
-                    Value::from_iter(differ.into_iter().map(|(k, v)| (k.to_owned(), v)))
-                ));
-            }
-            _ => {}
+        if got != want {
+            let differ: BTreeMap<_, _> = want
+                .iter()
+                .filter(|(k, v)| got.get(*k) != Some(*v))
+                .map(|(k, v)| (*k, json!({"want": v, "got": got.get(k)})))
+                .collect();
+            failures.push(format!(
+                "{id}: {}",
+                Value::from_iter(differ.into_iter().map(|(k, v)| (k.to_owned(), v)))
+            ));
         }
     }
-    assert!(
-        passing_but_pending.is_empty(),
-        "these pass now: take them out of {PENDING}'s pending[\"rust-host\"]: \
-         {passing_but_pending:?}"
-    );
     assert!(
         failures.is_empty(),
         "{} vectors differ:\n{}",

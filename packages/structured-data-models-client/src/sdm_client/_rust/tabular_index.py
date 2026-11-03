@@ -25,7 +25,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sdm_client._routing import RouteError
+from sdm_client._rust import NativeBoundaryError
 
 # Official Linux wheel binaries, mapped to their source-backed dispatch family.
 # Scalar argsort predates the numeric SIMD dispatch; AVX2 alone does not select
@@ -98,7 +98,7 @@ def _comparison_semantics() -> str:
     native = importlib.import_module(f'{namespace}._multiarray_umath')
     families = _producer_families(native.__file__)
     if families is None:
-        raise RouteError(
+        raise NativeBoundaryError(
             'this native scalar comparison producer has not been bound to core semantics'
         )
     semantics = families[1]
@@ -116,7 +116,7 @@ def _comparison_semantics() -> str:
         if required_mode == 'weak' and mode == 'legacy':
             return 'legacy_exact_unbounded_integers'
         if mode != required_mode:
-            raise RouteError(
+            raise NativeBoundaryError(
                 'this NumPy scalar promotion mode is not yet represented by the core'
             )
     return semantics
@@ -130,10 +130,12 @@ def _profile() -> str:
 
     path = native.__file__
     if path is None:
-        raise RouteError('this native index sort producer has no binary path')
+        raise NativeBoundaryError(
+            'this native index sort producer has no binary path'
+        )
     family = _producer(path)
     if family is None:
-        raise RouteError(
+        raise NativeBoundaryError(
             'this native index sort producer has not been bound to a core profile'
         )
     # These are this producer's actual dispatched groups, not CPU-name guesses.
@@ -248,7 +250,7 @@ def _scalar(value: Any) -> dict[str, Any]:
                 + offset.microseconds
             ),
         }
-    raise RouteError(
+    raise NativeBoundaryError(
         'this object index comparison family is not yet represented by the core'
     )
 
@@ -340,7 +342,9 @@ def _array(
             'floating' in kinds or has_float_missing
         ):
             if type(decimal_context) is not Context:
-                raise RouteError('custom Decimal contexts are not represented')
+                raise NativeBoundaryError(
+                    'custom Decimal contexts are not represented'
+                )
             if not kinds <= {
                 'decimal',
                 'decimal_infinity',
@@ -348,7 +352,9 @@ def _array(
                 'boolean',
                 'floating',
             }:
-                raise RouteError('this mixed Decimal owner is not represented')
+                raise NativeBoundaryError(
+                    'this mixed Decimal owner is not represented'
+                )
             for position, (value, absent) in enumerate(
                 zip(values, missing, strict=True)
             ):
@@ -365,7 +371,7 @@ def _array(
                             else 'temporal',
                         }
                     else:
-                        raise RouteError(
+                        raise NativeBoundaryError(
                             'this missing mixed Decimal owner is not represented'
                         )
             probe_policies = {
@@ -376,7 +382,7 @@ def _array(
                 '3.1.0': True,
             }
             if pd.__version__ not in probe_policies:
-                raise RouteError(
+                raise NativeBoundaryError(
                     'this Decimal probe producer is not represented'
                 )
             result = {
@@ -398,7 +404,7 @@ def _array(
                 'fixed_integer',
                 'fixed_floating',
             }:
-                raise RouteError(
+                raise NativeBoundaryError(
                     'this mixed NumPy object comparison family is not yet represented by the core'
                 )
             for position, (value, absent) in enumerate(
@@ -422,13 +428,13 @@ def _array(
                     ):
                         atoms[position] = _scalar(value)
                     else:
-                        raise RouteError(
+                        raise NativeBoundaryError(
                             'this missing NumPy companion owner is not yet represented by the core'
                         )
             result = {
                 'kind': 'scalar_object',
                 'values': atoms,
-                'semantics': _comparison_semantics(),
+                'semantics': 'value',
             }
             overflow = np.geterr()['over']
             if overflow in ('ignore', 'raise', 'warn', 'print'):
@@ -459,7 +465,7 @@ def _facts(
         pd.MultiIndex,
     )
     if type(index) not in ordinary:
-        raise RouteError(
+        raise NativeBoundaryError(
             'custom index producers are not supported for Rust sorting'
         )
     if type(index) is pd.MultiIndex:
@@ -589,10 +595,10 @@ def _facts(
                 'missing': missing,
                 'profile': 'stable',
             }
-        raise RouteError(
+        raise NativeBoundaryError(
             'this Arrow index ordering family is not yet represented by the core'
         )
-    raise RouteError(
+    raise NativeBoundaryError(
         'this index array comparison family is not yet represented by the core'
     )
 
@@ -602,7 +608,7 @@ def observe(
 ) -> dict[str, Any]:
     """Observe a sampled subset after reduction, without sorting in Python."""
     context = getcontext() if decimal_context is None else decimal_context
-    return {'index': _facts(index, 'unbound', context)}
+    return {'index': _facts(index, 'stable', context)}
 
 
 def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:

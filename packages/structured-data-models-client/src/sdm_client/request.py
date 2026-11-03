@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import sys
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -312,6 +313,12 @@ class Request:
             from one, and ``None`` when it was built from frames.
     """
 
+    if TYPE_CHECKING:
+        # Both constructors populate these fields; the frame constructor delegates.
+        schema: Schema
+        entity_table: str | None
+        requested_inference: dict[str, Any]
+
     query: str | None = None
 
     # How this question was rewritten, when it had to be: the kind of question
@@ -369,140 +376,20 @@ class Request:
                 from ``context``, or ``predict`` carries the target column.
             UnsupportedRequestError: If ``related_tables`` is given.
         """
-        from sdm_client import _routing
+        from sdm_client._rust.direct import construct
 
-        if _routing.route(_routing.DIRECT_CONSTRUCTORS) == 'core':
-            from sdm_client._rust.direct import construct
-
-            construct(
-                self,
-                context,
-                predict,
-                target=target,
-                task=task,
-                related_tables=related_tables,
-                schema=schema,
-                entity_table=entity_table,
-                inference=inference,
-                task_options=task_options,
-            )
-            return
-        context = _require_frame(context, 'context')
-        predict = _require_frame(predict, 'predict')
-        related = {
-            name: _require_frame(frame, f'related_tables[{name!r}]')
-            for name, frame in (related_tables or {}).items()
-        }
-        _refuse_tables_no_model_can_be_given(related)
-
-        if task not in TASK_KINDS:
-            raise StructuredDataError(
-                f'task must be one of {list(TASK_KINDS)}, got {task!r}',
-                code='INVALID_REQUEST',
-            )
-        if target in context.columns and _has_container_cells(context[target]):
-            # Said here because this is the only place that knows which column
-            # is the target. SDM's own `Task.classification` covers "binary,
-            # multi-class, or multi-label", but the wire does not: `CellValue`
-            # is documented as excluding array-valued prediction scalars on
-            # purpose, so a multi-label answer has no shape to come back in.
-            raise StructuredDataError(
-                f'{target!r} holds a list per row, which is a multi-label '
-                f'target. These models predict one value per row, and the '
-                f'contract has no form for a set of labels, so this cannot be '
-                f'asked or answered',
-                code='UNSUPPORTED_REQUEST',
-            )
-        if len(context) == 0:
-            # A zero-row `predict` is legal. The contract sets no minimum on
-            # rows, and an empty batch inside a loop is a reasonable no-op.
-            # A zero-row context is not: a model that predicts from labelled
-            # examples cannot be given none, and the endpoint answers a 500.
-            raise StructuredDataError(
-                'context has no rows, so there is nothing for the model to '
-                'learn the answer from',
-                code='INVALID_REQUEST',
-            )
-        if target not in context.columns:
-            raise StructuredDataError(
-                f'context has no target column {target!r}; it has '
-                f'{sorted(map(str, context.columns))}',
-                code='INVALID_REQUEST',
-            )
-        if target in predict.columns:
-            raise StructuredDataError(
-                f'predict carries the target column {target!r}. Those are the '
-                f'rows whose answer is being asked for, so the column has to '
-                f'be absent; drop it with predict.drop(columns=[{target!r}])',
-                code='INVALID_REQUEST',
-            )
-        if context[target].notna().sum() == 0:
-            raise StructuredDataError(
-                'context must contain at least one row with a known target',
-                code='INVALID_REQUEST',
-            )
-
-        missing = [
-            column
-            for column in predict.columns
-            if column not in context.columns
-        ]
-        if missing:
-            raise StructuredDataError(
-                f'predict has column(s) {missing} that context does not; the '
-                f'model is shown context first, so it cannot score a feature '
-                f'it has never been given',
-                code='INVALID_REQUEST',
-            )
-
-        if schema is None:
-            schema = Schema.from_data(
-                {entity_table: context, **related},
-                relationships=None if related else (),
-            )
-
-        _check_scored_values_mean_what_the_schema_says(
-            predict, schema, entity_table
+        construct(
+            self,
+            context,
+            predict,
+            target=target,
+            task=task,
+            related_tables=related_tables,
+            schema=schema,
+            entity_table=entity_table,
+            inference=inference,
+            task_options=task_options,
         )
-
-        # And the other direction: a feature the model was shown has to be
-        # supplied for the rows being scored. The endpoint rejects a predict
-        # half that is missing one, so name it here instead. A primary key is
-        # identity rather than a feature, so scoring rows may omit it.
-        identity = set(_as_key_tuple(schema[entity_table].primary_key))
-        absent = [
-            column
-            for column in context.columns
-            if column != target
-            and column not in identity
-            and column not in predict.columns
-        ]
-        if absent:
-            raise StructuredDataError(
-                f'predict is missing column(s) {absent} that context carries. '
-                f'Every feature the model is shown has to be supplied for the '
-                f'rows being scored; drop them from context, or supply them',
-                code='INVALID_REQUEST',
-            )
-
-        _judge_a_context_that_teaches_nothing(target, context[target], task)
-
-        self.schema = schema
-        self.task = Task(
-            kind=task,
-            target=Target(
-                column_name=target,
-                dtype=schema[entity_table][target].dtype,
-                table_name=entity_table,
-            ),
-            entity_table=entity_table if related else None,
-            options=dict(task_options or {}),
-        )
-        self._context = Split(instance_table=context, related_tables=related)
-        self._predict = Split(instance_table=predict, related_tables=related)
-        self.inference = dict(inference or {})
-        self.requested_inference = dict(inference or {})
-        self.entity_table = entity_table
 
     @classmethod
     def materialized(
@@ -638,13 +525,9 @@ class Request:
         """
         payloads = self.payloads
         if payloads:
-            from sdm_client import _routing
+            from sdm_client._rust.splits import read
 
-            if _routing.route(_routing.REQUEST_INSPECTION) == 'core':
-                from sdm_client._rust.splits import read
-
-                return read(payloads, half)
-            return _split_from(payloads, half)
+            return read(payloads, half)
         held = getattr(self, f'_{half}', None)
         return held if held is not None else Split(pd.DataFrame())
 
@@ -910,21 +793,37 @@ def _entity_table_in(payloads: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _wire_frame(table: Any) -> pd.DataFrame | None:
-    r"""One wire table as a frame, or nothing if it cannot be read as one."""
+    r"""One wire table as a frame, or nothing if it cannot be read as one.
+
+    An integer past the float range is refused here rather than left to
+    pandas, whose releases disagree on whether a frame can hold one.
+    """
     if not isinstance(table, Mapping):
         return None
     columns = table.get('columns')
     rows = table.get('rows')
     if not isinstance(columns, list) or not isinstance(rows, list):
         return None
+    if any(
+        _past_the_float_range(value)
+        for row in rows
+        if isinstance(row, (list, tuple))
+        for value in row
+    ):
+        return None
     try:
         return pd.DataFrame(rows, columns=columns)
     except (TypeError, ValueError, OverflowError):
-        # A row wider than its header raises rather than padding, and a
-        # number too large for pandas to hold raises as well. Reading a
+        # A row wider than its header raises rather than padding. Reading a
         # request is a description of it, and a description that cannot be
         # made is not worth failing the call for.
         return None
+
+
+def _past_the_float_range(value: Any) -> bool:
+    return isinstance(value, int) and not (
+        -sys.float_info.max <= value <= sys.float_info.max
+    )
 
 
 #: What ties a related row to the instance it hangs off.

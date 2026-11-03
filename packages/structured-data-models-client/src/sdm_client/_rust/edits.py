@@ -51,7 +51,7 @@ def _schema_holding(table: Any) -> tuple[Any, str] | None:
     from sdm_client.schema import Schema, Table, _edits_on_the_core
 
     schema = getattr(table, '_schema', None)
-    if schema is None and standalone_enabled() and hasattr(table, 'columns'):
+    if schema is None and hasattr(table, 'columns'):
         # A temporary view owns no object. The table keeps its identity and owner.
         schema = Schema.__new__(Schema)
         object.__setattr__(schema, '_tables', {table.name: table})
@@ -66,12 +66,6 @@ def _schema_holding(table: Any) -> tuple[Any, str] | None:
         if held is table:
             return schema, name
     return None
-
-
-def standalone_enabled() -> bool:
-    from sdm_client import _routing
-
-    return _routing.on_frames(_routing.FRAME_SCHEMA)
 
 
 def check_column(column: Any, stype: Any, *, validate_stype: bool) -> None:

@@ -7,7 +7,7 @@
 //! two keys, however close a double holds them (the whole-phase review's
 //! Postgres finding; the rides, item 6: exact numeric equality, no float
 //! rounding, per P2G-2 and P2C-3).
-//! `contract/tests/test_t214c_numeric_spelling.py` holds `python-core` to
+//! `contract/tests/test_postgres_source_contracts.py` holds `python-core` to
 //! the same on a real Postgres server.
 //!
 //! Postgres keeps a `numeric`'s scale, so `1.0` and `1.00` are one number
@@ -34,19 +34,15 @@
 //!   the call carried no order; on Postgres, whose SQL joins the two by
 //!   value, the second hop took `<digits>.00`'s user for another node and
 //!   failed (`INTERNAL_ERROR`, "a row looked up was already reached"), which
-//!   `test_t214c_numeric_spelling.py` holds;
+//!   `test_postgres_source_contracts.py` holds;
 //! - `spelling.different`: each link written `<digits>.01`, another number,
 //!   which no user's key is, though a double rounds every one of them to a
 //!   user's (ids past 2**53 are a double's every other integer): answered,
 //!   with no order linked to any user, so the call is not `spelling.same`'s.
 //!
-//! Gating: `contract/tests/t214c-pending.json`'s `pending` names, as
-//! `rust:spelling.<name>@memory-marked`, the keys that failed when written.
-//! Each must still fail (strict); once one passes it fails, naming itself,
-//! until it is taken out.
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
@@ -61,7 +57,6 @@ use sdm_testkit::memory::Memory;
 use sdm_testkit::{bases, duck, layer};
 use serde_json::{Value, json};
 
-const PENDING: &str = "contract/tests/t214c-pending.json";
 const CASE: &str = "key.past-2-53.given-link";
 /// The column made exact text in each table.
 const KEY: &str = "user_id";
@@ -76,49 +71,6 @@ const SPELLINGS: [(&str, &str); 3] = [
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-fn read_json(path: &Path) -> Value {
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-/// The pending file's `list` names of this test, as `rust:` keys.
-fn named(list: &str) -> BTreeSet<String> {
-    read_json(&root().join(PENDING))[list]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|n| n.as_str().unwrap().strip_prefix("rust:"))
-        .map(str::to_owned)
-        .collect()
-}
-
-fn gating_key(name: &str) -> String {
-    format!("{name}@memory-marked")
-}
-
-/// Runs `check`; a pending key must fail, any other must pass.
-fn gated(name: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
-    let key = gating_key(name);
-    let outcome = std::panic::catch_unwind(check);
-    match (outcome, named("pending").contains(&key)) {
-        (Ok(()), true) => panic!("{key} passes now: take rust:{key} out of {PENDING}'s pending"),
-        (Err(failure), false) => std::panic::resume_unwind(failure),
-        _ => {}
-    }
-}
-
-#[test]
-fn the_pending_list_only_shrinks() {
-    let authored: BTreeSet<String> = SPELLINGS.iter().map(|(n, _)| gating_key(n)).collect();
-    let mine = |list: &str| -> BTreeSet<String> {
-        named(list)
-            .into_iter()
-            .filter(|k| k.starts_with("spelling."))
-            .collect()
-    };
-    assert!(mine("pending").is_subset(&mine("authored")));
-    assert_eq!(mine("authored"), authored);
 }
 
 /// The case, its entities given as the users' keys are written: the text
@@ -264,49 +216,43 @@ fn spelling(name: &str) -> &'static str {
 
 #[test]
 fn a_link_written_as_its_key_is_answered() {
-    gated("spelling.same", || {
-        let same = call(&observe(spelling("spelling.same")));
-        assert!(rows_of(&same, "orders") > 0, "no order reached: {same}");
-        assert!(rows_of(&same, "users") > 0, "no user reached: {same}");
-        assert!(users_written_as_keys(&same), "{same}");
-    });
+    let same = call(&observe(spelling("spelling.same")));
+    assert!(rows_of(&same, "orders") > 0, "no order reached: {same}");
+    assert!(rows_of(&same, "users") > 0, "no user reached: {same}");
+    assert!(users_written_as_keys(&same), "{same}");
 }
 
 #[test]
 fn one_number_written_two_ways_is_one_key() {
     let same = call(&observe(spelling("spelling.same")));
-    gated("spelling.equal", || {
-        let equal = call(&observe(spelling("spelling.equal")));
-        assert!(
-            equal == same,
-            "the call for links written <digits>.00 is not the call for \
+    let equal = call(&observe(spelling("spelling.equal")));
+    assert!(
+        equal == same,
+        "the call for links written <digits>.00 is not the call for \
              links written <digits>.0, as the users' keys are"
-        );
-    });
+    );
 }
 
 #[test]
 fn two_numbers_are_two_keys_however_close_a_double_holds_them() {
     let same = call(&observe(spelling("spelling.same")));
-    gated("spelling.different", || {
-        // Not vacuous: every link is a number no user's key is, which a
-        // double rounds to a user's key.
-        let first = 9_007_199_254_740_992_u64;
-        for id in first..first + 4 {
-            let link: f64 = format!("{id}.01").parse().unwrap();
-            assert_ne!(format!("{id}.01"), format!("{id}"));
-            assert!((first..first + 6).any(|user| user as f64 == link));
-        }
-        let different = call(&observe(spelling("spelling.different")));
-        assert_eq!(
-            rows_of(&different, "orders"),
-            0,
-            "an order whose link is no user's key was reached: {different}"
-        );
-        assert!(
-            rows_of(&different, "users") > 0,
-            "no user reached: {different}"
-        );
-        assert!(different != same);
-    });
+    // Not vacuous: every link is a number no user's key is, which a
+    // double rounds to a user's key.
+    let first = 9_007_199_254_740_992_u64;
+    for id in first..first + 4 {
+        let link: f64 = format!("{id}.01").parse().unwrap();
+        assert_ne!(format!("{id}.01"), format!("{id}"));
+        assert!((first..first + 6).any(|user| user as f64 == link));
+    }
+    let different = call(&observe(spelling("spelling.different")));
+    assert_eq!(
+        rows_of(&different, "orders"),
+        0,
+        "an order whose link is no user's key was reached: {different}"
+    );
+    assert!(
+        rows_of(&different, "users") > 0,
+        "no user reached: {different}"
+    );
+    assert!(different != same);
 }

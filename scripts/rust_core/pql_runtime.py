@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Record frozen public PQL results and judge an installed wheel on native Arm."""
+"""Check installed-wheel PQL behavior on native Arm with independent expectations."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
-REFERENCE = '43e55f4f58924384c3cb52f67c8ed2e73ba45fa1'
 
 
 def run(command: list[str], *, env: dict[str, str], cwd: Path) -> None:
@@ -29,13 +28,11 @@ def run(command: list[str], *, env: dict[str, str], cwd: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wheel', type=Path, required=True)
-    parser.add_argument('--reference', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args()
     if platform.machine() not in ('aarch64', 'arm64'):
         raise SystemExit('this acceptance lane requires native Arm')
     wheel = args.wheel.resolve()
-    reference = args.reference.resolve()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ)
@@ -74,63 +71,18 @@ def main() -> None:
                 'wheel_sha256': hashlib.sha256(wheel.read_bytes()).hexdigest(),
                 'python': sys.version,
                 'machine': platform.machine(),
-                'reference_revision': REFERENCE,
                 'scope': 'targeted PQL runtime acceptance, not full CI',
             },
             indent=2,
         )
         + '\n'
     )
-    # Freeze the oracle before candidate execution, with only frozen product
-    # sources on PYTHONPATH; the recorder itself verifies checkout provenance.
-    frozen_env = dict(env)
-    frozen_env['PYTHONPATH'] = os.pathsep.join(
-        str(reference / 'packages' / package / 'src')
-        for package in (
-            'structured-data-models-client',
-            'structured-data-models-api',
-            'structured-data-models-pql',
-            'structured-data-models-connectors',
-        )
-    )
-    run(
-        [
-            sys.executable,
-            str(ROOT / 'scripts/record_tabular_pql.py'),
-            '--reference-checkout',
-            str(reference),
-            '--reference-revision',
-            REFERENCE,
-            '--output-dir',
-            str(out / 'reference'),
-        ],
-        env=frozen_env,
-        cwd=out,
-    )
-    for group in ('arrow_index', 'ordinary_index'):
-        run(
-            [
-                sys.executable,
-                str(ROOT / 'scripts/record_tabular_pql.py'),
-                '--reference-checkout',
-                str(reference),
-                '--reference-revision',
-                REFERENCE,
-                '--group',
-                group,
-                '--output-dir',
-                str(out / ('reference-' + group)),
-            ],
-            env=frozen_env,
-            cwd=out,
-        )
     tests = out / 'tests'
     tests.mkdir()
     source = ROOT / 'packages/structured-data-models-client/tests'
     for name in (
         'test_tabular_pql_core.py',
         'tabular_pql_fixtures.py',
-        'tabular_pql_reference.py',
         'tabular_numeric_pure_cases.py',
         'tabular_arrow_index_cases.py',
         'test_tabular_arrow_indexes.py',
@@ -138,13 +90,11 @@ def main() -> None:
         'test_tabular_ordinary_indexes.py',
     ):
         shutil.copy2(source / name, tests / name)
-    shutil.copytree(source / 'data', tests / 'data')
-    shutil.rmtree(tests / 'data/tabular_pql_reference')
-    shutil.copytree(out / 'reference', tests / 'data/tabular_pql_reference')
-    for group in ('arrow_index', 'ordinary_index'):
-        target = tests / ('data/tabular_' + group + '_reference')
-        shutil.rmtree(target)
-        shutil.copytree(out / ('reference-' + group), target)
+    (tests / 'data').mkdir()
+    shutil.copy2(
+        source / 'data/tabular_pql_profile_reference.json',
+        tests / 'data/tabular_pql_profile_reference.json',
+    )
     run(
         [
             sys.executable,

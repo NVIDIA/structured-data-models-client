@@ -176,6 +176,8 @@ def read_table(
     ):
         cursor, owned = _query_handle(connection)
         try:
+            if _is_duckdb(cursor):
+                return _read_duckdb(cursor, sql)
             with driver_guard(
                 'QUERY_FAILED',
                 'query execution failed',
@@ -216,6 +218,37 @@ def read_table(
             if owned:
                 with suppress(Exception):
                     cursor.close()
+
+
+def _is_duckdb(handle: Any) -> bool:
+    r"""Whether ``handle`` is a DuckDB connection, without importing DuckDB."""
+    duckdb = sys.modules.get('duckdb')
+    return duckdb is not None and isinstance(handle, duckdb.DuckDBPyConnection)
+
+
+def _read_duckdb(connection: Any, sql: str) -> pd.DataFrame:
+    r"""Reads a DuckDB result through a relation, not the DB-API cursor.
+
+    DuckDB 2.0 warns that Arrow from a DB-API result is an extra copy. A
+    statement that returns no result reads as an empty frame.
+    """
+    with driver_guard(
+        'QUERY_FAILED',
+        'query execution failed',
+        sql=sql,
+        type_error_is_the_caller_s=False,
+    ):
+        relation = connection.sql(sql)
+        arrow_table = None if relation is None else relation.to_arrow_table()
+    if arrow_table is None:
+        return pd.DataFrame()
+    with driver_guard(
+        'QUERY_FAILED',
+        'reading the result failed',
+        sql=sql,
+        type_error_is_the_caller_s=False,
+    ):
+        return _arrow_to_pandas(arrow_table)
 
 
 def _own_transaction(connection: Any) -> AbstractContextManager[Any]:

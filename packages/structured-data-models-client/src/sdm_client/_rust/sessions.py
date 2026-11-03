@@ -9,8 +9,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec, direct, results
+from sdm_client._rust import (
+    NativeBoundaryError,
+    codec,
+    direct,
+    direct_options,
+    results,
+)
 from sdm_client._rust.run import run
 
 
@@ -48,7 +53,9 @@ def close(fitted: Any) -> None:
         if not isinstance(endpoint, dict) or set(endpoint) != {
             'delete_session'
         }:
-            raise RouteError('session close received an unexpected endpoint')
+            raise NativeBoundaryError(
+                'session close received an unexpected endpoint'
+            )
         fitted._client._transport.delete_session(
             endpoint['delete_session']['session_id']
         )
@@ -121,10 +128,11 @@ def send(
     the shared response reader or creation-reply observations afterwards.
     """
     observed: dict[str, Any] = {}
+    primitive = inference is None or direct_options.can_encode(inference)
 
     def transmit(target: str | dict[str, Any], body: bytes) -> bytes:
         native = json.loads(body)
-        if 'inference' in native:
+        if 'inference' in native and not primitive:
             native['inference'] = inference
         observed['payload'] = native
         if target == 'create_session':
@@ -134,12 +142,23 @@ def send(
                 target['session_predict']['session_id'], native
             )
         else:
-            raise RouteError('unexpected session transport endpoint')
+            raise NativeBoundaryError('unexpected session transport endpoint')
         return b'{}'
 
     run(
         {'op': 'send_tabular_session', 'input': 1, 'payload': 2},
-        {1: codec.attachment({'endpoint': endpoint, 'payload': 2}), 2: payload},
+        {
+            1: codec.attachment(
+                {
+                    'endpoint': endpoint,
+                    'payload': 2,
+                    'inference': direct_options.encode(inference)
+                    if inference is not None and primitive
+                    else None,
+                }
+            ),
+            2: payload,
+        },
         model_endpoints=transmit,
     )
     return observed['reply'], observed['payload']
@@ -198,7 +217,10 @@ def fit(
     payload = bytes(finished.take(prepared['payload']))
     _report_held_back(prepared['held_back'], prepared['named_holdout_keys'])
     try:
-        created, sent = send(client, 'create_session', payload)
+        options = direct_options.observe(request.inference, direct._call)
+        created, sent = send(
+            client, 'create_session', payload, inference=options
+        )
     except Exception as error:
         from sdm_client.client import _SESSIONS_UNSUPPORTED
 

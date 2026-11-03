@@ -2,36 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T1.33's type set through real DuckDB on `rust-host`, held from outside
-//! the implementation (the package's independent test author) to
-//! `contract/type-set-vectors.json`.
-//!
-//! `sdm-host`'s `tests/t133_type_set.rs` holds the core to each vector with
-//! a column built as Arrow. This file holds the route a user takes: each
-//! vector and `reached` row with a `witness` (the DuckDB statements, after
-//! `shop`'s, that add a column `f` of the type to `users`, under the
-//! session setting that hands the type over) runs through this host's
-//! DuckDB provider as `nested.list-int` does; its `describe_source` is
-//! held (a run that goes on is held to nothing more here). The
-//! answer must be the row's `inference`: `f` described with its data type
-//! (as the wire names it: `int64`, `float64`, `string`, `bool`,
-//! `timestamp[us]` for a date or a time), left out with the core's
-//! `COLUMNS_LEFT_OUT` warning naming it, or the refusal with its code (and
-//! rule, for `UNSUPPORTED_REQUEST`). A session setting changes nothing
-//! else: on a connection with `arrow_lossless_conversion`, which hands the
-//! catalog's own booleans over as `arrow.bool8`, every table is described
-//! (the orchestrator's decision of 2026-10-14: the catalog read is made
-//! robust to the setting, not a new refusal), a plain column as it is
-//! without the setting, and a boolean read as one (`lossless.boolean`).
-//!
-//! Gating: `contract/tests/t133p2-pending.json`'s
-//! `pending["rust-host-duckdb"]` lists the rows that failed here when the
-//! test was written. Each must still fail (strict: one that passes must be
-//! taken out of the list), and the list may only shrink: it stays within
-//! `authored["rust-host-duckdb"]`. The implementer removes ids as they
-//! pass and changes nothing else of this file or the vectors.
+//! Type inference through the real DuckDB provider.
+//! Witness SQL constructs each supported fixture type, including lossless Arrow extensions.
+//! Every observed description, omission warning or named refusal must match its explicit vector.
 
-use std::collections::BTreeSet;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 
@@ -39,9 +13,6 @@ use sdm_testkit::bases;
 use sdm_testkit::case::{self, Case};
 use sdm_testkit::host::{self, Answer, Observed};
 use serde_json::{Value, json};
-
-const PENDING: &str = "contract/tests/t133p2-pending.json";
-const GROUP: &str = "rust-host-duckdb";
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -64,15 +35,6 @@ fn witnessed() -> Vec<Value> {
         .chain(all["reached"].as_array().unwrap())
         .filter(|row| row.get("witness").is_some_and(|w| !w.is_null()))
         .cloned()
-        .collect()
-}
-
-fn ids(value: &Value) -> BTreeSet<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_owned())
         .collect()
 }
 
@@ -177,23 +139,6 @@ fn the_case(template: &Case, row: &Value) -> Case {
 }
 
 #[test]
-fn the_pending_list_only_shrinks() {
-    let pending = read_json(PENDING);
-    let now = ids(&pending["pending"][GROUP]);
-    let authored = ids(&pending["authored"][GROUP]);
-    assert!(
-        now.is_subset(&authored),
-        "pending ids added: {:?}",
-        now.difference(&authored)
-    );
-    let all: BTreeSet<String> = witnessed()
-        .iter()
-        .map(|row| row["id"].as_str().unwrap().to_owned())
-        .collect();
-    assert!(now.is_subset(&all), "pending ids that are no witnessed row");
-}
-
-#[test]
 fn each_witnessed_type_through_duckdb_is_described_as_its_row_says() {
     let contract = root().join("contract");
     let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
@@ -204,11 +149,9 @@ fn each_witnessed_type_through_duckdb_is_described_as_its_row_says() {
         .case
         .clone();
     let bases = bases::load(&contract.join("bases.yaml")).unwrap();
-    let pending = ids(&read_json(PENDING)["pending"][GROUP]);
     let rows = witnessed();
     assert!(rows.len() > 50, "{} witnessed rows", rows.len());
     let mut failures = Vec::new();
-    let mut passing_but_pending = Vec::new();
     for row in &rows {
         let id = row["id"].as_str().unwrap();
         let want = wanted(row);
@@ -218,17 +161,10 @@ fn each_witnessed_type_through_duckdb_is_described_as_its_row_says() {
             Ok(Err(failure)) => json!({"outcome": "host failure", "why": failure.to_string()}),
             Err(payload) => json!({"outcome": "host panic", "why": panic_text(payload.as_ref())}),
         };
-        match (got == want, pending.contains(id)) {
-            (true, true) => passing_but_pending.push(id.to_owned()),
-            (false, false) => failures.push(format!("{id}: got {got}, want {want}")),
-            _ => {}
+        if got != want {
+            failures.push(format!("{id}: got {got}, want {want}"));
         }
     }
-    assert!(
-        passing_but_pending.is_empty(),
-        "these pass now: take them out of {PENDING}'s pending[\"{GROUP}\"]: \
-         {passing_but_pending:?}"
-    );
     assert!(
         failures.is_empty(),
         "{} rows differ:\n{}",

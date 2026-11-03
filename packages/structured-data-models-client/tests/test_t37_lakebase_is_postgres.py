@@ -2,32 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Lakebase is Postgres (T3.7): a ``lakebase()`` connection is a psycopg
-connection, read as a ``PostgresSource``, and the one change on the core
-route is that every Postgres source given no schema reads its session's
-schema once per run and names it in every statement, as the old client
-reads ``current_schema()`` once and writes ``"schema"."table"`` into every
-read (``old-behaviour/T3.7-lakebase.md``, rows 16, 21 and 38).
-
-Each case runs through the public API on a local Postgres, with the session's
-search path set to a schema of the test's own and no schema given the
-source, on the old route and with every core route forced:
-
-- a table a temporary table of its name shadows is read from the schema, as
-  the old client reads it, where the core refused it before (row 21);
-- every statement the core sends names the schema, and the session's schema
-  is asked once per run;
-- a session whose search path holds no schema is refused in the old
-  client's words (row 17);
-- a dotted name is one table in the schema, refused on both routes as the
-  old client refuses it (rows 20 and 22);
-- a session switched to another schema between two materializes is read
-  where it now points, the core keeping nothing between runs (plan B,
-  register P3A-1), where the old client reads where it first read.
-
-Where ``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
-not set, there is nothing to hold.
-"""
+"""Postgres session schemas are resolved and qualified afresh for every run."""
 
 from __future__ import annotations
 
@@ -35,27 +10,15 @@ import json
 import os
 import uuid
 import warnings
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from sdm_connectors import PostgresSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError, _routing
+from sdm_client import PredictiveQuery, Schema, StructuredDataError
 
-CORE = ','.join(sorted(_routing.CORE_ROUTED))
 QUERY = 'PREDICT users.target FOR EACH users.id'
-
-
-def _on_both_routes(
-    monkeypatch: pytest.MonkeyPatch, call: Callable[[], Any]
-) -> dict[str, Any]:
-    r"""``call``'s answer on the old route and with every core route forced."""
-    answers = {}
-    for route, forced in (('old', ''), ('core', CORE)):
-        monkeypatch.setenv(_routing.ENVIRONMENT, forced)
-        answers[route] = call()
-    return answers
 
 
 @pytest.fixture
@@ -139,39 +102,23 @@ def _recording(connection: Any) -> list[str]:
     return statements
 
 
-def test_a_table_a_temporary_table_shadows_is_read_from_the_schema(
-    monkeypatch: pytest.MonkeyPatch, connection: Any
-) -> None:
-    # A temporary table of the same name, first on the session's search
-    # path: an unqualified name would read it, a qualified one never does.
+def test_temporary_table_does_not_shadow_qualified_source(connection):
     connection.execute('CREATE TEMPORARY TABLE users (id BIGINT, other TEXT)')
     connection.execute("INSERT INTO users VALUES (1, 'temporary')")
-
-    def read() -> Any:
-        schema = _described(connection)
-        return sorted(schema['users'].columns), _payload(schema)
-
-    answers = _on_both_routes(monkeypatch, read)
-    assert answers['core'] == answers['old']
-    columns, payload = answers['core']
-    assert columns == ['id', 'target']
-    assert 'temporary' not in json.dumps(payload)
+    schema = _described(connection)
+    assert sorted(schema['users'].columns) == ['id', 'target']
+    assert 'temporary' not in json.dumps(_payload(schema))
 
 
-def test_every_statement_names_the_schema_and_the_session_is_asked_once_a_run(
-    monkeypatch: pytest.MonkeyPatch, connection: Any
-) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+def test_every_statement_names_schema_and_resolves_it_once_per_run(connection):
     statements = _recording(connection)
     schema = _described(connection)
     described = list(statements)
     _payload(schema)
-    materialized = statements[len(described) :]
-
-    for run in (described, materialized):
+    for run in (described, statements[len(described) :]):
         assert run
         asking = [s for s in run if 'current_schema' in s]
-        assert len(asking) == 1, asking
+        assert len(asking) == 1
         for statement in run:
             assert 'search_path' not in statement
             assert 'regclass' not in statement
@@ -181,66 +128,40 @@ def test_every_statement_names_the_schema_and_the_session_is_asked_once_a_run(
                 ), statement
 
 
-def test_a_session_with_no_schema_is_refused_in_the_old_client_s_words(
-    monkeypatch: pytest.MonkeyPatch, connection: Any
-) -> None:
+def test_missing_session_schema_names_the_remedy(connection):
     connection.execute('SET search_path TO no_such_schema')
-
-    def refused() -> tuple[str, str]:
-        with pytest.raises((StructuredDataError, ValueError)) as caught:
-            _described(connection)
-        return type(caught.value).__name__, str(caught.value)
-
-    answers = _on_both_routes(monkeypatch, refused)
-    words = (
-        "No current 'schema' set. Please specify the PostgreSQL schema manually"
-    )
-    # The old client raises the engine's own ValueError; the core refuses by
-    # name, INVALID_REQUEST, in the same words, as a StructuredDataError
-    # says them, after its code (register P3E-6).
-    assert answers['old'] == ('ValueError', words)
-    assert answers['core'] == (
-        'StructuredDataError',
-        f'[INVALID_REQUEST] {words}',
+    with pytest.raises(StructuredDataError) as caught:
+        _described(connection)
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert str(caught.value) == (
+        "[INVALID_REQUEST] No current 'schema' set. "
+        'Please specify the PostgreSQL schema manually'
     )
 
 
-def test_a_dotted_name_is_one_table_in_the_schema_on_both_routes(
-    monkeypatch: pytest.MonkeyPatch, connection: Any
-) -> None:
-    def refused() -> str:
-        with pytest.raises(StructuredDataError) as caught:
-            _described(connection, {'users': 'shop.users'})
-        return str(caught.value)
-
-    answers = _on_both_routes(monkeypatch, refused)
-    assert answers['core'] == answers['old']
+def test_dotted_name_is_a_literal_table_name(connection):
+    with pytest.raises(StructuredDataError) as caught:
+        _described(connection, {'users': 'shop.users'})
     assert (
         "Table 'shop.shop.users' does not exist in the PostgreSQL database"
-        in answers['core']
+        in str(caught.value)
     )
 
 
-def test_a_session_switched_to_another_schema_is_read_where_it_now_points(
-    monkeypatch: pytest.MonkeyPatch, connection: Any
-) -> None:
-    # Another schema whose users' targets are ten times shop's.
+def test_changed_search_path_is_observed_at_next_materialize(connection):
     _users(connection, 'outlet', 10)
-
-    def two_runs() -> tuple[Any, Any]:
-        connection.execute('SET search_path TO shop')
-        schema = _described(connection)
-        first = _payload(schema)
-        connection.execute('SET search_path TO outlet')
-        return first, _payload(schema)
-
-    answers = _on_both_routes(monkeypatch, two_runs)
-    # The old client reads where it first read; the core reads each run's
-    # session as it stands (register P3A-1).
-    old_first, old_second = answers['old']
-    assert old_second == old_first
-    core_first, core_second = answers['core']
-    assert core_first == old_first
-    assert core_second != core_first
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    assert core_second == _payload(_described(connection))
+    schema = _described(connection)
+    first = _payload(schema)
+    connection.execute('SET search_path TO outlet')
+    second = _payload(schema)
+    assert second == _payload(_described(connection))
+    assert len(first) == len(second) == 1
+    target = first[0]['task']['target']['column_name']
+    for before, after in zip(first, second, strict=True):
+        old = before['context']['instance_table']
+        new = after['context']['instance_table']
+        position = old['columns'].index(target)
+        assert old['columns'] == new['columns']
+        assert [row[position] for row in new['rows']] == [
+            10 * row[position] for row in old['rows']
+        ]

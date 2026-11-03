@@ -819,6 +819,12 @@ pub fn body(
         Some(_) => return Err(bad_payload("metadata")),
     };
     metadata.set("request_id", Value::text(request_id));
+    // This diagnostic field has a 1024-character server limit. Keep the
+    // original query in the request; shorten only the transmitted copy.
+    if let Some(Value::Text(query)) = metadata.get("source_query") {
+        let shortened: String = query.chars().take(1024).collect();
+        metadata.set("source_query", Value::text(&shortened));
+    }
     envelope.set("metadata", metadata);
 
     // Only the inference options the caller set, which the model reads: one
@@ -827,6 +833,7 @@ pub fn body(
     // none (the reference's 26ecdd28: a deployment applies its own defaults
     // to a request that carries none, and the SDM backends refuse any
     // non-empty `inference_config`).
+    crate::inference::envelope(&mut envelope)?;
     match envelope.get("inference") {
         Some(Value::Object(_)) => {
             if let Some(Value::Object(config)) = envelope
@@ -2337,6 +2344,41 @@ pub fn bind_direct(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transmitted_query_respects_character_limit_without_mutating_request() {
+        let query = "é".repeat(1100);
+        let mut payload = sdm_wire::json::read(br#"{"task":{"kind":"regression"}}"#).unwrap();
+        payload.set(
+            "metadata",
+            Value::Object(vec![("source_query".to_owned(), Value::text(&query))]),
+        );
+        let call = body(
+            &payload,
+            RELATIONAL,
+            "request",
+            &["prediction".to_owned()],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            call.get("metadata")
+                .unwrap()
+                .get("source_query")
+                .unwrap()
+                .as_text(),
+            Some("é".repeat(1024).as_str())
+        );
+        assert_eq!(
+            payload
+                .get("metadata")
+                .unwrap()
+                .get("source_query")
+                .unwrap()
+                .as_text(),
+            Some(query.as_str())
+        );
+    }
 
     #[test]
     fn direct_tabular_support_does_not_expand_gathered_body_tasks() {

@@ -480,15 +480,14 @@ def test_two_schemas_over_the_same_tables_do_not_fight_over_them() -> None:
     """A schema types the key columns of its own tables, and two handed the
     same ones fought: building an unlinked schema retyped a linked schema's
     join key, and checking the linked one retyped the unlinked one's back."""
-    from sdm_client.schema import _infer_table
 
     parent = pd.DataFrame({'id': [1, 2, 3]})
     child = pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         tables = {
-            'p': _infer_table('p', parent),
-            'c': _infer_table('c', child),
+            'p': Schema.from_data({'p': parent}, relationships=[])['p'],
+            'c': Schema.from_data({'c': child}, relationships=[])['c'],
         }
         linked = Schema(tables, [Relationship('c', 'pid', 'p', 'id')])
         unlinked = Schema(tables, [])
@@ -509,13 +508,13 @@ def test_a_table_owns_its_columns_before_it_marks_any_of_them() -> None:
     assigned, so a table built on another's columns typed *those* first, and
     left the table it borrowed them from changed."""
     from sdm_client import Table
-    from sdm_client.schema import _infer_table
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        lent = _infer_table(
-            'lent', pd.DataFrame({'rid': [1, 2, 3], 'v': [10, 20, 30]})
-        )
+        lent = Schema.from_data(
+            {'lent': pd.DataFrame({'rid': [1, 2, 3], 'v': [10, 20, 30]})},
+            relationships=[],
+        )['lent']
     assert lent['v'].stype == 'numerical'
 
     borrowed = Table(
@@ -535,19 +534,20 @@ def test_a_released_key_that_means_a_timestamp_orders_its_table_again() -> None:
     restoring the meaning around that assignment left a table saying it held a
     timestamp while naming no time column, which `check_consistent()`
     accepted and every temporal query then failed on."""
-    from sdm_client.schema import _infer_table
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        table = _infer_table(
-            't',
-            pd.DataFrame(
-                {
-                    'when': ['2024-01-01', '2024-01-02', '2024-01-03'],
-                    'v': [1.0, 2.0, 3.0],
-                }
-            ),
-        )
+        table = Schema.from_data(
+            {
+                't': pd.DataFrame(
+                    {
+                        'when': ['2024-01-01', '2024-01-02', '2024-01-03'],
+                        'v': [1.0, 2.0, 3.0],
+                    }
+                )
+            },
+            relationships=[],
+        )['t']
         schema = Schema({'t': table}, [])
 
     schema['t'].primary_key = 'when'
@@ -568,16 +568,18 @@ def test_a_schema_owns_a_table_that_arrives_from_another_one() -> None:
     schema that is still using it, and typing its key columns for this
     schema retyped them for that one. The same rule a table applies to the
     columns it is handed."""
-    from sdm_client.schema import _infer_table
 
     def tables():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             return {
-                'p': _infer_table('p', pd.DataFrame({'id': [1, 2, 3]})),
-                'c': _infer_table(
-                    'c', pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
-                ),
+                'p': Schema.from_data(
+                    {'p': pd.DataFrame({'id': [1, 2, 3]})}, relationships=[]
+                )['p'],
+                'c': Schema.from_data(
+                    {'c': pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})},
+                    relationships=[],
+                )['c'],
             }
 
     with warnings.catch_warnings():
@@ -601,16 +603,18 @@ def test_a_column_inserted_from_another_schema_is_owned_too() -> None:
     """Owning whole tables did not cover a column inserted through
     `table.columns`: it arrives still belonging to the table it came from, so
     typing it for this schema typed it for that one."""
-    from sdm_client.schema import _infer_table
 
     def tables():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             return {
-                'p': _infer_table('p', pd.DataFrame({'id': [1, 2, 3]})),
-                'c': _infer_table(
-                    'c', pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
-                ),
+                'p': Schema.from_data(
+                    {'p': pd.DataFrame({'id': [1, 2, 3]})}, relationships=[]
+                )['p'],
+                'c': Schema.from_data(
+                    {'c': pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})},
+                    relationships=[],
+                )['c'],
             }
 
     with warnings.catch_warnings():
@@ -634,12 +638,17 @@ def test_owning_columns_does_not_compare_the_frames_inside() -> None:
     """`Table` is a dataclass, so asking `table in (None, self)` asks `==`,
     which compares the frames it holds and raises on any table that has
     one."""
-    from sdm_client.schema import _infer_table
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        one = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
-        other = _infer_table('u', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+        one = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})},
+            relationships=[],
+        )['t']
+        other = Schema.from_data(
+            {'u': pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})},
+            relationships=[],
+        )['u']
 
     other.columns['v'] = one.columns['v']
     other._own_columns()
@@ -652,18 +661,25 @@ def test_two_tables_can_be_compared_without_raising() -> None:
     DataFrame is a frame of booleans, so asking whether two tables are equal
     raised `ValueError: The truth value of a DataFrame is ambiguous` from
     inside pandas, naming nothing the caller wrote."""
-    from sdm_client.schema import _infer_table
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        one = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
-        same = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
-        other_rows = _infer_table(
-            't', pd.DataFrame({'id': [1, 3], 'v': [1.0, 2.0]})
-        )
-        other_name = _infer_table(
-            'u', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})
-        )
+        one = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})},
+            relationships=[],
+        )['t']
+        same = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})},
+            relationships=[],
+        )['t']
+        other_rows = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 3], 'v': [1.0, 2.0]})},
+            relationships=[],
+        )['t']
+        other_name = Schema.from_data(
+            {'u': pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})},
+            relationships=[],
+        )['u']
 
     assert one == same
     assert one != other_rows

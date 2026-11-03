@@ -36,9 +36,6 @@ U+FFFD, and nothing else differing. The serving client's plain answer
 The core's own reader on the same byte forms is
 ``rust/crates/sdm-core/tests/t216_answer_encoding.rs``.
 
-Gating: ``t216-pending.json``'s ``pending`` names, as ``py:<query>.<form>``,
-the tests that failed when written. Each must still fail (strict); once
-one passes it fails, naming itself, until it is taken out.
 """
 
 from __future__ import annotations
@@ -56,7 +53,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RECORDER = ROOT / 'contract/tools/t216_encoding_record.py'
-PENDING = Path(__file__).with_name('t216-pending.json')
+
 PREFIX = 'py:'
 
 
@@ -87,33 +84,6 @@ NAMES = tuple(
 )
 
 
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    key = f'{PREFIX}{name}'
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert key in gating['authored'], f'{key} is not authored'
-    if key not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{key} passes now: take it out of '
-        'contract/tests/t216-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote; this
-    file's authored keys are its scenarios."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    mine = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert mine == {f'{PREFIX}{name}' for name in NAMES}
-
-
 def _replaced(value: Any) -> Any:
     r"""``value`` with each lone surrogate in its texts U+FFFD."""
     if isinstance(value, str):
@@ -137,7 +107,7 @@ def vectors() -> dict[str, Any]:
 @functools.cache
 def core() -> dict[str, Any]:
     r"""python-core's observation of every scenario, on the core routes."""
-    return recorder().observe(core=True)
+    return recorder().observe()
 
 
 def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
@@ -242,7 +212,7 @@ def test_an_answer_in_each_encoding_is_read_as_the_reference_reads_it(
             f'{json.dumps(want)[:400]}'
         )
 
-    held(name, check)
+    check()
 
 
 @pytest.mark.parametrize(
@@ -270,4 +240,4 @@ def test_a_lone_surrogate_in_an_answer_is_read_as_u_fffd(name: str) -> None:
             f'surrogates U+FFFD, has {ascii(replaced)[:400]}'
         )
 
-    held(name, check)
+    check()

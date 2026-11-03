@@ -12,7 +12,6 @@
 )]
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use arrow_schema::{
@@ -51,7 +50,9 @@ fn accepted() -> Vec<DataType> {
         DataType::Decimal128(38, 10),
         DataType::Decimal256(76, 38),
         DataType::Utf8,
+        DataType::LargeUtf8,
         DataType::Binary,
+        DataType::LargeBinary,
         DataType::Date32,
         DataType::Timestamp(TimeUnit::Nanosecond, None),
         DataType::Timestamp(TimeUnit::Microsecond, Some("Europe/Berlin".into())),
@@ -82,9 +83,7 @@ fn refused() -> Vec<DataType> {
         DataType::Float16,
         DataType::Decimal32(9, 2),
         DataType::Decimal64(18, 2),
-        DataType::LargeUtf8,
         DataType::Utf8View,
-        DataType::LargeBinary,
         DataType::BinaryView,
         DataType::FixedSizeBinary(16),
         DataType::Date64,
@@ -147,12 +146,12 @@ fn a_type_outside_the_set_is_refused_by_name() {
 fn a_nested_refusal_names_the_path() {
     let data_type = DataType::Struct(Fields::from(vec![field(
         "tags",
-        DataType::List(Arc::new(field("item", DataType::LargeUtf8))),
+        DataType::List(Arc::new(field("item", DataType::Utf8View))),
     )]));
     let err = ColumnType::from_arrow("attrs", &data_type).unwrap_err();
     let fields = serde_json::to_value(&err.fields).unwrap();
     assert_eq!(fields["column"]["v"], "attrs.tags.item");
-    assert_eq!(fields["arrow_type"]["v"], DataType::LargeUtf8.to_string());
+    assert_eq!(fields["arrow_type"]["v"], DataType::Utf8View.to_string());
 }
 
 #[test]
@@ -162,7 +161,7 @@ fn a_field_refuses_fields_its_type_does_not_have() {
     for bad in [
         r#"{"name":"a","type":{"type":"int64","unit":"us"},"nullable":true}"#,
         r#"{"name":"a","type":{"type":"duration","unit":"us","zone":null},"nullable":true}"#,
-        r#"{"name":"a","type":{"type":"large_utf8"},"nullable":true}"#,
+        r#"{"name":"a","type":{"type":"large_utf8","unit":"us"},"nullable":true}"#,
         r#"{"name":"a","type":{"type":"int64"},"nullable":true,"dictionary":false}"#,
     ] {
         assert!(
@@ -274,20 +273,40 @@ fn arrow_decimals_outside_the_limits_are_refused_and_an_empty_zone_is_none() {
 }
 
 #[test]
-fn the_cell_vocabulary_is_the_scope_manifests() {
-    // scope.schema.json's cell id pattern lists the types in this order.
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../docs/design/rust-core/phase-0/scope.schema.json");
-    let schema: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let pattern = schema["properties"]["cells"]["items"]["properties"]["id"]["pattern"]
-        .as_str()
-        .unwrap();
-    let types = pattern
-        .strip_prefix("^(")
-        .and_then(|p| p.split_once(")/"))
-        .unwrap()
-        .0;
-    let from_manifest: Vec<&str> = types.split('|').collect();
-    assert_eq!(cell_types(), from_manifest);
+fn the_cell_vocabulary_is_stable() {
+    assert_eq!(
+        cell_types(),
+        [
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "float32",
+            "float64",
+            "decimal128",
+            "decimal256",
+            "utf8",
+            "large-utf8",
+            "binary",
+            "large-binary",
+            "date32",
+            "timestamp-ns",
+            "timestamp-us",
+            "timestamp-ns-tz",
+            "timestamp-us-tz",
+            "duration-ns",
+            "duration-us",
+            "time64",
+            "list",
+            "struct",
+            "map",
+            "dictionary-utf8",
+            "bool",
+            "null",
+        ]
+    );
 }

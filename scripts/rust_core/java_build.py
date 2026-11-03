@@ -3,18 +3,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Builds and tests the Java library locally (T3.11), as CI's Java jobs do.
+r"""Builds and tests the Java library locally, as CI's Java jobs do.
 
     java_build.py verify    the native with the test-only operations, put
                             where Maven packages it (``java/target/natives/
                             <platform>/``), then ``mvn verify``: every Java
                             test, with the runtime flags, loading it as the
-                            JAR does (affected.py's suite for ``java/**``
-                            and ``rust/bindings/sdm-jni/**``)
+                            JAR does
     java_build.py jar       the same, then the JAR, and prints ``JAR``,
                             ``LIB`` and ``NATIVE`` lines, the arguments of
-                            ``contract/runners/run_java.py`` (handoff.py's
-                            Java legs)
+                            ``contract/runners/run_java.py``
 
 The JDK is ``SDM_JAVA_HOME``, else ``JAVA_HOME``; Maven is ``SDM_MAVEN``,
 else ``mvn`` on the path. Either missing exits 2, naming it. Cargo builds
@@ -30,12 +28,18 @@ import platform
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 JAVA = ROOT / 'java'
 POM = JAVA / 'pom.xml'
-JAR = JAVA / 'target' / 'structured-data-models-client-1.0.0.jar'
+VERSION = (
+    ET.parse(POM)
+    .getroot()
+    .findtext('{http://maven.apache.org/POM/4.0.0}version')
+)
+JAR = JAVA / 'target' / f'structured-data-models-client-{VERSION}.jar'
 
 
 class Missing(Exception):
@@ -45,7 +49,8 @@ class Missing(Exception):
 def java_home() -> Path:
     for name in ('SDM_JAVA_HOME', 'JAVA_HOME'):
         value = os.environ.get(name)
-        if value and (Path(value) / 'bin' / 'java').is_file():
+        executable = 'java.exe' if sys.platform == 'win32' else 'java'
+        if value and (Path(value) / 'bin' / executable).is_file():
             return Path(value)
     raise Missing('no JDK: set SDM_JAVA_HOME (or JAVA_HOME) to a JDK 17 or 21')
 
@@ -58,11 +63,17 @@ def maven() -> str:
 
 
 def native_name() -> str:
+    if sys.platform == 'win32':
+        return 'sdm_jni.dll'
     return 'libsdm_jni.dylib' if sys.platform == 'darwin' else 'libsdm_jni.so'
 
 
 def platform_name() -> str:
-    os_name = 'macos' if sys.platform == 'darwin' else 'linux'
+    os_name = {'darwin': 'macos', 'win32': 'windows', 'linux': 'linux'}.get(
+        sys.platform
+    )
+    if os_name is None:
+        raise Missing(f'unsupported operating system: {sys.platform}')
     machine = platform.machine().lower()
     arch = {'amd64': 'x86_64', 'arm64': 'aarch64'}.get(machine, machine)
     return f'{os_name}-{arch}'

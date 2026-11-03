@@ -15,7 +15,7 @@ import pytest
 from psycopg import sql
 from sdm_connectors import PostgresSource
 
-from sdm_client import PredictiveQuery, Schema, _routing
+from sdm_client import PredictiveQuery, Schema
 
 
 @pytest.mark.parametrize('source_type', ['REAL', 'DOUBLE PRECISION'])
@@ -25,10 +25,6 @@ def test_fractional_floating_entity_key_materializes_its_own_row(
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
     if not dsn:
         pytest.fail('needs the local Postgres test service')
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(_routing.FROM_SOURCE_POSTGRES + _routing.MATERIALIZE_POSTGRES),
-    )
     namespace = 't39_float_key_' + uuid.uuid4().hex[:12]
     with psycopg.connect(dsn, autocommit=True) as connection:
         connection.execute(

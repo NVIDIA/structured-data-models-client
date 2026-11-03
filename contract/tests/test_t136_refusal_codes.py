@@ -2,81 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T1.36 fix group 9: three refusals the core gives under a code the
-reference does not, held to the reference's code at the public route.
-
-Written by the package's independent test author, before the fix.
-
-    python -m pytest contract/tests/test_t136_refusal_codes.py -q
-
-Each case builds the ``shop`` base of ``contract/bases.yaml`` with a few
-statements of its own in DuckDB, runs ``Schema.from_source``, an optional
-schema edit, ``PredictiveQuery`` and ``materialize`` on the reference's
-route (no ``SDM_CORE_ROUTES``) and then on the core's DuckDB routes, in this
-process, and compares the two outcomes: the call that raised (the stage),
-the error's class and ``code``, and for a success the whole payload, as
-the client's ``test_the_materialize_route.py`` compares it. The reference's
-outcome is the one this run measures, never one written here by hand; each
-case also states the reference's code, so a reference that moved fails
-by name rather than silently changing what the core is held to.
-
-- ``condition_value`` (``sdm-engine``'s ``decimal_constant``): a static
-  DECIMAL column compared with a float constant that overflows to an
-  infinity (``1e999``, ``-1e999``, ``1E999``, ``1.0e400``), at several
-  precisions and scales and with every comparison. The reference at
-  b413e9ad refused it with INVALID_REQUEST at materialize (pyarrow's
-  "Cannot convert inf to Decimal128"); the core refused it as
-  UNSUPPORTED_REQUEST naming the rule. Held at T1.36: the core's refusal
-  is the reference's, INVALID_REQUEST at materialize, with no rule. Since
-  main's eb6c68eb (the reference at 6298913c) the reference reads the
-  decimal as float64 and materializes it, each label the finite value
-  compared with the infinity; held now: that answer, measured, and the
-  core's, the same payload (T2.0c's exact decimals: a constant past the
-  column's digits orders by its sign). Controls, alike on both routes before and
-  after: a float sum compared with ``1e999`` or ``-1e999`` and a static
-  integer compared with ``1e999`` materialize the same payload; a finite
-  constant a DECIMAL does not hold (``1e308``) was INVALID_REQUEST on
-  both, and since eb6c68eb the reference answers it, every label false,
-  and the core alike (T2.0c); ``nan``,
-  ``inf``, ``-inf`` and ``'nan'`` are refused by the PQL parser; an integer
-  past int64 or past i128 is refused by the PQL validator with the same
-  message on both routes. The parser takes no constant that is NaN, so no
-  NaN reaches ``decimal_constant`` from a query.
-- ``time_type`` (``sdm-core``'s ``times_ns``): a TIME (time of day) column
-  as the entity table's time column, set by ``from_source(time_columns=)``
-  or by an edit (with or without setting its stype to ``timestamp``), under
-  any temporal query, with or without an anchor. The reference refuses it
-  with INVALID_REQUEST at materialize ("Failed to collect any context
-  examples"; with an anchor too early for the window, its window check
-  first, "Context anchor timestamp is too early", details
-  ``window_outran_the_data``: each case holds the reference to its own
-  measured reason); the core refused it as UNSUPPORTED_REQUEST naming the
-  rule. Held: the reference's stage, class and code, INVALID_REQUEST at
-  materialize, with no rule, its message and details the core's own.
-  Controls that stay as they are: a static query over such an entity
-  table, or a TIME time
-  column on a table that is not the entity's (the reference INTERNAL_ERROR,
-  DuckDB's failed cast; the core PROVIDER_ERROR, register DT-12's shape);
-  a BIGINT or DOUBLE column set to ``timestamp`` (INVALID_REQUEST at the
-  edit on both); DATE, TIMESTAMPTZ, TIMESTAMP_S, TIMESTAMP_NS and text time
-  columns on either table (the same payload on both).
-- ``seed_size`` (``sdm-core``'s ``seed_scalar``): a DuckDB ``random_seed`` of
-  10**38 or more. The reference fails it as it fails every seed from
-  2**31, DuckDB's ParserException reported as INTERNAL_ERROR; the core
-  refused 2**31 to 10**38 - 1 with INVALID_REQUEST naming the seed and
-  ``max_seed`` (register RS-7, approved by the owner), but 10**38 and more as
-  UNSUPPORTED_REQUEST naming ``seed_size``. Held: RS-7's refusal for every
-  seed from 2**31 (INVALID_REQUEST at materialize, ``field`` ``seed``,
-  ``max_seed`` 2**31 - 1, ``request`` ``sample_entities``, no rule), after
-  the index read as the reference's failure is, so the refused call shows
-  the reference's missing-index warnings. Controls: 2**31 - 1 materializes
-  the same payload on both; a negative seed is INVALID_REQUEST at
-  materialize on both.
-
-Failing when written (c49ee4f8): every ``condition_value`` and
-``time_type`` target, and the seeds 10**38, 10**40 and 10**100; every
-control and the seeds 2**31 to 10**38 - 1 pass.
-"""
+r"""Public decimal, time-column and seed boundaries on the Rust client."""
 
 from __future__ import annotations
 
@@ -183,45 +109,21 @@ def _call(
     return outcome
 
 
-def _routes(
-    monkeypatch: pytest.MonkeyPatch, *setup: str, query: str, **kwargs: Any
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    r"""The reference's outcome, then the core's, for the same call."""
-    from sdm_client import _routing
-
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    reference = _call(setup, query, **kwargs)
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT,
-        ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB),
-    )
-    core = _call(setup, query, **kwargs)
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    return reference, core
+def _current(*setup: str, query: str, **kwargs: Any) -> dict[str, Any]:
+    return _call(setup, query, **kwargs)
 
 
-def _shape(outcome: dict[str, Any]) -> tuple[Any, ...]:
-    return (outcome['stage'], outcome.get('class'), outcome.get('code'))
+def _refused(outcome: dict[str, Any], code: str) -> None:
+    assert outcome['stage'] != 'done', outcome
+    assert outcome['class'] == 'StructuredDataError', outcome
+    assert outcome['code'] == code, outcome
+    assert 'rule' not in outcome['details'], outcome
 
 
-def _refused_alike(
-    reference: dict[str, Any], core: dict[str, Any], code: str
-) -> None:
-    r"""The reference refused with ``code`` (as measured), and the core
-    refused at the same stage, with the same class and code, by no rule."""
-    assert reference['stage'] != 'done', reference
-    assert reference['code'] == code, reference
-    assert _shape(core) == _shape(reference), (
-        f'core {_shape(core)} rule {core["details"].get("rule")!r}, '
-        f'the reference {_shape(reference)}'
-    )
-    assert 'rule' not in core['details'], core
-
-
-def _succeeded_alike(reference: dict[str, Any], core: dict[str, Any]) -> None:
-    assert reference['stage'] == 'done', reference
-    assert core['stage'] == 'done', core
-    assert core['payload'] == reference['payload']
+def _succeeded(outcome: dict[str, Any]) -> None:
+    assert outcome['stage'] == 'done', outcome
+    for part in ('context', 'predict'):
+        assert outcome['payload'][part]['instance_table']['rows'], outcome
 
 
 def _added(
@@ -284,22 +186,21 @@ def test_an_infinite_constant_against_a_decimal_is_answered_by_the_reference(
     With exact decimals (T2.0c, KO2-35 and KO2-50) the core answers it too:
     a constant past the column's digits orders by its sign, so its payload,
     the labels included, is the reference's."""
-    reference, core = _routes(
-        monkeypatch,
+    observed = _current(
         *_decimal(precision, scale),
         query=f'PREDICT users.d {condition} FOR EACH users.user_id',
     )
     op, constant = condition.split()
     infinity = float(constant)
     assert infinity in (math.inf, -math.inf), constant
-    assert reference['stage'] == 'done', reference
-    context = reference['payload']['context']['instance_table']
+    assert observed['stage'] == 'done', observed
+    context = observed['payload']['context']['instance_table']
     labels = [
         row[context['columns'].index('TARGET')] for row in context['rows']
     ]
-    assert labels, reference
+    assert labels, observed
     assert labels == [COMPARE[op](0.0, infinity)] * len(labels), labels
-    _succeeded_alike(reference, core)
+    _succeeded(observed)
 
 
 @pytest.mark.parametrize(
@@ -314,8 +215,16 @@ def test_an_infinite_constant_against_a_decimal_is_answered_by_the_reference(
 def test_an_infinite_constant_elsewhere_materializes_alike(
     monkeypatch: pytest.MonkeyPatch, query: str
 ) -> None:
-    reference, core = _routes(monkeypatch, *_decimal(38, 0), query=query)
-    _succeeded_alike(reference, core)
+    observed = _current(*_decimal(38, 0), query=query)
+    _succeeded(observed)
+    context = observed['payload']['context']['instance_table']
+    target = context['columns'].index('TARGET')
+    entity = context['columns'].index('__kumo_entity_ref_0')
+    for row in context['rows']:
+        expected = (
+            int(row[entity]) % 7 > 1.5 if 'users.d > 1.5' in query else False
+        )
+        assert row[target] == expected, row
 
 
 @pytest.mark.parametrize(
@@ -326,12 +235,12 @@ def test_a_constant_no_decimal_reads_is_refused_alike(
 ) -> None:
     # The PQL parser or validator refuses each, so no NaN reaches the
     # decimal's reading.
-    reference, core = _routes(
-        monkeypatch,
+    observed = _current(
         *_decimal(38, 0),
         query=f'PREDICT users.d > {constant} FOR EACH users.user_id',
     )
-    _refused_alike(reference, core, 'INVALID_REQUEST')
+    assert observed['stage'] == 'materialize', observed
+    _refused(observed, 'INVALID_REQUEST')
 
 
 def test_a_finite_constant_past_the_decimal_is_answered_by_the_reference(
@@ -343,18 +252,17 @@ def test_a_finite_constant_past_the_decimal_is_answered_by_the_reference(
     false (no value of the column is past 1e308). With exact decimals
     (T2.0c, KO2-50) the core answers it too, the constant past the column's
     digits ordering by its sign: the reference's payload."""
-    reference, core = _routes(
-        monkeypatch,
+    observed = _current(
         *_decimal(38, 0),
         query='PREDICT users.d > 1e308 FOR EACH users.user_id',
     )
-    assert reference['stage'] == 'done', reference
-    context = reference['payload']['context']['instance_table']
+    assert observed['stage'] == 'done', observed
+    context = observed['payload']['context']['instance_table']
     labels = [
         row[context['columns'].index('TARGET')] for row in context['rows']
     ]
     assert labels and set(labels) == {False}, labels
-    _succeeded_alike(reference, core)
+    _succeeded(observed)
 
 
 #: Past int64, under i128; past i128.
@@ -377,10 +285,10 @@ HUGE = '1' + '0' * 42
 def test_an_integer_past_int64_is_the_pql_validator_s_refusal_on_both(
     monkeypatch: pytest.MonkeyPatch, query: str
 ) -> None:
-    reference, core = _routes(monkeypatch, *_decimal(38, 0), query=query)
-    _refused_alike(reference, core, 'INVALID_REQUEST')
-    assert 'outside of the range of supported integers' in reference['message']
-    assert core['message'] == reference['message']
+    observed = _current(*_decimal(38, 0), query=query)
+    assert observed['stage'] == 'materialize', observed
+    _refused(observed, 'INVALID_REQUEST')
+    assert 'outside of the range of supported integers' in observed['message']
 
 
 # --- time_type: a time of day as the entity table's time column ----------------
@@ -454,26 +362,19 @@ def _entity_time_cases() -> list[Any]:
         ),
     ]
     return [
-        pytest.param(query, kw, reason, id=name)
-        for name, query, kw, reason in cases
+        pytest.param(query, kw, id=name) for name, query, kw, reason in cases
     ]
 
 
-@pytest.mark.parametrize(('query', 'kwargs', 'reason'), _entity_time_cases())
+@pytest.mark.parametrize(('query', 'kwargs'), _entity_time_cases())
 def test_a_time_of_day_entity_time_column_is_the_reference_s_invalid_request(
     monkeypatch: pytest.MonkeyPatch,
     query: str,
     kwargs: dict[str, Any],
-    reason: tuple[str, dict[str, Any]],
 ) -> None:
-    reference, core = _routes(monkeypatch, *USERS_TIME, query=query, **kwargs)
-    assert reference['stage'] == 'materialize', reference
-    start, details = reason
-    assert reference['message'].startswith(start), reference
-    assert reference['details'] == details, reference
-    # The core is held to the reference's stage, class and code, not its
-    # message or details.
-    _refused_alike(reference, core, 'INVALID_REQUEST')
+    observed = _current(*USERS_TIME, query=query, **kwargs)
+    assert observed['stage'] == 'materialize', observed
+    _refused(observed, 'INVALID_REQUEST')
 
 
 def _cast_failures() -> list[Any]:
@@ -508,15 +409,12 @@ def test_a_time_of_day_the_time_bounds_cast_fails_on_stays_dt12_s_shape(
 ) -> None:
     # DuckDB cannot cast TIME to TIMESTAMP: the reference's engine fails
     # (INTERNAL_ERROR), the core reports the provider's error (DT-12).
-    reference, core = _routes(monkeypatch, *setup, query=query, **kwargs)
-    assert (reference['stage'], reference['code']) == (
+    observed = _current(*setup, query=query, **kwargs)
+    assert (observed['stage'], observed['code']) == (
         'materialize',
-        'INTERNAL_ERROR',
-    ), reference
-    assert (core['stage'], core['code']) == ('materialize', 'PROVIDER_ERROR'), (
-        core
-    )
-    assert core['details'].get('request') == 'time_bounds', core
+        'PROVIDER_ERROR',
+    ), observed
+    assert observed['details'].get('request') == 'time_bounds', observed
 
 
 #: Time columns of other types: (kind, expression over a key, stype set).
@@ -552,18 +450,17 @@ def test_a_time_column_of_another_type_is_answered_alike(
     stype: str | None,
 ) -> None:
     key = 'user_id' if table == 'users' else 'order_id'
-    reference, core = _routes(
-        monkeypatch,
+    observed = _current(
         *_added(table, 'x', kind, expression.format(key=key)),
         query=SUM,
         edit=_time_column(table, 'x', stype),
     )
     if kind in {'BIGINT', 'DOUBLE'}:
         # A number cannot mean a timestamp: refused at the edit.
-        assert reference['stage'] == 'edit', reference
-        _refused_alike(reference, core, 'INVALID_REQUEST')
+        assert observed['stage'] == 'edit', observed
+        _refused(observed, 'INVALID_REQUEST')
     else:
-        _succeeded_alike(reference, core)
+        _succeeded(observed)
 
 
 # --- seed_size: a DuckDB seed of 10**38 or more ---------------------------------
@@ -587,43 +484,27 @@ def test_a_time_column_of_another_type_is_answered_alike(
 def test_a_seed_duckdb_cannot_take_is_rs7_s_named_invalid_request(
     monkeypatch: pytest.MonkeyPatch, seed: int
 ) -> None:
-    reference, core = _routes(monkeypatch, query=SUM, random_seed=seed)
-    # The reference: DuckDB's parser refuses the seed, reported as
-    # INTERNAL_ERROR at materialize; RS-7 names INVALID_REQUEST instead.
-    assert (reference['stage'], reference['code']) == (
-        'materialize',
-        'INTERNAL_ERROR',
-    ), reference
-    assert 'ParserException' in reference['message'], reference
-    assert _shape(core) == (
-        'materialize',
-        'StructuredDataError',
-        'INVALID_REQUEST',
-    ), f'core {_shape(core)} rule {core["details"].get("rule")!r}'
-    assert 'rule' not in core['details'], core
-    assert core['details'].get('field') == 'seed', core
-    assert core['details'].get('max_seed') == MAX_SEED, core
-    assert core['details'].get('request') == 'sample_entities', core
-    # Refused after the index read, as the reference fails after it.
-    assert (
-        core['missing_index_warnings']
-        == reference['missing_index_warnings']
-        == 1
-    )
+    observed = _current(query=SUM, random_seed=seed)
+    assert observed['stage'] == 'materialize', observed
+    _refused(observed, 'INVALID_REQUEST')
+    assert observed['details'].get('field') == 'seed', observed
+    assert observed['details'].get('max_seed') == MAX_SEED, observed
+    assert observed['details'].get('request') == 'sample_entities', observed
+    assert observed['missing_index_warnings'] == 1
 
 
 def test_duckdb_s_largest_seed_materializes_alike(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    reference, core = _routes(monkeypatch, query=SUM, random_seed=MAX_SEED)
-    _succeeded_alike(reference, core)
+    observed = _current(query=SUM, random_seed=MAX_SEED)
+    _succeeded(observed)
 
 
 @pytest.mark.parametrize('seed', [-1, -(2**31), -(10**40)])
 def test_a_negative_seed_is_refused_alike(
     monkeypatch: pytest.MonkeyPatch, seed: int
 ) -> None:
-    reference, core = _routes(monkeypatch, query=SUM, random_seed=seed)
-    assert reference['stage'] == 'materialize', reference
-    _refused_alike(reference, core, 'INVALID_REQUEST')
-    assert core['details'].get('field') == 'seed', core
+    observed = _current(query=SUM, random_seed=seed)
+    assert observed['stage'] == 'materialize', observed
+    _refused(observed, 'INVALID_REQUEST')
+    assert observed['details'].get('field') == 'seed', observed

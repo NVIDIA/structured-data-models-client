@@ -43,10 +43,8 @@ the implementer's, added to the same file under review.
 
 from __future__ import annotations
 
-import json
 import platform
 import sqlite3
-import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -233,14 +231,3 @@ def record() -> dict[str, Any]:
             },
         },
     }
-
-
-def main() -> int:
-    document = record()
-    OUT.write_text(json.dumps(document, indent=2) + '\n', encoding='utf-8')
-    print(f'{OUT.relative_to(ROOT)}: {len(document["canonical_text"])} vectors')
-    return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())

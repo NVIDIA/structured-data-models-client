@@ -55,8 +55,6 @@ so ``python-core`` is run by the same code.
 from __future__ import annotations
 
 import json
-import platform
-import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -271,37 +269,3 @@ def run(scenario: dict[str, Any]) -> dict[str, Any]:
     finally:
         cursor.close()
         connection.close()
-
-
-def main() -> int:
-    reference = Path.home() / 'code/sdmc-reference'
-    commit = subprocess.run(
-        ['git', '-C', str(reference), 'rev-parse', 'HEAD'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    import sdm_client
-
-    if not Path(sdm_client.__file__).resolve().is_relative_to(reference):
-        print("sdm_client is not the reference checkout's", file=sys.stderr)
-        return 1
-    scenarios = {}
-    for name, scenario in SCENARIOS.items():
-        scenarios[name] = {**scenario, 'reference': run(scenario)}
-        print(name, scenarios[name]['reference']['outcome'], file=sys.stderr)
-    document = {
-        'format': FORMAT,
-        'recorded_by': 'contract/tools/sqlite_regressions_record.py',
-        'reference': commit,
-        'cell': 'ref-pandas3',
-        'environment': {'python': platform.python_version()},
-        'query': QUERY,
-        'scenarios': scenarios,
-    }
-    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

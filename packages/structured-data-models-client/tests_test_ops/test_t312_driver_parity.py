@@ -572,18 +572,8 @@ DUCKDB: list[tuple[str, list[str]]] = [
 
 CASES = {'duckdb': DUCKDB, 'sqlite': SQLITE, 'postgres': POSTGRES}
 
-#: The differences the register states, by case: which side answers and
-#: which refuses (``python`` answers and Java refuses, or the reverse), and
-#: the entry. Every other case is held to the rule.
-KNOWN = {
-    # An anonymous record, which no table's column holds: psycopg reads it
-    # as a tuple of texts and the provider writes Python's repr of it; Java
-    # refuses it.
-    'record': ('python answers', 'JV-2'),
-    # Past the core's 2,000 levels: Python's provider writes the value
-    # back compact, Java's hands the server's text; the core refuses either.
-    "json past the core's reader": ('both answer, differently', 'JV-3'),
-}
+# Driver-specific representations checked explicitly by _judged.
+KNOWN = {'record', "json past the core's reader"}
 
 #: The cases both providers refuse, by the driver's error: the SQLSTATE it
 #: names, the same on both (none for a refusal of the client's own).
@@ -852,25 +842,30 @@ def _values(table: pa.Table) -> Any:
 
 def _judged(case: str, mine: Any, theirs: Any) -> str | None:
     r"""What is wrong with the two answers to ``case``, or None: a
-    registered difference as its entry states it; a refusal both refuse, by
+    documented representation difference; a refusal both refuse, by
     the same SQLSTATE; any other case both answer, with a row unless it
     has none, the same Arrow."""
-    known = KNOWN.get(case)
-    if known is not None:
-        if known[0] == 'python answers':
-            stated = isinstance(mine, pa.Table) and isinstance(theirs, Refused)
-        else:
-            stated = (
-                isinstance(mine, pa.Table)
-                and isinstance(theirs, pa.Table)
-                and _values(mine) != _values(theirs)
-            )
-        if stated:
+    if case == 'record':
+        if (
+            isinstance(mine, pa.Table)
+            and mine.num_rows == 1
+            and isinstance(theirs, Refused)
+            and theirs.sqlstate is None
+            and theirs.said == 'java.sql.SQLDataException'
+        ):
             return None
-        return (
-            f'not the difference {known[1]} states: Python {_shown(mine)}; '
-            f'Java {_shown(theirs)}'
-        )
+        return f'anonymous record: Python {_shown(mine)}; Java {_shown(theirs)}'
+    if case == "json past the core's reader":
+        if isinstance(mine, pa.Table) and isinstance(theirs, pa.Table):
+            compact = '[' * 2100 + '0' + ']' * 2100
+            spaced = '[ ' * 2100 + '0' + ' ]' * 2100
+            if (
+                mine.schema.equals(theirs.schema, check_metadata=True)
+                and mine.to_pydict() == {'v': [compact]}
+                and theirs.to_pydict() == {'v': [spaced]}
+            ):
+                return None
+        return f'deep JSON representation: Python {_shown(mine)}; Java {_shown(theirs)}'
     if case in REFUSED:
         if not (isinstance(mine, Refused) and isinstance(theirs, Refused)):
             return f'both refuse: Python {_shown(mine)}; Java {_shown(theirs)}'
@@ -909,17 +904,12 @@ def _shown(answer: pa.Table | Refused) -> str:
 def test_java_hands_the_core_what_python_s_provider_hands_it(
     databases: Databases, database: str
 ) -> None:
-    register = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-        encoding='utf-8'
-    )
-    for _, entry in KNOWN.values():
-        assert f'\n- id: {entry}\n' in register, entry
     # Every case named a difference, a refusal or empty is one that runs.
     named = {name for cases in CASES.values() for name, _ in cases}
     assert set(KNOWN) | REFUSED | EMPTY <= named
     java = _java()
     if java is None or (database == 'postgres' and databases.scoped is None):
-        return
+        pytest.skip('Java or PostgreSQL is not configured')
     steps: list[dict[str, Any]] = []
     names: list[str] = []
     for name, statements in CASES[database]:
@@ -973,7 +963,7 @@ def test_zoned_text_is_python_s_in_every_zone_postgres_names(
     # historic instants and DST edges; unreadable native dates remain refused.
     java = _java()
     if java is None or databases.scoped is None:
-        return
+        pytest.skip('Java or PostgreSQL is not configured')
     import psycopg
 
     with psycopg.connect(databases.scoped, autocommit=True) as connection:

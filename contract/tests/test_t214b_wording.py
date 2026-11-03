@@ -45,14 +45,6 @@ same code (``wording_record.observe`` and ``probe``).
 - A binary target with one class (``wording.binary-one-class``,
   ``decimal.compare-*``), explained as the reference explains it.
 
-Gating: ``t214b-pending.json``'s ``pending`` names, as
-``wording:named:<case key>``, ``wording:warned:<label>:<case key>`` and
-``wording:fx4:<probe>``, the keys whose test failed when written. Each must
-still fail (strict); once one passes it fails, naming itself, until it is
-taken out. ``pending`` stays within ``authored``. Where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
-not set, the Postgres keys have nothing to hold and return without
-asserting; with it set, a missing server fails (H26).
 """
 
 from __future__ import annotations
@@ -71,7 +63,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RECORDER = ROOT / 'contract/tools/wording_record.py'
 CASES = ROOT / 'contract/cases/s1'
-PENDING = Path(__file__).with_name('t214b-pending.json')
+
 PREFIX = 'wording:'
 
 
@@ -276,35 +268,6 @@ WARNED_KEYS = tuple(
 )
 
 
-def held(name: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``name`` is pending, fail."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    if name not in gating['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{name} passes now: take it out of '
-        'contract/tests/t214b-pending.json pending'
-    )
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    the ``wording:`` keys ``authored`` names are every key held here."""
-    gating = json.loads(PENDING.read_text(encoding='utf-8'))
-    assert set(gating['pending']) <= set(gating['authored'])
-    authored = {k for k in gating['authored'] if k.startswith(PREFIX)}
-    assert authored == (
-        {f'{PREFIX}named:{k}' for k in NAMED_KEYS}
-        | {f'{PREFIX}warned:{label}:{k}' for label, k in WARNED_KEYS}
-        | {f'{PREFIX}fx4:{name}' for name in recorder().PROBES}
-    )
-
-
 def test_every_case_held_here_is_recorded_and_named() -> None:
     r"""Control (no vacuous key): every case here has a vector on each of
     its databases at its case file, every case of :data:`NAMED` is held on
@@ -393,7 +356,7 @@ def core_observed(case_key: str) -> dict[str, Any]:
     r"""python-core's observation of the case, by the recorder's code."""
     case_id, _, database = case_key.partition('@')
     case, _ = cases()[case_id]
-    return recorder().observe(case, database or 'duckdb', core=True)
+    return recorder().observe(case, database or 'duckdb')
 
 
 def _outcome(outcome: dict[str, Any]) -> tuple[Any, ...]:
@@ -453,7 +416,7 @@ def test_python_core_names_what_the_reference_names(case_key: str) -> None:
             f'; the reference says {_words(want["message"])!r:.300}'
         )
 
-    held(f'{PREFIX}named:{case_key}', check)
+    check()
 
 
 def _labelled(label: str, shown: list[list[str]]) -> list[list[str]]:
@@ -490,7 +453,7 @@ def test_python_core_warns_in_the_reference_s_words(
             f'warns {want}'
         )
 
-    held(f'{PREFIX}warned:{label}:{case_key}', check)
+    check()
 
 
 @pytest.mark.parametrize('name', sorted(INFINITY_SHOWN))
@@ -508,10 +471,10 @@ def test_an_infinite_minimum_is_shown_as_the_reference_shows_it(
     assert guessed and all(shown in w[1] for w in guessed), want['warnings']
 
     def check() -> None:
-        got = recorder().probe(name, core=True)
+        got = recorder().probe(name)
         assert got['outcome'] == want['outcome']
         assert [w for w in got['warnings'] if 'time column' in w[1]] == (
             guessed
         ), f'{name}: python-core warns {got["warnings"]}'
 
-    held(f'{PREFIX}fx4:{name}', check)
+    check()

@@ -2,44 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T3.3's acceptance tests for the loader into the four warehouses (Phase 3
-design, choice 1; T3.3's brief, "The loader"), written by the package's
-test author before the implementation, offline: no warehouse is reached.
+"""Offline contracts for warehouse fixture loading.
 
-What each engine stores is read from the old client at 43e55f4f:
-Databricks' columns and types from ``information_schema.columns``
-(``RE/backend/databricks/table.py:212-246``), Snowflake's ``_to_dtype``
-(``RE/backend/snow/table.py:331-383``: ``NUMBER(p,s)``, ``TIMESTAMP*``,
-``TIME``, the unsupported ``VARIANT``, ``OBJECT`` and ``MAP``), and
-Lakebase as a Postgres connection (``CN/databricks.py:178-262``,
-``RE/backend/postgres/table.py:146-184``). ``RE/`` is
-``packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/``
-and ``CN/`` is ``packages/structured-data-models-connectors/src/sdm_connectors/``.
-
-The interface tested (``contract/runners/databases.py``), named here
-because nothing names it before the implementation:
-
-- ``TYPE_MAP[<family>]`` gains a ``databricks`` and a ``snowflake`` entry,
-  with ``<engine>_value`` naming the stored form of a type the engine has no
-  column type for (KO2-47: listed by :func:`non_native`, never counted as
-  covered), as SQLite's and Postgres's entries do; the vector file's
-  ``map`` is the same (``test_contract_loader.py`` holds them equal);
-- ``ENGINE``: each warehouse leg's engine in the type map
-  (``lakebase`` is a Postgres server, so it is ``postgres``);
-- ``column_type(kind, engine, where) -> str``: the column type a table's
-  ``CREATE TABLE`` declares for the Arrow type ``kind`` on ``engine``
-  (``databricks`` or ``snowflake``), :class:`Unloadable` naming ``where``
-  for a type it cannot hold in any form;
-- ``stored(duck, table, engine) -> pyarrow.Table``: DuckDB's ``table`` as
-  the loader sends it to ``engine``, each column in the type map's stored
-  form, its rows in DuckDB's order; :class:`Unloadable` names
-  ``table.column`` for a value the engine cannot hold exactly.
-
-Each test names the brief line it proves. Each test listed in
-``contract/tests/t33-pending.json``'s ``pending`` (as ``py:<function
-name>``) failed when written and is held to failing (``t33_gate.py``)
-until the implementer takes it out; ``pending`` stays within
-``authored``, the test author's list.
+Check connector-specific type mappings, value conversion, relation naming,
+resource guards and SQL execution without contacting a warehouse.
+These checks complement the live connector journeys.
 """
 
 from __future__ import annotations
@@ -76,27 +43,6 @@ def _module(name: str) -> ModuleType:
 
 
 databases = _module('databases')
-
-
-def _gate() -> ModuleType:
-    key = 't33_gate'
-    if key not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            key, Path(__file__).with_name('t33_gate.py')
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        sys.modules[key] = module
-    return sys.modules[key]
-
-
-#: Runs a test through the gate: it must pass, or fail while pending.
-pending = _gate().gated
-
-
-def test_t33_the_pending_list_only_shrinks() -> None:
-    assert _gate().only_shrinks() == []
 
 
 # --- helpers ---------------------------------------------------------------
@@ -168,7 +114,6 @@ def _holds(declared: str, engine: str, low: int, high: int) -> bool:
 # --- the type map ----------------------------------------------------------
 
 
-@pending
 def test_t33_the_type_map_has_each_warehouse_engine() -> None:
     r"""Brief, "The loader": Phase 2's loader extended with a type map per
     engine, in ``databases.py`` and the vector file together; each
@@ -249,7 +194,6 @@ DECLARED = [
 ]
 
 
-@pending
 @pytest.mark.parametrize(
     ('expression', 'engine', 'accepted'),
     DECLARED,
@@ -277,7 +221,6 @@ UNSIGNED = {
 }
 
 
-@pending
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
 def test_t33_unsigned_integers_keep_every_value(engine: str) -> None:
     r"""Brief, "The loader": Databricks and Snowflake have no unsigned
@@ -304,7 +247,6 @@ def test_t33_unsigned_integers_keep_every_value(engine: str) -> None:
         assert found == [value, 0], (kind, found)
 
 
-@pending
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
 def test_t33_a_decimal_of_38_digits_keeps_every_digit(engine: str) -> None:
     r"""Brief, "The loader": ``DECIMAL`` up to 38 digits, a key past 64 bits
@@ -332,7 +274,6 @@ def test_t33_a_decimal_of_38_digits_keeps_every_digit(engine: str) -> None:
     ]
 
 
-@pending
 def test_t33_types_an_engine_cannot_store_are_listed() -> None:
     r"""Brief, "The loader": a type an engine cannot store is listed, and its
     cell never counts (KO2-47). No column holds a time of day on
@@ -352,7 +293,6 @@ def test_t33_types_an_engine_cannot_store_are_listed() -> None:
     assert loaded.num_rows == 1 and loaded.column('v').null_count == 0
 
 
-@pending
 def test_t33_a_nanosecond_is_refused_where_the_engine_holds_microseconds() -> (
     None
 ):
@@ -404,7 +344,6 @@ EVERY_FAMILY = (
 )
 
 
-@pending
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
 def test_t33_a_null_stays_null_in_every_type(engine: str) -> None:
     r"""Brief, "Input axes": nulls in every type, on each engine: every
@@ -436,7 +375,6 @@ def _load_bases() -> dict[str, list[str]]:
 S1_CASES = sorted((ROOT / 'contract/cases/s1').glob('*.json'))
 
 
-@pending
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
 def test_t33_every_s1_case_loads_or_is_refused_by_name(engine: str) -> None:
     r"""Choice 1: every S1 case runs on every warehouse leg whose engine
@@ -491,10 +429,7 @@ def test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema() -> None:
             'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
         )
         return
-    _gate().held(
-        'py:test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema',
-        lambda: _shadowed_table_loads(dsn),
-    )
+    _shadowed_table_loads(dsn)
 
 
 def _shadowed_table_loads(dsn: str) -> None:

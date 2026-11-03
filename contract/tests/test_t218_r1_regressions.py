@@ -81,15 +81,6 @@ def _on_the_core(
     r"""The vector with its database's ``from_source`` and ``materialize``
     forced onto the core, S0 on its default route or, with ``s0``, on the
     core too."""
-    from sdm_client import _routing
-
-    database = vector['database']
-    routes = (*_routing.FROM_SOURCE[database], *_routing.MATERIALIZE[database])
-    if s0:
-        routes = (*routes, *_routing.S0)
-    # Not vacuous: the build routes each forced path on the core.
-    assert set(routes) <= _routing.CORE_ROUTED
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(dict.fromkeys(routes)))
     found: dict[str, Any] = R.run(vector)
     return found
 

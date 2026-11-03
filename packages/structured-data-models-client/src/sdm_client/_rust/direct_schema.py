@@ -260,6 +260,33 @@ def preparation_requires(frame: pd.DataFrame) -> bool:
     )
 
 
+def passive_numeric_preparation(*frames: pd.DataFrame) -> bool:
+    """Whether supplied-schema preparation can use one native Arrow batch.
+
+    No inference/advice is moved here. Keep effectful owners and values that
+    need ordered conversion on the per-column path, including wide unsigned
+    integers whose value-dependent dtype can fail before another column.
+    """
+    for frame in frames:
+        if (
+            type(frame) is not pd.DataFrame
+            or frame.attrs
+            or frame._constructor_sliced is not pd.Series
+        ):
+            return False
+        for dtype in frame.dtypes:
+            if not isinstance(dtype, np.dtype) or not dtype.isnative:
+                return False
+            if dtype.kind == 'f':
+                if dtype.itemsize not in (4, 8):
+                    return False
+            elif dtype.kind not in 'biu' or (
+                dtype.kind == 'u' and dtype.itemsize == 8
+            ):
+                return False
+    return True
+
+
 def requires(frame: pd.DataFrame) -> bool:
     if type(frame) is not pd.DataFrame or any(
         type(name) is not str for name in frame.columns

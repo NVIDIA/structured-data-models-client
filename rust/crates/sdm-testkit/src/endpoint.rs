@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The scripted model endpoint, in Rust: the one written rule of
-//! `contract/runners/scripted_endpoint.py`, which
-//! `contract/scripted-endpoint.json` holds both to (`tests/scripted_endpoint.rs`
-//! here, `contract/tests/test_scripted_endpoint.py` there).
+//! `tests/support/scripted_endpoint.py`, which
+//! `tests/fixtures/scripted-endpoint.json` holds both to (`tests/scripted_endpoint.rs`
+//! here, `tests/test_scripted_endpoint.py` there).
 //!
 //! For `POST /v1/predictions` with a JSON object body, the answer is `200`
 //! with one prediction per row of `predict.instance_table`, in row order:

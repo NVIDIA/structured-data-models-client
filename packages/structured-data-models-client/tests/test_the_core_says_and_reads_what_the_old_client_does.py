@@ -2,17 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Three answers the core route gives as the old route does (T3.8 fix 2,
-from Codex's first review round): each case runs on the old route and with
-every core route forced, through the public API, and the two must agree.
-
-- A schema built by hand reads only the columns it keeps: a column it leaves
-  out is never read, however its values look.
-- A day-first date literal in a query the core gathers alone is warned of,
-  in the reference's words.
-- A Postgres table a source given no schema lacks is named under the schema
-  the read looked in.
-"""
+"""Public regressions for schema selection, query identity and diagnostics."""
 
 from __future__ import annotations
 
@@ -21,7 +11,7 @@ import os
 import re
 import uuid
 import warnings
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from typing import Any
 
 import pandas as pd
@@ -37,28 +27,13 @@ from sdm_client import (  # noqa: E402
     Schema,
     SourceTable,
     StructuredDataError,
-    _routing,
 )
 
-CORE = ','.join(sorted(_routing.CORE_ROUTED))
 #: The code the core route puts before a warning's words (P3E-2).
 CODE = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
 
 
-def _on_both_routes(
-    monkeypatch: pytest.MonkeyPatch, call: Callable[[], Any]
-) -> dict[str, Any]:
-    r"""``call``'s answer on the old route and with every core route forced."""
-    answers = {}
-    for route, forced in (('old', ''), ('core', CORE)):
-        monkeypatch.setenv(_routing.ENVIRONMENT, forced)
-        answers[route] = call()
-    return answers
-
-
-def test_a_column_a_schema_built_by_hand_leaves_out_is_never_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_column_a_schema_built_by_hand_leaves_out_is_never_read() -> None:
     # A timestamp past what nanoseconds hold, in a column the schema does not
     # keep: the reference reads only the columns a schema describes
     # (`_copy_for_one_gather`), so it never meets it.
@@ -90,15 +65,11 @@ def test_a_column_a_schema_built_by_hand_leaves_out_is_never_read(
             ).materialize(indices=[1, 2], random_seed=7)
         return json.loads(json.dumps(request._payloads, default=str))
 
-    answers = _on_both_routes(monkeypatch, materialized)
-    assert answers['core'] == answers['old']
-    (payload,) = answers['core']
+    (payload,) = materialized()
     assert 'ignored_time' not in json.dumps(payload)
 
 
-def test_a_key_over_a_column_left_out_marks_no_column_it_keeps(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_key_over_a_column_left_out_marks_no_column_it_keeps() -> None:
     # The source keys the table on (ts, omitted); the schema leaves `omitted`
     # out and names `id`. The reference never reads the source's key here,
     # so the schema's key stands (T3.8 fix 3, Codex round 2).
@@ -135,8 +106,9 @@ def test_a_key_over_a_column_left_out_marks_no_column_it_keeps(
             ).materialize(indices=[1, 2], random_seed=7)
         return json.loads(json.dumps(request._payloads, default=str))
 
-    answers = _on_both_routes(monkeypatch, materialized)
-    assert answers['core'] == answers['old']
+    (payload,) = materialized()
+    assert schema['users'].primary_key == 'id'
+    assert len(payload['predict']['instance_table']['rows']) == 2
 
 
 def _buys() -> Schema:
@@ -158,9 +130,7 @@ def _buys() -> Schema:
         )
 
 
-def test_one_question_in_two_spellings_is_one_question(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_one_question_in_two_spellings_is_one_question() -> None:
     # A request keeps its query as the validated query writes it back, so a
     # session pins one question however it was spelled (T3.8 fix 3, Claude
     # round 2).
@@ -179,15 +149,11 @@ def test_one_question_in_two_spellings_is_one_question(
             ]
         return [(r.query, r._question) for r in requests]
 
-    answers = _on_both_routes(monkeypatch, asked)
-    assert answers['core'] == answers['old']
-    (first, second) = answers['core']
+    first, second = asked()
     assert first == second
 
 
-def test_a_forecast_step_s_refusal_names_the_step(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_forecast_step_s_refusal_names_the_step() -> None:
     def refused() -> str:
         schema = _buys()
         with (
@@ -202,14 +168,10 @@ def test_a_forecast_step_s_refusal_names_the_step(
             ).materialize(indices=[1, 2])
         return str(caught.value)
 
-    answers = _on_both_routes(monkeypatch, refused)
-    assert answers['core'] == answers['old']
-    assert 'This is forecast step 10 of 40.' in answers['core']
+    assert 'This is forecast step 10 of 40.' in refused()
 
 
-def test_a_day_first_literal_is_warned_of_when_the_core_gathers_alone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_day_first_literal_is_warned_of_when_the_core_gathers_alone() -> None:
     connection = duckdb.connect()
     connection.execute(
         'CREATE TABLE users AS SELECT i::BIGINT AS id, (i % 3)::DOUBLE AS '
@@ -240,11 +202,11 @@ def test_a_day_first_literal_is_warned_of_when_the_core_gathers_alone(
             if 'Parsing dates' in str(warning.message)
         ]
 
-    answers = _on_both_routes(monkeypatch, said)
-    # The old route says it each time it parses the literal; the words are
-    # what a caller reads.
-    assert answers['old'], answers
-    assert set(answers['core']) == set(answers['old'])
+    notices = said()
+    assert notices
+    assert all(
+        'dayfirst' in text and 'Parsing dates' in text for text in notices
+    )
 
 
 @pytest.fixture
@@ -275,7 +237,7 @@ def postgres() -> Iterator[Any]:
 
 
 def test_a_missing_postgres_table_is_named_under_the_schema_looked_in(
-    monkeypatch: pytest.MonkeyPatch, postgres: Any
+    postgres: Any,
 ) -> None:
     connection, namespace = postgres
 
@@ -286,6 +248,4 @@ def test_a_missing_postgres_table_is_named_under_the_schema_looked_in(
             )
         return str(caught.value)
 
-    answers = _on_both_routes(monkeypatch, refused)
-    assert answers['core'] == answers['old']
-    assert f"Table '{namespace}.nope' does not exist" in answers['core']
+    assert f"Table '{namespace}.nope' does not exist" in refused()

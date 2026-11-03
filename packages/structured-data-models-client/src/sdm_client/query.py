@@ -1,10 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: on the core route, the num_context_samples bound in
-# _validate_materialize_args (design, "Host-held semantics") is deleted in
-# Phase 1 by T1.28a; the decomposition and the model and route choice move
-# in a later phase (the ledger), and the S0 hook in _resolve goes in Phase 5.
 
 r"""Asking a question in PQL, and gathering the data that answers it.
 
@@ -30,7 +26,6 @@ from __future__ import annotations
 
 import dataclasses
 import re
-import warnings
 from collections.abc import Mapping, Sequence
 from numbers import Integral
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -38,38 +33,25 @@ from typing import TYPE_CHECKING, Any, NoReturn
 import pandas as pd
 
 from sdm_client.base import PROFILE_MODELS
-from sdm_client.core.warnings import SDMWarning
 from sdm_client.decompose import (
     FORECAST,
     RANKING,
     Decomposition,
     _decimal_as_typed,
-    about_the_part,
-    parts_of,
-    refuse_a_part_that_would_take_several_calls,
     said_as_parts_are,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
-from sdm_client.materializers.relational import (
-    refuse_more_entities_than_fit_in_memory,
-    rows_one_call_scores,
-    rows_per_call_asked_for,
-)
+from sdm_client.materializers import RelationalMaterializer
 from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
 
-#: The language's profiles a query is resolved for, by name: the core
-#: validates for a name, and only the old route's validator reads the old
-#: PQL package's object of it (T3.16, rule 11).
+#: Query validation profiles understood by the shared Rust core.
 RELATIONAL = 'RELATIONAL'
 TABULAR = 'TABULAR'
 
 if TYPE_CHECKING:
-    from predictive_query import ValidatedPredictiveQuery
-
     from sdm_client._rust.results import CoreParts, CoreQuery
 
 
@@ -120,7 +102,6 @@ class PredictiveQuery:
         self.schema = (
             data if isinstance(data, Schema) else Schema.from_data(dict(data))
         )
-        self._tabular_materializer = TabularMaterializer(self.schema)
         self._relational_materializer = RelationalMaterializer(self.schema)
 
     def materialize(
@@ -220,8 +201,6 @@ class PredictiveQuery:
                 'rows you want',
                 code='INVALID_REQUEST',
             )
-        from sdm_client import _routing
-
         self._validate_materialize_args(
             relational=relational,
             model_id=spec.model_id if spec is not None else None,
@@ -231,40 +210,10 @@ class PredictiveQuery:
             predict=predict,
             num_context_samples=num_context_samples,
             options=options,
-            # The core bounds the context size on its route (T1.28a): a
-            # schema over a DuckDB, SQLite or Postgres source is relational (refused above if
-            # not), and goes to the core where the seam forces it there.
-            bounded_by_the_core=(
-                _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
-                or (relational and not in_place and _routing.on_frames())
-            ),
+            bounded_by_the_core=relational,
         )
-
-        # On the core route a question asked in parts is the core's to split
-        # (lesson 17): a forecast in its steps (T1.36 fix 21) and a ranking
-        # in its candidates (T2.8), each refusal of either the core's, said
-        # here as this client says it; as is a query only the core resolves
-        # (KO2-36).
-        on_the_core = relational and (
-            _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
-            or (not in_place and _routing.on_frames())
-        )
-        # Resolved once, and against the profile this request is for, because
-        # whether it is asked as several questions is a property of the query
-        # and the profile answers what the query is allowed to be.
-        core_tabular = (
-            not relational
-            and _routing.route(
-                _routing.TABULAR_FRAME
-                if predict is not None
-                else _routing.TABULAR_INDICES
-            )
-            == 'core'
-        )
-        asked = self._resolve(
-            RELATIONAL if relational else TABULAR, core_tabular=core_tabular
-        )
-        if on_the_core:
+        asked = self._resolve(RELATIONAL if relational else TABULAR)
+        if relational:
             # The call's own checks first, as for any relational query.
             if task is not None:
                 _refuse_the_task(task, 'a relational query')
@@ -276,7 +225,7 @@ class PredictiveQuery:
                 candidates=candidates,
                 options=options,
             )
-        if core_tabular:
+        if not relational:
             if candidates is not None:
                 raise StructuredDataError(
                     f'candidates are the rows a ranking is over, and {self.text!r} does '
@@ -294,54 +243,6 @@ class PredictiveQuery:
                 num_context_samples=num_context_samples,
                 task=task,
             )
-
-        rewritten = parts_of(
-            asked,
-            self.text,
-            list(candidates) if candidates is not None else None,
-            options,
-            self.schema,
-        )
-        if task is not None and (relational or rewritten is not None):
-            _refuse_the_task(
-                task,
-                'a decomposed question'
-                if rewritten is not None
-                else 'a relational query',
-            )
-
-        if rewritten is not None:
-            return self._in_parts(
-                rewritten,
-                indices=indices,
-                predict=predict,
-                num_context_samples=num_context_samples,
-                model=model,
-                **options,
-            )
-
-        if predict is not None:
-            return self._tabular_materializer.table(
-                query=asked,
-                predict=predict,
-                task=task,
-            )
-
-        assert indices is not None
-        if not relational:
-            return self._tabular_materializer.indices(
-                query=asked,
-                indices=indices,
-                num_context_samples=num_context_samples,
-                task=task,
-            )
-
-        return self._relational_materializer.materialize(
-            query=asked,
-            indices=indices,
-            num_context_samples=num_context_samples,
-            options=options,
-        )
 
     @staticmethod
     def _validate_materialize_args(
@@ -484,51 +385,9 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
 
-    def _in_parts(self, rewritten: Decomposition, **how: Any) -> Request:
-        r"""Gather the questions this one is asked as, and keep them together.
-
-        Each is gathered like any other query, because each needs the context
-        its own labels come from: what was true in the second window is not
-        what was true in the first, and whether an entity reached one
-        candidate is not whether it reached another.
-
-        A part is one call, which is what makes the fan-out countable, so a
-        question over more entities than one call scores is refused here
-        rather than gathered as parts that each batch.
-        """
-        import copy
-
-        how = {name: value for name, value in how.items() if value is not None}
-        asked = 0 if how.get('indices') is None else len(how['indices'])
-        refuse_a_part_that_would_take_several_calls(
-            rewritten, asked, rows_one_call_scores(rows_per_call_asked_for(how))
-        )
-        refuse_more_entities_than_fit_in_memory(asked, len(rewritten.parts))
-        # How many candidates to keep belongs to the whole ranking. Each part
-        # is one yes-or-no question, and a task that ranks nothing is refused
-        # by the endpoint for carrying an option it cannot act on.
-        how.pop('top_k', None)
-        gathered = []
-        for text, step in rewritten.parts:
-            try:
-                gathered.append(
-                    PredictiveQuery(text, self.schema).materialize(**how)
-                )
-            except MissingExtraError:
-                raise
-            except StructuredDataError as error:
-                raise about_the_part(error, rewritten, step) from error
-        # A copy, because the carrier cannot be one of the things it carries:
-        # asking it would ask the first part, which would ask the first part.
-        whole = copy.copy(gathered[0])
-        whole._parts = tuple(gathered)
-        whole._decomposition = rewritten
-        whole._asked = self.text
-        return whole
-
     def _on_the_core(
         self,
-        asked: ValidatedPredictiveQuery | CoreQuery,
+        asked: CoreQuery,
         *,
         indices: Sequence[Any],
         num_context_samples: int | None,
@@ -704,95 +563,26 @@ class PredictiveQuery:
         carrier._asked = self.text
         return carrier
 
-    def _resolve(
-        self, profile: str, *, core_tabular: bool = False
-    ) -> ValidatedPredictiveQuery | CoreQuery:
-        r"""Parse and validate the query.
+    def _resolve(self, profile: str) -> CoreQuery:
+        """Validate and resolve the query with the shared Rust implementation."""
+        from sdm_client._rust import errors, s0
+        from sdm_client._rust.results import CoreQuery
+        from sdm_client._rust.spec import query_schema
 
-        On the core route (S0, the private routing seam) the core decides
-        validity (P2-MID2-1, design choice 9). Native Relational and Tabular
-        materialization consume :class:`~sdm_client._rust.results.CoreQuery`,
-        containing the text and Rust-resolved facts, without invoking the
-        old validator. Only where the old materializer gathers it is the accepted
-        query resolved by the old validator, for that materializer, which
-        also checks that the two agree.
-
-        On the old route the old validator decides. Where a relational
-        materialize runs on the core over a schema holding a column the
-        old validator's language cannot name (a dot, a backtick or a line
-        break in its name), a query the old validator refuses is the core's
-        to resolve as it gathers it (KO2-36, T2.18): ``CoreQuery``, holding
-        the old validator's refusal for a call only the old route answers.
-        """
-        from sdm_client import _routing
-
-        # Native Tabular materialization consumes resolved Rust identifiers,
-        # including when a comparison test selects only materialization routes.
-        core = core_tabular or _routing.route(_routing.S0) == 'core'
-        gathered_on_the_core = profile == RELATIONAL and (
-            _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
-            or (self.schema.source is None and _routing.on_frames())
+        accepted, messages, held, resolved = s0.validate(
+            self.text, query_schema(self.schema), profile
         )
-        from sdm_client.schema import (
-            names_a_query_cannot_say,
-            to_schema_definition,
+        if not accepted:
+            raise self._refusal(messages, profile)
+        errors.warn_held(held)
+        return CoreQuery(
+            text=str(
+                (None if resolved is None else resolved.text) or self.text
+            ),
+            num_forecasts=None if resolved is None else resolved.num_forecasts,
+            refusal=None,
+            columns=None if resolved is None else resolved.columns,
         )
-
-        if core:
-            from sdm_client._rust import s0
-            from sdm_client._rust.spec import query_schema
-
-            # The schema as the core reads it, written with no object of the
-            # old PQL package (T3.16, rule 11).
-            accepted, messages, held, resolved = s0.validate(
-                self.text, query_schema(self.schema), profile
-            )
-            if not accepted:
-                raise self._refusal(messages, profile)
-            if gathered_on_the_core or core_tabular:
-                from sdm_client._rust import errors
-                from sdm_client._rust.results import CoreQuery
-
-                # No shadow check reads it to say its day-first literal, so
-                # the core's warning is shown.
-                errors.warn_held(held)
-                return CoreQuery(
-                    text=str(
-                        (None if resolved is None else resolved.text)
-                        or self.text
-                    ),
-                    num_forecasts=(
-                        None if resolved is None else resolved.num_forecasts
-                    ),
-                    refusal=None,
-                    columns=None if resolved is None else resolved.columns,
-                )
-            with warnings.catch_warnings():
-                # Said once, as the core's query schema was written.
-                warnings.simplefilter('ignore', SDMWarning)
-                definition = to_schema_definition(self.schema)
-            return s0.shadow(self.text, definition, profile)
-        from predictive_query import validate
-
-        from sdm_client.base import language_profile
-
-        definition = to_schema_definition(self.schema)
-
-        old, response = validate(
-            self.text, definition, language_profile(profile)
-        )
-        if old is not None and response.ok:
-            return old
-        reasons = [error.message for error in response.errors]
-        if gathered_on_the_core and names_a_query_cannot_say(self.schema):
-            from sdm_client._rust.results import CoreQuery
-
-            return CoreQuery(
-                text=self.text,
-                num_forecasts=None,
-                refusal=self._refusal(reasons, profile),
-            )
-        raise self._refusal(reasons, profile)
 
     def _refusal(
         self, messages: list[str], profile: str

@@ -1,133 +1,37 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-r"""T3.8: with every core route forced, the client answers as the old client.
+"""Public schema behavior across connectors, held to preserved snapshots.
 
-Written by the package's independent test author from the brief, the
-design's T3.8 row, the carried rows P2-T2.16-9, -10 and -11 and the
-reference, before the implementation. Phase 2's flip dry run
-(``docs/design/rust-core/phase-2/evidence/flip/``) failed 118 client tests
-with every core route forced; each scenario of
-``t38_forced_routes_record.py`` is one input of one of their families, as a
-user meets it through the public API, on DuckDB, SQLite and Postgres, and
-``t38-forced-routes.json`` holds what the reference answered for it,
-recorded through the same :func:`observe` this test calls. Here each runs
-with every path of ``_routing.CORE_ROUTED`` forced, and its answer must
-equal the reference's:
-
-- ``time`` (P2-T2.16-9, exit 2's time-column family): the time columns and
-  the "Some time columns..." notice, in the reference's words;
-- ``keys`` (P2-T2.16-10, exit 2's key family): keys, duplicate counts, the
-  key notices and the refusals at the 1% and 99% thresholds, a missing
-  value, ``check_keys=False``, keys past 2^53, and "Cannot score" for an id
-  two rows hold;
-- ``refusals`` (P2-T2.16-10 and -11): a refused source call in the
-  reference's words, never "the request is not one the core accepts";
-- ``postgres`` (P2-T2.16-11, exit 2's Postgres family): a
-  ``PostgresSource`` read in the schema it names, also when ``public`` holds
-  a table of the same name;
-- ``described`` (P2-T2.16-11's ``RouteError``): ``materialize`` of a schema
-  built by hand, written out column by column, or described on the old
-  route, as the reference materializes any ``Schema``.
-
-What a scenario compares (``observe``): a schema's tables (source name,
-key, time column, duplicate count, columns) and relationships; the
-family's notices, class and words; a refusal's class, code and words; a
-payload's task, scored rows and their history, and the context's tables
-and columns (a context row is the draw's). Two readings, both the
-decisions' and not the package's to change:
-
-- every warning the core gives starts ``[CODE] `` (decisions E41(i) and
-  E59(d)); the words after it are compared (:func:`bare`);
-- a repeated key's example (``e.g. ...``) is whichever repeated value a
-  scan meets first on either route, so any of the scenario's repeated
-  values is the reference's.
-
-Gating: ``t38-pending.json``'s ``pending`` names, as ``py:<scenario>@<db>``,
-the keys whose comparison failed when written. Each must still fail
-(strict); once one passes it fails, naming itself, until it is taken out.
-``pending`` stays within ``authored``, the test author's. No test is
-marked or skipped (``scripts/rust_core/l0_scan.py``'s ``skips``): where
-``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is not
-set, a Postgres key has nothing to hold and returns without asserting
-(with it set, it fails), as ``contract/tests/test_t219_two_paths.py``'s do;
-so does a key that needs the old route where it is not installed.
+Warning-code prefixes and repeated-key example selection are normalized;
+all other recorded outcomes remain strict.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
-import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
-
-from sdm_client import _routing
+import schema_scenarios as R
 
 HERE = Path(__file__).resolve().parent
-PENDING = HERE / 't38-pending.json'
 RECORDED = json.loads(
     (HERE / 't38-forced-routes.json').read_text(encoding='utf-8')
 )
-#: Every path this build can run on the core: the flip's forcing.
-CORE = ','.join(sorted(_routing.CORE_ROUTED))
-ENGINE = importlib.util.find_spec('sdm_relational_engine') is not None
 
 
-def _module(name: str, path: Path) -> ModuleType:
-    if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(name, path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-    return sys.modules[name]
-
-
-R = _module('t38_forced_routes_record', HERE / 't38_forced_routes_record.py')
 KEYS = R.keys()
 
 
-def _gating() -> dict[str, Any]:
-    return json.loads(PENDING.read_text(encoding='utf-8'))
-
-
-def held(key: str, check: Any) -> None:
-    r"""Runs ``check``: it must pass, or, while ``py:<key>`` is pending,
-    fail."""
-    if f'py:{key}' not in _gating()['pending']:
-        check()
-        return
-    try:
-        check()
-    except Exception:  # noqa: BLE001 - pending: failing, as when written
-        return
-    raise AssertionError(
-        f'{key} passes now: take py:{key} out of '
-        'packages/structured-data-models-client/tests/t38-pending.json '
-        'pending'
-    )
-
-
-def _runs(name: str, database: str, *, old_route: bool = False) -> bool:
-    r"""Whether ``name`` on ``database`` has what it needs here: a Postgres
-    server for a Postgres key (a missing one fails where
-    ``SDM_REQUIRE_POSTGRES`` is set), and the old route where the scenario
-    uses it."""
+def _require_database(database):
     if database == 'postgres' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
         if os.environ.get('SDM_REQUIRE_POSTGRES'):
-            pytest.fail(
-                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
-            )
-        return False
-    if not ENGINE and (old_route or name.startswith('described.old-route.')):
-        return False
-    return True
+            pytest.fail('SDM_REQUIRE_POSTGRES requires SDM_POSTGRES_TEST_DSN')
+        pytest.skip('requires SDM_POSTGRES_TEST_DSN')
 
 
 def _examples_aside(value: Any, examples: list[str] | None) -> Any:
@@ -176,30 +80,12 @@ def _compare(key: str, actual: Any) -> None:
 
 
 @pytest.mark.parametrize('key', KEYS)
-def test_the_core_answers_as_the_reference(
-    key: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    r"""Exits 1 and 2: with every core route forced, each scenario's answer
-    is the reference's (the family and input its ``covers`` line names)."""
+def test_the_core_answers_as_the_reference(key: str, tmp_path: Path) -> None:
+    """Each connector case retains its recorded public behavior."""
     name, database = key.rsplit('@', 1)
-    if not _runs(name, database):
-        return
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    _require_database(database)
     found = R.SCENARIOS[name]
-    held(key, lambda: _compare(key, R.observe(found, database, tmp_path)))
-
-
-@pytest.mark.parametrize('key', KEYS)
-def test_the_old_route_answers_as_recorded(
-    key: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    r"""Control (exit 1's unforced run): the old route in this tree gives
-    the recorded answer, so a difference above is the core's."""
-    name, database = key.rsplit('@', 1)
-    if not _runs(name, database, old_route=True):
-        return
-    monkeypatch.setenv(_routing.ENVIRONMENT, '')
-    _compare(key, R.observe(R.SCENARIOS[name], database, tmp_path))
+    _compare(key, R.observe(found, database, tmp_path))
 
 
 # --- controls ---------------------------------------------------------------
@@ -309,14 +195,6 @@ def test_a_shadowing_table_differs_from_the_one_to_read() -> None:
         for table in recorded['tables'].values():
             assert 'other_id' not in table['columns']
             assert table['primary_key'] is not None
-
-
-def test_the_pending_list_only_shrinks() -> None:
-    r"""Control: ``pending`` names only keys the test author wrote, and
-    ``authored`` is every scenario on each of its databases."""
-    gating = _gating()
-    assert set(gating['pending']) <= set(gating['authored'])
-    assert set(gating['authored']) == {f'py:{key}' for key in KEYS}
 
 
 def test_the_core_s_warning_prefix_is_set_aside_and_nothing_else() -> None:

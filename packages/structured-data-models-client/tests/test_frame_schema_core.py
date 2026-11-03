@@ -7,13 +7,8 @@
 import pandas as pd
 import pytest
 
-from sdm_client import Schema, _routing
+from sdm_client import Schema
 from sdm_client.errors import StructuredDataError
-
-
-@pytest.fixture(autouse=True)
-def frame_schema_route(monkeypatch):
-    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.FRAME_SCHEMA))
 
 
 def test_inferred_relationship_keeps_original_frames():

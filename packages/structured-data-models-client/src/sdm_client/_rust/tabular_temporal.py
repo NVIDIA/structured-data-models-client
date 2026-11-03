@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from .._routing import RouteError
+from sdm_client._rust import NativeBoundaryError
 
 
 def _micros(value: timedelta) -> int:
@@ -25,12 +25,14 @@ def _pytz_offset(zone: Any) -> int:
         import pytz
         from pytz.tzinfo import DstTzInfo, StaticTzInfo
     except ImportError as error:
-        raise RouteError(
+        raise NativeBoundaryError(
             'this temporal timezone owner is not represented'
         ) from error
     cls = type(zone)
     if type(cls) is not type:
-        raise RouteError('custom timezone metaclasses are not represented')
+        raise NativeBoundaryError(
+            'custom timezone metaclasses are not represented'
+        )
     base: type[Any]
     field: str | None
     if cls is pytz.UTC.__class__:
@@ -42,17 +44,25 @@ def _pytz_offset(zone: Any) -> int:
     elif cls.__bases__ == (StaticTzInfo,):
         base, field = StaticTzInfo, '_utcoffset'
     else:
-        raise RouteError('this temporal timezone owner is not represented')
+        raise NativeBoundaryError(
+            'this temporal timezone owner is not represented'
+        )
     if getattr_static(zone, '__getattribute__') is not tzinfo.__getattribute__:
-        raise RouteError('custom timezone attribute access is not represented')
+        raise NativeBoundaryError(
+            'custom timezone attribute access is not represented'
+        )
     for name in ('utcoffset', 'dst'):
         if getattr_static(zone, name) is not base.__dict__[name]:
-            raise RouteError('custom timezone methods are not represented')
+            raise NativeBoundaryError(
+                'custom timezone methods are not represented'
+            )
     if field is None:
         return 0
     offset = getattr_static(zone, field)
     if type(offset) is not timedelta:
-        raise RouteError('custom timezone offset owners are not represented')
+        raise NativeBoundaryError(
+            'custom timezone offset owners are not represented'
+        )
     return _micros(offset)
 
 
@@ -61,7 +71,7 @@ def _offsets(value: datetime, zone: Any) -> tuple[int, int]:
         first = value.utcoffset()
         second = value.replace(fold=1 - value.fold).utcoffset()
         if type(first) is not timedelta or type(second) is not timedelta:
-            raise RouteError('this temporal offset is not represented')
+            raise NativeBoundaryError('this temporal offset is not represented')
         return _micros(first), _micros(second)
     offset = _pytz_offset(zone)
     return offset, offset
@@ -79,7 +89,7 @@ def observe(values: Any, missing: list[bool]) -> list[dict[str, Any]]:
             atoms.append({'kind': 'date', 'ordinal': value.toordinal()})
             continue
         if owner not in (datetime, pd.Timestamp):
-            raise RouteError(
+            raise NativeBoundaryError(
                 'this mixed temporal comparison family is not yet represented by the core'
             )
         zone = value.tzinfo

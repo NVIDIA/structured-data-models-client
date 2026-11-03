@@ -64,6 +64,7 @@ FLAG_VARIABLES = (
     'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS',
     'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS',
     'CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS',
+    'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS',
     'CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS',
 )
 #: The newest glibc a manylinux2014 wheel may need.
@@ -117,7 +118,9 @@ def _rustc_flags(log: str) -> list[str]:
     cargo log, each once, in the order first seen."""
     flags: list[str] = []
     for line in log.splitlines():
-        if 'Running `' not in line or 'rustc ' not in line:
+        if 'Running `' not in line or not re.search(
+            r'\brustc(?:\.exe)?["\']?\s', line
+        ):
             continue
         command = line.split('Running `', 1)[1].rsplit('`', 1)[0]
         try:
@@ -252,6 +255,8 @@ def _build(
         env=pinned,
         capture_output=True,
         text=True,
+        encoding='utf-8',
+        errors='replace',
         check=False,
     )
     log = build.stdout + build.stderr

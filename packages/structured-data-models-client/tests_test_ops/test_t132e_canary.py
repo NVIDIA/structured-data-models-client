@@ -1,54 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The canary test over the time and feature family's error paths and the
-multicategorical port's (T1.32e part 2's exit "the canary test covers the
-family's error paths", T1.32a's exits applied to this family; decision
-H17: diagnostics carry no input values).
-
-Written by the package's independent test author, before the
-implementation. It drives each path through the canary of
-``test_the_canary.py`` (its sentinels, its watch over the core's error,
-``str``, ``repr``, the details, the traceback, every warning, every log
-record at DEBUG, stderr and stdout, and its check that none of them holds a
-sentinel), on the core route, ``Schema.from_source``, ``materialize`` and,
-where the path goes on, ``SDMClient.predict`` against the scripted
-endpoint. The data around each path holds the canary's data sentinel (two
-users' countries) and a number sentinel of our own, ``NUMBER`` (an order's
-price); where the path reads a column of its own, the column holds one too:
-
-- describe: text holding several categories per value, one of them the
-  data sentinel, on the entity table and on the fact table, a null and an
-  empty string beside them (the reference describes it as
-  ``multicategorical``; the core refuses it today, rule
-  ``multicategorical``, which the port lifts); text holding times of day,
-  one value the data sentinel; an interval holding the number (refused by
-  name, P1B-8); a date and a timestamp, one with nulls, the earlier chosen
-  with a warning;
-- materialize: text dates the source cannot cast, one value the data
-  sentinel, one the number (the reference fails INTERNAL_ERROR in the
-  source's CAST; the core's provider error, DT-12, must not quote what the
-  source said of the value); a time of day as a feature (the engine warns
-  of the values it drops);
-- materialize and predict: a multi-category feature reaching the request;
-  a multi-category column asked for as the target, and summed (the
-  reference refuses both at materialize).
-
-The paths the port opens (``PORTED``) must reach past the description:
-a refusal by the rule ``multicategorical`` fails them, so the canary
-watches the port's path. Whatever the package settles for a path, a
-refusal or a success, nothing written may hold a sentinel. A refusal must be the core's (the canary saw
-the core's error), except where the host refuses as the reference does:
-the query's validation (``HOST_MAY_REFUSE``). Which refusal it is, is not
-this test's to judge: ``contract/tests/test_t132e_multicategorical.py``,
-``t132e_multicategorical.rs`` and the family's tests hold each outcome to
-the reference and the register.
-
-Gating (``contract/tests/t132e_gate.py``): a scenario named in
-``t132e-pending.json``'s ``pending["p2-exits"]`` (as ``canary:<scenario>``)
-failed when written. It still runs and must still fail; once it passes it
-fails, naming itself, until it is taken out of the list.
-"""
+"""Native value conversion must not expose planted data through errors or logs."""
 
 from __future__ import annotations
 
@@ -70,7 +23,6 @@ from sdm_client import (
     Schema,
     SDMClient,
     StructuredDataError,
-    _routing,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -88,16 +40,10 @@ def _module(name: str, path: Path) -> Any:
 
 
 C = _module('test_the_canary', HERE / 'test_the_canary.py')
-G = _module('t132e_gate', ROOT / 'contract/tests/t132e_gate.py')
 DATA = C.DATA
 #: Our number sentinel: digits no statement, code or field holds by chance.
 NUMBER = '73400917'
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
-CORE = ','.join(
-    _routing.FROM_SOURCE_DUCKDB
-    + _routing.MATERIALIZE_DUCKDB
-    + _routing.PREDICT_DUCKDB
-)
 #: The sentinels planted around every scenario: two users' countries and
 #: an order's price.
 PLANTED = [
@@ -249,7 +195,6 @@ def _answered(seen: Any, call: Callable[[], Any]) -> StructuredDataError | None:
 
 @pytest.fixture(autouse=True)
 def _core_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     monkeypatch.setattr(C, 'SENTINELS', (*C.SENTINELS, NUMBER))
 
 
@@ -274,7 +219,7 @@ def test_no_sentinel_of_the_family_reaches_anything_written(
                 f'{name}: refused outside the core ({error.code})'
             )
 
-    G.held('p2-exits', f'canary:{name}', check)
+    check()
 
 
 @pytest.mark.parametrize(

@@ -42,12 +42,10 @@ observed by the same code, with the core routes forced.
 
 from __future__ import annotations
 
-import argparse
 import codecs
 import importlib.util
 import io
 import json
-import os
 import sys
 import warnings
 from collections.abc import Callable
@@ -302,68 +300,11 @@ def answers() -> dict[str, Any]:
         connection.close()
 
 
-def observe(core: bool) -> dict[str, Any]:
-    r"""Every scenario, on the core where ``core`` (the DuckDB from-source,
-    materialize and predict paths forced, as ``run_python.py`` forces a
-    case's routes), else on the routes the interpreter's client takes."""
-    if core:
-        from sdm_client import _routing
-
-        os.environ['SDM_CORE_ROUTES'] = ','.join(
-            _routing.FROM_SOURCE_DUCKDB
-            + _routing.MATERIALIZE_DUCKDB
-            + _routing.PREDICT_DUCKDB
-        )
-    else:
-        os.environ['SDM_CORE_ROUTES'] = ''
-    try:
-        return {'answers': answers()}
-    finally:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+def observe() -> dict[str, Any]:
+    """Exercise response encodings through the installed client."""
+    return {'answers': answers()}
 
 
 def load() -> dict[str, Any]:
     r"""The vector file, as committed."""
     return json.loads(OUT.read_text(encoding='utf-8'))
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--reference', type=Path, required=True)
-    arguments = parser.parse_args(argv)
-    run = runner()
-    guard = run._Guard(arguments.reference)
-    guard.check('before the first case')
-    run._require_reference_client(arguments.reference)
-    commit = run._git(arguments.reference)
-    if not commit['clean']:
-        print('the reference checkout is not clean', file=sys.stderr)
-        return 1
-    document = {
-        'format': FORMAT,
-        'about': (
-            "What the reference's public calls give when the model endpoint "
-            'writes its answer in each encoding json.detect_encoding finds '
-            '(UTF-8 with and without its byte order mark, UTF-16 and UTF-32 '
-            'of either byte order with and without theirs), in two byte '
-            'forms no such encoding decodes, and with lone surrogates in its '
-            'id and metadata, over HTTP and from a Databricks serving '
-            'endpoint: the result, its request_id and metadata, or the '
-            'refusal. '
-            'contract/tests/test_t216_response_encoding.py holds python-core '
-            'to them, observed by the same code (observe).'
-        ),
-        'recorded_by': 'contract/tools/t216_encoding_record.py',
-        'reference': commit['sha'],
-        **observe(core=False),
-    }
-    guard.check('after the last case')
-    OUT.write_text(
-        json.dumps(document, indent=1, ensure_ascii=True) + '\n',
-        encoding='utf-8',
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

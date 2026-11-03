@@ -11,9 +11,7 @@ easy to get wrong here, and most of it has been got wrong at least once.
 |---|---|
 | `structured-data-models-client` | `sdm_client` |
 | `structured-data-models-api` | `sdm_api` |
-| `structured-data-models-pql` | `predictive_query` |
 | `structured-data-models-connectors` | `sdm_connectors` |
-| `structured-data-models-relational-engine` | `sdm_relational_engine` |
 
 Package directories under `packages/` carry the distribution name. Nothing
 derives one name from the other: read the import root off `src/`.
@@ -28,14 +26,14 @@ A rename that sweeps the tree will change these, and nothing will fail:
   `SAMPLING_QUERY_TAG` sits beside the second. They are what a warehouse sees,
   so changing them splits Databricks partner telemetry and query history at
   that version.
-- `_term('sdm-relational-engine')` in `rfm/graph_fingerprint.py`. It is hashed.
-  Changing it gives identical graphs different names, which the module says
-  only `FINGERPRINT_VERSION` may do.
 
-## Run the two suites separately
+- `APPLICATION` in `sdm_connectors/backends/snowflake.py`, `nvidia/kumo-sdm`, names sessions for Snowflake attribution.
+  Preserve that value when renaming internal code.
 
-The engine and the other four packages cannot be collected in one pytest run;
-together they fail at import. `CONTRIBUTING.md` gives both commands. Run both.
+## Run the maintained suites
+
+Follow `CONTRIBUTING.md` for Python, Rust and Java checks.
+The standalone Python PQL and relational-engine distributions are archived and are not development dependencies.
 
 ## skills/ is executable
 
@@ -56,15 +54,9 @@ Regenerate these; never edit them:
 - `packages/structured-data-models-api/src/sdm_api/generated/` -- regenerate
   with `scripts/generate_sdm_api.py`, which also writes `PROVENANCE.json`. A
   change to the generator itself changes the recorded hash.
-- The third-party attribution in the two `LICENSE` files, the root one and the
-  engine's -- `scripts/mermaid_notices.py --write`, checked with `--check`. It
-  renders `rfm/assets/MERMAID_COMPONENTS.json`, which `--refresh` regenerates;
-  neither touches `NOTICE`.
-- `rfm/assets/relbench_registry.json` -- `scripts/pin_relbench.py`. It pins
-  source commits and table digests.
-- The ANTLR output in `predictive_query/grammar/`: the `.py`, `.tokens` and
-  `.interp` files. Edit `PQLGrammar.g4` and regenerate. The `README.md` and
-  `__init__.py` there are hand-written.
+- `packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt` --
+  regenerate with `python scripts/rust_core/rust_notices.py --write` and verify with `--check`.
+  This covers dependencies in the supported native wheel targets; do not edit its entries by hand.
 - `tests/golden/` -- the exported surface and the recorded wire payloads.
 
 ## Gates that fail on prose

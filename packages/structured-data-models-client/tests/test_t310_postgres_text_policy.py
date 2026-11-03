@@ -12,7 +12,7 @@ import pytest
 from sdm_connectors import PostgresSource
 from sdm_connectors.providers import PlanNotRun
 
-from sdm_client import Schema, StructuredDataError, _routing
+from sdm_client import Schema, StructuredDataError
 from sdm_client._rust import providers
 from sdm_client._rust.providers.postgres import PostgresProvider
 
@@ -33,7 +33,6 @@ def test_public_postgres_schema_fetches_carry_the_core_utc_text_instruction(
             raise RuntimeError('stop before database I/O')
 
     connection = type('Connection', (), {'__module__': 'psycopg'})()
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     monkeypatch.setattr(providers, 'PostgresProvider', Spy)
     with pytest.raises(StructuredDataError):
         Schema.from_source(PostgresSource(connection, schema='public'))

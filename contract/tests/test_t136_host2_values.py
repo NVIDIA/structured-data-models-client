@@ -168,21 +168,9 @@ READ_FIRST = [
 DESCRIBED = [v['name'] for v in ALL if v['reference']['described'] is not None]
 
 
-def _routed(route: str, setup: list[Any]) -> dict[str, Any]:
-    r"""The recorder's answer on ``route``, the environment as it was."""
-    saved = os.environ.get('SDM_CORE_ROUTES')
-    try:
-        return dict(R.answer(setup, route))
-    finally:
-        if saved is None:
-            os.environ.pop('SDM_CORE_ROUTES', None)
-        else:
-            os.environ['SDM_CORE_ROUTES'] = saved
-
-
 @functools.cache
 def _core(name: str) -> str:
-    return json.dumps(_routed('core', BY_NAME[name]['setup']))
+    return json.dumps(R.answer(BY_NAME[name]['setup']))
 
 
 def core(name: str) -> dict[str, Any]:
@@ -206,19 +194,6 @@ def _same_description(got: dict[str, Any], reference: dict[str, Any]) -> None:
     )
 
 
-def _recorded_environment() -> bool:
-    import duckdb
-    import pandas as pd
-    import pyarrow as pa
-
-    wanted = FILE['recorded']['environments']['reference']
-    return (pd.__version__, pa.__version__, duckdb.__version__) == (
-        wanted['pandas'],
-        wanted['pyarrow'],
-        wanted['duckdb'],
-    )
-
-
 # --- the file -----------------------------------------------------------------
 
 
@@ -232,7 +207,6 @@ def test_the_vector_file_is_what_it_says() -> None:
     assert found is not None and recorded['reference'] == found[1]
     for environment in recorded['environments'].values():
         assert environment['duckdb'] == '1.5.6'
-    assert recorded['core_routes'] == R.CORE_ROUTES
     # Every source the recorder runs, once, with the setup it runs.
     assert [v['name'] for v in ALL] == list(R.SOURCES)
     for vector in ALL:
@@ -342,18 +316,6 @@ def test_duckdb_hands_over_what_the_file_says() -> None:
 
 
 # --- the reference, re-measured where it was recorded -----------------------
-
-
-@pytest.mark.parametrize('name', list(BY_NAME))
-def test_the_reference_answers_as_recorded(name: str) -> None:
-    r"""In ref-pandas3, the cell CI runs contract/tests in: the default
-    route, the reference's code, answers as the reference checkout did."""
-    assert _recorded_environment(), (
-        'the reference answers were recorded in ref-pandas3 (pandas 3.0.6, '
-        'pyarrow 25.0.1, DuckDB 1.5.6), where CI runs contract/tests'
-    )
-    got = _routed('reference', BY_NAME[name]['setup'])
-    assert got == BY_NAME[name]['reference']
 
 
 # --- the core ------------------------------------------------------------------
@@ -500,7 +462,7 @@ if BIG:
         row = next(r for r in BIG_ROWS if r['name'] == name)
         reference = row['reference']
         if reference['described'] is None:
-            got = _routed('core', row['setup'])
+            got = R.answer(row['setup'])
             assert got['outcome']['stage'] == 'from_source'
             assert got['outcome']['code'] is not None
             return
@@ -539,7 +501,7 @@ if BIG:
                     for value in result['prediction']
                 )
             return
-        got = _routed('core', row['setup'])
+        got = R.answer(row['setup'])
         assert got['described'] is not None, got['outcome']
         columns = got['described']['users']['columns']
         if '.blob.' in name:

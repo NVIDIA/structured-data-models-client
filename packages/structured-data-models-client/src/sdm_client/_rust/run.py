@@ -49,8 +49,7 @@ if TYPE_CHECKING:
     # dependency, and a core route over frames needs none of it.
     from sdm_connectors.providers import Provider
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec, errors, facts
+from sdm_client._rust import NativeBoundaryError, codec, errors, facts
 from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
 
@@ -109,12 +108,12 @@ def native() -> ModuleType:
     r"""``sdm_client._native``, imported here and nowhere else.
 
     A wheel without it cannot take a core route, and never falls back to
-    the old one: the call raises :class:`~sdm_client._routing.RouteError`.
+    the old one: the call raises :class:`~sdm_client._rust.NativeBoundaryError`.
     """
     try:
         from sdm_client import _native
     except ImportError as missing:
-        raise RouteError(
+        raise NativeBoundaryError(
             'a core route needs sdm_client._native, which this installation '
             'of the client cannot import'
         ) from missing
@@ -209,7 +208,7 @@ def run(
 
     Raises:
         StructuredDataError: The run's error, as :mod:`.errors` maps it.
-        RouteError: ``sdm_client._native`` cannot be imported.
+        NativeBoundaryError: ``sdm_client._native`` cannot be imported.
     """
     core = native()
     core.reset_log_cache()
@@ -351,7 +350,7 @@ def _steps(
                     outcome['continuation'] = answer.continuation
                 else:
                     attached[1] = answer
-            except RouteError:
+            except NativeBoundaryError:
                 # The route itself failed (an import of the old engine on
                 # it, say), which is no provider's error to hand the core.
                 handle.cancel()
@@ -402,7 +401,9 @@ def _call(
         elif step['endpoint'] == 'predict' and model is not None:
             answer = model(body)
         else:
-            raise RouteError('this host has no sender for the model endpoint')
+            raise NativeBoundaryError(
+                'this host has no sender for the model endpoint'
+            )
     except TransportFailed:
         outcome: dict[str, Any] = transport_error
     except EndpointFailed as failed:

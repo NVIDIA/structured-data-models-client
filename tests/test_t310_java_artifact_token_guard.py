@@ -103,7 +103,7 @@ def test_unsafe_download_or_other_token_destination_still_fails(
         java['permissions'] = {'actions': 'write'}
     elif mutation == 'other-job':
         java['steps'].remove(download)
-        document['jobs']['engine']['steps'].append(download)
+        document['jobs']['rust-test']['steps'].append(download)
     elif mutation == 'extra-action':
         java['steps'].append(
             {

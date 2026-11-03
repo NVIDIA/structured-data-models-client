@@ -48,7 +48,7 @@ Each table is `adventureworks_<name>` with the source file's columns (the order 
 | In all | 1,000 |
 
 Built in `ref-pandas3` (Python 3.12.13, pandas 3.0.6); a second build gave the same bytes.
-`contract/tests/test_refusal_map.py::test_the_fixture_holds_its_readme_s_rows_and_at_most_2000` holds the committed base to at most 2,000 rows, and to this table.
+The shared AdventureWorks cases use these committed rows for source-description, materialization and prediction checks.
 
 ## The notebook the cases were written from
 

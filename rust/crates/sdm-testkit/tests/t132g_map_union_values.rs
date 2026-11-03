@@ -19,14 +19,6 @@
 //! and its unencodable names. An interval in a map or a chosen member has
 //! its own cell since part 2e (`tests/t132g_interval_values.rs`).
 //!
-//! Gating: `contract/tests/t132g-pending.json`'s `pending["rust-host"]`
-//! lists the vectors (by name) that failed here when the test was written.
-//! Each must still fail (strict: one that passes must be taken out of the
-//! list), and the list may only shrink: it stays within
-//! `authored["rust-host"]`. The implementer removes names as they pass and
-//! changes nothing else of this file or the vectors.
-
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -41,8 +33,6 @@ use serde_json::{Value, json};
 use sdm_testkit::duck;
 use sdm_testkit::values::{arrow_type, ascii_json, values};
 
-const PENDING: &str = "contract/tests/t132g-pending.json";
-
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
@@ -56,15 +46,6 @@ fn vectors() -> Vec<Value> {
     let file = read_json("contract/t132g-p2c-vectors.json");
     assert_eq!(file["format"], "sdm-result-vectors/1");
     file["vectors"].as_array().unwrap().clone()
-}
-
-fn names(value: &Value) -> BTreeSet<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_owned())
-        .collect()
 }
 
 fn batch(name: &str, column: ArrayRef) -> RecordBatch {
@@ -192,35 +173,8 @@ fn the_vectors_are_what_they_say() {
 }
 
 #[test]
-fn the_pending_list_only_shrinks() {
-    let pending = read_json(PENDING);
-    let now = names(&pending["pending"]["rust-host"]);
-    let authored = names(&pending["authored"]["rust-host"]);
-    assert!(
-        now.is_subset(&authored),
-        "pending names added: {:?}",
-        now.difference(&authored)
-    );
-    // The rust-host list names part 2c's vectors and part 2e's
-    // (`contract/t132g-p2e-vectors.json`, `tests/t132g_interval_values.rs`).
-    let mut all: BTreeSet<String> = vectors()
-        .iter()
-        .map(|v| v["name"].as_str().unwrap().to_owned())
-        .collect();
-    for vector in read_json("contract/t132g-p2e-vectors.json")["vectors"]
-        .as_array()
-        .unwrap()
-    {
-        all.insert(vector["name"].as_str().unwrap().to_owned());
-    }
-    assert!(now.is_subset(&all), "pending names that are no vector");
-}
-
-#[test]
 fn each_map_and_union_vector_reads_as_the_python_runner_reads_it() {
-    let pending = names(&read_json(PENDING)["pending"]["rust-host"]);
     let mut failures = Vec::new();
-    let mut passing_but_pending = Vec::new();
     for vector in vectors() {
         let name = vector["name"].as_str().unwrap();
         let (_, got) = read(&vector);
@@ -229,17 +183,10 @@ fn each_map_and_union_vector_reads_as_the_python_runner_reads_it() {
             .iter()
             .all(|key| got[*key] == want[*key])
             && got["types"] == Value::Null;
-        match (ok, pending.contains(name)) {
-            (true, true) => passing_but_pending.push(name.to_owned()),
-            (false, false) => failures.push(format!("{name}: got {got}, want {want}")),
-            _ => {}
+        if !ok {
+            failures.push(format!("{name}: got {got}, want {want}"));
         }
     }
-    assert!(
-        passing_but_pending.is_empty(),
-        "these pass now: take them out of {PENDING}'s pending[\"rust-host\"]: \
-         {passing_but_pending:?}"
-    );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 

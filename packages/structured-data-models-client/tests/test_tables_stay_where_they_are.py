@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
@@ -39,7 +38,6 @@ from sdm_client import (  # noqa: E402
     Table,
 )
 from sdm_client.core.warnings import SDMWarning  # noqa: E402
-from sdm_client.materializers import RelationalMaterializer  # noqa: E402
 
 QUERY = 'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id'
 TABLES = {'users': 'app_users', 'orders': 'app_orders'}
@@ -188,7 +186,6 @@ def _by_hand(described: Schema, source: Any, **source_names: str) -> Schema:
 
 
 def test_the_tables_are_described_without_being_read(source: Any) -> None:
-    from sdm_relational_engine.rfm.base import DataBackend
 
     schema = _schema(source)
 
@@ -204,9 +201,6 @@ def test_the_tables_are_described_without_being_read(source: Any) -> None:
     assert schema.relationships == [
         Relationship('orders', 'user_id', 'users', 'user_id')
     ]
-    assert RelationalMaterializer(schema)._build_graph().backend == (
-        DataBackend(source.backend)
-    )
 
 
 @pytest.mark.parametrize('seed', [7, 11, 23])
@@ -578,19 +572,12 @@ def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
     assert schema['app_orders'].time_column == 'ts'
 
 
-@pytest.mark.parametrize('core_default', [False, True])
-def test_metadata_refresh_follows_the_selected_route(
+def test_materialization_refreshes_source_metadata(
     postgres_source: Any,
-    monkeypatch: pytest.MonkeyPatch,
-    core_default: bool,
 ) -> None:
-    r"""The default core refreshes metadata; the explicit legacy route caches it."""
+    """Each materialization reads current source metadata."""
     import psycopg
 
-    if core_default:
-        monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
-    else:
-        monkeypatch.setenv('SDM_CORE_ROUTES', '')
     statements: list[str] = []
 
     class Recorded(psycopg.Cursor):
@@ -607,7 +594,7 @@ def test_metadata_refresh_follows_the_selected_route(
 
     assert any('information_schema' in sql for sql in described)
     assert asked
-    assert bool(set(described) & set(asked)) is core_default
+    assert set(described) & set(asked)
 
 
 def test_a_question_cannot_change_what_the_next_one_is_given(
@@ -621,7 +608,8 @@ def test_a_question_cannot_change_what_the_next_one_is_given(
     changed['users']['country'].stype = 'text'
 
     _payload(changed)
-    graph = RelationalMaterializer(schema)._build_graph()
+    _payload(schema)
+    graph = schema
 
     assert str(graph['users']['age'].stype) == 'numerical'
     assert str(graph['users']['country'].stype) == 'categorical'

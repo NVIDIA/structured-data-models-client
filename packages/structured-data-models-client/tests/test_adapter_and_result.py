@@ -6,13 +6,20 @@
 
 from __future__ import annotations
 
+import dataclasses
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from sdm_client import (
+    KumoRelational,
+    KumoTabular,
     PredictionResult,
+    PredictiveQuery,
     Request,
+    Schema,
     UnsupportedRequestError,
 )
 from sdm_client.adapters.relational import RelationalAdapter
@@ -34,8 +41,32 @@ def context(rows: int = 6, **columns) -> pd.DataFrame:
     return frame
 
 
+def predict_recorded(request: Request, outputs=('prediction',)):
+    from test_tabular_direct_core import Endpoint, client
+
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-tabular',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [
+                {'row_index': i, 'prediction': 0}
+                for i in range(request.predict_rows)
+            ],
+        }
+    )
+    with client(endpoint) as model_client:
+        result = model_client.predict(
+            request, model=KumoTabular(), outputs=outputs
+        )
+    return result, endpoint.calls
+
+
 def envelope(request: Request, outputs=('prediction',)) -> dict:
-    return next(iter(TabularAdapter().prediction_plan(request, outputs)))
+    result, calls = predict_recorded(request, outputs)
+    assert len(result) == request.predict_rows
+    assert len(calls) == 1
+    return calls[0]
 
 
 # --- a column with no values decides nothing --------------------------------
@@ -155,7 +186,9 @@ def test_an_empty_predict_frame_is_still_allowed():
         target='y',
         task='classification',
     )
-    assert envelope(request)['predict']['instance_table']['rows'] == []
+    result, calls = predict_recorded(request)
+    assert result.to_pandas().empty
+    assert calls == []
 
 
 # --- what the endpoint enforces, said locally -------------------------------
@@ -186,32 +219,88 @@ def relational_payload(*, classes: int, kind: str = 'classification') -> dict:
     }
 
 
-class _Gathered:
-    query: str | None = None
+def relational_request(classes, kind='classification', **options):
+    frame = pd.DataFrame(
+        {
+            'uid': range(100),
+            'feature': [i % 7 for i in range(100)],
+            'label': [
+                f'class-{i % classes}' if kind == 'classification' else float(i)
+                for i in range(100)
+            ],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': frame}, primary_keys={'users': 'uid'}
+        )
+        return PredictiveQuery(
+            'PREDICT users.label FOR EACH users.uid', schema
+        ).materialize(
+            indices=[0, 1],
+            model=KumoRelational(),
+            **options,
+        )
 
-    def __init__(self, *payloads: dict) -> None:
-        self.payloads = tuple(payloads)
-        self.requested_inference: dict = {}
-        self.inference: dict = {}
+
+def predict_relational(request):
+    import json
+
+    from test_tabular_direct_core import Endpoint, client
+
+    class RelationalEndpoint(Endpoint):
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(payload)
+            table = payload['predict']['instance_table']
+            at = table['columns'].index('instance_id')
+            return json.dumps(
+                {
+                    'model': 'kumo-relational',
+                    'id': 'answer',
+                    'metadata': {},
+                    'predictions': [
+                        {'row_index': i, 'id': str(row[at]), 'prediction': 1.0}
+                        for i, row in enumerate(table['rows'])
+                    ],
+                }
+            ).encode()
+
+    endpoint = RelationalEndpoint()
+    with client(endpoint) as model_client:
+        result = model_client.predict(request, model=KumoRelational())
+    assert len(result) == 2
+    assert len(endpoint.calls) == 1
+    return endpoint.calls[0]
 
 
-def test_more_classes_than_the_model_takes_is_refused_locally():
-    request = _Gathered(relational_payload(classes=21))
+def test_more_classes_than_the_model_takes_is_refused_locally(monkeypatch):
+    from sdm_client import SDMClient
+
+    sent = []
+
+    def unexpected_send(*args):
+        sent.append(args)
+        raise AssertionError('class limit must be checked before transport')
+
+    monkeypatch.setattr(SDMClient, '_send_body', unexpected_send)
     with pytest.raises(UnsupportedRequestError) as error:
-        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+        predict_relational(relational_request(21))
     message = str(error.value)
     assert 'at most 10 classes' in message
     assert '21' in message
+    assert sent == []
 
 
 def test_a_target_within_the_ceiling_is_allowed():
-    request = _Gathered(relational_payload(classes=4))
-    assert list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    payload = predict_relational(relational_request(4))
+    assert payload['task']['kind'] == 'multiclass_classification'
 
 
 def test_a_regression_target_is_not_counted():
-    request = _Gathered(relational_payload(classes=40, kind='regression'))
-    assert list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    payload = predict_relational(relational_request(40, kind='regression'))
+    assert payload['task']['kind'] == 'regression'
 
 
 def test_the_ceiling_is_declared_where_the_other_limits_are():
@@ -276,83 +365,45 @@ def test_merging_parts_that_wanted_different_outputs_is_refused():
 # --- the inference config the caller handed over ----------------------------
 
 
-def gathered_with(config, sent=None) -> _Gathered:
-    payload = relational_payload(classes=3, kind='regression')
-    payload['inference'] = {
-        'run_mode': 'fast',
-        'inference_config': dict(
-            sent if sent is not None else {'num_estimators': 1}
-        ),
-    }
-    request = _Gathered(payload)
-    request.requested_inference = {'inference_config': config}
-    return request
-
-
-def regression_config(**fields):
-    return pytest.importorskip(
-        'sdm_relational_engine.rfm.inference.config'
-    ).RegressionInferenceConfig(**fields)
-
-
-def sent_inference(request) -> dict:
-    plan = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
-    return plan[0]['inference']
-
-
-def test_an_inference_config_dataclass_sends_what_the_dict_form_sends():
-    """The engine takes `InferenceConfig | dict | None` and gathers the same
-    payload from either, so only the warning bookkeeping saw the difference."""
-    assert sent_inference(gathered_with(regression_config())) == (
-        sent_inference(gathered_with({}))
-    )
-
-
-def test_a_dataclass_field_the_caller_set_is_still_named_when_it_is_dropped():
-    request = gathered_with(
-        regression_config(output_type='mean'),
-        sent={'num_estimators': 1, 'output_type': 'mean'},
-    )
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
-    assert 'output_type' in str(error.value)
-
-
-def test_a_defaulted_dataclass_field_is_dropped_without_a_refusal():
-    """A bare config asks for exactly what passing none asks for, and the
-    engine fills the rest in whether or not the caller wanted it."""
-    request = gathered_with(
-        regression_config(),
-        sent={'num_estimators': 1, 'output_type': 'median'},
-    )
-    assert 'inference_config' not in sent_inference(request)
-
-
-def test_the_engine_s_defaults_are_not_sent():
-    """A deployment applies them to a request that carries none, and the
-    SDM backends refuse a non-empty inference_config."""
-    defaults = {
-        'kind': 'classification',
-        'num_estimators': 1,
-        'column_shuffle': False,
-        'category_shuffle': False,
-        'hop_shuffle': False,
-        'class_shuffle': False,
-    }
-    assert sent_inference(gathered_with({}, sent=defaults)) == {
-        'run_mode': 'fast'
-    }
+def test_empty_inference_config_is_not_sent():
+    payload = predict_relational(relational_request(4, inference_config={}))
+    assert 'inference_config' not in payload.get('inference', {})
 
 
 def test_a_dropped_option_is_refused_with_a_remedy_that_works():
-    """The refusal used to print the forwarded keys as what the deployment
-    accepts, and every one of them is refused by the shipping build."""
-    request = gathered_with(
-        {'output_type': 'mean'},
-        sent={'num_estimators': 1, 'output_type': 'mean'},
-    )
     with pytest.raises(UnsupportedRequestError) as error:
-        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+        predict_relational(
+            relational_request(
+                4, kind='regression', inference_config={'output_type': 'mean'}
+            )
+        )
     message = str(error.value)
+    assert 'output_type' in message
     assert 'drop them from inference_config' in message
-    assert 'accepts' not in message
+    # Following the remedy reaches the endpoint successfully.
+    predict_relational(
+        relational_request(4, kind='regression', inference_config={})
+    )
+
+
+@dataclasses.dataclass
+class RegressionConfig:
+    output_type: str = 'median'
+    num_estimators: int = 1
+
+
+@pytest.mark.parametrize(
+    ('config', 'expected'),
+    [
+        (RegressionConfig(), set()),
+        (RegressionConfig(output_type='mean'), {'output_type'}),
+        ({}, set()),
+        ({'output_type': 'mean'}, {'output_type'}),
+    ],
+)
+def test_dataclass_defaults_do_not_become_explicit_inference_options(
+    config, expected
+):
+    from sdm_client.adapters.relational import _keys_the_caller_set
+
+    assert _keys_the_caller_set(config) == expected

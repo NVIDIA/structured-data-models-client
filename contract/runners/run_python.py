@@ -3,63 +3,24 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Python runner of the contract cases, in three modes.
+r"""Record current installed-client behavior and native operation traces.
 
-Run with ``python -I``, from the interpreter of the environment under test:
-
-    python -I contract/runners/run_python.py --mode MODE [--reference DIR]
-        [--database DATABASE] [--no-capture] [--inventory ID]... --out FILE
+    python -I contract/runners/run_python.py --mode python-core
+        [--database DATABASE] [--no-capture] --out FILE
         [CASE_OR_DIRECTORY...]
-    python -I contract/runners/run_python.py legs --database DATABASE
-        --providers FILE OBSERVATIONS...
 
-``legs`` holds a database job's observations to the staging rule
-(:func:`check_legs`), each core leg's providers given as JSON in FILE.
+Each case builds its database fixture and calls Schema.from_source,
+materialize and predict through the installed Python client.
+A local scripted endpoint exercises the real transport without a model server.
+Native operation inputs, fetches and responses are recorded for cross-language
+checks and SQL goldens; --record-fetches also supplies Rust Postgres replay.
+The optional driver capture records SQL and results without changing them.
 
-- ``python-ref``: the reference, the oracle. ``--reference`` names the
-  reference checkout, whose environment must be the interpreter's. Its guard
-  (``scripts/reference_guard.py``) is loaded by path, and its
-  ``require_isolation()`` runs before the first case and after the last;
-  either failing stops the run, which writes nothing. ``sdm_client`` must be
-  the reference checkout's.
-- ``python-core``: the candidate, with ``SDM_CORE_ROUTES`` set for each case
-  to its ``routes``. The core operations the case starts, with their inputs,
-  and the core's answer are recorded at ``sdm_client._native``'s boundary,
-  changing nothing that crosses it.
-- ``python-old``: the candidate on its default routes, a smoke runner that
-  must complete every case (decision H10).
-
-Each case builds its DuckDB base on a fresh in-memory connection; with
-``--database sqlite`` or ``postgres`` (T2.1a), the contract loader
-(``databases.py``) loads its tables into a new SQLite file or a new
-Postgres database's public schema, and the source is given a driver connection to that, its
-observation keyed ``<case>@<database>``; a case whose ``databases`` leave
-the database out is not run. Then it makes the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
-then ``SDMClient.predict`` against the scripted endpoint
-(``scripted_endpoint.py``), served on localhost and reached through the
-client's real transport, as far as the case's ``until``.
-
-The source is handed the connection through the test-only driver capture
-(design, "Driver capture"; decision Q2), which records every statement the
-driver runs, its typed parameters, each result read and every relation
-bound by name, derived cursors included, and changes nothing that crosses
-it; ``--no-capture`` hands it the connection itself, the conservation
-control. Setup, the statements before the connection reaches the source,
-is outside it. DuckDB's own query log is read after each case either way,
-so ``capture_check.py`` can hold the captured counts to it and the two runs
-to the same public projection (``public``: the schema, each request the
-scripted endpoint received, the result). Cases of the Phase 1b inventory are
-named with ``--inventory ID``. An exception a public call raises is the
-case's outcome, recorded by class, ``StructuredDataError.code`` and stage, a
-``RuntimeError`` included; the comparator decides whether it is the expected
-one. A runner failure is anything else: the guard failing, a missing
-``sdm_client._native`` or a refused forced route (``RouteError``), an error
-in the runner itself, an observation that does not validate, or the process
-dying. It exits non-zero and leaves no output file, an earlier run's
-included; observations are written only when every case was recorded. No message text is recorded (decision H17).
-
-This file also holds the case loader and the Phase 1b inventory loader,
-which maps each inventory case into the case format and back without loss.
+Public API exceptions are recorded as outcomes for the expectation checker.
+Runner failures produce a nonzero exit and no observation file.
+Frozen-client recording remains available in the external migration archive.
+This module also supplies shared case-loading and capture helpers to Java
+and provider tests.
 """
 
 from __future__ import annotations
@@ -87,13 +48,11 @@ HERE = Path(__file__).resolve().parent
 CONTRACT = HERE.parent
 REPO = CONTRACT.parent
 BASES = CONTRACT / 'bases.yaml'
-INVENTORY = REPO / 'docs/design/rust-core/phase-0/phase-1b-inventory.yaml'
 SCHEMAS = {
     'case': CONTRACT / 'case.schema.json',
-    'inventory': CONTRACT / 'inventory.schema.json',
     'observation': CONTRACT / 'observation.schema.json',
 }
-MODES = ('python-ref', 'python-core', 'python-old')
+MODES = ('python-core',)
 
 #: A cell's earlier pins, still that cell of ``CELLS``: the floor's before
 #: T2.0c moved it to pandas 2.2.2 and NumPy 1.23.5 (KO2-37). The phase
@@ -404,51 +363,6 @@ def on_database(path: str, database: str) -> str:
     return path
 
 
-def routes_on(case: dict[str, Any], database: str) -> list[str]:
-    r"""The routes python-core forces for ``case`` on ``database``: on DuckDB
-    the case's own with source aliases normalized; elsewhere those routes
-    over ``database``
-    (:func:`on_database`) and every route of each public call the case
-    makes, through its ``until`` (T2.1d). Off DuckDB the old route is not
-    the reference's (python-old runs on DuckDB only, T2.1a fix 4), so no
-    call of a core leg takes it: a case that routes only its DuckDB stop
-    (S0's validation, a source refused at ``from_source``) still runs on
-    the core where the database lets the call go further.
-
-    The three source-opening paths present in the cases' ``routes`` are
-    host-owned in scope-python, so stay coverage facts rather than core
-    selections. Other unknown paths still reach the routing refusal.
-    """
-    routes = [
-        on_database(route, database)
-        for route in case['routes']
-        if route
-        not in {
-            'source.connect-databricks/warehouse/databricks-sql',
-            'source.open/auto/databricks-sql',
-            'source.open/auto/databricks-spark',
-        }
-    ]
-    if database == 'duckdb':
-        return routes
-    from sdm_client import _routing
-
-    named = bool((case['input'].get('from_source') or {}).get('tables'))
-    calls = list(
-        _routing.FROM_SOURCE_DUCKDB_TABLES
-        if named
-        else _routing.FROM_SOURCE_DUCKDB
-    )
-    if case['until'] != 'from_source':
-        calls += _routing.MATERIALIZE_DUCKDB
-    if case['until'] == 'predict':
-        calls += _routing.PREDICT_DUCKDB
-    for path in calls:
-        if on_database(path, database) not in routes:
-            routes.append(on_database(path, database))
-    return routes
-
-
 def case_key(case_id: str, database: str) -> str:
     r"""An observation's key on ``database``: DuckDB's the bare case ID,
     another's ``<case>@<database>``."""
@@ -672,120 +586,6 @@ def load_bases(path: Path = BASES) -> dict[str, list[str]]:
         raise RunnerFailure(f'{path.name}: not sdm-bases/1: {problem}')
     bases: dict[str, list[str]] = document['bases']
     return bases
-
-
-# --- the Phase 1b inventory ------------------------------------------------------
-
-#: What every case taken from the inventory has, which the inventory does
-#: not say: diagnostic until its task admits it, S1, no paths or routes yet
-#: (coverage and the routes arrive with the cases' tasks), run to predict.
-_FROM_INVENTORY = {
-    'format': 'sdm-case/1',
-    'status': 'diagnostic',
-    'slice': 'S1',
-    'paths': [],
-    'routes': [],
-    'until': 'predict',
-}
-_INVENTORY_INPUT = ('base', 'setup', 'from_source')
-_INVENTORY_KEPT = ('id', 'seam', 'cells', 'expect', 'register', 'why', 'source')
-
-
-def load_inventory(path: Path = INVENTORY) -> dict[str, Any]:
-    r"""The Phase 1b inventory, validated, with unique case ids."""
-    import yaml
-
-    inventory = yaml.safe_load(path.read_text(encoding='utf-8'))
-    problem = _invalid(validator('inventory'), inventory)
-    if problem is not None:
-        raise RunnerFailure(f'{path.name}: not the inventory: {problem}')
-    # The case-level rules beyond the schema hold for the defaults a case
-    # inherits as for what it states; the indices rule is the only one.
-    problem = _indices(inventory['defaults'])
-    if problem is not None:
-        raise RunnerFailure(f'{path.name}: defaults: {problem}')
-    for entry in inventory['cases']:
-        problem = _indices(entry) if 'materialize' in entry else None
-        if problem is not None:
-            raise RunnerFailure(f'{path.name}: {entry["id"]}: {problem}')
-    ids = [entry['id'] for entry in inventory['cases']]
-    if len(ids) != len(set(ids)):
-        raise RunnerFailure(f'{path.name}: a case id repeats')
-    unknown = {entry['base'] for entry in inventory['cases']} - set(
-        inventory['bases']
-    )
-    if unknown:
-        raise RunnerFailure(f'{path.name}: a case names an unknown base')
-    loaded: dict[str, Any] = inventory
-    return loaded
-
-
-def inventory_case(
-    entry: dict[str, Any], defaults: dict[str, Any]
-) -> dict[str, Any]:
-    r"""An inventory case in the case format; :func:`inventory_entry` is
-    its inverse. The inventory's ``pql`` and ``materialize`` default from
-    its ``defaults``."""
-    entry = copy.deepcopy(entry)
-    case: dict[str, Any] = copy.deepcopy(_FROM_INVENTORY)
-    case['id'] = entry['id']
-    case['input'] = {
-        key: entry[key] for key in _INVENTORY_INPUT if key in entry
-    }
-    case['input']['pql'] = entry.get('pql', defaults['pql'])
-    case['input']['materialize'] = entry.get(
-        'materialize', copy.deepcopy(defaults['materialize'])
-    )
-    for key in _INVENTORY_KEPT:
-        if key in entry:
-            case[key] = entry[key]
-    return case
-
-
-def inventory_entry(
-    case: dict[str, Any], defaults: dict[str, Any]
-) -> dict[str, Any]:
-    r"""A case taken from the inventory, as the inventory wrote it."""
-    case = copy.deepcopy(case)
-    for key, value in _FROM_INVENTORY.items():
-        if case.pop(key) != value:
-            raise RunnerFailure(f'{case["id"]}: not a case of the inventory')
-    entry = {key: case.pop(key) for key in _INVENTORY_KEPT if key in case}
-    given = case.pop('input')
-    for key in _INVENTORY_INPUT:
-        if key in given:
-            entry[key] = given.pop(key)
-    for key in ('pql', 'materialize'):
-        value = given.pop(key)
-        if value != defaults[key]:
-            entry[key] = value
-    if given or case:
-        raise RunnerFailure(
-            f'{entry["id"]}: keys the inventory has no place for'
-        )
-    return entry
-
-
-def inventory_cases(ids: Iterable[str]) -> list[tuple[dict[str, Any], str]]:
-    r"""The inventory cases named, in the case format, each with the
-    SHA-256 of its canonical JSON."""
-    wanted = list(ids)
-    if not wanted:
-        return []
-    inventory = load_inventory()
-    entries = {entry['id']: entry for entry in inventory['cases']}
-    validate = validator('case')
-    found = []
-    for case_id in wanted:
-        if case_id not in entries:
-            raise RunnerFailure(f'{case_id}: not an inventory case')
-        case = inventory_case(entries[case_id], inventory['defaults'])
-        problem = _invalid(validate, case)
-        if problem is not None:
-            raise RunnerFailure(f'{case_id}: not a case: {problem}')
-        text = json.dumps(case, sort_keys=True).encode()
-        found.append((case, digest(text)))
-    return found
 
 
 # --- identity --------------------------------------------------------------------
@@ -1512,11 +1312,17 @@ class _Boundary:
 
         self.capture = _Capture()
         imported = run.native
+        self._original_native = imported
 
         def native() -> Any:
             return _Native(imported(), self.capture)
 
         run.native = native  # type: ignore[assignment]
+
+    def close(self) -> None:
+        from sdm_client._rust import run
+
+        run.native = self._original_native
 
     def reset(self) -> _Capture:
         self.capture = _Capture()
@@ -1528,7 +1334,12 @@ def _sibling(name: str) -> Any:
     script directory on ``sys.path``."""
     if name in sys.modules:
         return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, HERE / f'{name}.py')
+    path = (
+        HERE.parents[1] / 'tests/support/scripted_endpoint.py'
+        if name == 'scripted_endpoint'
+        else HERE / f'{name}.py'
+    )
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise RunnerFailure(f'{name}.py is missing beside the runner')
     module = importlib.util.module_from_spec(spec)
@@ -5110,8 +4921,8 @@ def stale_client(installed: Any, source: Path = CONTRACT_SOURCE) -> str | None:
     if installed != int(declared[0]):
         return (
             f"the installed client's contract version {installed} is not the "
-            f"checkout's {declared[0]}: a stale wheel; rebuild the lane's "
-            'environment (scripts/rust_core/cells.sh)'
+            f"checkout's {declared[0]}: a stale wheel; rebuild and install "
+            'the current native client using CONTRIBUTING.md'
         )
     return None
 
@@ -5142,190 +4953,148 @@ def run(
     record_fetches: Path | None = None,
     record: Path | None = None,
 ) -> list[dict[str, Any]]:
-    r"""Every case's observation on ``database``, keyed by :func:`case_key`,
-    or :class:`RunnerFailure`. A case that does not run on ``database``
-    (its legs, :func:`case_legs`) is left out; python-core runs on SQLite or
-    Postgres only when the core reports a provider for it
-    (``sdm_client._native.PROVIDERS``), as it does for DuckDB from the
-    start.
+    """Record cases supported by the selected installed native provider.
 
-    On a warehouse leg (Phase 3, choice 2) python-ref runs the old client
-    live, on the leg the live configuration opens, and every observation
-    is written with each private name as its placeholder, the run failing
-    on any private value left (:class:`Placeheld`). ``record``, the
-    recording mode, writes each case's capture there as well, one
-    ``sdm-capture/1`` line per case (:func:`capture_line`), all or
-    nothing."""
-    if record is not None and (
-        mode != 'python-ref' or database not in WAREHOUSES or not driver_capture
-    ):
+    Legacy arguments are rejected explicitly for callers using the old helper
+    signature; frozen-client recording belongs to the archived runner.
+    """
+    if mode != 'python-core' or reference is not None or record is not None:
         raise RunnerFailure(
-            'the recording mode runs python-ref on a warehouse leg, with the '
-            'driver capture'
-        )
-    if database in WAREHOUSES and mode == 'python-old':
-        raise RunnerFailure(
-            f'python-old runs on DuckDB only; the {database} reference side '
-            "is the capture's reference line"
-        )
-    if mode == 'python-old' and database != 'duckdb':
-        # The orchestrator's decision (T2.1a fix 4): off DuckDB the
-        # reference side is python-ref's committed lines until the core's
-        # providers land; the old route, deleted in Phase 5, is not run
-        # there.
-        raise RunnerFailure(
-            f'python-old runs on DuckDB only; the {database} reference side '
-            'is python-ref, its lines committed'
+            'this runner supports the current native client only; '
+            'use the archived runner for frozen-client recordings'
         )
     cases = [pair for pair in cases if database in case_legs(pair[0])]
     if not cases:
         raise RunnerFailure(f'no case runs on {database}')
-    # The candidate defaults to the core from T3.10. An old/reference run
-    # selects the legacy code explicitly, including between its cases.
-    os.environ['SDM_CORE_ROUTES'] = ''
-    guard = _Guard(reference) if reference is not None else None
-    if guard is not None:
-        guard.check('before the first case')
-        _require_reference_client(reference)  # type: ignore[arg-type]
     bases_path = BASES
     bases = load_bases(bases_path)
     bases_digest = digest(bases_path.read_bytes())
     boundary = _Boundary() if mode == 'python-core' else None
-    versions = _versions()
-    if 'duckdb' not in versions:
-        raise RunnerFailure('duckdb is not installed')
-    if mode == 'python-core':
-        from sdm_client import _native
-
-        refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
-        if refused is not None:
-            raise RunnerFailure(refused)
-    if mode == 'python-core' and database != 'duckdb':
-        from sdm_client import _native
-
-        if provider_for_leg(database) not in _native.PROVIDERS:
-            raise RunnerFailure(
-                f'the core reports no {database} provider: the {database} '
-                'job runs the reference side only'
-            )
-    recorded = []
-    kept: list[dict[str, Any]] = []
-    for case, case_digest in cases:
-        capture = boundary.reset() if boundary is not None else None
-        if capture is not None:
-            capture.recording = record_fetches is not None
+    try:
+        versions = _versions()
+        if 'duckdb' not in versions:
+            raise RunnerFailure('duckdb is not installed')
         if mode == 'python-core':
-            os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
-        else:
-            os.environ['SDM_CORE_ROUTES'] = ''
-        keep: dict[str, Any] | None = {} if record is not None else None
-        try:
+            from sdm_client import _native
+
+            refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
+            if refused is not None:
+                raise RunnerFailure(refused)
+        if mode == 'python-core' and database != 'duckdb':
+            from sdm_client import _native
+
+            if provider_for_leg(database) not in _native.PROVIDERS:
+                raise RunnerFailure(
+                    f'the core reports no {database} provider: the {database} '
+                    'job runs the reference side only'
+                )
+        recorded = []
+        kept: list[dict[str, Any]] = []
+        for case, case_digest in cases:
+            capture = boundary.reset() if boundary is not None else None
+            if capture is not None:
+                capture.recording = record_fetches is not None
+            keep: dict[str, Any] | None = {} if record is not None else None
             outcome, shown, driver, public, origins = _call(
                 case, bases, driver_capture, database, keep, capture
             )
-        finally:
-            os.environ.pop('SDM_CORE_ROUTES', None)
-        if keep is not None and record is not None:
-            kept.append(keep)
-        recorded.append(
-            (
-                case,
-                case_digest,
-                outcome,
-                shown,
-                capture,
-                'sdm_client._native' in sys.modules,
-                driver,
-                public,
-                origins,
-            )
-        )
-    reference_identity = None
-    if guard is not None and reference is not None:
-        guard.check('after the last case')
-        reference_identity = {
-            'commit': _git(reference),
-            'environment': _environment(),
-            'guard': {'before': 'passed', 'after': 'passed'},
-        }
-    native_sha256 = _native_sha256() if mode == 'python-core' else None
-    contract = None
-    if mode == 'python-core' and 'sdm_client._native' in sys.modules:
-        contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
-    commit = _git(REPO)
-    validate = validator('observation')
-    observations = []
-    for (
-        case,
-        case_digest,
-        outcome,
-        shown,
-        capture,
-        loaded,
-        driver,
-        public,
-        origins,
-    ) in recorded:
-        observation = {
-            'format': 'sdm-observation/1',
-            'case': case_key(case['id'], database),
-            'identity': {
-                'runner': mode,
-                'cell': _cell(versions),
-                'platform': f'{sys.platform}-{platform.machine()}',
-                'commit': commit,
-                'reference': reference_identity,
-                'native': (
-                    {'sha256': native_sha256} if native_sha256 else None
-                ),
-                'native_loaded': loaded,
-                'operations': capture.operations if capture else [],
-                'contract': contract,
-                'versions': versions,
-                'inputs': {'case': case_digest, 'bases': bases_digest},
-            },
-            'outcome': outcome,
-            # Each warning's origin on the candidate's runners, which a
-            # cell other than the reference's compares (HOST-5); never on
-            # python-ref, whose committed lines it would change.
-            'host': (
-                {'warnings': shown}
-                if mode == 'python-ref'
-                else {'warnings': shown, 'origins': origins}
-            ),
-            'core': capture.core() if capture else None,
-            'driver': driver,
-            'public': public,
-        }
-        problem = _invalid(validate, observation)
-        if problem is not None:
-            raise RunnerFailure(
-                f'{case["id"]}: its observation is not valid: {problem}'
-            )
-        observations.append(observation)
-    if database in WAREHOUSES and mode == 'python-ref':
-        observations = _held_observations(
-            observations, cases, bases, kept, record
-        )
-    if record_fetches is not None:
-        # The replay's recording (T2.3, KO2-20): each case's fetches, with
-        # the answers the Postgres provider replied with, in order, and the
-        # statements the driver ran for each, so the replay's record of what
-        # ran is python-core's.
-        record_fetches.write_text(
-            ''.join(
-                json.dumps(
-                    _replay_line(case, database, capture, driver),
-                    sort_keys=True,
+            if keep is not None and record is not None:
+                kept.append(keep)
+            recorded.append(
+                (
+                    case,
+                    case_digest,
+                    outcome,
+                    shown,
+                    capture,
+                    'sdm_client._native' in sys.modules,
+                    driver,
+                    public,
+                    origins,
                 )
-                + '\n'
-                for case, _, _, _, capture, _, driver, *_ in recorded
-                if capture is not None
-                and (capture.answered or database in WAREHOUSES)
-            ),
-            encoding='utf-8',
-        )
-    return observations
+            )
+        reference_identity = None
+        native_sha256 = _native_sha256() if mode == 'python-core' else None
+        contract = None
+        if mode == 'python-core' and 'sdm_client._native' in sys.modules:
+            contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
+        commit = _git(REPO)
+        validate = validator('observation')
+        observations = []
+        for (
+            case,
+            case_digest,
+            outcome,
+            shown,
+            capture,
+            loaded,
+            driver,
+            public,
+            origins,
+        ) in recorded:
+            observation = {
+                'format': 'sdm-observation/1',
+                'case': case_key(case['id'], database),
+                'identity': {
+                    'runner': mode,
+                    'cell': _cell(versions),
+                    'platform': f'{sys.platform}-{platform.machine()}',
+                    'commit': commit,
+                    'reference': reference_identity,
+                    'native': (
+                        {'sha256': native_sha256} if native_sha256 else None
+                    ),
+                    'native_loaded': loaded,
+                    'operations': capture.operations if capture else [],
+                    'contract': contract,
+                    'versions': versions,
+                    'inputs': {'case': case_digest, 'bases': bases_digest},
+                },
+                'outcome': outcome,
+                # Each warning's origin on the candidate's runners, which a
+                # cell other than the reference's compares (HOST-5); never on
+                # python-ref, whose committed lines it would change.
+                'host': (
+                    {'warnings': shown}
+                    if mode == 'python-ref'
+                    else {'warnings': shown, 'origins': origins}
+                ),
+                'core': capture.core() if capture else None,
+                'driver': driver,
+                'public': public,
+            }
+            problem = _invalid(validate, observation)
+            if problem is not None:
+                raise RunnerFailure(
+                    f'{case["id"]}: its observation is not valid: {problem}'
+                )
+            observations.append(observation)
+        if database in WAREHOUSES and mode == 'python-ref':
+            observations = _held_observations(
+                observations, cases, bases, kept, record
+            )
+        if record_fetches is not None:
+            # The replay's recording (T2.3, KO2-20): each case's fetches, with
+            # the answers the Postgres provider replied with, in order, and the
+            # statements the driver ran for each, so the replay's record of what
+            # ran is python-core's.
+            record_fetches.write_text(
+                ''.join(
+                    json.dumps(
+                        _replay_line(case, database, capture, driver),
+                        sort_keys=True,
+                    )
+                    + '\n'
+                    for case, _, _, _, capture, _, driver, *_ in recorded
+                    if capture is not None
+                    and (capture.answered or database in WAREHOUSES)
+                ),
+                encoding='utf-8',
+            )
+        return observations
+    finally:
+        if boundary is not None:
+            boundary.close()
 
 
 def _held_observations(
@@ -5486,50 +5255,6 @@ def legs_main(argv: list[str]) -> int:
     return 1 if problems else 0
 
 
-def environment_refusal(
-    environ: Mapping[str, str], prefix: str = sys.prefix
-) -> str | None:
-    r"""Why this interpreter may not run the client's routes, or None (T3.0).
-
-    On the orchestration machine (``SDM_ORCH_STATE`` set, outside CI), a
-    checkout's own ``.venv`` is shared and holds whatever client was last
-    installed there: Phase 2 read a stale one as an environment fault for
-    twelve hours. A runner under it refuses, naming the lane's environment,
-    which ``scripts/rust_core/cells.sh`` builds for the lane's tree. With
-    ``SDM_LANE_ENV`` set (that environment's directory), any interpreter
-    outside it refuses. CI builds its environment per run and is not held."""
-    if environ.get('GITHUB_ACTIONS') == 'true':
-        return None
-    here = Path(prefix).resolve()
-    lane = environ.get('SDM_LANE_ENV')
-    right = (
-        f'{lane}/current/cell-<cell>/bin/python (cells.sh prints each cell)'
-        if lane
-        else "your lane's environment: build it with scripts/rust_core/cells.sh "
-        '$SDM_CELLS_ROOT/<lane>, set SDM_LANE_ENV to that directory, and run '
-        'with the cell python it prints'
-    )
-    if lane:
-        root = Path(lane).resolve()
-        if here == root or root in here.parents:
-            return None
-        return (
-            f'this runner runs under {prefix}, outside the lane environment '
-            f'{lane} (SDM_LANE_ENV): run it with {right}'
-        )
-    if (
-        environ.get('SDM_ORCH_STATE')
-        and here.name == '.venv'
-        and (here.parent / '.git').exists()
-    ):
-        return (
-            f"this runner runs under {prefix}, a checkout's shared .venv, "
-            'whose client is whatever was last installed there, not this '
-            f"tree's: run it with {right}"
-        )
-    return None
-
-
 def publish_observations(
     observations: list[dict[str, Any]], database: str
 ) -> list[dict[str, Any]]:
@@ -5578,9 +5303,9 @@ def publish_main(argv: list[str]) -> int:
     return 0
 
 
-def _capture_run() -> Any:
+def _live_guard() -> Any:
     """The live runner's existing driver and loader write guard."""
-    path = REPO / 'scripts/live/capture_run.py'
+    path = REPO / 'scripts/live/runner_guard.py'
     spec = importlib.util.spec_from_file_location('runner_live_guard', path)
     assert spec is not None and spec.loader is not None
     loaded = importlib.util.module_from_spec(spec)
@@ -5597,19 +5322,11 @@ def main(argv: list[str] | None = None) -> int:
         return publish_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--mode', choices=MODES, required=True)
-    parser.add_argument('--reference', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument(
         '--guard-live',
         action='store_true',
         help='install the existing live write guard before any warehouse driver is opened',
-    )
-    parser.add_argument(
-        '--inventory',
-        action='append',
-        default=[],
-        metavar='ID',
-        help='a case of the Phase 1b inventory, by id, in the case format',
     )
     parser.add_argument(
         '--no-capture',
@@ -5628,14 +5345,6 @@ def main(argv: list[str] | None = None) -> int:
         'the live configuration (SDM_LIVE_CONFIG) names',
     )
     parser.add_argument(
-        '--record',
-        type=Path,
-        metavar='FILE',
-        help='the recording mode (Phase 3, choice 2): python-ref on a '
-        "warehouse leg writes each case's capture (sdm-capture/1) to FILE, "
-        'every private name as its placeholder',
-    )
-    parser.add_argument(
         '--record-fetches',
         type=Path,
         metavar='FILE',
@@ -5647,40 +5356,27 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     if arguments.guard_live and arguments.database not in WAREHOUSES:
         parser.error('--guard-live needs a warehouse database')
-    if arguments.mode != 'python-ref':
-        refused = environment_refusal(os.environ)
-        if refused is not None:
-            print(f'runner failure: {refused}', file=sys.stderr)
-            return 1
-    if arguments.record_fetches is not None and arguments.mode != 'python-core':
-        parser.error('--record-fetches is given in python-core mode only')
-    if (arguments.mode == 'python-ref') != (arguments.reference is not None):
-        parser.error('--reference is given in python-ref mode, and only there')
     # A failed run leaves no output, not an earlier run's.
     partial = arguments.out.with_name(arguments.out.name + '.partial')
     arguments.out.unlink(missing_ok=True)
     partial.unlink(missing_ok=True)
-    if arguments.record is not None:
-        arguments.record.unlink(missing_ok=True)
     undo = None
     try:
         if arguments.guard_live:
-            helper = _capture_run()
+            helper = _live_guard()
             undo = helper.install_guard(
                 arguments.database, helper.load_guard(), _sibling('databases')
             )
         cases = load_cases(arguments.cases) if arguments.cases else []
-        cases.extend(inventory_cases(arguments.inventory))
         if not cases:
             raise RunnerFailure('no cases')
         observations = run(
             arguments.mode,
             cases,
-            arguments.reference,
+            None,
             driver_capture=not arguments.no_capture,
             database=arguments.database,
             record_fetches=arguments.record_fetches,
-            record=arguments.record,
         )
         if arguments.guard_live and helper.environment_failure(observations):
             raise RunnerFailure(
