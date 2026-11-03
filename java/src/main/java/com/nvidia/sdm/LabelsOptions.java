@@ -46,7 +46,9 @@ public final class LabelsOptions {
     private Builder(long size) { this.size = size; }
     public Builder maxIterations(long value) { maxIterations = value; return this; }
     /** A supported Java time value, interpreted as by MaterializeOptions.anchorTime. */
-    public Builder anchorTime(Object value) { anchorTime = value; return this; }
+    public Builder anchorTime(java.time.LocalDate value) { anchorTime = value.atStartOfDay(); return this; }
+    public Builder anchorTime(java.time.LocalDateTime value) { anchorTime = java.util.Objects.requireNonNull(value); return this; }
+    public Builder anchorTime(java.time.ZonedDateTime value) { anchorTime = java.util.Objects.requireNonNull(value); return this; }
     /** Use each entity's own timestamp, for static targets only. */
     public Builder entityTime() { anchorTime = MaterializeOptions.EACH_ENTITY; return this; }
     /** A nonnegative seed, or null for a fresh sample. */

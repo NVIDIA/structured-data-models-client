@@ -61,6 +61,12 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::LabelsFrames(request) => Run::new(move |asker| async move {
+            crate::materialize::frames::labels(asker, request, attachments, facts, zones).await
+        }),
+        Operation::LabelsSource(request) => {
+            crate::materialize::label_query::source(root, request, attachments, facts, zones)?
+        }
         Operation::PrepareTimeSeries(request) => {
             let input = take_json(&mut attachments, request.input)?;
             let Some(Attachment::Arrow(table)) = attachments.remove(&request.table) else {

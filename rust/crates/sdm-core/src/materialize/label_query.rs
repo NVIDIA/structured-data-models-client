@@ -173,18 +173,14 @@ pub(crate) async fn extract(
     }
     let forecast_steps = validation.steps.as_ref().map_or(1, |v| v.count);
     let selected_ids = validated.entity_ids.clone();
-    let single;
-    let validated = if let Some(plan) = &validation.steps {
-        let text = plan.step(1);
-        single = crate::pql::resolve(&text, &schema, &profile, &inputs.facts, &*inputs.zones)?;
-        single
-            .query
-            .as_ref()
-            .ok_or_else(|| unresolved(&text, &single.diagnostics))?
-    } else {
-        validated
-    };
-    let asked = asked(validated)?;
+    // Forecast labels evaluate the original target at successive anchors.
+    // Only the orchestration marker changes; retain target conditions and IDs.
+    let mut target_query = validated.clone();
+    if validation.steps.is_some() {
+        target_query.problem_type = None;
+        target_query.num_forecasts = 1;
+    }
+    let asked = asked(&target_query)?;
     let entity = graph
         .table(&asked.entity_table)
         .ok_or_else(|| internal("labels entity absent"))?;
@@ -193,12 +189,8 @@ pub(crate) async fn extract(
         .as_deref()
         .filter(|key| *key == asked.entity_column)
         .ok_or_else(|| not_yet("entity_key"))?;
-    let key_type = entity
-        .column(key)
-        .ok_or_else(|| internal("labels key absent"))?
-        .received
-        .to_arrow();
-    let output_type = target_type(&asked, &graph)?;
+    let key_type = column_type(&graph, frames.as_ref(), &entity.name, key)?;
+    let output_type = target_type(&asked, &graph, frames.as_ref())?;
     let seed = match inputs.seed {
         Some(seed) => seed,
         None if inputs.unseeded => {
@@ -345,19 +337,15 @@ pub(crate) async fn extract(
             Some(keys) => frame.lookup(entity, keys, &columns)?,
             None => frame.entities(entity, &columns, trials, &seed)?,
         }
+    } else if let Some(keys) = explicit {
+        let seeds = key_set(asker, sample::seeds(keys, vec![])?)?;
+        let request = sample::by_pkey(entity, columns, seeds, false)?;
+        times.read(asker, entity, one_batch(&ask(asker, request).await?)?)?
     } else {
         let mut filters = vec![Filter::NotNull { column: key.into() }];
         if let Some(time) = &entity.time_column {
             filters.push(Filter::NotNull {
                 column: time.clone(),
-            });
-        }
-        if let Some(keys) = explicit {
-            let batch = RecordBatch::try_from_iter([(key, keys)])
-                .map_err(|_| internal("label key schema"))?;
-            filters.push(Filter::KeyIn {
-                columns: vec![key.into()],
-                keys: key_set(asker, batch)?,
             });
         }
         times.read(
@@ -394,7 +382,7 @@ pub(crate) async fn extract(
     let mut seen = BTreeSet::new();
     let keys = crate::subgraph::key_values(entity, key, named(&sampled, key)?)?;
     let kept: Vec<usize> = (0..keys.len())
-        .filter(|i| seen.insert(keys[*i].clone()))
+        .filter(|i| keys[*i].is_some() && seen.insert(keys[*i].clone()))
         .collect();
     let entity_key = take(named(&sampled, key)?, &kept)?;
     let entity_time = entity
@@ -509,25 +497,40 @@ fn first_id(node: &PqlNode, dtype: &DataType) -> Result<ArrayRef, CoreError> {
     keys::cast(&values, dtype)
 }
 
-fn target_type(asked: &Asked, graph: &Graph) -> Result<DataType, CoreError> {
+fn column_type(
+    graph: &Graph,
+    frames: Option<&frames::FrameGraph>,
+    table: &str,
+    column: &str,
+) -> Result<DataType, CoreError> {
+    match frames {
+        Some(frames) => frames.column_type(table, column),
+        None => Ok(graph
+            .table(table)
+            .and_then(|table| table.column(column))
+            .ok_or_else(|| internal("label column absent"))?
+            .received
+            .to_arrow()),
+    }
+}
+
+fn target_type(
+    asked: &Asked,
+    graph: &Graph,
+    frames: Option<&frames::FrameGraph>,
+) -> Result<DataType, CoreError> {
     Ok(match &asked.target {
         Shape::Links(window) => {
-            let dtype = graph
-                .table(&window.table)
-                .and_then(|t| window.column.as_ref().and_then(|c| t.column(c)))
-                .ok_or_else(|| internal("link target column absent"))?
-                .received
-                .to_arrow();
+            let column = window
+                .column
+                .as_ref()
+                .ok_or_else(|| internal("link target column absent"))?;
+            let dtype = column_type(graph, frames, &window.table, column)?;
             DataType::List(Arc::new(ArrowField::new("item", dtype, false)))
         }
         Shape::Condition { .. } | Shape::Both { .. } | Shape::Not(_) => DataType::Boolean,
         Shape::Column(column) => {
-            let dtype = graph
-                .table(&asked.entity_table)
-                .and_then(|table| table.column(column))
-                .ok_or_else(|| internal("target column absent"))?
-                .received
-                .to_arrow();
+            let dtype = column_type(graph, frames, &asked.entity_table, column)?;
             // Ask the actual target conversion about an empty column. This also
             // refuses unsupported target storage without sampling any rows.
             let target =

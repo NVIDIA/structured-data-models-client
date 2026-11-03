@@ -36,6 +36,8 @@ use crate::types::ColumnType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    LabelsFrames(crate::labels::LabelsFrames),
+    LabelsSource(crate::labels::LabelsSource),
     FrameSession(crate::frame_session::FrameSessionOperation),
     DescribeFrameTables(crate::frames::DescribeFrameTables),
     PrepareFrameGraph(crate::frames::PrepareFrameGraph),
@@ -123,6 +125,8 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::PrepareTimeSeries(_) => "prepare_time_series",
+            Operation::LabelsFrames(_) => "labels_frames",
+            Operation::LabelsSource(_) => "labels_source",
             Operation::TabularArrow(_) => "tabular_arrow",
             Operation::FeatureImportance(_) => "feature_importance",
             Operation::PlanResultMerge(_) => "plan_result_merge",
@@ -256,6 +260,10 @@ impl Operation {
                 ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
                 ids
             }
+            Operation::LabelsFrames(v) => {
+                vec![(v.graph, AttachmentKind::FrameGraph), (v.input, Bytes)]
+            }
+            Operation::LabelsSource(v) => vec![(v.schema, Bytes), (v.input, Bytes)],
             Operation::PrepareFrameGraph(v) => {
                 let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
                 ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
@@ -399,6 +407,7 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    Labels(crate::labels::LabelRows),
     ResultItems(crate::result::ResultItems),
     RequestSplit(crate::split::RequestSplit),
     PreparedFrameGraph(crate::frames::PreparedFrameGraph),
@@ -1954,6 +1963,8 @@ pub struct Attachments {
     pub assembleframeschema_input: crate::frames::AssembleFrameSchema,
     #[schemars(rename = "FrameTables.names")]
     pub frame_tables_names: Vec<String>,
+    #[schemars(rename = "Labels.input")]
+    pub labels_input: crate::labels::LabelsCall,
     #[schemars(rename = "MaterializeFrames.input")]
     pub materialize_frames_input: crate::frames::FrameCall,
     #[schemars(rename = "ObserveDirectSchema.input")]

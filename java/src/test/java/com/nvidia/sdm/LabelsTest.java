@@ -96,6 +96,8 @@ class LabelsTest {
       }
     }
     Map<String,Object> forecast = (Map<String,Object>) data.get("forecast");
+    assertThrows(StructuredDataException.class, () -> PredictiveQuery.parse(forecast.get("query").toString().replace("= 1", "= 999"))
+        .labels(schema, LabelsOptions.builder(3).anchorTime(LocalDate.parse(data.get("anchor").toString())).build()));
     try (Table output = PredictiveQuery.parse(forecast.get("query").toString()).labels(schema,
         LabelsOptions.builder(3).anchorTime(LocalDate.parse(data.get("anchor").toString())).build());
         FieldVector ids = output.getVectorCopy(0); FieldVector targets = output.getVectorCopy(2)) {

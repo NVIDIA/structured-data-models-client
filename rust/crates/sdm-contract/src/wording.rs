@@ -447,6 +447,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::TimeSeriesIrregular => said(
             "History intervals differ; using their median. Pass time_delta explicitly to override.",
         ),
+        S::LabelsInvalid => said("invalid labels {field}: {reason}"),
         S::FeatureImportanceScore => said("explanation score must be finite numeric attribution"),
         S::ResultMergeEmpty => said("no parts to merge"),
         S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),

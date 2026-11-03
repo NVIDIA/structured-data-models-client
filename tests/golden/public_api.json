@@ -342,6 +342,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
+          "labels": "(self, size: 'int', *, anchor_time: 'pd.Timestamp | str | None' = None, random_seed: 'int | None' = 42, max_iterations: 'int' = 10) -> 'pd.DataFrame'",
           "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, candidates: 'Sequence[Any] | None' = None, task: 'str | None' = None, **options: 'Any') -> 'Request'"
         },
         "signature": "(query: 'str', data: 'Schema | Mapping[str, pd.DataFrame]') -> 'None'"

@@ -59,6 +59,9 @@ impl FrameGraph {
         }
         Ok(Lease(self.clone()))
     }
+    pub(super) fn column_type(&self, table: &str, column: &str) -> Result<DataType, CoreError> {
+        self.0.snapshot.column_type(table, column)
+    }
     pub(super) fn graph(&self) -> Graph {
         self.0.graph.clone()
     }

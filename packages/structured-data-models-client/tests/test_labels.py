@@ -108,16 +108,13 @@ def test_size_and_seed_bound_selection():
 
 
 @pytest.mark.parametrize('connector', ['sqlite', 'duckdb'])
-def test_provider_ground_truth(connector):
-    import sqlite3
-
+def test_provider_ground_truth(connector, monkeypatch):
+    import adbc_driver_sqlite.dbapi as sqlite3
     import duckdb
     from sdm_connectors import DuckDBSource, SQLiteSource
 
     connection = (
-        duckdb.connect()
-        if connector == 'duckdb'
-        else sqlite3.connect(':memory:')
+        duckdb.connect() if connector == 'duckdb' else sqlite3.connect()
     )
     try:
         for name, declarations in (
@@ -130,11 +127,13 @@ def test_provider_ground_truth(connector):
             ),
         ):
             columns = DATA[name]
-            connection.execute(f'CREATE TABLE {name} ({declarations})')
-            connection.executemany(
-                f'INSERT INTO {name} VALUES ({", ".join("?" for _ in columns)})',
-                list(zip(*columns.values(), strict=True)),
-            )
+            with connection.cursor() as cursor:
+                cursor.execute(f'CREATE TABLE {name} ({declarations})')
+                cursor.executemany(
+                    f'INSERT INTO {name} VALUES ({", ".join("?" for _ in columns)})',
+                    list(zip(*columns.values(), strict=True)),
+                )
+        connection.commit()
         source = (
             DuckDBSource(connection)
             if connector == 'duckdb'
@@ -156,7 +155,31 @@ def test_provider_ground_truth(connector):
             Relationship('orders', 'user_id', 'users', 'user_id'),
             Relationship('orders', 'item_id', 'items', 'item_id'),
         ]
+        from sdm_client._rust import providers
+
+        original_provider = providers.for_source
+        requests = []
+
+        def observed(source):
+            choice, provider = original_provider(source)
+
+            def answer(request, keys):
+                requests.append(request['request'])
+                return provider(request, keys)
+
+            return choice, answer
+
+        monkeypatch.setattr(providers, 'for_source', observed)
+        zero = PredictiveQuery(
+            'PREDICT users.value FOR EACH users.user_id', data
+        ).labels(0)
+        assert zero.empty
+        assert not any(
+            request['request'] in ('sample_entities', 'lookup', 'neighbors')
+            for request in requests
+        )
         for case in DATA['cases']:
+            requests.clear()
             output = PredictiveQuery(
                 f'PREDICT {case["target"]} FOR EACH users.user_id', data
             ).labels(100, anchor_time=pd.Timestamp(DATA['anchor']))
@@ -167,10 +190,22 @@ def test_provider_ground_truth(connector):
                 for row in output.itertuples()
             }
             assert actual == case['expected']
+            neighbors = [
+                request
+                for request in requests
+                if request['request'] == 'neighbors'
+            ]
+            assert all(request.get('per_seed') is None for request in neighbors)
+            if case['name'] in ('regression', 'classification'):
+                assert not neighbors
         forecast = PredictiveQuery(DATA['forecast']['query'], data).labels(
             3, anchor_time=pd.Timestamp(DATA['anchor'])
         )
         assert forecast.TARGET.tolist() == DATA['forecast']['target']
+        with pytest.raises(StructuredDataError):
+            PredictiveQuery(
+                DATA['forecast']['query'].replace('= 1', '= 999'), data
+            ).labels(3, anchor_time=pd.Timestamp(DATA['anchor']))
     finally:
         connection.close()
 
@@ -291,3 +326,10 @@ def test_decimal_classes_without_collisions_keep_numeric_targets():
         output.TARGET.tolist()
         == np.array([1.01, 2.02], dtype=np.float32).tolist()
     )
+
+
+def test_missing_explicit_forecast_entity_is_a_structured_error():
+    with pytest.raises(StructuredDataError):
+        PredictiveQuery(
+            DATA['forecast']['query'].replace('= 1', '= 999'), schema()
+        ).labels(3, anchor_time=pd.Timestamp(DATA['anchor']))

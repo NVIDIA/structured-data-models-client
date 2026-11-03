@@ -58,6 +58,7 @@
 //! anything is fetched.
 
 pub(crate) mod frames;
+pub(crate) mod label_query;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};

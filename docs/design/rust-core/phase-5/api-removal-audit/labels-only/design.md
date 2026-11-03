@@ -4,7 +4,7 @@
 
 # Compute known answers without calling a model
 
-**Approved for contract-first implementation: add a labels operation to Python/Java `PredictiveQuery`.**
+**Implemented: Python/Java `PredictiveQuery.labels`, contract 62.**
 This produces historical ground truth for evaluation, debugging a prediction target or preparing a labeled dataset.
 It does not train or fit a model.
 
@@ -55,7 +55,7 @@ Reuse its underlying engine pieces, not its entry point.
 Shared fixtures must compare Python/Java values to independently calculated answers, for memory and provider paths, including empty outcomes and temporal boundaries.
 Warehouse label queries are required; preserve existing prediction sampling SQL, with regression checks demonstrating that separation.
 GPU testing is unnecessary for this operation.
-The cited old tests establish scalar/temporal label behavior; forecast/link output layouts still need explicit fixtures before claiming restoration parity for those shapes.
+The cited old tests establish scalar/temporal label behavior; forecast/link layouts are verified against independent shared fixtures and the old API.
 
 ## Test standard: parity or an explained improvement
 
@@ -102,3 +102,12 @@ The old pandas executor confirms `(start, end]` windows and omission of empty LI
 
 Scalar output uses the existing target conversion, including its value-dependent Decimal classification rule: represent colliding numeric classes as distinct strings.
 A zero-row result uses that conversion on an empty column; it cannot detect observed Decimal class collisions without reading rows.
+
+## Completion evidence
+
+- Shared fixture: 21 Python cases and 3 Java journeys cover memory, SQLite and DuckDB; 4 focused Rust tests cover output types and ownership-independent layouts.
+- Read-only Python Databricks SQL and Snowflake journeys pass scalar, temporal COUNT and link labels against the maintained shop fixture; no model endpoint or fixture writes.
+- Existing frame and warehouse-link materialization tests pass after the behavior-identical helper extraction.
+- Old `12955d397` `get_train_table` matches all five shared target cases plus explicit/default-anchor forecasts; its source hash was verified before execution.
+- Provider assertions enforce no entity sampling at size zero, no neighbor gathering for static labels, and uncapped target-window reads rather than feature-neighborhood sampling.
+- Deliberate improvements: structured temporal entity-anchor refusal instead of an assertion, checked trial multiplication, explicit owned outputs and preserved Decimal class identities.

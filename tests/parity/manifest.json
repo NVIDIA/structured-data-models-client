@@ -3745,9 +3745,31 @@
       },
       "gate": "local",
       "note": "Shared fixtures verify detached edits, recorded link origin, explicit choices and persistence; provider materialization checks the unchanged sampler boundary."
+    },
+    {
+      "id": "labels-only",
+      "apis": {
+        "python": [
+          "PredictiveQuery.labels"
+        ],
+        "java": [
+          "PredictiveQuery.labels",
+          "LabelsOptions"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_labels.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/LabelsTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Shared independent scalar/temporal/link/forecast labels across memory and SQLite/DuckDB; no model call; live warehouse read-only proof is separate."
     }
   ],
-  "public_api_snapshot_sha256": "30f5e87211c16aa07929f7dd9d7cb745863beeefb9cf8b1e3a5050f43af906e1",
+  "public_api_snapshot_sha256": "0226f12683ee7b755c82e5ee99276169fc6767b7e978624bd0a6ad85c0299b51",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -3983,6 +4005,9 @@
       },
       "sdm_client.PredictiveQuery": {
         "capability": "direct-dtypes-options"
+      },
+      "sdm_client.PredictiveQuery.labels": {
+        "capability": "labels-only"
       },
       "sdm_client.PredictiveQuery.materialize": {
         "capability": "direct-dtypes-options"
@@ -4745,6 +4770,39 @@
       "com.nvidia.sdm.JdbcSource#public abstract java.sql.Connection connection();": {
         "capability": "readers"
       },
+      "com.nvidia.sdm.LabelsOptions": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions#public static com.nvidia.sdm.LabelsOptions$Builder builder(long);": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions build();": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder anchorTime(java.time.LocalDate);": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder anchorTime(java.time.LocalDateTime);": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder anchorTime(java.time.ZonedDateTime);": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder entityTime();": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder maxIterations(long);": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder randomSeed(java.lang.Long);": {
+        "capability": "labels-only"
+      },
+      "com.nvidia.sdm.LabelsOptions$Builder#public com.nvidia.sdm.LabelsOptions$Builder randomSeed(long);": {
+        "capability": "labels-only"
+      },
       "com.nvidia.sdm.LinkMetadata": {
         "capability": "metadata-explanation-reports"
       },
@@ -5047,6 +5105,9 @@
       },
       "com.nvidia.sdm.PredictiveQuery#public java.lang.String toString();": {
         "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.PredictiveQuery#public org.apache.arrow.vector.table.Table labels(com.nvidia.sdm.Schema, com.nvidia.sdm.LabelsOptions);": {
+        "capability": "labels-only"
       },
       "com.nvidia.sdm.PredictiveQuery#public static com.nvidia.sdm.PredictiveQuery parse(java.lang.String);": {
         "capability": "direct-dtypes-options"
@@ -6064,6 +6125,26 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/schema-refinement",
       "reason": "Restore reviewed inference reruns and atomic schema edits in Python/Java; Rust owns inference and provenance."
+    },
+    {
+      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
+      "record": "api_contracts/labels-only",
+      "reason": "Restore reviewed model-free labels extraction with shared Rust target semantics and owned Python/Java outputs."
+    },
+    {
+      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
+      "record": "api_inventory",
+      "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
+    },
+    {
+      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
+      "record": "live_api_tests",
+      "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
+    },
+    {
+      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
     }
   ],
   "capabilities": [
@@ -7694,6 +7775,11 @@
     {
       "api_contract": "readers",
       "test": "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#liveExactNumbersTemporalValuesAndCallerSettings",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "labels-only",
+      "test": "packages/structured-data-models-client/tests/test_labels_warehouse.py::test_live_ground_truth_without_a_model",
       "evidence_level": "live-required"
     }
   ]
