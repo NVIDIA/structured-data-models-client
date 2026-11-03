@@ -146,21 +146,20 @@ pub fn infer(
                 table.primary_key.clone_from(&fresh.primary_key);
                 table.duplicate_keys.clone_from(&fresh.duplicate_keys);
             }
-            if table.time_column.is_none() && !state.time_declared.contains(&table.name) {
-                if let Some(choice) = candidate
+            if table.time_column.is_none()
+                && !state.time_declared.contains(&table.name)
+                && let Some(choice) = candidate
                     .inference
                     .as_ref()
                     .and_then(|s| s.times.get(&table.name))
-                {
-                    if choice.column.as_ref().is_none_or(|name| {
-                        table
-                            .columns
-                            .iter()
-                            .any(|column| &column.name == name && column.stype == Stype::Timestamp)
-                    }) {
-                        state.times.insert(table.name.clone(), choice.clone());
-                    }
-                }
+                && choice.column.as_ref().is_none_or(|name| {
+                    table
+                        .columns
+                        .iter()
+                        .any(|column| &column.name == name && column.stype == Stype::Timestamp)
+                })
+            {
+                state.times.insert(table.name.clone(), choice.clone());
             }
         }
     }

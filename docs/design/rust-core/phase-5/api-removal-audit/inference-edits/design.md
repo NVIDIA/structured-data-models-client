@@ -84,3 +84,20 @@ Pure edits perform no source reads; rerunning inference may read previews throug
 
 Fresh manually constructed schemas may infer missing default choices; setters explicitly assigning none disable that inference.
 Older serialized schemas with no recorded history retain unknown choices conservatively rather than guessing that missing means inferable.
+
+## Implementation evidence (contract 61)
+
+Python and Java now expose these operations through existing schema-edit and observation paths.
+The independent boundary/ownership review found no blocker; its null-argument consistency suggestion is covered by structured-error tests in both languages.
+
+| Check | Result |
+|---|---|
+| Rust schema and contract suites | Passed, including inference provenance and link-dependent time settlement |
+| Python affected schema/ledger suite | 95 passed; final focused refinement suite 11 passed |
+| Java refinement and persistence | 5 + 7 tests passed, including DuckDB inference/materialization |
+| Live edited schema | Existing Relational endpoint v27 returned 3 predictions after inference and materialization |
+| Static checks | Clippy, mypy (103 files), Ruff and Python/Java API ledger passed |
+
+Old behavior was checked against the cited implementation and existing schema semantics tests, rather than retaining the archived engine as a dependency.
+The intentional improvements are detached metadata, atomic failures, preserved explicit-none choices and honest unknown provenance for older records.
+No warehouse sampling algorithm changed.

@@ -932,7 +932,7 @@ class Schema:
             object.__setattr__(table, '_schema', self)
         # Fresh declarations are distinguishable from older records whose
         # inference history was never recorded. Missing choices stay inferable.
-        self._inference = {
+        self._inference: dict[str, Any] | None = {
             'unknown_tables': [],
             'key_declared': [
                 name

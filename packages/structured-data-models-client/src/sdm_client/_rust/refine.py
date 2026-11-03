@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from sdm_client._rust import edits, spec
 from sdm_client.errors import StructuredDataError
@@ -33,14 +33,14 @@ def changed(schema: Schema, edit: dict) -> Schema:
 
 
 def infer(schema: Schema, links: bool) -> Schema:
-    from sdm_client.schema import Schema
+    from sdm_client.schema import Schema, SourceTable, Table
 
     if not schema.tables:
         return schema.snapshot()
     if schema.source is None:
         candidate = Schema.from_data(
             {
-                name: table.data.loc[:, list(table.columns)]
+                name: cast(Table, table).data.loc[:, list(table.columns)]
                 for name, table in schema.tables.items()
             }
         )
@@ -48,7 +48,8 @@ def infer(schema: Schema, links: bool) -> Schema:
         candidate = Schema.from_source(
             schema.source,
             tables={
-                name: table.source_name for name, table in schema.tables.items()
+                name: cast(SourceTable, table).source_name
+                for name, table in schema.tables.items()
             },
         )
     return changed(

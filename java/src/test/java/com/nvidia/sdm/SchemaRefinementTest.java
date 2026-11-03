@@ -69,17 +69,20 @@ class SchemaRefinementTest {
       inferred = original.inferLinks();
       assertTrue(original.relationships().isEmpty());
       assertEquals(List.of(LINK), inferred.relationships());
-      try (Request request = PredictiveQuery.parse("PREDICT customers.value FOR EACH customers.customer_id")
-          .materialize(inferred, MaterializeOptions.builder().indices(List.of(0, 1, 2)).randomSeed(7).build())) {
-        assertNotNull(request);
-        assertEquals(1, inferred.withoutTable("orders").tables().size());
-      }
+      Request request = PredictiveQuery.parse("PREDICT customers.value FOR EACH customers.customer_id")
+          .materialize(inferred, MaterializeOptions.builder().indices(List.of(0, 1, 2)).randomSeed(7).build());
+      assertNotNull(request);
+      assertEquals(1, inferred.withoutTable("orders").tables().size());
     }
     assertTrue(inferred.withoutRelationship(LINK).relationships().isEmpty());
   }
 
   @Test void conflictingRelationshipFailsAtomically() throws Exception {
     Schema original = schema(false).withRelationship(LINK);
+    assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
+        () -> original.withRelationship(null)).code());
+    assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
+        () -> original.withoutRelationship(null)).code());
     Relationship conflict = new Relationship("orders", "customer_id", "orders", "order_id");
     assertEquals("INVALID_REQUEST", assertThrows(StructuredDataException.class,
         () -> original.withRelationship(conflict)).code());

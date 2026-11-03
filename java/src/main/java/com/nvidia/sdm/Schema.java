@@ -295,7 +295,8 @@ public final class Schema {
 
   /** Remove an existing relationship atomically. */
   public Schema withoutRelationship(Relationship relationship) {
-    Objects.requireNonNull(relationship, "relationship");
+    if (relationship == null) throw new StructuredDataException(
+        "relationship is required", "INVALID_REQUEST", Map.of(), null);
     return edited(Map.of("edit", "remove_link", "link", links(List.of(relationship)).get(0)));
   }
 
@@ -410,7 +411,8 @@ public final class Schema {
 
   /** This schema with {@code relationship} added after its relationships. */
   public Schema withRelationship(Relationship relationship) {
-    Objects.requireNonNull(relationship, "relationship");
+    if (relationship == null) throw new StructuredDataException(
+        "relationship is required", "INVALID_REQUEST", Map.of(), null);
     return edited(Map.of("edit", "add_link", "link", links(List.of(relationship)).get(0)));
   }
 

@@ -183,3 +183,11 @@ def test_ambiguous_matching_keys_are_not_guessed():
         relationships=[],
     )
     assert ambiguous.infer_links().relationships == []
+
+
+def test_null_relationship_arguments_are_structured_refusals():
+    original = schema([])
+    for action in (original.with_relationship, original.without_relationship):
+        with pytest.raises(StructuredDataError) as error:
+            action(None)
+        assert error.value.code == 'INVALID_REQUEST'
