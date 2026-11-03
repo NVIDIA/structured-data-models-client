@@ -30,6 +30,7 @@ fn schema() -> HeldSchema {
     HeldSchema {
         inference: None,
         tables: vec![HeldTable {
+            calculated_columns: vec![],
             name: "users".into(),
             source: "app_users".into(),
             columns: vec![

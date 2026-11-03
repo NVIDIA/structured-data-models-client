@@ -95,6 +95,7 @@ fn shop() -> SourceDescription {
         inference: None,
         tables: vec![
             DescribedTable {
+                calculated_columns: vec![],
                 name: "orders".into(),
                 source: "orders".into(),
                 columns: vec![
@@ -116,6 +117,7 @@ fn shop() -> SourceDescription {
                 duplicate_keys: None,
             },
             DescribedTable {
+                calculated_columns: vec![],
                 name: "users".into(),
                 source: "users".into(),
                 columns: vec![
@@ -673,6 +675,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         false,
     ));
     parent.tables.push(DescribedTable {
+        calculated_columns: vec![],
         name: "countries".into(),
         source: "countries".into(),
         columns: vec![column(

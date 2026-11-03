@@ -5,7 +5,7 @@
 # Calculated columns and custom relational examples
 
 **Proposal: restore two narrow workflows, rather than a general mutable task editor.**
-Approved for implementation in Python and Java, with contract review and independent code review.
+Both have approved Python and Java boundaries; implementation is in progress.
 
 ## What the two gaps mean
 
@@ -42,6 +42,11 @@ Rust owns column identity, type admission and key/link consistency.
 Providers own SQL syntax and execution; Rust keeps SQL text opaque, as it does today.
 Describe/preview the projection before admission; failures leave the original schema unchanged.
 This creates a query projection, not a stored warehouse column.
+Tables carry typed calculated-column declarations separately from their logical source identity.
+On refresh Rust resolves the current physical source/view, preserves its filter and validates its original columns, then reapplies only the recorded caller additions.
+Hosts retain this metadata mechanically; a resolved SQL projection is not a second editable definition.
+SQLite refuses a calculated alias named `rowid`, which would shadow its existing sampling identity.
+Existing live-source schemas and their prepared requests cannot be persisted because they retain open connections (verified unchanged on contract 63); this work does not serialize credentials or connections.
 
 Old support covered DuckDB, SQLite, PostgreSQL, Databricks and Snowflake.
 Today only Databricks/Snowflake advertise derived-relation support, so the other three need provider projection work and tests.
@@ -53,7 +58,9 @@ Destructive column editing remains outside this proposal; the old removal method
 
 Proposed shape: `schema.materialize_examples(task, context, predict, ...)` / `materializeExamples(...)`, returning the existing `Request`.
 Use an explicit task descriptor built from existing task/target concepts: task kind, entity table/key, target type and link destination where needed.
-Review exact signatures before implementation; no PQL is required.
+No PQL is required.
+Use immutable `RelationalTask(kind, entity_table, link_target_table=None, step_size_ns=None, num_forecasts=None)` and `materialize_examples(task, context, predict, *, num_neighbors=None, random_seed=42, inference=None)`.
+Rust owns task meaning; target physical types come from Arrow, never guessed task kinds from values.
 
 | Input | Columns and meaning |
 |---|---|
@@ -74,8 +81,12 @@ Existing graph gathering → ordinary Request → existing predict()
 
 Rust preserves supplied labels, row order and repeated entities at different anchors, validates references/types, and gathers related data.
 Include binary/multiclass classification, regression and temporal link labels.
-The old constructor also accepted forecasting with `step_size` and `num_forecasts`; define and verify the supplied-forecast row layout during contract review before implementation.
-Query-derived forecasting does not replace supplied forecasting examples; retain this gap until verified or explicitly deferred.
+Supplied forecasting uses numeric context labels, valid anchors, positive int64 `step_size_ns` and positive `num_forecasts`, checked for range/size.
+The old client converted offsets to nanoseconds and sent wire `step_size`; keep that wire meaning and verify forecast-step response alignment against the endpoint.
+Static tasks may omit anchors: Rust uses the graph’s latest start time, or the existing timeless sentinel when no start-time bounds exist; never wall-clock time.
+Temporal/forecast tasks require valid anchors.
+Supplied examples retain their labels and order even when context and prediction IDs overlap; the PQL-specific answer-removal rule does not apply.
+Reject invalid IDs/labels rather than silently dropping rows.
 
 ## Checks before completion
 
@@ -97,3 +108,11 @@ Run focused old-client comparisons to establish semantics, not an exhaustive dif
 Investigate each discrepancy: preserve useful behavior, fix demonstrated bugs, and record the changed expectation with a regression test.
 Verify real provider execution and relevant model predictions; mocks alone do not establish end-to-end support.
 Finish with cross-language contract checks, independent implementation review and combined production-artifact validation.
+
+## SQL implementation checkpoint (contract 64)
+
+Python and Java local SQLite/DuckDB checks pass, including values/nulls, repeated refresh, original-schema ownership, invalid expressions, quoted names and source changes.
+A filtered projection with a renamed UNIQUE-index key verifies alias-preserving discovery on both local SQL providers.
+PostgreSQL, Databricks SQL, Snowflake, Databricks metric views and Snowflake semantic views each produced the independently expected 24 labels and two live predictions.
+The old DuckDB calculated-column path produced the same 29 expected non-null fixture values and one null.
+The independent boundary review found no blocker; custom examples remain the next checkpoint.

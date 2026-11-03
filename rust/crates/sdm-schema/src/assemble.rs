@@ -369,6 +369,7 @@ fn assemble_described(
 /// A table's inferred source facts as the common schema description.
 fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> DescribedTable {
     DescribedTable {
+        calculated_columns: vec![],
         name: table.name,
         source: table.source,
         columns: table

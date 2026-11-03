@@ -128,6 +128,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
         inference: None,
         tables: vec![
             HeldTable {
+                calculated_columns: vec![],
                 name: "orders".into(),
                 source: "orders".into(),
                 columns: vec![
@@ -162,6 +163,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
                 duplicate_keys: None,
             },
             HeldTable {
+                calculated_columns: vec![],
                 name: "users".into(),
                 source: "users".into(),
                 columns: users,

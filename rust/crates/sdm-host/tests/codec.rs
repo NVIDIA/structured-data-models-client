@@ -174,6 +174,7 @@ fn description_of(size: usize) -> Vec<u8> {
     let make = |pad: usize| SourceDescription {
         inference: None,
         tables: vec![DescribedTable {
+            calculated_columns: vec![],
             name: "t".repeat(pad + 1),
             source: "t".into(),
             columns: vec![DescribedColumn {

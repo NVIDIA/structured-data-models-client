@@ -119,6 +119,23 @@ const MOST_PARTS: usize = 2;
 pub(crate) struct Postgres;
 
 impl SqlDialect for Postgres {
+    fn derived(&self, _request: &DataRequest, relation: &Relation, source: &str) -> Option<String> {
+        let projected = self.projected(relation, source);
+        if relation.found
+            || matches!(
+                _request,
+                DataRequest::Lookup { .. } | DataRequest::Neighbors { .. }
+            )
+        {
+            Some(projected)
+        } else {
+            Some(format!(
+                "{projected} AS {}",
+                self.identifier("__sdm_projection")
+            ))
+        }
+    }
+
     fn name(&self) -> &'static str {
         NAME
     }
@@ -129,7 +146,7 @@ impl SqlDialect for Postgres {
             compares_stored_times: false,
             opaque_vendor: None,
             samples_by_key_dtype: false,
-            derived_relations: false,
+            derived_relations: true,
             neighbor_lookback: false,
             keys_optional: false,
             key_enforcement: false,

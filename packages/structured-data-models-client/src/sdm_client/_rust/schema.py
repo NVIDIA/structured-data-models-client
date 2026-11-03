@@ -207,6 +207,13 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         table_shape = SourceTable.__new__(SourceTable)
         object.__setattr__(table_shape, 'name', name)
         object.__setattr__(
+            table_shape,
+            '_calculated_columns',
+            tuple(
+                tuple(c.items()) for c in table.get('calculated_columns', [])
+            ),
+        )
+        object.__setattr__(
             table_shape, 'source_name', codec.relation_name(table['source'])
         )
         object.__setattr__(table_shape, 'columns', columns)

@@ -163,7 +163,7 @@ impl SqlDialect for Snowflake {
         read(request, DescribePart::ViewDefinition, batches)
     }
 
-    fn derived(&self, relation: &Relation, source: &str) -> Option<String> {
+    fn derived(&self, _request: &DataRequest, relation: &Relation, source: &str) -> Option<String> {
         if relation.found {
             return Some(source.to_owned());
         }
