@@ -39,6 +39,34 @@ def explained(forecast):
         )
 
 
+class Carrying:
+    """An answer carrying an explanation, for drawing one that was edited.
+
+    A result's explanation is what it came back with and cannot be assigned
+    over, and a page is drawn or not drawn by whether its block is there.
+    """
+
+    def __init__(self, explanation):
+        self.explanation = explanation
+
+
+def without(result, *names, under=None):
+    """What `result` carries, less the block(s) `names` asks for."""
+    carried = dict(result.explanation)
+    block = dict(carried['explanation'])
+    if under is None:
+        for name in names:
+            block.pop(name, None)
+    else:
+        block[under] = {
+            key: value
+            for key, value in block[under].items()
+            if key not in names
+        }
+    carried['explanation'] = block
+    return Carrying(carried)
+
+
 def pages(path) -> int:
     raw = path.read_bytes()
     return raw.count(b'/Type /Page') - raw.count(b'/Type /Pages')
@@ -448,3 +476,265 @@ def test_only_this_model_is_asked_to_explain_a_forecast(anomaly):
                 outputs=['prediction', 'explanation'],
             )
     assert 'explanation' in str(caught.value)
+
+
+def test_the_smoothness_of_the_latent_state_is_measured(explained):
+    """Reported as null for every run before it was computed, so its page
+    was never drawn."""
+    block = explained.explanation['explanation']['trajectory_stability']
+
+    assert block is not None
+    assert block['n_time_steps'] == 512
+    assert 0.0 <= block['zero_crossing_rate_mean'] <= 1.0
+
+
+def test_the_smoothness_is_the_history_walked_once(explained, forecast):
+    """It is read off the trajectory the attribution already walked rather
+    than walked again, so it has to be what a second walk would say."""
+    import torch
+
+    from sdm_client.explain._explain import _standardised
+    from sdm_client.explain._kumo_ts.interpretability import (
+        compute_trajectory_stability,
+    )
+    from sdm_client.explain._model import Forecaster
+
+    carried = explained.explanation
+    window = _standardised(
+        forecast, history().to_numpy().T[:, -512:].astype('float32')
+    )
+    walked = compute_trajectory_stability(
+        Forecaster(forecast),
+        np.ascontiguousarray(window, dtype='float32'),
+        seq_len=512,
+        input_mask_t=np.ones(512, dtype='float32'),
+        device=torch.device('cpu'),
+    )
+
+    read = carried['explanation']['trajectory_stability']
+    assert read['relative_jitter_mean'] == pytest.approx(
+        walked.relative_jitter_mean, rel=1e-5
+    )
+    assert read['zero_crossing_rate_mean'] == pytest.approx(
+        walked.zero_crossing_rate_mean, rel=1e-5
+    )
+
+
+def test_the_smoothness_page_is_drawn(explained, tmp_path):
+    before = pages(forecast_report(explained, tmp_path / 'f.pdf'))
+    stripped = without(explained, 'trajectory_stability')
+
+    after = pages(forecast_report(stripped, tmp_path / 'g.pdf'))
+
+    assert before == after + 1
+
+
+@pytest.fixture(scope='module')
+def over_channels(forecast):
+    with SDMClient.in_process(forecast) as client:
+        return client.predict(
+            Request.forecast(
+                history(),
+                target='flow',
+                horizon=4,
+                inference={'feature_axis': True},
+            ),
+            model=KumoForecast(),
+            outputs=['prediction', 'explanation'],
+        )
+
+
+def test_the_embedding_is_measured_for_every_channel(over_channels):
+    """Asked for alongside the feature axis, because it answers the question
+    the feature axis raises: an influence attributed through a derivative
+    that is not there is not an influence."""
+    block = over_channels.explanation['explanation']['feature_axis']
+    measured = block['embedding_stability']
+
+    assert measured['channel_labels'] == ['flow', 'temp']
+    assert all(count > 0 for count in measured['n_trials_per_channel'])
+    assert all(np.isfinite(measured['lip_ratio_mean']))
+
+
+def test_the_embedding_is_not_measured_without_the_feature_axis(explained):
+    """It costs a window per channel per trial, which is the feature axis's
+    own order of cost and not the lag attribution's."""
+    block = explained.explanation['explanation'].get('feature_axis') or {}
+
+    assert 'embedding_stability' not in block
+
+
+def test_the_embedding_stability_page_is_drawn(over_channels, tmp_path):
+    before = pages(forecast_report(over_channels, tmp_path / 'f.pdf'))
+    stripped = without(
+        over_channels, 'embedding_stability', under='feature_axis'
+    )
+
+    after = pages(forecast_report(stripped, tmp_path / 'g.pdf'))
+
+    assert before == after + 1
+
+
+def test_too_many_channels_leave_the_page_out_rather_than_the_rest(forecast):
+    """The probes are a window per channel per trial and a copy of each, so
+    their memory grows with the square of the channels. Past the cap the
+    page is left out and the feature axis it was asked beside is not."""
+    import warnings
+
+    from sdm_client.core.warnings import SDMWarning
+    from sdm_client.explain import _explain
+
+    frame = history()
+    with SDMClient.in_process(forecast) as client:
+        request = Request.forecast(
+            frame,
+            target='flow',
+            horizon=4,
+            inference={'feature_axis': True},
+        )
+        with warnings.catch_warnings(record=True) as raised:
+            warnings.simplefilter('always')
+            kept = _explain._STABILITY_BYTES
+            _explain._STABILITY_BYTES = 1
+            try:
+                result = client.predict(
+                    request,
+                    model=KumoForecast(),
+                    outputs=['prediction', 'explanation'],
+                )
+            finally:
+                _explain._STABILITY_BYTES = kept
+
+    block = result.explanation['explanation']['feature_axis']
+    assert 'embedding_stability' not in block
+    assert block['channel_horizon_attributions'] is not None
+    assert any(
+        issubclass(one.category, SDMWarning)
+        and 'MiB of probes' in str(one.message)
+        for one in raised
+    )
+
+
+@pytest.fixture(scope='module')
+def by_gradient(forecast):
+    with SDMClient.in_process(forecast) as client:
+        return client.predict(
+            Request.forecast(
+                history(),
+                target='flow',
+                horizon=4,
+                inference={'integrated_gradients': True},
+            ),
+            model=KumoForecast(),
+            outputs=['prediction', 'explanation'],
+        )
+
+
+def test_the_gradient_attribution_covers_the_window_it_read(by_gradient):
+    block = by_gradient.explanation['explanation']['integrated_gradients']
+
+    assert np.asarray(block['attribution']).shape == (2, 512)
+    assert block['channel_labels'] == ['flow', 'temp']
+    assert sum(block['channel_abs_share']) == pytest.approx(1.0, rel=1e-5)
+
+
+@pytest.mark.parametrize(
+    ('differentiable', 'reads'),
+    [(False, False), (True, True)],
+)
+def test_the_gradient_is_taken_through_the_normalisation(
+    sdm, differentiable, reads
+):
+    """Each window is divided by statistics taken over the window itself,
+    and those are taken without gradients. A gradient through the model as it
+    stands therefore describes a pass with each window's own mean and spread
+    held still, which is not the pass that answered.
+
+    Measured against an invariant rather than against the model, so it holds
+    whatever the weights are: a normalised window has the same sum of squares
+    whatever it was made from, so moving the window cannot change it and the
+    true derivative is exactly zero.
+    """
+    import torch
+    from sdm.nn import RevIN
+
+    from sdm_client.explain._model import _statistics
+
+    torch.manual_seed(0)
+    revin = RevIN(eps=1e-5)
+    window = torch.randn(1, 3, 16, dtype=torch.float32)
+    direction = torch.randn_like(window)
+    direction /= direction.norm()
+
+    moved = window.clone().requires_grad_(True)
+    statistics = _statistics if differentiable else RevIN.stats
+    mean, scale = statistics(moved, correction=0)
+    revin(moved, mean, scale).square().sum().backward()
+    along = float((moved.grad * direction).sum())
+
+    assert (abs(along) < 1e-4) is reads
+
+
+def test_the_normalisation_is_left_as_it_was_found(forecast):
+    """It is patched for the length of one attribution. Left patched, every
+    forecast after it runs through a normaliser this client replaced."""
+    from sdm_client.explain._model import Forecaster
+
+    shim = Forecaster(forecast)
+    with shim.differentiable_normalisation():
+        patched = [
+            'stats' in vars(module)
+            for module in shim.modules()
+            if hasattr(module, 'eps') and hasattr(module, 'stats')
+        ]
+
+    assert any(patched)
+    assert not any(
+        'stats' in vars(module)
+        for module in shim.modules()
+        if hasattr(module, 'eps') and hasattr(module, 'stats')
+    )
+
+
+def test_the_length_of_the_embedding_is_not_what_is_explained(forecast):
+    """This forecaster's embedding is a retrieval key, scaled to unit length
+    before it is returned, so its length is one whatever it was given.
+    Explaining that explains a constant, and every reading came back zero."""
+    import torch
+
+    from sdm_client.explain._explain import _standardised
+    from sdm_client.explain._model import Forecaster
+
+    shim = Forecaster(forecast)
+    window = _standardised(
+        forecast, history().to_numpy().T[:, -512:].astype('float32')
+    )
+    embedded = shim.embed(
+        x_enc=torch.as_tensor(window, dtype=torch.float32)[None],
+        input_mask=torch.ones(1, 512),
+    ).embeddings
+
+    assert float(embedded.norm()) == pytest.approx(1.0, rel=1e-5)
+
+
+def test_a_forecast_asked_without_gradients_does_not_pay_for_them(explained):
+    """They walk a path of sixty-four windows and take a gradient at each."""
+    assert 'integrated_gradients' not in explained.explanation['explanation']
+
+
+def test_the_gradient_page_is_drawn(by_gradient, tmp_path):
+    before = pages(forecast_report(by_gradient, tmp_path / 'f.pdf'))
+    stripped = without(by_gradient, 'integrated_gradients')
+
+    after = pages(forecast_report(stripped, tmp_path / 'g.pdf'))
+
+    assert before == after + 1
+
+
+def test_the_files_the_gradient_page_names_are_written(by_gradient, tmp_path):
+    artifacts = tmp_path / 'artifacts'
+    forecast_report(by_gradient, tmp_path / 'f.pdf', artifacts_dir=artifacts)
+    written = {path.name for path in artifacts.iterdir()}
+
+    assert 'integrated_gradients_attributions.csv' in written
+    assert 'integrated_gradients_channel_summary.csv' in written

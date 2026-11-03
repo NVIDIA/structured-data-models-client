@@ -23,6 +23,8 @@ latent trajectory moving when it had not.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,6 +64,40 @@ class Forecaster:
         nothing to the forecast, though the embedding still pools it.
         """
         return self._inner.cross_channel is not None
+
+    def modules(self) -> Iterator[torch.nn.Module]:
+        r"""The forecaster's own modules, for code that walks them."""
+        return self._inner.modules()
+
+    @contextmanager
+    def differentiable_normalisation(self) -> Iterator[None]:
+        r"""The forecaster with its normalisation carrying gradients.
+
+        Each window is divided by statistics taken over the window itself,
+        and those are taken without gradients. A gradient through the model
+        as it stands therefore measures what a step does with the mean and
+        the spread of its own window held still, which is not what the step
+        does: the attribution came out some hundreds of times larger than the
+        change the same perturbation actually makes.
+
+        So the statistics are taken again, differentiably, for as long as
+        this is held. Everything else about the forward pass is unchanged,
+        and the numbers it produces are the same ones.
+        """
+        from sdm.nn import RevIN
+
+        patched = [
+            module
+            for module in self._inner.modules()
+            if isinstance(module, RevIN)
+        ]
+        for module in patched:
+            module.stats = _statistics
+        try:
+            yield
+        finally:
+            for module in patched:
+                del module.stats
 
     @property
     def prediction_size(self) -> int:
@@ -129,3 +165,28 @@ def _observed(x: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
     while keep.ndim < x.ndim:
         keep = keep.unsqueeze(0)
     return x.masked_fill(~keep.expand_as(x), float('nan'))
+
+
+def _statistics(
+    x: torch.Tensor,
+    mask: torch.Tensor | None = None,
+    correction: int = 1,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    r"""``RevIN.stats``, computed so that gradients reach the input.
+
+    The same arithmetic as the method it stands in for, which is what makes
+    the forward pass it takes part in produce the same numbers.
+    """
+    if mask is not None:
+        x = x.masked_fill(mask, torch.nan)
+    x = x.double()
+    mean = x.nanmean(dim=-1, keepdim=True)
+    variance = (x - mean).square().nanmean(dim=-1, keepdim=True)
+    if correction != 0:
+        count = (~x.isnan()).sum(dim=-1, keepdim=True)
+        variance = variance * (
+            count.double() / (count - correction).clamp(min=1)
+        )
+    deviation = variance.sqrt()
+    absent = mean.isnan()
+    return mean.masked_fill(absent, 0.0), deviation.masked_fill(absent, 1.0)

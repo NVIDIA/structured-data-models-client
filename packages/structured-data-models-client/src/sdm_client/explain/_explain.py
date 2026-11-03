@@ -24,6 +24,34 @@ from sdm_client.errors import StructuredDataError
 #: defaults; both cost time roughly in proportion.
 _LAGS = 128
 
+#: How many times each channel is nudged when the stability of the embedding
+#: is measured. Upstream's default, named here because the memory the probes
+#: take is worked out from it before they are built.
+_STABILITY_TRIALS = 30
+
+#: The most the stability probes may take. They are one window per channel
+#: per trial and a copy of each, so the memory grows with the square of the
+#: number of channels: forty channels of a 512-step window is already most of
+#: a gigabyte once both stacks are counted.
+_STABILITY_BYTES = 256 * 1024 * 1024
+
+#: How finely the path from a reference window to the real one is walked
+#: when the embedding is attributed step by step, and how many of those
+#: points are embedded at once. Upstream's step count; the batch bounds the
+#: activations rather than the answer, which does not depend on it.
+_GRADIENT_STEPS = 64
+_GRADIENT_BATCH = 8
+
+#: What of the embedding the attribution explains the movement of. Upstream
+#: explains the length of it, which cannot be the answer here: this
+#: forecaster's embedding is a retrieval key and is scaled to unit length
+#: before it is returned, so its length is one whatever it was given, and
+#: attributing a constant attributed nothing. Measured on the published
+#: weights: the length moved by 2e-07 between a real window and a reference
+#: one and every reading came back a billionth, where the sum moves and is
+#: explained.
+_GRADIENT_OBJECTIVE = 'sum'
+
 
 def explanation_of(
     model: Any,
@@ -34,6 +62,7 @@ def explanation_of(
     horizon: int,
     forecast: np.ndarray,
     feature_axis: bool = False,
+    integrated_gradients: bool = False,
 ) -> dict[str, Any]:
     r"""Attribute ``forecast`` to the history it was made from.
 
@@ -47,6 +76,10 @@ def explanation_of(
         forecast: What came back, one value per step.
         feature_axis: Also attribute across channels rather than only across
             lags. It costs several times the rest put together.
+        integrated_gradients: Also attribute the model's own reading of the
+            window, reading by reading, by walking the path from a reference
+            window to this one. It is the only attribution here that reads
+            the model's gradients rather than watching its output move.
 
     Raises:
         StructuredDataError: If the history is shorter than the model reads.
@@ -104,6 +137,7 @@ def explanation_of(
             f'pass, or ask for the explanation without it',
             code='UNSUPPORTED_SHAPE',
         )
+    device = next(model.parameters()).device
     window = _standardised(model, window_only)
     explanation = explain_forecast(
         forecaster,
@@ -111,14 +145,88 @@ def explanation_of(
         input_mask_l=np.ones(forecaster.context_size, dtype='float32'),
         model_horizon=forecaster.prediction_size,
         forecast_horizon=horizon,
-        device=next(model.parameters()).device,
+        device=device,
         n_lags=min(_LAGS, forecaster.context_size),
         surrogate=False,
         channel_axis=feature_axis,
         channel_target=channels.index(target) if feature_axis else None,
         channel_output_aware=feature_axis,
     )
-    return _as_dict(model, explanation, channels, target, horizon, forecast)
+    return _as_dict(
+        model,
+        explanation,
+        channels,
+        target,
+        horizon,
+        forecast,
+        smoothness=_smoothness_of(explanation, forecaster.context_size),
+        stability=(
+            _stability_of(forecaster, window, device) if feature_axis else None
+        ),
+        gradients=(
+            _gradients_of(forecaster, window, channels, device)
+            if integrated_gradients
+            else None
+        ),
+    )
+
+
+def _smoothness_of(explanation: Any, context_size: int) -> Any:
+    r"""How smoothly the model's latent state moved over the history.
+
+    Read off the trajectory the attribution already walked rather than walked
+    again. That trajectory runs the history and then the forecast, one state
+    per step, and its first ``context_size`` states are exactly the states a
+    second walk over the history alone would produce, because each one is the
+    window ending at its own step and the forecast is not in any of them.
+    """
+    from sdm_client.explain._kumo_ts.interpretability import (
+        summarize_trajectory_stability,
+    )
+
+    trajectory = np.asarray(explanation.latent_trajectory)
+    history = trajectory[:context_size]
+    if history.shape[0] < 2:
+        return None
+    return summarize_trajectory_stability(history)
+
+
+def _stability_of(forecaster: Any, window: np.ndarray, device: Any) -> Any:
+    r"""How much the embedding moves when one channel is nudged.
+
+    Asked for alongside the feature axis, because it answers the question the
+    feature axis raises: an influence attributed to a channel the embedding
+    treats erratically is an influence measured through a derivative that is
+    not there.
+    """
+    import warnings
+
+    from sdm_client.core.warnings import SDMWarning
+    from sdm_client.explain._kumo_ts.channel_stability import (
+        compute_per_channel_embedding_stability,
+    )
+
+    channels, steps = window.shape
+    probes = 2 * (1 + _STABILITY_TRIALS * channels) * channels * steps * 4
+    if probes > _STABILITY_BYTES:
+        warnings.warn(
+            f'the stability of the embedding is measured by nudging each of '
+            f'these {channels} channels {_STABILITY_TRIALS} times, which '
+            f'would take {probes // (1024 * 1024)} MiB of probes at once. '
+            f'That page is left out of this explanation; the rest of the '
+            f'feature axis is not',
+            SDMWarning,
+            stacklevel=2,
+        )
+        return None
+    return compute_per_channel_embedding_stability(
+        forecaster,
+        np.ascontiguousarray(window, dtype='float32'),
+        seq_len=int(steps),
+        input_mask_t=np.ones(steps, dtype='float32'),
+        device=device,
+        n_trials=_STABILITY_TRIALS,
+    )
 
 
 def _standardised(model: Any, window: np.ndarray) -> np.ndarray:
@@ -150,6 +258,45 @@ def _in_original_scale(model: Any, values: np.ndarray) -> np.ndarray:
     return restored.numerical.detach().cpu().numpy().T
 
 
+def _gradients_of(
+    forecaster: Any, window: np.ndarray, channels: list[str], device: Any
+) -> Any:
+    r"""What the model read, reading by reading, by integrated gradients.
+
+    Held inside the forecaster's differentiable normalisation, because a
+    gradient taken outside it describes a forward pass with each window's own
+    statistics frozen, which is a different pass from the one that answered.
+    What that costs is measurable and was measured, on the published
+    weights because an untrained forecaster's embedding barely moves at all
+    and the measure divides by how far it moved: an attribution has to add
+    up to the movement it explains, and taken outside this it accounted for
+    none of that movement and overshot it by half again, where taken inside
+    it accounts for all but a twenty-fifth of a percent. The ported code offers
+    a patch of its own for the same purpose and finds nothing to patch here,
+    since it looks for a method this forecaster spells another way; the flag
+    it records is true either way, and true.
+    """
+    from sdm_client.explain._kumo_ts.pages import (
+        _compute_integrated_gradients_report,
+    )
+
+    with forecaster.differentiable_normalisation():
+        return _compute_integrated_gradients_report(
+            model=forecaster,
+            x_context_ct=np.ascontiguousarray(window, dtype='float32'),
+            input_mask_l=np.ones(window.shape[-1], dtype='float32'),
+            device=device,
+            channel_labels=list(channels),
+            baseline='noise',
+            n_steps=_GRADIENT_STEPS,
+            n_baselines=1,
+            internal_batch_size=_GRADIENT_BATCH,
+            reduce=_GRADIENT_OBJECTIVE,
+            seed=0,
+            grad_through_norm=True,
+        )
+
+
 def _as_dict(
     model: Any,
     explanation: Any,
@@ -157,6 +304,10 @@ def _as_dict(
     target: str,
     horizon: int,
     forecast: np.ndarray,
+    *,
+    smoothness: Any = None,
+    stability: Any = None,
+    gradients: Any = None,
 ) -> dict[str, Any]:
     r"""The explanation as the contract carries one: plain JSON data.
 
@@ -186,6 +337,9 @@ def _as_dict(
         target_column=target,
         timestamp_column='forecast_step',
         channel_labels=list(channels),
+        trajectory_report=smoothness,
+        feature_axis_embedding_stability_report=stability,
+        integrated_gradients_report=gradients,
     )
     # Upstream keeps the labels only where feature-axis attribution ran, and
     # they name the channels of every explanation. The client knows them

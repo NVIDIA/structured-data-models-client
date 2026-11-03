@@ -200,7 +200,13 @@ KUMO_FORECAST = ModelSpec(
         outputs=frozenset({'prediction', 'explanation'}),
         sessions=False,
         inference_options=frozenset(
-            {'alpha', 'k', 'temperature', 'feature_axis'}
+            {
+                'alpha',
+                'k',
+                'temperature',
+                'feature_axis',
+                'integrated_gradients',
+            }
         ),
     ),
 )

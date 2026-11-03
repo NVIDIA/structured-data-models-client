@@ -40,7 +40,13 @@ _ALPHA = 1.0
 _NEIGHBOURS = 64
 _TEMPERATURE = 0.05
 
-_KNOBS = ('alpha', 'k', 'temperature', 'feature_axis')
+_KNOBS = (
+    'alpha',
+    'k',
+    'temperature',
+    'feature_axis',
+    'integrated_gradients',
+)
 
 
 class Forecast:
@@ -282,6 +288,9 @@ class Forecast:
             horizon=horizon,
             forecast=forecast.detach().cpu().numpy(),
             feature_axis=bool(options.get('feature_axis', False)),
+            integrated_gradients=bool(
+                options.get('integrated_gradients', False)
+            ),
         )
 
     @staticmethod

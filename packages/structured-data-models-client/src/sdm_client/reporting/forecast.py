@@ -95,6 +95,9 @@ def forecast_report(
         np.asarray(explanation.lag_horizon_scores), top_k=top_k
     )
     per_step = attributions if marginal is None else np.asarray(marginal)
+    smoothness = _smoothness(carried)
+    stability = _stability(carried)
+    gradients = (carried.get('explanation') or {}).get('integrated_gradients')
     with _artifacts(artifacts_dir) as out_dir:
         heatmap = pages._save_lag_horizon_artifacts(
             out_dir,
@@ -119,6 +122,12 @@ def forecast_report(
                 np.asarray(explanation.channel_horizon_attributions),
                 channel_labels=channels,
             )
+        if gradients is not None:
+            pages._save_integrated_gradients_artifacts(out_dir, gradients)
+        if stability is not None:
+            pages._save_feature_axis_embedding_stability_csv(
+                out_dir, stability, channels
+            )
         drawn = pages._build_pdf_report(
             Path(output_path),
             dataset_name=dataset_name,
@@ -132,6 +141,9 @@ def forecast_report(
             context_len=_context_len(carried, attributions.shape[1]),
             forecast_horizon=attributions.shape[1],
             channel_labels=channels,
+            trajectory_report=smoothness,
+            feature_axis_embedding_stability_report=stability,
+            integrated_gradients_report=gradients,
         )
     if drawn is None:  # pragma: no cover - matplotlib is present by here
         raise MissingExtraError('report', 'matplotlib')
@@ -193,6 +205,82 @@ def _explanation(carried: dict[str, Any]) -> Any:
         latent_diag_mahalanobis_ratio_forecast_vs_history=scalar(
             'latent_diag_mahalanobis_ratio_forecast_vs_history'
         ),
+    )
+
+
+def _smoothness(carried: dict[str, Any]) -> Any:
+    r"""How smoothly the latent state moved, read back from the data."""
+    from sdm_client.explain._kumo_ts.interpretability import (
+        TrajectoryStabilityReport,
+    )
+
+    block = (carried.get('explanation') or {}).get('trajectory_stability')
+    if not block:
+        return None
+    rates = (
+        'zero_crossing_rate_mean',
+        'zero_crossing_rate_p95',
+        'direction_flip_rate_mean',
+        'direction_flip_rate_p95',
+        'relative_jitter_mean',
+        'relative_jitter_p95',
+        'occupancy_positive_mean',
+        'occupancy_negative_mean',
+    )
+    if any(block.get(name) is None for name in rates):
+        return None
+    read = {name: float(block[name]) for name in rates}
+    return TrajectoryStabilityReport(
+        zero_crossing_rate_mean=read['zero_crossing_rate_mean'],
+        zero_crossing_rate_p95=read['zero_crossing_rate_p95'],
+        direction_flip_rate_mean=read['direction_flip_rate_mean'],
+        direction_flip_rate_p95=read['direction_flip_rate_p95'],
+        relative_jitter_mean=read['relative_jitter_mean'],
+        relative_jitter_p95=read['relative_jitter_p95'],
+        occupancy_positive_mean=read['occupancy_positive_mean'],
+        occupancy_negative_mean=read['occupancy_negative_mean'],
+        n_time_steps=int(block.get('n_time_steps') or 0),
+        n_dimensions=int(block.get('n_dimensions') or 0),
+    )
+
+
+def _stability(carried: dict[str, Any]) -> Any:
+    r"""How much the embedding moved when a channel was nudged.
+
+    The labels it carries are its own: the page reads them off the report
+    where there are as many as there are channels, and that count includes
+    the series being forecast, which the channel attribution beside it sets
+    aside. Rebuilt with the channel labels of the explanation instead, the
+    two would be the same length and name different channels.
+    """
+    from sdm_client.explain._kumo_ts.channel_stability import (
+        PerChannelEmbeddingStabilityReport,
+    )
+
+    feature_axis = (carried.get('explanation') or {}).get('feature_axis') or {}
+    block = feature_axis.get('embedding_stability')
+    if not block:
+        return None
+    labels = block.get('channel_labels') or []
+    ratios = {
+        name: np.asarray(block.get(name), dtype=float)
+        for name in (
+            'lip_ratio_mean',
+            'lip_ratio_max',
+            'lip_ratio_p50',
+            'lip_ratio_p95',
+        )
+    }
+    return PerChannelEmbeddingStabilityReport(
+        **ratios,
+        n_trials_per_channel=np.asarray(
+            block.get('n_trials_per_channel'), dtype='int64'
+        ),
+        n_unique_windows=int(block.get('n_unique_windows') or 0),
+        step_delta_norm_mean=float(
+            block.get('step_delta_norm_mean') or float('nan')
+        ),
+        n_channels=len(labels),
     )
 
 
