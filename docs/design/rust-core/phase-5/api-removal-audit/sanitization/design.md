@@ -4,11 +4,11 @@
 
 # 3. Structured sanitization reports
 
-**Status: implemented and reviewed for Python and Java; ready for Phase 6 integration.**
+**Status: implemented, independently reviewed and merged into `rust-core-phase-6`.**
 Expose counts Rust already computes when preparing an in-memory relational graph.
 This adds observability, not a new data-cleaning policy.
 For example: 100 input rows, three excluded for missing keys and two for duplicate keys, leaving 95 usable rows.
-Today Rust produces a warning but the client cannot retrieve these numbers as a report; “sanitization” here is not anonymization.
+Previously Rust produced only a warning; the new client also exposes these numbers as a report; “sanitization” here is not anonymization.
 Independent boundary review is incorporated below; this document is the implementation contract.
 
 ```text
@@ -53,7 +53,8 @@ Host adapters only decode immutable values and classify paths where graph prepar
 The materializer copies the preparation report onto each request made from its cached graph.
 A fitted handle retains its fit request's report independently of native graph/session lifetime; prediction does not replace it.
 Closing a handle or mutating the original source does not change the report.
-Existing request persistence retains reports; restoring older snapshots yields `unavailable`, never invented zero counts.
+Existing request persistence retains reports; older relational snapshots yield `unavailable`, never invented zero counts.
+Older Tabular snapshots remain `not_applicable`.
 Tabular stays `not_applicable`, including its fitted handles.
 
 ## Acceptance
@@ -85,3 +86,6 @@ Java admission rejects missing primary keys before graph preparation; Java publi
 No model inference algorithm or warehouse query was changed.
 
 Validation: 321 Rust tests, 73 Python lifecycle/materialization tests plus the legacy-snapshot check, Java relational lifecycle tests and malformed-snapshot check, API-ledger checks, Ruff and mypy passed.
+
+Ranking/forecast decomposition retains the preparation report on the carrier and every child request.
+Public regression tests reproduced and verified the Python and Java propagation fix.

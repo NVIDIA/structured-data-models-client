@@ -4,7 +4,7 @@
 
 # 1. Schema visualization
 
-**Status: assigned for contract-first implementation. Support both Python and Java; notebook integration is Python-specific.**
+**Status: implemented, independently reviewed and merged into `rust-core-phase-6`.**
 Restore diagram generation and export on the maintained `Schema`, without loading data or changing sampling.
 Independent boundary review is incorporated below; this document is the implementation contract.
 
