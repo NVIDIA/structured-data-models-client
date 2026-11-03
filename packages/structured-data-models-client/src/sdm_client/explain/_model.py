@@ -71,8 +71,22 @@ class Forecaster:
     def __call__(
         self, *, x_enc: torch.Tensor, input_mask: torch.Tensor | None = None
     ) -> _Forecast:
-        r"""The forecast for ``x_enc`` of shape ``[B, C, R]``."""
-        return _Forecast(forecast=self._inner(_observed(x_enc, input_mask)))
+        r"""The forecast for ``x_enc`` of shape ``[B, C, R]``.
+
+        Deliberately not differentiable. The attribution reaches for autograd
+        where the forecast carries gradients and falls back to finite
+        differences where it does not, and autograd is the wrong answer for
+        this forecaster: it normalises each window by statistics it takes
+        without gradients, so a gradient through it measures sensitivity with
+        that normalisation held still. It came out some hundreds of times
+        larger than the difference the same perturbation actually makes.
+
+        The upstream package patches its own normaliser to carry those
+        gradients, by a method name this one does not have, so the patch
+        finds nothing here and passes in silence.
+        """
+        with torch.no_grad():
+            return _Forecast(forecast=self._inner(_observed(x_enc, input_mask)))
 
     def embed(
         self, *, x_enc: torch.Tensor, input_mask: torch.Tensor | None = None

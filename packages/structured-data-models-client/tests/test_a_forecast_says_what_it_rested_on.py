@@ -298,6 +298,50 @@ def test_a_forecaster_that_cannot_use_a_covariate_does_not_attribute_one(
     assert 'mix channels' in str(caught.value)
 
 
+def test_the_heatmap_shows_what_its_caption_says(explained, tmp_path):
+    """Its rows are single past steps, and it was handed the cumulative
+    scores those are differenced out of, so a flat run read as the most
+    influential part of the window while the table ranked the newest first.
+    """
+    from sdm_client.explain._kumo_ts import pages
+
+    seen = []
+    original = pages._save_lag_horizon_artifacts
+
+    def watched(out_dir, attributions, scores=None, **kwargs):
+        seen.append(np.asarray(attributions))
+        return original(out_dir, attributions, scores, **kwargs)
+
+    pages._save_lag_horizon_artifacts = watched
+    try:
+        forecast_report(explained, tmp_path / 'f.pdf')
+    finally:
+        pages._save_lag_horizon_artifacts = original
+
+    block = explained.explanation['explanation']
+    marginal, _ = pages._topk_lag_steps_per_horizon(
+        np.asarray(block['lag_horizon_scores']), top_k=5
+    )
+    assert len(seen) == 1
+    assert np.allclose(seen[0], np.asarray(marginal))
+
+
+def test_the_channel_effects_are_measured_not_differentiated(forecast):
+    """This forecaster normalises each window by statistics it takes without
+    gradients, so a gradient through it holds that normalisation still and
+    reports a sensitivity hundreds of times what a perturbation produces.
+    The forward pass is not differentiable, which is what selects the
+    difference the attribution would otherwise skip."""
+    import torch
+
+    from sdm_client.explain._model import Forecaster
+
+    shim = Forecaster(forecast)
+    window = torch.zeros(1, 2, shim.context_size, requires_grad=True)
+
+    assert not shim(x_enc=window).forecast.requires_grad
+
+
 def test_the_attribution_heatmap_is_drawn(explained, tmp_path):
     """It is a page drawn from an image on disk, and hardcoding no image
     dropped it from every report although the matrix was right there."""

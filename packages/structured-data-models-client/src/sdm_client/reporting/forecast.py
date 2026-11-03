@@ -86,13 +86,19 @@ def forecast_report(
     # Scores, not attributions. That helper differences a cumulative score
     # into a per-step weight, and handing it the normalised attribution
     # ranked the lags in very nearly the opposite order.
-    _, topk_rows = pages._topk_lag_steps_per_horizon(
+    # That helper returns the per-step weights it ranks from, and those are
+    # what the heatmap's own caption describes. Drawn from the cumulative
+    # scores instead, it read a run of flat history as the most influential
+    # part of the window while the table beside it ranked the newest step
+    # first.
+    marginal, topk_rows = pages._topk_lag_steps_per_horizon(
         np.asarray(explanation.lag_horizon_scores), top_k=top_k
     )
+    per_step = attributions if marginal is None else np.asarray(marginal)
     with _artifacts(artifacts_dir) as out_dir:
         heatmap = pages._save_lag_horizon_artifacts(
             out_dir,
-            attributions,
+            per_step,
             np.asarray(explanation.lag_horizon_scores),
         )
         # The pages name these files, so a report that draws the pages and
