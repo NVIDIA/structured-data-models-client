@@ -101,4 +101,16 @@ class ReportsTest {
     }
     assertEquals(fixture.get("link_text"), new LinkReport(links).toText());
   }
+
+  @Test void resultViewReadsOnlyExplanationMetadata() throws Exception {
+    org.apache.arrow.vector.types.pojo.Schema schema = new org.apache.arrow.vector.types.pojo.Schema(
+        List.of(), Map.of("explanation", "{\"summary\":\"local\",\"unknown\":null}"));
+    byte[] bytes = com.nvidia.sdm.internal.ArrowData.ipc(com.nvidia.sdm.internal.ArrowData.reader(
+        schema, List.of(), com.nvidia.sdm.internal.ArrowData.allocator()));
+    PredictionResult result = new PredictionResult("kumo-relational", "r", Map.of(), List.of(), bytes);
+    assertEquals("local", result.explanationView().summary());
+    assertEquals("local", result.explanation().get("summary"));
+    assertNull(result.explanationView().raw().get("unknown"));
+    assertEquals(0, result.rows());
+  }
 }

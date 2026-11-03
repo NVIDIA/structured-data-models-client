@@ -657,6 +657,14 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.native_layout",
     ),
+    (
+        "Operation/feature_importance.input",
+        "FeatureImportance.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.feature_importance",
+    ),
     ("Operation/plan_result_merge.input", "PlanResultMerge.input"),
     (
         "OperationResult/direct_value.value",

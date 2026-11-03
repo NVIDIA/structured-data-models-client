@@ -4,7 +4,7 @@
 
 # 2. Schema reports and explanation conveniences
 
-**Status: assigned for contract-first implementation. Support both Python and Java; pandas and notebook formatting stay Python-specific.**
+**Status: implemented in Python and Java, independently reviewed, with shared metadata and attribution fixtures.**
 Expose readable information already held by schemas/results, without another warehouse or model call.
 Independent boundary review is incorporated below; this document is the implementation contract.
 
