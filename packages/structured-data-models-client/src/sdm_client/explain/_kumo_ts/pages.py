@@ -817,7 +817,9 @@ def _compute_integrated_gradients_report(
     grad_through_norm: bool,
 ) -> dict[str, Any]:
     """Run embedding integrated gradients for the current SDK context window."""
-    from integrated_gradients import integrated_gradients_embedding
+    from sdm_client.explain._kumo_ts.integrated_gradients import (
+        integrated_gradients_embedding,
+    )
 
     x_tensor = torch.as_tensor(
         np.asarray(x_context_ct, dtype=np.float32), device=device

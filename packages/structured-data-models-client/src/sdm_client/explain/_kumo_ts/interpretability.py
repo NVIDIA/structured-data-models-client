@@ -1478,25 +1478,13 @@ def fit_horizon_surrogates(
 
     work_items = [(c, h) for c in range(C) for h in range(H)]
 
-    # Default: 1 thread (matches historical behaviour). Callers that want
-    # the parallel path opt in via ``n_jobs`` (typically the OS CPU count
-    # divided by the number of GPU workers, so threads do not oversubscribe
-    # cores in a multi-GPU run).
     # Kumo-TS threads this across cores with a helper this port leaves
-    # behind, because it exists to feed several GPUs. The branch below does
-    # the same work in order.
-    if False:  # pragma: no cover - the threaded path is not ported
-
-        for c_idx, h_idx, b, a0 in parallel_apply_threads(
-            _solve_one, work_items, n_jobs=int(n_jobs)
-        ):
-            coef[c_idx, h_idx] = b
-            intercept[c_idx, h_idx] = a0
-    else:
-        for item in work_items:
-            c_idx, h_idx, b, a0 = _solve_one(item)
-            coef[c_idx, h_idx] = b
-            intercept[c_idx, h_idx] = a0
+    # behind, because it exists to feed several GPUs. `n_jobs` is read and
+    # kept for the signature it came with; the work is done in order.
+    for item in work_items:
+        c_idx, h_idx, b, a0 = _solve_one(item)
+        coef[c_idx, h_idx] = b
+        intercept[c_idx, h_idx] = a0
 
     return coef, intercept, feature_layout
 
