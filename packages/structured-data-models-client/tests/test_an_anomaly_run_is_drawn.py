@@ -212,3 +212,95 @@ def test_a_signal_the_readings_do_not_carry_is_refused(anomaly, tmp_path):
             feature_columns=['nothing'],
         )
     assert 'nothing' in str(caught.value)
+
+
+def test_the_caller_may_mark_the_detections_themselves(anomaly, tmp_path):
+    """Both thresholders read the whole run and decide for themselves where
+    the line falls, so a reader who wants it elsewhere has to supply it."""
+    from sdm_client import percentile_thresholds
+
+    frame = readings()
+    result = scored(anomaly, frame)
+    scores = result.to_pandas().sort_values('row_index')['prediction']
+    _, upper = percentile_thresholds(scores, upper_percentile=90.0)
+
+    written = anomaly_report(
+        result,
+        frame,
+        tmp_path / 'run.pdf',
+        detected_by=(scores.to_numpy() > upper),
+    )
+
+    assert b'supplied by the caller' in written.read_bytes()
+
+
+def test_supplied_detections_are_read_by_position_not_by_label(
+    anomaly, tmp_path
+):
+    """They mark one row of the readings each, in the order the readings are
+    in. Aligned on an index instead, a detection lands on whichever row
+    happened to share a label, which is usually none of them."""
+    from sdm_client.reporting.anomaly import _rejoined
+
+    frame = readings()
+    marks = pd.Series(
+        [False] * len(frame), index=np.arange(500, 500 + len(frame))
+    )
+    marks.iloc[3] = True
+
+    drawn, _, detected = _rejoined(scored(anomaly, frame), frame, marks)
+
+    assert drawn[detected].to_numpy().nonzero()[0].tolist() == [3]
+
+
+def test_supplied_detections_that_are_scores_are_refused(anomaly, tmp_path):
+    """Drawn as detections they mark every row whose score rounds up, which
+    is a different report that looks exactly like the one that was asked
+    for."""
+    frame = readings()
+
+    with pytest.raises(StructuredDataError) as caught:
+        anomaly_report(
+            scored(anomaly, frame),
+            frame,
+            tmp_path / 'run.pdf',
+            detected_by=np.linspace(0.0, 1.0, len(frame)),
+        )
+    assert 'threshold' in str(caught.value)
+
+
+def test_supplied_detections_that_are_not_one_per_row_are_refused(
+    anomaly, tmp_path
+):
+    frame = readings()
+
+    with pytest.raises(StructuredDataError) as caught:
+        anomaly_report(
+            scored(anomaly, frame),
+            frame,
+            tmp_path / 'run.pdf',
+            detected_by=np.zeros(len(frame) - 1, dtype=bool),
+        )
+    assert 'one row each' in str(caught.value)
+
+
+def test_supplied_detections_need_no_thresholder_in_the_answer(
+    anomaly, tmp_path
+):
+    """The labels are the caller's, so the answer does not have to carry
+    any, and a report of the score alone is then a report."""
+    frame = readings()
+    channels = frame.select_dtypes(include=[np.number])
+    with SDMClient.in_process(anomaly) as client:
+        result = client.predict(
+            Request.anomaly(channels, inference=FAST),
+            model=KumoAnomaly(),
+            outputs=['prediction'],
+        )
+
+    assert anomaly_report(
+        result,
+        frame,
+        tmp_path / 'run.pdf',
+        detected_by=np.zeros(len(frame), dtype=bool),
+    ).exists()

@@ -56,7 +56,7 @@ def anomaly_report(
     readings: pd.DataFrame,
     output_path: str | Path,
     *,
-    detected_by: str = 'scs',
+    detected_by: str | Sequence[Any] | np.ndarray = 'scs',
     feature_columns: Sequence[Hashable] | None = None,
     timestamp_column: str | None = None,
     ground_truth_column: str | None = None,
@@ -80,9 +80,12 @@ def anomaly_report(
             against. Dropping a column does not move a row, so the positions
             still line up.
         output_path: Where to write the PDF.
-        detected_by: Which thresholder's labels mark a row as detected,
-            ``'scs'`` or ``'macs'``. They disagree, and a report has to mark
-            one of them, so it says which.
+        detected_by: What marks a row as detected. Either the name of a
+            thresholder the answer carries, ``'scs'`` or ``'macs'`` -- they
+            disagree, and a report has to mark one of them, so it says which
+            -- or the detections themselves, one per row of ``readings`` and
+            in its order, for a caller who drew the line somewhere else.
+            :func:`~sdm_client.percentile_thresholds` draws one such line.
         feature_columns: The signals to draw. By default every numerical
             column of ``readings`` that is not the timestamp or the ground
             truth, which is what the model scored.
@@ -101,11 +104,11 @@ def anomaly_report(
     >>> result = client.predict(Request.anomaly(readings), model=KumoAnomaly())
     >>> anomaly_report(result, readings, 'readings.pdf')
     """
-    if detected_by not in THRESHOLDERS:
+    if isinstance(detected_by, str) and detected_by not in THRESHOLDERS:
         raise StructuredDataError(
             f'detected_by is {detected_by!r}; it names one of '
             f'{list(THRESHOLDERS)}, whose labels disagree, so a report marks '
-            f'one of them and says which',
+            f'one of them and says which, or it is the detections themselves',
             code='INVALID_REQUEST',
         )
     pages = _pages()
@@ -126,7 +129,7 @@ def anomaly_report(
         ground_truth_column=ground_truth_column,
         anomaly_column=detected,
         score_column=score,
-        title=f'{title} (detections by {detected_by.upper()})',
+        title=_titled(title, detected_by),
         max_report_pages=max_report_pages,
     )
 
@@ -140,16 +143,20 @@ def _pages() -> Any:
 
 
 def _rejoined(
-    result: PredictionResult, readings: pd.DataFrame, detected_by: str
+    result: PredictionResult,
+    readings: pd.DataFrame,
+    detected_by: str | Sequence[Any] | np.ndarray,
 ) -> tuple[pd.DataFrame, str, str]:
     r"""``readings`` with each row's score and label put back on it, and
     what those two columns ended up being called."""
     answer = result.to_pandas()
-    label = f'probability_{detected_by}'
-    if _SCORE not in answer.columns or label not in answer.columns:
+    named = isinstance(detected_by, str)
+    label = f'probability_{detected_by}' if named else None
+    wanted = [_SCORE] + ([label] if label is not None else [])
+    if any(name not in answer.columns for name in wanted):
         raise StructuredDataError(
             f'this answer carries {sorted(answer.columns)}, and a report '
-            f'needs {_SCORE!r} and {label!r}. Ask for them with '
+            f'needs {wanted}. Ask for them with '
             f"outputs=['prediction', 'probabilities']",
             code='INVALID_REQUEST',
         )
@@ -184,8 +191,54 @@ def _rejoined(
     drawn[score] = ordered[_SCORE].to_numpy()
     # Not converted to whole numbers here. A label of 0.9 is not a label, and
     # truncating it would turn it into one before anything checked it.
-    drawn[detected] = ordered[label].to_numpy()
+    drawn[detected] = (
+        ordered[label].to_numpy()
+        if label is not None
+        else _supplied(detected_by, len(readings))
+    )
     return drawn, score, detected
+
+
+def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
+    r"""The caller's own detections, checked against the rows they are about.
+
+    Taken as an array rather than as a labelled series: they are one per row
+    of the readings in the order the readings are in, which is the same thing
+    the scores are matched by, and aligning them on an index instead would
+    match a detection to whichever row happened to share a label.
+    """
+    values = np.asarray(
+        detections.to_numpy()
+        if isinstance(detections, (pd.Series, pd.Index))
+        else detections
+    ).reshape(-1)
+    if values.size != rows:
+        raise StructuredDataError(
+            f'detected_by carries {values.size} detection(s) and these '
+            f'readings are {rows} row(s); it marks one row each',
+            code='INVALID_REQUEST',
+        )
+    if values.dtype == bool:
+        return values
+    numeric = np.asarray(values, dtype=float)
+    if not bool(np.isin(numeric, (0.0, 1.0)).all()):
+        # A score is not a detection. Drawn as one it marks every row whose
+        # score rounds up, which is a different report from the one the
+        # caller asked for and looks exactly like the one they asked for.
+        raise StructuredDataError(
+            'detected_by carries values other than true and false, so it is '
+            'a score rather than a decision about one. Compare it against a '
+            'threshold first; percentile_thresholds finds one',
+            code='INVALID_REQUEST',
+        )
+    return numeric.astype(bool)
+
+
+def _titled(title: str, detected_by: str | Sequence[Any] | np.ndarray) -> str:
+    r"""The title, saying what decided the detections it draws."""
+    if isinstance(detected_by, str):
+        return f'{title} (detections by {detected_by.upper()})'
+    return f'{title} (detections supplied by the caller)'
 
 
 def _signals(
