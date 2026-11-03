@@ -98,4 +98,18 @@ class RebindingTest {
       }
     }
   }
+
+  @org.junit.jupiter.api.Test
+  void changedDeclaredTypeIsRejected() throws Exception {
+    try (var old = DriverManager.getConnection("jdbc:duckdb:"); var replacement = DriverManager.getConnection("jdbc:duckdb:")) {
+      try (var statement = old.createStatement()) { statement.execute("CREATE TABLE items AS SELECT 1 AS id, 2.0::DOUBLE AS value"); }
+      try (var statement = replacement.createStatement()) { statement.execute("CREATE TABLE items AS SELECT 1 AS id, 'other' AS value"); }
+      Schema schema = Schema.fromSource(DuckDbSource.of(old));
+      assertThrows(StructuredDataException.class, () -> schema.withSource(DuckDbSource.of(replacement)));
+      try (var statement = old.createStatement(); var result = statement.executeQuery("SELECT value FROM items")) {
+        assertTrue(result.next());
+        assertEquals(2.0, result.getDouble(1));
+      }
+    }
+  }
 }

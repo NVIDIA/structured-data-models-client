@@ -36,6 +36,7 @@ The separate live Python run passed all five PostgreSQL, Databricks SQL, Snowfla
 Namespace changes and changed semantic expression-trust settings were refused before source reads.
 Java passed SQLite/DuckDB public workflows and a PostgreSQL reconnect → materialize → live prediction journey using the existing parity fixture/configuration helpers.
 Both hosts cover reconnecting after the original connection has already closed.
+An additional test in each host rejects a replacement DuckDB column whose declared type changed from numeric to text, without harming the original source.
 
 A focused run against the pinned old engine confirmed that rebinding retained its key declaration and used replacement data, while mutating the existing table object.
 The new API retains those useful capabilities and isolates the original schema and prepared payloads.

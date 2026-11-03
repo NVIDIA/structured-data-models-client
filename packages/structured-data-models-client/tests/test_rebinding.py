@@ -155,3 +155,18 @@ def test_rebind_after_old_connection_closed(sources):
     sources[0].connection.close()
     rebound = schema.with_source(sources[1])
     assert labels(rebound) == {i: float((i + 100) * 2) for i in range(30)}
+
+
+def test_rebinding_rejects_changed_declared_type():
+    import duckdb
+    from sdm_connectors import DuckDBSource
+
+    with duckdb.connect() as old, duckdb.connect() as new:
+        old.execute(
+            'CREATE TABLE items AS SELECT 1 AS id, 2.0::DOUBLE AS value'
+        )
+        new.execute("CREATE TABLE items AS SELECT 1 AS id, 'other' AS value")
+        original = Schema.from_source(DuckDBSource(old), {'items': 'items'})
+        with pytest.raises(StructuredDataError):
+            original.with_source(DuckDBSource(new))
+        assert old.execute('SELECT value FROM items').fetchone() == (2.0,)
