@@ -74,6 +74,14 @@ def forecast_report(
     pages = _pages()
     frame, target, step = _forecast_frame(carried)
     explanation = _explanation(carried)
+    # The feature axis sets the forecast series' own effect aside rather than
+    # measuring it, and it reaches here as a zero. Left in, the page ranks it
+    # among measured channels and has called it the most influential of them.
+    # A row that is not a measurement does not belong in a matrix of
+    # measurements, so it is taken out along with its label.
+    explanation, channels = _without_the_unmeasured(
+        explanation, _channels(carried), carried
+    )
     attributions = np.asarray(explanation.lag_horizon_attributions)
     # Scores, not attributions. That helper differences a cumulative score
     # into a per-step weight, and handing it the normalised attribution
@@ -103,7 +111,7 @@ def forecast_report(
             pages._save_channel_axis_artifacts(
                 out_dir,
                 np.asarray(explanation.channel_horizon_attributions),
-                channel_labels=_channels(carried),
+                channel_labels=channels,
             )
         drawn = pages._build_pdf_report(
             Path(output_path),
@@ -117,7 +125,7 @@ def forecast_report(
             top_k=top_k,
             context_len=_context_len(carried, attributions.shape[1]),
             forecast_horizon=attributions.shape[1],
-            channel_labels=_channels(carried),
+            channel_labels=channels,
         )
     if drawn is None:  # pragma: no cover - matplotlib is present by here
         raise MissingExtraError('report', 'matplotlib')
@@ -233,3 +241,30 @@ def _artifacts(named: str | Path | None) -> Iterator[Path]:
         return
     with tempfile.TemporaryDirectory(prefix='sdm-forecast-') as temporary:
         yield Path(temporary)
+
+
+def _without_the_unmeasured(
+    explanation: Any, channels: list[str] | None, carried: dict[str, Any]
+) -> tuple[Any, list[str] | None]:
+    r"""``explanation`` with any channel it did not measure removed."""
+    from dataclasses import replace
+
+    excluded = (carried.get('metadata') or {}).get('feature_axis_excludes')
+    attributions = explanation.channel_horizon_attributions
+    if excluded is None or attributions is None or not channels:
+        return explanation, channels
+    if excluded not in channels:
+        return explanation, channels
+    keep = [name != excluded for name in channels]
+    return (
+        replace(
+            explanation,
+            channel_horizon_attributions=np.asarray(attributions)[keep],
+            per_channel_flow=(
+                None
+                if explanation.per_channel_flow is None
+                else np.asarray(explanation.per_channel_flow)[keep]
+            ),
+        ),
+        [name for name in channels if name != excluded],
+    )

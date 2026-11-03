@@ -55,6 +55,15 @@ class Forecaster:
         return int(self._inner.context_size)
 
     @property
+    def mixes_channels(self) -> bool:
+        r"""Whether a channel can reach the forecast of another one.
+
+        Without it, a column measured alongside the series contributes
+        nothing to the forecast, though the embedding still pools it.
+        """
+        return self._inner.cross_channel is not None
+
+    @property
     def prediction_size(self) -> int:
         r"""How many steps it forecasts in one pass."""
         return int(self._inner.prediction_size)

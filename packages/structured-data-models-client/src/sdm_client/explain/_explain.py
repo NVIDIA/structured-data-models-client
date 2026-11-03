@@ -67,6 +67,19 @@ def explanation_of(
     # reads anything. The attribution then works in the space the model works
     # in; handing it raw readings attributed a model being fed numbers it
     # never sees.
+    if len(channels) > 1 and not forecaster.mixes_channels:
+        # Without channel mixing and without retrieval, a covariate cannot
+        # reach the forecast at all. The embedding still pools every channel,
+        # so an attribution would move when one of them moves and report an
+        # influence the forecast does not have.
+        raise StructuredDataError(
+            'this forecaster does not mix channels, so nothing measured '
+            'alongside the series can reach the forecast, and an attribution '
+            'over them would report an influence there is none of. Explain a '
+            'history of the series alone, or use a forecaster that mixes '
+            'channels',
+            code='UNSUPPORTED_REQUEST',
+        )
     window_only = history[..., -forecaster.context_size :]
     if feature_axis and not np.isfinite(window_only).all():
         # Feature-axis attribution perturbs a channel towards its own mean

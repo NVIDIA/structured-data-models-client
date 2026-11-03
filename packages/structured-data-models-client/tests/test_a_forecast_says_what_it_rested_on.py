@@ -244,6 +244,60 @@ def test_the_files_the_pages_name_are_written(explained, tmp_path):
     assert 'semantic_flow.csv' in written
 
 
+def test_the_series_own_channel_is_not_ranked_among_the_measured(
+    forecast, tmp_path
+):
+    """Its effect is set aside rather than measured, so it arrives as a zero.
+    Left among real numbers the page ranked it, and with small effects
+    elsewhere it called the excluded channel the most influential of all."""
+    from sdm_client.reporting.forecast import (
+        _channels,
+        _explanation,
+        _without_the_unmeasured,
+    )
+
+    with SDMClient.in_process(forecast) as client:
+        result = client.predict(
+            Request.forecast(
+                history(600),
+                target='flow',
+                horizon=4,
+                inference={'feature_axis': True},
+            ),
+            model=KumoForecast(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    carried = result.explanation
+    assert carried['metadata']['feature_axis_excludes'] == 'flow'
+    _, channels = _without_the_unmeasured(
+        _explanation(carried), _channels(carried), carried
+    )
+    assert channels == ['temp']
+
+
+def test_a_forecaster_that_cannot_use_a_covariate_does_not_attribute_one(
+    sdm,
+):
+    """Without channel mixing a column measured alongside the series reaches
+    the forecast not at all, while the embedding still pools it, so an
+    attribution moves for something that changes nothing."""
+    import torch
+
+    torch.manual_seed(0)
+    flat = sdm.models.KumoForecast(
+        cross_channel=False, pretrained=False, device='cpu'
+    )
+    with SDMClient.in_process(flat) as client:
+        with pytest.raises(StructuredDataError) as caught:
+            client.predict(
+                Request.forecast(history(600), target='flow', horizon=2),
+                model=KumoForecast(),
+                outputs=['prediction', 'explanation'],
+            )
+    assert 'mix channels' in str(caught.value)
+
+
 def test_the_attribution_heatmap_is_drawn(explained, tmp_path):
     """It is a page drawn from an image on disk, and hardcoding no image
     dropped it from every report although the matrix was right there."""
