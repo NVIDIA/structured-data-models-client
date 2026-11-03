@@ -4,7 +4,8 @@
 
 # Restore missing user capabilities
 
-**Status: proposed; implementation has not started.**
+**Status: Phase 6 planning; implementation has not started.**
+Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
 The earlier green CI proves its tested scope, not completion of this work.
@@ -44,7 +45,7 @@ Names below describe proposed API placement, not frozen signatures.
 
 | Order | Capability and proposed API | Ownership / existing implementation | Size |
 |---|---|---|---|
-| 1 | `Schema.to_mermaid()` / Java equivalent; `visualize()` and HTML/file output | Small shared schema formatter in `sdm-schema`; hosts handle rendering, notebooks and files | Small |
+| 1 | `Schema.to_mermaid()` / Java equivalent; `visualize()` and HTML/file output | Host formatters/rendering over existing schema metadata; common renderer assets and semantic fixtures | Small |
 | 1 | Schema/table metadata and link reports; explanation accessors/printing on `PredictionResult` | Hosts format existing descriptors/results; shared numeric feature-importance aggregation belongs in Rust | Small–moderate |
 | 1 | Structured sanitization report on prepared requests/sessions | Expose existing `sdm-engine` snapshot drop counts through preparation results; hosts provide read-only views | Small |
 | 1 | RelBench loading into `Schema` | Host download/cache/parquet I/O; common pinned dataset metadata; existing schema admission | Small–moderate |

@@ -6,6 +6,7 @@
 
 **Status: design only. Support both Python and Java; pandas and notebook formatting stay Python-specific.**
 Expose readable information already held by schemas/results, without another warehouse or model call.
+Phase 6 boundary review: [decision and evidence](../../../phase-6/boundary-review.md).
 
 ```text
 Schema fields / prediction explanation
@@ -30,7 +31,9 @@ Keep `PredictionResult.explanation` / `explanation()` unchanged.
 Add a read-only explanation view for summary, details, warnings, cohorts, subgraphs and feature importance, with print/text conveniences.
 Do not reintroduce the old return type that switched between a DataFrame and an explanation object.
 Preserve unknown explanation fields and define absent/malformed fields explicitly; absence is not a zero-valued explanation.
-Aggregate per-cell attribution once in Rust rather than implementing different math in Python and Java.
+Numerical attribution interpretation may use a small shared Rust helper because its model-specific meaning must agree across languages, not simply because it is common code.
+Before adding that helper, define supported payload formats, signed/nonfinite scores, missing values and normalization.
+Compute on demand when feature importance is requested; do not add another call to ordinary prediction or copy the entire prediction result for a report.
 
 ## Acceptance
 

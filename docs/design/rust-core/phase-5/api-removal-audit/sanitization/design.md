@@ -7,6 +7,9 @@
 **Status: design only. Support both Python and Java through the same Rust report.**
 Expose counts Rust already computes when preparing an in-memory relational graph.
 This adds observability, not a new data-cleaning policy.
+For example: 100 input rows, three excluded for missing keys and two for duplicate keys, leaving 95 usable rows.
+Today Rust produces a warning but the client cannot retrieve these numbers as a report; “sanitization” here is not anonymization.
+Phase 6 boundary review: [decision and evidence](../../../phase-6/boundary-review.md).
 
 ```text
 Input Arrow tables → existing Rust graph preparation
@@ -27,7 +30,8 @@ Input Arrow tables → existing Rust graph preparation
 Expose `sanitization_report` / `sanitizationReport()` on prepared relational requests and fitted handles, tied to the preparation that produced them.
 Use a report status plus per-table input rows, output rows, null-primary-key drops, duplicate-key drops and null-time drops.
 Retain zero-drop tables and existing exclusive reason precedence: a row must not be counted twice.
-If current counters do not retain every required field, extend accounting where filtering already occurs; do not scan the data again.
+Current `Snapshot.dropped` stores only tables with nonzero drops.
+Extend accounting to include clean-table input/output counts where filtering already occurs; do not scan the data again.
 
 Warehouse preparations return an explicit unavailable status when no counts were collected; never imply that unavailable means zero drops.
 Define the non-relational case explicitly rather than manufacturing relational statistics for Tabular requests.

@@ -7,6 +7,7 @@
 **Status: design only. Support both Python and Java; use their existing file/Arrow readers.**
 Load a named, pinned dataset into the maintained `Schema`, with its keys, relationships and time metadata.
 This restores a convenience loader, not a second sampling path.
+Phase 6 boundary review: [decision and evidence](../../../phase-6/boundary-review.md).
 
 ```text
 Dataset name → common pinned manifest

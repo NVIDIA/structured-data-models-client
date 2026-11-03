@@ -6,11 +6,12 @@
 
 **Status: design only. Support both Python and Java; notebook integration is Python-specific.**
 Restore diagram generation and export on the maintained `Schema`, without loading data or changing sampling.
+Phase 6 boundary review: [decision and evidence](../../../phase-6/boundary-review.md).
 
 ```text
 Python Schema / Java Schema
-           ↓ existing schema descriptor
-Rust sdm-schema: names, keys, relationships → Mermaid text
+           ↓ existing schema metadata
+Python / Java: Mermaid text + shared HTML/renderer assets
            ↓
 Python / Java: standalone HTML, file export
 Python only: inline notebook display
@@ -18,8 +19,8 @@ Python only: inline notebook display
 
 | Layer | Responsibility |
 |---|---|
-| Rust `sdm-schema` | Pure Mermaid formatter; deterministic ordering, safe identifiers/labels, composite keys and column visibility |
-| Existing core/binding boundary | Pass a schema descriptor and formatting options; return text; no retained rendering state |
+| Python / Java formatter | Mermaid text from existing schema metadata; safe identifiers/labels, composite keys and column visibility |
+| Rust | Existing schema meaning and validation only; no new rendering operation or retained display state |
 | Python / Java | File writes, HTML resource loading, optional image-export HTTP calls and errors |
 | Python only | Jupyter/Databricks notebook display and terminal fallback |
 
@@ -37,7 +38,8 @@ No model endpoint, warehouse query or browser process is needed to generate Merm
 
 ## Acceptance
 
-Shared fixtures must produce identical diagram text in both languages, including empty schemas, quoted/unusual names and composite keys.
+Shared fixtures must verify equivalent diagram content in both languages, including empty schemas, quoted/unusual names and composite keys.
+Each formatter must be deterministic; incidental whitespace need not be identical.
 Test that untrusted names cannot inject script into HTML, offline HTML contains its renderer, and export dispatch/errors work.
 Python notebook display gets a host-specific test; both languages get file-export tests.
 Record notebook display as intentionally Python-specific in the existing parity manifest.
