@@ -6,6 +6,7 @@
 
 **The migration preserved the maintained facade, but did not preserve every useful feature of the archived engine.**
 The earlier “no remaining acceptance gap” conclusion was too broad.
+Restoration is tracked in [design.md](design.md).
 Do not use the green prediction matrix as evidence that these missing utilities are covered.
 
 ## What was compared
@@ -24,7 +25,7 @@ Java production sources were compared with the merged Phase 4 branch (`2b9e6ea88
 | Archived Python PQL | Its parser/AST/validator/rewriter imports disappeared; `PredictiveQuery` remains, but is not a replacement for programmatic AST manipulation |
 | Internal client interfaces | Backends, adapters, materializers and helper functions were removed or changed as policy moved into Rust; these were explicitly internal in the baseline stability policy |
 
-The combined inventory has **2,051 removed declaration/field/value records**, not 1,806 user-facing APIs: 1,053 PQL, 868 engine and 130 client implementation records.
+The combined inventory has **2,051 removed declaration/field/value records**, not 2,051 user-facing APIs: 1,053 PQL, 868 engine and 130 client implementation records.
 Of these, 290 are generated parser implementation records.
 The main-only comparison has 1,985 records; the extra baseline catches cleanup-only interfaces too.
 Exact names and source locations are in [removed-symbols.csv](removed-symbols.csv), [removed-exports.csv](removed-exports.csv) and [changed-symbols.csv](changed-symbols.csv).
@@ -47,7 +48,7 @@ Package-retirement approval is not approval to drop each capability.
 | `KumoRelational.sanitization_report`; `GraphSanitizationReport`, `TableSanitizationReport`, `SanitizationStatus` | Warnings/validation remain; no equivalent structured input/output/drop-count report | Confirmed diagnostics gap |
 | `Table.end_time_column`, `has_end_time_column()` and constructor argument | Python/Java public schema builders write a null end-time column, despite an optional field in the Rust contract | Confirmed admission gap; effects on interval-aware queries need dedicated tests |
 | `Graph.infer_metadata()`, `infer_links()`; `Table.infer_metadata()`, `infer_primary_key()`, `infer_time_column()`, `time_column_choice` | Initial inference exists in `Schema.from_data/from_source`; no equivalent explicit re-inference/reporting operation after edits | Partial replacement, not full parity |
-| `Table.add_column(s)` with `ColumnSpec`/expression objects | No equivalent public ColumnSpec/expression editing API; semantic-source expressions remain supported internally | Confirmed missing generic editing interface; semantic-view support is not a replacement |
+| `Table.add_column(s)` with `ColumnSpec`/expression objects | No equivalent public ColumnSpec/expression editing API; semantic-source expressions remain supported internally | Missing SQL expression editing interface; old LocalTable rejected expressions and required DataFrame preprocessing |
 | `Explanation.print()`, typed `summary/details/cohorts/subgraphs/feature_importance` accessors, `ExplainConfig` | `PredictionResult.explanation` retains explanation data as a dictionary; old typed/printing helpers are gone | Partial replacement; do not describe explanations as entirely removed |
 | `TaskTable` editing/narrowing and `predict_task()` | Materialize/predict survives through `PredictiveQuery`, `Request`, `Split`, `SDMClient`; arbitrary old task-object editing has no exact facade equivalent | Partial replacement; decide which editing use cases to retain |
 
