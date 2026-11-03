@@ -96,8 +96,9 @@ def test_all_pins_have_valid_metadata():
     assert set(overrides) <= set(registry['datasets'])
 
 
+@pytest.mark.parametrize('failure', ['truncated', 'wrong-digest'])
 def test_http_download_cache_and_failure_recovery(
-    catalog, tmp_path, monkeypatch
+    catalog, tmp_path, monkeypatch, failure
 ):
     import http.server
     import threading
@@ -115,7 +116,9 @@ def test_http_download_cache_and_failure_recovery(
             self.send_response(200)
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
-            self.wfile.write(data[:10] if broken[0] else data)
+            if broken[0]:
+                data = data[:10] if failure == 'truncated' else bytes(len(data))
+            self.wfile.write(data)
 
         def log_message(self, *args):
             pass
@@ -165,3 +168,80 @@ def test_unsafe_manifest_path_rejected(catalog, tmp_path):
     with pytest.raises(StructuredDataError) as error:
         Schema.from_relbench('../escape', cache_dir=tmp_path)
     assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_loaded_schema_composes_reports_exports_and_persisted_requests(
+    catalog, tmp_path, monkeypatch
+):
+    import pickle
+    import warnings
+
+    import pandas as pd
+
+    from sdm_client import KumoRelational, PredictiveQuery
+
+    loader, registry = catalog
+    seed(tmp_path, registry)
+    monkeypatch.setattr(
+        loader, 'urlopen', lambda *a, **kw: pytest.fail('offline HTTP')
+    )
+    schema = Schema.from_relbench('fixture', cache_dir=tmp_path, offline=True)
+    metadata = schema.metadata_report()
+    links = schema.link_report()
+    assert [table.name for table in metadata.tables] == ['customers', 'orders']
+    assert metadata.tables[0].primary_key == ('id',)
+    assert metadata.tables[1].primary_key == ()
+    assert metadata.tables[1].time_column == 'time'
+    assert links.to_pandas().to_dict('records') == [
+        dict(
+            source_table='orders',
+            source_column='customer_id',
+            target_table='customers',
+            target_column='id',
+        )
+    ]
+    schema.visualize(tmp_path / 'loaded.html')
+    schema.visualize(tmp_path / 'loaded.mmd')
+    assert (tmp_path / 'loaded.html').read_text() == schema.to_html()
+    assert (tmp_path / 'loaded.mmd').read_text().strip() == schema.to_mermaid()
+    assert schema.to_mermaid().count(' -->|') == 1
+
+    # Reports and cached bytes must not share mutable metadata with this owner.
+    schema['customers']['name'].stype = 'categorical'
+    second = Schema.from_relbench(
+        'rel-fixture', cache_dir=tmp_path, offline=True
+    )
+    assert second['customers']['name'].stype == 'text'
+    assert metadata.tables[0].columns[1].stype == 'text'
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT SUM(orders.amount, 0, 1, days) FOR EACH customers.id',
+            schema,
+        ).materialize(
+            indices=[1],
+            anchor_time=pd.Timestamp('2024-01-02'),
+            model=KumoRelational(),
+            num_context_samples=1,
+            random_seed=7,
+        )
+    assert request.predict_rows == 1
+    report = request.sanitization_report
+    assert report.status == 'available'
+    assert [(r.table, r.input_rows, r.output_rows) for r in report.tables] == [
+        ('customers', 2, 2),
+        ('orders', 2, 2),
+    ]
+    assert all(
+        r.null_primary_key_rows
+        == r.duplicate_primary_key_rows
+        == r.null_time_rows
+        == 0
+        for r in report.tables
+    )
+    restored = pickle.loads(pickle.dumps(request))
+    assert restored.sanitization_report == report
+    assert restored.payloads == request.payloads
+    schema['orders'].data.loc[0, 'amount'] = -999
+    assert second['orders'].data['amount'].tolist() == [2.5, 3.5]
+    assert restored.sanitization_report == report
