@@ -76,3 +76,29 @@ These are public end-to-end data-to-label tests; no GPU endpoint is involved bec
 Old source at `12955d397`: engine `rfm/rfm.py:1801` under `packages/structured-data-models-relational-engine/src/sdm_relational_engine/`.
 Old tests: engine `tests/test_rfm.py:87,694,705,748` cover labels, empty results and invalid entity timing.
 Current seams: `rust/crates/sdm-engine/src/labels.rs`, `sdm-core/src/materialize.rs`, `sdm-core/src/materialize/frames.rs` and the test-only dispatch in `sdm-core/src/test_ops.rs`.
+
+
+## Reviewed implementation contract
+
+Python `query.labels(size, *, anchor_time=None, random_seed=42, max_iterations=10)` returns a detached DataFrame.
+Java `query.labels(schema, LabelsOptions)` returns an owned Arrow Table; callers close it.
+Size is a nonnegative integer, iterations a positive integer, and their product is checked before allocation or provider sampling.
+A zero size returns typed empty output without an entity-sampling request; schema metadata may still be needed.
+Scalar targets retain scalar values; link targets return a list of identifiers per entity.
+
+A forecast retains the old one-entity layout: for `FORECAST 3 TIMEFRAMES`, output has up to three rows for one selected entity at successive anchors, capped by `size`.
+An explicit entity in PQL is honored; otherwise seeded selection chooses one eligible entity.
+For example, daily anchors January 1, 2 and 3 produce three scalar targets for that entity, not three target columns or a vector target.
+The default anchor accounts for the full horizon even when the row limit is smaller.
+Static entity-time anchors are supported; temporal entity-time anchors receive a structured refusal instead of the old assertion failure.
+No eligible entity remains an error, while eligible entities whose target filter yields no labels return typed empty output.
+
+The production operation uses a separate orchestration module sharing the existing engine's target, time, eligibility and provider helpers.
+It does not use the test-only labels operation, construct a model request, or gather a neighborhood.
+
+Target validity matches the shared engine: SUM/COUNT produce zero for empty windows; AVG/MIN/MAX and link targets omit examples with no target observations.
+The independent fixture includes a lower-bound event that must be excluded and an upper-bound event that must be included.
+The old pandas executor confirms `(start, end]` windows and omission of empty LIST_DISTINCT groups.
+
+Scalar output uses the existing target conversion, including its value-dependent Decimal classification rule: represent colliding numeric classes as distinct strings.
+A zero-row result uses that conversion on an empty column; it cannot detect observed Decimal class collisions without reading rows.

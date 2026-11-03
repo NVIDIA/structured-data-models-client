@@ -374,6 +374,45 @@ pub(crate) async fn materialize(
     run(asker, inputs).await
 }
 
+pub(crate) async fn labels(
+    asker: Asker,
+    request: sdm_contract::labels::LabelsFrames,
+    mut attachments: crate::run::Attachments,
+    facts: HostFacts,
+    zones: Arc<dyn sdm_engine::time::Zones>,
+) -> Result<OperationResult, CoreError> {
+    let Some(Attachment::FrameGraph(owner)) = attachments.remove(&request.graph) else {
+        return Err(internal("frame graph owner is absent"));
+    };
+    let _lease = owner.lease()?;
+    let call: sdm_contract::labels::LabelsCall =
+        crate::attached::take_json(&mut attachments, request.input)?;
+    let inputs = super::label_query::Inputs {
+        description: owner.0.description.clone(),
+        query: call.query,
+        pending: None,
+        types: owner.0.types.clone(),
+        facts,
+        zones,
+        anchor_time: call.anchor_time,
+        anchor_entity: call.anchor_entity,
+        seed: call.seed,
+        unseeded: call.unseeded,
+        source: "in_memory".into(),
+        frames: Some(owner),
+    };
+    let rows = super::label_query::extract(
+        &asker,
+        inputs,
+        super::label_query::Options {
+            size: call.size,
+            max_iterations: call.max_iterations,
+        },
+    )
+    .await?;
+    super::label_query::finish(&asker, rows)
+}
+
 fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
     use arrow_array::cast::AsArray;
     match array.data_type() {

@@ -82,6 +82,15 @@ public final class RelationalMaterializer implements AutoCloseable {
     }
   }
 
+  synchronized org.apache.arrow.vector.table.Table labels(PredictiveQuery query, LabelsOptions options) {
+    if (closed) throw new StructuredDataException("this materializer was closed", "INVALID_CONFIGURATION", Map.of(), null);
+    try (Host.Finished finished = Host.run(
+        Map.of("op", "labels_frames", "graph", 1, "input", 2),
+        Map.of(1, graph(), 2, Host.attachment(options.input(query.text()))))) {
+      return PredictiveQuery.labelTable(finished);
+    }
+  }
+
   @Override public synchronized void close() {
     if (!closed) {
       closed = true;

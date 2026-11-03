@@ -3598,85 +3598,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     };
     let fetched = labelling.read(&labelled_fetches).await?;
 
-    // The examples the entity filter and the assumption choose: each
-    // condition's truth over the examples, and-ed (`execute`'s `mask`).
-    let mut chosen: Option<Vec<bool>> = None;
-    for shape in &asked.choosing {
-        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
-        chosen = Some(match chosen {
-            None => holds,
-            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
-        });
-    }
-    let mut labelled = if let Shape::Links(window) = &asked.target {
-        let rows = fetched
-            .get(&window.table)
-            .ok_or_else(|| internal("link target rows were not read"))?;
-        let column = window
-            .column
-            .as_ref()
-            .ok_or_else(|| internal("link target has no column"))?;
-        let values = named(&rows.rows, column)?;
-        let kept = window
-            .filter
-            .as_ref()
-            .map(|filter| labels::truth(&row_condition(filter, &rows.rows)?).map(|v| v.values))
-            .transpose()?;
-        let starts = shifted(&examples.anchors, window.start, "anchor_time")?;
-        let ends = shifted(&examples.anchors, window.end, "anchor_time")?;
-        let linked = sdm_engine::frame_labels::distinct_identifiers(
-            examples.index.len(),
-            &rows.batch,
-            values,
-            &rows.times,
-            labels::Bounds {
-                starts: Some(&starts),
-                ends: &ends,
-            },
-            kept.as_deref(),
-        )?;
-        PreparedLabelled {
-            mask: linked.mask,
-            labels: PreparedLabels::Links(linked.labels),
-        }
-    } else {
-        let target = labelling.build(&asked.target, &fetched, true)?;
-        let scalar = if matches!(asked.task, Task::Multiclass) {
-            labels::label_classes(&target)?
-        } else {
-            labels::label(&target)?
-        };
-        PreparedLabelled {
-            mask: scalar.mask,
-            labels: PreparedLabels::Scalar(scalar.labels),
-        }
-    };
-    drop(fetched);
-    null_compared(&asked.target, &labelled.mask)?;
-    // The examples the entity filter or the assumption leaves out keep no
-    // label (`out[mask[_mask]]`, `mask & _mask`).
-    if let Some(chosen) = &chosen {
-        let keep: Vec<bool> = (0..labelled.mask.len())
-            .filter(|&row| labelled.mask[row])
-            .map(|row| chosen[row])
-            .collect();
-        for (row, holds) in chosen.iter().enumerate() {
-            labelled.mask[row] &= *holds;
-        }
-        labelled.labels = labelled.labels.kept(&keep);
-    }
-    // An example of an entity whose key is NaN is left out of the context
-    // once labelled, as the reference leaves it out (T2.12).
-    if !nan_key.is_empty() {
-        let keep: Vec<bool> = (0..labelled.mask.len())
-            .filter(|&row| labelled.mask[row])
-            .map(|row| !nan_key.contains(&examples.index[row]))
-            .collect();
-        for row in 0..labelled.mask.len() {
-            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
-        }
-        labelled.labels = labelled.labels.kept(&keep);
-    }
+    let labelled = label_examples(&asked, &labelling, fetched, &examples, &nan_key)?;
     // The examples with a label, in order, the first a context holds.
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
         .filter(|&row| labelled.mask[row])
@@ -5206,6 +5128,96 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
         DataType::Float64 => Scalar::Float64(array.as_primitive::<Float64Type>().value(row)),
         _ => Scalar::Null,
     }
+}
+
+/// Apply the same target/filter rules to prediction context or standalone labels.
+fn label_examples(
+    asked: &Asked,
+    labelling: &Labelling<'_>,
+    fetched: BTreeMap<String, Fetched>,
+    examples: &sample::Examples,
+    nan_key: &BTreeSet<usize>,
+) -> Result<PreparedLabelled, CoreError> {
+    // The examples the entity filter and the assumption choose: each
+    // condition's truth over the examples, and-ed (`execute`'s `mask`).
+    let mut chosen: Option<Vec<bool>> = None;
+    for shape in &asked.choosing {
+        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
+        chosen = Some(match chosen {
+            None => holds,
+            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
+        });
+    }
+    let mut labelled = if let Shape::Links(window) = &asked.target {
+        let rows = fetched
+            .get(&window.table)
+            .ok_or_else(|| internal("link target rows were not read"))?;
+        let column = window
+            .column
+            .as_ref()
+            .ok_or_else(|| internal("link target has no column"))?;
+        let values = named(&rows.rows, column)?;
+        let kept = window
+            .filter
+            .as_ref()
+            .map(|filter| labels::truth(&row_condition(filter, &rows.rows)?).map(|v| v.values))
+            .transpose()?;
+        let starts = shifted(&examples.anchors, window.start, "anchor_time")?;
+        let ends = shifted(&examples.anchors, window.end, "anchor_time")?;
+        let linked = sdm_engine::frame_labels::distinct_identifiers(
+            examples.index.len(),
+            &rows.batch,
+            values,
+            &rows.times,
+            labels::Bounds {
+                starts: Some(&starts),
+                ends: &ends,
+            },
+            kept.as_deref(),
+        )?;
+        PreparedLabelled {
+            mask: linked.mask,
+            labels: PreparedLabels::Links(linked.labels),
+        }
+    } else {
+        let target = labelling.build(&asked.target, &fetched, true)?;
+        let scalar = if matches!(asked.task, Task::Multiclass) {
+            labels::label_classes(&target)?
+        } else {
+            labels::label(&target)?
+        };
+        PreparedLabelled {
+            mask: scalar.mask,
+            labels: PreparedLabels::Scalar(scalar.labels),
+        }
+    };
+    drop(fetched);
+    null_compared(&asked.target, &labelled.mask)?;
+    // The examples the entity filter or the assumption leaves out keep no
+    // label (`out[mask[_mask]]`, `mask & _mask`).
+    if let Some(chosen) = &chosen {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| chosen[row])
+            .collect();
+        for (row, holds) in chosen.iter().enumerate() {
+            labelled.mask[row] &= *holds;
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
+    // An example of an entity whose key is NaN is left out of the context
+    // once labelled, as the reference leaves it out (T2.12).
+    if !nan_key.is_empty() {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| !nan_key.contains(&examples.index[row]))
+            .collect();
+        for row in 0..labelled.mask.len() {
+            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
+    Ok(labelled)
 }
 
 #[cfg(test)]
