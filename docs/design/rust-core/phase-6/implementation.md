@@ -58,10 +58,12 @@ Contract lock policy retains merged entries and only the newest unmerged version
 |---|---|---|
 | End-time roles and future-value masking | `rust-core-phase-6-end-time` | Contract 63 approved; implementation and focused fixtures started |
 | SQL columns and custom relational examples | `rust-core-phase-6-examples` | Exact API/task contract review, including supplied forecasting |
-| Deeper original-four coverage | `rust-core-phase-6-coverage2` | Audit new coverage gaps; reuse prior evidence and stable production artifacts |
+| Deeper original-four coverage | `rust-core-phase-6-coverage2` | Stopped under the replacement goal; unmerged work preserved |
 
 The authoritative designs are `phase-5/api-removal-audit/end-time/design.md` and `expressions-tasks/design.md`.
 Use independent expected answers and focused old-client comparisons; do not preserve demonstrated bugs or introduce an exhaustive differential framework.
 End-time owns the warm build target for contract 63; examples integrates that contract before generating its subsequent versions.
-The coverage worker uses stable contract-62 artifacts and does not compete for native builds.
+The replacement goal assigns implementation and testing to the two feature agents only.
+The coordinator reviews boundaries and integration; the feature agents also review each other’s changes.
+The separate original-four coverage branch is preserved but is outside this goal.
 All implementations require independent review, affected checks and integration into Phase 6 only.
