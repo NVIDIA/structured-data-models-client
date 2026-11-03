@@ -56,13 +56,13 @@ Contract lock policy retains merged entries and only the newest unmerged version
 
 | Work | Branch | Status |
 |---|---|---|
-| End-time roles and future-value masking | `rust-core-phase-6-end-time` | Signed checkpoint `2c4fd24ca`; 16 Python / 3 Java cases passed; final native/static and live checks pending |
+| End-time roles and future-value masking | `rust-core-phase-6-end-time` | Reviewed and merged (`b4292b660`); local suites, old-client comparison and live Databricks/Snowflake predictions passed |
 | SQL columns and custom relational examples | `rust-core-phase-6-examples` | SQL projection draft reviewed; integrating contract 63 before runtime tests; supplied custom examples follow in contract 65 |
 | Deeper original-four coverage | `rust-core-phase-6-coverage2` | Stopped under the replacement goal; unmerged work preserved |
 
 The authoritative designs are `phase-5/api-removal-audit/end-time/design.md` and `expressions-tasks/design.md`.
 Use independent expected answers and focused old-client comparisons; do not preserve demonstrated bugs or introduce an exhaustive differential framework.
-End-time owns the warm build target for contract 63; examples integrates that contract before generating its subsequent versions.
+Contract 63 is merged; the examples agent owns the warm target for SQL contract 64 and supplied-example contract 65.
 The replacement goal assigns implementation and testing to the two feature agents only.
 The coordinator reviews boundaries and integration; the feature agents also review each other’s changes.
 The separate original-four coverage branch is preserved but is outside this goal.

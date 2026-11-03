@@ -4,7 +4,7 @@
 
 # Restore missing user capabilities
 
-**Status: the first seven restorations are complete and merged into `rust-core-phase-6`.**
+**Status: the first eight restorations, including end-time support, are complete and merged into `rust-core-phase-6`.**
 Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
@@ -42,7 +42,7 @@ See [completion evidence](../../phase-6/completion.md).
 
 ## Implementation order and tracker
 
-The first seven rows are complete.
+The first eight rows are complete.
 See [restoration completion](../../phase-6/restoration-completion.md) for the latest evidence.
 See the [implementation tracker](../../phase-6/implementation.md) for validation status.
 Effort is relative, not an ETA.
@@ -57,8 +57,8 @@ Names below describe proposed API placement, not frozen signatures.
 | 2 / Complete | [Explicit inference and safe edits](inference-edits/design.md) | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
 | 2 / Complete | [Time-series builder](timeseries/design.md) | Hosts expose a preparation recipe; bounded Rust Arrow transformation handles row/time correctness; existing schema/PQL validates outputs | Moderate |
 | 2 / Complete | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
-| 3 / Proposed | [End-time column](end-time/design.md) | Both hosts declare the role; Rust handles sampled eligibility and hides future end dates through existing provider reads | Substantive |
-| 3 / Proposed | [SQL columns and custom relational examples](expressions-tasks/design.md) | Providers execute dialect SQL; Rust admits schema changes and supplied relational examples; hosts adapt/slice inputs | Substantive; two bounded workflows |
+| 3 / Complete | [End-time column](end-time/design.md) | Both hosts declare the role; Rust handles sampled eligibility and hides future end dates through existing provider reads | Substantive |
+| 3 / In progress | [SQL columns and custom relational examples](expressions-tasks/design.md) | Providers execute dialect SQL; Rust admits schema changes and supplied relational examples; hosts adapt/slice inputs | Substantive; two bounded workflows |
 
 **Sampling impact:** presentation, reports and loaders need no sampler changes.
 Inference/edit conveniences reuse existing algorithms; warehouse metadata previews may be reread.

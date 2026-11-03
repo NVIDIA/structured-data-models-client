@@ -46,9 +46,9 @@ Expose those counts without changing which rows survive; capture clean-table cou
 
 ## Remaining scope and acceptance
 
-The first four features, explicit inference/edits, time-series preparation and labels-only extraction are complete.
+The first four features, explicit inference/edits, time-series preparation, labels-only extraction and end-time support are complete.
 See [restoration completion](restoration-completion.md) for evidence.
-The [restoration tracker](../phase-5/api-removal-audit/design.md) still includes end-time eligibility and scoped expression/task editing.
+The [restoration tracker](../phase-5/api-removal-audit/design.md) still includes scoped SQL-column and custom relational-example work.
 Partial replacements such as connection rebinding and retry/batch scoping require an explicit tested migration mapping or accepted retirement decision.
 Do not silently expand restoration into unsupported old behavior: the old in-memory table API rejected generic expressions.
 
