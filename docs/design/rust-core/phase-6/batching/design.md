@@ -33,3 +33,16 @@ Compared with the old client, this prevents seed-based unsafe reuse and retry mu
 
 The supplied-example path previously put 201 temporal-link rows in one payload despite the existing 200-row model limit.
 A public reproduction on contract 65 confirmed this; the restored shared limit produces batches of 200 and one.
+
+## Verified on production contract 67
+
+| Check | Result |
+|---|---|
+| Rust contracts, prediction, multicall, serving and session tests | 92 passed; Clippy clean. |
+| Python HTTP lifecycle and affected existing suites | 129 passed; 10 optional tests skipped in the local run. |
+| Java HTTP lifecycle and affected existing suites | 44 passed; the live test was run separately. |
+| Existing model endpoint | Python and Java both passed with the same small shared dataset. Python observed one creation, three scoring calls and one deletion, then compared the identical prepared request through stateless calls: row IDs and order match, predictions match within `rtol=1e-5`, `atol=1e-6`. |
+| Boundary checks | Wire snapshots, contract attachment/schema locks, Ruff and targeted mypy passed. |
+
+The two live workflows ran separately from the local suites; no deployment was created.
+Explicit sessions retain their existing behavior, including failed-close retry and session-ID aliases.
