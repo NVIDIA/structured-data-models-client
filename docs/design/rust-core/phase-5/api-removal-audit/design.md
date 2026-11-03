@@ -4,7 +4,7 @@
 
 # Restore missing user capabilities
 
-**Status: Phase 6 planning; implementation has not started.**
+**Status: first four restorations complete and merged into `rust-core-phase-6`; next three are proposals for review.**
 Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
@@ -22,7 +22,8 @@ Python / Java public API
                                          in-memory data or warehouse
 ```
 
-Rust owns rules that must agree across languages: inference, validation, transformations, eligibility and result aggregation.
+Rust owns engine semantics: inference, validation, typed data preparation, eligibility and numerical result interpretation.
+Code being reusable across languages is not sufficient reason to put it in Rust.
 Python/Java own presentation and I/O, with thin wrappers around shared operations.
 Use existing crates and message contracts; no new callback cycle or parallel Python sampling implementation.
 Python returns pandas-friendly views; Java uses the existing Arrow conventions.
@@ -36,22 +37,24 @@ All four provide useful functionality in **both Python and Java**; notebook disp
 3. [Sanitization reports](sanitization/design.md)
 4. [RelBench loading](relbench/design.md)
 
-These are proposals for review, not implemented APIs.
+All four are implemented in both languages, independently reviewed and tested.
+See [completion evidence](../../phase-6/completion.md).
 
 ## Implementation order and tracker
 
-All rows are **not started**; effort is relative, not an ETA.
+The first four rows are complete; the next three have designs but no implementation.
+Effort is relative, not an ETA.
 Names below describe proposed API placement, not frozen signatures.
 
-| Order | Capability and proposed API | Ownership / existing implementation | Size |
+| Order / status | Capability and proposed API | Ownership / existing implementation | Size |
 |---|---|---|---|
-| 1 | `Schema.to_mermaid()` / Java equivalent; `visualize()` and HTML/file output | Host formatters/rendering over existing schema metadata; common renderer assets and semantic fixtures | Small |
-| 1 | Schema/table metadata and link reports; explanation accessors/printing on `PredictionResult` | Hosts format existing descriptors/results; shared numeric feature-importance aggregation belongs in Rust | Small–moderate |
-| 1 | Structured sanitization report on prepared requests/sessions | Expose existing `sdm-engine` snapshot drop counts through preparation results; hosts provide read-only views | Small |
-| 1 | RelBench loading into `Schema` | Host download/cache/parquet I/O; common pinned dataset metadata; existing schema admission | Small–moderate |
-| 2 | Explicit metadata/link inference and safe table/link edit helpers | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
-| 2 | Time-series builder returning schema plus predictive query | Rust expands Arrow observation arrays and constructs tables/query; hosts adapt inputs/results | Moderate |
-| 2 | Labels-only operation on `PredictiveQuery`, replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
+| 1 / Complete | `Schema.to_mermaid()` / Java equivalent; `visualize()` and HTML/file output | Host formatters/rendering over existing schema metadata; common renderer assets and semantic fixtures | Small |
+| 1 / Complete | Schema/table metadata and link reports; explanation accessors/printing on `PredictionResult` | Hosts format existing descriptors/results; shared numeric feature-importance aggregation belongs in Rust | Small–moderate |
+| 1 / Complete | Structured sanitization report on prepared requests/sessions | Expose existing `sdm-engine` snapshot drop counts through preparation results; hosts provide read-only views | Small |
+| 1 / Complete | RelBench loading into `Schema` | Host download/cache/parquet I/O; common pinned dataset metadata; existing schema admission | Small–moderate |
+| 2 | [Explicit inference and safe edits](inference-edits/design.md) | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
+| 2 | [Time-series builder](timeseries/design.md) | Hosts expose a preparation recipe; bounded Rust Arrow transformation handles row/time correctness; existing schema/PQL validates outputs | Moderate |
+| 2 | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
 | 3 | End-time-column configuration | Carry through both facades, shared schema, engine graph, provider projections and eligibility | Substantive |
 | 3 | Generic expression-column and task editing | Define useful edits first; Rust validates expressions, dependencies, entity references and row alignment; providers execute source expressions | Substantive; scope review required |
 
@@ -61,7 +64,7 @@ Labels-only requires a distinct labeling mode, without neighbor gathering or mod
 End-time support changes entity eligibility, including warehouse selection.
 Generic expression editing changes source projection/planning; these two items need focused push-down regression coverage.
 
-## Contracts to settle before coding each affected row
+## Contracts to preserve or settle for the remaining work
 
 - **Presentation:** preserve offline HTML and Mermaid source; explicitly distinguish network-backed image export, keep rendering safe, and restore bundled-asset notices/security checks.
   Notebook display is language-specific; shared diagram content and file export should be available in both languages.
