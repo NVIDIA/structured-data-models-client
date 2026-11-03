@@ -143,11 +143,21 @@ def test_a_key_column_is_not_read_as_history(forecast):
     )
 
 
-@pytest.mark.parametrize('horizon', [0, -1, 1.5, True])
+@pytest.mark.parametrize('horizon', [0, -1, 1.5, True, 10_001])
 def test_a_horizon_that_is_not_a_count_of_steps_is_refused(forecast, horizon):
+    """The upper bound is the contract's: `num_forecasts`, `forecast_step`
+    and the number of predictions are each capped at ten thousand, so a
+    longer horizon is one no deployment may answer."""
     with pytest.raises(StructuredDataError) as caught:
         Request.forecast(history(), target='flow', horizon=horizon)
     assert 'horizon' in str(caught.value)
+
+
+def test_the_longest_horizon_the_contract_carries_is_accepted(forecast):
+    """The premise of the bound above: ten thousand is inside it."""
+    request = Request.forecast(history(), target='flow', horizon=10_000)
+
+    assert request.horizon == 10_000
 
 
 def test_a_history_without_the_series_is_refused(forecast):

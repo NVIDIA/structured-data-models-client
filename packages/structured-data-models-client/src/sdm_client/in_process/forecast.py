@@ -31,6 +31,7 @@ from sdm_client.in_process.columns import (
     key_columns,
     stype_of,
 )
+from sdm_client.request import MAX_FORECAST_STEPS
 
 #: Retrieval blends historical windows into the forecast. One is the direct
 #: forecast alone, which is what the model does when it is not asked.
@@ -178,9 +179,10 @@ class Forecast:
         target = payload['task']['target']['column_name']
         history, alongside = self.series(payload, target)
         horizon = int(payload['task'].get('num_forecasts') or 0)
-        if horizon < 1:
+        if not 1 <= horizon <= MAX_FORECAST_STEPS:
             raise StructuredDataError(
-                'a forecast asks for num_forecasts steps, and this names none',
+                f'a forecast asks for between 1 and {MAX_FORECAST_STEPS} '
+                f'steps as num_forecasts, and this names {horizon or "none"}',
                 code='INVALID_REQUEST',
             )
         options = payload.get('inference') or {}

@@ -66,6 +66,11 @@ TASK_KINDS = (
     'anomaly_detection',
 )
 
+#: The most forecast steps the contract carries. `task.num_forecasts`,
+#: `forecast_step` and the number of predictions are each capped there, so a
+#: horizon past it is a request no deployment may answer.
+MAX_FORECAST_STEPS = 10_000
+
 #: The target of a question asked about the whole row rather than one column.
 #: An anomaly score is joint across the channels it reconstructs, so naming
 #: one column would promise a score specific to it that the model never
@@ -674,6 +679,13 @@ class Request:
             raise StructuredDataError(
                 f'horizon is {horizon}; a forecast of no steps is not a '
                 f'question with an answer',
+                code='INVALID_REQUEST',
+            )
+        if horizon > MAX_FORECAST_STEPS:
+            raise StructuredDataError(
+                f'horizon is {horizon}, and the contract carries at most '
+                f'{MAX_FORECAST_STEPS} forecast steps, so no deployment may '
+                f'answer this',
                 code='INVALID_REQUEST',
             )
         if len(history) == 0:
