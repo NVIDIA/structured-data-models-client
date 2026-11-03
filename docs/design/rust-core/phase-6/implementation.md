@@ -75,3 +75,20 @@ Its shared Python/Java expectations live in `tests/fixtures/custom-examples/`; t
 Independent review covers explicit task metadata without fabricated PQL, authoritative labels, unchanged sampling, checked forecast response alignment and input ownership.
 
 See [final restoration evidence](final-restorations.md) for the completed scope, validation and limitations.
+
+## Connection and execution follow-up
+
+The owner approved the remaining mappings in [the short audit and plan](remaining-api-mappings.md).
+A new goal covers these three efforts; prior restoration evidence remains valid for its recorded scope.
+
+| Effort | Implementation branch | Status |
+|---|---|---|
+| Connection rebinding | `rust-core-phase-6-rebinding` | Agent investigating exact Python/Java ownership and validation contract |
+| Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Agent investigating context identity, lifecycle and retry contract |
+| Typed settings and optional summary generation | `rust-core-phase-6-settings` | Agent investigating host APIs and explicit summarizer integration |
+
+Each agent submits its precise API/boundary proposal before substantial implementation.
+The coordinator reviews proposals, serializes native contract versions/builds and arranges reciprocal implementation review.
+Tests cover independently expected public behavior, focused old-client comparisons, ownership/errors and real provider/model journeys where applicable.
+Controlled HTTP endpoints exercise failures and lifecycle behavior that live services cannot reliably reproduce.
+Summary live validation uses only an existing authorized endpoint and synthetic data; any external validation limit is recorded explicitly.
