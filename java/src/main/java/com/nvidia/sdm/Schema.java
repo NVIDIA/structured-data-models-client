@@ -59,6 +59,36 @@ public final class Schema {
     this.conversionNotes = List.copyOf(conversionNotes);
   }
 
+  /** Return an offline diagram of schema metadata, including all columns. */
+  public String toMermaid() { return toMermaid(true); }
+
+  /** Return an offline diagram; false shows only keys and time columns. */
+  public String toMermaid(boolean showColumns) { return SchemaVisualization.mermaid(this, showColumns); }
+
+  /** Return self-contained offline HTML including all columns. */
+  public String toHtml() { return toHtml(true); }
+
+  /** Return self-contained offline HTML with the bundled renderer. */
+  public String toHtml(boolean showColumns) { return SchemaVisualization.html(toMermaid(showColumns)); }
+
+  /** Export .mmd/.html offline; explicit .png/.svg sends metadata to https://mermaid.ink. */
+  public void visualize(java.nio.file.Path path) throws java.io.IOException { visualize(path, true); }
+
+  /** Export metadata only; no rows are read or transmitted. */
+  public void visualize(java.nio.file.Path path, boolean showColumns) throws java.io.IOException {
+    SchemaVisualization.export(this, path, showColumns);
+  }
+
+  /** Load a pinned RelBench dataset, using the default verified local cache. */
+  public static Schema fromRelbench(String name) {
+    return fromRelbench(name, RelBenchOptions.builder().build());
+  }
+
+  /** Load a pinned dataset with declared keys, times and links; offline mode never uses HTTP. */
+  public static Schema fromRelbench(String name, RelBenchOptions options) {
+    return RelBench.load(name, options);
+  }
+
   /** Describe named in-memory Arrow tables, taking owned snapshots before returning. */
   public static Schema fromData(Map<String, org.apache.arrow.vector.table.Table> tables) {
     Objects.requireNonNull(tables, "tables");

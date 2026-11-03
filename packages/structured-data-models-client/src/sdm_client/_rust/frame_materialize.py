@@ -69,6 +69,7 @@ def _graph(materializer: Any) -> Any:
         attachments,
     )
     result = results.expect(finished.result, results.PreparedFrameGraph)
+    materializer._sanitization_report = result.sanitization
     materializer._core_frame_graph = finished.take(result.graph)
     return materializer._core_frame_graph
 

@@ -3559,9 +3559,112 @@
       },
       "gate": "in-process",
       "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate."
+    },
+    {
+      "id": "schema-visualization",
+      "apis": {
+        "python": [
+          "Schema.to_mermaid",
+          "Schema.to_html",
+          "Schema.visualize"
+        ],
+        "java": [
+          "Schema.toMermaid",
+          "Schema.toHtml",
+          "Schema.visualize"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_visualization.py::test_empty_schema_public_journey",
+          "packages/structured-data-models-client/tests/test_visualization.py::test_metadata_keys_edges_and_safe_labels",
+          "packages/structured-data-models-client/tests/test_visualization.py::test_image_errors_do_not_disclose_schema"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#emptySchemaExportsWithoutNativeOrNetwork",
+          "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#sharedMetadataRetainsKeysAndEscapesNames",
+          "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#packagedRendererMatchesPinnedUpstream"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "schema-notebook-display",
+      "apis": {
+        "python": [
+          "Schema.visualize"
+        ],
+        "java": []
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_visualization.py::test_notebook_display_is_sandboxed",
+          "packages/structured-data-models-client/tests/test_visualization.py::test_streamlit_display_and_restricted_fallback"
+        ],
+        "java": []
+      },
+      "gate": "local"
+    },
+    {
+      "id": "relbench",
+      "apis": {
+        "python": [
+          "Schema.from_relbench"
+        ],
+        "java": [
+          "Schema.fromRelbench",
+          "RelBenchOptions"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_relbench.py::test_offline_metadata_rows_and_no_http",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_corrupt_offline_and_unknown",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_all_pins_have_valid_metadata",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_http_download_cache_and_failure_recovery",
+          "packages/structured-data-models-client/tests/test_relbench.py::test_unsafe_manifest_path_rejected"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#offlineOwnedSchemaPreservesRowsAndDeclarations",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#corruptOfflineCacheAndUnknownNameAreStructured",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#registryIsPackagedAndUnsafePathsFail",
+          "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#httpCacheReuseAndFailedDownloadRecovery"
+        ]
+      },
+      "gate": "local"
+    },
+    {
+      "id": "sanitization-reports",
+      "apis": {
+        "python": [
+          "Request.sanitization_report",
+          "FittedModel.sanitization_report",
+          "SanitizationReport",
+          "TableSanitizationReport"
+        ],
+        "java": [
+          "Request.sanitizationReport",
+          "FittedModel.sanitizationReport",
+          "SanitizationReport",
+          "TableSanitizationReport"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_exclusive_drop_precedence_and_no_key_table",
+          "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_sanitization_report_survives_prediction_and_close"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sanitizationReportSurvivesRequestPersistence",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#sanitizationCountsDuplicateBeforeNullTime",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession"
+        ]
+      },
+      "gate": "local"
     }
   ],
-  "public_api_snapshot_sha256": "73a05cddb755f97bc1e97ae58bdf21bd00498ff6e7a93ceae5b1f400b2fe63e4",
+  "public_api_snapshot_sha256": "48f0308ae59046f058a270cddd2d5dd81703e4a810c93b933f2a61568fef6885",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4040,6 +4143,33 @@
       },
       "sdm_client.SDMClient.in_process": {
         "capability": "in-process-models"
+      },
+      "sdm_client.Schema.to_mermaid": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.to_html": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.visualize": {
+        "capability": "schema-visualization"
+      },
+      "sdm_client.Schema.from_relbench": {
+        "capability": "relbench"
+      },
+      "sdm_client.FittedModel.sanitization_report": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.Request.sanitization_report": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.SanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.SanitizationReport.tables": {
+        "capability": "sanitization-reports"
+      },
+      "sdm_client.TableSanitizationReport": {
+        "capability": "sanitization-reports"
       }
     },
     "java": {
@@ -4963,6 +5093,114 @@
       },
       "com.nvidia.sdm.Table#public java.util.OptionalLong duplicateKeys();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toMermaid();": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toMermaid(boolean);": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toHtml();": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public java.lang.String toHtml(boolean);": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path) throws java.io.IOException;": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.Schema#public void visualize(java.nio.file.Path, boolean) throws java.io.IOException;": {
+        "capability": "schema-visualization"
+      },
+      "com.nvidia.sdm.RelBenchOptions": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public boolean offline();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public java.nio.file.Path cacheDirectory();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions#public static com.nvidia.sdm.RelBenchOptions$Builder builder();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions build();": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder cacheDirectory(java.nio.file.Path);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.RelBenchOptions$Builder#public com.nvidia.sdm.RelBenchOptions$Builder offline(boolean);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.Schema#public static com.nvidia.sdm.Schema fromRelbench(java.lang.String, com.nvidia.sdm.RelBenchOptions);": {
+        "capability": "relbench"
+      },
+      "com.nvidia.sdm.FittedModel#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.SanitizationReport sanitizationReport();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public com.nvidia.sdm.SanitizationReport(java.lang.String, java.util.List<com.nvidia.sdm.TableSanitizationReport>);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final boolean equals(java.lang.Object);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final int hashCode();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public final java.lang.String toString();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public java.lang.String status();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.SanitizationReport#public java.util.List<com.nvidia.sdm.TableSanitizationReport> tables();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public com.nvidia.sdm.TableSanitizationReport(java.lang.String, long, long, long, long, long);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public final boolean equals(java.lang.Object);": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public final int hashCode();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public final java.lang.String toString();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public java.lang.String table();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long duplicatePrimaryKeyRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long inputRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long nullPrimaryKeyRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long nullTimeRows();": {
+        "capability": "sanitization-reports"
+      },
+      "com.nvidia.sdm.TableSanitizationReport#public long outputRows();": {
+        "capability": "sanitization-reports"
       }
     }
   },
@@ -4996,6 +5234,11 @@
       "capability": "in-process-models",
       "language": "java",
       "reason": "Runs the Python structured-data-models/PyTorch runtime in the caller process; Java uses the same models through endpoints."
+    },
+    {
+      "capability": "schema-notebook-display",
+      "language": "java",
+      "reason": "Automatic notebook display and BytesIO export are Python-specific; Java provides equivalent source, HTML and explicit file exports."
     }
   ],
   "contract_changes": [
@@ -5213,6 +5456,31 @@
       "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
       "record": "public_api_snapshot_sha256",
       "reason": "Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_contracts/schema-visualization",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_contracts/schema-notebook-display",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_exceptions",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
+    },
+    {
+      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
+      "record": "api_inventory",
+      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
     }
   ],
   "capabilities": [

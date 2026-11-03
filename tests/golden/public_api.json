@@ -125,11 +125,13 @@
       "Request",
       "SDMClient",
       "SDMWarning",
+      "SanitizationReport",
       "Schema",
       "SourceTable",
       "Split",
       "StructuredDataError",
       "Table",
+      "TableSanitizationReport",
       "Target",
       "Task",
       "UnknownModelError",
@@ -154,6 +156,7 @@
         "kind": "class",
         "public_attributes": [
           "model",
+          "sanitization_report",
           "session_id"
         ],
         "public_methods": {
@@ -266,6 +269,7 @@
           "predict",
           "predict_rows",
           "query",
+          "sanitization_report",
           "target_moves_with_time"
         ],
         "public_methods": {
@@ -300,6 +304,15 @@
         "public_methods": {},
         "signature": null
       },
+      "SanitizationReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "tables"
+        ],
+        "public_methods": {},
+        "signature": "(status: Literal['available', 'unavailable', 'not_applicable'], tables: tuple[sdm_client.sanitization.TableSanitizationReport, ...] = ()) -> None"
+      },
       "Schema": {
         "bases": [],
         "kind": "class",
@@ -311,8 +324,12 @@
         "public_methods": {
           "check_consistent": "(self) -> 'None'",
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
+          "from_relbench": "(name: 'str', *, cache_dir: 'str | Path | None' = None, offline: 'bool' = False) -> 'Schema'",
           "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
-          "snapshot": "(self) -> 'Schema'"
+          "snapshot": "(self) -> 'Schema'",
+          "to_html": "(self, show_columns: 'bool' = True) -> 'str'",
+          "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
+          "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'"
         },
         "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"
       },
@@ -357,6 +374,13 @@
         ],
         "public_methods": {},
         "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+      },
+      "TableSanitizationReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(table: str, input_rows: int, output_rows: int, null_primary_key_rows: int, duplicate_primary_key_rows: int, null_time_rows: int) -> None"
       },
       "Target": {
         "bases": [],

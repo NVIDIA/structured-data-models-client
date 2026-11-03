@@ -323,6 +323,9 @@ def construct(
 ) -> None:
     from sdm_client._rust import direct_admission, direct_schema
     from sdm_client.request import Split, Target, Task
+    from sdm_client.sanitization import SanitizationReport
+
+    request._sanitization_report = SanitizationReport('not_applicable')
 
     related = direct_admission.arguments(
         context, predict, related_tables, task, _call

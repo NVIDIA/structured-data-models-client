@@ -26,6 +26,7 @@ import java.util.Objects;
 public final class RelationalMaterializer implements AutoCloseable {
   private final Schema schema;
   private NativeFrameGraph graph;
+  private SanitizationReport sanitizationReport = SanitizationReport.unavailable();
   private boolean closed;
 
   public RelationalMaterializer(Schema schema) {
@@ -46,6 +47,7 @@ public final class RelationalMaterializer implements AutoCloseable {
     Map<String, Object> op = Map.of("op", "prepare_frame_graph", "schema", 1, "names", 2, "tables", ids);
     try (Host.Finished finished = ArrowFrames.run(op,
         Map.of(1, Host.attachment(schema.toHeld()), 2, Host.attachment(names)), tables, Host.Call.none())) {
+      sanitizationReport = SanitizationReport.prepared(finished.result().get("sanitization"));
       graph = finished.graph(((Number) finished.result().get("graph")).intValue());
       return graph;
     }
@@ -76,7 +78,7 @@ public final class RelationalMaterializer implements AutoCloseable {
       @SuppressWarnings("unchecked") Map<String, Object> state = (Map<String, Object>) finished.result().get("state");
       MaterializedRequest retained = new MaterializedRequest(state, finished);
       return new Request(schema, retained, query.text(), gathered.query(),
-          PredictiveQuery.inferenceAsked(options.options().get("inference_config")));
+          PredictiveQuery.inferenceAsked(options.options().get("inference_config"))).withSanitizationReport(sanitizationReport);
     }
   }
 

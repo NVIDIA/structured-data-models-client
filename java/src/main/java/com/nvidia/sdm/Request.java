@@ -21,6 +21,16 @@ import java.util.Optional;
  * the schema it was gathered from never changes under it.
  */
 public final class Request {
+  private SanitizationReport sanitizationReport = SanitizationReport.unavailable();
+
+  /** Row exclusions observed when this request's graph was prepared. */
+  public SanitizationReport sanitizationReport() { return sanitizationReport; }
+
+  Request withSanitizationReport(SanitizationReport report) {
+    this.sanitizationReport = report;
+    return this;
+  }
+
   private byte[] contextData;
   private byte[] predictData;
   private Map<String, Object> direct;
@@ -55,6 +65,7 @@ public final class Request {
   }
 
   Request(byte[] context, byte[] predict, Map<String, Object> request, String query) {
+    this.sanitizationReport = SanitizationReport.notApplicable();
     this.contextData = context;
     this.predictData = predict;
     try (Host.Finished finished = ArrowTabular.run("prepare", request,
@@ -109,6 +120,7 @@ public final class Request {
   public void writeTo(java.io.OutputStream output) throws java.io.IOException {
     Snapshots.Writer writer = new Snapshots.Writer();
     Map<String, Object> saved = new java.util.LinkedHashMap<>();
+    saved.put("sanitization_report", sanitizationReport.saved());
     saved.put("schema", schema.saved(writer));
     saved.put("query", query); saved.put("inference", inference); saved.put("task_options", taskOptions);
     if (direct()) {
@@ -175,6 +187,9 @@ public final class Request {
         request = new Request(schema, com.nvidia.sdm.internal.MaterializedRequest.restored(state, attachments),
             query, result.query(), Snapshots.texts(saved.get("inference_asked")));
       }
+    }
+    if (saved.containsKey("sanitization_report")) {
+      request.sanitizationReport = SanitizationReport.restored(saved.get("sanitization_report"));
     }
     request.inference = inference;
     request.taskOptions = taskOptions;

@@ -290,6 +290,18 @@ pub(crate) fn prepare(
                 .with_field("summary", Detail::text(summary)),
         );
     }
+    let sanitization = snapshot
+        .dropped
+        .iter()
+        .map(|row| sdm_contract::frames::TableSanitizationReport {
+            table: row.table.clone(),
+            input_rows: row.input as u64,
+            output_rows: (row.input - row.null_keys - row.duplicate_keys - row.null_times) as u64,
+            null_primary_key_rows: row.null_keys as u64,
+            duplicate_primary_key_rows: row.duplicate_keys as u64,
+            null_time_rows: row.null_times as u64,
+        })
+        .collect();
     let owner = FrameGraph(Arc::new(Owner {
         description,
         snapshot,
@@ -300,7 +312,10 @@ pub(crate) fn prepare(
     }));
     let graph = asker.attach(Attachment::FrameGraph(owner))?;
     Ok(OperationResult::PreparedFrameGraph(
-        sdm_contract::frames::PreparedFrameGraph { graph },
+        sdm_contract::frames::PreparedFrameGraph {
+            graph,
+            sanitization,
+        },
     ))
 }
 

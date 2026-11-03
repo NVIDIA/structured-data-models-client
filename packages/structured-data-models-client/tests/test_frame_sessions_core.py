@@ -311,3 +311,14 @@ def test_saved_explicit_dataclass_option_is_refused_before_transport(
         assert len(endpoint.created) == 1
         assert endpoint.deleted == ['frames-1']
     assert endpoint.scored == []
+
+
+def test_sanitization_report_survives_prediction_and_close(client):
+    client, endpoint = client
+    request = gather(query(), [1, 2])
+    fitted = client.fit(request, model=KumoRelational())
+    assert fitted.sanitization_report == request.sanitization_report
+    fitted.predict(request)
+    fitted.close()
+    assert fitted.sanitization_report == request.sanitization_report
+    assert fitted.sanitization_report.status == 'available'

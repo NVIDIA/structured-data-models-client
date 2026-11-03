@@ -34,10 +34,12 @@ Nothing here contacts a model. Inference reads your frames locally.
 from __future__ import annotations
 
 import functools
+import io
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
@@ -928,6 +930,34 @@ class Schema:
         self._engine_tables: Any = None
         self._conversion_notes: tuple[str, ...] = ()
 
+    def to_mermaid(self, show_columns: bool = True) -> str:
+        """Return an offline schema diagram from metadata, without reading rows."""
+        from sdm_client._visualization import mermaid
+
+        return mermaid(self, show_columns)
+
+    def to_html(self, show_columns: bool = True) -> str:
+        """Return self-contained offline HTML with the bundled Mermaid renderer."""
+        from sdm_client._visualization import document
+
+        return document(self.to_mermaid(show_columns))
+
+    def visualize(
+        self,
+        path: Path | str | io.BytesIO | None = None,
+        show_columns: bool = True,
+        height: int = 540,
+    ) -> None:
+        """Display in a notebook or export .mmd/.html/.png/.svg.
+
+        HTML and Mermaid stay offline. Explicit PNG/SVG and BytesIO exports
+        send schema metadata (never rows) to https://mermaid.ink.
+        BytesIO receives PNG and stays open. Other environments print Mermaid.
+        """
+        from sdm_client._visualization import visualize
+
+        visualize(self, path, show_columns, height)
+
     @property
     def source(self) -> Source | None:
         r"""Where the tables are, for a schema built with :meth:`from_source`.
@@ -1153,6 +1183,24 @@ class Schema:
             time_columns=time_columns,
             relationships=relationships,
         )
+
+    @classmethod
+    def from_relbench(
+        cls,
+        name: str,
+        *,
+        cache_dir: str | Path | None = None,
+        offline: bool = False,
+    ) -> Schema:
+        """Load a pinned RelBench dataset with its declared keys, times and links.
+
+        Downloads are cached and SHA-256 verified on every use.
+        ``offline=True`` requires a complete valid cache and never uses HTTP.
+        The default cache is ``~/.cache/sdm/relbench``.
+        """
+        from sdm_client._relbench import load
+
+        return load(cls, name, cache_dir=cache_dir, offline=offline)
 
     @classmethod
     def from_source(

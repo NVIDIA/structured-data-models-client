@@ -12,6 +12,10 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
+- Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned
+  RelBench datasets with verified caches, offline mode and declared schema metadata.
+- Python and Java requests and fitted handles expose immutable sanitization reports for in-memory relational preparation, with per-table row exclusions and explicit unavailable/not-applicable states.
+
 - Every `sdm_connectors` source says its kind and its namespace in one way:
   `Source.kind` (`'databricks-sql'` for a SQL warehouse connection,
   `'databricks-spark'` for a notebook's Spark session,
