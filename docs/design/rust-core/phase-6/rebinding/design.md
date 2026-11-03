@@ -5,7 +5,8 @@
 # Replace a database connection
 
 Python `schema.with_source(source)` and Java `schema.withSource(source)` return a new schema using the replacement connection.
-The original schema, queries, requests and both caller-owned connections remain unchanged and open.
+The original schema, queries and requests remain unchanged.
+Neither connection is closed or modified by rebinding.
 
 ```text
 Python / Java: replacement Source + existing declarations
