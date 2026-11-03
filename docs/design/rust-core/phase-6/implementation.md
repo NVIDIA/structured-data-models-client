@@ -10,11 +10,14 @@ Use at most two heavy jobs, Cargo jobs=2 and the existing heavy guard; do not in
 
 | Feature | Branch | Status |
 |---|---|---|
-| Visualization | `rust-core-phase-6-visualization` | Contract review first |
-| Sanitization | `rust-core-phase-6-sanitization` | Contract review first |
-| RelBench | `rust-core-phase-6-relbench` | Contract review first |
+| Visualization | `rust-core-phase-6-visualization` | Contract approved; tests and implementation in progress |
+| Sanitization | `rust-core-phase-6-sanitization` | Contract approved; tests and implementation in progress |
+| RelBench | `rust-core-phase-6-relbench` | Contract approved; tests and implementation in progress |
 | Reports/explanations | `rust-core-phase-6-reports` | Queued for a worker slot; contract review first |
 
 Three workers can run alongside the coordinator; the fourth starts when a slot frees.
 No feature is complete on implementation alone: contracts, affected tests and independent review must pass.
 Remaining audit capabilities stay in the Phase 6 scope and are not implicitly completed by these four merges.
+
+Sanitization reserves contract 58 and the warm native target during its builds.
+Reports must reconcile with that version before adding any result-semantic operation.
