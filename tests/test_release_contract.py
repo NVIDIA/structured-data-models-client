@@ -1247,12 +1247,14 @@ class TestDistributionCoherence:
                     .strip()
                 )
                 # databricks-sdk and structured-data-models are imported by the
-                # client's own transports, so the client is the distribution
-                # that declares them.
+                # client's own transports, and matplotlib by the one module
+                # that draws an answer, so the client is the distribution that
+                # declares them.
                 assert name in known or name in {
                     'pytest',
                     'requests-mock',
                     'databricks-sdk',
+                    'matplotlib',
                     'structured-data-models',
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '
