@@ -56,8 +56,8 @@ Contract lock policy retains merged entries and only the newest unmerged version
 
 | Work | Branch | Status |
 |---|---|---|
-| End-time roles and future-value masking | `rust-core-phase-6-end-time` | Contract 63 approved; implementation and focused fixtures started |
-| SQL columns and custom relational examples | `rust-core-phase-6-examples` | Exact API/task contract review, including supplied forecasting |
+| End-time roles and future-value masking | `rust-core-phase-6-end-time` | Contract 63 draft; 13 Python memory/SQLite/DuckDB cases passed; Java, multi-anchor/session and live checks pending |
+| SQL columns and custom relational examples | `rust-core-phase-6-examples` | SQL contract approved; provider projection implementation and review underway; supplied forecast intervals verified as nanoseconds |
 | Deeper original-four coverage | `rust-core-phase-6-coverage2` | Stopped under the replacement goal; unmerged work preserved |
 
 The authoritative designs are `phase-5/api-removal-audit/end-time/design.md` and `expressions-tasks/design.md`.
