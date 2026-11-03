@@ -4,7 +4,7 @@
 
 # Infer missing metadata and safely edit a schema
 
-**Proposal only: restore in Python and Java.**
+**Approved for contract-first implementation: restore in Python and Java.**
 This helps users repair or extend a schema without rebuilding it and losing their declarations.
 
 ## What is missing?
@@ -52,6 +52,10 @@ Warehouse inference may read metadata/previews through existing providers; sampl
 Check one materialization after an edit in memory and via a warehouse provider.
 
 ## Test standard: parity or an explained improvement
+
+Use existing public-API tests and small shared fixtures, not a new migration comparison framework.
+Be thorough about behaviors, edge cases and connector differences; use focused old-client comparisons where they resolve a real semantic question.
+Before implementation, settle signatures, ownership and error contracts with coordinator review; finish with independent code review and affected tests.
 
 Run small public workflows through the old Python client, new Python and Java using identical input data.
 Compare keys, time choices, relationships and resulting materialized rows; compare semantics rather than printed text or object classes.

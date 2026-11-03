@@ -24,3 +24,20 @@ Reports adds contract 59 for lazy attribution aggregation.
 Final integration passed 157 Python tests against the installed wheel and 33 Java tests.
 Wheel/JAR assets and packaged native loading passed.
 See [completion evidence](completion.md) for scope, reviews and remaining audit work.
+
+
+## Next three restorations and stronger coverage
+
+| Work | Branch | Status |
+|---|---|---|
+| Inference and safe edits | `rust-core-phase-6-inference` | Assigned; contract review first |
+| Time-series preparation | `rust-core-phase-6-timeseries` | Assigned; contract review first |
+| Labels-only extraction | `rust-core-phase-6-labels` | Assigned; contract review first |
+| Thorough testing of the first four | `rust-core-phase-6-coverage` | Queued for first worker slot |
+
+The three designs under `phase-5/api-removal-audit/{inference-edits,timeseries,labels-only}/design.md` define the scope and testing expectations.
+Use existing test infrastructure, focused old-client comparisons and independently calculated expected results; do not rebuild migration instrumentation.
+The coverage worker audits actual tests for the first four features, closes meaningful missing public-workflow/security/ownership/error coverage, reproduces and fixes real bugs, and records remaining limits honestly.
+Prioritize real execution over mocks where it exercises the feature; use model endpoints only for workflows that actually predict.
+All changes receive independent review and merge into Phase 6; no publication or merge into `rust-core`/`main`.
+The coordinator serializes contract-version allocation and warm-target ownership to avoid conflicting native builds.

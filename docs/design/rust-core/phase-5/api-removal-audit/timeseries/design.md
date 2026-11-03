@@ -4,7 +4,7 @@
 
 # Build a forecasting query from arrays of history
 
-**Proposal only: restore a Python/Java convenience builder.**
+**Approved for contract-first implementation: restore a Python/Java convenience builder.**
 Forecasting already works; this missing helper prepares its tables and query from a common input layout.
 
 ## What is missing?
@@ -65,6 +65,10 @@ Shared fixtures compare generated rows, timestamps, schema and query in both lan
 Run one resulting forecasting request against the model endpoint; push-down sampling is untouched.
 
 ## Test standard: parity or an explained improvement
+
+Use existing public-API tests and small shared fixtures, not a new migration comparison framework.
+Be thorough about behaviors, edge cases and connector differences; use focused old-client comparisons where they resolve a real semantic question.
+Before implementation, settle signatures, ownership and error contracts with coordinator review; finish with independent code review and affected tests.
 
 Feed the old builder, new Python and Java the same histories; compare generated rows, keys, times, effective interval and parsed query meaning.
 Use hand-calculated tiny examples as an independent oracle, so agreement between implementations is not the only check.

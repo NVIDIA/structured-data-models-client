@@ -4,7 +4,7 @@
 
 # Compute known answers without calling a model
 
-**Proposal only: add a labels operation to Python/Java `PredictiveQuery`.**
+**Approved for contract-first implementation: add a labels operation to Python/Java `PredictiveQuery`.**
 This produces historical ground truth for evaluation, debugging a prediction target or preparing a labeled dataset.
 It does not train or fit a model.
 
@@ -58,6 +58,10 @@ GPU testing is unnecessary for this operation.
 The cited old tests establish scalar/temporal label behavior; forecast/link output layouts still need explicit fixtures before claiming restoration parity for those shapes.
 
 ## Test standard: parity or an explained improvement
+
+Use existing public-API tests and small shared fixtures, not a new migration comparison framework.
+Be thorough about behaviors, edge cases and connector differences; use focused old-client comparisons where they resolve a real semantic question.
+Before implementation, settle signatures, ownership and error contracts with coordinator review; finish with independent code review and affected tests.
 
 For each supported target shape, calculate expected labels independently on tiny data, then compare old Python, new Python and Java.
 Use all eligible entities for exact comparisons; test bounded/random subsets separately for size, membership, seed reproducibility and trial limits.
