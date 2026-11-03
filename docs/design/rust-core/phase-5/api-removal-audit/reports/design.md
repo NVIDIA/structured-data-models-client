@@ -4,9 +4,9 @@
 
 # 2. Schema reports and explanation conveniences
 
-**Status: design only. Support both Python and Java; pandas and notebook formatting stay Python-specific.**
+**Status: assigned for contract-first implementation. Support both Python and Java; pandas and notebook formatting stay Python-specific.**
 Expose readable information already held by schemas/results, without another warehouse or model call.
-Phase 6 boundary review: [decision and evidence](../../../phase-6/boundary-review.md).
+Independent boundary review is incorporated below; this document is the implementation contract.
 
 ```text
 Schema fields / prediction explanation
@@ -41,3 +41,12 @@ Compare metadata records and attribution values across languages using the same 
 Cover absent explanations, nested cohorts/subgraphs, empty attribution, repeated columns and malformed numeric values.
 Test host text/pandas views separately; verify reporting does not mutate inputs or perform I/O.
 No GPU tests are needed for wrappers over captured result payloads.
+
+## Implementation and review gate
+
+First finalize the public signatures, result shapes, ownership and error behavior here; obtain coordinator contract review before implementation.
+Add focused public-API and cross-language tests first where practical, then implement the reviewed behavior.
+Use existing parity/snapshot tooling; do not hand-edit generated snapshots or introduce migration-only machinery.
+Finish with independent code review, address findings, and run affected tests before merging into `rust-core-phase-6`.
+
+If shared attribution computation is needed, place its pure numerical policy alongside `sdm-request` result policies and expose it through the existing boundary; leave raw explanation data unchanged.

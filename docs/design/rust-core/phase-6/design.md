@@ -29,7 +29,7 @@ Downloads/readers feed existing core admission; they do not recreate sampling po
 ## First four designs
 
 The existing documents remain at their stable paths and now track Phase 6 work.
-The [independent review](boundary-review.md) is complete and its boundary corrections are incorporated.
+Independent boundary review is complete and incorporated directly into each feature design; those documents are authoritative.
 All four should provide useful APIs in both languages; Python notebook display/pandas views are intentional language-specific conveniences.
 
 | Feature | Design | Reviewed boundary |
@@ -54,3 +54,7 @@ Use the existing compatibility manifest for Python/Java mappings and targeted te
 Review shared semantic/contract changes before implementation; review completed changes independently.
 Prediction/warehouse tests are needed when inputs or sampling semantics change, not for every printing helper.
 The first four must not alter warehouse sampling algorithms.
+
+## Execution
+
+See [implementation tracker](implementation.md) for isolated feature branches, contract review and merge status.

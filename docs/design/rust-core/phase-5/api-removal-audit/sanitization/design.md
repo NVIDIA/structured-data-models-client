@@ -4,12 +4,12 @@
 
 # 3. Structured sanitization reports
 
-**Status: design only. Support both Python and Java through the same Rust report.**
+**Status: assigned for contract-first implementation. Support both Python and Java through the same Rust report.**
 Expose counts Rust already computes when preparing an in-memory relational graph.
 This adds observability, not a new data-cleaning policy.
 For example: 100 input rows, three excluded for missing keys and two for duplicate keys, leaving 95 usable rows.
 Today Rust produces a warning but the client cannot retrieve these numbers as a report; “sanitization” here is not anonymization.
-Phase 6 boundary review: [decision and evidence](../../../phase-6/boundary-review.md).
+Independent boundary review is incorporated below; this document is the implementation contract.
 
 ```text
 Input Arrow tables → existing Rust graph preparation
@@ -45,3 +45,13 @@ Use one fixture containing overlapping null-key, duplicate-key and null-time cas
 Assert counts, precedence and input/output totals through both public APIs.
 Check report stability across predict, close and source mutation; unavailable warehouse reports must add no queries.
 No new model inference or sampling algorithm is required.
+
+## Implementation and review gate
+
+First finalize the public signatures, result shapes, ownership and error behavior here; obtain coordinator contract review before implementation.
+Add focused public-API and cross-language tests first where practical, then implement the reviewed behavior.
+Use existing parity/snapshot tooling; do not hand-edit generated snapshots or introduce migration-only machinery.
+Finish with independent code review, address findings, and run affected tests before merging into `rust-core-phase-6`.
+
+Implementation anchors: `sdm-engine/src/frames.rs` owns `Snapshot.dropped`; `sdm-core/src/materialize/frames.rs` currently emits a warning; `sdm-contract/src/frames.rs` returns the graph handle.
+Extend that preparation result, not a separate reporting service or warning parser.
