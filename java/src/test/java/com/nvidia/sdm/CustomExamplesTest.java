@@ -116,7 +116,7 @@ class CustomExamplesTest {
       if(name.equals("temporal_link_prediction")) wanted=wanted.stream().map(v->((List<?>)v).stream().map(Object::toString).toList()).toList();
       assertEquals(normalized(wanted),normalized(labels),name);
       assertEquals(rows(object(test.get("context"))).size(),rows(instance(payload,"context")).size(),name+" overlaps retained");
-      assertEquals(false,object(payload.get("inference")).get("use_prediction_time"));
+      assertEquals(expected.get("use_prediction_time"),object(payload.get("inference")).get("use_prediction_time"));
       if(name.equals("regression") || name.equals("forecasting"))
         assertEquals("float64",object(object(payload.get("task")).get("target")).get("dtype"));
       if(expected.containsKey("closed_by_context_row")) {

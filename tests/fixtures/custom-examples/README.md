@@ -41,3 +41,6 @@ No warehouse, model artifact or deployment was changed for this investigation.
 The old timeless default is `Timestamp.min`, but its local sampler rounds through whole seconds and overflows when converting back to nanoseconds.
 Execution produced a positive near-maximum timestamp instead of the negative sentinel.
 The timeless fixture intentionally requires the correct sentinel, improving this old bug rather than copying it.
+
+The old `predict_task()` and `RFMPredictRequest` default `use_prediction_time` to false (verified in the emitted payloads).
+Anchors still govern sampling and row identity; including them as a model feature is a separate option and must not be silently enabled.
