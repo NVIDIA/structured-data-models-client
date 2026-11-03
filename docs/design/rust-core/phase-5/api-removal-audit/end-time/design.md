@@ -5,7 +5,7 @@
 # Tell the engine when an entity stops being active
 
 **Proposal: restore end-time declarations in Python and Java, including expiry handling and protection against future-data leakage.**
-This is design only; implementation has not started.
+Approved for implementation with contract review and independent code review.
 
 ## What users lose today
 
@@ -68,3 +68,11 @@ Old source is pinned at `12955d397`; paths below are under the retired engine pa
 `rfm/base/table.py:647` defines the role; `rfm/base/sampler.py:322` masks future dates and `:705` handles eligibility.
 `tests/test_rfm.py:1026` demonstrates expired explicit IDs and masked context values.
 Current seams: `sdm-contract/src/ops.rs` (`QueryTable` versus `DescribedTable`), `sdm-engine/src/graph.rs`, `sample.rs`, and `sdm-core/src/materialize.rs`.
+
+## Test standard: parity or a verified improvement
+
+Use maintained public-API tests with small shared fixtures and independently calculated answers.
+Run focused old-client comparisons to establish semantics, not an exhaustive differential framework.
+Investigate each discrepancy: preserve useful behavior, fix demonstrated bugs, and record the changed expectation with a regression test.
+Verify real provider execution and relevant model predictions; mocks alone do not establish end-to-end support.
+Finish with cross-language contract checks, independent implementation review and combined production-artifact validation.

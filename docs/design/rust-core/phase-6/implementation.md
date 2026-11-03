@@ -50,3 +50,18 @@ See [restoration completion](restoration-completion.md) for combined production-
 Contract lock policy retains merged entries and only the newest unmerged version via `scripts/rust_core/contract_lock.py --prune-working`; schema history files remain unchanged.
 
 [Original-feature coverage audit](coverage-audit.md) records the focused additions and their limits.
+
+
+## Remaining scoped restorations
+
+| Work | Branch | Status |
+|---|---|---|
+| End-time roles and future-value masking | `rust-core-phase-6-end-time` | Contract 63 approved; implementation and focused fixtures started |
+| SQL columns and custom relational examples | `rust-core-phase-6-examples` | Exact API/task contract review, including supplied forecasting |
+| Deeper original-four coverage | `rust-core-phase-6-coverage2` | Audit new coverage gaps; reuse prior evidence and stable production artifacts |
+
+The authoritative designs are `phase-5/api-removal-audit/end-time/design.md` and `expressions-tasks/design.md`.
+Use independent expected answers and focused old-client comparisons; do not preserve demonstrated bugs or introduce an exhaustive differential framework.
+End-time owns the warm build target for contract 63; examples integrates that contract before generating its subsequent versions.
+The coverage worker uses stable contract-62 artifacts and does not compete for native builds.
+All implementations require independent review, affected checks and integration into Phase 6 only.

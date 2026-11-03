@@ -5,7 +5,7 @@
 # Calculated columns and custom relational examples
 
 **Proposal: restore two narrow workflows, rather than a general mutable task editor.**
-Both need Python and Java APIs; implementation has not started.
+Approved for implementation in Python and Java, with contract review and independent code review.
 
 ## What the two gaps mean
 
@@ -89,3 +89,11 @@ Use focused old-client cases and independent answers; correct demonstrated old b
 Old source at `12955d397`: `rfm/base/table.py:225,321`, `base/sql_sampler.py:100`, `backend/local/table.py:152`, and `inference/task.py:20,125` under the retired engine's `rfm/` directory.
 Old tests: `tests/backend/databricks/test_databricks_table.py:165`, `tests/test_task_table.py:48`, and `tests/test_rfm.py:1395,1435`.
 Current boundaries: `sdm-contract/src/data.rs:243` (opaque derived SQL), `sdm-core/src/view.rs` (projection admission), Python `request.py:377` and Java `Request.java:39` (direct Tabular restriction).
+
+## Test standard: parity or a verified improvement
+
+Use maintained public-API tests with small shared fixtures and independently calculated answers.
+Run focused old-client comparisons to establish semantics, not an exhaustive differential framework.
+Investigate each discrepancy: preserve useful behavior, fix demonstrated bugs, and record the changed expectation with a regression test.
+Verify real provider execution and relevant model predictions; mocks alone do not establish end-to-end support.
+Finish with cross-language contract checks, independent implementation review and combined production-artifact validation.
