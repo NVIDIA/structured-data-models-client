@@ -50,6 +50,7 @@ fn schema() -> HeldSchema {
             ],
             primary_key: vec!["user_id".into()],
             time_column: Some("seen".into()),
+            end_time_column: None,
             duplicate_keys: Some(Scalar::UInt64(3)),
         }],
         links: vec![],

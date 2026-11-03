@@ -288,6 +288,7 @@ def _schema(
                     definition['time_column'], definition['time_column']
                 ),
             ),
+            ('end_time_column', definition.get('end_time_column')),
             (
                 'duplicate_keys',
                 0

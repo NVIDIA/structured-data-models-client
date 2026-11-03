@@ -29,6 +29,8 @@ fn snapshot() -> (Graph, Snapshot) {
                 columns: vec![],
                 primary_key: Some("id".to_owned()),
                 time_column: None,
+
+                end_time_column: None,
             })
             .collect(),
         edges: vec![Edge {

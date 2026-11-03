@@ -391,7 +391,7 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
         start,
         end: i128::from(window.end),
         unit: window.unit.value(),
-        entity: format!("{} {}", query.for_each, ast::to_string(&query.entity_ast)),
+        entity: query.render_entity(false),
     }))
 }
 

@@ -58,6 +58,7 @@ class TableMetadata(_Printable):
     columns: tuple[ColumnMetadata, ...]
     primary_key: tuple[str, ...]
     time_column: str | None
+    end_time_column: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, 'columns', tuple(self.columns))
@@ -71,6 +72,8 @@ class TableMetadata(_Printable):
                 flags.append('primary key')
             if column.name == self.time_column:
                 flags.append('time column')
+            if column.name == self.end_time_column:
+                flags.append('end time column')
             suffix = f' ({", ".join(flags)})' if flags else ''
             lines.append(
                 f'  {column.name}: {column.dtype}, {column.stype}{suffix}'

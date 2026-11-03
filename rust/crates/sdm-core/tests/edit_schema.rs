@@ -97,6 +97,7 @@ fn described() -> SourceDescription {
             ],
             primary_key: vec!["user_id".into()],
             time_column: None,
+            end_time_column: None,
             time_column_inferred: None,
             duplicate_keys: None,
         }],
@@ -134,6 +135,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
                     .collect(),
                 primary_key: t.primary_key.clone(),
                 time_column: t.time_column.clone(),
+                end_time_column: t.end_time_column.clone(),
                 duplicate_keys: t.duplicate_keys.clone(),
             })
             .collect(),

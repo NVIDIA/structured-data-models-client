@@ -184,6 +184,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
+                end_time_column: table.end_time_column.clone(),
                 duplicate_keys: table.duplicate_keys.clone(),
             })
             .collect(),
@@ -218,6 +219,7 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
             columns,
             primary_key: table.primary_key.clone(),
             time_column: table.time_column.clone(),
+            end_time_column: table.end_time_column.clone(),
             time_column_inferred: None,
             duplicate_keys: table.duplicate_keys.clone(),
         });

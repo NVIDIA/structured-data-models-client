@@ -96,6 +96,26 @@ impl ParsedQuery {
         out
     }
 
+    /// The complete entity clause, including explicit IDs and a retained filter.
+    pub fn render_entity(&self, rich: bool) -> String {
+        let bold = |t: &str| ast::maybe_bold(t, rich);
+        let mut text = bold(&self.for_each);
+        match &self.rfm_entity_ids {
+            None => text.push_str(&format!(" {}", ast::render(&self.entity_ast, rich))),
+            Some(ids) => {
+                text.push_str(&format!(" {}", ast::render(ids, rich)));
+                if let Kind::Filter { condition, .. } = &self.entity_ast.borrow().kind {
+                    text.push_str(&format!(
+                        " {} {}",
+                        bold("WHERE"),
+                        ast::render(condition, rich)
+                    ));
+                }
+            }
+        }
+        text
+    }
+
     /// The query written back, `PREDICT` first unless left out, and its
     /// keywords in bold for a rich console when `rich`.
     pub fn to_string_with(&self, rich: bool, exclude_predict: bool) -> String {
@@ -127,20 +147,8 @@ impl ParsedQuery {
         if let Some(top_k) = &self.top_k {
             text.push_str(&format!(" {}", bold(&format!("TOP {top_k}"))));
         }
-        text.push_str(&format!(" {}", bold(&self.for_each)));
-        match &self.rfm_entity_ids {
-            None => text.push_str(&format!(" {}", ast::render(&self.entity_ast, rich))),
-            Some(ids) => {
-                text.push_str(&format!(" {}", ast::render(ids, rich)));
-                if let Kind::Filter { condition, .. } = &self.entity_ast.borrow().kind {
-                    text.push_str(&format!(
-                        " {} {}",
-                        bold("WHERE"),
-                        ast::render(condition, rich)
-                    ));
-                }
-            }
-        }
+        text.push(' ');
+        text.push_str(&self.render_entity(rich));
         if let Some(whatif) = &self.whatif_ast {
             text.push_str(&format!(
                 " {} {}",

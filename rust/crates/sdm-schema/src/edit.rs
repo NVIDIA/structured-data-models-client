@@ -153,6 +153,9 @@ pub fn edit(
             primary_key(&mut description, table, key, types)?;
             state.key_declared.insert(table.clone());
         }
+        SchemaEdit::EndTimeColumn { table, column } => {
+            declared = end_time_column(&mut description, table, column, supports, types)?;
+        }
         SchemaEdit::TimeColumn { table, column } => {
             declared = time_column(&mut description, table, column, supports, types)?;
             state.time_declared.insert(table.clone());
@@ -192,6 +195,7 @@ pub fn edit(
                 .collect();
         }
     }
+    validate_end_times(&description)?;
     crate::refine::retain(&description, &mut state);
     if old_links != description.links || matches!(edit, SchemaEdit::Infer { .. }) {
         crate::refine::settle(&mut description, &state);
@@ -350,6 +354,71 @@ fn time_column(
     }))
 }
 
+/// End roles are declarations, never inferred start times.
+fn end_time_column(
+    description: &mut SourceDescription,
+    table: &str,
+    column: &Given<Option<String>>,
+    supports: Supports<'_>,
+    types: &HostTypes,
+) -> Result<Option<ColumnRef>, CoreError> {
+    let at = table_at(description, table, "end_time_column")?;
+    let Given::Value(name) = column else {
+        return Err(end_error("end_time_column must name a column or be null"));
+    };
+    if let Some(name) = name {
+        column_at(&description.tables[at], name, "end_time_column")?;
+        if description.tables[at].primary_key.contains(name)
+            || description.tables[at].time_column.as_ref() == Some(name)
+        {
+            return Err(end_error(
+                "end_time_column must differ from key and start time",
+            ));
+        }
+    }
+    description.tables[at].end_time_column = name.clone();
+    if let Some(name) = name {
+        assign(
+            description,
+            at,
+            name,
+            Stype::Timestamp,
+            supports,
+            "end_time_column",
+            types,
+        )?;
+    }
+    Ok(name.as_ref().map(|name| ColumnRef {
+        table: table.into(),
+        column: name.clone(),
+    }))
+}
+
+fn end_error(reason: &str) -> CoreError {
+    CoreError::new(Sentence::SchemaRefinement, reason).with_field("reason", Detail::text(reason))
+}
+
+pub(crate) fn validate_end_times(description: &SourceDescription) -> Result<(), CoreError> {
+    for table in &description.tables {
+        if let Some(name) = &table.end_time_column {
+            let column = table
+                .columns
+                .iter()
+                .find(|c| &c.name == name)
+                .ok_or_else(|| end_error("end_time_column does not exist"))?;
+            if table.primary_key.contains(name)
+                || table.time_column.as_ref() == Some(name)
+                || column.stype != Stype::Timestamp
+            {
+                return Err(end_error(
+                    "end_time_column must be a timestamp distinct from key and start time",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// `schema[table][column].stype = stype` (`Column.__setattr__`): the text
 /// one of the meanings a caller may assign (`_check_stype`), then
 /// [`assign`]ed.
@@ -476,6 +545,7 @@ fn assign(
     shape.columns[index].stype = meaning;
     if meaning == Stype::Timestamp
         && shape.time_column.is_none()
+        && shape.end_time_column.as_deref() != Some(column)
         && !shape.primary_key.iter().any(|k| k == column)
     {
         shape.time_column = Some(column.to_owned());

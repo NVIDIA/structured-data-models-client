@@ -378,6 +378,24 @@ public final class Schema {
     return edited(edit);
   }
 
+  /** Declare the exclusive end of sampled entity validity. */
+  public Schema withEndTimeColumn(String table, String column) {
+    Map<String, Object> edit = new LinkedHashMap<>();
+    edit.put("edit", "end_time_column");
+    edit.put("table", table);
+    edit.put("column", FromSourceOptions.given(Objects.requireNonNull(column, "column")));
+    return edited(edit);
+  }
+
+  /** Clear the declared end-time role. */
+  public Schema withoutEndTimeColumn(String table) {
+    Map<String, Object> edit = new LinkedHashMap<>();
+    edit.put("edit", "end_time_column");
+    edit.put("table", table);
+    edit.put("column", FromSourceOptions.given(null));
+    return edited(edit);
+  }
+
   /** This schema with {@code table.column} meaning {@code stype}. */
   public Schema withStype(String table, String column, String stype) {
     Map<String, Object> edit = new LinkedHashMap<>();
@@ -495,6 +513,7 @@ public final class Schema {
       held.put("columns", columns);
       held.put("primary_key", table.primaryKey());
       held.put("time_column", table.timeColumn().orElse(null));
+      held.put("end_time_column", table.endTimeColumn().orElse(null));
       if (table.duplicateKeysOrNull() != null) {
         Map<String, Object> count = new LinkedHashMap<>();
         count.put("t", "u64");
@@ -521,7 +540,7 @@ public final class Schema {
           Map.of("name", c.name(), "dtype", dtypeNames.get(c.dtype()), "stype", c.stype())).toList());
       value.put("primary_key", table.primaryKey().size() == 1 ? table.primaryKey().get(0) : null);
       value.put("time_column", table.timeColumn().orElse(null));
-      value.put("end_time_column", null);
+      value.put("end_time_column", table.endTimeColumn().orElse(null));
       named.add(value);
     }
     return Map.of("tables", named, "links", links(relationships));
@@ -645,6 +664,7 @@ public final class Schema {
         columns,
         key,
         (String) table.get("time_column"),
+        (String) table.get("end_time_column"),
         duplicates);
   }
 

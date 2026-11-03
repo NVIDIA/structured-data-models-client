@@ -336,6 +336,7 @@ class _TableShape:
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None
     time_column: str | None
+    end_time_column: str | None
     duplicate_keys: int | None
 
     def metadata_report(self) -> TableMetadata:
@@ -353,6 +354,7 @@ class _TableShape:
             if isinstance(key, str)
             else tuple(key),
             self.time_column,
+            getattr(self, 'end_time_column', None),
         )
 
     def print_metadata(self) -> None:
@@ -408,6 +410,7 @@ class _TableShape:
             and _as_key_tuple(self.primary_key)
             == _as_key_tuple(other.primary_key)
             and self.time_column == other.time_column
+            and getattr(self, 'end_time_column', None) == getattr(other, 'end_time_column', None)
             and getattr(self, 'source_name', None)
             == getattr(other, 'source_name', None)
         )
@@ -432,12 +435,12 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key in ('primary_key', 'time_column'):
+        if key in ('primary_key', 'time_column', 'end_time_column'):
             from sdm_client._rust import edits
 
             if edits.table(self, key, value):
                 return
-        if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
+        if key in ('primary_key', 'time_column', 'end_time_column') and 'columns' in self.__dict__:
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
             # `__post_init__` (which runs after the fields are assigned), so
@@ -716,6 +719,7 @@ class Table(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used.
     #: Inference tolerates a few, deliberately; this is what it tolerated.
     #: Not an init argument: the generated ``__init__`` assigns fields in
@@ -775,6 +779,7 @@ class SourceTable(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used, as
     #: :meth:`Schema.from_source` counted them in the source. Zero for a key
     #: the source enforces, and for a table with no key. ``None`` where
@@ -1720,8 +1725,8 @@ def _copy_table(table: _T) -> _T:
     )
     if getattr(table, '_core_origin', None) == 'frames':
         object.__setattr__(copied, '_core_origin', 'frames')
-    for carried in ('primary_key', 'time_column', 'duplicate_keys'):
-        object.__setattr__(copied, carried, getattr(table, carried))
+    for carried in ('primary_key', 'time_column', 'end_time_column', 'duplicate_keys'):
+        object.__setattr__(copied, carried, getattr(table, carried, None))
     for column in copied.columns.values():
         object.__setattr__(column, '_table', copied)
     return copied
@@ -2599,7 +2604,7 @@ def query_schema(schema: Schema) -> dict[str, Any]:
                 # An empty name is none, as the language's table reads it.
                 'primary_key': key if isinstance(key, str) and key else None,
                 'time_column': table.time_column or None,
-                'end_time_column': None,
+                'end_time_column': getattr(table, 'end_time_column', None),
             }
         )
     links = [

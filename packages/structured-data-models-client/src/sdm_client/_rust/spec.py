@@ -58,6 +58,7 @@ def held_schema(schema: Schema) -> dict[str, Any]:
             'columns': columns,
             'primary_key': [] if key is None else list(_as_key_tuple(key)),
             'time_column': table.time_column,
+            'end_time_column': getattr(table, 'end_time_column', None),
         }
         repeated = getattr(table, 'duplicate_keys', None)
         if repeated is not None:

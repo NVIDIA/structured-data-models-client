@@ -596,6 +596,7 @@ pub(crate) fn describe(
             columns,
             primary_key: logical.primary_key.iter().cloned().collect(),
             time_column,
+            end_time_column: None,
             time_column_inferred: inferred_time,
             duplicate_keys: None,
         });

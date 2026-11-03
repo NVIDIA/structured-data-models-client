@@ -786,6 +786,9 @@ pub struct DescribedTable {
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
+    /// Optional exclusive end of sampled entity validity. Null cells mean no end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time_column: Option<String>,
     /// The column inference took as the time column, when the table's
     /// time column is now another or none: a lone stamp of the last edit a
     /// link then refused (decision E55), or the column inference took where
@@ -973,6 +976,9 @@ pub struct HeldTable {
     pub columns: Vec<HeldColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
+    /// Optional exclusive end of sampled entity validity. Null cells mean no end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time_column: Option<String>,
     /// Rows sharing a key value, as the host holds it
     /// ([`DescribedTable::duplicate_keys`]): a `u64` scalar, or none.
     /// `edit_schema` sets it as a key edit does; `materialize` does not
@@ -1067,6 +1073,10 @@ pub enum SchemaEdit {
     /// A table's time column set (`schema[table].time_column = column`),
     /// or cleared (`null`).
     TimeColumn {
+        table: String,
+        column: Given<Option<String>>,
+    },
+    EndTimeColumn {
         table: String,
         column: Given<Option<String>>,
     },

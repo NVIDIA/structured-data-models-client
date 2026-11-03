@@ -111,6 +111,7 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
+                end_time_column: None,
                 time_column_inferred: None,
                 duplicate_keys: None,
             },
@@ -129,6 +130,7 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["user_id".into()],
                 time_column: None,
+                end_time_column: None,
                 time_column_inferred: None,
                 duplicate_keys: None,
             },
@@ -682,6 +684,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         )],
         primary_key: vec!["code".into()],
         time_column: None,
+        end_time_column: None,
         time_column_inferred: None,
         duplicate_keys: None,
     });

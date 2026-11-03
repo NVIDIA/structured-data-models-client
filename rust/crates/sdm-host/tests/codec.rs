@@ -189,6 +189,7 @@ fn description_of(size: usize) -> Vec<u8> {
             }],
             primary_key: vec![],
             time_column: None,
+            end_time_column: None,
             time_column_inferred: None,
             duplicate_keys: None,
         }],
