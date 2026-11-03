@@ -83,7 +83,7 @@ A new goal covers these three efforts; prior restoration evidence remains valid 
 
 | Effort | Implementation branch | Status |
 |---|---|---|
-| Connection rebinding | `rust-core-phase-6-rebinding` | Contract approved: detached `with_source` / `withSource`, same backend/namespace/source kind; implementing |
+| Connection rebinding | `rust-core-phase-6-rebinding` | Reviewed and integrated; 23 local Python / 3 local Java tests, five live Python warehouse/model journeys and one live Java journey passed |
 | Batch controls, retries and automatic session reuse | `rust-core-phase-6-batching` | Contract approved: supplied batch-size control, identical-context session reuse, bounded recovery and centralized retries; implementing |
 | Typed settings and optional summary generation | `rust-core-phase-6-settings` | Reviewed and integrated; 22 Python / 6 Java checks passed; final combined inventory and validation pending |
 
@@ -94,5 +94,5 @@ Controlled HTTP endpoints exercise failures and lifecycle behavior that live ser
 Summary live validation uses only an existing authorized endpoint and synthetic data; any external validation limit is recorded explicitly.
 
 Native contract allocation: rebinding 66 first, batching 67 after integration; settings/summaries are host adapters.
-Rebinding owns the shared native target initially; other agents develop without competing native builds.
+Rebinding released the shared native target after production 66; batching owns it for production 67 and final lifecycle validation.
 No authorized live summarizer endpoint was found in the existing model configuration; controlled HTTP tests are required and real-provider validation remains explicitly unclaimed.

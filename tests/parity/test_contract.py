@@ -316,6 +316,10 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'end-time',
         'sql-columns',
         'custom-examples',
+        'connection-rebinding',
+        'automatic-batch-sessions',
+        'typed-inference-settings',
+        'explanation-summaries',
     }
 
 

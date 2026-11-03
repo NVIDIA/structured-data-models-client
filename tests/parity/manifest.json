@@ -3875,9 +3875,53 @@
       },
       "gate": "local",
       "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed."
+    },
+    {
+      "id": "connection-rebinding",
+      "apis": {
+        "python": [
+          "Schema.with_source"
+        ],
+        "java": [
+          "Schema.withSource"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_rebinding.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RebindingTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Detached replacement source preserves declarations and ownership; local SQLite/DuckDB checks and separately recorded real warehouse/model reconnect journeys."
+    },
+    {
+      "id": "automatic-batch-sessions",
+      "apis": {
+        "python": [
+          "SDMClient.predict",
+          "Schema.materialize_examples"
+        ],
+        "java": [
+          "SdmClient.predict",
+          "ExamplesOptions"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_automatic_batch_sessions.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/AutomaticBatchSessionTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison."
     }
   ],
-  "public_api_snapshot_sha256": "284ef118d1edb8bd1311ef134fd83d34c4a4a923283fb85cf84cfa15b2cbb351",
+  "public_api_snapshot_sha256": "61115913e10880746b6992f1011ef590046c26f0127adf7b36125a626979a412",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4590,6 +4634,9 @@
       },
       "sdm_client.InferenceConfig.to_dict": {
         "capability": "typed-inference-settings"
+      },
+      "sdm_client.Schema.with_source": {
+        "capability": "connection-rebinding"
       }
     },
     "java": {
@@ -6134,6 +6181,12 @@
       },
       "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
         "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSource(com.nvidia.sdm.Source);": {
+        "capability": "connection-rebinding"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder rowsPerCall(long);": {
+        "capability": "custom-examples"
       }
     }
   },
@@ -6519,6 +6572,16 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/typed-inference-settings",
       "reason": "Add reviewed immutable inference settings using Rust validation and explicit opt-in host explanation summaries; both public language APIs have local behavioral tests."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/connection-rebinding",
+      "reason": "Restore database rebinding as immutable Python/Java source replacement, with Rust-owned compatibility validation and public local/live workflow tests."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/automatic-batch-sessions",
+      "reason": "Add reviewed automatic exact-context batch sessions and supplied batch controls in Python/Java, preserving partial results and safe lifecycle behavior with controlled HTTP and real endpoint tests."
     }
   ],
   "capabilities": [
@@ -8174,6 +8237,26 @@
     {
       "api_contract": "custom-examples",
       "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_live_warehouse_supplied_examples",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "connection-rebinding",
+      "test": "packages/structured-data-models-client/tests/test_sql_columns_warehouse.py::test_live_calculated_column_values_refresh_and_prediction",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "connection-rebinding",
+      "test": "java/src/test/java/com/nvidia/sdm/RebindingTest.java#postgresReconnectAndLivePrediction",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "automatic-batch-sessions",
+      "test": "packages/structured-data-models-client/tests/test_automatic_batch_sessions.py::test_live_automatic_session_uploads_context_once",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "automatic-batch-sessions",
+      "test": "java/src/test/java/com/nvidia/sdm/AutomaticBatchSessionTest.java#livePreparedBatchPrediction",
       "evidence_level": "live-required"
     }
   ]

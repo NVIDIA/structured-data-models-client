@@ -481,7 +481,7 @@
           "infer_links": "(self) -> 'Schema'",
           "infer_metadata": "(self) -> 'Schema'",
           "link_report": "(self) -> 'LinkReport'",
-          "materialize_examples": "(self, task: 'RelationalTask', context: 'Any', predict: 'Any', *, num_neighbors: 'Sequence[int] | None' = None, random_seed: 'int' = 42, inference: 'Mapping[str, Any] | InferenceConfig | None' = None) -> 'Request'",
+          "materialize_examples": "(self, task: 'RelationalTask', context: 'Any', predict: 'Any', *, num_neighbors: 'Sequence[int] | None' = None, rows_per_call: 'int | None' = None, random_seed: 'int' = 42, inference: 'Mapping[str, Any] | InferenceConfig | None' = None) -> 'Request'",
           "metadata_report": "(self) -> 'MetadataReport'",
           "print_links": "(self) -> 'None'",
           "print_metadata": "(self) -> 'None'",
@@ -490,6 +490,7 @@
           "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
           "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'",
           "with_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
+          "with_source": "(self, source: 'Source') -> 'Schema'",
           "with_sql_column": "(self, table: 'str', name: 'str', expression: 'str') -> 'Schema'",
           "without_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
           "without_table": "(self, name: 'str') -> 'Schema'"
