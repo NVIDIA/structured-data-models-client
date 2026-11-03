@@ -38,6 +38,19 @@ _SCORE = 'prediction'
 _DETECTED = 'detected'
 
 
+def _free(name: str, taken: Any) -> str:
+    r"""``name``, or a spelling of it the readings have not already used.
+
+    The score and the label are put onto the frame to draw it. A reading
+    already called one of those would be replaced by it, and the report would
+    then plot the score as though it were that reading, or read the
+    detections as the ground truth they were supposed to be judged against.
+    """
+    while name in taken:
+        name = f'_{name}'
+    return name
+
+
 def anomaly_report(
     result: PredictionResult,
     readings: pd.DataFrame,
@@ -96,7 +109,7 @@ def anomaly_report(
             code='INVALID_REQUEST',
         )
     pages = _pages()
-    frame = _rejoined(result, readings, detected_by)
+    frame, score, detected = _rejoined(result, readings, detected_by)
     resolved = _signals(
         readings,
         feature_columns,
@@ -111,9 +124,9 @@ def anomaly_report(
         feature_columns=resolved,
         timestamp_column=timestamp_column,
         ground_truth_column=ground_truth_column,
-        anomaly_column=_DETECTED,
-        score_column=_SCORE,
-        title=title,
+        anomaly_column=detected,
+        score_column=score,
+        title=f'{title} (detections by {detected_by.upper()})',
         max_report_pages=max_report_pages,
     )
 
@@ -128,8 +141,9 @@ def _pages() -> Any:
 
 def _rejoined(
     result: PredictionResult, readings: pd.DataFrame, detected_by: str
-) -> pd.DataFrame:
-    r"""``readings`` with each row's score and label put back on it."""
+) -> tuple[pd.DataFrame, str, str]:
+    r"""``readings`` with each row's score and label put back on it, and
+    what those two columns ended up being called."""
     answer = result.to_pandas()
     label = f'probability_{detected_by}'
     if _SCORE not in answer.columns or label not in answer.columns:
@@ -158,15 +172,20 @@ def _rejoined(
             code='INVALID_REQUEST',
         )
 
-    # `row_index` is a position in the frame that was sent, not a label of
-    # this frame's index, so the readings are taken by position and given a
-    # fresh index. A frame indexed 100..199 would otherwise line up with
-    # nothing.
-    drawn = readings.reset_index(drop=True).copy()
+    # The readings keep their own index: a DatetimeIndex is an axis upstream
+    # plots against, and resetting it drew dates a month apart as evenly
+    # spaced steps. `row_index` is a position in the frame that was sent
+    # rather than a label of this index, so the values are assigned as arrays,
+    # which is positional and ignores the index entirely.
+    drawn = readings.copy()
     ordered = answer.sort_values('row_index', kind='stable')
-    drawn[_SCORE] = ordered[_SCORE].to_numpy()
-    drawn[_DETECTED] = ordered[label].to_numpy().astype(int)
-    return drawn
+    score = _free(_SCORE, drawn.columns)
+    detected = _free(_DETECTED, drawn.columns)
+    drawn[score] = ordered[_SCORE].to_numpy()
+    # Not converted to whole numbers here. A label of 0.9 is not a label, and
+    # truncating it would turn it into one before anything checked it.
+    drawn[detected] = ordered[label].to_numpy()
+    return drawn, score, detected
 
 
 def _signals(
@@ -178,9 +197,9 @@ def _signals(
 ) -> list[Hashable]:
     r"""The columns to draw as signals.
 
-    Named rather than left to be worked out from the joined frame: that frame
-    carries the score and the label, and a default that reads every numerical
-    column off it would plot those as though they were readings.
+    Read off the readings rather than the frame that is drawn: that frame
+    carries the score and the label as well, and a default worked out from it
+    would plot those as though they were readings.
     """
     if feature_columns is not None:
         missing = [
@@ -193,7 +212,7 @@ def _signals(
             )
         return list(feature_columns)
 
-    excluded = {timestamp_column, ground_truth_column, _SCORE, _DETECTED}
+    excluded = {timestamp_column, ground_truth_column}
     resolved = [
         name
         for name in readings.select_dtypes(include=[np.number]).columns

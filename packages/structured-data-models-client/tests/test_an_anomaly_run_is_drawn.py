@@ -93,6 +93,60 @@ def test_rows_are_matched_by_position_and_not_by_index_label(anomaly, tmp_path):
     ).exists()
 
 
+def test_a_reading_already_called_prediction_is_kept(anomaly, tmp_path):
+    """The score and the label are put onto the frame to draw it. A reading
+    of that name would be replaced by one of them and plotted as the score."""
+    from sdm_client.reporting.anomaly import _rejoined
+
+    frame = readings()
+    frame['prediction'] = np.arange(len(frame), dtype=float) * 10
+    frame['detected'] = 0
+
+    drawn, score, detected = _rejoined(scored(anomaly, frame), frame, 'scs')
+
+    assert score != 'prediction' and detected != 'detected'
+    assert drawn['prediction'].tolist() == frame['prediction'].tolist()
+    assert drawn['detected'].tolist() == frame['detected'].tolist()
+
+
+def test_a_label_that_is_not_a_label_is_refused(anomaly, tmp_path):
+    """0.9 is not a verdict. Rounding it to one before anything looked would
+    have made it a detection nobody reported."""
+    frame = readings()
+    result = scored(anomaly, frame)
+    answer = result.to_pandas()
+    answer.loc[0, 'probability_scs'] = 0.9
+    result.to_pandas = lambda: answer
+
+    with pytest.raises(ValueError, match='binary'):
+        anomaly_report(result, frame, tmp_path / 'run.pdf')
+
+
+def test_a_timestamp_index_is_the_axis_it_is_drawn_against(anomaly, tmp_path):
+    """Upstream plots against a DatetimeIndex when there is one. Giving the
+    readings a fresh index drew dates a month apart as even steps."""
+    from sdm_client.reporting.anomaly import _rejoined
+
+    frame = readings().set_index('ts')
+
+    drawn, _, _ = _rejoined(scored(anomaly, frame), frame, 'scs')
+
+    assert isinstance(drawn.index, pd.DatetimeIndex)
+
+
+def test_the_report_says_which_thresholder_marked_it(anomaly, tmp_path):
+    """They disagree, so a reader has to be told which one this is."""
+    frame = readings()
+    written = anomaly_report(
+        scored(anomaly, frame),
+        frame,
+        tmp_path / 'run.pdf',
+        detected_by='macs',
+    )
+
+    assert b'MACS' in written.read_bytes()
+
+
 def test_the_score_and_the_label_are_not_drawn_as_signals(anomaly, tmp_path):
     """They are put on the frame to draw it, and reading every numerical
     column off that frame would plot them as though they were readings."""
