@@ -166,8 +166,9 @@ class InProcessBackend:
             self._require_open()
             return [
                 model_id
-                for model_id in _SERVED
-                if self._loads or model_id in self._models
+                for model_id, served in _SERVED.items()
+                if (self._loads or model_id in self._models)
+                and served.installed()
             ]
 
     def predict(

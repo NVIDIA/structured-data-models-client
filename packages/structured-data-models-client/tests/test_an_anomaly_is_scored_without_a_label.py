@@ -304,6 +304,15 @@ def test_a_structured_data_models_without_this_model_still_answers(
     assert caught.value.code == 'INVALID_CONFIGURATION'
 
 
+def test_a_model_that_is_not_installed_is_not_offered(sdm, monkeypatch):
+    """`models()` says what this backend answers for. Naming one it cannot
+    load sends a caller to a refusal they were told to expect an answer to."""
+    monkeypatch.delattr(sdm.models, 'KumoAnomaly', raising=False)
+
+    with SDMClient.in_process() as client:
+        assert 'kumo-anomaly' not in client.models()
+
+
 def test_another_model_is_not_asked_this_question(tabular):
     """`anomaly_detection` is a task only one model here answers."""
     with SDMClient.in_process(tabular) as client:

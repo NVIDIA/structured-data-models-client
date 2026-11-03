@@ -51,6 +51,15 @@ class Anomaly:
     outputs = {'anomaly_detection': ('prediction', 'probabilities')}
 
     @staticmethod
+    def installed() -> bool:
+        r"""Whether the structured-data-models here carries this model."""
+        try:
+            _model_type()
+        except StructuredDataError:
+            return False
+        return True
+
+    @staticmethod
     def load(device: Any) -> Any:
         return _model_type()(device=device)
 
