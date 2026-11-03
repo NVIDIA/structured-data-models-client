@@ -72,6 +72,42 @@ public final class PredictiveQuery {
     return text;
   }
 
+  /**
+   * Compute historical ENTITY, ANCHOR_TIMESTAMP and TARGET without a model call.
+   * The caller closes the returned owned Arrow table. Link targets are identifier lists;
+   * forecasts produce successive scalar-target rows for one selected entity.
+   * Decimal categories use strings when observed values would collide numerically;
+   * an empty output cannot observe such collisions.
+   */
+  public org.apache.arrow.vector.table.Table labels(Schema schema, LabelsOptions options) {
+    Objects.requireNonNull(schema, "schema");
+    Objects.requireNonNull(options, "options");
+    if (!schema.data().isEmpty()) {
+      try (RelationalMaterializer materializer = new RelationalMaterializer(schema)) {
+        return materializer.labels(this, options);
+      }
+    }
+    Providers.Chosen chosen = Providers.of(schema.source());
+    try (Host.Finished finished = Host.run(
+        Map.of("op", "labels_source", "provider", chosen.choice(), "schema", 1, "input", 2),
+        Map.of(1, Host.attachment(schema.toHeld()), 2, Host.attachment(options.input(text))),
+        new Host.Call(chosen.provider(), null, Providers.held(schema.source())))) {
+      return labelTable(finished);
+    }
+  }
+
+  static org.apache.arrow.vector.table.Table labelTable(Host.Finished finished) {
+    if (!"labels".equals(finished.result().get("op"))) throw new StructuredDataException(
+        "unexpected labels result", "INTERNAL_ERROR", Map.of(), null);
+    try {
+      return com.nvidia.sdm.internal.ReadTables.collect(
+          finished.arrowReader(((Number) finished.result().get("data")).intValue(), ArrowData.allocator()),
+          ArrowData.allocator());
+    } catch (java.io.IOException error) {
+      throw new StructuredDataException("could not read label output", "INTERNAL_ERROR", Map.of(), error);
+    }
+  }
+
   /** Materialize one in-memory table using new Arrow rows to score. */
   public Request materialize(Schema schema, org.apache.arrow.vector.table.Table predict) {
     return materialize(schema, predict, MaterializeOptions.builder().build());

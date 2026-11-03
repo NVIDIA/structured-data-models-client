@@ -237,6 +237,21 @@ pub enum FrameNeighbor {
 }
 
 impl Snapshot {
+    /// Physical storage of one admitted column, without scanning or sampling rows.
+    pub fn column_type(&self, table: &str, column: &str) -> Result<DataType, CoreError> {
+        let rows = &self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("unknown table"))?
+            .rows;
+        Ok(rows
+            .schema()
+            .field_with_name(column)
+            .map_err(|_| invalid("unknown column"))?
+            .data_type()
+            .clone())
+    }
+
     pub fn new(graph: &Graph, input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
         Self::prepare(graph, input, None, BTreeMap::new())
     }
