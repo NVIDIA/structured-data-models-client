@@ -856,6 +856,13 @@ class Relationship:
         )
 
 
+class RelationshipOrigin(NamedTuple):
+    """An existing relationship and its engine-recorded origin."""
+
+    relationship: Relationship
+    origin: str
+
+
 class Schema:
     r"""The tables a request is about.
 
@@ -929,6 +936,60 @@ class Schema:
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
         self._conversion_notes: tuple[str, ...] = ()
+
+    def infer_metadata(self) -> Schema:
+        """Return a schema with missing, non-disabled key/time choices inferred."""
+        from sdm_client._rust.refine import infer
+
+        return infer(self, False)
+
+    def infer_links(self) -> Schema:
+        """Return a schema with unambiguous missing relationships inferred."""
+        from sdm_client._rust.refine import infer
+
+        return infer(self, True)
+
+    def without_table(self, name: str) -> Schema:
+        """Return a schema without a table and all its incident relationships."""
+        from sdm_client._rust.refine import changed
+        from sdm_client.errors import StructuredDataError
+
+        if not isinstance(name, str):
+            raise StructuredDataError(
+                'table name must be a string', code='INVALID_REQUEST'
+            )
+        return changed(self, {'edit': 'remove_table', 'table': name})
+
+    def with_relationship(self, relationship: Relationship) -> Schema:
+        """Add a relationship atomically; identical additions are idempotent."""
+        from sdm_client._rust.refine import link_edit
+
+        return link_edit(self, relationship, False)
+
+    def without_relationship(self, relationship: Relationship) -> Schema:
+        """Remove an existing relationship atomically."""
+        from sdm_client._rust.refine import link_edit
+
+        return link_edit(self, relationship, True)
+
+    @property
+    def link_origins(self) -> tuple[RelationshipOrigin, ...]:
+        """Ordered engine provenance; historical records are explicitly unknown."""
+        state = getattr(self, '_inference', None) or {}
+        origins = {}
+        for record in state.get('links', ()):
+            foreign, primary = record['link']
+            link = Relationship(
+                foreign['table'],
+                foreign['column'],
+                primary['table'],
+                primary['column'],
+            )
+            origins[link] = record['origin']
+        return tuple(
+            RelationshipOrigin(link, origins.get(link, 'unknown'))
+            for link in self.relationships
+        )
 
     def to_mermaid(self, show_columns: bool = True) -> str:
         """Return an offline schema diagram from metadata, without reading rows."""
@@ -1064,6 +1125,7 @@ class Schema:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             self.relationships = list(state.get('relationships') or ())
+        object.__setattr__(self, '_inference', state.get('_inference'))
 
     def _settle(self, links: Sequence[Relationship]) -> list[Relationship]:
         r"""The relationships as this schema will hold them, having said so.
@@ -1120,6 +1182,9 @@ class Schema:
             object.__setattr__(
                 copied, 'relationships', _Links(self.relationships, copied)
             )
+            import copy
+
+            copied._inference = copy.deepcopy(getattr(self, '_inference', None))
             copied._engine_tables = self._engine_tables
             copied._conversion_notes = self._conversion_notes
             return copied
@@ -1128,6 +1193,9 @@ class Schema:
             list(self.relationships),
             source=self._source,
         )
+        import copy
+
+        copied._inference = copy.deepcopy(getattr(self, '_inference', None))
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables

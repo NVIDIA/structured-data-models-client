@@ -77,8 +77,59 @@ pub fn edit(
     types: &HostTypes,
 ) -> Result<Edited, CoreError> {
     let mut declared = None;
+    let old_links = description.links.clone();
+    let mut state = crate::refine::state(&description);
     let mut warnings = Vec::new();
     match edit {
+        SchemaEdit::Infer { candidate, links } => {
+            let candidate = crate::held::read_frame(candidate.clone(), true)?.description;
+            crate::refine::infer(&mut description, &mut state, &candidate, *links, types)?;
+        }
+        SchemaEdit::RemoveTable { table } => {
+            let at = table_at(&description, table, "table")?;
+            description.tables.remove(at);
+            description
+                .links
+                .retain(|link| !link.iter().any(|column| &column.table == table));
+            state.key_declared.remove(table);
+            state.time_declared.remove(table);
+            state.unknown_tables.remove(table);
+            state.times.remove(table);
+        }
+        SchemaEdit::AddLink { link } => {
+            checked(&description.tables, link, types)?;
+            if !description.links.contains(link) {
+                if description
+                    .links
+                    .iter()
+                    .any(|old| old.first() == link.first())
+                {
+                    return Err(CoreError::new(
+                        Sentence::SchemaRefinement,
+                        "a foreign-key column already has a different relationship",
+                    )
+                    .with_field(
+                        "reason",
+                        Detail::text("a foreign-key column already has a different relationship"),
+                    ));
+                }
+                description.links.push(link.clone());
+                state.links.push(sdm_contract::ops::LinkOrigin {
+                    link: link.clone(),
+                    origin: sdm_contract::ops::InferenceOrigin::Declared,
+                });
+            }
+        }
+        SchemaEdit::RemoveLink { link } => {
+            let Some(at) = description.links.iter().position(|old| old == link) else {
+                return Err(CoreError::new(
+                    Sentence::SchemaRefinement,
+                    "the relationship is not present",
+                )
+                .with_field("reason", Detail::text("the relationship is not present")));
+            };
+            description.links.remove(at);
+        }
         SchemaEdit::Check {} => {
             mark_keys(&mut description);
             for table in &description.tables {
@@ -100,9 +151,11 @@ pub fn edit(
         }
         SchemaEdit::PrimaryKey { table, key } => {
             primary_key(&mut description, table, key, types)?;
+            state.key_declared.insert(table.clone());
         }
         SchemaEdit::TimeColumn { table, column } => {
             declared = time_column(&mut description, table, column, supports, types)?;
+            state.time_declared.insert(table.clone());
         }
         SchemaEdit::Stype {
             table,
@@ -110,6 +163,17 @@ pub fn edit(
             stype,
         } => {
             stype_of(&mut description, table, column, stype, supports, types)?;
+            if description
+                .tables
+                .iter()
+                .any(|t| &t.name == table && t.time_column.as_ref() == Some(column))
+                || state
+                    .times
+                    .get(table)
+                    .is_some_and(|choice| choice.column.as_ref() == Some(column))
+            {
+                state.time_declared.insert(table.clone());
+            }
             declared = Some(ColumnRef {
                 table: table.clone(),
                 column: column.clone(),
@@ -118,7 +182,24 @@ pub fn edit(
         SchemaEdit::LeaveOut { table, column } => leave_out(&mut description, table, column)?,
         SchemaEdit::Relationships { links } => {
             warnings = relationships(&mut description, links, types)?;
+            state.links = description
+                .links
+                .iter()
+                .map(|link| sdm_contract::ops::LinkOrigin {
+                    link: link.clone(),
+                    origin: sdm_contract::ops::InferenceOrigin::Declared,
+                })
+                .collect();
         }
+    }
+    crate::refine::retain(&description, &mut state);
+    if old_links != description.links || matches!(edit, SchemaEdit::Infer { .. }) {
+        crate::refine::settle(&mut description, &state);
+        mark_keys(&mut description);
+    }
+    // Plain validation must not claim to reconstruct missing historical state.
+    if description.inference.is_some() || !matches!(edit, SchemaEdit::Check {}) {
+        description.inference = Some(state);
     }
     Ok(Edited {
         description,

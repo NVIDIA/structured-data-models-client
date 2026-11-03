@@ -1069,6 +1069,7 @@ sentences! {
     CompositeKeyNameTaken = "composite_key_name_taken", E::InvalidRequest;
     ReservedName = "reserved_name", E::InvalidRequest;
     ReservedNames = "reserved_names", E::InvalidRequest;
+    SchemaRefinement = "schema_refinement", E::InvalidRequest;
     SchemaLinkUnread = "schema_link_unread", E::InvalidRequest;
     WireReservedOne = "wire_reserved_one", E::InvalidSchema;
     WireReservedSeveral = "wire_reserved_several", E::InvalidSchema;

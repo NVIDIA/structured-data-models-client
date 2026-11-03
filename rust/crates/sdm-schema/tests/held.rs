@@ -28,6 +28,7 @@ fn facts(dtype: Dtype, received: ColumnType) -> SourceFacts {
 
 fn schema() -> HeldSchema {
     HeldSchema {
+        inference: None,
         tables: vec![HeldTable {
             name: "users".into(),
             source: "app_users".into(),

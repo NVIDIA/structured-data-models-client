@@ -172,6 +172,7 @@ fn the_core_writes_a_message_whole_within_the_cap_or_as_an_attachment() {
 /// A source description whose JSON is exactly `size` bytes.
 fn description_of(size: usize) -> Vec<u8> {
     let make = |pad: usize| SourceDescription {
+        inference: None,
         tables: vec![DescribedTable {
             name: "t".repeat(pad + 1),
             source: "t".into(),

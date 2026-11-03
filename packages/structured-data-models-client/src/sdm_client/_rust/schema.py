@@ -243,4 +243,5 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
+    object.__setattr__(schema, '_inference', described.get('inference'))
     return schema

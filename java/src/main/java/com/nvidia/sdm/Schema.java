@@ -40,6 +40,7 @@ import java.util.function.Function;
  */
 public final class Schema {
   private Map<String, byte[]> data = Map.of();
+  private Map<String, Object> inference;
   Map<String, byte[]> data() { return data; }
 
   private final List<Table> tables;
@@ -164,6 +165,7 @@ public final class Schema {
         throw Snapshots.invalid("snapshot frames do not match its schema tables", null);
       }
       Schema result = new Schema(checked.tables, checked.relationships, null, Snapshots.texts(saved.get("notes")));
+      result.inference = checked.inference;
       result.data = java.util.Collections.unmodifiableMap(frames);
       return result;
     } catch (ClassCastException | NullPointerException | IllegalArgumentException malformed) {
@@ -273,7 +275,68 @@ public final class Schema {
       }
       said.add(Wording.said(Map.of("sentence", note.sentence(), "fields", note.fields())));
     }
-    return new Schema(tables, relationships, source, said);
+    Schema result = new Schema(tables, relationships, source, said);
+    result.inference = inference;
+    result.data = data;
+    return result;
+  }
+
+  /** Fill missing key/time choices without changing declared metadata or this schema. */
+  public Schema inferMetadata() { return infer(false); }
+
+  /** Infer missing links, preserving the links and key choices already held. */
+  public Schema inferLinks() { return infer(true); }
+
+  /** Return a schema without the named table and its incident links. */
+  public Schema withoutTable(String name) {
+    if (name == null) throw new StructuredDataException("table name is required", "INVALID_REQUEST", Map.of(), null);
+    return edited(Map.of("edit", "remove_table", "table", name));
+  }
+
+  /** Remove an existing relationship atomically. */
+  public Schema withoutRelationship(Relationship relationship) {
+    Objects.requireNonNull(relationship, "relationship");
+    return edited(Map.of("edit", "remove_link", "link", links(List.of(relationship)).get(0)));
+  }
+
+  /** Ordered immutable provenance; older saved records have unknown origins. */
+  @SuppressWarnings("unchecked")
+  public List<RelationshipOrigin> linkOrigins() {
+    List<RelationshipOrigin> result = new ArrayList<>();
+    for (Relationship relationship : relationships) {
+      String origin = "unknown";
+      if (inference != null) for (Object entry : (List<?>) inference.get("links")) {
+        Map<String, Object> record = (Map<String, Object>) entry;
+        if (relationships(List.of(record.get("link"))).get(0).equals(relationship)) origin = (String) record.get("origin");
+      }
+      result.add(new RelationshipOrigin(relationship, origin));
+    }
+    return List.copyOf(result);
+  }
+
+  private Schema infer(boolean links) {
+    if (tables.isEmpty()) return this;
+    Schema candidate;
+    if (source != null) {
+      FromSourceOptions.Builder options = FromSourceOptions.builder();
+      for (Table table : tables) options.table(table.name(), table.sourceName());
+      candidate = fromSource(source, options.build());
+    } else {
+      if (data.isEmpty()) throw new StructuredDataException("inference requires table data", "INVALID_REQUEST", Map.of(), null);
+      Map<Integer, byte[]> imports = new LinkedHashMap<>();
+      List<Integer> ids = new ArrayList<>();
+      List<String> names = new ArrayList<>();
+      for (Table table : tables) {
+        int id = imports.size() + 2;
+        ids.add(id); names.add(table.name()); imports.put(id, data.get(table.name()));
+      }
+      try (Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(
+          Map.of("op", "describe_frame_tables", "names", 1, "tables", ids),
+          Map.of(1, Host.attachment(names)), imports, Host.Call.none())) {
+        candidate = held(com.nvidia.sdm.internal.ArrowTabular.value(finished), null);
+      }
+    }
+    return edited(Map.of("edit", "infer", "candidate", candidate.toHeld(), "links", links));
   }
 
   // --- edits ----------------------------------------------------------------------------
@@ -347,9 +410,8 @@ public final class Schema {
 
   /** This schema with {@code relationship} added after its relationships. */
   public Schema withRelationship(Relationship relationship) {
-    List<Relationship> more = new ArrayList<>(relationships);
-    more.add(Objects.requireNonNull(relationship, "relationship"));
-    return withRelationships(more);
+    Objects.requireNonNull(relationship, "relationship");
+    return edited(Map.of("edit", "add_link", "link", links(List.of(relationship)).get(0)));
   }
 
   /**
@@ -394,7 +456,10 @@ public final class Schema {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
       Schema changed = held(read(finished.bytes(edited.schema())), source);
       Schema result = new Schema(changed.tables, changed.relationships, source, conversionNotes);
-      result.data = data;
+      result.inference = changed.inference;
+      Map<String, byte[]> kept = new LinkedHashMap<>();
+      for (Table table : changed.tables) if (data.containsKey(table.name())) kept.put(table.name(), data.get(table.name()));
+      result.data = java.util.Collections.unmodifiableMap(kept);
       return result;
     }
   }
@@ -439,6 +504,7 @@ public final class Schema {
     Map<String, Object> schema = new LinkedHashMap<>();
     schema.put("tables", written);
     schema.put("links", links(relationships));
+    if (inference != null) schema.put("inference", inference);
     return schema;
   }
 
@@ -526,7 +592,9 @@ public final class Schema {
       }
       tables.add(table(table, columns));
     }
-    return new Schema(tables, relationships(description.get("links")), source);
+    Schema result = new Schema(tables, relationships(description.get("links")), source);
+    result.inference = (Map<String, Object>) description.get("inference");
+    return result;
   }
 
   /** The schema of a {@code HeldSchema} the core answered an edit with. */
@@ -549,7 +617,9 @@ public final class Schema {
       }
       tables.add(table(table, columns));
     }
-    return new Schema(tables, relationships(answer.get("links")), source);
+    Schema result = new Schema(tables, relationships(answer.get("links")), source);
+    result.inference = (Map<String, Object>) answer.get("inference");
+    return result;
   }
 
   @SuppressWarnings("unchecked")

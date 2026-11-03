@@ -69,3 +69,15 @@ Add one live prediction after inferred/edited schema preparation; it verifies in
 Old source at `12955d397`: engine `rfm/graph.py:2579,2647,2996,3188` and `rfm/base/table.py:970` under `packages/structured-data-models-relational-engine/src/sdm_relational_engine/`.
 Old tests: engine `tests/test_inferred_edges.py` and `tests/metadata_inference/test_time_col.py`.
 Current implementation seams: `rust/crates/sdm-schema/src/{infer,assemble,edit}.rs`, Python `schema.py`, Java `Schema.java`.
+
+## Approved implementation contract
+
+Python adds `infer_metadata()`, `infer_links()`, `without_table(name)`, `with_relationship(link)` and `without_relationship(link)` returning new schemas.
+Java provides `inferMetadata()`, `inferLinks()`, `withoutTable(name)` and `withoutRelationship(link)`, retaining existing `withRelationship(link)`.
+Metadata is detached; source/frame buffers remain shared, as existing schema snapshots do.
+`link_origins` / `linkOrigins()` returns immutable ordered relationship/origin records with `declared`, `inferred` or `unknown` origins.
+Declared includes caller and catalog declarations; only engine-created links are inferred, and old records remain unknown.
+Identical link additions are idempotent; conflicting additions and missing removals raise `INVALID_REQUEST` without mutation.
+Explicit inference reuses existing frame/source observation and then applies a Rust-owned merge preserving columns, types and current choices.
+Optional typed engine state preserves explicit key/time choices (including none), time-choice dependence on links and link provenance through snapshots/persistence.
+Pure edits perform no source reads; rerunning inference may read previews through existing providers.
