@@ -147,3 +147,35 @@ pub struct ResultItemSegment {
     pub table: AttachmentId,
     pub fields: Vec<ItemField>,
 }
+
+/// Score-only input; raw cells and prediction rows remain in the host.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureImportanceInput {
+    pub cells: Vec<AttributionCell>,
+    pub normalize: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AttributionCell {
+    pub table: String,
+    pub column: String,
+    /// JSON scalar text preserves nonfinite and out-of-range numeric spellings.
+    pub score: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureImportanceOutput {
+    pub rows: Vec<FeatureImportanceRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureImportanceRow {
+    pub table: String,
+    pub column: String,
+    pub score: f64,
+}

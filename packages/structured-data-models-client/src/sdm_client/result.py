@@ -35,6 +35,8 @@ from typing import Any
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
+from sdm_client.reports import ExplanationView
+
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
 _SCALAR_FIELDS = ('row_index', 'id', 'forecast_step', 'prediction')
@@ -141,6 +143,15 @@ class PredictionResult:
         ``None`` otherwise, rather than a different return type.
         """
         return self._explanation
+
+    @property
+    def explanation_view(self) -> ExplanationView | None:
+        """An immutable local view, without reading prediction rows."""
+        return (
+            None
+            if self._explanation is None
+            else ExplanationView(self._explanation)
+        )
 
     @property
     def unscored_candidates(self) -> tuple[Any, ...]:

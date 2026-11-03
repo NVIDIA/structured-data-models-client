@@ -112,9 +112,16 @@
   "sdm_client": {
     "__all__": [
       "Column",
+      "ColumnMetadata",
+      "ExplanationView",
+      "FeatureImportance",
+      "FeatureImportanceRow",
       "FittedModel",
       "KumoRelational",
       "KumoTabular",
+      "LinkMetadata",
+      "LinkReport",
+      "MetadataReport",
       "MissingExtraError",
       "Model",
       "ModelCapabilities",
@@ -131,6 +138,7 @@
       "Split",
       "StructuredDataError",
       "Table",
+      "TableMetadata",
       "TableSanitizationReport",
       "Target",
       "Task",
@@ -150,6 +158,52 @@
           "check_consistent": "(self) -> 'None'"
         },
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "ColumnMetadata": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "ExplanationView": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "cohorts",
+          "details",
+          "subgraphs",
+          "summary",
+          "warnings"
+        ],
+        "public_methods": {
+          "feature_importance": "(self, normalize: 'bool' = False) -> 'FeatureImportance | None'",
+          "print": "(self) -> 'None'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(raw: 'Mapping[str, Any]') -> 'None'"
+      },
+      "FeatureImportance": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(rows: 'tuple[FeatureImportanceRow, ...]', normalized: 'bool') -> None"
+      },
+      "FeatureImportanceRow": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(table: 'str', column: 'str', score: 'float') -> None"
       },
       "FittedModel": {
         "bases": [],
@@ -186,6 +240,39 @@
         ],
         "public_methods": {},
         "signature": "()"
+      },
+      "LinkMetadata": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(source_table: 'str', source_column: 'str', target_table: 'str', target_column: 'str') -> None"
+      },
+      "LinkReport": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(links: 'tuple[LinkMetadata, ...]') -> None"
+      },
+      "MetadataReport": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(tables: 'tuple[TableMetadata, ...]') -> None"
       },
       "MissingExtraError": {
         "bases": [
@@ -230,6 +317,7 @@
         "kind": "class",
         "public_attributes": [
           "explanation",
+          "explanation_view",
           "unscored_candidates"
         ],
         "public_methods": {
@@ -326,6 +414,10 @@
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
           "from_relbench": "(name: 'str', *, cache_dir: 'str | Path | None' = None, offline: 'bool' = False) -> 'Schema'",
           "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
+          "link_report": "(self) -> 'LinkReport'",
+          "metadata_report": "(self) -> 'MetadataReport'",
+          "print_links": "(self) -> 'None'",
+          "print_metadata": "(self) -> 'None'",
           "snapshot": "(self) -> 'Schema'",
           "to_html": "(self, show_columns: 'bool' = True) -> 'str'",
           "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
@@ -343,7 +435,10 @@
           "primary_key",
           "time_column"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "metadata_report": "(self) -> 'TableMetadata'",
+          "print_metadata": "(self) -> 'None'"
+        },
         "signature": "(name: 'str', source_name: 'str', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
       },
       "Split": {
@@ -372,8 +467,24 @@
           "primary_key",
           "time_column"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "metadata_report": "(self) -> 'TableMetadata'",
+          "print_metadata": "(self) -> 'None'"
+        },
         "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+      },
+      "TableMetadata": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(name: 'str', columns: 'tuple[ColumnMetadata, ...]', primary_key: 'tuple[str, ...]', time_column: 'str | None') -> None"
       },
       "TableSanitizationReport": {
         "bases": [],

@@ -211,6 +211,16 @@ public final class Schema {
 
   // --- what a schema holds ---------------------------------------------------------------
 
+  /** Snapshot existing descriptors without inference or source access. */
+  public MetadataReport metadataReport() {
+    return new MetadataReport(tables().stream().map(Table::metadataReport).toList());
+  }
+
+  /** Snapshot existing directed relationships. */
+  public LinkReport linkReport() {
+    return new LinkReport(relationships().stream().map(r -> new LinkMetadata(r.sourceTable(), r.sourceColumn(), r.targetTable(), r.targetColumn())).toList());
+  }
+
   /** Its tables, in order. */
   public List<Table> tables() {
     return tables;

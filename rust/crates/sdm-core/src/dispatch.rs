@@ -61,6 +61,13 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::FeatureImportance(request) => {
+            let input: sdm_contract::result::FeatureImportanceInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::result::feature_importance(&input)?)
+            })
+        }
         Operation::PlanResultMerge(request) => {
             let input: sdm_contract::result::PlanResultMerge =
                 take_json(&mut attachments, request.input)?;

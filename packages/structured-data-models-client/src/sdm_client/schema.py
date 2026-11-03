@@ -47,6 +47,13 @@ import pandas as pd
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
+from sdm_client.reports import (
+    ColumnMetadata,
+    LinkMetadata,
+    LinkReport,
+    MetadataReport,
+    TableMetadata,
+)
 from sdm_client.wire import (
     UNTYPED,
     infer_tfm_dtype,
@@ -330,6 +337,27 @@ class _TableShape:
     primary_key: str | Sequence[str] | None
     time_column: str | None
     duplicate_keys: int | None
+
+    def metadata_report(self) -> TableMetadata:
+        """Snapshot existing metadata without reading table rows."""
+        key = self.primary_key
+        return TableMetadata(
+            self.name,
+            tuple(
+                ColumnMetadata(c.name, c.dtype, c.stype)
+                for c in self.columns.values()
+            ),
+            ()
+            if key is None
+            else (key,)
+            if isinstance(key, str)
+            else tuple(key),
+            self.time_column,
+        )
+
+    def print_metadata(self) -> None:
+        """Print existing table metadata locally."""
+        self.metadata_report().print()
 
     def _own_columns(self) -> None:
         r"""Point every column at this table, and take a copy of any that is
@@ -1278,6 +1306,34 @@ class Schema:
             relationships=relationships,
             check_keys=check_keys,
         )
+
+    def metadata_report(self) -> MetadataReport:
+        """Snapshot existing table descriptors without inference or source reads."""
+        return MetadataReport(
+            tuple(t.metadata_report() for t in self.tables.values())
+        )
+
+    def link_report(self) -> LinkReport:
+        """Snapshot existing directed relationships."""
+        return LinkReport(
+            tuple(
+                LinkMetadata(
+                    r.source_table,
+                    r.source_column,
+                    r.target_table,
+                    r.target_column,
+                )
+                for r in self.relationships
+            )
+        )
+
+    def print_metadata(self) -> None:
+        """Print existing schema metadata locally."""
+        self.metadata_report().print()
+
+    def print_links(self) -> None:
+        """Print existing schema relationships locally."""
+        self.link_report().print()
 
     @property
     def tables(self) -> dict[str, Table | SourceTable]:
