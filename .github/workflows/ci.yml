@@ -1145,7 +1145,7 @@ jobs:
       # key (P2-T2.14c-1).
       - &contract-postgres-vectors
         name: T2.3's Postgres regression and key vectors, T2.21's exact-key vectors and T2.14c's numeric spellings, on the service
-        run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_t221_exact_keys.py -q
+        run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_t221_exact_keys.py packages/structured-data-models-client/tests/test_postgres_keyless_order.py -q -m "not live_nim"
       # T2.14b's Postgres JSON regressions (a document escaping a lone
       # surrogate kept as the reference keeps it), on the service, in the
       # reference cell (T2.14b fix 7).
@@ -1986,7 +1986,7 @@ jobs:
         run: |
           unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
-            -Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest test
+            -Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest,PostgresKeylessOrderTest test
       - name: The S1 cases on the Java host
         run: |
           python contract/runners/run_java.py --database "$DATABASE" \

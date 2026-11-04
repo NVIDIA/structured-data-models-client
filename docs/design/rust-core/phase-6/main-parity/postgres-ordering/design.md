@@ -40,7 +40,7 @@ Skipping the content columns makes that choice ambiguous; ordering raw JSON/XML 
 | Was it documented? | The historical changelog describes the failure and fix; PostgreSQL engine tests include JSON, XML and a JSON domain. No dedicated end-user notebook/example was found for this edge case. |
 | What is missing here? | Rust tie-break terms lose string-type information and the PostgreSQL SQL path orders the original value. Output-transfer casts do not fix the `ORDER BY`. |
 
-This is source-confirmed, not yet a live reproduction: the audit's PostgreSQL connection attempt failed.
+Reproduced against PostgreSQL through public `Schema.from_source` → PQL materialization before the fix: PostgreSQL rejected `ORDER BY` on a JSON column.
 
 ## Small design
 
@@ -67,3 +67,24 @@ One read → materialize → predict smoke test verifies these rows reach the mo
 Inspect the query plan on a representative fixture; the cast is needed for correctness, but no speedup is assumed.
 
 Evidence: main `6aa25db22`; current `sdm-engine/src/sample.rs:410`, `sdm-contract/src/data.rs` (`TieTerm`) and `sdm-data/src/sql.rs:332`.
+
+## Implementation and verification
+
+Rust now carries a `string_like` fact on keyless tie terms (internal contract 68).
+Only the PostgreSQL renderer uses it; Python and Java still execute the generated SQL without sorting rows themselves.
+
+| Check | Result |
+|---|---|
+| Rust | 45 data unit tests, 2 dialect-matrix tests, 3 PostgreSQL golden tests and the engine type-boundary regression passed; Clippy passed. |
+| Python public API | JSON, XML and JSON-domain fixtures passed against PostgreSQL, including numeric 2 before 10, equal/older/null timestamps, null bodies, repeated bounded selection and a quoted column name. |
+| Java public API | The same JSON/XML/domain ordering fixture and live prediction passed, plus all 7 existing PostgreSQL read controls (9 tests total). |
+| Real model | PostgreSQL read → materialize → predict passed for both requested IDs in Python and Java against the same deployed relational model. |
+| Existing PostgreSQL controls | 15 source/key tests passed with the production wheel. |
+| CI | New Python/Java regressions are included in existing PostgreSQL-service jobs; 54 workflow checks passed. |
+
+The actual generated query's `EXPLAIN ANALYZE` retained per-seed limits and database sorting; no host-side whole-table fetch was added.
+The small fixture is a correctness check, not a performance benchmark.
+Regenerating the dialect matrix corrected three pre-existing capability rows (`derived_relations`); existing SQL snapshots did not change.
+The same capability mismatch was verified against the parent implementation, independently of the new string-type field.
+Production wheel: commit `347de10fc`, default production features.
+Independent review found no material boundary or correctness issue.

@@ -54,6 +54,11 @@ def prepare(postgres_notes, kind):
         'FROM generate_series(1,20)i CROSS JOIN '
         "(VALUES (2,'z'),(10,'a'),(2,'a'),(2,NULL)) a(n,v)"
     )
+    connection.execute(
+        f'INSERT INTO {name}.notes SELECT i, at, 0, {expression} '
+        'FROM generate_series(1,20)i CROSS JOIN '
+        "(VALUES (TIMESTAMP '2023-01-01','a'),(NULL::timestamp,'a')) a(at,v)"
+    )
     schema = Schema.from_source(
         PostgresSource(connection, schema=name),
         {'users': 'users', 'notes': 'notes'},
@@ -84,7 +89,7 @@ def test_keyless_strings_keep_numeric_order_and_nulls(postgres_notes, kind):
     expected = (
         ['<v>a</v>', '<v>z</v>']
         if kind == 'xml'
-        else ['{"v" : "a"}', '{"v" : "z"}']
+        else ['{"v":"a"}', '{"v":"z"}']
     )
     for _ in range(2):
         table = materialize(schema).payloads[0]['predict']['related_tables'][
@@ -98,7 +103,7 @@ def test_keyless_strings_keep_numeric_order_and_nulls(postgres_notes, kind):
             2,
             2,
             2,
-        ]  # Numeric2 precedes10, not text ordering.
+        ]  # Numeric 2 precedes 10, not text ordering.
         assert bodies == expected * 2
     table = materialize(schema, 3).payloads[0]['predict']['related_tables'][
         'notes'
