@@ -57,3 +57,28 @@ A future configurable endpoint limit is a separate design, not a reason to remov
 - Run a small 201-entity temporal-link prediction against a supporting endpoint; compare IDs/order and semantic results, allowing documented model numerical variation across changed batching.
 
 Evidence: `sdm-core/src/materialize.rs:3816`, `sdm-request/src/options.rs:801`, and existing [supplied-example batching design](../../batching/design.md).
+
+## Implemented and verified
+
+The shared Rust `BatchTask` policy now caps temporal-link PQL and supplied-example batches at 200.
+Forecast/ranking preflight, host APIs, wire contract 67 and sampling SQL are unchanged.
+Independent review found no ownership or correctness issues.
+
+| Evidence | Result |
+|---|---|
+| Before-fix public reproduction | Memory, DuckDB and SQLite emitted 201 rows instead of 200/1; the regression test failed as expected. |
+| Rust | Two limit tests passed; Clippy for `sdm-request` and `sdm-core`, including tests, passed with warnings denied. |
+| Installed Python | 212 focused tests passed; 11 live cases deselected. Includes new boundary/identity/call-limit/partial-result checks, supplied examples and existing forecast/ranking/session controls. |
+| Java | 30 focused tests passed; optional live tests run separately. Covers memory/DuckDB/SQLite PQL, supplied examples, forecast/ranking and partial failures. |
+| Real model endpoint | Python and Java each passed the maintained shop fixture expanded to 201 users before ingestion: payload sizes 200/1, exactly 201 ordered entity IDs, rankings present. No wire-payload cleanup. |
+
+The production wheel and JNI library were built from `e74b32178699dfd3e4580a18e95e35ac1bf90031`; later changes are tests, ledger and evidence only.
+The wheel's manifest records a clean tree, production features and SHA256 `9f35eee4b2e414ae7144b3a22497f64d1ada8694c642ebc48b47d321fae9dfda`.
+Artifacts: `/tmp/sdm-p6-temporal-e74b32178/`; test/build logs: `/tmp/p6-temporal-*.log`.
+The maintained parity ledger names both language regression suites and both live tests.
+
+**Separate limitation:** the initial minimal synthetic dataset returned endpoint HTTP500 even for two rows.
+Its two-row and 200-row payloads are byte-for-byte equal between the before-fix Phase 6 artifact and this artifact, so the batching change did not introduce that behavior.
+The cause is not established; feature/history experiments did not establish an explanation and were not retained.
+Local boundary tests keep that original dataset; live validation uses the existing shop dataset, identically expanded in Python and Java.
+This is not a claim that the endpoint accepts every otherwise valid synthetic dataset.

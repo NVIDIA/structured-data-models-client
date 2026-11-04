@@ -45,10 +45,10 @@ class TemporalLinkBatchingTest {
         statement.execute("CREATE TABLE items(item_id BIGINT PRIMARY KEY, price DOUBLE)");
         statement.execute("CREATE TABLE orders(order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), item_id BIGINT REFERENCES items(item_id), time TIMESTAMP)");
       }
-      for (var entry : data().entrySet()) {
-        var table = object(entry.getValue());
+      for (String name : List.of("users", "items", "orders")) {
+        var table = object(data().get(name));
         int columns = ((List<?>) table.get("columns")).size();
-        try (PreparedStatement insert = connection.prepareStatement("INSERT INTO " + entry.getKey()
+        try (PreparedStatement insert = connection.prepareStatement("INSERT INTO " + name
             + " VALUES (" + String.join(",", Collections.nCopies(columns, "?")) + ")")) {
           for (var row : rows(table)) {
             for (int c = 0; c < columns; c++) insert.setObject(c + 1, row.get(c));
@@ -116,4 +116,48 @@ class TemporalLinkBatchingTest {
       assertEquals(List.of(200, 1), sizes(request));
     }
   }
+
+  @Test @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="SDM_RELATIONAL_URL", matches=".+")
+  void liveShopBatches() throws Exception {
+    var fixture = ParityRunner.read(java.nio.file.Path.of("../tests/parity/fixtures/shop.json"));
+    var original = object(fixture.get("tables"));
+    List<List<Object>> users = new ArrayList<>(), events = new ArrayList<>();
+    var sourceUsers = rows(object(original.get("users")));
+    var sourceEvents = rows(object(original.get("events")));
+    for (int i = 0; i < 201; i++) {
+      var source = sourceUsers.get(i % sourceUsers.size());
+      var user = new ArrayList<>(source); user.set(0, i); users.add(user);
+      for (var sourceEvent : sourceEvents) {
+        if (((Number) sourceEvent.get(1)).longValue() != ((Number) source.get(0)).longValue()) continue;
+        var event = new ArrayList<>(sourceEvent);
+        event.set(0, events.size()); event.set(1, i); events.add(event);
+      }
+    }
+    var userTable = new LinkedHashMap<>(object(original.get("users"))); userTable.put("rows", users);
+    var eventTable = new LinkedHashMap<>(object(original.get("events"))); eventTable.put("rows", events);
+    // The same expanded shop fixture as Python, before public ingestion.
+    try (RootAllocator allocator = new RootAllocator();
+        Table userData = ParityRunner.table(userTable, allocator);
+        Table eventData = ParityRunner.table(eventTable, allocator);
+        Table itemData = ParityRunner.table(object(original.get("items")), allocator)) {
+      Schema schema = Schema.fromData(Map.of("users", userData, "events", eventData, "items", itemData))
+          .withPrimaryKey("users", "id").withPrimaryKey("events", "event").withPrimaryKey("items", "item")
+          .withTimeColumn("events", "event_time")
+          .withRelationships(List.of(new Relationship("events", "id", "users", "id"),
+              new Relationship("events", "item", "items", "item")));
+      var ids = java.util.stream.IntStream.range(0, 201).boxed().toList();
+      Request request = PredictiveQuery.parse("PREDICT LIST_DISTINCT(events.item, 0, 30, days) FOR EACH users.id")
+          .materialize(schema, MaterializeOptions.builder().model(SdmClient.KUMO_RELATIONAL)
+              .indices(new ArrayList<>(ids)).option("random_seed", 7).build());
+      assertEquals(List.of(200, 1), sizes(request));
+      try (SdmClient client = SdmClient.connect(System.getenv("SDM_RELATIONAL_URL"),
+          ClientOptions.builder().timeout(java.time.Duration.ofSeconds(180)).build())) {
+        var result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+        assertEquals(201, result.rows());
+        assertEquals(ids, result.items().stream().map(item -> ((Number) item.id()).intValue()).toList());
+        assertTrue(result.absent(List.of("rankings")).isEmpty());
+      }
+    }
+  }
+
 }
