@@ -16,6 +16,7 @@ asked for separately.
 
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -102,9 +103,10 @@ def forecast_report(
     )
     per_step = attributions if marginal is None else np.asarray(marginal)
     smoothness = _smoothness(carried)
-    stability = _stability(carried)
+    stability, stability_channels = _stability(carried)
     gradients = (carried.get('explanation') or {}).get('integrated_gradients')
     with _artifacts(artifacts_dir) as out_dir:
+        _saved_as_json(out_dir, carried)
         heatmap = pages._save_lag_horizon_artifacts(
             out_dir,
             per_step,
@@ -129,7 +131,7 @@ def forecast_report(
             pages._save_integrated_gradients_artifacts(out_dir, gradients)
         if stability is not None:
             pages._save_feature_axis_embedding_stability_csv(
-                out_dir, stability, channels
+                out_dir, stability, stability_channels
             )
         drawn = pages._build_pdf_report(
             Path(output_path),
@@ -146,6 +148,7 @@ def forecast_report(
             channel_labels=channels,
             trajectory_report=smoothness,
             feature_axis_embedding_stability_report=stability,
+            feature_axis_stability_channel_labels=stability_channels,
             integrated_gradients_report=gradients,
         )
     if drawn is None:  # pragma: no cover - matplotlib is present by here
@@ -248,14 +251,15 @@ def _smoothness(carried: dict[str, Any]) -> Any:
     )
 
 
-def _stability(carried: dict[str, Any]) -> Any:
-    r"""How much the embedding moved when a channel was nudged.
+def _stability(carried: dict[str, Any]) -> tuple[Any, list[str] | None]:
+    r"""How much the embedding moved when a channel was nudged, and the
+    channels it is about.
 
-    The labels it carries are its own: the page reads them off the report
-    where there are as many as there are channels, and that count includes
-    the series being forecast, which the channel attribution beside it sets
-    aside. Rebuilt with the channel labels of the explanation instead, the
-    two would be the same length and name different channels.
+    The labels it carries are its own and are handed back beside it. There
+    are as many of them as there are channels, and that count includes the
+    series being forecast, which the channel attribution beside it sets
+    aside. Drawn under the explanation's labels instead, the two lists were
+    different lengths, and the page fell back to numbering the channels.
     """
     from sdm_client.explain._attribution.channel_stability import (
         PerChannelEmbeddingStabilityReport,
@@ -264,8 +268,8 @@ def _stability(carried: dict[str, Any]) -> Any:
     feature_axis = (carried.get('explanation') or {}).get('feature_axis') or {}
     block = feature_axis.get('embedding_stability')
     if not block:
-        return None
-    labels = block.get('channel_labels') or []
+        return None, None
+    labels = [str(name) for name in block.get('channel_labels') or []]
     ratios = {
         name: np.asarray(block.get(name), dtype=float)
         for name in (
@@ -275,17 +279,18 @@ def _stability(carried: dict[str, Any]) -> Any:
             'lip_ratio_p95',
         )
     }
+    reference = block.get('step_delta_norm_mean')
     return PerChannelEmbeddingStabilityReport(
         **ratios,
         n_trials_per_channel=np.asarray(
             block.get('n_trials_per_channel'), dtype='int64'
         ),
         n_unique_windows=int(block.get('n_unique_windows') or 0),
-        step_delta_norm_mean=float(
-            block.get('step_delta_norm_mean') or float('nan')
-        ),
+        step_delta_norm_mean=float('nan')
+        if reference is None
+        else float(reference),
         n_channels=len(labels),
-    )
+    ), labels
 
 
 def _forecast_frame(carried: dict[str, Any]) -> tuple[Any, str, str]:
@@ -339,6 +344,22 @@ def _artifacts(named: str | Path | None) -> Iterator[Path]:
         return
     with tempfile.TemporaryDirectory(prefix='sdm-forecast-') as temporary:
         yield Path(temporary)
+
+
+def _saved_as_json(out_dir: Path, carried: dict[str, Any]) -> Path:
+    r"""The explanation these pages were drawn from, written out beside them.
+
+    Three of the pages send the reader to ``explanation.json`` for the
+    diagnostics block and for the values they only summarise, and nothing
+    wrote one, so the reader was sent to a file that was never there.
+
+    What is written is the answer's own explanation, unchanged: the pages
+    read nothing else, so anything derived here could disagree with them.
+    """
+    out_path = out_dir / 'explanation.json'
+    with out_path.open('w', encoding='utf-8') as handle:
+        json.dump(carried, handle, indent=2, allow_nan=False)
+    return out_path
 
 
 def _without_the_unmeasured(

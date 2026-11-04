@@ -18,6 +18,7 @@ import pytest
 from sdm_client import KumoForecast, Request, SDMClient, StructuredDataError
 
 pytest.importorskip('matplotlib', reason='needs the report extra')
+pytest.importorskip('torch', reason='the attribution runs on torch')
 
 from sdm_client.reporting import forecast_report  # noqa: E402
 
@@ -270,6 +271,7 @@ def test_the_files_the_pages_name_are_written(explained, tmp_path):
 
     assert 'lag_horizon_heatmap.png' in written
     assert 'semantic_flow.csv' in written
+    assert 'explanation.json' in written
 
 
 def test_the_series_own_channel_is_not_ranked_among_the_measured(
@@ -411,6 +413,28 @@ def test_a_channel_with_a_gap_is_not_called_uninfluential(forecast):
                 outputs=['prediction', 'explanation'],
             )
     assert 'gap' in str(caught.value)
+
+
+def test_a_gradient_over_a_gap_is_not_an_attribution(forecast):
+    """Integrated gradients measure against a baseline of noise over the
+    window, and one gap makes the whole baseline NaN: every attribution
+    taken against it reads as no influence at all."""
+    frame = history(600)
+    frame.loc[599, 'temp'] = np.nan
+
+    with SDMClient.in_process(forecast) as client:
+        with pytest.raises(StructuredDataError) as caught:
+            client.predict(
+                Request.forecast(
+                    frame,
+                    target='flow',
+                    horizon=4,
+                    inference={'integrated_gradients': True},
+                ),
+                model=KumoForecast(),
+                outputs=['prediction', 'explanation'],
+            )
+    assert 'integrated gradients' in str(caught.value)
 
 
 def test_a_report_is_drawn_from_an_explanation(explained, tmp_path):
@@ -575,6 +599,52 @@ def test_the_embedding_stability_page_is_drawn(over_channels, tmp_path):
     assert before == after + 1
 
 
+def test_the_stability_csv_names_the_channels_it_measured(
+    over_channels, tmp_path
+):
+    """The channels it measured include the series being forecast, which the
+    channel attribution beside it sets aside. Drawn under the attribution's
+    labels the two lists were different lengths, and the page numbered the
+    channels instead of naming them."""
+    import pandas as pd
+
+    artifacts = tmp_path / 'artifacts'
+    forecast_report(over_channels, tmp_path / 'f.pdf', artifacts_dir=artifacts)
+    written = pd.read_csv(artifacts / 'feature_axis_embedding_stability.csv')
+
+    assert written['feature'].tolist() == ['flow', 'temp']
+
+
+@pytest.mark.parametrize('reference', [0.0, 1.5, None])
+def test_a_reference_scale_of_zero_is_a_reference_scale(reference):
+    """A trajectory that does not move has a mean step of zero, which read
+    as a measurement that was never taken."""
+    from sdm_client.reporting.forecast import _stability
+
+    report, labels = _stability(
+        {
+            'explanation': {
+                'feature_axis': {
+                    'embedding_stability': {
+                        'channel_labels': ['flow', 'temp'],
+                        'lip_ratio_mean': [1.0, 2.0],
+                        'lip_ratio_max': [1.0, 2.0],
+                        'lip_ratio_p50': [1.0, 2.0],
+                        'lip_ratio_p95': [1.0, 2.0],
+                        'n_trials_per_channel': [3, 3],
+                        'n_unique_windows': 4,
+                        'step_delta_norm_mean': reference,
+                    }
+                }
+            }
+        }
+    )
+
+    assert labels == ['flow', 'temp']
+    read = report.step_delta_norm_mean
+    assert np.isnan(read) if reference is None else read == reference
+
+
 def test_too_many_channels_leave_the_page_out_rather_than_the_rest(forecast):
     """The probes are a window per channel per trial and a copy of each, so
     their memory grows with the square of the channels. Past the cap the
@@ -694,6 +764,46 @@ def test_the_normalisation_is_left_as_it_was_found(forecast):
         for module in shim.modules()
         if hasattr(module, 'eps') and hasattr(module, 'stats')
     )
+
+
+def test_the_normalisation_survives_being_held_twice(forecast):
+    """The inner one deleted the outer one's patch on its way out, and the
+    outer one then raised on a name that was no longer there."""
+    from sdm_client.explain._model import Forecaster
+
+    shim = Forecaster(forecast)
+    revins = [
+        module
+        for module in shim.modules()
+        if hasattr(module, 'eps') and hasattr(module, 'stats')
+    ]
+    with shim.differentiable_normalisation():
+        with shim.differentiable_normalisation():
+            pass
+        inner = [vars(module).get('stats') for module in revins]
+
+    assert all(held is not None for held in inner)
+    assert not any('stats' in vars(module) for module in revins)
+
+
+def test_a_normalisation_of_its_own_is_put_back(forecast):
+    """A module that carried its own statistics before any of this lost
+    them outright: the patch was deleted rather than replaced."""
+    from sdm_client.explain._model import Forecaster
+
+    shim = Forecaster(forecast)
+    revin = next(
+        module
+        for module in shim.modules()
+        if hasattr(module, 'eps') and hasattr(module, 'stats')
+    )
+    theirs = revin.stats
+    revin.stats = theirs
+
+    with shim.differentiable_normalisation():
+        pass
+
+    assert vars(revin).get('stats') is theirs
 
 
 def test_the_length_of_the_embedding_is_not_what_is_explained(forecast):

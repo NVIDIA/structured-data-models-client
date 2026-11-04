@@ -83,21 +83,35 @@ class Forecaster:
         So the statistics are taken again, differentiably, for as long as
         this is held. Everything else about the forward pass is unchanged,
         and the numbers it produces are the same ones.
+
+        What each module had before is put back rather than deleted. Two of
+        these held at once over the same forecaster left the inner one
+        deleting the outer one's patch on its way out, and the outer one
+        then raising on a name that was no longer there; a module that
+        carried its own statistics before any of this lost them outright.
         """
         from sdm.nn import RevIN
 
-        patched = [
-            module
-            for module in self._inner.modules()
-            if isinstance(module, RevIN)
-        ]
-        for module in patched:
-            module.stats = _statistics
+        held: list[tuple[torch.nn.Module, bool, Any]] = []
         try:
+            for module in self._inner.modules():
+                if not isinstance(module, RevIN):
+                    continue
+                held.append(
+                    (
+                        module,
+                        'stats' in module.__dict__,
+                        module.__dict__.get('stats'),
+                    )
+                )
+                module.stats = _statistics
             yield
         finally:
-            for module in patched:
-                del module.stats
+            for module, had_its_own, previous in reversed(held):
+                if had_its_own:
+                    module.stats = previous
+                else:
+                    module.__dict__.pop('stats', None)
 
     @property
     def prediction_size(self) -> int:

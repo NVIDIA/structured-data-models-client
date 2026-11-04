@@ -1151,9 +1151,17 @@ def _build_pdf_report(
     context_len: int | None = None,
     forecast_horizon: int | None = None,
     channel_labels: list[str] | None = None,
+    feature_axis_stability_channel_labels: list[str] | None = None,
     integrated_gradients_report: dict[str, Any] | None = None,
 ) -> Path | None:
-    """Compose a multi-page PDF with the forecast and attribution heatmap."""
+    """Compose a multi-page PDF with the forecast and attribution heatmap.
+
+    ``feature_axis_stability_channel_labels`` names the channels the
+    embedding-stability report is about, which include the series being
+    forecast. ``channel_labels`` names the ones the channel attribution is
+    about, which do not. Drawing the stability page under the latter left
+    the two lists different lengths and the channels numbered instead.
+    """
     try:
         import matplotlib as mpl
 
@@ -1556,7 +1564,8 @@ def _build_pdf_report(
                     pdf,
                     plt,
                     report=feature_axis_embedding_stability_report,
-                    channel_labels=channel_labels,
+                    channel_labels=feature_axis_stability_channel_labels
+                    or channel_labels,
                 )
             except Exception as e:
                 logger.warning(

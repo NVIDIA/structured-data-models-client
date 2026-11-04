@@ -17,6 +17,7 @@ import ast
 import builtins
 import importlib
 import pkgutil
+import symtable
 from pathlib import Path
 
 import pytest
@@ -31,46 +32,34 @@ NAMES = sorted(
 MODULES = [f'{PORTED}.{name}' for name in NAMES]
 
 
-def named(tree: ast.AST) -> set[str]:
-    """Every global name the module's code reads, bound names aside."""
-    bound: set[str] = set()
-    read: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
-            (bound if isinstance(node.ctx, ast.Store) else read).add(node.id)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            bound.add(node.name)
-            arguments = node.args
-            for argument in (
-                arguments.args
-                + arguments.posonlyargs
-                + arguments.kwonlyargs
-                + [a for a in (arguments.vararg, arguments.kwarg) if a]
-            ):
-                bound.add(argument.arg)
-        elif isinstance(node, ast.ClassDef):
-            bound.add(node.name)
-        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                bound.add(alias.asname or alias.name.split('.')[0])
-        elif isinstance(node, ast.ExceptHandler) and node.name:
-            bound.add(node.name)
-        elif isinstance(node, ast.Global):
-            bound.update(node.names)
-        elif isinstance(node, (ast.comprehension,)):
-            for target in ast.walk(node.target):
-                if isinstance(target, ast.Name):
-                    bound.add(target.id)
-    return read - bound
+def read_as_globals(source: str, filename: str) -> set[str]:
+    """Every name the module's code reads and expects to find around it.
+
+    Asked of Python's own scope analysis rather than worked out from the
+    tree. Collecting bindings by walking merges every scope into one, and a
+    parameter named `logger` in one function then resolves a `logger` that
+    another function reads and nothing defines.
+    """
+    found: set[str] = set()
+    pending = [symtable.symtable(source, filename, 'exec')]
+    while pending:
+        scope = pending.pop()
+        pending.extend(scope.get_children())
+        found.update(
+            symbol.get_name()
+            for symbol in scope.get_symbols()
+            if symbol.is_referenced() and symbol.is_global()
+        )
+    return found
 
 
 @pytest.mark.parametrize('module_name', MODULES)
 def test_the_ported_module_resolves_every_name_it_reads(module_name):
     module = importlib.import_module(module_name)
-    source = ast.parse(Path(module.__file__).read_text(encoding='utf-8'))
+    source = Path(module.__file__).read_text(encoding='utf-8')
     unresolved = {
         name
-        for name in named(source)
+        for name in read_as_globals(source, module.__file__)
         if not hasattr(module, name) and not hasattr(builtins, name)
     }
 
@@ -82,16 +71,24 @@ def test_the_ported_module_imports_nothing_from_where_it_came_from(
     module_name,
 ):
     """An import of a bare top-level module is the shape the move leaves
-    behind: upstream ran these as scripts beside one another."""
+    behind: upstream ran these as scripts beside one another. Both spellings
+    of it, because `import channel_flow` leaves the same module missing as
+    `from channel_flow import ...` does."""
     module = importlib.import_module(module_name)
     source = ast.parse(Path(module.__file__).read_text(encoding='utf-8'))
     sibling = {
-        node.module
+        named
         for node in ast.walk(source)
-        if isinstance(node, ast.ImportFrom)
-        and node.level == 0
-        and node.module is not None
-        and node.module.split('.')[0] in NAMES
+        for named in (
+            [node.module]
+            if isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module is not None
+            else [alias.name for alias in node.names]
+            if isinstance(node, ast.Import)
+            else []
+        )
+        if named.split('.')[0] in NAMES
     }
 
     assert not sibling

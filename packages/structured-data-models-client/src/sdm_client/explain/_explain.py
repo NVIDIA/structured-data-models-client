@@ -125,14 +125,25 @@ def explanation_of(
             code='UNSUPPORTED_REQUEST',
         )
     window_only = history[..., -forecaster.context_size :]
-    if feature_axis and not np.isfinite(window_only).all():
+    over_the_window = [
+        name
+        for name, asked in (
+            ('the feature axis', feature_axis),
+            ('integrated gradients', integrated_gradients),
+        )
+        if asked
+    ]
+    if over_the_window and not np.isfinite(window_only).all():
         raise StructuredDataError(
-            f'feature-axis attribution replaces a channel with its own '
-            f'average over the window it reads, which a gap in that window '
-            f'makes undefined, and the channel is then reported as having no '
-            f'influence. The window is the last {forecaster.context_size} '
-            f'steps; fill its gaps, or ask for the explanation without the '
-            f'feature axis',
+            f'this explanation was asked for '
+            f'{" and ".join(over_the_window)}, and each of those measures '
+            f'against a baseline worked out from the window it reads -- a '
+            f'channel replaced by its own average, or the window replaced by '
+            f'noise. A gap makes that baseline undefined, and every '
+            f'attribution taken against it is then NaN, which reads as no '
+            f'influence at all. The window is the last '
+            f'{forecaster.context_size} steps; fill its gaps, or ask for the '
+            f'explanation without them',
             code='UNSUPPORTED_SHAPE',
         )
     if feature_axis and horizon > forecaster.prediction_size:
