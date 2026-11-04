@@ -3911,14 +3911,16 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_automatic_batch_sessions.py"
+          "packages/structured-data-models-client/tests/test_automatic_batch_sessions.py",
+          "packages/structured-data-models-client/tests/test_temporal_link_batching.py"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/AutomaticBatchSessionTest.java"
+          "java/src/test/java/com/nvidia/sdm/AutomaticBatchSessionTest.java",
+          "java/src/test/java/com/nvidia/sdm/TemporalLinkBatchingTest.java"
         ]
       },
       "gate": "local",
-      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison."
+      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison. PQL and supplied temporal-link batches share the 200-row model cap, with ordered entity identities on memory, DuckDB and SQLite routes."
     }
   ],
   "public_api_snapshot_sha256": "61115913e10880746b6992f1011ef590046c26f0127adf7b36125a626979a412",
@@ -8257,6 +8259,16 @@
     {
       "api_contract": "automatic-batch-sessions",
       "test": "java/src/test/java/com/nvidia/sdm/AutomaticBatchSessionTest.java#livePreparedBatchPrediction",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "automatic-batch-sessions",
+      "test": "packages/structured-data-models-client/tests/test_temporal_link_batching.py::test_live_temporal_link_batches_preserve_entity_identity",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "automatic-batch-sessions",
+      "test": "java/src/test/java/com/nvidia/sdm/TemporalLinkBatchingTest.java#liveShopBatches",
       "evidence_level": "live-required"
     }
   ]

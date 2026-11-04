@@ -3807,14 +3807,23 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         };
         return labels_result(asker, &train_keys, &anchors, scalar).map(Gathered::Done);
     }
-    // How many entities one call scores: the endpoint's 10,000, or fewer
+    // How many entities one call scores: 200 for temporal links, otherwise
+    // the endpoint's 10,000, or fewer
     // where the caller asked (`rows_per_call`); a request of more is
     // gathered as several calls, each with a context of its own, at most as
     // many as the host's limit, 100 where it names none, refused once the
     // context is gathered, as the client refuses it after its engine's task
     // table (`_refuse_more_entities_than_fit_in_memory`, `main`'s 1fc5a686).
-    let per_call = usize::try_from(options::rows_one_call_scores(rows_per_call))
-        .map_err(|_| internal("a call's rows past usize"))?;
+    let batch_task = if matches!(asked.target, Shape::Links(_)) {
+        options::BatchTask::TemporalLink
+    } else {
+        options::BatchTask::Ordinary
+    };
+    let per_call = usize::try_from(options::rows_one_task_call_scores(
+        rows_per_call,
+        batch_task,
+    ))
+    .map_err(|_| internal("a call's rows past usize"))?;
     let num_test = indices.len();
     let calls = num_test.div_ceil(per_call);
     let most = most_calls.unwrap_or(MOST_CALLS);

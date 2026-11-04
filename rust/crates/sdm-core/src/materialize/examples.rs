@@ -325,11 +325,13 @@ async fn run(
     let names = crate::subgraph::sample_columns(&graph, entity, &[]);
     let per_call = if forecasting {
         1
-    } else if linking {
-        usize::try_from(call.rows_per_call.unwrap_or(200).min(200))
-            .map_err(|_| internal("batch size overflow"))?
     } else {
-        usize::try_from(options::rows_one_call_scores(call.rows_per_call))
+        let task = if linking {
+            options::BatchTask::TemporalLink
+        } else {
+            options::BatchTask::Ordinary
+        };
+        usize::try_from(options::rows_one_task_call_scores(call.rows_per_call, task))
             .map_err(|_| internal("batch size overflow"))?
     };
     let mut calls = Vec::new();
