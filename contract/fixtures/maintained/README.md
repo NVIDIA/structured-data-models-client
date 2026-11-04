@@ -15,9 +15,11 @@ The archive's external manifest additionally records every original file, its by
 - `reference-inventory.json` preserves every original case identity and captured-statement count for the recording completeness checks.
 - `postgres-statements.json` retains every distinct PostgreSQL statement with its original case and multiplicity, plus all observed key-lookup column/type layouts.
   Write-guard and provider-layout tests exercise these facts without loading full driver result logs.
-- `snowflake.json` contains the statements and result references for the 21 Snowflake cases exercised by `t36_snowflake.rs`.
+- `snowflake.json` contains the statements and result references for the 27 Snowflake cases named by `t36_snowflake.rs` and the public Python Snowflake tests.
   `snowflake/` shares identical Arrow IPC streams by their SHA-256 names.
   Original driver Arrow bytes are preserved, including their types and metadata.
+- `snowflake-public.json` shares the independent public schema and wire-payload expectations for the 14 cases named by the Python Snowflake consumer.
+  The extractor reads both consumers when selecting cases, so Python-only cases are not lost when removing capture archives.
 - `decimal-key-inputs.json` contains the setup and indices used by the current exact-decimal join tests.
   Those tests assert exact joins against ordinary-key twins and literal entity identities; they did not consume the historical decimal predictions.
 - `consumers.json` names the current consumers and reviewed byte limits for large retained fixtures.
