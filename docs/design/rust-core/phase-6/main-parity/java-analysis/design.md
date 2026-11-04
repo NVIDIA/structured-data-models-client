@@ -40,3 +40,25 @@ Confirm existing Python/Rust lanes still run and review findings rather than sup
 No model endpoint or GPU is needed.
 
 Evidence: `.github/workflows/codeql.yml:51` and `java/src/main/java/com/nvidia/sdm/`.
+
+## Implemented and verified
+
+Java uses manual extraction around `mvn -f java/pom.xml clean compile`, followed by the existing security-extended analysis.
+This resolves the real Maven dependencies, including optional adapters, without tests, JNI loading or model calls.
+[GitHub's build-mode guidance](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages) supports explicit traced builds; a clean compile avoids incremental build omissions.
+A small post-analysis check requires the source archive to contain the exact bytes of every shipped Java source.
+
+| Evidence | Result |
+|---|---|
+| Local negative/ordering regressions | Six passed; reject missing, stale and duplicate sources and an empty source tree |
+| Ruff / targeted mypy / diff whitespace | Passed |
+| [Actual branch analysis](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41751430654), code `3a16881af` | Java compiled all 101 sources; analysis and upload succeeded; archive guard verified all 101 |
+| Uploaded Java analysis | `2091068805`, one finding reviewed below |
+| Independent review | Wheel-provenance agent reviewed ownership, workflow sequencing and coverage checks; no material findings |
+
+The Java finding (`java/comparison-with-wider-type`, alert #8) points to the integer loop versus long-returning `Table.getRowCount()` in `TimeSeriesArrow`.
+Inspection of the pinned Arrow 19 bytecode confirms that `BaseTable` stores an integer row count and `getRowCount()` merely widens it; ordinary Table constructors also accept integer counts.
+No supported-input overflow defect was established, and no product code or alert suppression was added.
+An arbitrary custom subclass overriding that invariant was not treated as a normal Arrow input contract.
+The Python lane also succeeded; its existing open findings concern test-only workflow credential assertions, not a newly established product vulnerability.
+Extraction coverage and successful analysis do not certify absence of vulnerabilities or connector/model E2E parity.
