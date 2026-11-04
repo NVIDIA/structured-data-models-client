@@ -19,19 +19,21 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Callable
-from types import SimpleNamespace
 from typing import Any
 
+import pandas as pd
 import pytest
 from sample_tables import graph
 
 from sdm_client import (
+    ColumnExplanations,
     KumoRelational,
     PredictiveQuery,
     Relationship,
     Request,
     Schema,
     SDMClient,
+    SDMWarning,
 )
 from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.core.backend import NimBackend
@@ -131,6 +133,7 @@ def gathered(*users: int, first: int = 100, task: str = 'classification'):
     wrong call, gives another entity's row.
     """
     instances = {user: first + at for at, user in enumerate(users)}
+    labels = [0.0, 1.0, 0.0] if task == 'regression' else ['no', 'yes', 'no']
     related: dict[str, dict[str, Any]] = {}
     for name, (columns, _) in TABLES.items():
         rows: list[list[Any]] = []
@@ -178,7 +181,9 @@ def gathered(*users: int, first: int = 100, task: str = 'classification'):
             'instance_table': {
                 'format': 'arrays',
                 'columns': ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
-                'rows': [[0, 1, 'no'], [1, 2, 'yes'], [2, 3, 'no']],
+                'rows': [
+                    [at, at + 1, label] for at, label in enumerate(labels)
+                ],
             },
         },
         'predict': {
@@ -251,10 +256,22 @@ class Transport:
     def __init__(self, gradient_explanation) -> None:
         self.build = gradient_explanation
         self.sent: list[dict] = []
+        self.pinned: dict = {}
 
     def predict(self, payload: dict) -> dict:
         self.sent.append(payload)
         return nim_answer(payload, self.build)
+
+    def create_session(self, payload: dict) -> dict:
+        self.pinned = payload
+        return {'session_id': 's1'}
+
+    def session_predict(self, session_id: str, payload: dict) -> dict:
+        """Answered as a one-shot call over the pinned half and ``payload``."""
+        return self.predict({**self.pinned, **payload})
+
+    def delete_session(self, session_id: str) -> None:
+        return None
 
     def close(self) -> None:
         return None
@@ -293,8 +310,10 @@ def test_every_entity_is_explained_under_its_id(explained):
     Assumptions:
     - The call scores users 5 and 7, and the NIM explains both.
     """
-    assert sorted(explained.explanations) == [5, 7]
-    assert sorted(explained.explanations) == sorted(explained.to_pandas()['id'])
+    assert sorted(explained.explanations.gradients) == [5, 7]
+    assert sorted(explained.explanations.gradients) == sorted(
+        explained.to_pandas()['id']
+    )
 
 
 def test_the_engines_question_row_is_not_an_entrys_block(explained):
@@ -304,7 +323,7 @@ def test_the_engines_question_row_is_not_an_entrys_block(explained):
     Assumptions:
     - The NIM explains every record's ``instance_table`` as well.
     """
-    for entry in explained.explanations.values():
+    for entry in explained.explanations.gradients.values():
         assert set(entry) == {'outputs', 'related'}
 
 
@@ -314,7 +333,7 @@ def test_an_entity_has_a_block_for_every_related_table(explained):
     Assumptions:
     - The NIM sends one block per related table for every record.
     """
-    for entry in explained.explanations.values():
+    for entry in explained.explanations.gradients.values():
         assert set(entry['related']) == set(TABLES)
 
 
@@ -326,7 +345,7 @@ def test_related_rows_are_the_entitys_own_values_as_sent(explained):
     - The rows of the two entities are interleaved in every table, so a
       position read as the wrong row names the other entity's.
     """
-    related = explained.explanations[5]['related']
+    related = explained.explanations.gradients[5]['related']
 
     assert related['users']['rows'] == [{'user_id': 5, 'tenure_days': 30.0}]
     assert related['orders']['rows'] == [
@@ -337,9 +356,9 @@ def test_related_rows_are_the_entitys_own_values_as_sent(explained):
         {'user_id': 5, 'kind': 'login', 'seconds': 41},
         {'user_id': 5, 'kind': 'login', 'seconds': 42},
     ]
-    assert explained.explanations[7]['related']['products']['rows'] == [
-        {'product_id': 77, 'price': 4.5}
-    ]
+    assert explained.explanations.gradients[7]['related']['products'][
+        'rows'
+    ] == [{'product_id': 77, 'price': 4.5}]
 
 
 def test_a_keyed_table_gives_each_row_its_key_as_declared(explained):
@@ -350,16 +369,18 @@ def test_a_keyed_table_gives_each_row_its_key_as_declared(explained):
     - ``orders.order_id`` is declared int64, and user 7's order id is past
       2**53, so it travels as text.
     """
-    orders_7 = explained.explanations[7]['related']['orders']
+    orders_7 = explained.explanations.gradients[7]['related']['orders']
 
-    assert explained.explanations[5]['related']['orders']['keys'] == [
+    assert explained.explanations.gradients[5]['related']['orders']['keys'] == [
         9003,
         9004,
     ]
     assert orders_7['keys'] == [WIDE]
     assert isinstance(orders_7['keys'][0], int)
     assert orders_7['rows'][0]['order_id'] == str(WIDE)
-    assert explained.explanations[5]['related']['users']['keys'] == [5]
+    assert explained.explanations.gradients[5]['related']['users']['keys'] == [
+        5
+    ]
 
 
 def test_a_keyless_table_gives_rows_without_keys(explained):
@@ -368,7 +389,7 @@ def test_a_keyless_table_gives_rows_without_keys(explained):
     Assumptions:
     - ``events`` has no key of its own; the engine numbers its rows.
     """
-    events = explained.explanations[5]['related']['events']
+    events = explained.explanations.gradients[5]['related']['events']
 
     assert 'keys' not in events
     assert all('__node_id' not in row for row in events['rows'])
@@ -382,7 +403,7 @@ def test_related_gradients_are_aligned_with_rows(explained):
     - The NIM explains each related row by its numerical column ``v`` as
       ``[-v, v]``, so a gradient names the row it belongs to.
     """
-    for entry in explained.explanations.values():
+    for entry in explained.explanations.gradients.values():
         for name, block in entry['related'].items():
             column = TABLES[name][1]
             values = [row[column] for row in block['rows']]
@@ -400,7 +421,7 @@ def test_outputs_and_columns_are_passed_through(explained):
     - The NIM names its outputs and preprocessed columns; the client does not
       read or rename them.
     """
-    entry = explained.explanations[5]
+    entry = explained.explanations.gradients[5]
 
     assert entry['outputs'] == CLASSES
     assert entry['related']['events']['columns'] == ['seconds']
@@ -422,7 +443,7 @@ def test_no_explanation_asked_for_leaves_explanations_empty(
 
     result = RelationalAdapter().normalize(answer, ('prediction',), payload)
 
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
 
 
 # --- a request sent in several calls ----------------------------------------
@@ -448,14 +469,17 @@ def test_a_split_request_reads_each_call_against_its_own_rows(
         )
 
     assert len(transport.sent) == 2
-    assert sorted(result.explanations) == [5, 7]
-    seven = result.explanations[7]['related']
+    assert sorted(result.explanations.gradients) == [5, 7]
+    seven = result.explanations.gradients[7]['related']
     assert seven['users']['keys'] == [7]
     assert seven['orders']['keys'] == [WIDE]
     assert seven['events']['rows'] == [
         {'user_id': 7, 'kind': 'logout', 'seconds': 71}
     ]
-    assert result.explanations[5]['related']['orders']['keys'] == [9003, 9004]
+    assert result.explanations.gradients[5]['related']['orders']['keys'] == [
+        9003,
+        9004,
+    ]
 
 
 def test_a_split_request_whose_calls_repeat_an_id_keys_by_row_index(
@@ -477,9 +501,12 @@ def test_a_split_request_whose_calls_repeat_an_id_keys_by_row_index(
             split((5,), (5,)), model=KumoRelational(), outputs=list(EXPLAIN)
         )
 
-    assert sorted(result.explanations) == [0, 1]
-    assert result.explanations[1]['related']['users']['keys'] == [5]
-    assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
+    assert sorted(result.explanations.gradients) == [0, 1]
+    assert result.explanations.gradients[1]['related']['users']['keys'] == [5]
+    assert (
+        list(result.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
 
 
 def test_a_split_request_keeps_row_index_keys_apart(gradient_explanation):
@@ -527,9 +554,14 @@ def test_a_split_request_keeps_row_index_keys_apart(gradient_explanation):
 
     merged = PredictionResult.merge(_numbered_across_calls(calls, answer))
 
-    assert sorted(merged.explanations) == [0, 1, 2, 3]
-    assert merged.explanations[2]['instance']['gradients'] == [[-12.0], [12.0]]
-    assert sorted(merged.explanations) == list(merged.to_pandas()['row_index'])
+    assert sorted(merged.explanations.gradients) == [0, 1, 2, 3]
+    assert merged.explanations.gradients[2]['instance']['gradients'] == [
+        [-12.0],
+        [12.0],
+    ]
+    assert sorted(merged.explanations.gradients) == list(
+        merged.to_pandas()['row_index']
+    )
 
 
 def _entry(gradient: float) -> dict:
@@ -559,8 +591,8 @@ def test_hand_built_parts_with_unique_ids_merge_under_their_ids(
         ]
     )
 
-    assert sorted(merged.explanations) == ['u5', 'u7']
-    assert list(merged.explanations.to_pandas().columns)[0] == 'id'
+    assert sorted(merged.explanations.gradients) == ['u5', 'u7']
+    assert list(merged.explanations.gradients.to_pandas().columns)[0] == 'id'
 
 
 def test_hand_built_parts_repeating_an_id_merge_by_row_index(
@@ -583,10 +615,15 @@ def test_hand_built_parts_repeating_an_id_merge_by_row_index(
         ]
     )
 
-    assert sorted(merged.explanations) == list(merged.to_pandas()['row_index'])
-    assert sorted(merged.explanations) == [0, 1]
-    assert merged.explanations[1]['instance']['gradients'] == [[2.0]]
-    assert list(merged.explanations.to_pandas().columns)[0] == 'row_index'
+    assert sorted(merged.explanations.gradients) == list(
+        merged.to_pandas()['row_index']
+    )
+    assert sorted(merged.explanations.gradients) == [0, 1]
+    assert merged.explanations.gradients[1]['instance']['gradients'] == [[2.0]]
+    assert (
+        list(merged.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
 
 
 def test_hand_built_forecast_parts_repeating_an_id_merge_by_row_and_step(
@@ -609,8 +646,8 @@ def test_hand_built_forecast_parts_repeating_an_id_merge_by_row_and_step(
         ]
     )
 
-    assert sorted(merged.explanations) == [(0, 1), (1, 1)]
-    flat = merged.explanations.to_pandas()
+    assert sorted(merged.explanations.gradients) == [(0, 1), (1, 1)]
+    flat = merged.explanations.gradients.to_pandas()
     assert list(flat.columns)[:2] == ['row_index', 'forecast_step']
 
 
@@ -645,59 +682,50 @@ def test_hand_built_parts_whose_rows_cannot_be_found_are_refused(
 # --- a forecast ---------------------------------------------------------------
 
 
-def forecast(gradient_explanation, steps: int = 2):
-    """A forecast of users 5 and 7 over ``steps`` steps, through the client's
-    decomposed route, each step answered by the adapter as the NIM would."""
-    from sdm_client.decompose import Decomposition
-
-    rewritten = Decomposition(
-        'forecast', tuple((f'q{step}', step) for step in range(1, steps + 1))
+@pytest.fixture
+def forecast(monkeypatch, relational_endpoint):
+    """A two-step forecast of users 5 and 7 through ``predict()``, each step a
+    regression the endpoint answers and explains as the NIM would."""
+    client, _ = relational_endpoint()
+    request = relational_asked(
+        monkeypatch, FORECAST.removeprefix('EXPLAIN '), kind='regression'
     )
-    request = SimpleNamespace(
-        _decomposition=rewritten, parts=tuple(object() for _ in range(steps))
-    )
-    adapter = RelationalAdapter()
-    answers = []
-    for _ in range(steps):
-        payload = gathered(5, 7, task='regression')
-        answer = nim_answer(payload, gradient_explanation)
-        for record in answer['predictions']:
-            record['prediction'] = 1.0
-            del record['probabilities']
-        answers.append(adapter.normalize(answer, EXPLAIN, payload))
-    client = SDMClient.__new__(SDMClient)
-    handed = iter(answers)
-    client.predict = lambda part, model, outputs: next(handed)
-    return SDMClient._answer_in_parts(
-        client, request, 'kumo-relational', ['prediction', 'explanation']
+    return client.predict(
+        request, model=KumoRelational(), outputs=['prediction', 'explanation']
     )
 
 
-def test_a_forecast_is_explained_under_id_and_step(gradient_explanation):
+def test_a_forecast_is_explained_under_id_and_step(forecast):
     """Each point of a forecast is explained under ``(id, forecast_step)``,
     and nothing is gathered under ``by_forecast_step``.
 
     Assumptions:
-    - Two steps, each answered with an explanation for users 5 and 7.
+    - Two steps, built by the real ``materialize()`` with gathering stood
+      in for, each answered with an explanation for users 5 and 7.
     """
-    result = forecast(gradient_explanation)
+    result = forecast
 
-    assert sorted(result.explanations) == [(5, 1), (5, 2), (7, 1), (7, 2)]
-    assert 'by_forecast_step' not in result.explanations
+    assert sorted(result.explanations.gradients) == [
+        (5, 1),
+        (5, 2),
+        (7, 1),
+        (7, 2),
+    ]
+    assert 'by_forecast_step' not in result.explanations.gradients
     frame = result.to_pandas()
-    assert sorted(result.explanations) == sorted(
+    assert sorted(result.explanations.gradients) == sorted(
         zip(frame['id'], frame['forecast_step'], strict=True)
     )
 
 
-def test_a_forecasts_flat_table_names_the_step(gradient_explanation):
+def test_a_forecasts_flat_table_names_the_step(forecast):
     """``to_pandas()`` of a forecast's explanations starts with ``id`` and
     ``forecast_step``.
 
     Assumptions:
-    - Two steps, each explained.
+    - Two steps, built by the real ``materialize()``, each explained.
     """
-    flat = forecast(gradient_explanation).explanations.to_pandas()
+    flat = forecast.explanations.gradients.to_pandas()
 
     assert list(flat.columns)[:3] == ['id', 'forecast_step', 'table']
     assert sorted(set(flat['forecast_step'])) == [1, 2]
@@ -812,7 +840,7 @@ def test_relational_asks_for_explanation(
     )
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert sorted(result.explanations) == [5, 7]
+    assert sorted(result.explanations.gradients) == [5, 7]
 
 
 @pytest.fixture
@@ -873,7 +901,12 @@ def test_forecast_explains_every_step(
     )
 
     assert fields_sent(endpoint.sent) == [['prediction', 'explanation']] * 2
-    assert sorted(result.explanations) == [(5, 1), (5, 2), (7, 1), (7, 2)]
+    assert sorted(result.explanations.gradients) == [
+        (5, 1),
+        (5, 2),
+        (7, 1),
+        (7, 2),
+    ]
 
 
 def test_forecast_names_an_unexplained_step(monkeypatch, relational_endpoint):
@@ -922,7 +955,7 @@ def test_the_flat_table_has_the_documented_columns(explained):
     Assumptions:
     - The entities are keyed by id.
     """
-    assert list(explained.explanations.to_pandas().columns) == [
+    assert list(explained.explanations.gradients.to_pandas().columns) == [
         'id',
         'table',
         'hop',
@@ -941,7 +974,7 @@ def test_the_flat_table_has_a_line_per_row_table_output_and_column(explained):
     - Each block has one column and two outputs. User 5 has 1 + 2 + 2 + 2
       related rows and user 7 has 1 + 1 + 1 + 1; the question row is dropped.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
 
     assert len(flat) == 2 * 7 + 2 * 4
     assert len(flat[(flat['id'] == 5) & (flat['table'] == 'orders')]) == 4
@@ -955,7 +988,7 @@ def test_the_flat_table_counts_hops_from_the_entity(explained):
     - ``users`` holds the entity, ``orders`` and ``events`` link
       to ``users``, and ``products`` is linked from ``orders``.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
     linked = flat[(flat['id'] == 5) & (flat['key'] != 88)]
 
     hops = linked.groupby('table')['hop'].unique()
@@ -974,7 +1007,7 @@ def test_the_flat_table_leaves_the_hop_of_an_unlinked_row_empty(explained):
     Assumptions:
     - Product 88 is sampled for user 5, and no order of theirs names it.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
 
     unlinked = flat[(flat['table'] == 'products') & (flat['key'] == 88)]
 
@@ -989,7 +1022,7 @@ def test_the_flat_table_names_rows_by_key_and_position(explained):
     Assumptions:
     - User 5 has two orders and two keyless events.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
     five = flat[flat['id'] == 5]
 
     orders = five[five['table'] == 'orders']
@@ -1013,7 +1046,7 @@ def test_the_flat_table_names_each_output_as_the_frame_does(explained):
     Assumptions:
     - The NIM explains both class probabilities and returns them.
     """
-    named = set(explained.explanations.to_pandas()['output'])
+    named = set(explained.explanations.gradients.to_pandas()['output'])
 
     assert named == {'probability_no', 'probability_yes'}
     assert named <= set(explained.to_pandas().columns)
@@ -1043,7 +1076,517 @@ def test_a_boolean_class_is_named_by_the_frames_column_for_it(
             output['class'] = name
     result = RelationalAdapter().normalize(answer, EXPLAIN, payload)
 
-    named = set(result.explanations.to_pandas()['output'])
+    named = set(result.explanations.gradients.to_pandas()['output'])
 
     assert named == {'probability_False', 'probability_True'}
     assert named <= set(result.to_pandas().columns)
+
+
+# --- column analysis, made once per request -------------------------------
+#
+# Each labelled context below gives every entity one ``users`` row, so the
+# analysis has one ``COUNT(*)`` cohort holding every entity, and its mean per
+# class is that class's share of the context's labels.
+
+#: Two of four entities labelled ``'yes'``.
+EVEN = [(1, 'no'), (2, 'yes'), (3, 'no'), (4, 'yes')]
+#: One of three entities labelled ``'yes'``.
+SKEWED = [(1, 'no'), (2, 'yes'), (3, 'no')]
+
+
+def labelled(payload: dict, entities: list[tuple[int, Any]]) -> dict:
+    """``payload`` with its context replaced by ``entities``, each an
+    ``(entity, label)`` with one linked ``users`` row."""
+    payload['context'] = {
+        'instance_table': {
+            'format': 'arrays',
+            'columns': ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
+            'rows': [
+                [at, entity, label]
+                for at, (entity, label) in enumerate(entities)
+            ],
+        },
+        'related_tables': {
+            'users': {
+                'format': 'arrays',
+                'columns': TABLES['users'][0],
+                'rows': [
+                    [at, entity, 1.0] for at, (entity, _) in enumerate(entities)
+                ],
+            }
+        },
+    }
+    return payload
+
+
+def gathering(monkeypatch, *calls: tuple[dict, ...]) -> None:
+    """Answer each gather with the next of ``calls``, a tuple of payloads."""
+    handed = iter(calls)
+    monkeypatch.setattr(
+        RelationalMaterializer,
+        '_gather',
+        lambda self, query, indices, num_context_samples, options: next(handed),
+    )
+
+
+def asked_over(monkeypatch, entities, text: str = TIER) -> Request:
+    """``text`` scoring users 5 and 7 over the context ``entities``."""
+    gathering(monkeypatch, (labelled(gathered(5, 7), entities),))
+    return materialized(text)
+
+
+def label_means(result) -> dict[Any, float]:
+    """Per class, the mean in the ``users`` ``COUNT(*)`` cohort."""
+    frame = result.explanations.columns.to_pandas()
+    count = frame[(frame['table'] == 'users') & (frame['column'] == 'COUNT(*)')]
+    assert list(count['cohort'].unique()) == ['[1 - 1+]']
+    assert set(count['share']) == {1.0}
+    return dict(zip(count['class'], count['mean'], strict=True))
+
+
+@pytest.mark.parametrize(
+    ('outputs', 'analysed'),
+    [(['prediction'], False), (['prediction', 'explanation'], True)],
+    ids=['not asked', 'asked'],
+)
+def test_relational_one_shot_analysis_only_when_explained(
+    monkeypatch, relational_endpoint, outputs, analysed
+):
+    """A one-shot relational answer carries a column analysis exactly when an
+    explanation was asked for.
+
+    Assumptions:
+    - Gathering is stood in for; the endpoint explains every call.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            asked_over(monkeypatch, EVEN),
+            model=KumoRelational(),
+            outputs=outputs,
+        )
+
+    assert (result.explanations.columns is not None) is analysed
+
+
+def test_relational_one_shot_predicts_analyse_apart(
+    monkeypatch, relational_endpoint
+):
+    """Separate ``predict()`` calls each analyse their own request's context.
+
+    Assumptions:
+    - The first request's context is ``EVEN`` (yes 1/2), the second's
+      ``SKEWED`` (yes 1/3).
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        even, skewed = (
+            client.predict(
+                asked_over(monkeypatch, entities),
+                model=KumoRelational(),
+                outputs=['prediction', 'explanation'],
+            )
+            for entities in (EVEN, SKEWED)
+        )
+
+    assert label_means(even) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
+    assert label_means(skewed) == pytest.approx({'no': 2 / 3, 'yes': 1 / 3})
+
+
+def test_relational_fits_analyse_apart_and_after_the_holdout(
+    monkeypatch, relational_endpoint
+):
+    """Separate ``fit()`` calls each analyse what they pin, and a holdout is
+    out of it: holding entity 4 back leaves yes at 1/3, not 1/2.
+
+    Assumptions:
+    - Both sessions are fitted over ``EVEN``; the second holds 4 back.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        whole, held = (
+            client.fit(
+                asked_over(monkeypatch, EVEN),
+                model=KumoRelational(),
+                outputs=['prediction', 'explanation'],
+                holdout=holdout,
+            ).predict(asked_over(monkeypatch, EVEN))
+            for holdout in (None, [4])
+        )
+
+    assert label_means(whole) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
+    assert label_means(held) == pytest.approx({'no': 2 / 3, 'yes': 1 / 3})
+
+
+def test_a_relational_session_keeps_its_fit_time_analysis(
+    monkeypatch, relational_endpoint
+):
+    """A session's answers all carry the one analysis made at fit, even for a
+    request re-materialized over a different context.
+
+    Assumptions:
+    - Fitted over ``EVEN``; the later requests are gathered over ``EVEN``
+      and then ``SKEWED``, and both are accepted as the pinned question.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fitted = client.fit(
+            asked_over(monkeypatch, EVEN),
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+        same = fitted.predict(asked_over(monkeypatch, EVEN))
+        other = fitted.predict(asked_over(monkeypatch, SKEWED))
+
+    assert other.explanations.columns is same.explanations.columns
+    assert label_means(other) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
+
+
+def test_a_split_request_analyses_its_context_before_the_drop(
+    monkeypatch, relational_endpoint
+):
+    """A request gathered as two calls is analysed once, over the context as
+    gathered, before the scored entities' own rows were dropped from it.
+
+    Assumptions:
+    - Both calls share one context of five entities, two of them the scored
+      users 5 and 7: yes 2/5 as gathered, 1/3 once they are dropped.
+    """
+    gathered_as = [(1, 'no'), (5, 'yes'), (7, 'no'), (2, 'yes'), (3, 'no')]
+    first = labelled(gathered(5), gathered_as)
+    second = gathered(7)
+    second['context'] = first['context']
+    gathering(monkeypatch, (first, second))
+    client, endpoint = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            materialized(TIER),
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    assert [
+        [row[1] for row in sent['context']['instance_table']['rows']]
+        for sent in endpoint.sent
+    ] == [[1, 2, 3], [1, 2, 3]]
+    assert label_means(result) == pytest.approx({'no': 3 / 5, 'yes': 2 / 5})
+
+
+def test_a_forecast_is_analysed_over_every_steps_rows(
+    monkeypatch, relational_endpoint
+):
+    """A forecast carries one analysis over every step's labelled rows, each
+    step's entities kept apart: the mean label is over all six rows.
+
+    Assumptions:
+    - Two steps gathered over three entities each, labelled 0, 1, 0 and
+      then 3, 3, 3: 10/6 over both, 1/3 over the first alone.
+    - Both steps number their instances from 0; one ``COUNT(*)`` cohort at
+      1 shows no entity took another step's ``users`` row.
+    """
+    gathering(
+        monkeypatch,
+        *(
+            (labelled(gathered(5, 7, task='regression'), labels),)
+            for labels in (
+                [(1, 0.0), (2, 1.0), (3, 0.0)],
+                [(1, 3.0), (2, 3.0), (3, 3.0)],
+            )
+        ),
+    )
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(materialized(FORECAST), model=KumoRelational())
+
+    assert label_means(result) == pytest.approx({None: 10 / 6})
+
+
+def test_a_forecast_analyses_a_table_only_some_steps_reached(
+    monkeypatch, relational_endpoint
+):
+    """A related table one step's context lacks is still analysed, each of
+    its rows read against the entity of the step that carried it.
+
+    Assumptions:
+    - Two steps over entities 1, 2, 3 (instances 0-2 in each), labelled
+      0, 10, 0 and then 100, 200, 300.
+    - ``orders`` (``amount`` 1, 2, 3) is reached only in step 1, ``events``
+      (``seconds`` 10, 20, 30) only in step 2, one row per entity; both
+      columns are numerical. An entity with no row of a table drops out of
+      that column's cohorts.
+    - Each step's schema names only ``users`` and the table it reached, with
+      their links, as the engine sends it.
+    - Hand-computed: deciles of 10, 20, 30 are 10, 12, ..., 30; the values
+      land in the bins ending 12, 20 and 30, so the kept cohorts are
+      [10 - 12], (12 - 20], (20 - 30], one entity each, means 100, 200,
+      300. Read against step 1's entities instead, they would be 0, 10, 0;
+      dropped, ``events`` would be absent.
+    """
+
+    def step(labels: list[float], table: str, values: list[float]) -> dict:
+        entities = list(zip([1, 2, 3], labels, strict=True))
+        payload = labelled(gathered(5, 7, task='regression'), entities)
+        columns = TABLES[table][0]
+        # As the engine sends it: the schema names only the tables this
+        # step reached, and the links between them.
+        schema = payload['schema']
+        kept = {'users', table}
+        schema['related_tables'] = {
+            name: described
+            for name, described in schema['related_tables'].items()
+            if name in kept
+        }
+        schema['relationships'] = [
+            link
+            for link in schema['relationships']
+            if link.get('source_table', 'users') in kept
+            and link['target_table'] in kept
+        ]
+        described = schema['related_tables'][table]
+        described['columns'][TABLES[table][1]]['stype'] = 'numerical'
+        rows = {
+            'orders': lambda at, entity, value: [
+                at,
+                9000 + at,
+                entity,
+                77,
+                value,
+            ],
+            'events': lambda at, entity, value: [
+                at,
+                at,
+                entity,
+                'login',
+                value,
+            ],
+        }[table]
+        payload['context']['related_tables'][table] = {
+            'format': 'arrays',
+            'columns': columns,
+            'rows': [
+                rows(at, entity, value)
+                for at, ((entity, _), value) in enumerate(
+                    zip(entities, values, strict=True)
+                )
+            ],
+        }
+        return payload
+
+    gathering(
+        monkeypatch,
+        (step([0.0, 10.0, 0.0], 'orders', [1.0, 2.0, 3.0]),),
+        (step([100.0, 200.0, 300.0], 'events', [10.0, 20.0, 30.0]),),
+    )
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(materialized(FORECAST), model=KumoRelational())
+
+    frame = result.explanations.columns.to_pandas()
+    analysed = {
+        column: (
+            list(cohorts['cohort']),
+            list(cohorts['share']),
+            list(cohorts['mean']),
+        )
+        for column, cohorts in frame.groupby('column')
+        if column in ('amount', 'seconds')
+    }
+    assert analysed['seconds'][0] == ['[10 - 12]', '(12 - 20]', '(20 - 30]']
+    assert analysed['seconds'][1] == pytest.approx([1 / 3] * 3)
+    assert analysed['seconds'][2] == pytest.approx([100.0, 200.0, 300.0])
+    assert analysed['amount'][0] == ['[1 - 1.20]', '(1.20 - 2]', '(2 - 3]']
+    assert analysed['amount'][2] == pytest.approx([0.0, 10.0, 0.0])
+
+
+def test_time_cohorts_hold_every_rows_age():
+    """Each related row's age before its own entity's anchor falls in the
+    time cohort whose label contains it: the oldest in the closed last
+    cohort, one exactly on an edge in the cohort that edge opens.
+
+    Assumptions:
+    - Entity 1 (label 100) is anchored 2024-01-31 with one event on
+      2024-01-01, 30 days old; entity 2 (label 10) is anchored 2024-01-11
+      with events on 2024-01-05 and 2024-01-01, 6 and 10 days old.
+    - Cohort width is the oldest age over ten, rounded up, so ten cohorts
+      cover it; an age on an edge goes in the cohort that edge opens, and
+      the last cohort is closed.
+    - Hand-computed: the oldest age, 30 days, gives 3-day cohorts ending at
+      30. 6 opens [6, 9), 10 is in [9, 12), 30 closes [27, 30]. Each entity weighs 1, split over its rows, so the shares are
+      1/4, 1/4, 1/2 and the means 10, 10, 100.
+    - The raw timestamps span 4 days, which gave 1-day cohorts up to 10
+      days: 30 fell in [9, 10) and 6 in [5, 6).
+    """
+    events = [(1, '2024-01-01'), (2, '2024-01-05'), (2, '2024-01-01')]
+    payload = labelled(
+        gathered(5, 7, task='regression'), [(1, 100.0), (2, 10.0)]
+    )
+    payload['task']['anchor_time_column'] = 'anchor'
+    instance = payload['context']['instance_table']
+    instance['columns'].append('anchor')
+    for row, anchor in zip(
+        instance['rows'], ['2024-01-31', '2024-01-11'], strict=True
+    ):
+        row.append(anchor)
+    payload['schema']['related_tables']['events'] = {
+        'columns': {
+            'instance_id': {'dtype': 'int64'},
+            '__node_id': {'dtype': 'int64'},
+            'user_id': {'dtype': 'int64'},
+            'at': {'dtype': 'datetime64[ns]', 'stype': 'timestamp'},
+        },
+        'primary_key': PRIMARY_KEYS['events'],
+    }
+    payload['context']['related_tables']['events'] = {
+        'format': 'arrays',
+        'columns': ['instance_id', '__node_id', 'user_id', 'at'],
+        'rows': [
+            [entity - 1, node, entity, at]
+            for node, (entity, at) in enumerate(events)
+        ],
+    }
+
+    frame = ColumnExplanations(payload).to_pandas()
+
+    cohorts = frame[frame['column'] == 'at']
+    assert list(cohorts['cohort']) == [
+        '[6 days, 9 days)',
+        '[9 days, 12 days)',
+        '[27 days, 30 days]',
+    ]
+    assert list(cohorts['share']) == pytest.approx([1 / 4, 1 / 4, 1 / 2])
+    assert list(cohorts['mean']) == pytest.approx([10.0, 10.0, 100.0])
+
+
+def numbered(values: list[float]) -> pd.DataFrame:
+    """The analysis of a regression context whose ``users.tenure_days``,
+    analysed as numerical, holds ``values``, one entity each."""
+    entities = [(at + 1, float(at)) for at in range(len(values))]
+    payload = labelled(gathered(5, 7, task='regression'), entities)
+    users = payload['schema']['related_tables']['users']
+    users['columns']['tenure_days']['stype'] = 'numerical'
+    rows = payload['context']['related_tables']['users']['rows']
+    for row, value in zip(rows, values, strict=True):
+        row[2] = value
+    return ColumnExplanations(payload).to_pandas()
+
+
+def test_large_numeric_edges_keep_distinct_labels():
+    """Cohort edges of large, close values print in full, so no two cohort
+    labels collide and none is in scientific notation.
+
+    Assumptions:
+    - Ten entities with ``tenure_days`` 10000 to 10009, one row each.
+    - Hand-computed: the deciles step by 0.9 (10000, 10000.90, ...); four
+      significant digits would print most of them as ``1e+04``.
+    """
+    frame = numbered([10000.0 + at for at in range(10)])
+
+    labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    assert len(labels) == 10
+    assert all('e+' not in label and 'e-' not in label for label in labels)
+
+
+def test_whole_number_edges_print_without_decimals():
+    """Whole-number cohort edges, numerical and ``COUNT(*)``, print with no
+    ``.00``.
+
+    Assumptions:
+    - Eleven entities with ``tenure_days`` 0 to 10, one ``users`` row each.
+    - Hand-computed: the deciles are 0, 1, ..., 10, each value but 0 ending
+      its own bin; every entity has 1 linked row, so ``COUNT(*)`` is one
+      cohort, open-ended.
+    """
+    frame = numbered([float(at) for at in range(11)])
+
+    tenure = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    count = list(frame[frame['column'] == 'COUNT(*)']['cohort'].unique())
+    assert tenure == [
+        '[0 - 1]',
+        *(f'({at} - {at + 1}]' for at in range(1, 10)),
+    ]
+    assert count == ['[1 - 1+]']
+
+
+def test_fractional_edges_keep_two_decimals():
+    """A fractional cohort edge prints rounded to two decimals.
+
+    Assumptions:
+    - Two entities with ``tenure_days`` 0 and 1660 / 7 (237.142857...).
+    - Hand-computed: the deciles step by 23.714285...; 0 falls in the first
+      bin and 1660 / 7 in the last, and the empty bins between merge into
+      it, so the second cohort opens at 23.714285...
+    """
+    frame = numbered([0.0, 1660 / 7])
+
+    labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    assert labels == ['[0 - 23.71]', '(23.71 - 237.14]']
+
+
+def test_a_forecast_not_explained_is_not_analysed(
+    monkeypatch, relational_endpoint
+):
+    """A forecast asked without an explanation carries no analysis.
+
+    Assumptions:
+    - Two steps, asked for the prediction only.
+    """
+    client, _ = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            relational_asked(
+                monkeypatch,
+                FORECAST.removeprefix('EXPLAIN '),
+                kind='regression',
+            ),
+            model=KumoRelational(),
+            outputs=['prediction'],
+        )
+
+    assert result.explanations.columns is None
+
+
+def test_a_failed_analysis_does_not_block_a_forecast(
+    monkeypatch, relational_endpoint, failing_analysis
+):
+    """An explained forecast whose analysis raises warns, naming the error,
+    and still answers every step with no column analysis.
+
+    Assumptions:
+    - The analysis is made to raise; two steps over users 5 and 7, gathering
+      stood in for.
+    """
+    client, _ = relational_endpoint()
+    request = relational_asked(monkeypatch, FORECAST, kind='regression')
+
+    with pytest.warns(
+        SDMWarning, match=f'this request failed.*{failing_analysis}'
+    ):
+        result = client.predict(
+            request,
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    assert sorted(result.explanations.gradients) == [
+        (5, 1),
+        (5, 2),
+        (7, 1),
+        (7, 2),
+    ]
+    assert result.explanations.columns is None

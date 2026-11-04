@@ -6,7 +6,7 @@ explanation.
 ```python
 result = client.predict(request, model=KumoRelational())
 result.to_pandas()  # always a frame
-result.explanations  # empty unless you asked for them
+result.explanations  # .gradients and .columns, empty unless you asked for them
 result.metadata  # whatever the endpoint reported
 ```
 
@@ -135,20 +135,27 @@ call would ask for anyway; passing both is allowed and redundant. A ranking refu
 assembled client-side from per-candidate classifications; a forecast explains
 each step.
 
+`result.explanations` has two parts:
+
+- `gradients`: one entry per scored row, returned by the endpoint. Described
+  from [Keys](#keys) to [As one table](#as-one-table).
+- `columns`: per-column cohort statistics over the labelled context, computed
+  by the client. See [Column explanations](#column-explanations).
+
 ### Keys
 
-`result.explanations` maps a row's key to that row's explanation. It is kept
-out of `result.to_pandas()`. `result.explanation` is deprecated, see
-`result.explanations`; there is no `{'by_forecast_step': ...}`.
+`result.explanations.gradients` maps a row's key to that row's explanation. It
+is kept out of `result.to_pandas()`. `result.explanation` is deprecated, see
+`result.explanations.gradients`; there is no `{'by_forecast_step': ...}`.
 
 The key is whatever identifies the row in `to_pandas()`, by the same rule on
 both models:
 
 | Request | Key | Example |
 |---|---|---|
-| has an entity id, none repeated | the row's `id`, the same value as in `to_pandas()['id']` | `result.explanations['user_5']` |
-| forecast | `(id, forecast_step)`, or `(row_index, forecast_step)` when ids repeat | `result.explanations[('user_5', 3)]` |
-| no id column, or its ids repeat | `row_index` | `result.explanations[0]` |
+| has an entity id, none repeated | the row's `id`, the same value as in `to_pandas()['id']` | `result.explanations.gradients['user_5']` |
+| forecast | `(id, forecast_step)`, or `(row_index, forecast_step)` when ids repeat | `result.explanations.gradients[('user_5', 3)]` |
+| no id column, or its ids repeat | `row_index` | `result.explanations.gradients[0]` |
 
 ### One entry
 
@@ -222,7 +229,7 @@ same way.
 Values are illustrative. `kumo-tabular`, request with an id column:
 
 ```python
-result.explanations['cust_17']
+result.explanations.gradients['cust_17']
 # {'outputs': [{'kind': 'probability', 'class': 'no'},
 #              {'kind': 'probability', 'class': 'yes'}],
 #  'instance': {'columns': ['age', 'balance'],
@@ -234,7 +241,7 @@ result.explanations['cust_17']
 identified by their values. All are part of the same entry:
 
 ```python
-result.explanations['user_5']
+result.explanations.gradients['user_5']
 # {'outputs': [{'kind': 'probability', 'class': 'no'},
 #              {'kind': 'probability', 'class': 'yes'}],
 #  'related': {
@@ -254,7 +261,7 @@ result.explanations['user_5']
 
 ### As one table
 
-`result.explanations.to_pandas()` gives one line per (row, output, column),
+`result.explanations.gradients.to_pandas()` gives one line per (row, output, column),
 across all entities:
 
 ```
@@ -277,3 +284,51 @@ user_5  events    1    None        1    probability_yes  kind_login   -0.02
   `related[table]['rows']`, and 0 on a `kumo-tabular` `instance` line.
 - `output` names the score by the column of `result.to_pandas()` that holds
   it: `probability_yes`, `prediction`, `quantile_0.1`.
+
+### Column explanations
+
+`result.explanations.columns` shows, for each column, how the outcome differs
+across groups of the labelled context rows. The client computes it from the
+labelled rows it sends; the endpoint is not asked for it. It is `None` when
+explanations were not asked for.
+
+When it is computed:
+
+- `predict()`: on each call that asks for explanations, from that request's
+  labelled rows. A forecast has one analysis, over every step's labelled rows
+  together, each with that step's outcome.
+- a session: once, at `fit()`, from the pinned labelled rows after `holdout`
+  is taken out. The same analysis is attached to every answer when `fit()`
+  asked for `'explanation'`, otherwise only to a prediction whose query begins
+  `EXPLAIN`.
+
+Each column is split into cohorts: numerical values into up to 10 quantile
+bins, categories into one cohort each (the tenth onward merged into
+`OTHER(*)`, missing values under `N/A`), timestamps into ranges of time before
+the anchor. Each cohort has its `share` of the entities and its `mean`
+outcome: the rate of each class for classification (classes by frequency, at
+most 30), the plain mean for regression. A column's `score` is how much its
+cohort means spread, weighted by share and averaged over classes; scores sum
+to 1 across columns.
+
+| Model | Columns analysed |
+|---|---|
+| kumo-tabular | every column of the one table except the target, the primary key and timestamps (there is no anchor), reported under table `instance_table` |
+| kumo-relational | every column of each related table except keys, per hop the table is reached at, plus `COUNT(*)`, the number of that table's rows linked to the entity. The entity's own table is not analysed. |
+
+On `kumo-relational` an entity's related rows at one hop are averaged first,
+then entities are grouped into cohorts.
+
+`result.explanations.columns.to_pandas()` gives one line per (table, hop,
+column, cohort, class), highest `score` first. Values are illustrative, and
+the `no` lines are left out:
+
+```
+table   hop  column    stype      cohort       class  share  mean  score
+orders  1    COUNT(*)  None       [0 - 0]      yes    0.30   0.12  0.41
+orders  1    COUNT(*)  None       (0 - 3]      yes    0.45   0.38  0.41
+orders  1    COUNT(*)  None       (3 - 18+]    yes    0.25   0.71  0.41
+orders  1    amount    numerical  [3 - 12]     yes    0.50   0.22  0.27
+```
+
+`class` is `None` for regression. `stype` is `None` on a `COUNT(*)` line.

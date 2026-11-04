@@ -687,8 +687,8 @@ def test_a_tabular_answer_carries_a_nim_record_per_row(tabular, target):
             {'kind': 'probability', 'class': name}
             for name in item.probabilities
         ]
-    assert len(result.explanations) == len(frame)
-    for entry in result.explanations.values():
+    assert len(result.explanations.gradients) == len(frame)
+    for entry in result.explanations.gradients.values():
         assert set(entry) >= {'outputs', 'instance'}
         assert sorted(entry['instance']['columns']) == ['age', 'visits']
 
@@ -759,7 +759,7 @@ def test_nothing_is_explained_unless_asked(tabular, explains):
 
     assert explains == []
     assert all(item.explanation is None for item in result)
-    assert len(result.explanations) == 0
+    assert len(result.explanations.gradients) == 0
 
 
 def regression_answer(tabular, fields, levels=None) -> Any:
@@ -826,7 +826,7 @@ def test_a_session_explains_when_asked(tabular, explains):
             result = fitted.predict(request)
 
     assert len(explains) == 1
-    assert len(result.explanations) == len(result) > 0
+    assert len(result.explanations.gradients) == len(result) > 0
     assert {item.explanation['format'] for item in result} == {
         'sdm_gradient_v1'
     }
@@ -849,8 +849,8 @@ def test_a_relational_answer_explains_each_entity_and_its_rows(relational):
     assert {item.explanation['format'] for item in result} == {
         'sdm_gradient_v1'
     }
-    assert len(result.explanations) == 2
-    for entry in result.explanations.values():
+    assert len(result.explanations.gradients) == 2
+    for entry in result.explanations.gradients.values():
         assert set(entry) == {'outputs', 'related'}
         assert 'users' in entry['related']
         assert [output['kind'] for output in entry['outputs']] == [
@@ -870,7 +870,7 @@ def test_in_process_tabular_explains(tabular):
             tabular_asked(f'EXPLAIN {CHURN}'), model=KumoTabular()
         )
 
-    assert len(result.explanations) == len(result) == 2
+    assert len(result.explanations.gradients) == len(result) == 2
     assert {item.explanation['format'] for item in result} == {
         'sdm_gradient_v1'
     }
@@ -894,4 +894,4 @@ def test_in_process_relational_explains(relational):
         with SDMClient.in_process(relational) as client:
             result = client.predict(request, model=KumoRelational())
 
-    assert len(result.explanations) == len(result) == 2
+    assert len(result.explanations.gradients) == len(result) == 2

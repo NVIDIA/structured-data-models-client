@@ -40,7 +40,7 @@ from sdm_client.errors import (
     StructuredDataError,
     UnsupportedRequestError,
 )
-from sdm_client.explanations import GradientDecoder
+from sdm_client.explanations import Explanations, GradientDecoder
 from sdm_client.models import (
     DEFAULT_PREDICTION_STATISTIC,
     KUMO_RELATIONAL,
@@ -290,9 +290,11 @@ class RelationalAdapter:
             items=named,
             metadata=dict(metadata or {}),
             outputs=outputs,
-            # Read against this call's own tables, whose positions restart at
-            # 0 in every call of a split request.
-            explanations=GradientDecoder(payload or {}).decode(named),
+            explanations=Explanations(
+                # Read against this call's own tables, whose positions restart
+                # at 0 in every call of a split request.
+                GradientDecoder(payload or {}).decode(named),
+            ),
         )
 
     def explain_error(

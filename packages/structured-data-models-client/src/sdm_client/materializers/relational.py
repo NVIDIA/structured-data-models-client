@@ -303,8 +303,9 @@ class RelationalMaterializer:
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
+        labelled = copy.deepcopy(payloads[0]['context'])
         _drop_context_that_answers_the_question(payloads, windowed=windowed)
-        return Request.materialized(
+        request = Request.materialized(
             payloads=payloads,
             windowed=windowed,
             schema=self.schema.snapshot(),
@@ -320,6 +321,8 @@ class RelationalMaterializer:
                 )
             },
         )
+        request._labelled_context = labelled
+        return request
 
     def _gather(
         self,

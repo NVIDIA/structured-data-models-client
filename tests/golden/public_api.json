@@ -112,6 +112,8 @@
   "sdm_client": {
     "__all__": [
       "Column",
+      "ColumnExplanations",
+      "Explanations",
       "FittedModel",
       "GradientExplanations",
       "KumoRelational",
@@ -149,6 +151,30 @@
           "check_consistent": "(self) -> 'None'"
         },
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "ColumnExplanations": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "COUNT",
+          "MAX_CATEGORIES",
+          "MAX_CLASSES",
+          "NA",
+          "NUM_COHORTS",
+          "OTHER",
+          "TABULAR_TABLE"
+        ],
+        "public_methods": {
+          "to_pandas": "(self) -> 'pd.DataFrame'"
+        },
+        "signature": "(payload: 'Mapping[str, Any]') -> 'None'"
+      },
+      "Explanations": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(gradients: 'GradientExplanations | None' = None, columns: 'ColumnExplanations | None' = None) -> 'None'"
       },
       "FittedModel": {
         "bases": [],
@@ -244,10 +270,10 @@
         ],
         "public_methods": {
           "absent": "(self, requested: 'Sequence[str]') -> 'tuple[str, ...]'",
-          "merge": "(parts: 'Sequence[PredictionResult]') -> 'PredictionResult'",
+          "merge": "(parts: 'Sequence[PredictionResult]', *, columns: 'ColumnExplanations | None' = None) -> 'PredictionResult'",
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
-        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanations: 'Mapping[Any, dict[str, Any]] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = (), explanation: 'dict[str, Any] | None' = None) -> 'None'"
+        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanations: 'Explanations | Mapping[Any, dict[str, Any]] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = (), explanation: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "PredictiveQuery": {
         "bases": [],

@@ -191,20 +191,21 @@ explanation is an output, over every scored row. Each has limits and refusals
 of its own, and they are in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
 
-An explanation is kept out of `to_pandas()`, on `result.explanations`, a
+An explanation is kept out of `to_pandas()`, on `result.explanations.gradients`, a
 mapping from each row's key to its explanation: the entity's `id`, or
 `(id, forecast_step)` on a forecast. One entry covers the entity's own row
 and every related row gathered for it, each under its table's name in
 `related`:
 
 ```python
-entry = result.explanations['user_5']  # the entity whose id is 'user_5'
+entry = result.explanations.gradients['user_5']  # the entity whose id is 'user_5'
 entry['related']['users']              # the entity's own row, hop 0
 orders = entry['related']['orders']    # one block per related table
 entry['related']['users']['keys']      # present only when a relationship joins on the table's key column
 orders['rows']                         # each row's values as sent
 orders['gradients']                    # [output][row][column]
-result.explanations.to_pandas()        # one line per (row, output, column), with its hop; the entity's users line is hop 0
+result.explanations.gradients.to_pandas()  # one line per (row, output, column), with its hop; the entity's users line is hop 0
+result.explanations.columns.to_pandas()    # per-column cohorts of the labelled context
 ```
 
 ## Asking the same context more than once

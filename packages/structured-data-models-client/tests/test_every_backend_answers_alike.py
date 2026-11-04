@@ -542,3 +542,29 @@ def test_a_numpy_boolean_built_by_hand_is_read_as_the_boolean_it_holds(
     )
     with client_for('kumo-relational') as client:
         assert len(client.predict(request, model=KumoRelational()).items) == 2
+
+
+def test_a_column_analysis_is_made_per_request_on_either_backend(client_for):
+    """Either backend attaches a column analysis over the context sent, and
+    only when an explanation is asked for; a session reuses its fit's.
+
+    Assumptions:
+    - The context is ``people``' first 45 rows, 15 of them (``i % 3 == 0``)
+      in segment ``'south'``.
+    """
+    request = asked('churn', 'classification')
+    explain = ['prediction', 'explanation']
+    with client_for('kumo-tabular') as client:
+        plain = client.predict(request, model=KumoTabular())
+        once = client.predict(request, model=KumoTabular(), outputs=explain)
+        with client.fit(
+            request, model=KumoTabular(), outputs=explain
+        ) as fitted:
+            first, second = (fitted.predict(request) for _ in range(2))
+
+    frame = once.explanations.columns.to_pandas()
+    south = frame[(frame['column'] == 'segment') & (frame['cohort'] == 'south')]
+    assert plain.explanations.columns is None
+    assert float(south['share'].iloc[0]) == pytest.approx(15 / 45)
+    assert first.explanations.columns is second.explanations.columns
+    pd.testing.assert_frame_equal(first.explanations.columns.to_pandas(), frame)

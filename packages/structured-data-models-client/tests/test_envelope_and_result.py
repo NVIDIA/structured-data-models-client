@@ -6,12 +6,20 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 from sdm_api.generated.tfm_api import PredictionItem
+from test_relational_explanations import (
+    FORECAST,
+    RelationalEndpoint,
+    relational_asked,
+)
 
-from sdm_client import PredictionResult, Request
+from sdm_client import KumoRelational, PredictionResult, Request, SDMClient
 from sdm_client.adapters.tabular import TabularAdapter
+from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
 
 
@@ -244,7 +252,7 @@ def test_the_entity_key_is_carried_when_the_model_has_one():
 
 def test_an_explanation_is_absent_rather_than_a_different_return_type():
     result = result_with({'row_index': 0, 'prediction': 1})
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
     assert isinstance(result.to_pandas(), pd.DataFrame)
 
 
@@ -284,7 +292,7 @@ def test_the_deprecated_explanation_keyword_is_accepted_and_read_back():
         )
     with pytest.warns(DeprecationWarning):
         assert result.explanation == _RAW
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
 
 
 def test_quantiles_are_spread_under_a_readable_prefix():
@@ -338,79 +346,87 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
         )
 
 
-def forecast_through_the_client(explanations, requested):
-    """Drive the decomposed route itself, so what is proved is the wiring."""
-    import warnings
-    from types import SimpleNamespace
+@pytest.fixture
+def forecast_through_the_client(monkeypatch, gradient_explanation):
+    """Ask a two-step forecast through ``predict()``; what it warns.
 
-    from sdm_api.generated.tfm_api import PredictionItem
+    Takes the step positions answered without an explanation and the
+    outputs asked for. Built by the real ``materialize()``, gathering stood
+    in for, so what is proved is the wiring.
+    """
 
-    from sdm_client.client import SDMClient
-    from sdm_client.decompose import Decomposition
-    from sdm_client.result import PredictionResult
-
-    rewritten = Decomposition(
-        'forecast', tuple((f'q{i}', i) for i in range(1, len(explanations) + 1))
-    )
-    request = SimpleNamespace(
-        _decomposition=rewritten,
-        parts=tuple(object() for _ in explanations),
-    )
-    answers = [
-        PredictionResult(
-            model='kumo-relational',
-            request_id='r',
-            items=[
-                PredictionItem(row_index=0, prediction=1.0, forecast_step=None)
-            ],
-            outputs=tuple(requested),
-            explanations=held,
+    def ask(bare: frozenset[int], requested: list[str]) -> list[str]:
+        client = SDMClient(url='http://localhost:8000')
+        client._backend = NimBackend(
+            RelationalEndpoint(gradient_explanation, bare)
         )
-        for held in explanations
-    ]
-    client = SDMClient.__new__(SDMClient)
-    handed = iter(answers)
-    client.predict = lambda part, model, outputs: next(handed)
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        SDMClient._answer_in_parts(
-            client, request, 'kumo-relational', list(requested)
+        request = relational_asked(
+            monkeypatch, FORECAST.removeprefix('EXPLAIN '), kind='regression'
         )
-    return [str(item.message) for item in caught]
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            client.predict(request, model=KumoRelational(), outputs=requested)
+        return [str(item.message) for item in caught]
+
+    return ask
 
 
-def test_a_forecast_step_that_carries_no_explanation_is_named():
+def test_a_forecast_step_that_carries_no_explanation_is_named(
+    forecast_through_the_client,
+):
     """Each step is explained on its own, so asking only whether the merged
     answer carries an explanation sees the step that did and says nothing
-    about the one that did not."""
+    about the one that did not.
+
+    Assumptions:
+    - Two steps asked for an explanation; the second comes back without.
+    """
     said = forecast_through_the_client(
-        [{0: {'outputs': []}}, None], ['prediction', 'explanation']
+        frozenset({1}), ['prediction', 'explanation']
     )
 
     assert any('step 2 carries none' in message for message in said)
 
 
-def test_a_forecast_whose_steps_all_explain_is_not_reported():
+def test_a_forecast_whose_steps_all_explain_is_not_reported(
+    forecast_through_the_client,
+):
+    """No step is named when every step comes back explained.
+
+    Assumptions:
+    - Two steps asked for an explanation; both come back with one.
+    """
     said = forecast_through_the_client(
-        [{0: {'outputs': []}}, {0: {'outputs': []}}],
-        ['prediction', 'explanation'],
+        frozenset(), ['prediction', 'explanation']
     )
 
     assert not any('carries none' in message for message in said)
 
 
-def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported():
-    said = forecast_through_the_client(
-        [{0: {'outputs': []}}, None], ['prediction']
-    )
+def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported(
+    forecast_through_the_client,
+):
+    """Nothing is said about explanations that were not asked for.
+
+    Assumptions:
+    - Two steps asked for the prediction only; the endpoint explains the
+      first anyway and not the second.
+    """
+    said = forecast_through_the_client(frozenset({1}), ['prediction'])
 
     assert said == []
 
 
-def test_a_forecast_carrying_no_explanation_at_all_still_says_so():
+def test_a_forecast_carrying_no_explanation_at_all_still_says_so(
+    forecast_through_the_client,
+):
+    """A forecast asked for an explanation that no step carries says so.
+
+    Assumptions:
+    - Two steps asked for an explanation; neither comes back with one.
+    """
     said = forecast_through_the_client(
-        [None, None], ['prediction', 'explanation']
+        frozenset({0, 1}), ['prediction', 'explanation']
     )
 
     assert any('explanation' in message for message in said)

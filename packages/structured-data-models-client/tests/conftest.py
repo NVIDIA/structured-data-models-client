@@ -174,3 +174,16 @@ def hand_built_result() -> Callable[..., Any]:
         )
 
     return build
+
+
+@pytest.fixture
+def failing_analysis(monkeypatch) -> str:
+    """Make every column analysis the client starts raise; returns the error
+    text it raises with."""
+    error = 'analysis broke'
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(error)
+
+    monkeypatch.setattr('sdm_client.client.ColumnExplanations', broken)
+    return error

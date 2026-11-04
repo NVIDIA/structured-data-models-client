@@ -25,6 +25,7 @@ from sdm_client import (
     Request,
     Schema,
     SDMClient,
+    SDMWarning,
 )
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model
@@ -120,7 +121,7 @@ def test_result_carries_explanation(gradient_explanation):
     result = TabularAdapter().normalize(
         response(explanation=explanation), EXPLAIN
     )
-    assert result.explanations == {
+    assert result.explanations.gradients == {
         0: {
             'outputs': [{'kind': 'prediction', 'statistic': 'mean'}],
             'instance': {'columns': ['x'], 'gradients': [[0.5]]},
@@ -136,7 +137,7 @@ def test_result_without_explanation():
     - The record carries no explanation field.
     """
     result = TabularAdapter().normalize(response(), ('prediction',))
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
 
 
 def answered(request, gradient_explanation, *, keyed=True, outputs=None):
@@ -189,8 +190,10 @@ def test_every_row_is_explained_under_its_id(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    assert sorted(result.explanations) == [90, 91]
-    assert sorted(result.explanations) == sorted(result.to_pandas()['id'])
+    assert sorted(result.explanations.gradients) == [90, 91]
+    assert sorted(result.explanations.gradients) == sorted(
+        result.to_pandas()['id']
+    )
 
 
 def test_each_row_keeps_its_own_gradients(
@@ -203,11 +206,14 @@ def test_each_row_keeps_its_own_gradients(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    assert result.explanations[90]['instance'] == {
+    assert result.explanations.gradients[90]['instance'] == {
         'columns': ['age'],
         'gradients': [[-1.0], [1.0]],
     }
-    assert result.explanations[91]['instance']['gradients'] == [[-2.0], [2.0]]
+    assert result.explanations.gradients[91]['instance']['gradients'] == [
+        [-2.0],
+        [2.0],
+    ]
 
 
 def test_rows_without_a_key_are_explained_under_their_row_index(
@@ -222,8 +228,11 @@ def test_rows_without_a_key_are_explained_under_their_row_index(
         tabular_request(rows=3, keyed=False), gradient_explanation, keyed=False
     )
 
-    assert sorted(result.explanations) == [0, 1, 2]
-    assert result.explanations[2]['instance']['gradients'] == [[-3.0], [3.0]]
+    assert sorted(result.explanations.gradients) == [0, 1, 2]
+    assert result.explanations.gradients[2]['instance']['gradients'] == [
+        [-3.0],
+        [3.0],
+    ]
 
 
 def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
@@ -245,9 +254,15 @@ def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
 
     result = answered(request, gradient_explanation)
 
-    assert sorted(result.explanations) == [0, 1]
-    assert result.explanations[1]['instance']['gradients'] == [[-2.0], [2.0]]
-    assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
+    assert sorted(result.explanations.gradients) == [0, 1]
+    assert result.explanations.gradients[1]['instance']['gradients'] == [
+        [-2.0],
+        [2.0],
+    ]
+    assert (
+        list(result.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
 
 
 def test_a_missing_id_keys_all_rows_by_row_index(
@@ -292,7 +307,7 @@ def test_a_tabular_entry_has_no_related_tables(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    for entry in result.explanations.values():
+    for entry in result.explanations.gradients.values():
         assert set(entry) == {'outputs', 'instance'}
 
 
@@ -313,8 +328,8 @@ def test_outputs_and_columns_are_passed_through(
         tabular_request(rows=1), gradient_explanation, outputs=outputs
     )
 
-    assert result.explanations[90]['outputs'] == outputs
-    assert result.explanations[90]['instance']['columns'] == ['age']
+    assert result.explanations.gradients[90]['outputs'] == outputs
+    assert result.explanations.gradients[90]['instance']['columns'] == ['age']
 
 
 def test_the_flat_table_has_a_line_per_row_output_and_column(
@@ -328,7 +343,7 @@ def test_the_flat_table_has_a_line_per_row_output_and_column(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert list(flat.columns) == [
         'id',
@@ -360,7 +375,7 @@ def test_the_flat_table_names_a_keyless_row_by_its_row_index(
         tabular_request(rows=2, keyed=False), gradient_explanation, keyed=False
     )
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert list(flat.columns)[0] == 'row_index'
     assert sorted(set(flat['row_index'])) == [0, 1]
@@ -414,7 +429,7 @@ def test_the_flat_table_names_each_output_as_the_frame_does(
         envelope,
     )
 
-    named = result.explanations.to_pandas()['output']
+    named = result.explanations.gradients.to_pandas()['output']
 
     assert len(set(named)) == len(outputs)
     assert set(named) <= set(result.to_pandas().columns)
@@ -464,7 +479,7 @@ def test_each_class_is_named_by_the_frames_column_for_it(
         envelope,
     )
 
-    named = set(result.explanations.to_pandas()['output'])
+    named = set(result.explanations.gradients.to_pandas()['output'])
 
     assert named == columns
     assert named <= set(result.to_pandas().columns)
@@ -504,7 +519,7 @@ def test_a_regressions_outputs_keep_their_names(
         envelope,
     )
 
-    named = set(result.explanations.to_pandas()['output'])
+    named = set(result.explanations.gradients.to_pandas()['output'])
 
     assert named == {'prediction', 'quantile_0.1', 'quantile_0.9'}
 
@@ -541,7 +556,7 @@ def test_a_boolean_class_keeps_its_spelling_in_outputs(
         envelope,
     )
 
-    assert result.explanations[90]['outputs'] == outputs
+    assert result.explanations.gradients[90]['outputs'] == outputs
 
 
 def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
@@ -555,7 +570,7 @@ def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
     """
     result = TabularAdapter().normalize(response(), ('prediction',))
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert isinstance(flat, pd.DataFrame)
     assert flat.empty
@@ -565,15 +580,15 @@ def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
 # --- a query asked with `EXPLAIN` -------------------------------------------
 
 
-def tabular_asked(text: str) -> Request:
-    """``text`` over ``people``, scoring persons 50 and 51."""
+def tabular_asked(text: str, indices: tuple[int, ...] = (50, 51)) -> Request:
+    """``text`` over ``people``, scoring ``indices`` (persons 50 and 51)."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_data(
             {'people': people()}, primary_keys={'people': 'person_id'}
         )
     return PredictiveQuery(text, schema).materialize(
-        indices=[50, 51], model=KumoTabular(), task='classification'
+        indices=list(indices), model=KumoTabular(), task='classification'
     )
 
 
@@ -642,7 +657,7 @@ def test_tabular_asks_for_explanation(tabular_endpoint, fields_sent):
     )
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert len(result.explanations) == len(result) == 2
+    assert len(result.explanations.gradients) == len(result) == 2
 
 
 @pytest.mark.parametrize(
@@ -724,7 +739,7 @@ def test_session_explains_when_asked(tabular_endpoint, fields_sent):
     result = fitted.predict(tabular_asked(f'EXPLAIN {CHURN}'))
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert len(result.explanations) == 2
+    assert len(result.explanations.gradients) == 2
 
 
 def test_session_keeps_its_question(tabular_endpoint, fields_sent):
@@ -755,7 +770,7 @@ def test_explain_fit_pins_explanation(tabular_endpoint, fields_sent):
     result = fitted.predict(tabular_asked(CHURN))
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert len(result.explanations) == 2
+    assert len(result.explanations.gradients) == 2
 
 
 @pytest.mark.parametrize('prefix', ['', 'EXPLAIN '], ids=['plain', 'explain'])
@@ -775,3 +790,307 @@ def test_session_refuses_another_question(tabular_endpoint, prefix):
     with pytest.raises(StructuredDataError, match='pinned a different'):
         fitted.predict(other)
     assert endpoint.sent == []
+
+
+# --- column analysis, made once per request -------------------------------
+#
+# ``people`` has 60 persons; person ``i`` is in segment ``'south'`` when
+# ``i % 3 == 0``, so 20 are. Scoring persons 50 and 51 (51 is south) leaves
+# 58 context rows, 19 of them south.
+
+
+def south_share(result) -> float:
+    """The share of context rows in the ``segment`` column's south cohort."""
+    frame = result.explanations.columns.to_pandas()
+    south = frame[(frame['column'] == 'segment') & (frame['cohort'] == 'south')]
+    return float(south['share'].iloc[0])
+
+
+@pytest.fixture
+def quiet():
+    """Silence the notices materializing and scoring ``people`` raise."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        yield
+
+
+@pytest.mark.parametrize(
+    ('text', 'outputs', 'analysed'),
+    [
+        (CHURN, ['prediction'], False),
+        (CHURN, ['prediction', 'explanation'], True),
+        (f'EXPLAIN {CHURN}', None, True),
+    ],
+    ids=['not asked', 'asked in outputs', 'asked with EXPLAIN'],
+)
+def test_one_shot_analysis_only_when_explained(
+    tabular_endpoint, quiet, text, outputs, analysed
+):
+    """A one-shot answer carries a column analysis exactly when an
+    explanation was asked for.
+
+    Assumptions:
+    - Persons 50 and 51 scored; the endpoint explains when asked.
+    """
+    client, _ = tabular_endpoint
+
+    result = client.predict(
+        tabular_asked(text), model=KumoTabular(), outputs=outputs
+    )
+
+    assert (result.explanations.columns is not None) is analysed
+
+
+def test_one_shot_analysis_reads_the_requests_context(tabular_endpoint, quiet):
+    """A one-shot analysis is over the context sent: 19 of 58 rows south.
+
+    Assumptions:
+    - Persons 50 and 51 scored, so they are out of the context.
+    """
+    client, _ = tabular_endpoint
+
+    result = client.predict(
+        tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
+    )
+
+    assert south_share(result) == pytest.approx(19 / 58)
+
+
+def test_each_one_shot_predict_makes_its_own_analysis(tabular_endpoint, quiet):
+    """Separate ``predict()`` calls each analyse their own request; nothing is
+    reused between them.
+
+    Assumptions:
+    - Two calls on one request, then one scoring persons 0 and 3 (both
+      south), whose context is 18 of 58 rows south.
+    """
+    client, _ = tabular_endpoint
+    request = tabular_asked(CHURN)
+
+    first = client.predict(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    second = client.predict(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    other = client.predict(
+        tabular_asked(CHURN, indices=(0, 3)),
+        model=KumoTabular(),
+        outputs=list(EXPLAIN),
+    )
+
+    assert first.explanations.columns is not second.explanations.columns
+    pd.testing.assert_frame_equal(
+        first.explanations.columns.to_pandas(),
+        second.explanations.columns.to_pandas(),
+    )
+    assert south_share(other) == pytest.approx(18 / 58)
+
+
+def test_each_fit_makes_its_own_analysis(tabular_endpoint, quiet):
+    """Separate ``fit()`` calls each analyse what they pin; nothing is reused
+    between sessions.
+
+    Assumptions:
+    - Two fits of one request, and one holding persons 0-5 back (0 and 3
+      south), which pins 52 rows, 17 of them south.
+    """
+    client, _ = tabular_endpoint
+    request = tabular_asked(CHURN)
+
+    first = client.fit(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    second = client.fit(request, model=KumoTabular(), outputs=list(EXPLAIN))
+    held = client.fit(
+        request, model=KumoTabular(), outputs=list(EXPLAIN), holdout=range(6)
+    )
+    answers = [fitted.predict(request) for fitted in (first, second, held)]
+
+    assert (
+        answers[0].explanations.columns is not answers[1].explanations.columns
+    )
+    pd.testing.assert_frame_equal(
+        answers[0].explanations.columns.to_pandas(),
+        answers[1].explanations.columns.to_pandas(),
+    )
+    assert south_share(answers[0]) == pytest.approx(19 / 58)
+    assert south_share(answers[2]) == pytest.approx(17 / 52)
+
+
+def test_fit_analysis_leaves_out_the_holdout(tabular_endpoint, quiet):
+    """A session's analysis is over the rows pinned after the holdout is
+    taken out: 17 of 52 south, not 19 of 58.
+
+    Assumptions:
+    - Persons 0-5 held back, two of them (0 and 3) south.
+    """
+    client, _ = tabular_endpoint
+    request = tabular_asked(CHURN)
+
+    fitted = client.fit(
+        request, model=KumoTabular(), outputs=list(EXPLAIN), holdout=range(6)
+    )
+
+    assert south_share(fitted.predict(request)) == pytest.approx(17 / 52)
+
+
+def test_a_session_reuses_its_fit_time_analysis(
+    tabular_endpoint, tabular_request
+):
+    """Every answer of a session explained at fit carries the one analysis
+    made at fit, an answer with no rows to score included.
+
+    Assumptions:
+    - The session is fitted on a request built from frames; the later
+      requests share its context, the last scoring no rows.
+    """
+    client, endpoint = tabular_endpoint
+    fitted = client.fit(
+        tabular_request(rows=2), model=KumoTabular(), outputs=list(EXPLAIN)
+    )
+
+    answers = [fitted.predict(tabular_request(rows=rows)) for rows in (2, 1, 0)]
+
+    assert len(endpoint.sent) == 2
+    assert answers[0].explanations.columns is not None
+    assert all(
+        answer.explanations.columns is answers[0].explanations.columns
+        for answer in answers
+    )
+
+
+@pytest.mark.parametrize(
+    ('text', 'analysed'),
+    [(CHURN, False), (f'EXPLAIN {CHURN}', True)],
+    ids=['plain', 'explain'],
+)
+def test_a_session_fit_without_explanation_analyses_when_asked(
+    tabular_endpoint, quiet, text, analysed
+):
+    """A session fitted without an explanation attaches the fit-time analysis
+    only to a call asked with `EXPLAIN`.
+
+    Assumptions:
+    - The session pinned the plain question with the default outputs.
+    """
+    client, _ = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+
+    result = fitted.predict(tabular_asked(text))
+
+    assert (result.explanations.columns is not None) is analysed
+    if analysed:
+        assert south_share(result) == pytest.approx(19 / 58)
+
+
+# --- a failed column analysis blocks nothing --------------------------------
+
+
+def column_analysis_warnings(caught) -> list[str]:
+    """The messages among ``caught`` that report a failed column analysis."""
+    return [
+        str(warning.message)
+        for warning in caught
+        if 'column analysis' in str(warning.message)
+    ]
+
+
+def test_a_failed_analysis_does_not_block_fit(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """A fit whose column analysis raises still pins the context and returns
+    a handle that scores, and says nothing when no explanation was asked.
+
+    Assumptions:
+    - The analysis is made to raise; the fit asks for the default outputs.
+    """
+    client, endpoint = tabular_endpoint
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+    result = fitted.predict(tabular_asked(CHURN))
+
+    assert column_analysis_warnings(caught) == []
+    assert fitted.session_id == 's1'
+    assert len(result) == 2
+
+
+def test_a_failed_analysis_warns_a_fit_that_asked_for_explanations(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """A fit asked for an explanation warns at fit time that its analysis
+    failed, naming the error.
+
+    Assumptions:
+    - The analysis is made to raise; the fit names ``'explanation'``.
+    """
+    client, _ = tabular_endpoint
+
+    with pytest.warns(
+        SDMWarning, match=f'pinned context failed.*{failing_analysis}'
+    ):
+        client.fit(
+            tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
+        )
+
+
+@pytest.mark.parametrize('rows', [2, 0], ids=['rows', 'no rows'])
+def test_a_session_whose_analysis_failed_warns_an_explained_predict(
+    tabular_endpoint, tabular_request, failing_analysis, rows
+):
+    """An explained predict on a session whose analysis failed warns, and its
+    answer carries no column analysis, whether or not it has rows to score.
+
+    Assumptions:
+    - The analysis is made to raise at fit; the fit pinned
+      ``'explanation'``, so every later predict asks for one.
+    """
+    client, _ = tabular_endpoint
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fitted = client.fit(
+            tabular_request(rows=2), model=KumoTabular(), outputs=list(EXPLAIN)
+        )
+
+    with pytest.warns(SDMWarning, match='pinned context failed'):
+        result = fitted.predict(tabular_request(rows=rows))
+
+    assert result.explanations.columns is None
+
+
+def test_a_session_whose_analysis_failed_is_silent_on_a_plain_predict(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """A predict that asks for no explanation says nothing about the failed
+    analysis.
+
+    Assumptions:
+    - The analysis is made to raise at fit; neither call asks to explain.
+    """
+    client, _ = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = fitted.predict(tabular_asked(CHURN))
+
+    assert column_analysis_warnings(caught) == []
+    assert len(result) == 2
+
+
+def test_a_failed_analysis_does_not_block_a_one_shot_predict(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """An explained one-shot predict whose analysis raises warns, naming the
+    error, and still answers every row with no column analysis.
+
+    Assumptions:
+    - The analysis is made to raise; two persons are scored.
+    """
+    client, _ = tabular_endpoint
+
+    with pytest.warns(
+        SDMWarning, match=f'this request failed.*{failing_analysis}'
+    ):
+        result = client.predict(
+            tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
+        )
+
+    assert len(result) == 2
+    assert result.explanations.columns is None

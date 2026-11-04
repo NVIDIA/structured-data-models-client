@@ -11,10 +11,11 @@ union. Here an explanation is an output field like any other:
 >>> result = client.predict(request, model=KumoRelational(),
 ...                         outputs=['prediction', 'explanation'])
 >>> result.to_pandas()       # always a frame
->>> result.explanations      # {} unless you asked for them
->>> result.explanations['user_5']          # one row's explanation
->>> result.explanations[('user_5', 3)]     # a forecast's, at step 3
->>> result.explanations.to_pandas()        # every gradient, one per line
+>>> result.explanations.gradients      # {} unless you asked for them
+>>> result.explanations.gradients['user_5']          # one row's explanation
+>>> result.explanations.gradients[('user_5', 3)]     # a forecast's, at step 3
+>>> result.explanations.gradients.to_pandas()        # every gradient
+>>> result.explanations.columns.to_pandas()  # cohorts per column
 
 Each explained row is under the key that names it in ``to_pandas()``: its
 ``id``, ``(id, forecast_step)`` for a forecast, and its ``row_index`` when the
@@ -44,7 +45,11 @@ import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.explanations import GradientExplanations
+from sdm_client.explanations import (
+    ColumnExplanations,
+    Explanations,
+    GradientExplanations,
+)
 
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
@@ -89,7 +94,7 @@ class PredictionResult:
         request_id: str,
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
-        explanations: Mapping[Any, dict[str, Any]] | None = None,
+        explanations: Explanations | Mapping[Any, dict[str, Any]] | None = None,
         outputs: Sequence[str] = (),
         unscored_candidates: Sequence[Any] = (),
         explanation: dict[str, Any] | None = None,
@@ -114,11 +119,14 @@ class PredictionResult:
         # about. Set where a forecast is assembled, for the same reason.
         self._names_its_step = False
         self.metadata = dict(metadata or {})
-        self._explanations = (
-            explanations
-            if isinstance(explanations, GradientExplanations)
-            else GradientExplanations(explanations)
-        )
+        if isinstance(explanations, Explanations):
+            self._explanations = explanations
+        elif isinstance(explanations, GradientExplanations):
+            self._explanations = Explanations(explanations)
+        else:
+            self._explanations = Explanations(
+                GradientExplanations(explanations)
+            )
         self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
@@ -150,7 +158,7 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return bool(self._explanations)
+            return bool(self._explanations.gradients)
         if name not in _ITEM_FIELDS:
             return True
         return any(
@@ -159,16 +167,17 @@ class PredictionResult:
         )
 
     @property
-    def explanations(self) -> GradientExplanations:
-        r"""Each explained row's explanation, under the key naming that row.
+    def explanations(self) -> Explanations:
+        r"""The explanations: ``.gradients`` and ``.columns``.
 
-        The key is the one ``to_pandas()`` names the row by: its ``id``,
-        ``(id, forecast_step)`` for a forecast, and ``row_index`` when the
-        request has no entity key. Kept out of the frame, because an entry is
-        nested and the frame is flat. ``explanations.to_pandas()`` flattens
-        them.
+        ``gradients`` holds each explained row's explanation under the key
+        ``to_pandas()`` names the row by: its ``id``, ``(id, forecast_step)``
+        for a forecast, and ``row_index`` when the request has no entity key.
+        Kept out of the frame, because an entry is nested and the frame is
+        flat. ``gradients.to_pandas()`` flattens them.
 
-        Empty when not asked for, rather than a different return type.
+        ``gradients`` is empty and ``columns`` is ``None`` when not
+        asked for, rather than a different return type.
         """
         return self._explanations
 
@@ -176,8 +185,8 @@ class PredictionResult:
     def explanation(self) -> dict[str, Any] | None:
         r"""Deprecated: the first record's raw explanation; use ``explanations``."""
         warnings.warn(
-            'result.explanation is deprecated; use result.explanations. '
-            'It will be removed in 2.0.0',
+            'result.explanation is deprecated; use '
+            'result.explanations.gradients[key]. It will be removed in 2.0.0',
             DeprecationWarning,
             stacklevel=2,
         )
@@ -283,13 +292,19 @@ class PredictionResult:
         return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 
     @classmethod
-    def merge(cls, parts: Sequence[PredictionResult]) -> PredictionResult:
+    def merge(
+        cls,
+        parts: Sequence[PredictionResult],
+        *,
+        columns: ColumnExplanations | None = None,
+    ) -> PredictionResult:
         r"""Join the results of one request that was sent in several calls.
 
         A request larger than the endpoint's per-call cap is split by the
         adapter, and each call answers about its own rows. Keeping only the
         last answer would silently drop every earlier batch, so the parts are
-        concatenated here.
+        concatenated here. ``columns`` is the request's column analysis,
+        computed before any call was sent.
 
         Raises:
             StructuredDataError: If ``parts`` is empty, which would mean a
@@ -301,6 +316,8 @@ class PredictionResult:
                 'no parts to merge', code='INTERNAL_ERROR'
             )
         if len(parts) == 1:
+            if columns is not None:
+                parts[0]._explanations.columns = columns
             return parts[0]
         first = parts[0]
         models = {part.model for part in parts}
@@ -316,9 +333,12 @@ class PredictionResult:
         # would otherwise survive. That is the one you do not have when a
         # later batch is the one that misbehaved.
         metadata['batch_request_ids'] = [part.request_id for part in parts]
-        explanations = GradientExplanations._merged(
-            [part.explanations for part in parts],
-            [part.items for part in parts],
+        explanations = Explanations(
+            GradientExplanations._merged(
+                [part.explanations.gradients for part in parts],
+                [part.items for part in parts],
+            ),
+            columns,
         )
         # Every part answers one slice of the same request, so they were asked
         # for the same fields. If they were not, the merged result cannot
@@ -360,7 +380,7 @@ class PredictionResult:
         return iter(self.items)
 
     def __repr__(self) -> str:
-        explained = ', explained' if self._explanations else ''
+        explained = ', explained' if self._explanations.gradients else ''
         left_out = len(self._unscored_candidates)
         unscored = (
             f', {left_out} candidate{"s" if left_out > 1 else ""} unscored'

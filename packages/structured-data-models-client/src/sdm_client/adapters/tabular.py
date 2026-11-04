@@ -37,7 +37,7 @@ from sdm_api.generated.tfm_api import (
 from sdm_client.base import ModelSpec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
-from sdm_client.explanations import GradientDecoder
+from sdm_client.explanations import Explanations, GradientDecoder
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
@@ -171,8 +171,10 @@ class TabularAdapter:
             items=named,
             metadata=dict(metadata or {}),
             outputs=outputs,
-            # One table, so an entry has no related rows to name.
-            explanations=GradientDecoder(labelled_by=payload).decode(named),
+            explanations=Explanations(
+                # One table, so an entry has no related rows to name.
+                GradientDecoder(labelled_by=payload).decode(named),
+            ),
         )
 
     def explain_error(

@@ -46,7 +46,11 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
-from sdm_client.explanations import GradientExplanations
+from sdm_client.explanations import (
+    ColumnExplanations,
+    Explanations,
+    GradientExplanations,
+)
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
@@ -113,6 +117,8 @@ class FittedModel:
     _held_back: int
     _pinned: dict[str, Any]
     _question: Question | None
+    _columns: ColumnExplanations | None
+    _columns_warning: str | None
     _closed: bool
 
     def __init__(self) -> None:
@@ -134,6 +140,8 @@ class FittedModel:
         pinned_over_a_window: bool = False,
         held_back: int = 0,
         question: Question | None = None,
+        columns: ColumnExplanations | None = None,
+        columns_warning: str | None = None,
     ) -> FittedModel:
         r"""The handle for a session ``SDMClient.fit`` has just created."""
         fitted = cls.__new__(cls)
@@ -149,6 +157,8 @@ class FittedModel:
         fitted._held_back = held_back
         fitted._pinned = pinned or {}
         fitted._question = question
+        fitted._columns = columns
+        fitted._columns_warning = columns_warning
         fitted._closed = False
         return fitted
 
@@ -190,8 +200,18 @@ class FittedModel:
             request, self._named_outputs, lambda: self._outputs
         )
         fields = self._outputs if outputs is None else tuple(outputs)
+        # Fit-time analysis, whatever this call's rows; never recomputed.
+        columns = self._columns if 'explanation' in fields else None
+        if 'explanation' in fields and self._columns_warning is not None:
+            warnings.warn(
+                self._columns_warning,
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
         if request.nothing_to_score:
-            return _empty_answer(self.model, fields, request)
+            empty = _empty_answer(self.model, fields, request)
+            empty.explanations.columns = columns
+            return empty
         _warn_scoring_what_was_pinned(
             request,
             self._pinned_keys,
@@ -209,6 +229,7 @@ class FittedModel:
                 fields,
                 self._pinned,
             ),
+            columns,
         )
         if not parts:
             raise StructuredDataError(
@@ -216,7 +237,7 @@ class FittedModel:
                 code='INVALID_REQUEST',
             )
         return _report_absent(
-            PredictionResult.merge(parts), outputs, self.model
+            PredictionResult.merge(parts, columns=columns), outputs, self.model
         )
 
     def close(self) -> None:
@@ -498,26 +519,52 @@ class SDMClient:
         )
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
+        return self._answer(request, model, outputs, analysed=True)
+
+    def _answer(
+        self,
+        request: Request,
+        model: str | Model,
+        outputs: Sequence[str] | None,
+        *,
+        analysed: bool,
+    ) -> PredictionResult:
+        r"""Send ``request`` and merge its calls.
+
+        With ``analysed``, an explained request gets its column analysis,
+        computed once before any call is sent.
+        """
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
             return _empty_answer(adapter.spec.model_id, fields, request)
         # Asked here, where both halves of the request travel together, which
         # is the only call at which the pairing is a leak.
         warn_of_rows_scored_from_their_own_answers(request)
-        # Every call's rows are kept. A request past the endpoint's per-call
-        # cap is split by the adapter, and each call answers about its own
-        # rows, so returning only the last would drop the earlier batches.
-        parts = _numbered_across_calls(
-            adapter.prediction_plan(request, fields),
-            lambda payload: self._backend.predict(adapter, payload, fields),
-        )
-        if not parts:
+        calls = list(adapter.prediction_plan(request, fields))
+        if not calls:
             raise StructuredDataError(
                 'the adapter produced no call for this request',
                 code='INVALID_REQUEST',
             )
+        columns = (
+            _analysed_or_warned(
+                lambda: ColumnExplanations(_LabelledRows.of(request, calls[0]))
+            )
+            if analysed and 'explanation' in fields
+            else None
+        )
+        # Every call's rows are kept. A request past the endpoint's per-call
+        # cap is split by the adapter, and each call answers about its own
+        # rows, so returning only the last would drop the earlier batches.
+        parts = _numbered_across_calls(
+            calls,
+            lambda payload: self._backend.predict(adapter, payload, fields),
+            columns,
+        )
         return _report_absent(
-            PredictionResult.merge(parts), outputs, adapter.spec.model_id
+            PredictionResult.merge(parts, columns=columns),
+            outputs,
+            adapter.spec.model_id,
         )
 
     def _answer_in_parts(
@@ -548,6 +595,16 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
+        # A forecast's analysis reads every step's labelled rows at once.
+        columns = (
+            _analysed_or_warned(
+                lambda: ColumnExplanations(
+                    _LabelledRows().across(request.parts or ())
+                )
+            )
+            if not ranking and outputs is not None and 'explanation' in outputs
+            else None
+        )
         answers: list[PredictionResult] = []
         answered: list[int] = []
         for position, (part, (_, about)) in enumerate(
@@ -557,11 +614,13 @@ class SDMClient:
                 continue
             answered.append(position)
             try:
-                answers.append(self.predict(part, model=model, outputs=wanted))
+                answers.append(
+                    self._answer(part, model, wanted, analysed=False)
+                )
             except Exception as error:
                 answered.pop()
                 _carry_the_steps_already_paid_for(
-                    error, answers, rewritten, answered, ranking
+                    error, answers, rewritten, answered, ranking, columns
                 )
                 if not isinstance(error, StructuredDataError):
                     raise
@@ -575,7 +634,7 @@ class SDMClient:
                 outputs,
                 unscored=[parts[i][1] for i in sorted(unscored)],
             )
-        merged = _by_step(answers, rewritten)
+        merged = _by_step(answers, rewritten, columns)
         _warn_of_steps_that_carry_no_explanation(
             answers, rewritten, outputs, spec_for(model).model_id
         )
@@ -716,6 +775,23 @@ class SDMClient:
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         held = _held_back(payload, holdout)
+        # Always, on exactly the rows being pinned: a later scoring call
+        # carries no context to analyse.
+        columns_warning = None
+        try:
+            columns: ColumnExplanations | None = ColumnExplanations(payload)
+        except Exception as error:
+            columns = None
+            columns_warning = (
+                f'the column analysis of the pinned context failed, so answers '
+                f'from this session carry no column analysis: {error}'
+            )
+            if 'explanation' in fields:
+                warnings.warn(
+                    columns_warning,
+                    category=SDMWarning,
+                    stacklevel=caller_stacklevel(),
+                )
         session_id = self._backend.create_session(adapter, payload)
         fitted = FittedModel._open(
             self,
@@ -736,6 +812,8 @@ class SDMClient:
             held_back=held,
             pinned_over_a_window=request.target_moves_with_time,
             question=request._question,
+            columns=columns,
+            columns_warning=columns_warning,
         )
         self._pinned.add(fitted)
         return fitted
@@ -842,6 +920,7 @@ class SDMClient:
 def _numbered_across_calls(
     plan: Iterable[dict[str, Any]],
     answer: Callable[[dict[str, Any]], PredictionResult],
+    columns: ColumnExplanations | None = None,
 ) -> list[PredictionResult]:
     r"""Answer each call, numbering its rows from where the last call's ended.
 
@@ -872,7 +951,7 @@ def _numbered_across_calls(
         try:
             answers.append(_numbered_from(answer(payload), start))
         except Exception as error:
-            _carry_the_answers_already_paid_for(error, answers, start)
+            _carry_the_answers_already_paid_for(error, answers, start, columns)
             raise
         start += rows or 0
     return answers
@@ -884,6 +963,7 @@ def _carry_the_steps_already_paid_for(
     rewritten: Decomposition,
     answered: Sequence[int],
     ranking: bool,
+    columns: ColumnExplanations | None = None,
 ) -> None:
     r"""Record on ``error`` the parts answered before the one that failed.
 
@@ -911,6 +991,7 @@ def _carry_the_steps_already_paid_for(
                         rewritten,
                         parts=tuple(rewritten.parts[at] for at in answered),
                     ),
+                    columns,
                 )
             }
         ),
@@ -918,7 +999,10 @@ def _carry_the_steps_already_paid_for(
 
 
 def _carry_the_answers_already_paid_for(
-    error: BaseException, answers: list[PredictionResult], rows: int
+    error: BaseException,
+    answers: list[PredictionResult],
+    rows: int,
+    columns: ColumnExplanations | None = None,
 ) -> None:
     r"""Record on ``error`` the calls that were answered before it.
 
@@ -939,7 +1023,7 @@ def _carry_the_answers_already_paid_for(
     held = getattr(error, 'details', None)
     error.details = {  # type: ignore[attr-defined]
         **(held if isinstance(held, dict) else {}),
-        'answered': PredictionResult.merge(answers),
+        'answered': PredictionResult.merge(answers, columns=columns),
         'calls_answered': len(answers),
         'rows_answered': rows,
     }
@@ -957,8 +1041,102 @@ def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
             else item
             for item in result.items
         )
-        result._explanations = result._explanations._renumbered(start)
+        result._explanations.gradients = (
+            result._explanations.gradients._renumbered(start)
+        )
     return result
+
+
+class _LabelledRows:
+    r"""The labelled rows a request's column analysis reads."""
+
+    _INSTANCE_ID = 'instance_id'
+
+    def __init__(self) -> None:
+        # Each step's instance ids, renumbered so no two steps share one.
+        self._ids: dict[tuple[int, Any], int] = {}
+
+    @staticmethod
+    def of(request: Request, planned: Mapping[str, Any]) -> dict[str, Any]:
+        r"""``planned``'s task and schema over the request's labelled context.
+
+        A gathered request carries its context as it was before the rows
+        answering the scored ones were dropped; any other request's planned
+        context is that context.
+        """
+        labelled = request._labelled_context
+        return {
+            **planned,
+            'context': planned['context'] if labelled is None else labelled,
+        }
+
+    def across(self, steps: Sequence[Request]) -> dict[str, Any]:
+        r"""Every forecast step's labelled rows as one context.
+
+        An entity appears once per step, labelled for that step's window.
+        """
+        each = []
+        for step in steps:
+            payloads = step.payloads
+            assert payloads is not None
+            each.append(self.of(step, payloads[0]))
+        contexts = [payload['context'] for payload in each]
+        context: dict[str, Any] = {
+            'instance_table': self._stacked(
+                [
+                    (step, context['instance_table'])
+                    for step, context in enumerate(contexts)
+                ]
+            )
+        }
+        if any('related_tables' in context for context in contexts):
+            # A step omits a table it reached no rows of.
+            related = [
+                context.get('related_tables') or {} for context in contexts
+            ]
+            names = dict.fromkeys(name for tables in related for name in tables)
+            context['related_tables'] = {
+                name: self._stacked(
+                    [
+                        (step, tables[name])
+                        for step, tables in enumerate(related)
+                        if name in tables
+                    ]
+                )
+                for name in names
+            }
+        # A step's schema describes only the tables that step reached.
+        schemas = [payload['schema'] for payload in each]
+        schema = dict(schemas[0])
+        if any('related_tables' in step_schema for step_schema in schemas):
+            described: dict[str, Any] = {}
+            for step_schema in schemas:
+                for name, table in (
+                    step_schema.get('related_tables') or {}
+                ).items():
+                    described.setdefault(name, table)
+            schema['related_tables'] = described
+        if any('relationships' in step_schema for step_schema in schemas):
+            links: list[Any] = []
+            for step_schema in schemas:
+                for link in step_schema.get('relationships') or []:
+                    if link not in links:
+                        links.append(link)
+            schema['relationships'] = links
+        return {**each[0], 'schema': schema, 'context': context}
+
+    def _stacked(
+        self, tables: Sequence[tuple[int, Mapping[str, Any]]]
+    ) -> dict[str, Any]:
+        r"""One wire table holding each ``(step, table)``'s rows, in order."""
+        at = list(tables[0][1]['columns']).index(self._INSTANCE_ID)
+        rows = []
+        for step, table in tables:
+            for row in table.get('rows') or []:
+                row = list(row)
+                row[at] = self._ids.setdefault((step, row[at]), len(self._ids))
+                rows.append(row)
+        return {**tables[0][1], 'rows': rows}
 
 
 def _report_absent(
@@ -1106,6 +1284,22 @@ def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
         for name, described in columns.items()
         if isinstance(described, Mapping) and described.get('dtype')
     }
+
+
+def _analysed_or_warned(
+    analyse: Callable[[], ColumnExplanations],
+) -> ColumnExplanations | None:
+    r"""The request's column analysis, or a warning and None if it fails."""
+    try:
+        return analyse()
+    except Exception as error:
+        warnings.warn(
+            f'the column analysis for this request failed, so the result '
+            f'carries no column analysis: {error}',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+        return None
 
 
 def _warn_scoring_what_was_pinned(
@@ -1290,7 +1484,7 @@ def _warn_of_steps_that_carry_no_explanation(
     missing = [
         step
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        if not answer.explanations
+        if not answer.explanations.gradients
     ]
     if not missing or len(missing) == len(answers):
         return
@@ -1305,7 +1499,9 @@ def _warn_of_steps_that_carry_no_explanation(
 
 
 def _by_step(
-    answers: list[PredictionResult], rewritten: Decomposition
+    answers: list[PredictionResult],
+    rewritten: Decomposition,
+    columns: ColumnExplanations | None = None,
 ) -> PredictionResult:
     r"""What each step holds, in the order the steps come.
 
@@ -1324,11 +1520,16 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
-    explanations = GradientExplanations._merged(
-        [
-            answer.explanations._at_step(step)
-            for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        ]
+    explanations = Explanations(
+        GradientExplanations._merged(
+            [
+                answer.explanations.gradients._at_step(step)
+                for (_, step), answer in zip(
+                    rewritten.parts, answers, strict=True
+                )
+            ]
+        ),
+        columns,
     )
     built = PredictionResult(
         model=answers[0].model if answers else '',
