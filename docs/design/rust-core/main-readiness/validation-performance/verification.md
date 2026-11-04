@@ -4,7 +4,7 @@
 
 # Validation checkpoint
 
-**Phase 8 is not yet accepted: final platform CI and S3 validation remain pending.**
+**Platform CI and available local/live checks pass; Phase 8 acceptance still requires S3 validation.**
 This checkpoint records completed evidence, not a release approval.
 
 ## Live behavior
@@ -62,5 +62,6 @@ No credentials or full warehouse captures are committed.
 
 S3 credentials remain expired; dedicated CI identities are owner-deferred.
 Full CI run `41800680419` tests integrated code `24f48e6f7`; later report changes do not alter executable code.
-Its DBR 16.4 artifact download encountered a connection reset before tests, and that job needs a bounded retry after the run finishes.
-This infrastructure failure is not counted as passing coverage.
+Attempt 2 completed successfully: 81 successful jobs and one intentional targeted-PQL skip.
+The only retry was DBR 16.4 after an artifact-download connection reset; its installation and runtime tests subsequently passed.
+The remaining 52 S3 matrix cells and S3-specific live API checks are incomplete until authorized AWS credentials are refreshed.
