@@ -23,6 +23,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
+from scripts.rust_core.fixture_tables import unpack
 from sdm_connectors import SnowflakeSource
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import (
@@ -40,7 +41,7 @@ from sdm_client import (
 )
 
 ROOT = Path(__file__).resolve().parents[3]
-CAPTURES = ROOT / 'contract' / 'captures'
+FIXTURES = ROOT / 'contract' / 'fixtures' / 'maintained'
 
 DB = '{catalog}'
 SCHEMA = '{schema}'
@@ -52,11 +53,14 @@ ROWS_OF_THE_LISTING = (
 )
 
 
-def _capture_dir(case: str) -> Path:
-    for root in (CAPTURES / 'snowflake', CAPTURES / 's2' / 'snowflake'):
-        if (root / case / 'capture.json').exists():
-            return root / case
-    raise AssertionError(f'no capture of {case}')
+def _captured(case: str, *, public: bool = False) -> dict[str, Any]:
+    """Read only independently extracted facts; the archive is not a test dependency."""
+    name = 'snowflake-public.json' if public else 'snowflake.json'
+    cases = unpack(json.loads((FIXTURES / name).read_text(encoding='utf-8')))
+    if public:
+        cases = {record['case']: record for record in cases}
+    assert case in cases, f'no retained Snowflake case {case}'
+    return cases[case]
 
 
 def _missing(text: str) -> ProgrammingError:
@@ -73,10 +77,8 @@ class _Recording:
     and the old client's request payloads."""
 
     def __init__(self, case: str) -> None:
-        directory = _capture_dir(case)
-        capture = json.loads(
-            (directory / 'capture.json').read_text(encoding='utf-8')
-        )
+        directory = FIXTURES / 'snowflake'
+        capture = _captured(case)
         self.answers: dict[tuple[str, str], Any] = {}
         for statement in capture['statements']:
             key = (statement['text'], json.dumps(statement['parameters']))
@@ -312,9 +314,7 @@ def _projection(schema: Schema) -> dict[str, Any]:
 def _assert_recorded_schema(
     schema: Schema, case: str, *, selected: set[str] | None = None
 ) -> None:
-    expected = json.loads((_capture_dir(case) / 'capture.json').read_text())[
-        'reference'
-    ]['public']['schema']
+    expected = _captured(case, public=True)['schema']
     if selected is not None:
         expected['tables'] = [
             t for t in expected['tables'] if t['name'] in selected
@@ -725,9 +725,7 @@ def test_a_view_materializes_when_counted_exactly() -> None:
 
 
 def _assert_recorded_payloads(request: Any, case: str) -> None:
-    reference = json.loads((_capture_dir(case) / 'capture.json').read_text())[
-        'reference'
-    ]['public']['payloads']
+    reference = _captured(case, public=True)['payloads']
 
     def numbers(value: Any) -> Any:
         if isinstance(value, dict):

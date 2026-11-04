@@ -77,11 +77,19 @@
     "max_bytes": 12610000,
     "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
   },
+  "contract/fixtures/maintained/snowflake-public.json": {
+    "consumers": [
+      "packages/structured-data-models-client/tests/test_snowflake_from_source.py"
+    ],
+    "max_bytes": 570000,
+    "reason": "Independent schema and wire-payload observations for cases used by the public Snowflake tests; shared literal tables preserve archived values."
+  },
   "contract/fixtures/maintained/snowflake.json": {
     "consumers": [
-      "rust/crates/sdm-testkit/tests/t36_snowflake.rs"
+      "rust/crates/sdm-testkit/tests/t36_snowflake.rs",
+      "packages/structured-data-models-client/tests/test_snowflake_from_source.py"
     ],
-    "max_bytes": 530000,
+    "max_bytes": 560000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
   "contract/t311-java-vectors.json": {

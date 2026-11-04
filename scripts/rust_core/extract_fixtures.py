@@ -14,6 +14,7 @@ its source and validates every extracted observation and Arrow byte stream.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import importlib.util
 import json
@@ -246,7 +247,17 @@ def extract(archive: Path, verify: bool) -> None:
             ROOT / 'rust/crates/sdm-testkit/tests/t36_snowflake.rs'
         ).read_text()
         literals = set(re.findall(r'"([^"\n]+)"', rust))
+        python_consumer = 'packages/structured-data-models-client/tests/test_snowflake_from_source.py'
+        python_literals = {
+            node.value
+            for node in ast.walk(
+                ast.parse((ROOT / python_consumer).read_text())
+            )
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        literals |= python_literals
         cases = {}
+        public = {}
         for prefix in (
             'contract/captures/snowflake/',
             'contract/captures/s2/snowflake/',
@@ -272,14 +283,33 @@ def extract(archive: Path, verify: bool) -> None:
                             kept['result'] = blob
                         statements.append(kept)
                     cases[case] = {'statements': statements}
-        assert len(cases) == 21, sorted(cases)
+                    if case in python_literals:
+                        observed = capture['reference']['public']
+                        public[case] = {
+                            key: observed[key]
+                            for key in ('schema', 'payloads')
+                            if key in observed
+                        }
+        assert cases and public, (
+            'Snowflake fixture consumers must name archived cases'
+        )
         write(
             DEST / 'snowflake.json',
             json.dumps(cases, indent=2).encode() + b'\n',
         )
+        write(
+            DEST / 'snowflake-public.json',
+            dumps(
+                pack(
+                    [{'case': case, **facts} for case, facts in public.items()]
+                )
+            ).encode(),
+        )
         provenance['consumers']['snowflake.json'] = [
-            'rust/crates/sdm-testkit/tests/t36_snowflake.rs'
+            'rust/crates/sdm-testkit/tests/t36_snowflake.rs',
+            python_consumer,
         ]
+        provenance['consumers']['snowflake-public.json'] = [python_consumer]
         provenance['consumers']['vectors'] = list(VECTORS)
         write(
             DEST / 'PROVENANCE.json',
