@@ -16,7 +16,10 @@ This checkpoint records completed evidence, not a release approval.
 | Current Java matrix | All 370 applicable non-S3 cells pass; combined Python/Java comparison passes all 740 cells with no unobserved subprocesses |
 | Old Python comparison | All 370 non-S3 cells executed with matched dependencies; 277 strict matches and 93 classified differences |
 
-The candidate uses production artifacts built at `08d027795`; subsequent changes repair validation tooling and tests, with unchanged product source.
+The matrix and benchmark evidence uses production artifacts built at `08d027795`.
+Later CI exposed one product compatibility bug: `query.labels()` used an Arrow helper absent in Arrow 14.
+Commit `d140e0d6d` uses the existing capsule-import pattern; its fresh wheel passes 60 focused tests on Arrow 14, with one expected skip.
+Prediction benchmarks do not call this labels adapter, so their original artifact identities and measurements remain unchanged.
 The baseline is clean `main` commit `847a1e9e3` in separate environments.
 Live comparisons match pandas 2.3.3, NumPy 2.5.4 and Arrow 24, and use the same fixtures and recorded model versions.
 Earlier observations with different pandas/Arrow versions are diagnostics only.
