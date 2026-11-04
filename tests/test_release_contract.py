@@ -597,6 +597,36 @@ class _InternalTypes:
 class TestPublicSurface:
     """What a caller can name, and what the endpoint receives."""
 
+    def test_forward_annotations_remain_distinct_from_defaults_and_types(self):
+        spec = importlib.util.spec_from_file_location(
+            'snapshot_signatures', REPO / 'scripts/snapshot_public_api.py'
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def function(value="ForwardRef('Result')"):
+            pass
+
+        function.__annotations__ = {
+            'value': typing.ForwardRef('Input'),
+            'return': typing.ForwardRef('Result'),
+        }
+        assert module._signature(function) == (
+            "(value: ForwardRef('Input') = \"ForwardRef('Result')\")"
+            " -> ForwardRef('Result')"
+        )
+        function.__annotations__['value'] = int
+        assert module._signature(function).startswith('(value: int = ')
+        function.__annotations__['value'] = typing.ForwardRef(
+            'Input', module='a'
+        )
+        first = module._signature(function)
+        function.__annotations__['value'] = typing.ForwardRef(
+            'Input', module='b'
+        )
+        assert module._signature(function) != first
+        assert "module='a'" in first
+
     def test_the_exported_api_matches_the_recorded_snapshot(self):
         result = _run('snapshot_public_api.py')
         assert result.returncode == 0, (

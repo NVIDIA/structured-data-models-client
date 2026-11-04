@@ -20,7 +20,7 @@ import inspect
 import json
 import pathlib
 import sys
-from typing import Any
+from typing import Any, ForwardRef
 
 SNAPSHOT = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -37,6 +37,16 @@ PACKAGES = (
 )
 
 
+class _ForwardAnnotation:
+    """Keep an unevaluated annotation's spelling stable across interpreters."""
+
+    def __init__(self, annotation: ForwardRef):
+        self.text = repr(annotation)
+
+    def __repr__(self) -> str:
+        return self.text
+
+
 def _signature(obj: object) -> str | None:
     r"""The signature as this project wrote it, on any supported Python.
 
@@ -45,7 +55,25 @@ def _signature(obj: object) -> str | None:
     must record the same surface wherever the suite runs.
     """
     try:
-        written = str(inspect.signature(obj))  # type: ignore[arg-type]
+        signature = inspect.signature(obj)  # type: ignore[arg-type]
+        # Python 3.14 renders ForwardRef annotations as resolved-looking names.
+        # Preserve their actual unevaluated identity, without rewriting defaults.
+        signature = signature.replace(
+            parameters=[
+                parameter.replace(
+                    annotation=_ForwardAnnotation(parameter.annotation)
+                )
+                if isinstance(parameter.annotation, ForwardRef)
+                else parameter
+                for parameter in signature.parameters.values()
+            ],
+            return_annotation=(
+                _ForwardAnnotation(signature.return_annotation)
+                if isinstance(signature.return_annotation, ForwardRef)
+                else signature.return_annotation
+            ),
+        )
+        written = str(signature)
     except (TypeError, ValueError):
         return None
     return written.replace('typing_extensions.', '')
