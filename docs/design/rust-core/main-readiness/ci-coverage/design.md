@@ -127,3 +127,7 @@ Both must identify the same production CI artifacts; cleanup failures and skippe
 Disposable fixture setup/read/cleanup passed locally for PostgreSQL, emulated S3, Databricks SQL/Spark/metric views and Snowflake tables/semantic views.
 The combined CPU smoke passed locally: four Python cases and three Java methods, including session coverage, in 27.8 seconds.
 Hosted execution is still pending; these local checks do not claim hosted acceptance.
+
+Full CI exposed a pandas 3.1.1 compatibility omission for mixed Decimal/float row labels.
+The relevant upstream `pandas/_libs/algos.pyx` is byte-identical to 3.1.0; extending the existing version entry fixed eight reproduced failures, with all 26 ordinary-index checks passing locally.
+The Rust sorting algorithm and live acceptance requirements remain unchanged.

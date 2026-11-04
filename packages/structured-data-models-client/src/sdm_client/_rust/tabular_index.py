@@ -380,6 +380,8 @@ def _array(
                 '2.3.3': False,
                 '3.0.6': True,
                 '3.1.0': True,
+                # pandas/_libs/algos.pyx is unchanged from the audited 3.1.0 tag.
+                '3.1.1': True,
             }
             if pd.__version__ not in probe_policies:
                 raise NativeBoundaryError(
