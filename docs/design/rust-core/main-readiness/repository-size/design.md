@@ -105,8 +105,8 @@ The archive remains outside Git; retained fixtures carry source and extraction-t
 
 | Measurement | Before | After extraction |
 |---|---:|---:|
-| Tracked checkout bytes | 1,652,168,033 | approximately 74.1 million |
-| Tracked files | 19,894 | approximately 2,110 |
+| Tracked checkout bytes | 1,652,168,033 | approximately 75.3 million |
+| Tracked files | 19,894 | approximately 2,130 |
 | Added lines against main `847a1e9e3` | more than 22 million | approximately 978,000 |
 
 The exact final integrated totals come from `scripts/rust_core/repository_size.py --base 847a1e9e3`.
@@ -114,7 +114,8 @@ The enforced limits are strictly below 100,000,000 bytes and 1,000,000 added lin
 The gate also rejects returning migration archives, unlocked versioned schemas, oversized fixtures without named consumers, missing consumers and corrupt shared-table expansions.
 Generated API snapshots and the parity manifest retain their existing dedicated gates.
 
-The extraction retains 345 consumed reference observations, 21 Snowflake statement/result cases and all cases in eight shared-table fixtures.
+The extraction retains 345 consumed reference observations, 27 Snowflake statement/result cases and all cases in eight shared-table fixtures.
+Fourteen public Snowflake schema/payload expectations are retained independently, including Python-only cases.
 Every shared-table expansion is compared to its original independent recording, including order and JSON types.
 Three orphan vector recordings were removed; decimal recordings were projected to the inputs used by current exact-join assertions.
 The type-set and semantic-type fixtures and their parity hashes were preserved.
