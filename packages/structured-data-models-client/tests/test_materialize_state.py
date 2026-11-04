@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import json
+import re
 import warnings
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -410,14 +412,69 @@ def _logged(connection: Any) -> int:
 
 
 class _Located:
-    """Counts the statements of each fetch the core marks as plan B's read
-    of a table as it stands (``FetchStep.purpose``, ``locate``, register
-    P3A-1): the one rule by which a core run's statements are compared with
-    the old client's, the core's own mark, never the statements' text."""
+    """Observe engine fetch plans without replacing provider execution.
+
+    Locate reads remain separately counted; raw driver logs must contain
+    exactly the planned SQL after bounded driver bookkeeping is reconciled.
+    """
 
     def __init__(self) -> None:
         self.statements = 0
         self.requests: list[dict[str, Any]] = []
+
+    def observed_statements(self, logged: list[str]) -> int:
+        """Count actual SQL, allowing only bounded driver bookkeeping.
+
+        The allowed registrations come from each observed plan's key sets.
+        A materialized-relation read is allowed only immediately after an
+        observed table-info plan's own PRAGMA query-log entry.
+        Extra data queries and unrequested bookkeeping remain counted and fail.
+        """
+        registrations: Counter[str] = Counter()
+        pragmas: Counter[str] = Counter()
+        planned = 0
+        for request in self.requests:
+            statements = request['plan'].get('statements', [])
+            planned += len(statements)
+            relations = {
+                param['relation']
+                for statement in statements
+                for param in statement.get('params', [])
+                if param.get('param') == 'key_set'
+            }
+            for relation in relations:
+                name = relation.replace('"', '""')
+                registrations[
+                    f'CREATE TEMPORARY VIEW "{name}" AS SELECT 1'
+                ] += 1
+            for statement in statements:
+                match = re.fullmatch(
+                    r'PRAGMA table_info\("((?:[^"]|"")*)"\)', statement['text']
+                )
+                if match:
+                    name = match[1].replace('""', '"').replace("'", "''")
+                    pragmas[f"SELECT * FROM pragma_table_info('{name}');"] += 1
+        materialized = re.compile(
+            r'SELECT \* FROM "__duckdb_source_[0-9a-f]+_[0-9]+" AS "unnamed_relation_[0-9a-f]+"'
+        )
+        actual = 0
+        previous = None
+        for text in logged:
+            if registrations[text]:
+                registrations[text] -= 1
+            elif (
+                previous is not None
+                and pragmas[previous]
+                and materialized.fullmatch(text)
+            ):
+                pragmas[previous] -= 1
+            else:
+                actual += 1
+            previous = text
+        assert actual == planned, (
+            f'unplanned driver statements: observed {actual}, planned {planned}'
+        )
+        return actual - self.statements
 
     def __enter__(self) -> _Located:
         from sdm_client._rust import codec, run
@@ -479,11 +536,11 @@ def _calls(
     expected_error: str | None = None,
     **arguments: Any,
 ) -> list[tuple[int, int]]:
-    """Each query of ``queries`` materialized in turn: the statements each
-    call ran and the missing-index warnings it showed."""
+    """Each query materialized in turn: its actual planned SQL statements
+    recorded by the driver (excluding locate reads), and index warnings."""
     made = []
     for query in queries:
-        before = _logged(connection)
+        before = len(_logged_texts(connection))
         with (
             warnings.catch_warnings(record=True) as caught,
             _Located() as located,
@@ -497,7 +554,8 @@ def _calls(
                 request = query.materialize(anchor_time=ANCHOR, **arguments)
                 assert request._payloads
         warned = sum('Missing' in str(w.message) for w in caught)
-        made.append((_logged(connection) - before - located.statements, warned))
+        actual = located.observed_statements(_logged_texts(connection)[before:])
+        made.append((actual, warned))
     return made
 
 
@@ -687,7 +745,7 @@ def _edited_between_calls(edit: str) -> list[tuple[int, int, str]]:
     for call in range(2):
         if call == 1:
             _edit(schema, edit)
-        before = _logged(connection)
+        before = len(_logged_texts(connection))
         with (
             warnings.catch_warnings(record=True) as caught,
             _Located() as located,
@@ -696,9 +754,10 @@ def _edited_between_calls(edit: str) -> list[tuple[int, int, str]]:
             payload = query.materialize(
                 indices=[0, 1], anchor_time=ANCHOR
             )._payloads[0]
+        actual = located.observed_statements(_logged_texts(connection)[before:])
         made.append(
             (
-                _logged(connection) - before - located.statements,
+                actual,
                 sum('Missing' in str(w.message) for w in caught),
                 json.dumps(payload, sort_keys=True, default=str),
             )
@@ -728,7 +787,7 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
     assert json.dumps(fresh, sort_keys=True, default=str) == core[1][2]
 
 
-def test_a_second_call_runs_the_reference_s_statements() -> None:
+def test_a_second_call_reuses_the_index_check_but_refreshes_data() -> None:
 
     def made() -> list[tuple[int, int]]:
         connection, schema = _shop_logged()
@@ -915,3 +974,37 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request() -> None:
     assert _unreferenced(core) == 0
     # An entirely unreachable table and its foreign-key column are omitted.
     assert core == _materialize()._payloads[0]
+
+
+def test_query_accounting_rejects_an_extra_provider_data_scan(monkeypatch):
+    from sdm_client._rust.providers.duckdb import DuckDBProvider
+
+    connection, schema = _shop_logged()
+    query = PredictiveQuery(QUERY, schema)
+    original = DuckDBProvider.__call__
+
+    def duplicate_scan(provider, *args, **kwargs):
+        answer = original(provider, *args, **kwargs)
+        provider._connection.execute('SELECT * FROM users').fetchall()
+        return answer
+
+    monkeypatch.setattr(DuckDBProvider, '__call__', duplicate_scan)
+    with pytest.raises(AssertionError, match='unplanned driver statements'):
+        _calls([query], connection, indices=[0, 1])
+
+
+@pytest.mark.parametrize(
+    'extra',
+    [
+        'SELECT * FROM users',
+        'CREATE TEMPORARY VIEW "__sdm_seeds__" AS SELECT 1',
+        'SELECT * FROM "__duckdb_source_aabb_1" AS "unnamed_relation_ccdd"',
+    ],
+)
+def test_query_accounting_rejects_unrequested_driver_bookkeeping(extra):
+    observed = _Located()
+    observed.requests = [
+        {'plan': {'statements': [{'text': 'SELECT 1', 'params': []}]}}
+    ]
+    with pytest.raises(AssertionError, match='unplanned driver statements'):
+        observed.observed_statements(['SELECT 1', extra])
