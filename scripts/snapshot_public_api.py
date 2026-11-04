@@ -42,6 +42,13 @@ class _ForwardAnnotation:
 
     def __init__(self, annotation: ForwardRef):
         self.text = repr(annotation)
+        # Python 3.10 stores the module but omits it from ForwardRef.__repr__.
+        # Preserve that identity without discarding newer interpreters' fields.
+        module = annotation.__forward_module__
+        if module is not None and self.text == (
+            f'ForwardRef({annotation.__forward_arg__!r})'
+        ):
+            self.text = self.text[:-1] + f', module={module!r})'
 
     def __repr__(self) -> str:
         return self.text
