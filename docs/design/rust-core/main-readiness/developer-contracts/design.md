@@ -4,7 +4,11 @@
 
 # Developing without losing capabilities
 
-**Proposal: extend the existing compatibility ledger and add one developer change guide, rather than another parity framework.**
+**Implementation plan: extend the existing compatibility ledger and add one developer change guide.**
+
+Phase 8 implements ownership and applicability on API groups, direct behavior links for changed public symbols, and disposable generated views.
+The CI effort owns live-registry execution; fixture reduction preserves the type-contract inputs.
+Final correctness and benchmarks run after integration, with valid baseline/candidate comparisons and reported numbers, without performance tuning.
 
 ## Existing protection and real gaps
 

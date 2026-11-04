@@ -2941,7 +2941,54 @@
           "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#frameKeyEditsCheckActualRowsAndPreserveOriginalSchema"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/edit.rs"
+        ],
+        "operations": [
+          "edit_schema",
+          "check_column",
+          "assemble_frame_schema"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "types.date.inferred",
+            "types.null.inferred",
+            "types.null.provider",
+            "types.null.session",
+            "types.numeric.inferred",
+            "types.numeric.provider",
+            "types.sequence.declared",
+            "types.tags.declared",
+            "types.temporal.inferred",
+            "types.temporal.provider",
+            "types.text-null.declared",
+            "types.text-null.inferred",
+            "types.text-short.declared",
+            "types.text-short.inferred",
+            "types.text-short.session",
+            "types.text.inferred"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types",
+            "reader-model-type-journeys"
+          ]
+        }
+      }
     },
     {
       "id": "direct-dtypes-options",
@@ -3014,7 +3061,65 @@
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#inferenceAdmissionIsSharedAcrossPredictionAndSessions"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/direct.rs"
+        ],
+        "operations": [
+          "prepare_direct",
+          "check_direct_shape",
+          "check_direct_option"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "direct.regression",
+            "node.binary",
+            "node.multiclass",
+            "node.regression",
+            "reader.raw.regression",
+            "relational.aggregate",
+            "relational.condition",
+            "relational.forecast",
+            "relational.foreign-key",
+            "relational.ranking",
+            "relational.temporal-link",
+            "types.date.inferred",
+            "types.null.inferred",
+            "types.null.provider",
+            "types.null.session",
+            "types.numeric.inferred",
+            "types.numeric.provider",
+            "types.sequence.declared",
+            "types.tags.declared",
+            "types.temporal.inferred",
+            "types.temporal.provider",
+            "types.text-null.declared",
+            "types.text-null.inferred",
+            "types.text-short.declared",
+            "types.text-short.inferred",
+            "types.text-short.session",
+            "types.text.inferred"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types",
+            "reader-model-type-journeys"
+          ]
+        }
+      }
     },
     {
       "id": "readiness-discovery",
@@ -3039,7 +3144,28 @@
           "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#rankingPartsRemainUsableAndUnscoredCandidatesSurviveMerge"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/client.py"
+        ],
+        "operations": [],
+        "host_only_reason": "HTTP endpoint discovery and readiness are host I/O."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Endpoint capability discovery is host I/O; no prediction task is performed."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "results-merge",
@@ -3073,7 +3199,37 @@
           "java/src/test/java/com/nvidia/sdm/ResultInspectionTest.java#rankingPartsRemainUsableAndUnscoredCandidatesSurviveMerge"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/result.rs"
+        ],
+        "operations": [
+          "merge_results",
+          "plan_result_merge"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "outputs.binary",
+            "outputs.regression.batched",
+            "outputs.regression.tabular"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "persistence",
@@ -3108,7 +3264,43 @@
           "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#liveSourcesAreExplicitlyExcluded"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/schema.py"
+        ],
+        "operations": [],
+        "host_only_reason": "Serialization and restoring public containers belong to the hosts."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "lifecycle.fitted",
+            "lifecycle.holdout",
+            "persistence.request",
+            "persistence.tabular-read",
+            "refusal.source-persistence",
+            "refusal.tabular.aggregate",
+            "refusal.tabular.condition",
+            "refusal.tabular.forecast",
+            "refusal.tabular.foreign-key",
+            "refusal.tabular.ranking",
+            "refusal.tabular.temporal-link"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "readers",
@@ -3168,7 +3360,51 @@
           "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-connectors/src/sdm_connectors"
+        ],
+        "operations": [],
+        "host_only_reason": "Drivers and file I/O remain host-owned; admission is tested separately."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "types.date.inferred",
+            "types.null.inferred",
+            "types.null.provider",
+            "types.null.session",
+            "types.numeric.inferred",
+            "types.numeric.provider",
+            "types.sequence.declared",
+            "types.tags.declared",
+            "types.temporal.inferred",
+            "types.temporal.provider",
+            "types.text-null.declared",
+            "types.text-null.inferred",
+            "types.text-short.declared",
+            "types.text-short.inferred",
+            "types.text-short.session",
+            "types.text.inferred"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types",
+            "reader-model-type-journeys"
+          ]
+        }
+      }
     },
     {
       "id": "provider-contract",
@@ -3188,7 +3424,30 @@
         "java": []
       },
       "gate": "native",
-      "note": "Public Rust host-provider obligations shared by language bindings, not an invented Python provider API."
+      "note": "Public Rust host-provider obligations shared by language bindings, not an invented Python provider API.",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/_rust/providers"
+        ],
+        "operations": [],
+        "host_only_reason": "Hosts execute engine SQL through the provider protocol, rather than a user operation."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Provider execution is model-independent; native provider tests define the SQL boundary."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types"
+          ]
+        }
+      }
     },
     {
       "id": "large-values",
@@ -3214,7 +3473,30 @@
         ]
       },
       "gate": "large-memory",
-      "note": "Synthetic capacity tests run locally; actual greater-than-2GiB journeys require the protected resource gate."
+      "note": "Synthetic capacity tests run locally; actual greater-than-2GiB journeys require the protected resource gate.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/tabular_arrow.rs"
+        ],
+        "operations": [
+          "tabular_arrow"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Dedicated large-memory tests define size limits; these are not scenario-matrix acceptance."
+        },
+        "input_paths": {
+          "refs": [
+            "warehouse-relational"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "public-serving-refusals",
@@ -3281,7 +3563,30 @@
         ]
       },
       "gate": "local",
-      "note": "Public Databricks session refusal remains distinct from real-model private-bridge lifecycle tests."
+      "note": "Public Databricks session refusal remains distinct from real-model private-bridge lifecycle tests.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/direct.rs"
+        ],
+        "operations": [
+          "prepare_direct",
+          "check_direct_shape"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused refusal tests define preflight behavior; no successful prediction scope is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "request-inspection",
@@ -3310,7 +3615,29 @@
           "java/src/test/java/com/nvidia/sdm/RequestSplitTest.java#gatheredViewsPartsAndRestorationLeavePredictionPayloadsUntouched"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/split.rs"
+        ],
+        "operations": [
+          "read_request_split"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Request inspection is model-independent container access."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "result-items",
@@ -3337,7 +3664,36 @@
           "java/src/test/java/com/nvidia/sdm/ResultItemsTest.java#temporalLinkDictionariesAndForecastStepsNeedNoJsonParsingByCaller"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/result.rs"
+        ],
+        "operations": [
+          "read_result_items"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "outputs.binary",
+            "outputs.regression.batched",
+            "outputs.regression.tabular"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "sessions",
@@ -3374,6 +3730,45 @@
           "java/src/test/java/com/nvidia/sdm/FitOutputsTest.java#tabularFitForwardsRequestedOutputs",
           "java/src/test/java/com/nvidia/sdm/FitOutputsTest.java#relationalFitForwardsRequestedOutputsAndTraceObservesActualResponses"
         ]
+      },
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/session.rs"
+        ],
+        "operations": [
+          "prepare_tabular_fit",
+          "prepare_tabular_score",
+          "close_tabular_session"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "lifecycle.fitted",
+            "lifecycle.holdout",
+            "persistence.request",
+            "persistence.tabular-read",
+            "refusal.source-persistence",
+            "refusal.tabular.aggregate",
+            "refusal.tabular.condition",
+            "refusal.tabular.forecast",
+            "refusal.tabular.foreign-key",
+            "refusal.tabular.ranking",
+            "refusal.tabular.temporal-link"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3419,6 +3814,27 @@
           "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anEmptyAnswerIsAnEmptyObject",
           "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anAnswerWhoseBodyIsHeldBackTimesOut"
         ]
+      },
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/_rust/errors.py"
+        ],
+        "operations": [],
+        "host_only_reason": "Hosts translate core error codes to language-specific exceptions."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Exception translation is model-independent; operation-specific refusals belong to their capability tests."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3465,6 +3881,27 @@
           "packages/structured-data-models-api/tests/test_response_strictness.py::test_an_entity_id_that_is_absent_or_null_is_still_allowed"
         ],
         "java": []
+      },
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-api/src/sdm_api"
+        ],
+        "operations": [],
+        "host_only_reason": "Generated wire vocabulary describes HTTP, independently of core operations."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Generated endpoint vocabulary describes wire shapes rather than prediction applicability."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3486,6 +3923,27 @@
           "packages/structured-data-models-connectors/tests/test_sql.py::test_resolve_sql_requires_exactly_one_source"
         ],
         "java": []
+      },
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-connectors/src/sdm_connectors"
+        ],
+        "operations": [],
+        "host_only_reason": "Public connector SQL helpers are host utilities, not engine policy."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "SQL helper formatting is model-independent connector utility behavior."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3501,6 +3959,27 @@
           "tests/test_release_contract.py::TestPublicSurface::test_the_exported_api_matches_the_recorded_snapshot"
         ],
         "java": []
+      },
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/_version.py"
+        ],
+        "operations": [],
+        "host_only_reason": "Package metadata is a distribution concern."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Distribution metadata has no model, task, input, or type applicability."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3539,6 +4018,45 @@
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#laterSessionFailureRetainsAlreadyAnsweredRows",
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#failedDeleteCanRetryAndClientCloseAttemptsEverySession"
         ]
+      },
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/materialize.rs"
+        ],
+        "operations": [
+          "materialize",
+          "materialize_frames"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [
+            "direct.regression",
+            "node.binary",
+            "node.multiclass",
+            "node.regression",
+            "reader.raw.regression",
+            "relational.aggregate",
+            "relational.condition",
+            "relational.forecast",
+            "relational.foreign-key",
+            "relational.ranking",
+            "relational.temporal-link"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "reader-model-type-journeys"
+          ]
+        }
       }
     },
     {
@@ -3558,7 +4076,28 @@
         "java": []
       },
       "gate": "in-process",
-      "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate."
+      "note": "Optional Python model runtime. The in-process CPU CI job runs both public prediction/session test modules with random-weight models; endpoint evidence remains separate.",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/in_process"
+        ],
+        "operations": [],
+        "host_only_reason": "The host provides model execution to the same core request protocol."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused runtime tests cover the local model adapter; no live scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "schema-visualization",
@@ -3586,7 +4125,28 @@
           "java/src/test/java/com/nvidia/sdm/SchemaVisualizationTest.java#packagedRendererMatchesPinnedUpstream"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/_visualization.py"
+        ],
+        "operations": [],
+        "host_only_reason": "Rendering is host presentation."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Schema graph rendering is model-independent presentation."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "schema-notebook-display",
@@ -3603,7 +4163,28 @@
         ],
         "java": []
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/_visualization.py"
+        ],
+        "operations": [],
+        "host_only_reason": "Notebook display is host presentation."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Notebook schema rendering is model-independent presentation."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "relbench",
@@ -3633,7 +4214,28 @@
           "java/src/test/java/com/nvidia/sdm/RelBenchTest.java#loadedSchemaComposesReportsExportsAndPersistedRequests"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "packages/structured-data-models-client/src/sdm_client/_relbench.py"
+        ],
+        "operations": [],
+        "host_only_reason": "Dataset adaptation is host input conversion."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "RelBench adaptation converts dataset objects; focused tests define the adapter boundary."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "sanitization-reports",
@@ -3665,7 +4267,29 @@
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#decomposedRequestsRetainSanitizationReport"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/direct.rs"
+        ],
+        "operations": [
+          "prepare_direct"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Sanitization report tests inspect prepared inputs; no separate scenario scope is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "metadata-explanation-reports",
@@ -3689,6 +4313,29 @@
         "java": [
           "java/src/test/java/com/nvidia/sdm/ReportsTest.java"
         ]
+      },
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/result.rs"
+        ],
+        "operations": [
+          "read_result_items",
+          "feature_importance"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Metadata and explanation presentation is covered by focused report tests."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3713,7 +4360,29 @@
         ]
       },
       "gate": "local",
-      "note": "Shared history fixtures; public materialization; owned outputs and invalid inputs. One resulting live forecast separately verified."
+      "note": "Shared history fixtures; public materialization; owned outputs and invalid inputs. One resulting live forecast separately verified.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/timeseries.rs"
+        ],
+        "operations": [
+          "prepare_time_series"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused forecast preparation tests define temporal transformations; model execution scope is not enumerated here."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "schema-refinement",
@@ -3744,7 +4413,31 @@
         ]
       },
       "gate": "local",
-      "note": "Shared fixtures verify detached edits, recorded link origin, explicit choices and persistence; provider materialization checks the unchanged sampler boundary."
+      "note": "Shared fixtures verify detached edits, recorded link origin, explicit choices and persistence; provider materialization checks the unchanged sampler boundary.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/edit.rs"
+        ],
+        "operations": [
+          "edit_schema"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Schema refinement is model-independent; focused tests cover inference edits."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types"
+          ]
+        }
+      }
     },
     {
       "id": "labels-only",
@@ -3766,7 +4459,30 @@
         ]
       },
       "gate": "local",
-      "note": "Shared independent scalar/temporal/link/forecast labels across memory and SQLite/DuckDB; no model call; live warehouse read-only proof is separate."
+      "note": "Shared independent scalar/temporal/link/forecast labels across memory and SQLite/DuckDB; no model call; live warehouse read-only proof is separate.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/materialize.rs"
+        ],
+        "operations": [
+          "labels_frames",
+          "labels_source"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Ground-truth label computation does not execute a model; focused memory and warehouse tests define scope."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "end-time",
@@ -3789,7 +4505,31 @@
           "java/src/test/java/com/nvidia/sdm/EndTimeTest.java"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/materialize.rs"
+        ],
+        "operations": [
+          "materialize",
+          "materialize_frames",
+          "labels_source"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused temporal tests cover end-time selection and prediction; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "sql-columns",
@@ -3809,7 +4549,29 @@
           "java/src/test/java/com/nvidia/sdm/SqlColumnTest.java"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/sql_column.rs"
+        ],
+        "operations": [
+          "add_sql_column"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused warehouse tests cover calculated columns; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "custom-examples",
@@ -3832,7 +4594,29 @@
           "java/src/test/java/com/nvidia/sdm/CustomExamplesTest.java"
         ]
       },
-      "gate": "local"
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/materialize.rs"
+        ],
+        "operations": [
+          "materialize_examples"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused supplied-example tests define materialization; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "typed-inference-settings",
@@ -3853,7 +4637,30 @@
         ]
       },
       "gate": "local",
-      "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed."
+      "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/predict.rs"
+        ],
+        "operations": [
+          "predict",
+          "prepare_direct"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused option tests define accepted inference settings; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "explanation-summaries",
@@ -3874,7 +4681,29 @@
         ]
       },
       "gate": "local",
-      "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed."
+      "note": "Public typed/mapping equivalence through Rust and controlled HTTP summary exchanges; no live text-model validation claimed.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/result.rs"
+        ],
+        "operations": [
+          "read_result_items"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Summary generation is a separate text-service adapter, not a tabular/relational prediction task."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "connection-rebinding",
@@ -3895,7 +4724,29 @@
         ]
       },
       "gate": "local",
-      "note": "Detached replacement source preserves declarations and ownership; local SQLite/DuckDB checks and separately recorded real warehouse/model reconnect journeys."
+      "note": "Detached replacement source preserves declarations and ownership; local SQLite/DuckDB checks and separately recorded real warehouse/model reconnect journeys.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/rebind.rs"
+        ],
+        "operations": [
+          "rebind_source"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused connection tests cover source replacement and ownership; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "automatic-batch-sessions",
@@ -3920,7 +4771,30 @@
         ]
       },
       "gate": "local",
-      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison. PQL and supplied temporal-link batches share the 200-row model cap, with ordered entity identities on memory, DuckDB and SQLite routes."
+      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison. PQL and supplied temporal-link batches share the 200-row model cap, with ordered entity identities on memory, DuckDB and SQLite routes.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/batch_session.rs"
+        ],
+        "operations": [
+          "predict",
+          "prepare_tabular_fit"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused batching tests cover session reuse; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     },
     {
       "id": "gradient-explanations",
@@ -3973,7 +4847,30 @@
           "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#ordinaryResultsStillMergeRepeatedPartsWithoutGradients"
         ]
       },
-      "note": "Rust validates gradient shapes, row identities, class labels and forecast/batch/session association; hosts present collections and tables. Local contract tests do not certify gradient support for every connector or deployed model. Python also retains public manual result construction; Java constructor visibility remains unchanged, while Java-produced results share Rust identity/merge policy. Generated keys remain client-only state and never enter outgoing model request metadata."
+      "note": "Rust validates gradient shapes, row identities, class labels and forecast/batch/session association; hosts present collections and tables. Local contract tests do not certify gradient support for every connector or deployed model. Python also retains public manual result construction; Java constructor visibility remains unchanged, while Java-produced results share Rust identity/merge policy. Generated keys remain client-only state and never enter outgoing model request metadata.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/result.rs"
+        ],
+        "operations": [
+          "read_result_items",
+          "decode_direct_response"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused local/live gradient tests define supported tasks and models; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     }
   ],
   "public_api_snapshot_sha256": "61665e4145f8ca8c68631faa4e0404b0796da081b60e0e3649a905be23c6f3e5",
@@ -6732,6 +7629,176 @@
       "base_commit": "ff08b03d760f657bdff98005629f068c8f0be6b7",
       "record": "public_api_snapshot_sha256",
       "reason": "Merge main explanation contracts into Rust routes, restore Python manual construction and test engine routing, early refusals, internal key provenance and joinable result identities."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/schema-edits",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/direct-dtypes-options",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/readiness-discovery",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/results-merge",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/persistence",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/readers",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/provider-contract",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/large-values",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/public-serving-refusals",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/request-inspection",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/result-items",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/sessions",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/errors",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/wire-vocabulary",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/sql-helpers",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/release-metadata",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/relational-materialization",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/in-process-models",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/schema-visualization",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/schema-notebook-display",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/relbench",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/sanitization-reports",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/metadata-explanation-reports",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/timeseries-preparation",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/schema-refinement",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/labels-only",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/end-time",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/sql-columns",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/custom-examples",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/typed-inference-settings",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/explanation-summaries",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/connection-rebinding",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/automatic-batch-sessions",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
     }
   ],
   "capabilities": [

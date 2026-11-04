@@ -190,3 +190,5 @@ By making a contribution to this project, I certify that:
 Optional local prerequisites or unsupported platforms may produce explicit test skips.
 The CI job responsible for a capability must require its prerequisites and fail when they are unavailable (`SDM_REQUIRE_POSTGRES` and `SDM_REQUIRE_JAVA`).
 Mandatory parity cases are also checked by the maintained test ledger.
+
+For capability changes, follow the [developer change guide](docs/development/change-guide.md).

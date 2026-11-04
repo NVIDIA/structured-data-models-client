@@ -1,7 +1,7 @@
 # The Rust core
 
 One Rust library that every host language shares.
-A host (Python today) starts an operation, and the core answers with steps: run these SQL statements, send this request body to the model, or here is the result.
+A host (Python or Java) starts an operation, and the core answers with steps: run these SQL statements, send this request body to the model, or here is the result.
 The host runs each step with its own database driver or HTTP client and hands back Arrow tables or response bytes.
 The core opens no database connection and no network socket.
 Time zones come from directories the host names, then from a bundled copy.
@@ -22,9 +22,10 @@ The last column is what `scripts/rust_core/l0_deps.py` allows, for any kind of d
 | `sdm-core` | The run state machine and the operations: describe, edit, validate, materialize, predict | every crate above |
 | `sdm-host` | The layer every binding shares: message codec, Arrow admission, run ownership, panic containment, zones | `sdm-core`, `sdm-data`, `sdm-contract` |
 | `sdm-py` (in `bindings/`) | The Python module `sdm_client._native` | exactly `sdm-host` and `sdm-contract` |
+| `sdm-jni` (in `bindings/`) | The JNI bridge used by the Java client | exactly `sdm-host` and `sdm-contract` |
 | `sdm-testkit` (dev only) | A pure-Rust test host and the `sdm-contract-run` program for the contract cases | `sdm-host`, `sdm-contract` |
 
-A Java binding, `sdm-jni`, is planned under `bindings/` with the same rule as `sdm-py`.
+The Java binding, `sdm-jni`, lives under `bindings/` with the same dependency rule as `sdm-py`.
 
 ## Dependency diagram
 
@@ -36,6 +37,8 @@ Each crate's own README repeats its part of this graph.
 
 ```mermaid
 flowchart TD
+    sdm_jni["sdm-jni"] --> sdm_host
+    sdm_jni --> sdm_contract
     sdm_py["sdm-py"] --> sdm_host["sdm-host"]
     sdm_testkit["sdm-testkit (dev only)"] --> sdm_host
     sdm_host --> sdm_core["sdm-core"]
