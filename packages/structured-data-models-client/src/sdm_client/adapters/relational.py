@@ -599,7 +599,8 @@ def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
 
 _WIRE_TARGET = 'TARGET'
 _A_PREDICTED_COLUMN = re.compile(
-    r'^\s*PREDICT\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s', re.IGNORECASE
+    r'^\s*(?:EXPLAIN\s+)?PREDICT\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s',
+    re.IGNORECASE,
 )
 
 
