@@ -27,6 +27,8 @@ use serde_json::Value;
 const READ: &[&str] = &[
     "CheckColumn.input",
     "PlanResultMerge.input",
+    "PrepareTimeSeries.input",
+    "FeatureImportance.input",
     "AssembleFrameSchema.input",
     "ResolveDirectDtype.input",
     "ResolveObservedTabular.input",

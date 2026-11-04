@@ -8,10 +8,13 @@ could be either, `materialize(task=...)` settles it.)
 ## The shape
 
 ```
-PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
+[ EXPLAIN ] PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
 (FOR EACH | FOR) <entity>
 [ ASSUMING <condition> ]
 ```
+
+`EXPLAIN PREDICT …` adds `'explanation'` to the ordinary requested outputs.
+Explicitly including that output too is allowed; `outputs=[]` remains invalid. A ranking refuses it; a forecast explains each step.
 
 `CLASSIFY` is in the language and **not reachable on these models**. It takes
 a multicategorical target, and that is the one thing these models will not

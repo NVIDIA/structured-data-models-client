@@ -43,6 +43,7 @@ def _run(
                     'output',
                     'inference',
                     'metadata',
+                    'client_generated_keys',
                 )
             )
             attachments[number] = prediction._payload(

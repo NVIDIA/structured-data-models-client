@@ -65,7 +65,6 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
-    assert RELATIONAL_LIMITS['explanation_predict_rows'] == 1
     assert RELATIONAL_LIMITS['hops_max'] == 6
     assert RELATIONAL_LIMITS['tables_max'] == 15
 
@@ -82,22 +81,17 @@ def test_num_hops_must_be_a_whole_number(bad):
     assert error.value.code == 'INVALID_REQUEST'
 
 
-def test_an_explanation_covering_more_than_one_entity_is_refused():
-    """The model explains one entity at a time; more gets an opaque 500."""
-    request = _Gathered(payload(predict_rows=4, context_rows=100))
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(sent(request, ('prediction', 'explanation')))
-    assert 'one at a time' in str(error.value)
-
-
-def test_an_explanation_over_the_smaller_context_budget_is_refused():
-    """Explaining forces the smaller budget, which caps context at 1,000."""
-    request = _Gathered(payload(predict_rows=1, context_rows=5_000))
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(sent(request, ('prediction', 'explanation')))
-    message = str(error.value)
-    assert 'num_context_samples' in message
-    assert '1,000' in message
+@pytest.mark.parametrize(
+    ('predict_rows', 'context_rows'), [(4, 100), (1, 5000)]
+)
+def test_explanations_have_no_separate_row_or_context_limit(
+    predict_rows, context_rows
+):
+    request = _Gathered(
+        payload(predict_rows=predict_rows, context_rows=context_rows)
+    )
+    plans = list(sent(request, ('prediction', 'explanation')))
+    assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
 def test_an_explanation_within_both_limits_is_allowed():
@@ -227,8 +221,7 @@ def test_the_preflight_runs_through_a_real_materialized_request():
     assert len(plans) == 1
     assert plans[0]['model'] == 'kumo-relational'
 
-    with pytest.raises(UnsupportedRequestError):
-        list(sent(request, ('prediction', 'explanation')))
+    assert sent(request, ('prediction', 'explanation'))
 
 
 def gathered_in_calls(*, calls: int, context_rows: int):

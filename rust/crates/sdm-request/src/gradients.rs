@@ -7,7 +7,9 @@
 use crate::predict::{self, Entity, Row};
 use sdm_contract::{
     CoreError,
-    result::{GradientCollection, GradientKeyKind, GradientRecord},
+    result::{
+        GradientCollection, GradientKeyKind, GradientRecord, MergeCandidate, MergeDescriptor,
+    },
 };
 use sdm_wire::json::{self, Value};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -262,7 +264,14 @@ impl<'a> Decoder<'a> {
                         return Err(bad("wrong_related_owner"));
                     }
                 }
-                let keys = key_columns(described)?;
+                let generated = payload
+                    .get("client_generated_keys")
+                    .and_then(|keys| keys.get(name))
+                    .and_then(Value::as_text);
+                let keys = key_columns(described)?
+                    .into_iter()
+                    .filter(|key| Some(*key) != generated)
+                    .collect::<Vec<_>>();
                 let mut item = object([
                     (
                         "rows",
@@ -275,7 +284,10 @@ impl<'a> Decoder<'a> {
                                             .names
                                             .iter()
                                             .zip(table.rows[at])
-                                            .filter(|(column, _)| column.as_str() != "instance_id")
+                                            .filter(|(column, _)| {
+                                                column.as_str() != "instance_id"
+                                                    && Some(column.as_str()) != generated
+                                            })
                                             .map(|(column, value)| (column.clone(), value.clone()))
                                             .collect(),
                                     )
@@ -511,6 +523,8 @@ fn hops<'a>(
 pub fn records(rows: &[Row]) -> Vec<GradientRecord> {
     rows.iter()
         .map(|row| GradientRecord {
+            native_id: None,
+            entry_owner: None,
             row_index: row.gradient_position.unwrap_or(row.row_index),
             answer_index: row.answer_index,
             forecast_step: row.forecast_step,
@@ -527,24 +541,24 @@ pub fn collection(rows: Vec<GradientRecord>) -> Result<Option<GradientCollection
     let mut seen = BTreeSet::new();
     let mut by_id = true;
     for row in &rows {
-        let id = json::read_answer(row.id.as_bytes()).map_err(|_| bad("invalid_identity"))?;
-        if matches!(id, Value::Array(_) | Value::Object(_) | Value::Null)
-            || matches!(&id,Value::Number(token) if matches!(token.as_str(),"NaN"|"Infinity"|"-Infinity"))
+        let identity = identity(row)?;
+        if matches!(&identity, MergeCandidate::Json { value } if matches!(value.as_str(), "null" | "NaN" | "Infinity" | "-Infinity"))
+            || matches!(
+                &identity,
+                MergeCandidate::List { .. }
+                    | MergeCandidate::Mapping { .. }
+                    | MergeCandidate::Unsupported { .. }
+            )
         {
             by_id = false;
         }
-        let key = crate::result::candidate_key(&crate::result::candidate(id))?;
-        if row.id == "null" || key.is_none_or(|key| !seen.insert((key, row.forecast_step))) {
+        let key = crate::result::candidate_key(&identity)?;
+        if key.is_none_or(|key| !seen.insert((key, row.forecast_step))) {
             by_id = false
         }
     }
     let mut rows = rows;
     rows.sort_by_key(|row| row.answer_index);
-    let mut positions = BTreeMap::new();
-    for row in &mut rows {
-        let next = i64::try_from(positions.len()).map_err(|_| bad("too_many_rows"))?;
-        row.row_index = *positions.entry(row.row_index).or_insert(next);
-    }
     Ok(Some(GradientCollection {
         keyed_by: if by_id {
             GradientKeyKind::Id
@@ -555,27 +569,111 @@ pub fn collection(rows: Vec<GradientRecord>) -> Result<Option<GradientCollection
     }))
 }
 
-/// Independently produced results receive consecutive positions while forecasts retain their step.
+fn identity(row: &GradientRecord) -> Result<MergeCandidate, CoreError> {
+    row.native_id.clone().map_or_else(
+        || {
+            json::read_answer(row.id.as_bytes())
+                .map(crate::result::candidate)
+                .map_err(|_| bad("invalid_identity"))
+        },
+        Ok,
+    )
+}
+
+/// Resolve host-owned manual entries against the same row identity policy as model results.
+pub fn manual_records(part: &MergeDescriptor) -> Result<Vec<GradientRecord>, CoreError> {
+    if part.manual_gradients.is_empty() {
+        return Ok(part.gradient_rows.clone());
+    }
+    let mut probe = part.gradient_rows.clone();
+    for row in &mut probe {
+        row.explanation = Some("{}".into());
+    }
+    let keyed = collection(probe)?.ok_or_else(manual_error)?.keyed_by;
+    let mut rows = part.gradient_rows.clone();
+    let mut positions = BTreeMap::new();
+    for (at, row) in rows.iter().enumerate() {
+        let key = if keyed == GradientKeyKind::Id {
+            identity(row)?
+        } else {
+            MergeCandidate::Json {
+                value: row.row_index.to_string(),
+            }
+        };
+        let key = match row.forecast_step {
+            Some(step) => MergeCandidate::Tuple {
+                values: vec![
+                    key,
+                    MergeCandidate::Json {
+                        value: step.to_string(),
+                    },
+                ],
+            },
+            None => key,
+        };
+        let key = crate::result::candidate_key(&key)?.ok_or_else(manual_error)?;
+        if positions.insert(key, at).is_some() {
+            return Err(manual_error());
+        }
+    }
+    for entry in &part.manual_gradients {
+        let wanted = crate::result::candidate_key(&entry.key)?.ok_or_else(manual_error)?;
+        let row = &mut rows[*positions.get(&wanted).ok_or_else(manual_error)?];
+        if row.entry_owner.replace(entry.owner).is_some() {
+            return Err(manual_error());
+        }
+        row.explanation = Some("{}".into());
+    }
+    Ok(rows)
+}
+
+fn manual_error() -> CoreError {
+    CoreError::new(
+        sdm_contract::Sentence::ResultMergeManualIdentity,
+        "manual explanation keys must identify result rows by id or row_index and forecast step; use predict() for decoded results",
+    )
+}
+
+/// Preserve unique positions; resolve collisions between results while retaining forecast steps.
 pub fn merge_records<'a>(
     parts: impl IntoIterator<Item = &'a [GradientRecord]>,
 ) -> Result<Option<GradientCollection>, CoreError> {
+    let parts = parts.into_iter().collect::<Vec<_>>();
+    if parts
+        .iter()
+        .flat_map(|part| part.iter())
+        .all(|row| row.explanation.is_none())
+    {
+        return Ok(None);
+    }
+    for part in &parts {
+        let mut unique = BTreeSet::new();
+        if part
+            .iter()
+            .any(|row| !unique.insert((row.row_index, row.forecast_step)))
+        {
+            return Err(manual_error());
+        }
+    }
+    let mut seen = BTreeSet::new();
+    let collisions = parts
+        .iter()
+        .flat_map(|p| p.iter())
+        .any(|r| !seen.insert((r.row_index, r.forecast_step)));
     let mut rows = Vec::new();
-    let mut offset = 0i64;
-    for part in parts {
+    let mut positions = BTreeMap::new();
+    for (part_index, part) in parts.into_iter().enumerate() {
         let mut ordered = part.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|r| r.answer_index);
-        let mut mapping = BTreeMap::new();
         for row in ordered {
-            let next = offset + i64::try_from(mapping.len()).map_err(|_| bad("too_many_rows"))?;
-            let position = *mapping.entry(row.row_index).or_insert(next);
             let mut row = row.clone();
-            row.row_index = position;
+            if collisions {
+                let next = i64::try_from(positions.len()).map_err(|_| bad("too_many_rows"))?;
+                row.row_index = *positions.entry((part_index, row.row_index)).or_insert(next);
+            }
             row.answer_index = i64::try_from(rows.len()).map_err(|_| bad("too_many_rows"))?;
             rows.push(row);
         }
-        offset = offset
-            .checked_add(i64::try_from(mapping.len()).map_err(|_| bad("too_many_rows"))?)
-            .ok_or_else(|| bad("too_many_rows"))?;
     }
     collection(rows)
 }
@@ -682,6 +780,8 @@ mod tests {
     }
     fn record(id: &str, row_index: i64, step: Option<i64>, explained: bool) -> GradientRecord {
         GradientRecord {
+            native_id: None,
+            entry_owner: None,
             id: id.into(),
             row_index,
             answer_index: row_index,
@@ -742,7 +842,7 @@ mod tests {
         let first = collection(vec![a, b]).unwrap().unwrap();
         assert_eq!(
             first.rows.iter().map(|r| r.row_index).collect::<Vec<_>>(),
-            [0, 1]
+            [5, 2]
         );
         let last = [record("7", 0, None, true)];
         let nested = merge_records([first.rows.as_slice(), last.as_slice()])
@@ -750,9 +850,21 @@ mod tests {
             .unwrap();
         assert_eq!(
             nested.rows.iter().map(|r| r.row_index).collect::<Vec<_>>(),
-            [0, 1, 2]
+            [5, 2, 0]
         );
     }
+    #[test]
+    fn ordinary_nested_merges_do_not_apply_gradient_identity_rules() {
+        let rows = [record("1", 0, None, false), record("1", 0, None, false)];
+        assert!(merge_records([rows.as_slice()]).unwrap().is_none());
+    }
+
+    #[test]
+    fn duplicate_positions_within_one_part_are_rejected() {
+        let rows = [record("1", 0, None, true), record("2", 0, None, true)];
+        assert!(merge_records([rows.as_slice()]).is_err());
+    }
+
     #[test]
     fn complex_nonfinite_and_python_equal_ids_use_positions() {
         for id in ["[1,2]", "{\"k\":1}", "NaN", "Infinity"] {

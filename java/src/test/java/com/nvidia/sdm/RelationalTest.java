@@ -433,6 +433,7 @@ class RelationalTest {
     final AtomicInteger deleteFailures = new AtomicInteger();
     final AtomicInteger scoreCalls = new AtomicInteger();
     volatile int failScoreOn;
+    boolean gradients;
     final Map<String, Map<String, Object>> sessions = new java.util.concurrent.ConcurrentHashMap<>();
 
     Endpoint() throws Exception {
@@ -473,6 +474,7 @@ class RelationalTest {
               } else {
                 row.put("prediction", true); row.put("probabilities", Map.of("True", 0.9, "False", 0.1));
               }
+              if (gradients) row.put("explanation", MainMergeContractTest.gradient(body, at));
               predictions.add(row);
             }
             answer = Json.write(Map.of("id", "relational-response", "model", SdmClient.KUMO_RELATIONAL,

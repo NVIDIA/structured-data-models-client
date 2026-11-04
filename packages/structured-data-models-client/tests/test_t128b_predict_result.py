@@ -297,6 +297,18 @@ def test_the_core_s_predict_is_the_reference_s(
             f'the size refusal does not explain the limit: {got["message"]!r}'
         )
         return
+    if spec['name'] in {
+        'prepare.regression.outputs-explanation-two-rows',
+        'preflight.explanation-larger-context',
+    }:
+        # Main removed these historical explanation limits. The maintained
+        # gradient suites validate actual decoded multirow explanations.
+        assert got['outcome'] == 'result'
+        assert got['calls']
+        assert all(
+            'explanation' in call['output']['fields'] for call in got['calls']
+        )
+        return
     _held(got, expected, spec['name'])
 
 

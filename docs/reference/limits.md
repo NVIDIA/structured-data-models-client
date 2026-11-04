@@ -198,3 +198,10 @@ broader build with six task kinds and seven output fields. A narrower build
 serves only classification and regression, refusing the rest itself. The
 contract has no capabilities route, so the client declares the broader set
 and lets the narrower build reject unsupported requests.
+
+## Explanation admission
+
+`EXPLAIN PREDICT` augments the requested outputs; it does not make an empty `outputs=[]` valid.
+A ranking with this prefix is refused at materialization before source gathering.
+An explanation requested later through `predict(outputs=...)` is checked at prediction admission.
+The optional Python model runtime checks its supported outputs before loading weights.

@@ -51,6 +51,16 @@ pub struct MergeDescriptor {
     pub candidates: Vec<MergeCandidate>,
     #[serde(default)]
     pub gradient_rows: Vec<GradientRecord>,
+    /// Keys and host-owned entry positions of a manually constructed mapping.
+    #[serde(default)]
+    pub manual_gradients: Vec<ManualGradient>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ManualGradient {
+    pub key: MergeCandidate,
+    pub owner: usize,
 }
 
 /// Native values, not Python equality callbacks. NaNs compare unequal.
@@ -190,6 +200,12 @@ pub struct GradientRecord {
     pub row_index: i64,
     pub answer_index: i64,
     pub id: String,
+    /// Optional native identity observation; the value owner stays in the host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_id: Option<MergeCandidate>,
+    /// A manually supplied entry's opaque host position, never model data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_owner: Option<usize>,
     pub forecast_step: Option<i64>,
     pub explanation: Option<String>,
 }

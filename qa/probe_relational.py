@@ -428,21 +428,64 @@ def run(client):
                 note(e, message[:160])
 
     with probe(
-        AREA, 'an explanation over several entities', 'refused before the wire'
+        AREA,
+        'an explanation over several entities',
+        'one entry per scored entity, keyed by id, with related tables, '
+        'or refused for a stated reason',
     ) as e:
         built = schema()
         request = PredictiveQuery(
             'PREDICT Orders.ShipVia FOR EACH Orders.OrderID', built
         ).materialize(indices=order_ids(built, 4), num_context_samples=200)
         try:
-            client.predict(
+            result = client.predict(
                 request,
                 model=KumoRelational(),
                 outputs=['prediction', 'explanation'],
             )
-            fail(e, 'four entities were accepted for an explanation')
         except StructuredDataError as exc:
-            note(e, str(exc)[:140])
+            note(e, f'refused: {str(exc)[:160]}')
+        else:
+            frame = result.to_pandas()
+            explained = result.explanations
+            if set(explained) != set(frame['id']):
+                fail(
+                    e,
+                    f'explained {sorted(explained)}, '
+                    f'scored {sorted(frame["id"])}',
+                )
+            elif not all(entry.get('related') for entry in explained.values()):
+                fail(e, 'an entry carries no related tables')
+            elif any('instance' in entry for entry in explained.values()):
+                fail(e, 'an entry carries the engine question row as instance')
+            elif not all(
+                'Orders' in entry['related'] for entry in explained.values()
+            ):
+                fail(e, "an entry lacks the entity's own table, Orders")
+            elif any(
+                len(block['gradients']) != len(entry['outputs'])
+                or any(
+                    len(per_output) != len(block['rows'])
+                    for per_output in block['gradients']
+                )
+                for entry in explained.values()
+                for block in entry['related'].values()
+            ):
+                fail(e, 'gradients are not [output][row][column]')
+            else:
+                flat = explained.to_pandas()
+                if 'explanation' in frame.columns:
+                    fail(e, 'the explanation leaked into to_pandas()')
+                elif not set(flat['id']) <= set(explained):
+                    fail(e, f'to_pandas() ids: {sorted(set(flat["id"]))}')
+                else:
+                    first = explained[min(explained)]
+                    note(
+                        e,
+                        f'{len(explained)} entries, '
+                        f'related {sorted(first["related"])}, '
+                        f'{len(flat)} lines flat',
+                    )
 
     with probe(
         AREA,

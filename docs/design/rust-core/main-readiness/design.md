@@ -7,8 +7,8 @@
 **Phase 6 is merged and pushed to `rust-core` at `db8f88528`; readiness work below is proposed, not implemented.**
 The merge preserves the tested Phase 6 tree unchanged.
 We ported the audited main features; we did **not** rebase onto latest main.
-The subsequent merge audit found additional missing contracts, so that port is not complete.
-**First complete the [main merge plan](main-merge/design.md), before the other readiness proposals.**
+The subsequent merge audit found additional missing contracts, now implemented on `rust-core-phase-7` with final verification in progress.
+**First complete and integrate the [main merge plan](main-merge/design.md), before the other readiness proposals.**
 Audit baseline: `origin/main` at `847a1e9e3`, checked November 4, 2026.
 
 | Proposal | Finding | Recommended action |
@@ -28,5 +28,8 @@ Configure CI lanes ───┘
 ```
 
 No fixture deletion, history rewrite, CI reconfiguration or new benchmark campaign was performed in this audit.
-Review the proposals first; published-history handling and eventual integration into `main` remain separate decisions.
+The owner authorized the four remaining efforts for `rust-core-phase-8` after the main merge completes.
+Reconcile their dependencies first, use at most three concurrent implementation agents, and run final correctness and performance checks last.
+Report comparable warm/cold latency and memory measurements without performance tuning; minor latency regressions are acceptable.
+Phase 8 changes stay on that branch; published-history rewriting, release publication and eventual integration into `main` are not authorized.
 PR #63's cohort/container proposal is still open at `f240fe448`, outside completed Phase 6 scope.

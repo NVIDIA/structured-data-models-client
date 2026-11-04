@@ -53,6 +53,9 @@ flow that assumes one arrives. Do not assume one never does either: another
 relational deployment serves `explanation`, and the same code gets a parsed
 one back there, so the refusal belongs to the deployment and not to the
 request.
+The optional `SDMClient.in_process()` runtime can return gradients too.
+`EXPLAIN PREDICT` adds explanation output to the ordinary outputs; it does not discard predictions.
+Read structured gradients from `result.explanations`; the singular raw view remains available.
 
 The task is not an argument. It follows from the query: see
 [`pql.md`](pql.md).

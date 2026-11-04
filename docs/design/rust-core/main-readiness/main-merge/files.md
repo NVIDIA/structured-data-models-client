@@ -4,13 +4,14 @@
 
 # File-by-file merge disposition
 
-**This is a resolution map, not a claim that the merge or its verification is complete.**
+**All incoming files are resolved and verified on Phase 7; integration into `rust-core` is pending.**
+See [verification](verification.md) for passing checks and limits.
 Baseline: main `847a1e9e3`, Rust `d184fb269`, common ancestor `12955d397`.
 `C/` means `packages/structured-data-models-client/src/sdm_client/`; `T/` means that package's `tests/` directory.
 “Absorbed” means Git proposes no change to that file, not that its behavior needs no testing.
 Every retained public assertion must map to a current test or a reviewed difference during implementation.
 
-| File | Git outcome | Planned disposition |
+| File | Git outcome | Resolution |
 |---|---|---|
 | `CHANGELOG.md` | Conflict | Combine actual feature entries; do not restore retired package claims. |
 | `docs/about/architecture.md` | Conflict | Keep Rust engine/host ownership; add explanation flow. |
@@ -73,7 +74,7 @@ Select expectations by the actual host/input route; a Python object path and Jav
 Check these against `sdm-contract/src/ops.rs`, host dispatch and the actual journey; rejected calls must not perform later I/O.
 A token native call followed by Python decoding must still fail the forbidden-path checks.
 
-## Behavior anchors
+## Behavior anchors at the audited baseline
 
 - Manual construction: main `T/test_relational_explanations.py::test_hand_built_*`; current `C/result.py::__init__` lacks the argument.
 - Empty outputs: main `T/test_tabular_explanations.py::test_empty_outputs_still_refused`; current Rust `pql::explanation_outputs` appends before validation.
@@ -81,3 +82,38 @@ A token native call followed by Python decoding must still fail the forbidden-pa
 - Early ranking refusal: main `T/test_relational_explanations.py::test_ranking_refused_before_gathering`; current `T/test_gradient_explanations.py` only checks rejection at prediction.
 - Generated-key concern: `sdm-request/src/payload.rs` creates keys; `sdm-request/src/gradients.rs` exposes primary-key values. Reproduce before fixing.
 - Existing forecast warning: `sdm-core/src/predict.rs` calls `steps_unexplained`; add EXPLAIN/default-output coverage rather than restoring Python orchestration.
+
+## Documentation resolution
+
+The seven conflicting documentation files retain the Rust architecture and incorporate main's explanation contracts: collection keys, per-call decoding, related rows, hop views, forecast steps, optional local execution and removal of obsolete explanation limits.
+`CHANGELOG.md`, `docs/about/architecture.md`, `docs/reference/{limits,prediction-output}.md`, both model skills and `skills/relational/references/beyond-one-answer.md` were resolved against both parents.
+The clean PQL reference edits were retained with a correction: EXPLAIN adds an output rather than replacing ordinary outputs, and an explicit empty list stays invalid.
+Main's raw-view deprecation was intentionally omitted; the approved raw compatibility view remains supported.
+Claims that every NIM serves explanations were qualified by endpoint capability, and synthetic keys are distinguished from genuine source keys rather than hidden by name prefix.
+No verified example output was edited or invented.
+These resolutions still require the final implementation and skills checks; they are not completion evidence by themselves.
+
+## Implemented source and test resolution
+
+All 43 rows above were inspected, including clean merges and absorbed changes.
+The source resolutions follow the table: no competing `explanations/` package, retired PQL distribution, Python decoder, adapter planning, or Python forecast decomposition was restored.
+The four reproduced gaps now use the existing engine boundary: Rust output admission and early ranking rejection; Python optional-runtime preflight; Python manual containers with Rust identity and merge planning.
+An actual sampled keyless table also reproduced exposed synthetic keys.
+Its provenance is now explicit internal state, preserved across persistence and sessions and removed before model HTTP requests; genuine similarly named source keys remain visible.
+Contract 70 describes that state and the typed manual-entry ownership records, rather than passing arbitrary Python identities through JSON.
+
+| Incoming assertions | Maintained coverage / reviewed difference |
+|---|---|
+| `test_tabular_explanations.py` | Public predict/session/EXPLAIN assertions retained; decoder-dependent assertions now send mocked endpoint replies through real Rust decoding. Missing IDs, duplicate IDs, gradients and flat views retained. Empty views keep their columns. |
+| `test_relational_explanations.py` | Related rows, keys, hops, output labels including booleans, split requests and all four manual-construction groups retained on current public requests. Added native datetime/bytes/tuple identities, existing collection metadata and nonconsecutive row positions. |
+| Old `_gather`/decomposition monkeypatches | Replaced by actual schema materialization in `test_gradient_explanations.py` and `test_gradient_key_provenance.py`; forecast step identity, default EXPLAIN missing-step warnings and pre-read ranking refusal are asserted. One-class refusal identifies the source question rather than wire `TARGET`. |
+| `test_in_process_explanations.py` | Tensor conversion and real local-runtime assertions retained; removed duplicate Python decoder tests. Runtime regression quantile test now captures the actual public request and decodes through Rust. |
+| Limits/session/request/result tests | Retained current Rust dispatch and valid incoming observations. Removed obsolete one-row/1k-context explanation restrictions; explicit empty outputs remain invalid. Raw explanation compatibility remains supported. |
+| `conftest.py`, backend/live tests, skills tests | Useful incoming public fixtures and capability assertions retained. Optional-runtime absence hides only optional `sdm`/Torch, not required PyArrow. Live skips are not counted as endpoint evidence. |
+| QA probes | Retained as public probes; permissive refusal acceptance is not used as proof that gradient prediction succeeded. |
+
+The public repeated-result merge also exposed mismatched frame and gradient positions.
+Rust now preserves unique positions and resolves collisions consistently in both views, without mutating inputs; ambiguous duplicate positions within one explained input are rejected.
+Ordinary unexplained merges retain their existing behavior.
+This is a correctness improvement over both parents, covered by nested merges and both language bindings.
+The public snapshot and contract schemas were regenerated with their maintained generators.

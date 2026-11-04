@@ -91,6 +91,10 @@ def predicted(request: Any, outputs: list[str] | None) -> dict[str, Any]:
         out: dict[str, Any] = {}
         try:
             with SDMClient(url, max_retries=0) as client:
+                # This scripted endpoint implements predictions only. Declare
+                # that capability so session probing does not change its
+                # recorded prediction-call ordinals or payload inventory.
+                client._transport.serves_sessions = False
                 result = client.predict(
                     request, model=KumoRelational(), outputs=outputs
                 )

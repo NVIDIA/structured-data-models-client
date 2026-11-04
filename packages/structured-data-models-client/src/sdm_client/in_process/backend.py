@@ -132,6 +132,7 @@ class InProcessBackend:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         with self._running():
+            self._preflight(payload)
             served, model = self._serving(payload['model'])
             task = payload['task']
             fields = _fields(served, model, task['kind'], payload)
@@ -157,6 +158,7 @@ class InProcessBackend:
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Fit the context once, to be scored against until released."""
         with self._running():
+            self._preflight(payload)
             served, model = self._serving(payload['model'])
             _fields(served, model, payload['task']['kind'], payload)
             context = served.context(payload)
@@ -219,6 +221,12 @@ class InProcessBackend:
         with self._state:
             self._require_open()
             self._sessions.pop(session_id, None)
+
+    def _preflight(self, payload: Mapping[str, Any]) -> None:
+        """Reject unsupported local-runtime outputs before downloading weights."""
+        served = _SERVED.get(payload['model'])
+        if served is not None:
+            _fields(served, None, payload['task']['kind'], payload)
 
     def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
@@ -359,6 +367,8 @@ def _check_task(served: Tabular | Relational, model: Any, kind: str) -> None:
             f'{sorted(served.outputs)}',
             code='UNSUPPORTED_TASK',
         )
+    if model is None:
+        return
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)
     if needed not in loaded:

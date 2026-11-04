@@ -316,12 +316,8 @@ def explanation_plan(request):
     return sent(request, outputs=('prediction', 'explanation'))
 
 
-def test_an_explanation_is_refused_on_the_mode_the_endpoint_refuses_it_on():
-    """A graph that supplies 120 rows for a request of 1,500 still selects the
-    larger-context mode, and that is what the endpoint gates explaining on."""
-    with pytest.raises(StructuredDataError) as raised:
-        explanation_plan(gathered(context_rows=120, run_mode='best'))
-    assert 'num_context_samples' in str(raised.value)
+def test_explains_larger_context():
+    assert explanation_plan(gathered(context_rows=120, run_mode='best'))
 
 
 def test_a_small_context_asked_for_smally_still_explains():
@@ -332,8 +328,7 @@ def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
     """Nothing the engine gathers arrives without a run_mode, but a hand-built
     payload can, and the rows are then all there is to read."""
     assert explanation_plan(gathered(context_rows=120, run_mode=None))
-    with pytest.raises(StructuredDataError):
-        explanation_plan(gathered(context_rows=1_001, run_mode=None))
+    assert explanation_plan(gathered(context_rows=1_001, run_mode=None))
 
 
 # --- a context that teaches nothing, on both routes -------------------------

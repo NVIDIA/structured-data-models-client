@@ -16,6 +16,44 @@ from sdm_api.generated.tfm_api import PredictionItem
 from sdm_client import KumoTabular, PredictionResult, Request, SDMClient
 
 
+@pytest.fixture(autouse=True)
+def verify_engine_route(request):
+    from test_runtime_ownership import operations, require_operations
+
+    required = {
+        'test_public_multiple_rows_class_labels_and_nested_merge': (
+            'predict:direct',
+            'plan_result_merge',
+        ),
+        'test_malformed_gradient_is_not_silently_discarded': (
+            'predict:direct',
+        ),
+        'test_tabular_session_explain_is_an_output_not_a_new_question': (
+            'prepare_tabular_fit',
+            'accept_tabular_session',
+            'prepare_tabular_score',
+            'send_tabular_session',
+            'close_tabular_session',
+        ),
+        'test_partial_relational_batches_keep_completed_explanations': (
+            'predict',
+        ),
+        'test_explain_forecast_keeps_step_identity': (
+            'materialize_frames',
+            'predict',
+        ),
+        'test_native_reply_nonfinite_gradient_uses_shared_refusal': (
+            'decode_direct_response',
+        ),
+        'test_explain_candidate_ranking_is_refused_before_model_call': (
+            'materialize_frames',
+        ),
+    }
+    with operations() as observed:
+        yield
+    require_operations(observed, *required.get(request.node.originalname, ()))
+
+
 @pytest.fixture
 def endpoint(request):
     mode = getattr(request, 'param', 'ok')
@@ -146,6 +184,7 @@ def test_public_multiple_rows_class_labels_and_nested_merge(endpoint):
     )
     assert len(merged.explanations) == 6
     assert set(merged.explanations) == set(range(6))
+    assert list(merged.explanations) == merged.to_pandas().row_index.tolist()
     assert calls[0]['output']['fields'] == [
         'prediction',
         'probabilities',
@@ -373,16 +412,15 @@ def test_explain_candidate_ranking_is_refused_before_model_call(endpoint):
     )
 
     url, calls = endpoint
-    req = PredictiveQuery(
-        'EXPLAIN PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id',
-        link_schema(),
-    ).materialize(
-        indices=[1, 2],
-        candidates=[1, 2],
-        num_context_samples=12,
-        random_seed=7,
-        model=KumoRelational(),
-    )
-    with SDMClient(url=url) as client, pytest.raises(UnsupportedRequestError):
-        client.predict(req, model=KumoRelational())
+    with SDMClient(url=url), pytest.raises(UnsupportedRequestError):
+        PredictiveQuery(
+            'EXPLAIN PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id',
+            link_schema(),
+        ).materialize(
+            indices=[1, 2],
+            candidates=[1, 2],
+            num_context_samples=12,
+            random_seed=7,
+            model=KumoRelational(),
+        )
     assert not calls

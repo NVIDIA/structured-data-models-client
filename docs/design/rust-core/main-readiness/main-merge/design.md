@@ -5,7 +5,9 @@
 # Merge main without restoring the old engine
 
 **Do this before the other readiness work: merge main's contracts and improvements into the Rust architecture, then prove which paths execute.**
-This is a plan; the merge has not been applied to `rust-core`.
+Implemented and independently reviewed on `rust-core-phase-7`; all required checks pass.
+Integration into `rust-core` remains pending.
+See [verification](verification.md) for results and evidence limits.
 
 ## What we audited
 
@@ -28,10 +30,10 @@ The first four findings were reproduced through the installed Phase 6 public Pyt
 | `EXPLAIN` with `outputs=[]` sends an explanation request | Reject the empty list in Rust before EXPLAIN augmentation; assert zero model calls. |
 | Unsupported in-process output attempts model loading first | Check runtime capabilities before loading in Python's model adapter; keep result interpretation in Rust. |
 | EXPLAIN candidate ranking materializes successfully, then fails at prediction | Reject EXPLAIN/ranking in Rust before source gathering. Outputs supplied later to `predict()` still validate there. |
-| Generated related-table keys may appear as user keys | Verify keyless tables and genuine user `__node_id...` columns first. Track generated-key provenance in Rust instead of copying main's prefix heuristic. |
+| Generated related-table keys appeared as user keys | Reproduced with real keyless sampling; explicit Rust provenance now hides generated keys while preserving genuine user `__node_id...` columns. |
 
 Retain strict errors, typed identities, nested merges and the singular raw view.
-Proposed construction policy: restore Python’s existing convenience API; retain Java’s current constructor visibility and record that difference in the ledger.
+Implemented construction policy: restore Python’s existing convenience API; retain Java’s current constructor visibility and record that difference in the ledger.
 Java-produced results still use the same Rust merge rules.
 Do not restore main's already-expired “removed in 2.0” deprecation deadline.
 Forecast missing-step warnings and session EXPLAIN → plain reset already exist; verify their structured-gradient variants rather than reimplementing them.
@@ -51,7 +53,7 @@ Keep `predictive_query` and the retired relational-engine runtime absent.
 Tensor conversion remains Python: main's converter is already ported as `in_process/gradients.py`.
 Preserve supported native Python object handling through existing Rust-directed operations; a compatibility fallback is not automatically a legacy path.
 
-## Three implementation steps
+## Completed implementation steps
 
 1. **Resolve by behavior on an isolated merge branch.**
    Refresh and pin `origin/main`, update the inventory if it moved, then merge without committing.

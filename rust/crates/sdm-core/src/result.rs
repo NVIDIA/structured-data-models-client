@@ -414,6 +414,7 @@ pub(crate) fn merge(
         };
         let (part, held) = decode(description, &data.schema, &data.batches)?;
         descriptors.push(sdm_contract::result::MergeDescriptor {
+            manual_gradients: vec![],
             model: description.model.clone(),
             request_id: description.request_id.clone(),
             outputs: description.outputs.clone(),

@@ -6,7 +6,7 @@ explanation.
 ```python
 result = client.predict(request, model=KumoRelational())
 result.to_pandas()  # always a frame
-result.explanation  # None unless you asked for it
+result.explanations  # empty unless the model returned structured gradients
 result.metadata  # whatever the endpoint reported
 ```
 
@@ -124,15 +124,47 @@ Request `outputs=["prediction", "explanation"]` or prefix PQL with `EXPLAIN PRED
 For a model that returns `sdm_gradient_v1`, `result.explanations` maps each prediction to its validated gradients; `result.explanations.to_pandas()` gives one row per gradient.
 Java exposes `result.explanations().entries()` and `toArrow(allocator)`; callers close the returned Arrow root before closing their allocator.
 
-Keys are entity IDs when unique, otherwise positions in result order; forecasts add the forecast step to each key.
+Keys are entity IDs when they identify rows uniquely, otherwise `row_index`; forecasts add the forecast step to each key.
+
+| Prediction rows | Explanation key |
+|---|---|
+| Unique entity IDs | `id` |
+| Missing or repeated IDs | `row_index` |
+| Forecast | `(id, forecast_step)`, or `(row_index, forecast_step)` when needed |
 Merging results preserves every explanation, including repeated IDs and repeated merges.
+For explained results, unambiguous row indices are preserved; collisions across parts receive consistent new indices in both the predictions and explanations, without changing input results.
 Related rows and hop distances refer to the exact sampled request, without additional warehouse reads.
 Gradient columns describe the model's **preprocessed numerical features**, including derived datetime features; they are not causal effects or general feature importance.
 Java Arrow views retain ordinary string/integer key types; mixed or wider keys use lossless JSON text with explicit schema metadata.
 
 `EXPLAIN` changes requested outputs, not a fitted session's question identity.
 The endpoint must support gradients; client-assembled candidate rankings remain unsupported.
+An explicitly empty `outputs=[]` is invalid even with `EXPLAIN`.
+There is no separate client explanation row/context limit; deployment limits still apply.
 Unknown explanation formats remain available through the raw accessors below.
+
+### Entry contents
+
+Each entry has `outputs`, naming the explained scores in order.
+Tabular entries contain `instance`, with `columns` and `gradients[output][column]`.
+Relational entries contain `related`, mapping table names to `rows`, `columns` and `gradients[output][row][column]`.
+Related rows contain the values sent to the model; meaningful source keys appear in `keys`, while generated transport keys stay hidden.
+The entity's own table is included; the synthetic question row is not.
+Context examples receive no gradients.
+A sampled row reached through multiple paths has one gradient per output/column, not one per path.
+
+The flat view includes `table`, `hop`, `key`, `row`, `output`, `column` and `gradient`, alongside the prediction identity.
+`hop` is zero for the entity's own row and absent for an unreachable related row.
+`output` matches the prediction frame's column spelling, such as `probability_yes` or `quantile_0.1`.
+
+### Constructing results in Python
+
+`PredictionResult(..., explanations=mapping)` also accepts manually supplied per-row entries.
+Merging validates their association with the prediction rows in Rust and refuses entries that cannot be matched.
+Repeated IDs and forecast steps remain distinct through result merging.
+Java retains its existing result-construction visibility; results produced by Java calls use the same Rust identity rules.
+
+### Raw explanations and other formats
 
 `result.explanation` remains the raw endpoint payload.
 `result.explanation_view` provides an immutable snapshot of that payload, or `None` when there is no explanation.

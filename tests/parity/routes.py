@@ -38,12 +38,14 @@ TARGETS = {
         'session_plan',
         'session_prediction_plan',
         'normalize',
+        'answered',
     ),
     'sdm_client.adapters.tabular.TabularAdapter': (
         'prediction_plan',
         'session_plan',
         'session_prediction_plan',
         'normalize',
+        'answered',
     ),
     'sdm_client.schema.Schema': (
         '_settle',
@@ -61,7 +63,15 @@ TARGETS = {
         '_adopt_key',
         '_check_time_column',
     ),
-    'sdm_client.client': ('_held_back', '_ranked', '_by_step'),
+    'sdm_client.client': (
+        '_held_back',
+        '_ranked',
+        '_by_step',
+        '_explained_if_asked',
+        '_apart_from_explain',
+    ),
+    'sdm_client.decompose': ('parts_of',),
+    'sdm_client.explanations.decoder.GradientDecoder': ('decode',),
     'sdm_client.request': ('_split_from',),
     'predictive_query': ('validate',),
 }
@@ -72,6 +82,8 @@ def owner(name, *, missing_ok=False):
         return importlib.import_module(name)
     except ModuleNotFoundError as error:
         if error.name != name:
+            if missing_ok and error.name and name.startswith(error.name + '.'):
+                return None
             raise
         module, attr = name.rsplit('.', 1)
         loaded = importlib.import_module(module)

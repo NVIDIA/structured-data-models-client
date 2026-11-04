@@ -277,14 +277,25 @@ def test_non_mapping_response_item_field_is_refused(
     assert f"item's {field}" in str(core)
 
 
-def test_explanation_of_two_entities_is_refused() -> None:
+def test_explanation_of_two_entities_reaches_the_endpoint() -> None:
     request = _gathered(COUNT)
     assert isinstance(request, Request), request
-    core, _ = _predicted(request, _answer(), ['prediction', 'explanation'])
-    assert isinstance(core, StructuredDataError), core
-    assert core.code == 'UNSUPPORTED_REQUEST'
-    assert 'explanation' in str(core).lower()
-    assert 'one' in str(core).lower() or 'single' in str(core).lower()
+    rows = request.payloads[0]['predict']['instance_table']['rows']
+    body = _answer(
+        *[
+            {
+                'id': str(row[0]),
+                'row_index': index,
+                'prediction': True,
+                'explanation': {'features': []},
+            }
+            for index, row in enumerate(rows)
+        ]
+    )
+    core, _ = _predicted(request, body, ['prediction', 'explanation'])
+    assert not isinstance(core, StructuredDataError), core
+    assert len(core) == 2
+    assert 'explanation' in core.outputs
 
 
 def _shown_on_the_core(text: str) -> tuple[list[str], str | None]:

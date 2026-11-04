@@ -449,6 +449,9 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::LabelsInvalid => said("invalid labels {field}: {reason}"),
         S::FeatureImportanceScore => said("explanation score must be finite numeric attribution"),
+        S::ResultMergeManualIdentity => said(
+            "manual explanation keys must identify result rows by id or row_index and forecast step; use predict() for decoded results",
+        ),
         S::ResultMergeEmpty => said("no parts to merge"),
         S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
         S::ResultMergeOutputs => said(

@@ -263,7 +263,11 @@ def test_the_core_s_payload_rules_are_the_reference_s(
             # PD-2: the count is of the bytes the core produced and sends;
             # here, ASCII and compact, it is the reference's count too.
             assert len(attachments) == 1, attachments
-            assert len(attachments[0]) == expected['bytes']
+            state = bytes(attachments[0])
+            prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
+            assert state.startswith(prefix)
+            model_bytes = b'{' + state[len(prefix) :]
+            assert len(model_bytes) == expected['bytes']
             assert expected['bytes'] <= R.PAYLOAD_LIMIT
     elif covers == R.INFERENCE:
         assert got['inference'] == expected['inference']
@@ -287,3 +291,28 @@ def test_a_payload_past_the_byte_limit_is_refused_by_name(
     assert not _not_held(got), got
     assert got['code'] == past['expected']['code']
     assert not attachments
+
+
+@pytest.mark.parametrize('padding, accepted', [(5, True), (8, False)])
+def test_client_only_provenance_does_not_consume_model_payload_limit(
+    padding, accepted, monkeypatch
+):
+    import copy
+
+    spec = copy.deepcopy(
+        next(c for c in CASES if c['name'] == 'size.at-the-limit')
+    )
+    spec['setup'].append(
+        f"UPDATE users SET note=note||'{'a' * padding}' WHERE user_id=0"
+    )
+    got, attachments = _on_the_core(spec, monkeypatch)
+    if accepted:
+        assert got['outcome'] == 'payload', got
+        state = bytes(attachments[0])
+        prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
+        assert state.startswith(prefix)
+        model_bytes = b'{' + state[len(prefix) :]
+        assert len(model_bytes) <= R.PAYLOAD_LIMIT < len(state)
+    else:
+        assert got['outcome'] == 'refused'
+        assert '30MB' in got['message']

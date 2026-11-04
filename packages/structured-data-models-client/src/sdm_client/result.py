@@ -29,7 +29,7 @@ it is there, otherwise on** ``row_index``, **and never on row order.**
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import pandas as pd
@@ -82,6 +82,7 @@ class PredictionResult:
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
         explanation: dict[str, Any] | None = None,
+        explanations: Mapping[Any, dict[str, Any]] | None = None,
         outputs: Sequence[str] = (),
         unscored_candidates: Sequence[Any] = (),
     ) -> None:
@@ -98,7 +99,11 @@ class PredictionResult:
         self._names_its_step = False
         self.metadata = dict(metadata or {})
         self._explanation = explanation
-        self.explanations = GradientExplanations()
+        self.explanations = (
+            explanations
+            if isinstance(explanations, GradientExplanations)
+            else GradientExplanations(explanations)
+        )
         self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
@@ -130,7 +135,7 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return self._explanation is not None
+            return bool(self.explanations) or self._explanation is not None
         if name not in _ITEM_FIELDS:
             return True
         return any(

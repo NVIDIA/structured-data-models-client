@@ -125,6 +125,7 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         cls,
         collection: dict[str, Any] | None,
         entries: Mapping[int, dict[str, Any]] | None = None,
+        identities: Mapping[int, Any] | None = None,
     ) -> GradientExplanations:
         if collection is None:
             result = cls()
@@ -138,6 +139,7 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
             dict(
                 row,
                 explanation='{}' if row['explanation'] is not None else None,
+                entry_owner=None,
             )
             for row in records
         ]
@@ -147,6 +149,8 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
             identity = (
                 json.loads(row['id']) if kind == 'id' else row['row_index']
             )
+            if kind == 'id' and identities is not None:
+                identity = identities[row['answer_index']]
             key = (identity, row['forecast_step']) if stepped else identity
             entry = (
                 entries[row['answer_index']]

@@ -107,6 +107,7 @@ fn full() -> StatePayload {
         related_tables: Named(vec![(text("t"), rows)]),
     };
     StatePayload {
+        client_generated_keys: Default::default(),
         model: text("m"),
         task: Task {
             step_size: None,

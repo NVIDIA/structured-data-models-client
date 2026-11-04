@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+import sdm_client
+
 
 @pytest.mark.parametrize('already_imported', [False, True])
 def test_the_fake_warehouse_restores_the_parent_packages(
@@ -22,6 +24,7 @@ def test_the_fake_warehouse_restores_the_parent_packages(
 import importlib
 import importlib.util
 import sys
+sys.path.insert(0, sys.argv[3])
 import types
 import pytest
 import sdm_connectors.backends as backends
@@ -66,6 +69,7 @@ else:
             probe,
             str(fixture),
             str(already_imported),
+            str(Path(sdm_client.__file__).resolve().parent.parent),
         ],
         capture_output=True,
         text=True,

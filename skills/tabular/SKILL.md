@@ -48,6 +48,12 @@ regression, and asking for the wrong one comes back as
 
 Gradient-capable models also accept `outputs=['prediction', 'explanation']` or `EXPLAIN PREDICT`.
 Read per-row gradients with `result.explanations.to_pandas()`; these describe preprocessed numerical features, not causal effects.
+Each entry has `outputs` and `instance`, with numerical `columns` and `gradients[output][column]`; there are no related tables.
+Keys are unique entity IDs, or `row_index` when IDs are missing or repeated.
+The client imposes no separate explanation row limit; the endpoint must support gradients.
+The optional Python model runtime also supports them.
+`EXPLAIN` adds explanation output without dropping ordinary outputs; `outputs=[]` remains invalid.
+See [the result contract](../../docs/reference/prediction-output.md).
 
 ## The whole interface
 

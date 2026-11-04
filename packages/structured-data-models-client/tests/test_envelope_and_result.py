@@ -329,7 +329,8 @@ def forecast_through_the_client(explanations, requested):
 
     request = _materialize(
         indices=[0],
-        query=f'PREDICT COUNT(orders.*, 0, 30, days) FORECAST {len(explanations)} TIMEFRAMES FOR EACH users.user_id',
+        query=('EXPLAIN ' if requested is None else '')
+        + f'PREDICT COUNT(orders.*, 0, 30, days) FORECAST {len(explanations)} TIMEFRAMES FOR EACH users.user_id',
     )
 
     class ForecastEndpoint(Endpoint):
@@ -403,3 +404,30 @@ def test_a_forecast_carrying_no_explanation_at_all_still_says_so():
     )
 
     assert any('explanation' in message for message in said)
+
+
+def test_explain_default_outputs_names_missing_structured_gradient_step(
+    gradient_explanation,
+):
+    held = gradient_explanation(
+        outputs=[{'kind': 'prediction', 'statistic': 'mean'}],
+        row=0,
+        columns=[],
+        gradients=[[]],
+    )
+    said = forecast_through_the_client([held, None], None)
+    assert any('step 2 carries none' in message for message in said)
+
+
+def test_raw_explanation_constructor_remains_supported_without_expired_deprecation():
+    import warnings
+
+    raw = {'format': 'custom', 'details': {'note': 'opaque'}}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = PredictionResult(
+            model='kumo-tabular', request_id='r', items=[], explanation=raw
+        )
+        assert result.explanation is raw
+    assert not caught
+    assert not result.explanations

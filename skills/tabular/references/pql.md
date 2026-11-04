@@ -8,9 +8,12 @@ and the refusals say so.
 ## The whole of it
 
 ```
-PREDICT <table>.<column> FOR EACH <table>.<key>
-PREDICT <table>.<column> FOR <table>.<key> IN (...)
+[ EXPLAIN ] PREDICT <table>.<column> FOR EACH <table>.<key>
+[ EXPLAIN ] PREDICT <table>.<column> FOR <table>.<key> IN (...)
 ```
+
+`EXPLAIN PREDICT …` adds `'explanation'` to the ordinary requested outputs.
+Explicitly including that output too is allowed; `outputs=[]` remains invalid.
 
 `FOR` needs a selector. `FOR customers.customer_id` on its own is refused:
 *"When using "FOR" in foundation model queries, you must specify one or

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import date, datetime, timezone
 from typing import Any
@@ -130,23 +131,28 @@ def merge(cls: Any, parts: Any) -> Any:
             return part.explanations._records
         values = []
         for index, item in enumerate(part.items):
-            identity = item.id
-            if isinstance(
-                identity, (np.bool_, np.integer, np.floating, np.str_)
-            ):
-                identity = identity.item()
-            if type(identity) not in (type(None), bool, int, float, str):
-                identity = None
             values.append(
                 {
-                    'row_index': index,
+                    'row_index': item.row_index,
                     'answer_index': index,
-                    'forecast_step': item.forecast_step,
-                    'id': json.dumps(identity),
+                    'forecast_step': getattr(item, 'forecast_step', None),
+                    'id': 'null',
+                    'native_id': _candidate(getattr(item, 'id', None)),
                     'explanation': None,
                 }
             )
         return values
+
+    owners: list[dict[str, Any]] = []
+
+    def manual_entries(part: Any) -> list[dict[str, Any]]:
+        if not gradients or part.explanations._records:
+            return []
+        entries = []
+        for key, entry in part.explanations.items():
+            entries.append({'key': _candidate(key), 'owner': len(owners)})
+            owners.append(entry)
+        return entries
 
     descriptors = [
         {
@@ -157,6 +163,7 @@ def merge(cls: Any, parts: Any) -> Any:
             if len(parts) == 1
             else bool(part.explanation),
             'gradient_rows': records(part),
+            'manual_gradients': manual_entries(part),
             'names_rows': part._names_its_rows,
             'names_step': part._names_its_step,
             'candidates': []
@@ -200,8 +207,24 @@ def merge(cls: Any, parts: Any) -> Any:
             }
         )
         offset += len(part.items)
+    if plan['gradients'] is not None:
+        positions = {
+            row['answer_index']: row['row_index']
+            for row in plan['gradients']['rows']
+        }
+        result.items = tuple(
+            dataclasses.replace(item, row_index=positions[index])
+            if positions[index] != item.row_index
+            else item
+            for index, item in enumerate(result.items)
+        )
+        for row in plan['gradients']['rows']:
+            if row.get('entry_owner') is not None:
+                entries[row['answer_index']] = owners[row['entry_owner']]
     result.explanations = GradientExplanations._from_core(
-        plan['gradients'], entries
+        plan['gradients'],
+        entries,
+        identities={index: item.id for index, item in enumerate(result.items)},
     )
     result._names_its_rows = plan['names_rows']
     result._names_its_step = plan['names_step']

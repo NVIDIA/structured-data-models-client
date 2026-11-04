@@ -152,15 +152,17 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
             "no parts to merge",
         ));
     };
+    let gradient_parts = parts
+        .iter()
+        .map(crate::gradients::manual_records)
+        .collect::<Result<Vec<_>, _>>()?;
     let mut plan = ResultMergePlan {
         single: parts.len() == 1,
         batches: parts.len(),
         batch_request_ids: parts.iter().map(|p| p.request_id.clone()).collect(),
         explanation_part: None,
         candidate_positions: vec![],
-        gradients: crate::gradients::merge_records(
-            parts.iter().map(|p| p.gradient_rows.as_slice()),
-        )?,
+        gradients: crate::gradients::merge_records(gradient_parts.iter().map(Vec::as_slice))?,
         names_rows: true,
         names_step: false,
     };
@@ -233,6 +235,7 @@ mod tests {
     use super::*;
     fn descriptor(candidates: Vec<C>) -> MergeDescriptor {
         MergeDescriptor {
+            manual_gradients: vec![],
             model: "m".into(),
             request_id: "one".into(),
             outputs: vec!["prediction".into()],

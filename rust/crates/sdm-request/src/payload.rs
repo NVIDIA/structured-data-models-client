@@ -1179,6 +1179,7 @@ fn build_mode(
     // The related tables: each row with the example it belongs to, and a
     // key of its own where the table sends none.
     let mut frames: Vec<Related> = Vec::new();
+    let mut client_generated_keys = std::collections::BTreeMap::new();
     for table in &sampled.tables {
         let rows: Vec<usize> = (0..table.batch.len()).collect();
         let mut frame = Frame {
@@ -1201,6 +1202,7 @@ fn build_mode(
             Some(key) if frame.column(key).is_some() => key.clone(),
             _ => {
                 let name = unique_name(&frame.names(), NODE_ID);
+                client_generated_keys.insert(table.name.clone(), name.clone());
                 frame.columns.insert(1, int_column(&name, 0..frame.rows));
                 stypes.push((name.clone(), Stype::Id));
                 name
@@ -1452,8 +1454,20 @@ fn build_mode(
         num_prediction_examples: sampled.num_test as u64,
     };
     let model = "kumo-relational".to_owned();
+    // Only this small state-only member is counted separately; never copy or
+    // reparse the potentially 30MiB table data merely to measure its wire size.
+    let client_only_bytes = if client_generated_keys.is_empty() {
+        0
+    } else {
+        serde_json::to_vec(&client_generated_keys)
+            .expect("string map serializes")
+            .len()
+            + br#""client_generated_keys":"#.len()
+            + 1 // comma separating the member from model-facing members
+    };
     let bytes = if link.is_some() {
         StatePayload {
+            client_generated_keys,
             model,
             task: sdm_wire::payload::TemporalLinkTask {
                 kind: "temporal_link_prediction".into(),
@@ -1475,6 +1489,7 @@ fn build_mode(
         .to_bytes()
     } else if kind.is_classification() {
         StatePayload {
+            client_generated_keys,
             model,
             task: task!(ClassTarget {
                 column_name: TARGET.to_owned(),
@@ -1492,6 +1507,7 @@ fn build_mode(
         .to_bytes()
     } else {
         StatePayload {
+            client_generated_keys,
             model,
             task: task!(Target {
                 column_name: TARGET.to_owned(),
@@ -1513,7 +1529,8 @@ fn build_mode(
     // most rows a call of the request scores (`smaller_calls`); a call of
     // one row cannot, and only a narrower context helps
     // (`no_smaller_call`).
-    if bytes.len() > PAYLOAD_BYTES {
+    let model_bytes = bytes.len() - client_only_bytes;
+    if model_bytes > PAYLOAD_BYTES {
         let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(
             if sampled.num_test > 1 {
@@ -1524,7 +1541,7 @@ fn build_mode(
             "the request is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("payload"))
-        .with_field("bytes", count(bytes.len()))
+        .with_field("bytes", count(model_bytes))
         .with_field("limit", count(PAYLOAD_BYTES))
         .with_field(
             "batch_too_large_to_send",

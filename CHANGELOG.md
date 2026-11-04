@@ -25,7 +25,7 @@ The public API snapshot records this version update; publication remains pending
   meant).
 - `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
   Python process with structured-data-models, through the same calls as a NIM:
-  predictions, fitted sessions, rankings and forecasts. It loads each model
+  predictions, fitted sessions, rankings, forecasts and explanations. It loads each model
   from its published weights on first use, or uses one passed in. The request
   is prepared as it is for a NIM and the model run on it directly, the context
   fitted as the NIM fits it. A request the model cannot answer is refused with
@@ -43,6 +43,11 @@ The public API snapshot records this version update; publication remains pending
   x86-64/ARM64 and Windows x86-64.
   Native Windows ARM64 is deferred pending upstream Arrow dependencies.
 
+- Both models support gradient explanation collections when the model runtime supports them.
+  Python exposes `result.explanations` and its pandas view; Java exposes `explanations()` and its Arrow view.
+  `EXPLAIN PREDICT` requests explanations, including each forecast step; client-assembled rankings refuse them.
+  Python also accepts manually supplied `PredictionResult(explanations=...)` mappings.
+
 ### Changed
 
 - Sampled Tabular context uses stable Rust index ordering, including duplicate labels and mixed numeric labels.
@@ -55,7 +60,15 @@ The public API snapshot records this version update; publication remains pending
   execution, including fitted sessions, for both Python and Java.
   NumPy scalar options are accepted at Python request admission.
 
+- Gradient explanations have no separate one-row or 1,000-context-row client restriction.
+  Endpoint capabilities and ordinary request limits still apply.
+  The singular raw `result.explanation` view remains supported.
+
 ### Fixed
+
+- Explicit empty outputs remain invalid with `EXPLAIN`; unsupported local-runtime outputs are refused before model weights load.
+- Gradient identities and merging run in Rust, with generated transport keys distinguished from genuine source keys.
+  Merged explanations and predictions now use matching row indices, including repeated result parts.
 
 - A predictive query longer than 1,024 characters is answered. A relational
   request carries the query in `metadata.source_query` for logging, which the

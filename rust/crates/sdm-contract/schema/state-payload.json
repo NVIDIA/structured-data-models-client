@@ -3,6 +3,13 @@
   "description": "The payload of one prediction request: a regression's by default, a\nclassification's with [`ClassTarget`] and [`ClassificationConfig`].",
   "type": "object",
   "properties": {
+    "client_generated_keys": {
+      "description": "Client-only generated keys, stripped before sending to a model.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "model": {
       "description": "The model the request was laid out for.",
       "type": "string"

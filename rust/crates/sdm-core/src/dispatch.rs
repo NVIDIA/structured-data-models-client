@@ -77,7 +77,8 @@ pub fn start(
             crate::materialize::label_query::source(root, request, attachments, facts, zones)?
         }
         Operation::PrepareTimeSeries(request) => {
-            let input = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::frames::TimeSeriesOptions =
+                take_json(&mut attachments, request.input)?;
             let Some(Attachment::Arrow(table)) = attachments.remove(&request.table) else {
                 return Err(internal("time-series input is not Arrow"));
             };

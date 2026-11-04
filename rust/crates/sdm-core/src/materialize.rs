@@ -2788,6 +2788,18 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let (steps, ranked, facts) = resolved(&inputs);
     // A ranking, asked as one binary question per candidate (T2.8).
     if let Some(plan) = ranked {
+        if crate::pql::explained_query(&inputs.query).is_some() {
+            return Err(CoreError::new(
+                Sentence::ModelLacksOutputs,
+                "explanations are unavailable for client-assembled candidate rankings",
+            )
+            .with_field("model", Detail::text("kumo-relational"))
+            .with_field("unsupported_outputs", names(["explanation"]))
+            .with_field(
+                "supported_outputs",
+                names(["prediction", "scores", "rankings"]),
+            ));
+        }
         return crate::ranking::materialize(asker, inputs, plan, facts).await;
     }
     // Candidates on a question that ranks nothing, refused before anything

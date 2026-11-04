@@ -376,7 +376,7 @@
           "merge": "(parts: 'Sequence[PredictionResult]') -> 'PredictionResult'",
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
-        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanation: 'dict[str, Any] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = ()) -> 'None'"
+        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanation: 'dict[str, Any] | None' = None, explanations: 'Mapping[Any, dict[str, Any]] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = ()) -> 'None'"
       },
       "PredictiveQuery": {
         "bases": [],

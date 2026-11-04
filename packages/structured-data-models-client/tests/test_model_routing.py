@@ -361,12 +361,11 @@ def test_a_frame_on_a_self_referencing_schema_is_told_what_would_work():
 # --- capabilities only names what a caller can reach -------------------------
 
 
-def test_no_explanation_format_is_advertised_that_cannot_be_asked_for():
-    """Two were, and neither appears in any response: nothing on this client
-    takes a format argument, and the endpoint names its own."""
+def test_advertised_gradient_format_is_the_supported_response_format():
+    """The runtime names its supported response format, not a request option."""
     from sdm_client.models import KUMO_RELATIONAL
 
-    assert KUMO_RELATIONAL.runtime.explanation_formats == ()
+    assert KUMO_RELATIONAL.runtime.explanation_formats == ('sdm_gradient_v1',)
 
 
 def test_the_model_that_explains_still_says_so_through_its_outputs():

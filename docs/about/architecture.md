@@ -88,3 +88,19 @@ Maintained tests use the current client and self-contained fixtures, without ins
 The `sdm_client/in_process/` modules load models, convert model inputs, run inference and own fitted model state.
 They replace the model server, not the shared core: sampling, batching and result key restoration remain in Rust.
 Canonical request/response data still crosses the core boundary; this path avoids HTTP, but does not claim to avoid JSON conversion.
+
+## Gradient explanations
+
+`EXPLAIN PREDICT` adds explanation output to the requested fields; an explicitly empty output list remains invalid.
+Rust decodes each call's gradients against that call's sampled tables before merging results, so batching and forecasting cannot associate gradients with another call's rows.
+It restores row identities, validates gradient shapes and computes related-row hop distances.
+Python and Java expose collections and pandas/Arrow views; they do not run a second gradient decoder.
+
+Related rows carry their submitted values and meaningful source keys.
+Generated transport keys are internal provenance, not user-facing row identities, and that provenance is never sent to the model.
+Relational explanations omit the synthetic question-row block; Tabular explanations describe each predicted row's own features.
+Forecast explanations retain step identity; client-assembled rankings reject explanations before gathering when the query requests them.
+
+A gradient-capable endpoint or the optional Python model runtime supplies the gradients.
+The Python runtime converts tensors to response data; Rust performs the same result interpretation as for HTTP responses.
+See [explanation keys and views](../reference/prediction-output.md#reading-an-explanation).

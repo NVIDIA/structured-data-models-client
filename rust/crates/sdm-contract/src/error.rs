@@ -829,6 +829,7 @@ sentences! {
     TimeSeriesInput = "time_series_input", E::InvalidRequest;
     LabelsInvalid = "labels_invalid", E::InvalidRequest;
     FeatureImportanceScore = "feature_importance_score", E::InvalidRequest;
+    ResultMergeManualIdentity = "result_merge_manual_identity", E::InvalidRequest;
     ResultMergeEmpty = "result_merge_empty", E::InternalError;
     ResultMergeModels = "result_merge_models", E::InternalError;
     ResultMergeOutputs = "result_merge_outputs", E::InternalError;

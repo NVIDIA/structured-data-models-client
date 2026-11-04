@@ -725,6 +725,7 @@ pub fn body(
 ) -> Result<Value, CoreError> {
     let kind = called(payload)?;
     let mut envelope = payload.clone();
+    envelope.remove("client_generated_keys");
     envelope.set("model", Value::text(model));
 
     // The outputs, and a regression's statistic: the one the payload
@@ -1440,6 +1441,7 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
     let descriptors = parts
         .iter()
         .map(|part| sdm_contract::result::MergeDescriptor {
+            manual_gradients: vec![],
             model: part.model.clone(),
             request_id: part.request_id.clone(),
             outputs: vec![],
@@ -1496,6 +1498,9 @@ pub fn merge_planned(
     for (at, row) in first.rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
         row.gradient_position = gradient_positions.get(&row.answer_index).copied();
+        if let Some(position) = row.gradient_position {
+            row.row_index = position;
+        }
     }
     Ok(first)
 }

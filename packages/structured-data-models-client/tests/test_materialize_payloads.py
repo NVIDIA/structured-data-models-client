@@ -67,6 +67,7 @@ def test_materialized_payload_matches_recorded_request(recording):
         defaults.update(target_transforms=['quantile'], output_type='median')
         assert expected['output'].pop('prediction_statistic') == 'median'
     assert actual['inference'].pop('inference_config') == defaults
+    assert actual.pop('client_generated_keys') == {'orders': '__node_id'}
     assert actual == expected
     assert request.entity_table == 'users'
     assert request.indices == [0, 1]

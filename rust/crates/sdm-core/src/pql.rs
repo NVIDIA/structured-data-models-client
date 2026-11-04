@@ -1267,7 +1267,8 @@ pub(crate) fn explanation_outputs(
     kind: &str,
     outputs: Option<Vec<String>>,
 ) -> Option<Vec<String>> {
-    if explained_query(query).is_none() {
+    if explained_query(query).is_none() || outputs.as_ref().is_some_and(Vec::is_empty) {
+        // Explicitly empty outputs must reach normal admission unchanged.
         return outputs;
     }
     let mut fields = outputs.unwrap_or_else(|| {

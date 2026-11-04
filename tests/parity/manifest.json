@@ -3928,7 +3928,8 @@
       "apis": {
         "python": [
           "PredictionResult.explanations",
-          "GradientExplanations.to_pandas"
+          "GradientExplanations.to_pandas",
+          "PredictionResult(explanations=...)"
         ],
         "java": [
           "PredictionResult.explanations",
@@ -3945,17 +3946,37 @@
           "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_partial_relational_batches_keep_completed_explanations",
           "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_explain_forecast_keeps_step_identity",
           "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_native_reply_nonfinite_gradient_uses_shared_refusal",
-          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_explain_candidate_ranking_is_refused_before_model_call"
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_explain_candidate_ranking_is_refused_before_model_call",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_hand_built_parts_with_unique_ids_merge_under_their_ids",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_hand_built_parts_repeating_an_id_merge_by_row_index",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_hand_built_forecast_parts_repeating_an_id_merge_by_row_and_step",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_hand_built_parts_whose_rows_cannot_be_found_are_refused",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_manual_native_identity_owner_survives_nested_merges",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_manual_nonconsecutive_row_indices_remain_joinable",
+          "packages/structured-data-models-client/tests/test_gradient_key_provenance.py::test_generated_keys_are_internal_but_source_names_are_preserved",
+          "packages/structured-data-models-client/tests/test_tabular_explanations.py::test_empty_outputs_still_refused",
+          "packages/structured-data-models-client/tests/test_envelope_and_result.py::test_explain_default_outputs_names_missing_structured_gradient_step",
+          "packages/structured-data-models-client/tests/test_runtime_ownership.py::test_installed_explanations_has_one_origin_and_no_retired_dependencies",
+          "packages/structured-data-models-client/tests/test_relational_explanations.py::test_explain_one_class_refusal_names_source_column",
+          "packages/structured-data-models-client/tests/test_tabular_explanations.py::test_empty_explanation_view_retains_columns",
+          "packages/structured-data-models-client/tests/test_t128a_payload_rules.py::test_client_only_provenance_does_not_consume_model_payload_limit"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#publicGradientCollectionSurvivesNestedMergesAndSessions",
-          "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#immutableViewsRetainWideKey"
+          "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#immutableViewsRetainWideKey",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#emptyExplainOutputsNeverReachEitherModel",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#tabularSessionAndMergeUseNativeOperations",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#explainRankingIsRefusedBeforeWarehouseReads",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#generatedKeysStayInternalAcrossPersistenceAndRelationalSessions",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#genuineNodeIdNamedSourceKeyIsNotHidden",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#operationAssertionRejectsUnrelatedNativeWork",
+          "java/src/test/java/com/nvidia/sdm/MainMergeContractTest.java#ordinaryResultsStillMergeRepeatedPartsWithoutGradients"
         ]
       },
-      "note": "Rust validates gradient shapes, row identities, class labels and forecast/batch/session association; hosts present collections and tables. Local contract tests do not certify gradient support for every connector or deployed model."
+      "note": "Rust validates gradient shapes, row identities, class labels and forecast/batch/session association; hosts present collections and tables. Local contract tests do not certify gradient support for every connector or deployed model. Python also retains public manual result construction; Java constructor visibility remains unchanged, while Java-produced results share Rust identity/merge policy. Generated keys remain client-only state and never enter outgoing model request metadata."
     }
   ],
-  "public_api_snapshot_sha256": "de768e8e8f62f63f7139ffd1efde3bf2c660bdc263a3e557b6506a0de69190d2",
+  "public_api_snapshot_sha256": "61665e4145f8ca8c68631faa4e0404b0796da081b60e0e3649a905be23c6f3e5",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -6701,6 +6722,16 @@
       "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
       "record": "public_api_snapshot_sha256",
       "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
+    },
+    {
+      "base_commit": "ff08b03d760f657bdff98005629f068c8f0be6b7",
+      "record": "api_contracts",
+      "reason": "Merge main explanation contracts into Rust routes, restore Python manual construction and test engine routing, early refusals, internal key provenance and joinable result identities."
+    },
+    {
+      "base_commit": "ff08b03d760f657bdff98005629f068c8f0be6b7",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Merge main explanation contracts into Rust routes, restore Python manual construction and test engine routing, early refusals, internal key provenance and joinable result identities."
     }
   ],
   "capabilities": [

@@ -175,7 +175,10 @@ pub(crate) async fn run(
                 &envelope,
                 &["model", "task", "schema", "context", "metadata"],
             );
-            let pinned = subset(&body, &["model", "task", "schema"]);
+            let mut pinned = subset(&body, &["model", "task", "schema"]);
+            if let Some(keys) = payloads[0].get("client_generated_keys") {
+                pinned.set("client_generated_keys", keys.clone());
+            }
             let state_keys = row_keys(&body, "context", windowed)?;
             let answer = call(&asker, Endpoint::CreateSession, body).await?;
             let id = session_id(&answer)?;

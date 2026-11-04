@@ -75,6 +75,9 @@ impl<T: JsonSchema> JsonSchema for Named<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields, rename = "StatePayload")]
 pub struct StatePayload<K = Task, C = InferenceConfig> {
+    /// Client-only generated keys, stripped before sending to a model.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub client_generated_keys: std::collections::BTreeMap<String, String>,
     /// The model the request was laid out for.
     pub model: String,
     pub task: K,

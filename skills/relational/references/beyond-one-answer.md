@@ -116,3 +116,15 @@ An explanation is requested with `outputs=[..., 'explanation']` or `EXPLAIN PRED
 For `sdm_gradient_v1`, read each prediction through `result.explanations` and its numerical gradients through `to_pandas()`.
 The model must support that output; client-assembled rankings refuse it locally.
 `result.explanation` remains the singular raw compatibility view, including unknown formats.
+
+Each entry contains `outputs` and `related`, one block per sampled table, including the entity's own table at hop zero.
+Blocks carry submitted `rows`, model-derived numerical `columns` and `gradients[output][row][column]`.
+Source keys can identify related rows; synthetic transport keys are not user keys.
+Only scored rows and their sampled related rows receive gradients, not the labelled context examples.
+A gradient measures sensitivity to a preprocessed feature, not a causal effect.
+
+Unique prediction IDs key the collection; missing/repeated IDs use `row_index`.
+Forecast keys include the step, and merging preserves distinct rows and steps.
+`result.explanations.to_pandas()` flattens entries with table, hop, related-row identity, output and column.
+`EXPLAIN` ranking is rejected before gathering; explanations requested later through `outputs` are checked before prediction.
+See [the result contract](../../../docs/reference/prediction-output.md).

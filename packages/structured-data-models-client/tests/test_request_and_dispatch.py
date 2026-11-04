@@ -213,7 +213,10 @@ def test_a_task_kind_the_model_does_not_serve_is_refused():
     )
 
 
-def test_an_output_field_the_model_cannot_produce_is_refused_by_name():
+@pytest.mark.parametrize('unsupported', ['embeddings', 'rankings'])
+def test_an_output_field_the_model_cannot_produce_is_refused_by_name(
+    unsupported,
+):
     from test_tabular_direct_core import Endpoint, client
 
     endpoint = Endpoint()
@@ -221,10 +224,10 @@ def test_an_output_field_the_model_cannot_produce_is_refused_by_name():
         client(endpoint).predict(
             simple_request(),
             model=KumoTabular(),
-            outputs=('prediction', 'embeddings'),
+            outputs=('prediction', unsupported),
         )
     message = str(error.value)
-    assert 'embeddings' in message
+    assert unsupported in message
     assert 'probabilities' in message
     assert endpoint.calls == []
 

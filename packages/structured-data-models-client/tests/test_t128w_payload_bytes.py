@@ -64,7 +64,12 @@ def _core_bytes(
             random_seed=sample['seed'],
         )
     assert len(taken) == 1, taken
-    return bytes(taken[0])
+    state = bytes(taken[0])
+    # State carries explicit client-only provenance; preserve every model-facing
+    # byte, including numeric tokens, while checking that metadata separately.
+    prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
+    assert state.startswith(prefix)
+    return b'{' + state[len(prefix) :]
 
 
 def _decimal_target(sample: dict[str, Any]) -> bool:

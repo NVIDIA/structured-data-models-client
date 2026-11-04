@@ -900,13 +900,10 @@ fn the_outputs_are_checked_as_the_client_checks_them() {
         unknown.fields["unsupported_outputs"],
         Detail::List(vec![Scalar::Utf8("bogus".into())])
     );
-    for outputs in [&["prediction", "explanation"][..], &["explanation"]] {
-        let error = refused(outputs);
-        assert_eq!(error.code, ErrorCode::UnsupportedRequest);
-        assert_eq!(error.fields["scored"], Detail::Scalar(Scalar::UInt64(2)));
-    }
     for outputs in [
-        &["prediction", "prediction"][..],
+        &["prediction", "explanation"][..],
+        &["explanation"],
+        &["prediction", "prediction"],
         &["quantiles"],
         &["probabilities"],
     ] {

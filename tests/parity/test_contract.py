@@ -1358,3 +1358,72 @@ def test_default_guard_rejects_preloaded_retired_packages(module, monkeypatch):
             pytest.fail('a preloaded retired package must prevent the journey')
     assert guard.report['legacy_hits'] == [module]
     assert not guard.report['installed']
+
+
+@pytest.mark.parametrize(
+    'owner_name,method',
+    [
+        ('sdm_client.client', '_explained_if_asked'),
+        ('sdm_client.decompose', 'parts_of'),
+        ('sdm_client.adapters.tabular.TabularAdapter', 'answered'),
+    ],
+)
+def test_guard_catches_reintroduced_main_engine_helpers(
+    monkeypatch, owner_name, method
+):
+    from routes import owner
+
+    obj = owner(owner_name)
+    monkeypatch.setattr(obj, method, lambda: None, raising=False)
+    with LegacyGuard(raise_caught=False) as guard:
+        with pytest.raises(AssertionError, match='legacy policy executed'):
+            getattr(obj, method)()
+    assert guard.report['legacy_hits'] == [owner_name + '.' + method]
+
+
+def test_guard_tolerates_removed_nested_decoder_without_hiding_other_import_errors():
+    from routes import owner
+
+    assert (
+        owner(
+            'sdm_client.explanations.decoder.GradientDecoder', missing_ok=True
+        )
+        is None
+    )
+
+
+def test_default_guard_catches_reintroduced_gradient_decoder(monkeypatch):
+    import sdm_client.explanations as module
+
+    decoder = types.ModuleType('sdm_client.explanations.decoder')
+
+    class GradientDecoder:
+        def decode(self):
+            return {}
+
+    decoder.GradientDecoder = GradientDecoder
+    monkeypatch.setitem(sys.modules, decoder.__name__, decoder)
+    monkeypatch.setattr(module, 'decoder', decoder, raising=False)
+    with LegacyGuard(raise_caught=False) as guard:
+        with pytest.raises(AssertionError, match='legacy policy executed'):
+            GradientDecoder().decode()
+    assert guard.report['legacy_hits'] == [
+        'sdm_client.explanations.decoder.GradientDecoder.decode'
+    ]
+
+
+def test_missing_nested_owner_does_not_swallow_dependency_import_failure(
+    monkeypatch,
+):
+    import routes
+
+    def missing_dependency(name):
+        raise ModuleNotFoundError(
+            "No module named 'required_dependency'", name='required_dependency'
+        )
+
+    monkeypatch.setattr(routes.importlib, 'import_module', missing_dependency)
+    with pytest.raises(ModuleNotFoundError, match='required_dependency'):
+        routes.owner(
+            'sdm_client.explanations.decoder.GradientDecoder', missing_ok=True
+        )
