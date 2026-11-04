@@ -89,11 +89,14 @@ def effective_case(case, connector):
     return active
 
 
-def expectation(case, model, language=None):
+def expectation(case, model, language=None, *, live=True):
     """Model capabilities are explicit; candidate language exceptions stay separate."""
     expected = case.get('expected_by_model', {}).get(model, case['expected'])
     if language is not None:
         expected = case.get('expected_by_language', {}).get(language, expected)
+    if not live and expected.get('stage') in {'fit', 'predict', 'close'}:
+        # Local mode ends after materialization/restore, before these operations.
+        return {'status': 'supported'}
     return expected
 
 

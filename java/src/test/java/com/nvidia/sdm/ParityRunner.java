@@ -221,6 +221,10 @@ public final class ParityRunner {
   }
 
   static boolean accepted(Map<String, Object> record, Map<String, Object> expected) {
+    if ("local".equals(record.get("execution"))
+        && List.of("fit", "predict", "close").contains(expected.getOrDefault("stage", ""))) {
+      return "passed".equals(record.get("status"));
+    }
     Object wanted =
         expected.getOrDefault(
             "outcome", "refused".equals(expected.get("status")) ? "refused" : "passed");

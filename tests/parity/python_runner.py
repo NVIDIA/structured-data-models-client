@@ -790,6 +790,7 @@ def expected_outcome(case, record):
         case,
         record['model'],
         'python' if record['phase'] == 'candidate' else None,
+        live=record.get('execution') != 'local',
     )
     if expected['status'] == 'supported':
         return record['status'] == 'passed'

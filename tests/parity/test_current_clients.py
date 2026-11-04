@@ -83,6 +83,39 @@ def test_local_mode_never_claims_live_acceptance_or_agreement():
     assert report['scope_complete']
     assert not report['goal_complete']
     assert 'Local check only' in matrix(report)
+
+
+@pytest.mark.parametrize(
+    'feature', ['supplement', 'raw-reader', 'prediction-refusal']
+)
+def test_materialization_mode_does_not_require_unexecuted_model_calls(feature):
+    from contract import fixture_hash
+
+    data = one()
+    case = data['scenarios'][0]
+    if feature == 'supplement':
+        case['supplement'] = {'kind': 'batch', 'prediction_calls': 2}
+    elif feature == 'raw-reader':
+        case['input_mode'] = 'raw-reader'
+    else:
+        case['expected'] = {
+            'status': 'refused',
+            'stage': 'predict',
+            'code': 'UNSUPPORTED_DTYPE',
+            'rule': None,
+        }
+    _, records = paired(data)
+    for record in records.values():
+        record['fixture_hash'] = fixture_hash(case)
+        record['execution'] = 'local'
+        record['status'] = 'passed'
+        record.pop('error', None)
+        record['semantic']['lifecycle'] = ['materialize']
+        record['semantic']['results'] = []
+    report = check(data, records, live=False)
+    assert report['scope_complete']
+    assert not report['goal_complete']
+    assert not check(data, records, live=True)['scope_complete']
     assert 'Cross-language agreement' not in matrix(report)
 
 

@@ -578,7 +578,7 @@ def assess(
             if new is None:
                 continue
             problem = evidence_problem(new, case, 'candidate', live)
-            expected = expectation(case, cell[2], 'python')
+            expected = expectation(case, cell[2], 'python', live=live)
             wanted = expected.get(
                 'outcome',
                 'refused' if expected['status'] == 'refused' else 'passed',
@@ -621,9 +621,9 @@ def assess(
         if live and old.get('endpoint') != new.get('endpoint'):
             row['reason'] = 'different model versions or transports'
             continue
-        expected = expectation(case, cell[2], cell[3])
+        expected = expectation(case, cell[2], cell[3], live=live)
         baseline_expected = expectation(
-            case, cell[2], 'python' if current else None
+            case, cell[2], 'python' if current else None, live=live
         )
         wanted = expected.get(
             'outcome',
@@ -685,7 +685,7 @@ def assess(
             copy.deepcopy(old.get('semantic')),
             copy.deepcopy(new.get('semantic')),
         )
-        if case.get('supplement') and wanted == 'passed':
+        if live and case.get('supplement') and wanted == 'passed':
             from supplements import normalize_response_ids
 
             for semantic in (old_semantic, new_semantic):
@@ -765,7 +765,8 @@ def assess(
                 )
                 continue
         if (
-            case.get('supplement')
+            live
+            and case.get('supplement')
             and cell[2] == 'relational'
             and wanted == 'passed'
         ):
@@ -822,7 +823,7 @@ def assess(
                     reason='transport identity proof failed: ' + str(error),
                 )
                 continue
-        if case.get('input_mode') == 'raw-reader':
+        if live and case.get('input_mode') == 'raw-reader':
             from supplements import wire_inputs
 
             from contract import HERE

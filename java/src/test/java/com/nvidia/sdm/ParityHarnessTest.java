@@ -181,5 +181,11 @@ class ParityHarnessTest {
     assertTrue(ParityRunner.accepted(record, expected));
     expected.put("stage", "predict");
     assertFalse(ParityRunner.accepted(record, expected));
+    var local = Map.<String, Object>of("status", "passed", "execution", "local");
+    assertTrue(ParityRunner.accepted(local, expected));
+    assertFalse(
+        ParityRunner.accepted(Map.of("status", "passed", "execution", "live"), expected));
+    expected.put("stage", "materialize");
+    assertFalse(ParityRunner.accepted(local, expected));
   }
 }
