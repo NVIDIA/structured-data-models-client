@@ -7,7 +7,7 @@
 **Inventory: four product fixes, two CI improvements, and one evidence follow-up.**
 Temporal-link batching, wheel provenance and Java analysis are now implemented and merged; see [completion evidence](implementation.md).
 The remaining three designs now record the approved DuckDB version policy, explanation ownership boundaries and PostgreSQL correction.
-DuckDB 2 and PostgreSQL ordering are implemented, reviewed and merged into Phase 6; gradient explanations are in implementation and review.
+DuckDB 2, PostgreSQL ordering and gradient explanations are implemented, independently reviewed, tested and merged into Phase 6.
 See the [final-three tracker](final-three-implementation.md) for validation evidence.
 PR #63’s final explanation API remains pending upstream review.
 The latest investigation also records main `847a1e9e3` (PR#62, `EXPLAIN PREDICT`) in the explanation design; the original audit remains pinned to its earlier snapshot.

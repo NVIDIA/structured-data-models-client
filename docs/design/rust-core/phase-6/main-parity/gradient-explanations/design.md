@@ -4,8 +4,8 @@
 
 # Explain every prediction
 
-**Gap:** main can explain each prediction; Phase 6 still exposes mainly a single raw explanation and rejects some supported requests.
-This is the largest remaining product change.
+**Completed:** Phase 6 now exposes per-prediction gradient collections in Python and Java, with shared Rust decoding and EXPLAIN handling.
+The previous singular raw explanation remains supported.
 
 ## Approved engine and language boundaries
 
