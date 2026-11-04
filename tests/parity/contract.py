@@ -125,7 +125,7 @@ def records(path):
     return out
 
 
-def evidence_problem(record, case, phase, live):
+def evidence_problem(record, case, phase, live, *, baseline_commit=BASELINE):
     if record.get('version') != 1 or record.get('phase') != phase:
         return 'invalid observation version/phase'
     if record.get('fixture_hash') != fixture_hash(case):
@@ -134,8 +134,8 @@ def evidence_problem(record, case, phase, live):
     if not artifact.get('commit') or not artifact.get('package_hash'):
         return 'missing installed artifact identity'
     if phase == 'baseline':
-        if artifact['commit'] != BASELINE:
-            return 'baseline is not the frozen reference'
+        if artifact['commit'] != baseline_commit:
+            return 'baseline is not the requested reference commit'
     else:
         if not artifact.get('native_hash') or not isinstance(
             artifact.get('contract'), int

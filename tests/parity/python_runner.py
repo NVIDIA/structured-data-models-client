@@ -22,7 +22,6 @@ from pathlib import Path
 from routes import LegacyGuard
 
 from contract import (
-    BASELINE,
     HERE,
     digest,
     effective_case,
@@ -129,11 +128,9 @@ def artifact(commit, phase, provenance=None):
                 ['git', '-C', str(package), *args], text=True
             ).strip()
 
-        if git('rev-parse', 'HEAD') != BASELINE or git(
-            'status', '--porcelain', '--', str(package)
-        ):
+        if git('rev-parse', 'HEAD') != commit or git('status', '--porcelain'):
             raise Incomplete(
-                'frozen Python source is not the clean reference commit'
+                'baseline Python source is not the requested clean commit'
             )
         source_root = (
             Path(git('rev-parse', '--show-toplevel'))
@@ -815,8 +812,6 @@ def main():
     parser.add_argument('--provenance', type=Path)
     args = parser.parse_args()
     data = manifest(args.manifest)
-    if args.phase == 'baseline' and args.commit != BASELINE:
-        parser.error('baseline must identify the frozen reference commit')
     config = json.loads(args.config.read_text()) if args.config else {}
     results = []
     with args.out.open('w') as output:

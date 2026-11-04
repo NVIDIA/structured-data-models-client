@@ -332,6 +332,28 @@ def test_candidate_commit_and_artifact_mixing_fail_closed():
         assess(data, old, new)
 
 
+def test_explicit_baseline_commit_preserves_historical_identity_checks():
+    data = one()
+    old, new = paired(data)
+    requested = '847a1e9e37735978bc6270d1b4425d0652302cea'
+    next(iter(old.values()))['artifact']['commit'] = requested
+    assert not assess(data, old, new)['scope_complete']
+    report = assess(data, old, new, baseline_commit=requested)
+    assert report['scope_complete']
+    assert report['baseline_commit'] == requested
+    assert not assess(data, old, new, baseline_commit='wrong')['scope_complete']
+
+
+def test_baseline_records_cannot_mix_installed_sources():
+    data = one()
+    old, new = paired(data)
+    record = copy.deepcopy(next(iter(old.values())))
+    record['artifact']['package_hash'] = 'different-package'
+    old[('another-case', 'memory', 'relational', 'python')] = record
+    with pytest.raises(ValueError, match='baseline records mix artifacts'):
+        assess(data, old, new)
+
+
 def test_model_tolerance_never_changes_input_or_reader_comparison():
     data = one()
     data['scenarios'][0]['tolerance'] = {'absolute': 0.1, 'relative': 0}

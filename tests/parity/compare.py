@@ -18,6 +18,7 @@ from identity import (
 )
 
 from contract import (
+    BASELINE,
     cells,
     deferred,
     effective_case,
@@ -507,10 +508,22 @@ def assess(
     selected=None,
     candidate_commit,
     comparison='historical',
+    baseline_commit=BASELINE,
 ):
     if comparison not in {'historical', 'current-clients'}:
         raise ValueError('unknown comparison mode')
     current = comparison == 'current-clients'
+    if not current:
+        identities = {
+            (
+                record.get('artifact', {}).get('commit'),
+                record.get('artifact', {}).get('package_hash'),
+            )
+            for record in baseline.values()
+            if record.get('artifact', {}).get('package_hash')
+        }
+        if len(identities) > 1:
+            raise ValueError('baseline records mix artifacts')
     if current:
         baseline = candidate
     scenarios = {case['id']: case for case in data['scenarios']}
@@ -593,7 +606,11 @@ def assess(
         if old is None or new is None:
             continue
         problem = evidence_problem(
-            old, case, 'candidate' if current else 'baseline', live
+            old,
+            case,
+            'candidate' if current else 'baseline',
+            live,
+            baseline_commit=baseline_commit,
         ) or evidence_problem(new, case, 'candidate', live)
         if problem:
             row['reason'] = problem
@@ -976,6 +993,7 @@ def assess(
         'coverage_mode': 'live' if live else 'local',
         'comparison': comparison,
         'candidate_commit': candidate_commit,
+        'baseline_commit': None if current else baseline_commit,
         'cells': result,
     }
 
@@ -1030,6 +1048,7 @@ def main():
         default=Path(__file__).with_name('manifest.json'),
     )
     parser.add_argument('--baseline', type=Path)
+    parser.add_argument('--baseline-commit', default=BASELINE)
     parser.add_argument(
         '--comparison',
         choices=('current-clients', 'historical'),
@@ -1064,6 +1083,7 @@ def main():
         selected=selected,
         candidate_commit=args.candidate_commit,
         comparison=args.comparison,
+        baseline_commit=args.baseline_commit,
     )
     args.out.write_text(json.dumps(report, indent=2) + '\n')
     if args.matrix:
