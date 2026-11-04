@@ -229,9 +229,15 @@ def test_candidate_artifact_proof_rejects_mismatches(
             )
             assert (
                 identities['python']['commit']
-                == identities['java']['commit']
+                == identities['java']['source_commit']
                 == 'candidate'
             )
+            assert identities['java']['execution'] == 'source-equivalent'
+            assert identities['java']['tree_clean'] is True
+            assert identities['java']['verified_reference_jar_hash'] == digest(
+                jar
+            )
+            assert identities['java']['native_hash'] == digest(jni)
     finally:
         artifact.cache_clear()
 

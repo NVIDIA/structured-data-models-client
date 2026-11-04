@@ -7,160 +7,192 @@ on:
   schedule:
     - cron: '41 4 * * 1'
   workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful full CI run for this exact commit (also use for stress).
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
+# The ordinary matrix, focused GPU methods and stress lane share resources.
+# One workflow at a time across all refs is intentionally conservative.
 concurrency:
-  group: live-parity-${{ github.ref }}
+  group: parity-shared-resources
   cancel-in-progress: false
 
+env:
+  GH_TOKEN: ${{ github.token }}
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+  AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+
 jobs:
-  parity:
-    # Never expose source/model credentials to pull requests or arbitrary refs.
+  preflight:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rust-core'
     runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
-    timeout-minutes: 180
+    timeout-minutes: 30
     environment: parity-live
-    env:
-      CARGO_BUILD_JOBS: '2'
-      CMAKE_BUILD_PARALLEL_LEVEL: '2'
-      RUSTUP_TOOLCHAIN: '1.97.0'
-      PARITY_RUNNER_LABELS: ${{ vars.PARITY_RUNNER_LABELS }}
+    outputs:
+      ci_run_id: ${{ steps.setup.outputs.ci-run-id }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Require dedicated live configuration
-        env:
-          PARITY_DIR: ${{ runner.temp }}/parity
-          PARITY_CONFIG: ${{ secrets.PARITY_CONFIG_JSON }}
+      - uses: ./.github/actions/parity-artifacts
+        id: setup
+        with:
+          ci-run-id: ${{ inputs.ci_run_id }}
+          config: ${{ secrets.PARITY_CONFIG_JSON }}
+      - name: Authenticate and probe bounded resources before acceptance
         run: |
-          set -euo pipefail
-          echo "PARITY_DIR=$PARITY_DIR" >> "$GITHUB_ENV"
-          mkdir -p "$PARITY_DIR/evidence"
-          if [ -z "$PARITY_CONFIG" ]; then
-            echo '::error::Dedicated parity-live configuration is missing; coverage is incomplete.'
-            exit 1
-          fi
-          umask 077
-          printenv PARITY_CONFIG > "$PARITY_DIR/config.json"
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+          "$PARITY_DIR/candidate/bin/python" tests/parity/resource_preflight.py \
+            --config "$PARITY_DIR/config.json" --out "$PARITY_DIR/evidence/preflight.json" \
+            > "$PARITY_DIR/private/preflight.log" 2>&1
+      - id: matrix
+        run: echo "matrix=$(python tests/parity/ci_shards.py --matrix)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
-          python-version: '3.12'
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+          name: live-preflight-${{ github.sha }}
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/parity/config.json"
+
+  shards:
+    needs: preflight
+    runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 60
+    environment: parity-live
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-      - name: Install the pinned Rust toolchain
-        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/parity-artifacts
         with:
-          workspaces: rust
-          key: live-parity
-      - name: Build the candidate artifacts
+          ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
+          config: ${{ secrets.PARITY_CONFIG_JSON }}
+      - name: Resolve the pinned Spark Connect classpath
         run: |
-          set -euo pipefail
-          python -m pip install maturin==1.15.0
-          python scripts/rust_core/native_wheel.py --out "$PARITY_DIR/wheels"
-          (cd rust && cargo build --release --locked -p sdm-jni)
-          mkdir -p java/target/natives/linux-x86_64
-          cp rust/target/release/libsdm_jni.so java/target/natives/linux-x86_64/
-          mvn -B -f java/pom.xml -DskipTests package
-          python - <<'PYVERSION'
-          import os, xml.etree.ElementTree as ET
-          version = ET.parse('java/pom.xml').getroot().findtext('{http://maven.apache.org/POM/4.0.0}version')
-          with open(os.environ['GITHUB_ENV'], 'a') as out:
-              out.write(f'SDM_JAVA_VERSION={version}\n')
-          PYVERSION
           mvn -B -f java/parity-connect-pom.xml dependency:build-classpath \
-            -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt"
-          python -m venv "$PARITY_DIR/candidate"
-          "$PARITY_DIR/candidate/bin/pip" install \
-            ./packages/structured-data-models-api \
-            './packages/structured-data-models-connectors[all,test]' \
-            "$PARITY_DIR"/wheels/*.whl databricks-connect==17.3.11 'jsonschema>=4.18' 'structured-data-models>=0.2.1,<0.3'
-      - name: Record installed artifact identities
-        run: |
-          "$PARITY_DIR/candidate/bin/python" - <<'PY'
-          import hashlib, json, os, pathlib
-          from sdm_client import _native
-          root = pathlib.Path(os.environ['PARITY_DIR'])
-          commit = os.environ['GITHUB_SHA']
-          jar = pathlib.Path('java/target') / f"structured-data-models-client-{os.environ['SDM_JAVA_VERSION']}.jar"
-          native = pathlib.Path('rust/target/release/libsdm_jni.so')
-          java = dict(commit=commit, package_hash=hashlib.sha256(jar.read_bytes()).hexdigest(),
-                      native_hash=hashlib.sha256(native.read_bytes()).hexdigest(), contract=_native.CONTRACT_VERSION)
-          (root / 'java-provenance.json').write_text(json.dumps(java))
-          PY
-      - name: Require registered live API resources
-        run: |
-          "$PARITY_DIR/candidate/bin/python" tests/parity/live_api.py \
-            --config "$PARITY_DIR/config.json" --commit "$GITHUB_SHA" \
-            --out "$PARITY_DIR/evidence/live-api.json" \
-            --private-dir "$PARITY_DIR/private-api" --preflight
-      - name: Run both public clients against real endpoints
+            -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt" \
+            > "$PARITY_DIR/private/connect.log" 2>&1
+      - name: Run both exact-artifact public clients for one connector
         env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-          AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+          CONNECTOR: ${{ matrix.connector }}
         run: |
-          # Keep observations from every runner even when an earlier one fails.
           set +e
           runners_ok=0
           "$PARITY_DIR/candidate/bin/python" tests/parity/python_runner.py \
-            --phase candidate --commit "$GITHUB_SHA" --mode live \
-            --provenance "$PARITY_DIR"/wheels/*.whl.json \
-            --config "$PARITY_DIR/config.json" --out "$PARITY_DIR/evidence/python.jsonl"
+            --phase candidate --commit "$GITHUB_SHA" --mode live --connector "$CONNECTOR" \
+            --provenance "$PARITY_PROVENANCE" \
+            --config "$PARITY_DIR/config.json" --out "$PARITY_DIR/evidence/python.jsonl" \
+            > "$PARITY_DIR/private/python.log" 2>&1
           if [ "$?" -ne 0 ]; then runners_ok=1; fi
           mvn -B -f java/pom.xml -Dtest=ParityRunnerTest \
-            -Dsdm.native.library="$GITHUB_WORKSPACE/rust/target/release/libsdm_jni.so" \
-            -Dsdm.parity.jar="$GITHUB_WORKSPACE/java/target/structured-data-models-client-${SDM_JAVA_VERSION}.jar" \
+            -Dsdm.native.library="$PARITY_NATIVE" -Dsdm.parity.jar="$PARITY_JAR" \
             -Dsdm.parity.provenance="$PARITY_DIR/java-provenance.json" \
             -Dsdm.parity.connect.classpath="$PARITY_DIR/connect-classpath.txt" \
-            -Dsdm.parity.commit="$GITHUB_SHA" \
+            -Dsdm.parity.commit="$GITHUB_SHA" -Dsdm.parity.connectors="$CONNECTOR" \
             -Dsdm.parity.manifest="$GITHUB_WORKSPACE/tests/parity/manifest.json" \
             -Dsdm.parity.config="$PARITY_DIR/config.json" \
             -Dsdm.parity.output="$PARITY_DIR/evidence/java.jsonl" \
-            -Dsdm.parity.mode=live test
+            -Dsdm.parity.mode=live test > "$PARITY_DIR/private/java.log" 2>&1
           if [ "$?" -ne 0 ]; then runners_ok=1; fi
-          set -e
-          cat "$PARITY_DIR/evidence/python.jsonl" "$PARITY_DIR/evidence/java.jsonl" > "$PARITY_DIR/evidence/candidates.jsonl"
-          "$PARITY_DIR/candidate/bin/python" tests/parity/compare.py \
-            --comparison current-clients \
-            --candidate "$PARITY_DIR/evidence/candidates.jsonl" --candidate-commit "$GITHUB_SHA" \
-            --out "$PARITY_DIR/evidence/report.json" --matrix "$PARITY_DIR/evidence/matrix.md"
           exit "$runners_ok"
-      - name: Execute every registered live API requirement
-        if: ${{ !cancelled() && success() }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: live-shard-${{ matrix.connector }}
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/parity/config.json"
+
+  aggregate:
+    needs: [preflight, shards]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: live-shard-*
+          path: ${{ runner.temp }}/shards
+      - name: Require all shard artifacts and all manifest cells
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-          AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          CI_RUN_ID: ${{ needs.preflight.outputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/parity/evidence"
+          python -m pip install 'jsonschema>=4.18'
+          python tests/parity/ci_shards.py --root "$RUNNER_TEMP/shards" \
+            --commit "$GITHUB_SHA" --run-id "$CI_RUN_ID" \
+            --out "$RUNNER_TEMP/parity/evidence/candidates.jsonl"
+          python tests/parity/compare.py --comparison current-clients \
+            --candidate "$RUNNER_TEMP/parity/evidence/candidates.jsonl" --candidate-commit "$GITHUB_SHA" \
+            --out "$RUNNER_TEMP/parity/evidence/report.json" --matrix "$RUNNER_TEMP/parity/evidence/matrix.md"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: live-parity-${{ github.sha }}
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error
+      - name: Require runner success as well as complete observations
+        env:
+          SHARDS_RESULT: ${{ needs.shards.result }}
+        run: test "$SHARDS_RESULT" = success
+
+  parity:
+    needs: [preflight, aggregate]
+    runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 90
+    environment: parity-live
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/parity-artifacts
+        with:
+          ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
+          config: ${{ secrets.PARITY_CONFIG_JSON }}
+      - name: Execute every registered live API requirement once
         run: |
           "$PARITY_DIR/candidate/bin/python" tests/parity/live_api.py \
             --config "$PARITY_DIR/config.json" --commit "$GITHUB_SHA" \
             --out "$PARITY_DIR/evidence/live-api.json" \
             --private-dir "$PARITY_DIR/private-api" \
-            --provenance "$PARITY_DIR"/wheels/*.whl.json \
+            --provenance "$PARITY_PROVENANCE" \
             --java-provenance "$PARITY_DIR/java-provenance.json" \
-            --java-jar "$GITHUB_WORKSPACE/java/target/structured-data-models-client-${SDM_JAVA_VERSION}.jar" \
-            --java-native "$GITHUB_WORKSPACE/rust/target/release/libsdm_jni.so"
-      - name: Retain sanitized observations and matrix
+            --java-jar "$PARITY_JAR" --java-native "$PARITY_NATIVE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: live-parity-${{ github.sha }}
+          name: live-registry-${{ github.sha }}
           path: ${{ runner.temp }}/parity/evidence/
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Remove temporary credentials
         if: always()
-        run: rm -f "$PARITY_DIR/config.json"
+        run: rm -f "$RUNNER_TEMP/parity/config.json"

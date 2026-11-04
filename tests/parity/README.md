@@ -140,6 +140,12 @@ A missing or invalid Git reference remains an error.
 
 The ordinary live workflow runs the prediction matrix and every `live_api_tests` requirement.
 The dedicated CI identities are not configured yet; local acceptance uses caller-provided private configuration without uploading it.
+Both live workflows share a repository-wide concurrency limit of one; connector shards also run one at a time.
+They reuse production wheel, JAR and JNI artifacts from successful full CI for the exact candidate commit, rather than rebuilding distribution artifacts.
+The matrix loads the exact JAR; focused Java API and giant tests compile the exact clean source commit and load the verified packaged JNI, and record this as source-equivalent execution.
+Set the same `ci_run_id` dispatch input on both lanes to pin identical bytes across reruns; sanitized receipts retain that run and artifact hashes.
+The ordinary workflow runs bounded authentication/read probes and endpoint readiness checks before its manifest-derived connector shards, then requires every shard and the unfiltered matrix comparison before running the API registry once.
+`resource_preflight.py` records optional remote model listing separately; readiness and configuration do not certify task, session or gradient support.
 Use the installed candidate Python interpreter, its optional pretrained model runtime, a CUDA GPU, the candidate JNI library and Maven:
 
 ```sh

@@ -22,16 +22,16 @@ def workflow(name):
 def test_live_credentials_only_on_trusted_refs():
     data = workflow('parity-live.yml')
     assert set(data['on']) == {'schedule', 'workflow_dispatch'}
-    job = data['jobs']['parity']
+    job = data['jobs']['preflight']
     assert job['environment'] == 'parity-live'
     assert job['if'] == (
         "github.ref == 'refs/heads/main' || "
         "github.ref == 'refs/heads/rust-core'"
     )
-    assert data['permissions'] == {'contents': 'read'}
+    assert data['permissions'] == {'contents': 'read', 'actions': 'read'}
     evidence = next(
         s
-        for s in job['steps']
+        for s in data['jobs']['aggregate']['steps']
         if s.get('with', {}).get('name', '').startswith('live-parity-')
     )
     assert evidence['with']['path'].endswith('/parity/evidence/')
@@ -155,8 +155,11 @@ def test_giant_reports_require_exactly_one_passed_case(
 
 
 def test_live_workflow_validates_current_clients_without_frozen_install():
-    job = workflow('parity-live.yml')['jobs']['parity']
-    scripts = '\n'.join(step.get('run', '') for step in job['steps'])
+    scripts = '\n'.join(
+        step.get('run', '')
+        for job in workflow('parity-live.yml')['jobs'].values()
+        for step in job['steps']
+    )
     assert '--comparison current-clients' in scripts
     assert '--phase candidate' in scripts
     assert '-Dsdm.parity.mode=live' in scripts
@@ -174,12 +177,53 @@ def test_live_workflow_validates_current_clients_without_frozen_install():
 def test_ordinary_live_has_registry_without_giant_prerequisites():
     data = workflow('parity-live.yml')
     scripts = '\n'.join(
-        step.get('run', '') for step in data['jobs']['parity']['steps']
+        step.get('run', '')
+        for job in data['jobs'].values()
+        for step in job['steps']
     )
     assert 'tests/parity/live_api.py' in scripts
-    assert '--preflight' in scripts
+    assert 'tests/parity/resource_preflight.py' in scripts
     assert 'MemAvailable' not in scripts
     assert 'PYGIANT' not in scripts
     stress = workflow('parity-stress.yml')
     assert set(stress['on']) == {'workflow_dispatch'}
     assert stress['jobs']['parity']['environment'] == 'parity-live'
+
+
+def test_live_lanes_share_resources_and_exact_artifacts_without_rebuilds():
+    live = workflow('parity-live.yml')
+    stress = workflow('parity-stress.yml')
+    assert (
+        live['concurrency']
+        == stress['concurrency']
+        == {'group': 'parity-shared-resources', 'cancel-in-progress': 'false'}
+    )
+    assert live['jobs']['shards']['strategy']['max-parallel'] == '1'
+    assert live['jobs']['shards']['strategy']['fail-fast'] == 'false'
+    assert live['jobs']['shards']['needs'] == 'preflight'
+    assert live['jobs']['parity']['needs'] == ['preflight', 'aggregate']
+    for data in (live, stress):
+        for job in data['jobs'].values():
+            scripts = '\n'.join(step.get('run', '') for step in job['steps'])
+            for forbidden in (
+                'cargo build',
+                'native_wheel.py',
+                '-DskipTests package',
+            ):
+                assert forbidden not in scripts
+    for name in ('shards', 'parity'):
+        setup = next(
+            step
+            for step in live['jobs'][name]['steps']
+            if step.get('uses') == './.github/actions/parity-artifacts'
+        )
+        assert (
+            setup['with']['ci-run-id']
+            == '${{ needs.preflight.outputs.ci_run_id }}'
+        )
+    aggregate = '\n'.join(
+        step.get('run', '') for step in live['jobs']['aggregate']['steps']
+    )
+    assert 'ci_shards.py' in aggregate
+    assert '--connector' not in aggregate and '--language' not in aggregate
+    assert 'test "$SHARDS_RESULT" = success' in aggregate

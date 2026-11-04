@@ -275,5 +275,7 @@ def test_java_release_paths_follow_the_pom_version():
     live = (ROOT / '.github/workflows/parity-live.yml').read_text()
     assert 'structured-data-models-client-1.0.0.jar' not in ci + live
     assert "ET.parse('java/pom.xml')" in ci
-    assert "ET.parse('java/pom.xml')" in live
-    assert 'SDM_JAVA_VERSION' in live
+    assert '-Dsdm.parity.jar="$PARITY_JAR"' in live
+    artifacts = (ROOT / 'tests/parity/ci_artifacts.py').read_text()
+    assert "one((root / 'java').glob('*.jar'))" in artifacts
+    assert 'java-artifacts.json' in artifacts

@@ -77,6 +77,12 @@ Correct environment branch rules; approve manual candidates, and use a narrowly 
 ## Next changes
 
 1. Repository implementation separates `parity-live.yml` and manual `parity-stress.yml`, and publication requires both on the exact candidate.
+Both lanes share a repository-wide concurrency group with capacity one.
+The live workflow derives serial connector shards from the maintained manifest, requires every shard artifact, and runs the unfiltered comparator before the focused registry.
+Both lanes reuse successful full-CI production artifacts for the exact commit, verifying wheel/native and JAR/POM identities.
+The matrix loads the verified JAR; focused Java registry and giant tests use the exact clean Java source commit with the verified packaged JNI, explicitly labeled source-equivalent execution.
+Pin the same optional `ci_run_id` for both lanes to retain identical artifact bytes even if CI is rerun on that commit.
+Preflight checks authentication, bounded fixture reads and endpoint readiness before acceptance work; optional remote model listing is recorded separately and does not certify task, session or gradient support.
 2. `tests/parity/live_api.py` executes the registry through the existing Python/JUnit runners, preserving private diagnostics and reporting missing resources without connection values.
 3. Dedicated identities and environment policy remain owner-deferred; no personal credentials are uploaded by this work.
 4. Final local acceptance and bounded benchmarks run after integration; measure a configured trusted CI run before selecting operational budgets or claiming scheduled coverage.

@@ -111,8 +111,12 @@ def artifact_identities(
             'version': importlib.metadata.version('structured-data-models'),
         },
         'java': {
-            key: java[key]
-            for key in ('commit', 'package_hash', 'native_hash', 'contract')
+            'execution': 'source-equivalent',
+            'source_commit': head,
+            'tree_clean': True,
+            'native_hash': java['native_hash'],
+            'contract': java['contract'],
+            'verified_reference_jar_hash': java['package_hash'],
         },
     }
 
