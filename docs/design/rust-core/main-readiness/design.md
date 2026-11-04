@@ -33,18 +33,19 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Maintained Python suite | 6,881 passed; nine skips accounted for separately |
 | Repaired contract files on the integrated branch | 629 passed, no skips |
 | Repository tooling | 164 passed, no skips |
-| Platform CI | Eight validation-tooling causes repaired; corrected full [run 41796680139](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41796680139) is running at `bf5f7f412` |
+| Platform CI | Second run: 78 successful jobs and three failures, now repaired; full [run 41800680419](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41800680419) tests integrated `24f48e6f7` |
 | Live matrix | All 740 Python/Java non-S3 cells pass across 13 connectors with observed subprocesses |
 | Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
 | Current-main comparison | All 370 non-S3 cells executed with matched dependencies: 277 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
-| Benchmarks | Two fixed-response workloads measured across four variants and independently reviewed; remaining workloads pending, see [results](validation-performance/verification.md) |
+| Benchmarks | Tabular and relational memory measured with scaling, gradients and real models; remaining SQLite workloads running, see [results](validation-performance/verification.md) |
 
-The installed candidate artifacts are from `08d027795`; the platform CI runner is `7f6fbbc8e`.
-Later reviewed runners repair test endpoint selection and authentication observation; product source remains unchanged.
+The matrix/benchmark artifacts remain identified as `08d027795`.
+A later Arrow 14 labels-adapter repair is tested separately in the fresh `d140e0d6d` wheel; its native binary is unchanged.
+Other changes repair validation tooling, test ownership and evidence accounting.
 The historical live comparison matches pandas 2.3.3, NumPy 2.5.4 and Arrow 24; earlier mismatched-dependency observations are diagnostics only.
 These partial results do not establish completion.
-The final source audit found outstanding CI resource/preflight/artifact-sharing work and developer-ledger first-adoption/evidence-view gaps.
-These are being completed before acceptance; the tested product implementation remains unchanged.
+The final source audit identified CI resource/preflight/artifact-sharing work and developer-ledger first-adoption/evidence-view gaps.
+Their reviewed implementations are integrated, with focused tests passing; final CI and acceptance remain pending.
 
 | Owner | Changes | Shared contract |
 |---|---|---|
