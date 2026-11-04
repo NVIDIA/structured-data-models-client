@@ -299,3 +299,78 @@ def test_request_row_counts_keep_context_and_related_work_separate():
         'instance_rows': 0,
         'related_rows': {},
     }
+
+
+@pytest.mark.parametrize('fault', [None, 'value', 'missing', 'shape'])
+def test_gradient_worker_keeps_correctness_without_duplicate_merge(
+    monkeypatch, capsys, fault
+):
+    from types import SimpleNamespace
+
+    from sdm_client import PredictionResult, StructuredDataError
+
+    spec = importlib.util.spec_from_file_location(
+        'gradient_worker', Path(bench.__file__).with_name('python_case.py')
+    )
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    answer = bench.answer
+
+    def response(*args):
+        value = answer(*args)
+        for item in value['predictions']:
+            if fault == 'missing':
+                item.pop('explanation')
+            elif fault == 'shape':
+                item['explanation']['details']['instance_table'][
+                    'gradients'
+                ] = []
+            elif fault == 'value':
+                item['explanation']['details']['instance_table']['gradients'][
+                    0
+                ][0][0] = 0.5
+        return value
+
+    monkeypatch.setattr(bench, 'answer', response)
+
+    def forbidden_merge(*args):
+        raise AssertionError('unsupported duplicate merge was called')
+
+    monkeypatch.setattr(PredictionResult, 'merge', forbidden_merge)
+    server = bench.Fixture(True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv(
+        'SDM_BENCH_URL', f'http://127.0.0.1:{server.server_port}'
+    )
+    monkeypatch.setenv('SDM_BENCH_FIXED', '1')
+    args = SimpleNamespace(
+        workload='tabular-session',
+        rows=12,
+        scores=2,
+        width=1,
+        degree=1,
+        warmups=0,
+        loops=0,
+        gradients=1,
+    )
+    try:
+        if fault:
+            with pytest.raises(
+                (AssertionError, StructuredDataError)
+            ) as refused:
+                worker.run(args)
+            assert 'unsupported duplicate merge was called' not in str(
+                refused.value
+            )
+        else:
+            worker.run(args)
+            result = json.loads(capsys.readouterr().out)
+            assert result['status'] == 'passed'
+            assert result['iterations'][0]['gradient_cells'] == 2
+            assert result['iterations'][0]['seconds']['result_merge'] is None
+            assert result['unavailable_phases']['result_merge']
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()

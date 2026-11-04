@@ -264,14 +264,17 @@ def run(args):
                     or (fixed and not (explanations['gradient'] == 0.25).all())
                 ):
                     raise AssertionError('gradient response contract differs')
-            merged = timed(
-                'result_merge',
-                lambda result=result: PredictionResult.merge([result, result]),
-            )
-            if len(merged) != 2 * args.scores:
-                raise AssertionError('merge row count differs')
-            if args.gradients and len(merged.explanations) != 2 * args.scores:
-                raise AssertionError('merge lost explanation identities')
+            if args.gradients:
+                values['result_merge'] = None
+            else:
+                merged = timed(
+                    'result_merge',
+                    lambda result=result: PredictionResult.merge(
+                        [result, result]
+                    ),
+                )
+                if len(merged) != 2 * args.scores:
+                    raise AssertionError('merge row count differs')
             results.append(
                 {
                     'phase': 'cold-first'
@@ -303,6 +306,11 @@ def run(args):
                 'setup_seconds': setup_seconds,
                 'client_close_seconds': close_seconds,
                 'iterations': results,
+                'unavailable_phases': {
+                    'result_merge': 'Duplicate-result gradient merging is outside the shared public scope of the pinned clients'
+                }
+                if args.gradients
+                else {},
                 'inputs': vars(args),
                 'input_rows': {
                     'users': args.rows,

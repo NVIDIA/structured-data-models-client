@@ -153,13 +153,17 @@ public final class ClientCost {
           });
           if (result.explanations().entries().size() != scores) throw new AssertionError("explanation count differs");
         }
-        PredictionResult merged = timed(times, "result_merge", () -> PredictionResult.merge(List.of(result, result)));
-        if (merged.rows() != 2 * scores) throw new AssertionError("merge row count differs");
-        if (gradients && merged.explanations().entries().size() != 2 * scores) throw new AssertionError("merge lost explanations");
+        if (gradients) times.put("result_merge", null);
+        else {
+          PredictionResult merged = timed(times, "result_merge", () -> PredictionResult.merge(List.of(result, result)));
+          if (merged.rows() != 2 * scores) throw new AssertionError("merge row count differs");
+        }
         iterations.add(Map.of("phase", iteration == 0 ? "cold-first" : iteration <= warmups ? "warmup" : "warm", "seconds", times, "gradient_cells", gradientCells));
       }
       Map<String, Object> result = new LinkedHashMap<>();
       result.put("entry_epoch_seconds", entryEpoch); result.put("status", "passed"); result.put("inputs", args); result.put("iterations", iterations);
+      result.put("unavailable_phases", gradients ? Map.of("result_merge",
+          "Duplicate-result gradient merging is outside the shared public scope of the pinned clients") : Map.of());
       result.put("input_rows", Map.of("users", rows, "scores", scores, "events", tabular ? 0 : rows * degree));
       result.put("setup_seconds", setupSeconds); result.put("native_load", "included in setup or first public operation; not isolated");
       result.put("sql_query_count", sqlite ? null : 0); result.put("native_call_count", null);

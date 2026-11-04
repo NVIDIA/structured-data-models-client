@@ -85,14 +85,19 @@ The relational query predicts the entity's numerical target with one-hop related
 The SQLite route uses ADBC in Python and JDBC in Java, and preserves each driver's ordinary representations.
 It includes real source schema discovery and SQL pushdown; it is not a reader-normalized memory substitute.
 Tabular sessions measure request preparation, fit, score, close, result conversion, and merge.
-All workloads measure result merge and check independent expected row counts and fixed-response values.
+Non-gradient workloads measure result merge and check independent expected row counts and fixed-response values.
 
 Repeat each workload with `--gradients` for clients exporting the public gradient view.
 The relational fixture assigns gradients to the known `users.x*` numerical features, using actual related-table positions filtered by each prediction’s `instance_id`.
 It omits gradients for other tables rather than inventing values or interpreting every feature as numerical.
 Both hosts require nonempty gradient views and record their cell counts for comparison.
-The fixed HTTP fixture independently constructs regression gradients of 0.25 with correct row/output/column dimensions, and the clients check gradient values and merge identities.
+The fixed HTTP fixture independently constructs regression gradients of 0.25 with correct row/output/column dimensions, and the clients check gradient values and per-result explanation counts.
 A historical client lacking the gradient API reports unsupported; it is not counted as a successful zero-cost measurement.
+Gradient runs record `result_merge: null` with an explicit unavailable-phase reason in both languages.
+The pinned old client merges slices whose row positions are already distinct; repeating the same result collides its gradient keys.
+The candidate preserves repeated-result explanations by rebasing positions, a separately tested improvement rather than a shared benchmark workload.
+Java has no public result-slice constructor, so the shared gradient benchmark measures decode and view work without internal access or synthetic merge timing.
+Existing public gradient merge correctness tests remain separate from this measurement.
 This measures gradient response handling, not model differentiation or model quality.
 
 Each subprocess performs a distinct cold first iteration, explicit warmups, then retained warm iterations.
@@ -139,4 +144,4 @@ The recorded endpoint identity comes from this configuration; the benchmark does
 The URL is passed through the child environment and is not written to results.
 Client HTTP counters are unavailable in this mode.
 Keep remote cache/startup state and model CPU/GPU memory separate from client measurements.
-Constant-value assertions apply only to the fixed fixture; real-model runs retain row-count and merge consistency checks.
+Constant-value assertions apply only to the fixed fixture; real-model runs retain row-count and per-result explanation checks, plus merge consistency checks in non-gradient runs.
