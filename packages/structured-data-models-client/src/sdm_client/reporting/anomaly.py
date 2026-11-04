@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import numbers
 from collections.abc import Hashable, Sequence
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -246,7 +247,7 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
         return values
     if values.dtype.kind not in 'biufO' or (
         values.dtype.kind == 'O'
-        and not all(isinstance(value, numbers.Real) for value in values)
+        and not all(_is_a_real_number(value) for value in values)
     ):
         raise StructuredDataError(
             f'detected_by carries {values.dtype} values, which are not a '
@@ -269,6 +270,19 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
             code='INVALID_REQUEST',
         )
     return numeric.astype(bool)
+
+
+def _is_a_real_number(value: Any) -> bool:
+    r"""Whether ``value`` is a number that reads as a float unchanged.
+
+    Asked of the numeric tower where it answers, and of the types by name
+    where it does not: ``numpy.bool_`` and :class:`~decimal.Decimal` are
+    neither :class:`numbers.Real` nor :class:`numbers.Complex`, and both are
+    ordinary spellings of a detection.
+    """
+    if isinstance(value, (bool, np.bool_, Decimal)):
+        return True
+    return isinstance(value, numbers.Real)
 
 
 def _titled(title: str, detected_by: str | Sequence[Any] | np.ndarray) -> str:

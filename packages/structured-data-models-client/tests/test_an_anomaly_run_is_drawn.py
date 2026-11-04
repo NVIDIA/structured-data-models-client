@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -328,7 +330,7 @@ def test_an_answer_from_another_model_is_refused(anomaly, tmp_path):
     'detections',
     [
         lambda rows: np.full(rows, 2j),
-        lambda rows: np.array([2j] * rows, dtype=object),
+        lambda rows: np.array([np.complex128(2j)] * rows, dtype=object),
         lambda rows: np.array(['1'] * rows),
     ],
 )
@@ -347,6 +349,22 @@ def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
             detected_by=detections(len(frame)),
         )
     assert 'detected_by' in str(caught.value)
+
+
+@pytest.mark.parametrize('spelling', [np.bool_, Decimal])
+def test_detections_spelled_in_other_ways_are_still_detections(
+    anomaly, tmp_path, spelling
+):
+    """Neither of these is a `numbers.Real`, and both are ordinary ways of
+    writing a decision about a row."""
+    frame = readings()
+
+    assert anomaly_report(
+        scored(anomaly, frame),
+        frame,
+        tmp_path / 'run.pdf',
+        detected_by=np.array([spelling(0)] * len(frame), dtype=object),
+    ).exists()
 
 
 @pytest.mark.parametrize('supplied', [False, True])
