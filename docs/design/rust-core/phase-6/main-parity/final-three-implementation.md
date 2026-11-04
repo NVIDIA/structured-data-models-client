@@ -11,9 +11,9 @@ PR #63 remains open at `f240fe448`; its unfinished cohort/container API is not s
 
 | Effort | Branch | Status | Required evidence |
 |---|---|---|---|
-| DuckDB2 | `rust-core-phase-6-duckdb2` | Delegated; contract review | Python1.5/2 reads, SQL/catalog/types/ownership/error behavior; Java2 shared SQL; live read→predict |
-| PostgreSQL ordering | `rust-core-phase-6-postgres-order` | Delegated; contract review | Public failure reproduction; JSON/XML/domain keyless ordering; Python/Java; other dialects unchanged; model smoke |
-| Explanations | `rust-core-phase-6-gradients` | Delegated; API contract review first | Rust validated decoding/identity/session/decomposition; Python/Java APIs and presentation; optional Python runtime; supported live model checks |
+| DuckDB2 | `rust-core-phase-6-duckdb2` | Merged `c8b94150d`; 252 tests per driver, 4 live model journeys, Java/3.10 checks passed | Python1.5/2 reads, SQL/catalog/types/ownership/error behavior; Java2 shared SQL; live read→predict |
+| PostgreSQL ordering | `rust-core-phase-6-postgres-order` | Merged `d07bf1369`; Python 19 and Java 9 checks passed, including real database-to-model predictions | Public failure reproduction; JSON/XML/domain keyless ordering; Python/Java; other dialects unchanged; model smoke |
+| Explanations | `rust-core-phase-6-gradients` | Contract accepted; Rust decoder/host views in progress | Rust validated decoding/identity/session/decomposition; Python/Java APIs and presentation; optional Python runtime; supported live model checks |
 
 Rust owns engine semantics, including SQL dialects, EXPLAIN interpretation, gradient decoding and result identity.
 Hosts own connections, transport, presentation and optional Python model execution.
