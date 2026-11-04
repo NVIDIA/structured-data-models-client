@@ -12,16 +12,23 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize('gate', ['local', 'live'])
 @pytest.mark.parametrize(
     'fault', ['missing', 'duplicate', 'skipped', 'failure', 'error', None]
 )
-def test_required_junit_results(tmp_path, fault):
+def test_required_junit_results(tmp_path, fault, gate):
     coverage = runpy.run_path(str(ROOT / 'tests/parity/check_junit.py'))
     ledger = tmp_path / 'tests/parity/manifest.json'
     ledger.parent.mkdir(parents=True)
     ledger.write_text(
         json.dumps(
             {
+                'live_api_tests': [
+                    {
+                        'api_contract': 'example',
+                        'test': 'java/src/test/java/com/nvidia/sdm/ExampleTest.java#required',
+                    }
+                ],
                 'api_contracts': [
                     {
                         'gate': 'local',
@@ -31,7 +38,7 @@ def test_required_junit_results(tmp_path, fault):
                             ]
                         },
                     }
-                ]
+                ],
             }
         )
     )
@@ -49,7 +56,7 @@ def test_required_junit_results(tmp_path, fault):
         f'<testsuite>{case}</testsuite>'
     )
     report = coverage['Report']()
-    coverage['parity_junit_check'](tmp_path, reports, report)
+    coverage['parity_junit_check'](tmp_path, reports, report, gate)
     assert bool(report.problems) is (fault is not None)
 
 
@@ -104,3 +111,34 @@ def test_runner_uses_fresh_reports_and_preserves_natives(
     assert checker['main']() == exit_code
     assert calls == [['test-maven', '-B', '-f', 'java/pom.xml', 'verify']]
     assert native.read_bytes() == b'keep-native'
+
+
+def test_live_missing_parameterized_invocation_fails(tmp_path):
+    from check_junit import Report, parity_junit_check
+
+    ledger = tmp_path / 'tests/parity/manifest.json'
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(
+        json.dumps(
+            {
+                'live_api_tests': [
+                    {
+                        'api_contract': 'example',
+                        'test': 'java/src/test/java/com/nvidia/sdm/ExampleTest.java#required',
+                        'invocations': 2,
+                    }
+                ]
+            }
+        )
+    )
+    reports = tmp_path / 'reports'
+    reports.mkdir()
+    (reports / 'TEST-ExampleTest.xml').write_text(
+        '<testsuite><testcase classname="com.nvidia.sdm.ExampleTest" name="required(int)[1]"/></testsuite>'
+    )
+    report = Report()
+    parity_junit_check(tmp_path, reports, report, 'live')
+    assert any(
+        'expected 2 invocations, got 1' in problem
+        for problem in report.problems
+    )

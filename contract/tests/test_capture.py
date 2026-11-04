@@ -336,12 +336,12 @@ def test_the_control_over_duckdb_and_its_query_log() -> None:
                 ).fetchall()
             )
             seen.append(
-                cursor.execute(
-                    'SELECT a FROM t WHERE a >= ? ORDER BY a', [2]
+                cursor.sql(
+                    'SELECT a FROM t WHERE a >= 2 ORDER BY a'
                 ).to_arrow_table(batch_size=2)
             )
             seen.append(
-                cursor.execute('SELECT a FROM t WHERE a < 0').to_arrow_table()
+                cursor.sql('SELECT a FROM t WHERE a < 0').to_arrow_table()
             )
             seen.append(cursor.execute("PRAGMA table_info('t')").fetchall())
         logged = run_python.query_log(connection)
@@ -354,8 +354,9 @@ def test_the_control_over_duckdb_and_its_query_log() -> None:
     # DuckDB ran the same statements, as many times, with or without it.
     assert len(logged_on) == len(logged_off)
     assert [t for t in logged_on if t] == [t for t in logged_off if t]
-    assert len(log.statements) == sum(1 for text in logged_on if text) == 4
-    assert len(log.bindings) == sum(1 for text in logged_on if not text) == 1
+    normalized = run_python._binding_queries(log, logged_on)
+    assert len(log.statements) == sum(1 for text in normalized if text) == 4
+    assert len(log.bindings) == sum(1 for text in normalized if not text) == 1
 
 
 # --- conservation on base.regression -----------------------------------------------
@@ -492,7 +493,8 @@ def test_a_connection_s_arrow_reader_passes_through_unchanged() -> None:
         handle = (
             run_python.capture(connection, log) if capturing else connection
         )
-        reader = handle.execute('select 1 AS a, 2 AS b').arrow()
+        method = 'arrow' if hasattr(connection, 'arrow') else 'to_arrow_reader'
+        reader = getattr(handle.execute('select 1 AS a, 2 AS b'), method)()
         return type(reader), reader.read_all(), log.incomplete
 
     plain_type, plain, _ = read(False)
@@ -501,7 +503,12 @@ def test_a_connection_s_arrow_reader_passes_through_unchanged() -> None:
     assert captured.equals(plain)
     # The reader is the caller's to consume, so the capture says it could
     # not record it, rather than read it first.
-    assert incomplete == ['arrow']
+    expected = (
+        'arrow'
+        if hasattr(duckdb.DuckDBPyConnection, 'arrow')
+        else 'to_arrow_reader'
+    )
+    assert incomplete == [expected]
 
 
 def test_named_parameters_are_recorded_by_name_and_value() -> None:
@@ -519,3 +526,90 @@ def test_named_parameters_are_recorded_by_name_and_value() -> None:
     assert log.statements[1]['parameters'] == [
         {'name': 'value', 'type': 'builtins.int', 'value': '7'}
     ]
+
+
+def test_lazy_sql_relation_keeps_binding_execution_and_arrow_reads():
+    connection = duckdb.connect()
+    connection.execute('CREATE TABLE late_read(value INTEGER)')
+    log = run_python.DriverLog()
+    proxy = run_python.capture(connection, log)
+    # Binding must not eagerly execute or consume the relation.
+    relation = proxy.sql(
+        'SELECT value + 2 AS value FROM late_read',
+    )
+    assert isinstance(relation, duckdb.DuckDBPyRelation)
+    assert log.statements == []
+    connection.execute('INSERT INTO late_read VALUES (3)')
+    assert relation.to_arrow_table(batch_size=1).to_pylist() == [{'value': 5}]
+    connection.execute('INSERT INTO late_read VALUES (4)')
+    assert relation.to_arrow_table().to_pylist() == [{'value': 5}, {'value': 6}]
+    assert len(log.statements) == 2
+    assert [
+        statement['results'][0]['rows'] for statement in log.statements
+    ] == [1, 2]
+    assert log.incomplete == []
+    connection.close()
+
+
+def test_sql_parameter_binding_matches_the_driver_snapshot():
+    connection = duckdb.connect()
+    connection.execute('CREATE TABLE bound_read(value INTEGER)')
+    connection.execute('INSERT INTO bound_read VALUES (3)')
+    log = run_python.DriverLog()
+    proxy = run_python.capture(connection, log)
+    sql = 'SELECT value + $increment AS value FROM bound_read'
+    raw = connection.sql(sql, params={'increment': 2}, alias='bound')
+    captured = proxy.sql(sql, params={'increment': 2}, alias='bound')
+    connection.execute('INSERT INTO bound_read VALUES (4)')
+    assert captured.to_arrow_table().equals(raw.to_arrow_table())
+    assert captured.alias == raw.alias
+    assert log.statements[0]['parameters']
+    assert log.incomplete == []
+    connection.close()
+
+
+def test_parameterized_relation_capture_accounts_for_driver_execution():
+    connection = duckdb.connect()
+    run_python.enable_query_log(connection)
+    log = run_python.DriverLog()
+    proxy = run_python.capture(connection, log)
+    relation = proxy.sql(
+        'SELECT $value AS value', params={'value': 7}, alias='bound'
+    )
+    first = relation.to_arrow_table()
+    assert relation.to_arrow_table().equals(first)
+    logged = run_python.query_log(connection)
+    compared, differing = run_python._logged_texts(log, logged)
+    assert compared == len(log.statements) == len(logged)
+    assert differing == []
+    connection.close()
+
+
+def test_binding_log_reconciliation_cannot_hide_unobserved_statements():
+    log = run_python.DriverLog()
+    log.bindings.append({'name': 'bound'})
+    registered = 'CREATE TEMPORARY VIEW "bound" AS SELECT 1'
+    unrelated = 'CREATE TEMPORARY VIEW "unrelated" AS SELECT 1'
+    assert run_python._binding_queries(
+        log, [registered, registered, unrelated]
+    ) == ['', registered, unrelated]
+    log.statements.append({'sql': registered})
+    assert run_python._binding_queries(log, [registered]) == [registered]
+
+
+def test_sql_capability_is_only_advertised_when_the_driver_provides_it():
+    for database in ('sqlite', 'postgres'):
+        log = run_python.DriverLog()
+        proxy = run_python.capture(object(), log, database)
+        assert not hasattr(proxy, 'sql')
+        assert log.incomplete == []
+        assert log.passed == []
+    connection = duckdb.connect()
+    try:
+        proxy = run_python.capture(connection, run_python.DriverLog())
+        assert hasattr(proxy, 'sql')
+        assert proxy.sql('SELECT 1 AS value').to_arrow_table().to_pylist() == [
+            {'value': 1}
+        ]
+    finally:
+        connection.close()

@@ -1,0 +1,162 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: Live stress
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-stress-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    # Never expose source/model credentials to pull requests or arbitrary refs.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rust-core'
+    runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 180
+    environment: parity-live
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      RUSTUP_TOOLCHAIN: '1.97.0'
+      PARITY_RUNNER_LABELS: ${{ vars.PARITY_RUNNER_LABELS }}
+      SDM_T136_LIVE_ENDPOINT: ${{ vars.PARITY_GIANT_ENDPOINT }}
+      PARITY_GIANT_MODEL_VERSION: ${{ vars.PARITY_GIANT_MODEL_VERSION }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require dedicated live configuration
+        env:
+          PARITY_DIR: ${{ runner.temp }}/parity
+          PARITY_CONFIG: ${{ secrets.PARITY_CONFIG_JSON }}
+        run: |
+          set -euo pipefail
+          echo "PARITY_DIR=$PARITY_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$PARITY_DIR/evidence"
+          if [ -z "$PARITY_CONFIG" ]; then
+            echo '::error::Dedicated parity-live configuration is missing; coverage is incomplete.'
+            exit 1
+          fi
+          if [ -z "$PARITY_RUNNER_LABELS" ] || [ -z "$SDM_T136_LIVE_ENDPOINT" ] || [ -z "$PARITY_GIANT_MODEL_VERSION" ]; then
+            echo '::error::Explicit high-memory runner and giant endpoint/version configuration are required.'
+            exit 1
+          fi
+          python3 - <<'PYMEM'
+          import pathlib
+          available = int(next(line.split()[1] for line in pathlib.Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:')))
+          if available < 24 * 1024 * 1024:
+              raise SystemExit('Giant parity requires at least 24 GiB available RAM; choose a larger dedicated runner.')
+          PYMEM
+          umask 077
+          printenv PARITY_CONFIG > "$PARITY_DIR/config.json"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: live-parity
+      - name: Build the candidate artifacts
+        run: |
+          set -euo pipefail
+          python -m pip install maturin==1.15.0
+          python scripts/rust_core/native_wheel.py --out "$PARITY_DIR/wheels"
+          (cd rust && cargo build --release --locked -p sdm-jni)
+          mkdir -p java/target/natives/linux-x86_64
+          cp rust/target/release/libsdm_jni.so java/target/natives/linux-x86_64/
+          mvn -B -f java/pom.xml -DskipTests package
+          python - <<'PYVERSION'
+          import os, xml.etree.ElementTree as ET
+          version = ET.parse('java/pom.xml').getroot().findtext('{http://maven.apache.org/POM/4.0.0}version')
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write(f'SDM_JAVA_VERSION={version}\n')
+          PYVERSION
+          mvn -B -f java/parity-connect-pom.xml dependency:build-classpath \
+            -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt"
+          python -m venv "$PARITY_DIR/candidate"
+          "$PARITY_DIR/candidate/bin/pip" install \
+            ./packages/structured-data-models-api \
+            './packages/structured-data-models-connectors[all,test]' \
+            "$PARITY_DIR"/wheels/*.whl databricks-connect==17.3.11 'jsonschema>=4.18'
+      - name: Record installed artifact identities
+        run: |
+          "$PARITY_DIR/candidate/bin/python" - <<'PY'
+          import hashlib, json, os, pathlib
+          from sdm_client import _native
+          root = pathlib.Path(os.environ['PARITY_DIR'])
+          commit = os.environ['GITHUB_SHA']
+          jar = pathlib.Path('java/target') / f"structured-data-models-client-{os.environ['SDM_JAVA_VERSION']}.jar"
+          native = pathlib.Path('rust/target/release/libsdm_jni.so')
+          java = dict(commit=commit, package_hash=hashlib.sha256(jar.read_bytes()).hexdigest(),
+                      native_hash=hashlib.sha256(native.read_bytes()).hexdigest(), contract=_native.CONTRACT_VERSION)
+          (root / 'java-provenance.json').write_text(json.dumps(java))
+          PY
+      - name: Validate giant values against the real model sequentially
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          SDM_T136_BIG: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          # Same installed Python clients and native artifact as the ordinary matrix.
+          # Do not print raw test diagnostics: transport errors may contain private URLs.
+          "$PARITY_DIR/candidate/bin/python" - <<'PYGIANT'
+          import json, os, pathlib, subprocess, xml.etree.ElementTree as ET
+          root = pathlib.Path(os.environ['PARITY_DIR'])
+          node = 'contract/tests/test_t136_host2_values.py::test_big_a_value_past_int32_offsets_on_the_core[big.blob.large]'
+          commands = [
+              ('python', [str(root / 'candidate/bin/python'), '-m', 'pytest', node, '-q', '--junitxml=' + str(root / 'giant-python.xml')]),
+              ('java', ['mvn', '-B', '-f', 'java/pom.xml', '-Dtest=DuckDbLargeValueTest',
+                        '-Dsdm.test.giant=true', '-Dsdm.test.giant.endpoint=' + os.environ['SDM_T136_LIVE_ENDPOINT'],
+                        '-Dsdm.native.library=' + os.environ['GITHUB_WORKSPACE'] + '/rust/target/release/libsdm_jni.so', 'test']),
+          ]
+          reports = []
+          for language, command in commands:
+              report = (pathlib.Path('java/target/surefire-reports/TEST-com.nvidia.sdm.DuckDbLargeValueTest.xml')
+                        if language == 'java' else root / ('giant-' + language + '.xml'))
+              report.unlink(missing_ok=True)
+              with (root / ('giant-' + language + '.log')).open('w') as log:
+                  completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=False)
+              counts = {'tests': 0, 'skipped': 0, 'failures': 0, 'errors': 0}
+              try:
+                  cases = list(ET.parse(report).getroot().iter('testcase'))
+                  counts['tests'] = len(cases)
+                  for field, tag in [('skipped', 'skipped'), ('failures', 'failure'), ('errors', 'error')]:
+                      counts[field] = sum(case.find(tag) is not None for case in cases)
+              except (OSError, ET.ParseError):
+                  counts['errors'] = 1
+              passed = completed.returncode == 0 and counts == {'tests': 1, 'skipped': 0, 'failures': 0, 'errors': 0}
+              reports.append({'client': language, 'exit_code': completed.returncode, **counts,
+                              'status': 'passed' if passed else 'failed'})
+              (root / 'evidence/giant.json').write_text(json.dumps({
+                  'candidate_commit': os.environ['GITHUB_SHA'],
+                  'model_version': os.environ['PARITY_GIANT_MODEL_VERSION'],
+                  'results': reports}, indent=2) + '\n')
+          if any(report['status'] != 'passed' for report in reports):
+              raise SystemExit('Giant real-model acceptance failed; private runner diagnostics retained outside uploaded evidence.')
+          PYGIANT
+      - name: Retain sanitized observations and matrix
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: live-stress-${{ github.sha }}
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: warn
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f "$PARITY_DIR/config.json"

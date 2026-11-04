@@ -4,8 +4,10 @@
 
 # CI coverage without a warehouse on every PR
 
-**Proposal: require deterministic local checks on every PR; run warehouses and pretrained models in a separate, protected acceptance lane.**
-This is a plan; the external lane is not operational.
+**Implementation: require deterministic local checks on every PR; separate ordinary live acceptance from explicit stress acceptance.**
+Dedicated CI credentials remain owner-deferred; the protected external lane is not operational.
+This work changes repository configuration and runners only, without uploading personal credentials or changing remote environments.
+Local candidate acceptance can use existing authorized resources; final correctness and performance checks run after the repository-size and developer-contract changes are integrated.
 
 ## Verified gaps
 
@@ -31,8 +33,8 @@ GitHub schedules use the [default branch](https://docs.github.com/en/actions/ref
 | Rust/Python/Java CI, installed wheels/JNI, SQLite/DuckDB/Postgres | Keep real local-database and artifact checks |
 | CPU in-process tests | Real tiny random-weight models; not pretrained/GPU evidence |
 | API ledger, snapshots, dtype vectors, JUnit checks | Keep declared coverage separate from executed outcomes |
-| General live matrix | Unconfigured; separate it from mandatory giant-value testing |
-| `manifest.json.live_api_tests` | 16 focused live methods are declared but have no execution consumer |
+| General live matrix | Dedicated CI remains unconfigured; ordinary acceptance is separate from manual giant-value testing |
+| `manifest.json.live_api_tests` | Executed through maintained pytest/JUnit accounting; missing prerequisites stay incomplete |
 | Publishing gate | Already requires live success on the exact release commit; incomplete workflow scope can still miss tests |
 
 The last completed pre-merge [Rust CI run](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41565210006) had 81 successful jobs and one intentional skip: **20.6 minutes wall time, 301.5 summed job-minutes**.
@@ -74,8 +76,9 @@ Correct environment branch rules; approve manual candidates, and use a narrowly 
 
 ## Next changes
 
-1. Configure dedicated identities, fixture access and runner/model settings; verify access without logging secrets.
-2. Split ordinary live coverage from stress tests, and execute every declared live API requirement.
-3. Measure one trusted run, set budgets/cadence, and require complete exact-candidate acceptance before `main` and publication.
+1. Repository implementation separates `parity-live.yml` and manual `parity-stress.yml`, and publication requires both on the exact candidate.
+2. `tests/parity/live_api.py` executes the registry through the existing Python/JUnit runners, preserving private diagnostics and reporting missing resources without connection values.
+3. Dedicated identities and environment policy remain owner-deferred; no personal credentials are uploaded by this work.
+4. Final local acceptance and bounded benchmarks run after integration; measure a configured trusted CI run before selecting operational budgets or claiming scheduled coverage.
 
 Code: [CI](../../../../../.github/workflows/ci.yml), [live workflow](../../../../../.github/workflows/parity-live.yml), [release gate](../../../../../.github/workflows/publish.yml), [runner guide](../../../../../tests/parity/README.md), [ledger](../../../../../tests/parity/manifest.json).

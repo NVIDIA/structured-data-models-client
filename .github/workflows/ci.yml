@@ -77,7 +77,7 @@ jobs:
     needs: configuration
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     env:
-      SDM_API_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/rust-core' }}
+      SDM_API_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,12 +91,14 @@ jobs:
           java-version: '17'
           cache: maven
       - run: pip install pytest
+      - name: Enforce maintained repository size and fixture consumers
+        run: python scripts/rust_core/repository_size.py --base "$SDM_API_BASE"
       - name: Compare Java APIs and enforce capability coverage
         run: |
           python scripts/check_java_api.py --base "$SDM_API_BASE"
           python scripts/snapshot_java_api.py --out java/target/public-api.json
           python tests/parity/ledger.py --base "$SDM_API_BASE" --java-inventory java/target/public-api.json
-          python -m pytest tests/parity/test_ledger.py tests/parity/test_api_outcomes.py tests/parity/test_java_api.py tests/parity/test_junit_results.py -q
+          python -m pytest tests/parity/test_ledger.py tests/parity/test_api_outcomes.py tests/parity/test_java_api.py tests/parity/test_junit_results.py tests/parity/test_live_api.py -q
 
   in-process:
     name: In-process models (CPU)

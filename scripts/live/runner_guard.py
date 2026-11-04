@@ -44,6 +44,32 @@ DIALECT = {
 }
 
 
+_BACKTICK = (
+    'a name holds a backtick, which the write guard refuses on Databricks'
+)
+_LINE_BREAK = 'a name holds a line break, which the write guard refuses'
+# Cases whose names cannot be loaded through the maintained live write guard.
+# These exclusions concern fixture setup, not supported client behavior.
+NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
+    **{
+        f'name.backtick-{part}': (
+            ('databricks-sql', 'databricks-spark'),
+            _BACKTICK,
+        )
+        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
+    },
+    # T3.4's odd column names hold a backtick among others.
+    'databricks.name.odd-columns': (
+        ('databricks-sql', 'databricks-spark'),
+        _BACKTICK,
+    ),
+    **{
+        f'name.line-break-{part}': (tuple(DIALECT), _LINE_BREAK)
+        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
+    },
+}
+
+
 def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
     r"""Every live statement of the run through the one write guard:
     every driver's entry points (``guard.install``, each dialect's test
