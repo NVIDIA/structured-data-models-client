@@ -39,6 +39,28 @@ Repeated public calls confirm that its context order changes, while the Rust cli
 This supports a reproducibility improvement, not a claim of identical predictions or improved model accuracy.
 Independent review checked the classification and the retained raw differences.
 
+## Initial performance results
+
+These are fixed-response client measurements, not model latency.
+Each number is the median of six independent process medians of summed timed warm stages, in milliseconds.
+Each process has one cold iteration, ten warmups and twenty measured iterations.
+
+| Workload | Old main Python | Pre-Phase-6 Python | Current Python | Current Java |
+|---|---:|---:|---:|---:|
+| Tabular fit → predict → close | 18.47 | 62.27 | 66.75 | 15.59 |
+| Relational in-memory prediction | 25.91 | 45.41 | 48.39 | 17.02 |
+
+Inputs use 1,000 rows, ten scoring rows and four features; relational degree is four.
+Independent review confirmed matching request work counts and common Python dependencies.
+The largest Python differences occur before HTTP, in request preparation and schema construction; most of the gap already exists before Phase 6.
+These are substantial regressions, reported without performance tuning as requested.
+Java uses Arrow result views and Python uses pandas, so host conversion costs differ.
+
+Import/startup and cold timings remain separate from this table.
+Memory samples cover the whole process lifetime, including imports, rather than warm-only or isolated Rust memory.
+The retained raw results are `benchmark-real/fixed-tabular-session.json` and `benchmark-real/fixed-relational-memory.json` in the external Phase 8 archive.
+Scaling, gradients, SQLite and real-model measurements are still pending; these two workloads do not establish overall performance.
+
 ## Evidence and remaining work
 
 Raw observations, artifact identities, dependency inventories, checksums and reproducible classification scripts are retained outside Git in the Phase 8 validation archive.
@@ -46,5 +68,5 @@ Key reports are `non-s3-validated-report.json`, `main-matched-non-s3-comparison.
 No credentials or full warehouse captures are committed.
 
 S3 credentials remain expired; dedicated CI identities are owner-deferred.
-Benchmark harness smoke checks passed; the measured campaign is running, and smoke timings are not performance results.
+Benchmark harness smoke checks passed; the remaining measured campaign is running, and smoke timings are not performance results.
 Final measurements must report imports/cold/warm conditions, actual sampled work and process-memory scope, without performance tuning.
