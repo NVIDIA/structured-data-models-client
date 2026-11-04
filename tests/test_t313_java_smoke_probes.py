@@ -59,7 +59,7 @@ def test_the_ci_jar_load_source_compiles_against_the_shipped_api(
         [
             str(Path(home) / 'bin/javac'),
             '-cp',
-            str(jar),
+            os.pathsep.join([str(jar), str(jar.parent / 'lib' / '*')]),
             '-d',
             str(tmp_path),
             str(ROOT / 'java/jar-load/JarLoad.java'),
