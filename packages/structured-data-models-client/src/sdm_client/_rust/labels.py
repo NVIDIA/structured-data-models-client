@@ -81,7 +81,8 @@ def extract(
         )
     import pyarrow as pa
 
-    with pa.RecordBatchReader.from_stream(
-        finished.take(finished.result['data'])
+    # Arrow 14 supports capsule import, but not the public from_stream helper.
+    with pa.RecordBatchReader._import_from_c_capsule(
+        finished.take(finished.result['data']).__arrow_c_stream__()
     ) as reader:
         return reader.read_all().to_pandas()
