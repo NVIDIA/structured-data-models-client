@@ -77,15 +77,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require complete live parity for the release commit
+      - name: Require hosted acceptance for the release commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for acceptance_workflow in parity-live.yml parity-stress.yml; do
+          for acceptance_workflow in parity-live.yml; do
           conclusion=$(gh run list --workflow "$acceptance_workflow" --commit "$GITHUB_SHA" \
             --branch main --status completed --limit 100 \
-            --json conclusion,event --jq '[.[] | select(.event == "schedule" or .event == "workflow_dispatch")] | first | .conclusion // "missing"')
+            --json conclusion,event --jq '[.[] | select(.event == "workflow_run" or .event == "workflow_dispatch")] | first | .conclusion // "missing"')
           if [ "$conclusion" != "success" ]; then
             echo "::error::$acceptance_workflow for this release commit is '$conclusion'. Run Live parity on main at this commit before releasing."
             exit 1

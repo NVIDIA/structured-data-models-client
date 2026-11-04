@@ -41,6 +41,35 @@ Do not mark a capability passed just because its tests exist.
 
 ## Live evidence
 
+### Required hosted profile
+
+`parity-live.yml` runs after successful full CI on `main`, or by manual dispatch on an explicitly approved environment branch.
+It reuses that commit's production wheel and JNI artifacts.
+The broad connector matrix checks read and materialization behavior; it does not run a model for every cell.
+Separate CPU smoke checks cover pretrained classification/regression gradients in both languages and Java session behavior.
+The final gate requires both sets of results and identical artifact receipts.
+
+| Resource | Hosted setup |
+|---|---|
+| PostgreSQL | Disposable local service and generated tables |
+| S3 readers | Local Moto server, generated files and dummy credentials |
+| Snowflake / Databricks | Dedicated protected API credentials; a unique schema created and removed per shard |
+| Models | Public pretrained weight download, CPU only; no model endpoint credential |
+| Real S3 / Lakebase / giant-value stress | Optional, outside the required hosted profile |
+
+`hosted_profile.py` declares every connector's execution policy and rejects unclassified additions.
+`hosted_runner.py` provisions fixtures and invokes both public clients.
+`hosted_aggregate.py` checks complete results, cleanup receipts and the separate CPU smoke evidence.
+Local or emulated results never certify real AWS or Lakebase behavior.
+Ordinary PR CI remains credential-free; the warehouse workflow has no weekly schedule.
+
+Warehouse setup uses the protected `parity-live` secrets `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `SNOWFLAKE_URL`, `SNOWFLAKE_USERNAME` and `SNOWFLAKE_ACCESS_TOKEN`.
+Environment variables select writable test namespaces: `PARITY_DATABRICKS_CATALOG`, optional `PARITY_DATABRICKS_WAREHOUSE_ID`, `PARITY_SNOWFLAKE_DATABASE` and `PARITY_SNOWFLAKE_WAREHOUSE`.
+Databricks Spark uses serverless compute.
+Credentials and private driver logs are never uploaded as evidence.
+
+The commands below remain available for explicitly configured full live-model validation.
+
 Run all applicable Python cells by omitting filters, or repeat `--case`, `--connector` and `--model` to select a scope:
 
 ```sh

@@ -96,7 +96,8 @@ The supplied Snowflake and Databricks API credentials are validated and stored a
 
 | Lane | Required work | External dependency |
 |---|---|---|
-| Every PR | Existing engine/host contracts, local PostgreSQL, generated CSV/Parquet and local S3-emulator reader checks | None |
+| Every PR | Existing engine/host contracts, local PostgreSQL and generated CSV/Parquet checks | None |
+| Required hosted local shards | Full declared materialization matrix for local connectors and S3 emulation | No external service credentials |
 | Push to main or approved manual branch run | Real Snowflake and Databricks reader/SQL journeys in both languages, using disposable generated fixtures | Snowflake and Databricks API credentials |
 | Small model smoke | Pretrained CPU classification/regression and gradients for both models; Python and Java public paths, plus necessary session checks | Model-weight download access, to verify on a clean runner |
 | Optional only | Real S3, Lakebase and giant-value stress | Explicitly configured resources |
@@ -120,3 +121,9 @@ Four Python pretrained gradient checks passed with a fresh model cache and impli
 Java's four model/task combinations passed through the maintained CPU backend over loopback HTTP: 10.5 seconds test time, 19.9 seconds including Maven startup.
 These are local measurements, not hosted-runner timing claims.
 The test server uses no archived reference client or Databricks transport bridge.
+
+Implementation now uses a connector execution profile plus separate CPU smoke evidence.
+Both must identify the same production CI artifacts; cleanup failures and skipped smoke tests fail acceptance.
+Disposable fixture setup/read/cleanup passed locally for PostgreSQL, emulated S3, Databricks SQL/Spark/metric views and Snowflake tables/semantic views.
+The combined CPU smoke passed locally: four Python cases and three Java methods, including session coverage, in 27.8 seconds.
+Hosted execution is still pending; these local checks do not claim hosted acceptance.

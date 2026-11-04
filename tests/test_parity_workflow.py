@@ -19,23 +19,27 @@ def workflow(name):
     )
 
 
-def test_live_credentials_only_on_trusted_refs():
+def test_live_credentials_only_on_approved_runs():
     data = workflow('parity-live.yml')
-    assert set(data['on']) == {'schedule', 'workflow_dispatch'}
-    job = data['jobs']['preflight']
-    assert job['environment'] == 'parity-live'
-    assert job['if'] == (
-        "github.ref == 'refs/heads/main' || "
-        "github.ref == 'refs/heads/rust-core'"
+    assert set(data['on']) == {'workflow_run', 'workflow_dispatch'}
+    assert data['on']['workflow_run']['branches'] == ['main']
+    assert data['on']['workflow_run']['workflows'] == ['CI']
+    assert (
+        'head_repository.full_name == github.repository'
+        in data['jobs']['preflight']['if']
     )
+    assert data['jobs']['shards']['environment'] == 'parity-live'
     assert data['permissions'] == {'contents': 'read', 'actions': 'read'}
-    evidence = next(
-        s
-        for s in data['jobs']['aggregate']['steps']
-        if s.get('with', {}).get('name', '').startswith('live-parity-')
-    )
-    assert evidence['with']['path'].endswith('/parity/evidence/')
-    assert 'config.json' not in evidence['with']['path']
+    assert 'env' not in data['jobs']['models']
+    for name, value in data['jobs']['shards']['env'].items():
+        if 'secrets.' in value:
+            assert "matrix.service == 'real-warehouse'" in value
+        assert not name.startswith('AWS_')
+    for job in data['jobs'].values():
+        for step in job['steps']:
+            if step.get('uses', '').startswith('actions/upload-artifact@'):
+                assert step['with']['path'].endswith('/parity/evidence/')
+                assert 'private' not in step['with']['path']
 
 
 @pytest.mark.parametrize(
@@ -46,7 +50,7 @@ def test_release_requires_success_for_exact_commit(tmp_path, conclusion):
         step
         for step in workflow('publish.yml')['jobs']['build']['steps']
         if step.get('name')
-        == 'Require complete live parity for the release commit'
+        == 'Require hosted acceptance for the release commit'
     )
     fake = tmp_path / 'gh'
     fake.write_text(
@@ -71,15 +75,13 @@ def test_release_requires_success_for_exact_commit(tmp_path, conclusion):
     )
     assert (result.returncode == 0) == (conclusion == 'success')
     actual = args.read_text().splitlines()
-    assert actual[actual.index('--workflow') + 1] == (
-        'parity-stress.yml' if conclusion == 'success' else 'parity-live.yml'
-    )
+    assert actual[actual.index('--workflow') + 1] == 'parity-live.yml'
     assert actual[actual.index('--commit') + 1] == 'exact-release-commit'
     assert actual[actual.index('--branch') + 1] == 'main'
     assert actual[actual.index('--status') + 1] == 'completed'
 
 
-def test_giant_acceptance_is_mandatory_sequential_and_private():
+def test_optional_giant_acceptance_is_sequential_and_private():
     job = workflow('parity-stress.yml')['jobs']['parity']
     assert 'PARITY_RUNNER_LABELS' in job['runs-on']
     setup = next(
@@ -160,9 +162,11 @@ def test_live_workflow_validates_current_clients_without_frozen_install():
         for job in workflow('parity-live.yml')['jobs'].values()
         for step in job['steps']
     )
-    assert '--comparison current-clients' in scripts
-    assert '--phase candidate' in scripts
-    assert '-Dsdm.parity.mode=live' in scripts
+    runner = (ROOT / 'tests/parity/hosted_runner.py').read_text()
+    aggregate = (ROOT / 'tests/parity/hosted_aggregate.py').read_text()
+    assert "comparison='current-clients'" in aggregate
+    assert "'candidate'" in runner
+    assert '-Dsdm.parity.mode=local' in runner
     for retired in (
         '--phase baseline',
         '--baseline',
@@ -174,15 +178,20 @@ def test_live_workflow_validates_current_clients_without_frozen_install():
         assert retired not in scripts
 
 
-def test_ordinary_live_has_registry_without_giant_prerequisites():
+def test_ordinary_hosted_separates_cpu_smoke_without_giant_prerequisites():
     data = workflow('parity-live.yml')
     scripts = '\n'.join(
         step.get('run', '')
         for job in data['jobs'].values()
         for step in job['steps']
     )
-    assert 'tests/parity/live_api.py' in scripts
-    assert 'tests/parity/resource_preflight.py' in scripts
+    assert 'tests/parity/hosted_model_smoke.py' in scripts
+    assert 'tests/parity/hosted_runner.py' in scripts
+    assert data['jobs']['aggregate']['needs'] == [
+        'preflight',
+        'shards',
+        'models',
+    ]
     assert 'MemAvailable' not in scripts
     assert 'PYGIANT' not in scripts
     stress = workflow('parity-stress.yml')
@@ -198,10 +207,10 @@ def test_live_lanes_share_resources_and_exact_artifacts_without_rebuilds():
         == stress['concurrency']
         == {'group': 'parity-shared-resources', 'cancel-in-progress': 'false'}
     )
-    assert live['jobs']['shards']['strategy']['max-parallel'] == '1'
+    assert live['jobs']['shards']['strategy']['max-parallel'] == '2'
     assert live['jobs']['shards']['strategy']['fail-fast'] == 'false'
     assert live['jobs']['shards']['needs'] == 'preflight'
-    assert live['jobs']['parity']['needs'] == ['preflight', 'aggregate']
+    assert live['jobs']['models']['needs'] == 'preflight'
     for data in (live, stress):
         for job in data['jobs'].values():
             scripts = '\n'.join(step.get('run', '') for step in job['steps'])
@@ -211,7 +220,7 @@ def test_live_lanes_share_resources_and_exact_artifacts_without_rebuilds():
                 '-DskipTests package',
             ):
                 assert forbidden not in scripts
-    for name in ('shards', 'parity'):
+    for name in ('shards', 'models'):
         setup = next(
             step
             for step in live['jobs'][name]['steps']
@@ -224,9 +233,10 @@ def test_live_lanes_share_resources_and_exact_artifacts_without_rebuilds():
     aggregate = '\n'.join(
         step.get('run', '') for step in live['jobs']['aggregate']['steps']
     )
-    assert 'ci_shards.py' in aggregate
+    assert 'hosted_aggregate.py' in aggregate
     assert '--connector' not in aggregate and '--language' not in aggregate
     assert 'test "$SHARDS_RESULT" = success' in aggregate
+    assert 'test "$MODELS_RESULT" = success' in aggregate
 
 
 def test_installed_api_failure_retains_accounting_and_diagnostics():

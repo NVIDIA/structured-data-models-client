@@ -8,8 +8,14 @@ inputs:
     description: Successful full CI run to reuse; empty selects the latest exact-commit run.
     default: ''
   config:
-    description: Private live fixture configuration.
-    required: true
+    description: Optional private configuration for the separate stress lane.
+    default: ''
+  commit:
+    description: Exact checked-out candidate commit.
+    default: ${{ github.sha }}
+  models:
+    description: Install pretrained CPU model dependencies for the smoke job only.
+    default: 'false'
 outputs:
   ci-run-id:
     description: Verified full CI run shared by all shards.
@@ -25,7 +31,7 @@ runs:
         distribution: temurin
         java-version: '17'
         cache: maven
-    - name: Require dedicated live configuration
+    - name: Prepare private workspace
       shell: bash
       env:
         PARITY_CONFIG: ${{ inputs.config }}
@@ -37,34 +43,41 @@ runs:
           exit 1
         fi
         mkdir -p "$RUNNER_TEMP/parity/evidence" "$RUNNER_TEMP/parity/private"
-        if [ -z "$PARITY_CONFIG" ]; then
-          echo '::error::Dedicated parity-live configuration is missing; coverage is incomplete.'
-          exit 1
+        if [ -n "$PARITY_CONFIG" ]; then
+          printenv PARITY_CONFIG > "$RUNNER_TEMP/parity/config.json"
         fi
-        printenv PARITY_CONFIG > "$RUNNER_TEMP/parity/config.json"
     - name: Download and verify shared production artifacts
       id: artifacts
       shell: bash
       env:
         REQUESTED_CI_RUN: ${{ inputs.ci-run-id }}
+        CANDIDATE_COMMIT: ${{ inputs.commit }}
       run: |
         set -euo pipefail
         python tests/parity/ci_artifacts.py --root "$RUNNER_TEMP/parity" \
-          --commit "$GITHUB_SHA" --run-id "$REQUESTED_CI_RUN" \
+          --commit "$CANDIDATE_COMMIT" --run-id "$REQUESTED_CI_RUN" \
           2> "$RUNNER_TEMP/parity/private/artifacts.log"
     - name: Install the verified candidate and live drivers
       shell: bash
+      env:
+        INSTALL_MODELS: ${{ inputs.models }}
+        CANDIDATE_COMMIT: ${{ inputs.commit }}
       run: |
         set -euo pipefail
         python -m venv "$PARITY_DIR/candidate"
+        if [ "$INSTALL_MODELS" = true ]; then
+          "$PARITY_DIR/candidate/bin/pip" install torch --index-url https://download.pytorch.org/whl/cpu \
+            > "$PARITY_DIR/private/torch-install.log" 2>&1
+          "$PARITY_DIR/candidate/bin/pip" install 'structured-data-models>=0.2.1,<0.3' \
+            > "$PARITY_DIR/private/model-install.log" 2>&1
+        fi
         if ! "$PARITY_DIR/candidate/bin/pip" install \
           ./packages/structured-data-models-api \
           './packages/structured-data-models-connectors[all,test]' \
-          "$PARITY_WHEEL" databricks-connect==17.3.11 'jsonschema>=4.18' \
-          'structured-data-models>=0.2.1,<0.3' \
+          "$PARITY_WHEEL" databricks-connect==17.3.11 'jsonschema>=4.18' pytest 'moto[server,s3]' \
           > "$PARITY_DIR/private/install.log" 2>&1; then
           echo '::error::Live dependencies could not be installed; private diagnostics retained.'
           exit 1
         fi
         "$PARITY_DIR/candidate/bin/python" tests/parity/ci_artifacts.py \
-          --root "$PARITY_DIR" --commit "$GITHUB_SHA" --installed
+          --root "$PARITY_DIR" --commit "$CANDIDATE_COMMIT" --installed

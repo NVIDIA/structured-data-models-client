@@ -4,12 +4,14 @@
 name: Live parity
 
 on:
-  schedule:
-    - cron: '41 4 * * 1'
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       ci_run_id:
-        description: Successful full CI run for this exact commit (also use for stress).
+        description: Successful full CI run for this exact selected branch commit.
         type: string
         default: ''
 
@@ -17,121 +19,138 @@ permissions:
   contents: read
   actions: read
 
-# The ordinary matrix, focused GPU methods and stress lane share resources.
-# One workflow at a time across all refs is intentionally conservative.
 concurrency:
   group: parity-shared-resources
   cancel-in-progress: false
 
 env:
   GH_TOKEN: ${{ github.token }}
-  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-  AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+  PARITY_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   preflight:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rust-core'
-    runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
-    timeout-minutes: 30
-    environment: parity-live
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      ci_run_id: ${{ steps.setup.outputs.ci-run-id }}
-      matrix: ${{ steps.matrix.outputs.matrix }}
+      ci_run_id: ${{ steps.plan.outputs.ci_run_id }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          ref: ${{ env.PARITY_COMMIT }}
           persist-credentials: false
-      - uses: ./.github/actions/parity-artifacts
-        id: setup
-        with:
-          ci-run-id: ${{ inputs.ci_run_id }}
-          config: ${{ secrets.PARITY_CONFIG_JSON }}
-      - name: Authenticate and probe bounded resources before acceptance
+      - id: plan
+        env:
+          REQUESTED_RUN: ${{ inputs.ci_run_id || github.event.workflow_run.id }}
         run: |
-          "$PARITY_DIR/candidate/bin/python" tests/parity/resource_preflight.py \
-            --config "$PARITY_DIR/config.json" --out "$PARITY_DIR/evidence/preflight.json" \
-            > "$PARITY_DIR/private/preflight.log" 2>&1
-      - id: matrix
-        run: echo "matrix=$(python tests/parity/ci_shards.py --matrix)" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: live-preflight-${{ github.sha }}
-          path: ${{ runner.temp }}/parity/evidence/
-          if-no-files-found: error
-      - name: Remove temporary credentials
-        if: always()
-        run: rm -f "$RUNNER_TEMP/parity/config.json"
+          set -euo pipefail
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'tests/parity')
+          from ci_artifacts import select_run
+          from hosted_profile import profile
+          import json
+          run = select_run(os.environ['GITHUB_REPOSITORY'], os.environ['PARITY_COMMIT'], os.environ.get('REQUESTED_RUN', ''))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'ci_run_id={run}', file=output)
+              print('matrix=' + json.dumps({'include': profile()['required']}), file=output)
+          PY
 
   shards:
     needs: preflight
-    runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Environment branch policies allow only main and explicitly approved branches.
     environment: parity-live
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+    services:
+      postgres:
+        image: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sdm_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      DATABRICKS_HOST: ${{ matrix.service == 'real-warehouse' && secrets.DATABRICKS_HOST || '' }}
+      DATABRICKS_TOKEN: ${{ matrix.service == 'real-warehouse' && secrets.DATABRICKS_TOKEN || '' }}
+      DATABRICKS_SERVERLESS_COMPUTE_ID: auto
+      SNOWFLAKE_URL: ${{ matrix.service == 'real-warehouse' && secrets.SNOWFLAKE_URL || '' }}
+      SNOWFLAKE_USERNAME: ${{ matrix.service == 'real-warehouse' && secrets.SNOWFLAKE_USERNAME || '' }}
+      SNOWFLAKE_ACCESS_TOKEN: ${{ matrix.service == 'real-warehouse' && secrets.SNOWFLAKE_ACCESS_TOKEN || '' }}
+      PARITY_DATABRICKS_CATALOG: ${{ vars.PARITY_DATABRICKS_CATALOG }}
+      PARITY_DATABRICKS_WAREHOUSE_ID: ${{ vars.PARITY_DATABRICKS_WAREHOUSE_ID }}
+      PARITY_SNOWFLAKE_DATABASE: ${{ vars.PARITY_SNOWFLAKE_DATABASE }}
+      PARITY_SNOWFLAKE_WAREHOUSE: ${{ vars.PARITY_SNOWFLAKE_WAREHOUSE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.PARITY_COMMIT }}
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/parity-artifacts
         with:
           ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
-          config: ${{ secrets.PARITY_CONFIG_JSON }}
-      - name: Resolve the pinned Spark Connect classpath
+          commit: ${{ env.PARITY_COMMIT }}
+      - name: Resolve Spark Connect runtime only for Spark
+        if: matrix.connector == 'databricks-spark'
         run: |
           mvn -B -f java/parity-connect-pom.xml dependency:build-classpath \
-            -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt" \
-            > "$PARITY_DIR/private/connect.log" 2>&1
-      - name: Run both exact-artifact public clients for one connector
+            -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt" > "$PARITY_DIR/private/connect.log" 2>&1
+      - name: Read and materialize through both public clients
         env:
           CONNECTOR: ${{ matrix.connector }}
         run: |
-          set +e
-          runners_ok=0
-          "$PARITY_DIR/candidate/bin/python" tests/parity/python_runner.py \
-            --phase candidate --commit "$GITHUB_SHA" --mode live --connector "$CONNECTOR" \
-            --provenance "$PARITY_PROVENANCE" \
-            --config "$PARITY_DIR/config.json" --out "$PARITY_DIR/evidence/python.jsonl" \
-            > "$PARITY_DIR/private/python.log" 2>&1
-          if [ "$?" -ne 0 ]; then runners_ok=1; fi
-          mvn -B -f java/pom.xml -Dtest=ParityRunnerTest \
-            -Dsdm.native.library="$PARITY_NATIVE" -Dsdm.parity.jar="$PARITY_JAR" \
-            -Dsdm.parity.provenance="$PARITY_DIR/java-provenance.json" \
-            -Dsdm.parity.connect.classpath="$PARITY_DIR/connect-classpath.txt" \
-            -Dsdm.parity.commit="$GITHUB_SHA" -Dsdm.parity.connectors="$CONNECTOR" \
-            -Dsdm.parity.manifest="$GITHUB_WORKSPACE/tests/parity/manifest.json" \
-            -Dsdm.parity.config="$PARITY_DIR/config.json" \
-            -Dsdm.parity.output="$PARITY_DIR/evidence/java.jsonl" \
-            -Dsdm.parity.mode=live test > "$PARITY_DIR/private/java.log" 2>&1
-          if [ "$?" -ne 0 ]; then runners_ok=1; fi
-          exit "$runners_ok"
+          "$PARITY_DIR/candidate/bin/python" tests/parity/hosted_runner.py \
+            --connector "$CONNECTOR" --root "$PARITY_DIR" --commit "$PARITY_COMMIT" \
+            > "$PARITY_DIR/private/provision.log" 2>&1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: live-shard-${{ matrix.connector }}
           path: ${{ runner.temp }}/parity/evidence/
           if-no-files-found: error
-      - name: Remove temporary credentials
+
+  models:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.PARITY_COMMIT }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/parity-artifacts
+        with:
+          ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
+          commit: ${{ env.PARITY_COMMIT }}
+          models: 'true'
+      - name: Small pretrained CPU model and session smoke suite
+        run: |
+          "$PARITY_DIR/candidate/bin/python" tests/parity/hosted_model_smoke.py --root "$PARITY_DIR" \
+            > "$PARITY_DIR/private/model-smoke.log" 2>&1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
-        run: rm -f "$RUNNER_TEMP/parity/config.json"
+        with:
+          name: cpu-model-smoke
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error
 
   aggregate:
-    needs: [preflight, shards]
+    needs: [preflight, shards, models]
     if: ${{ !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.PARITY_COMMIT }}
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -140,59 +159,26 @@ jobs:
         with:
           pattern: live-shard-*
           path: ${{ runner.temp }}/shards
-      - name: Require all shard artifacts and all manifest cells
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cpu-model-smoke
+          path: ${{ runner.temp }}/models
+      - name: Require all declared cells and successful jobs
         env:
           CI_RUN_ID: ${{ needs.preflight.outputs.ci_run_id }}
+          SHARDS_RESULT: ${{ needs.shards.result }}
+          MODELS_RESULT: ${{ needs.models.result }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/parity/evidence"
           python -m pip install 'jsonschema>=4.18'
-          python tests/parity/ci_shards.py --root "$RUNNER_TEMP/shards" \
-            --commit "$GITHUB_SHA" --run-id "$CI_RUN_ID" \
-            --out "$RUNNER_TEMP/parity/evidence/candidates.jsonl"
-          python tests/parity/compare.py --comparison current-clients \
-            --candidate "$RUNNER_TEMP/parity/evidence/candidates.jsonl" --candidate-commit "$GITHUB_SHA" \
-            --out "$RUNNER_TEMP/parity/evidence/report.json" --matrix "$RUNNER_TEMP/parity/evidence/matrix.md"
+          mkdir -p "$RUNNER_TEMP/parity/evidence"
+          python tests/parity/hosted_aggregate.py --root "$RUNNER_TEMP/shards" \
+            --commit "$PARITY_COMMIT" --run-id "$CI_RUN_ID" --models "$RUNNER_TEMP/models" --out "$RUNNER_TEMP/parity/evidence/report.json"
+          test "$SHARDS_RESULT" = success
+          test "$MODELS_RESULT" = success
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: live-parity-${{ github.sha }}
+          name: hosted-parity-${{ env.PARITY_COMMIT }}
           path: ${{ runner.temp }}/parity/evidence/
           if-no-files-found: error
-      - name: Require runner success as well as complete observations
-        env:
-          SHARDS_RESULT: ${{ needs.shards.result }}
-        run: test "$SHARDS_RESULT" = success
-
-  parity:
-    needs: [preflight, aggregate]
-    runs-on: ${{ fromJSON(vars.PARITY_RUNNER_LABELS || '["ubuntu-latest"]') }}
-    timeout-minutes: 90
-    environment: parity-live
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/parity-artifacts
-        with:
-          ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
-          config: ${{ secrets.PARITY_CONFIG_JSON }}
-      - name: Execute every registered live API requirement once
-        run: |
-          "$PARITY_DIR/candidate/bin/python" tests/parity/live_api.py \
-            --config "$PARITY_DIR/config.json" --commit "$GITHUB_SHA" \
-            --out "$PARITY_DIR/evidence/live-api.json" \
-            --private-dir "$PARITY_DIR/private-api" \
-            --provenance "$PARITY_PROVENANCE" \
-            --java-provenance "$PARITY_DIR/java-provenance.json" \
-            --java-jar "$PARITY_JAR" --java-native "$PARITY_NATIVE"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: live-registry-${{ github.sha }}
-          path: ${{ runner.temp }}/parity/evidence/
-          if-no-files-found: error
-      - name: Remove temporary credentials
-        if: always()
-        run: rm -f "$RUNNER_TEMP/parity/config.json"
