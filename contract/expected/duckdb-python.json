@@ -50,7 +50,7 @@
     "explain.forecast": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "explain.not-answered": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "explain.query": {"code": null, "error": null, "result": "success", "stage": "predict"},
-    "explain.two-entities": {"code": "UNSUPPORTED_REQUEST", "error": "UnsupportedRequestError", "result": "refusal", "stage": "predict"},
+    "explain.two-entities": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "feature.bool": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "filter.entity-aggregation": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "filter.entity-column": {"code": null, "error": null, "result": "success", "stage": "predict"},

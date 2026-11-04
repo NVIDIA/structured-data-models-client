@@ -50,7 +50,7 @@
     "explain.forecast@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "explain.not-answered@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "explain.query@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
-    "explain.two-entities@sqlite": {"code": "UNSUPPORTED_REQUEST", "error": "UnsupportedRequestError", "result": "refusal", "stage": "predict"},
+    "explain.two-entities@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "feature.bool@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "filter.entity-aggregation@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "filter.entity-column@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},

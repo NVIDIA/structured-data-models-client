@@ -50,7 +50,7 @@
     "explain.forecast@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "explain.not-answered@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "explain.query@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
-    "explain.two-entities@postgres": {"code": "UNSUPPORTED_REQUEST", "error": "UnsupportedRequestError", "result": "refusal", "stage": "predict"},
+    "explain.two-entities@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "feature.bool@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "filter.entity-aggregation@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "filter.entity-column@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
