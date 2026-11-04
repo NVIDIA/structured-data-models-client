@@ -78,3 +78,13 @@ Manual branch runs were forbidden from saving Rust caches, and their sibling `ru
 
 Cache state is not test evidence: every required assertion still runs, and published artifact receipts remain tied to the candidate commit.
 If test execution itself exceeds the target after caching, report that separately; do not claim the target from cache configuration alone.
+
+## Hosted execution findings
+
+The hosted CPU smoke passed four Python cases and three Java methods in 60 seconds on run `41915433899`.
+Connector acceptance is still pending: that run exposed a non-Spark Java launcher argument error and incomplete generated semantic-view definitions.
+Fix the test setup while retaining every matrix assertion; fixture reads alone do not prove schema construction or materialization.
+
+For readiness dispatch, use `gh workflow run ci.yml --ref rust-core-phase-8 -f fresh=false`.
+The optional `fresh=true` mode upgrades dependencies and is a separate compatibility experiment.
+Run `41916333063` accidentally used that mode and failed the exact Arrow fixture-version check after upgrading 58.4.0 to 58.4.1; it is not passing readiness evidence.

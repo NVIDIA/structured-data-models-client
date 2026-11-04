@@ -105,7 +105,7 @@ def snowflake_connection():
 
 
 def semantic_view(cursor, fixture, namespace, databricks):
-    view = 'fixture_model'
+    view = 'fixture_model' if databricks else 'FIXTURE_MODEL'
 
     def q(name):
         return quoted(name, databricks)
@@ -129,7 +129,17 @@ def semantic_view(cursor, fixture, namespace, databricks):
                     'on': 'source.item = items.item',
                 },
             ],
-            'dimensions': [{'name': 'event', 'expr': 'source.event'}],
+            # Expose prediction features; shared join keys are also supplied by joins.
+            'dimensions': [
+                {'name': column, 'expr': expression}
+                for column, expression in {
+                    column: ('source' if table == 'events' else table)
+                    + '.'
+                    + column
+                    for table, data in fixture['tables'].items()
+                    for column in data['columns']
+                }.items()
+            ],
             'measures': [{'name': 'event_count', 'expr': 'COUNT(1)'}],
         }
         body = yaml.safe_dump(definition)
@@ -138,7 +148,7 @@ def semantic_view(cursor, fixture, namespace, databricks):
         )
     else:
         tables = ', '.join(
-            f'{q(name)} AS {namespace}.{q(name)} PRIMARY KEY ({q(fixture["primary_keys"][name])})'
+            f'{q(name.upper())} AS {namespace}.{q(name.upper())} PRIMARY KEY ({q(fixture["primary_keys"][name])})'
             for name in fixture['tables']
         )
         relations = []
@@ -146,12 +156,17 @@ def semantic_view(cursor, fixture, namespace, databricks):
             lt, lc = left.split('.')
             rt, rc = right.split('.')
             relations.append(
-                f'{q("link_" + str(i))} AS {q(lt)} ({q(lc)}) REFERENCES {q(rt)} ({q(rc)})'
+                f'{q("link_" + str(i))} AS {q(lt.upper())} ({q(lc)}) REFERENCES {q(rt.upper())} ({q(rc)})'
             )
+        dimensions = ', '.join(
+            f'{q(table.upper())}.{q(column)} AS {q(table.upper())}.{q(column)}'
+            for table, data in fixture['tables'].items()
+            for column in data['columns']
+        )
         cursor.execute(
             f'CREATE SEMANTIC VIEW {target} TABLES ({tables}) '
             f'RELATIONSHIPS ({", ".join(relations)}) '
-            f'DIMENSIONS ({q("users")}.{q("user_id")} AS {q("users")}.{q("ID")})'
+            f'DIMENSIONS ({dimensions})'
         )
     return view
 
@@ -198,7 +213,15 @@ def warehouse(connector):
             try:
                 for table, frame in tables_of(fixture).items():
                     data = pa.Table.from_pandas(frame, preserve_index=False)
-                    target = namespace + '.' + q(table)
+                    target = (
+                        namespace
+                        + '.'
+                        + q(
+                            table.upper()
+                            if connector == 'snowflake-semantic'
+                            else table
+                        )
+                    )
                     columns = ', '.join(
                         f'{q(field.name)} {sql_type(field.type, databricks)}'
                         for field in data.schema
@@ -251,7 +274,12 @@ def warehouse(connector):
                     'snapshot': digest(fixture),
                     'source': source,
                     'connect': connect,
-                    'tables': {name: name for name in fixture['tables']},
+                    'tables': {
+                        name: name.upper()
+                        if connector == 'snowflake-semantic'
+                        else name
+                        for name in fixture['tables']
+                    },
                     'java': java,
                 }
                 if view:
