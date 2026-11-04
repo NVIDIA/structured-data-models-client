@@ -52,6 +52,7 @@ Each process has one cold iteration, ten warmups and twenty measured iterations.
 | Relational SQLite prediction | 36.45 | 26.35 | 27.64 | 43.99 |
 | Tabular with gradients | 20.05 | Unsupported | 68.00 | 14.94 |
 | Tabular, 10,000 context rows | 130.85 | 158.70 | 160.57 | 56.82 |
+| Tabular, 16 features | 39.58 | 128.99 | 135.84 | 20.36 |
 
 Unless the row specifies otherwise, inputs use 1,000 rows, ten scoring rows and four features; relational degree is four.
 Independent review confirmed matching request work counts and common Python dependencies.
@@ -65,6 +66,11 @@ Import/startup and cold timings remain separate from this table.
 Memory samples cover the whole process lifetime, including imports, rather than warm-only or isolated Rust memory.
 The retained raw results are `benchmark-real/fixed-tabular-session.json` and `benchmark-real/fixed-relational-memory.json` in the external Phase 8 archive.
 Further width/degree scaling, relational gradients and real-model measurements remain pending; these results do not establish overall performance.
+
+The separate real-model Tabular run completed all 24 processes successfully against the pinned endpoint.
+Using the same warm-stage aggregation, it measured **260.31 ms main Python, 327.13 ms pre-Phase-6 Python, 338.78 ms current Python and 342.18 ms current Java**.
+These numbers include model I/O; remote cache/startup state is uncontrolled, and client HTTP work counters are unavailable in this lane.
+The raw result is `benchmark-real/real-tabular-session.json`; relational real-model runs remain pending.
 
 ## Evidence and remaining work
 
