@@ -13,6 +13,36 @@ import jdk.jfr.consumer.RecordingFile;
 
 /** Test-only native phase witnesses and process observation around the entire journey. */
 final class ParityRoute implements AutoCloseable {
+  private static final String DATABRICKS_SDK =
+      "com.databricks.sdk.core.DatabricksCliCredentialsProvider";
+
+  static boolean databricksAuthentication(String command, String executable, Set<String> callers) {
+    if (!callers.contains(DATABRICKS_SDK)
+        || !executable.matches("/[A-Za-z0-9_./-]+/databricks")) return false;
+    String prefix = "/bin/bash -c " + executable + " ";
+    if (!command.startsWith(prefix)) return false;
+    String arguments = command.substring(prefix.length());
+    return arguments.equals("version --output json")
+        || (callers.contains("com.databricks.sdk.core.CliTokenSource")
+            && arguments.matches("auth token --profile [A-Za-z0-9_.-]+ --force-refresh"));
+  }
+
+  static List<String> authenticationReceipt(String command) {
+    return command.endsWith(" version --output json")
+        ? List.of("databricks", "version", "--output", "json")
+        : List.of("databricks", "auth", "token", "--profile", "<redacted>", "--force-refresh");
+  }
+
+  private static Path databricksExecutable() {
+    for (String directory : System.getenv().getOrDefault("PATH", "").split(":")) {
+      if (directory.isBlank()) continue;
+      Path candidate = Path.of(directory, "databricks").toAbsolutePath().normalize();
+      if (Files.isRegularFile(candidate) && Files.isExecutable(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  private final Path authExecutable = databricksExecutable();
   private final Recording recording = new Recording();
   private final Set<String> workers = ConcurrentHashMap.newKeySet();
   private Map<String, Object> current;
@@ -170,7 +200,22 @@ final class ParityRoute implements AutoCloseable {
                     Arrays.asList(command.split(" ")),
                     "origin",
                     "org.sqlite.util.ProcessRunner"));
-          else processes.add(Long.toString(event.getLong("pid")));
+          else {
+            var callers = new HashSet<String>();
+            if (event.getStackTrace() != null)
+              for (var frame : event.getStackTrace().getFrames())
+                callers.add(frame.getMethod().getType().getName());
+            if (authExecutable != null
+                && databricksAuthentication(command, authExecutable.toString(), callers))
+              observed.add(
+                  Map.of(
+                      "pid", event.getLong("pid"),
+                      "command", authenticationReceipt(command),
+                      "origin", DATABRICKS_SDK,
+                      "executable_sha256", ParityRunner.fileHash(authExecutable),
+                      "purpose", "Databricks SDK authentication only"));
+            else processes.add(Long.toString(event.getLong("pid")));
+          }
         }
         if (event.getEventType().getName().equals("jdk.ThreadStart")) {
           var thread = event.getThread("thread");
