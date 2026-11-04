@@ -34,12 +34,14 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Repaired contract files on the integrated branch | 629 passed, no skips |
 | Repository tooling | 164 passed, no skips |
 | Platform CI | [Run 41791796675](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41791796675) is running; SQL architecture guard needs investigation |
-| Live matrix | Python Spark authentication observation is being verified; Java completed journeys but its subprocess audit remains unproven |
-| Current-main comparison | First 130 cells: 79 strict matches, 51 differences under investigation; warehouse comparison continues |
+| Live matrix | All 370 Python non-S3 cells pass across 13 connectors; Java is rerunning with reviewed authentication observation |
+| Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
+| Current-main comparison | With matched dependencies, 107 of 130 local cells match strictly; 23 generated-key/SQLite identity differences remain under investigation; warehouse comparison continues |
 | Benchmarks | Four artifact/source variants verified; measurements have not started |
 
-The installed candidate artifacts are from `08d027795`; the validation runner is `7f6fbbc8e`.
-Product source is unchanged between those commits; later changes repair tests and validation tooling.
+The installed candidate artifacts are from `08d027795`; the platform CI runner is `7f6fbbc8e`.
+Later reviewed runners repair test endpoint selection and authentication observation; product source remains unchanged.
+The historical live comparison matches pandas 2.3.3, NumPy 2.5.4 and Arrow 24; earlier mismatched-dependency observations are diagnostics only.
 These partial results do not establish completion.
 
 | Owner | Changes | Shared contract |
