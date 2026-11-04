@@ -4,7 +4,9 @@
 
 # Main parity: remaining designs
 
-**Proposal only: four product fixes, two CI improvements, and one evidence follow-up.**
+**Inventory: four product fixes, two CI improvements, and one evidence follow-up.**
+Temporal-link batching, wheel provenance and Java analysis are now implemented and merged; see [completion evidence](implementation.md).
+The other three implementation designs remain proposals.
 Based on the [commit audit](../main-commit-audit.md): main `1c5e2e71d` versus Phase 6 `2e29a56a9`.
 These are missing behaviors, not a proposal to restore the old Python engine.
 
@@ -57,4 +59,4 @@ Use Rust tests for engine policy, Python/Java public tests for adapters, and tar
 Test expected outcomes directly; compare selected old-client cases only where useful.
 Do not preserve old bugs, add a second legacy runtime, or build another comparison framework.
 Update the existing capability ledger and regenerate public/wire snapshots only when their contracts change.
-These docs report investigation, not implementation or newly passed tests.
+Implementation status and fresh test results are recorded separately in [completion evidence](implementation.md) and each completed design.

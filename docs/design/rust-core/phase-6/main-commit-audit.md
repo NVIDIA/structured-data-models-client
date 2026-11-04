@@ -49,6 +49,9 @@ Their dates are commit dates, not deployment dates.
 
 ## Work to carry into Phase 6
 
+**Follow-up:** G2 (temporal batching), G5 (wheel provenance) and G6 (Java analysis) are now merged into Phase 6; see [verified completion](main-parity/implementation.md).
+The ledger below remains the historical audit of `2e29a56a9`, not a claim that those fixes are still absent.
+
 See the [short per-gap designs](main-parity/design.md) for intended usage, historical support, API boundaries and acceptance tests.
 The explanation design also tracks open PR #63 separately from the audited main snapshot.
 
