@@ -283,7 +283,7 @@ def test_a_value_json_cannot_spell_does_not_cost_the_report(
 
     artifacts = tmp_path / 'artifacts'
     carried = dict(explained.explanation)
-    carried['diagnostics'] = {'top': [{'share': float('nan')}]}
+    carried['diagnostics'] = {'top': [{'share': float('nan'), 'n': 2**1024}]}
 
     forecast_report(
         Carrying(carried), tmp_path / 'f.pdf', artifacts_dir=artifacts
@@ -291,6 +291,7 @@ def test_a_value_json_cannot_spell_does_not_cost_the_report(
     written = json.loads((artifacts / 'explanation.json').read_text())
 
     assert written['diagnostics']['top'][0]['share'] is None
+    assert written['diagnostics']['top'][0]['n'] == 2**1024
 
 
 def test_the_series_own_channel_is_not_ranked_among_the_measured(

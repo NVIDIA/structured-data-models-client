@@ -370,12 +370,17 @@ def _saved_as_json(out_dir: Path, carried: dict[str, Any]) -> Path:
 
 
 def _readable(value: Any) -> Any:
-    r"""``value`` with everything JSON has no spelling for written as null."""
+    r"""``value`` with everything JSON has no spelling for written as null.
+
+    A whole number is handed back as it is rather than read as a float: JSON
+    spells one of any size, and one too large to be a float raised here and
+    cost the report the float was never needed for.
+    """
     if isinstance(value, dict):
         return {name: _readable(held) for name, held in value.items()}
     if isinstance(value, (list, tuple)):
         return [_readable(held) for held in value]
-    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+    if isinstance(value, (bool, int)) or not isinstance(value, numbers.Real):
         return value
     return None if not math.isfinite(float(value)) else value
 
