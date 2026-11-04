@@ -119,6 +119,7 @@
       "FeatureImportanceRow",
       "FittedModel",
       "ForecastInput",
+      "GradientExplanations",
       "InferenceConfig",
       "KumoRelational",
       "KumoTabular",
@@ -240,6 +241,17 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(schema: 'Schema', query: 'PredictiveQuery', anchor_time: 'pd.Timestamp | None') -> None"
+      },
+      "GradientExplanations": {
+        "bases": [
+          "builtins.dict"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "to_pandas": "(self) -> 'pd.DataFrame'"
+        },
+        "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
       },
       "InferenceConfig": {
         "bases": [],

@@ -91,7 +91,8 @@ Rust now owns a lazy per-response decoder, canonical row/step identity, typed jo
 One Arrow metadata collection carries decoded data; nested merges retain identity without changing existing prediction-item indices.
 Python merge sends compact identity markers and keeps decoded entry owners locally.
 Hosts only render pandas/Arrow views; the Python model adapter executes and converts tensors.
-The shared PQL prefix reader also accepts tabs/newlines, and forecast decomposition retains EXPLAIN.
+The shared PQL prefix reader also accepts tabs/newlines, and forecast and candidate-ranking decomposition retain EXPLAIN.
+Client-assembled ranking explanations are refused before model calls, rather than silently dropping the request.
 
 | Public surface | Presentation |
 |---|---|
@@ -104,3 +105,8 @@ Real pretrained checks use `structured-data-models==0.2.1` on a local GPU: both 
 The configured remote relational endpoint explicitly refuses explanation output; live evidence therefore uses the actual local model runtime, including Java HTTP calls to it, not replayed answers.
 Run Python real-model checks with `SDM_RUN_LOCAL_MODEL=1`; Java uses `SDM_GRADIENT_URL` pointing to a supporting endpoint.
 No deployment or publication is part of this change.
+
+Validation also covers malformed HTTP/custom-backend responses, partial batches, nested merges, duplicate/wide IDs, and fitted-session EXPLAIN toggling.
+Focused checks passed: 146 Rust unit cases, 11 schema/integration cases, 85 Python regression cases, and 193 static skill checks.
+Rust Clippy, Python Ruff/mypy, and repository hygiene checks passed.
+Two independent reviews verified the Rust/host boundaries and result identity contracts.

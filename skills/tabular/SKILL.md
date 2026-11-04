@@ -29,10 +29,10 @@ with SDMClient(url='http://localhost:8000') as client:
 | | `kumo-tabular` |
 |---|---|
 | Tasks | `classification`, `regression` |
-| Outputs | `prediction`, `probabilities`, `quantiles` |
+| Outputs | `prediction`, `probabilities`, `quantiles`, `explanation` |
 | Several tables | no |
 | Relationships | no |
-| Explanations | yes, when the endpoint supports gradients |
+| Explanations | yes |
 | Sessions | yes |
 | Context rows | 10,000 |
 
