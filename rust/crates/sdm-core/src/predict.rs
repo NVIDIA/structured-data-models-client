@@ -143,8 +143,24 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
         inputs.default_outputs = false;
     }
     if let Some((questions, top_k)) = inputs.ranking.take() {
-        if inputs.outputs.iter().any(|field|field=="explanation") {
-            return Err(CoreError::new(Sentence::ModelLacksOutputs,"explanations are unavailable for client-assembled candidate rankings"));
+        if inputs.outputs.iter().any(|field| field == "explanation") {
+            return Err(CoreError::new(
+                Sentence::ModelLacksOutputs,
+                "explanations are unavailable for client-assembled candidate rankings",
+            )
+            .with_field("model", Detail::text(&inputs.model))
+            .with_field(
+                "unsupported_outputs",
+                Detail::List(vec![Scalar::Utf8("explanation".into())]),
+            )
+            .with_field(
+                "supported_outputs",
+                Detail::List(vec![
+                    Scalar::Utf8("prediction".into()),
+                    Scalar::Utf8("rankings".into()),
+                    Scalar::Utf8("scores".into()),
+                ]),
+            ));
         }
         return crate::ranking::predict(asker, inputs, questions, top_k).await;
     }

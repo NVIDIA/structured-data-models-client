@@ -950,6 +950,7 @@ pub struct Row {
     /// lays one out (T2.13).
     pub explanation: Option<Value>,
     pub gradient: Option<Value>,
+    pub gradient_position: Option<i64>,
     /// The item's own metadata, a mapping as the explanation (T2.13).
     pub metadata: Option<Value>,
     /// Each quantile's value, keyed as the answer wrote it, in the order
@@ -1160,7 +1161,7 @@ fn non_finite(value: &Value) -> Option<f64> {
 /// (`_as_the_column_spells_them`), left as written where reading them back
 /// would make two classes one; a float target's class as `float_text`
 /// spells the double it reads as.
-fn spelled(
+pub(crate) fn spelled(
     probabilities: &[(String, f64)],
     answers: AnswerType,
     float_text: fn(f64) -> String,
@@ -1243,7 +1244,7 @@ pub(crate) fn layout_with_answers(
         None => (as_written(response)?, true),
     };
 
-    let mut decoder = crate::gradients::Decoder::new(payload);
+    let mut decoder = crate::gradients::Decoder::new(payload).with_answers(answers, float_text);
     let mut laid = Vec::with_capacity(placed.len());
     for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
         if let Some(field) = item.carried.first() {
@@ -1263,6 +1264,7 @@ pub(crate) fn layout_with_answers(
             rankings: item.rankings.clone(),
             explanation: item.explanation.clone(),
             gradient: decoder.decode(item.explanation.as_ref(), row_index)?,
+            gradient_position: None,
             metadata: item.metadata.clone(),
             quantiles: item.quantiles.clone(),
             embeddings: item.embeddings.clone(),
@@ -1484,8 +1486,19 @@ pub fn merge_planned(
             first.explanation = part.explanation;
         }
     }
+    let gradient_positions = plan
+        .gradients
+        .as_ref()
+        .map(|c| {
+            c.rows
+                .iter()
+                .map(|r| (r.answer_index, r.row_index))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
     for (at, row) in first.rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
+        row.gradient_position = gradient_positions.get(&row.answer_index).copied();
     }
     Ok(first)
 }
@@ -1861,7 +1874,6 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
             (|r: &Row| r.quantiles.as_ref()) as fn(&Row) -> Option<&Value>,
         ),
         ("explanation", |r: &Row| r.explanation.as_ref()),
-        ("sdm.gradient", |r: &Row| r.gradient.as_ref()),
         ("metadata", |r: &Row| r.metadata.as_ref()),
     ] {
         if rows.iter().any(|r| of(r).is_some()) {
@@ -2432,12 +2444,13 @@ mod tests {
             ]
         );
         assert!(relational.single_table && relational.multiple_tables && relational.relationships);
-        assert!(relational.sessions && relational.explanation_formats.is_empty());
+        assert!(relational.sessions);
+        assert_eq!(relational.explanation_formats, [crate::gradients::FORMAT]);
         let tabular = &all[1];
         assert_eq!(tabular.tasks, ["classification", "regression"]);
         assert_eq!(
             tabular.outputs,
-            ["prediction", "probabilities", "quantiles"]
+            ["explanation", "prediction", "probabilities", "quantiles"]
         );
         assert!(tabular.single_table && !tabular.multiple_tables && !tabular.relationships);
         for each in &all {

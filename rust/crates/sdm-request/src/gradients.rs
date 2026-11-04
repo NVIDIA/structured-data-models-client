@@ -7,7 +7,7 @@
 use crate::predict::{self, Entity, Row};
 use sdm_contract::{
     CoreError,
-    result::{GradientCollection, GradientRecord, GradientKeyKind},
+    result::{GradientCollection, GradientKeyKind, GradientRecord},
 };
 use sdm_wire::json::{self, Value};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -16,7 +16,7 @@ pub const FORMAT: &str = "sdm_gradient_v1";
 fn bad(reason: &'static str) -> CoreError {
     predict::bad_response("prediction.explanation", reason)
 }
-fn array<'a>(value: Option<&'a Value>) -> Result<&'a [Value], CoreError> {
+fn array(value: Option<&Value>) -> Result<&[Value], CoreError> {
     match value {
         Some(Value::Array(v)) => Ok(v),
         _ => Err(bad("invalid_shape")),
@@ -57,9 +57,11 @@ fn encoded(value: &Value) -> String {
 
 /// A known format is checked strictly; unknown formats remain on the raw accessor.
 /// The returned entry includes hop arrays as semantic facts, not presentation policy.
+type LabelRules = (predict::AnswerType, fn(f64) -> String);
 pub struct Decoder<'a> {
     payload: &'a Value,
     context: Option<Context<'a>>,
+    labels: Option<LabelRules>,
 }
 struct Context<'a> {
     instance: Table<'a>,
@@ -71,7 +73,16 @@ impl<'a> Decoder<'a> {
         Self {
             payload,
             context: None,
+            labels: None,
         }
+    }
+    pub fn with_answers(
+        mut self,
+        answers: predict::AnswerType,
+        float_text: fn(f64) -> String,
+    ) -> Self {
+        self.labels = Some((answers, float_text));
+        self
     }
     pub fn decode(
         &mut self,
@@ -126,8 +137,21 @@ impl<'a> Decoder<'a> {
         if outputs.is_empty() {
             return Err(bad("missing_outputs"));
         }
+        let task = payload
+            .get("task")
+            .and_then(|v| v.get("kind"))
+            .and_then(Value::as_text);
         for output in outputs {
-            match text(output.get("kind"))? {
+            let kind = text(output.get("kind"))?;
+            if task == Some("regression") && kind == "probability"
+                || matches!(
+                    task,
+                    Some("classification" | "binary_classification" | "multiclass_classification")
+                ) && kind != "probability"
+            {
+                return Err(bad("output_task_mismatch"));
+            }
+            match kind {
                 "probability" => {
                     if output.get("class").is_none_or(|v| {
                         matches!(v, Value::Null | Value::Array(_) | Value::Object(_))
@@ -157,7 +181,28 @@ impl<'a> Decoder<'a> {
                 _ => return Err(bad("invalid_output")),
             }
         }
-        let mut entry = object([("outputs", Value::Array(outputs.to_vec()))]);
+        let mut outputs = outputs.to_vec();
+        if let Some((answers, float_text)) = self.labels {
+            let classes = outputs
+                .iter()
+                .filter(|v| v.get("kind").and_then(Value::as_text) == Some("probability"))
+                .map(|v| {
+                    (
+                        v.get("class")
+                            .map(|v| v.as_text().map_or_else(|| encoded(v), str::to_owned))
+                            .unwrap(),
+                        0.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut normalized = predict::spelled(&classes, answers, float_text).into_iter();
+            for output in &mut outputs {
+                if output.get("kind").and_then(Value::as_text) == Some("probability") {
+                    output.set("class", Value::Text(normalized.next().unwrap().0));
+                }
+            }
+        }
+        let mut entry = object([("outputs", Value::Array(outputs.clone()))]);
         let instance = &context.instance;
         let row = usize::try_from(row_index).map_err(|_| bad("invalid_row_index"))?;
         if row >= instance.rows.len() {
@@ -168,15 +213,14 @@ impl<'a> Decoder<'a> {
             .ok_or_else(|| bad("missing_instance"))?;
         let (positions, columns, gradients) =
             block_data(block, outputs.len(), instance.rows.len())?;
-        if columns.iter().any(|c|instance.at(c.as_text().unwrap()).is_none()) { return Err(bad("unknown_column")); }
         if positions != [row] {
             return Err(bad("wrong_instance_row"));
         }
         if payload.get("model").and_then(Value::as_text) == Some("kumo-tabular") {
-            if let Some(related) = details.get("related_tables") {
-                if !members(related)?.is_empty() {
-                    return Err(bad("unexpected_related_table"));
-                }
+            if let Some(related) = details.get("related_tables")
+                && !members(related)?.is_empty()
+            {
+                return Err(bad("unexpected_related_table"));
             }
             let flat = gradients
                 .iter()
@@ -210,7 +254,6 @@ impl<'a> Decoder<'a> {
                     .ok_or_else(|| bad("unknown_table"))?;
                 let (positions, columns, gradients) =
                     block_data(block, outputs.len(), table.rows.len())?;
-            if columns.iter().any(|c|table.at(c.as_text().unwrap()).is_none()) { return Err(bad("unknown_column")); }
                 if let (Some(scope), Some(instance_scope)) =
                     (table.at("instance_id"), instance.at("instance_id"))
                 {
@@ -220,7 +263,6 @@ impl<'a> Decoder<'a> {
                     }
                 }
                 let keys = key_columns(described)?;
-                let synthetic = BTreeSet::<&str>::new();
                 let mut item = object([
                     (
                         "rows",
@@ -233,10 +275,7 @@ impl<'a> Decoder<'a> {
                                             .names
                                             .iter()
                                             .zip(table.rows[at])
-                                            .filter(|(column, _)| {
-                                                column.as_str() != "instance_id"
-                                                    && !synthetic.contains(column.as_str())
-                                            })
+                                            .filter(|(column, _)| column.as_str() != "instance_id")
                                             .map(|(column, value)| (column.clone(), value.clone()))
                                             .collect(),
                                     )
@@ -247,25 +286,25 @@ impl<'a> Decoder<'a> {
                     ("columns", Value::Array(columns)),
                     ("gradients", Value::Array(gradients)),
                 ]);
-                if keys.len() == 1 && synthetic.is_empty() {
-                    if let Some(at) = table.at(keys[0]) {
-                        let dtype = described
-                            .get("columns")
-                            .and_then(|v| v.get(keys[0]))
-                            .and_then(|v| v.get("dtype"))
-                            .and_then(Value::as_text);
-                        item.set(
-                            "keys",
-                            Value::Array(
-                                positions
-                                    .iter()
-                                    .map(|&row| {
-                                        entity_json(&predict::entity(&table.rows[row][at], dtype))
-                                    })
-                                    .collect(),
-                            ),
-                        );
-                    }
+                if keys.len() == 1
+                    && let Some(at) = table.at(keys[0])
+                {
+                    let dtype = described
+                        .get("columns")
+                        .and_then(|v| v.get(keys[0]))
+                        .and_then(|v| v.get("dtype"))
+                        .and_then(Value::as_text);
+                    item.set(
+                        "keys",
+                        Value::Array(
+                            positions
+                                .iter()
+                                .map(|&row| {
+                                    entity_json(&predict::entity(&table.rows[row][at], dtype))
+                                })
+                                .collect(),
+                        ),
+                    );
                 }
                 distances.push((
                     name.clone(),
@@ -318,7 +357,7 @@ fn block_data(block: &Value, outputs: usize, rows: usize) -> Result<Block, CoreE
         .iter()
         .map(|v| text(Some(v)))
         .collect::<Result<BTreeSet<_>, _>>()?;
-    if names.len() != columns.len() {
+    if names.iter().any(|name| name.is_empty()) || names.len() != columns.len() {
         return Err(bad("duplicate_column"));
     }
     let gradients = array(block.get("gradients"))?;
@@ -472,7 +511,8 @@ fn hops<'a>(
 pub fn records(rows: &[Row]) -> Vec<GradientRecord> {
     rows.iter()
         .map(|row| GradientRecord {
-            row_index: row.row_index,
+            row_index: row.gradient_position.unwrap_or(row.row_index),
+            answer_index: row.answer_index,
             forecast_step: row.forecast_step,
             id: encoded(&entity_json(&row.id)),
             explanation: row.gradient.as_ref().map(encoded),
@@ -487,16 +527,30 @@ pub fn collection(rows: Vec<GradientRecord>) -> Result<Option<GradientCollection
     let mut seen = BTreeSet::new();
     let mut by_id = true;
     for row in &rows {
-        let id = json::read(row.id.as_bytes()).map_err(|_| bad("invalid_identity"))?;
+        let id = json::read_answer(row.id.as_bytes()).map_err(|_| bad("invalid_identity"))?;
+        if matches!(id, Value::Array(_) | Value::Object(_) | Value::Null)
+            || matches!(&id,Value::Number(token) if matches!(token.as_str(),"NaN"|"Infinity"|"-Infinity"))
+        {
+            by_id = false;
+        }
         let key = crate::result::candidate_key(&crate::result::candidate(id))?;
         if row.id == "null" || key.is_none_or(|key| !seen.insert((key, row.forecast_step))) {
             by_id = false
         }
     }
     let mut rows = rows;
-    rows.sort_by_key(|row| (row.row_index, row.forecast_step));
+    rows.sort_by_key(|row| row.answer_index);
+    let mut positions = BTreeMap::new();
+    for row in &mut rows {
+        let next = i64::try_from(positions.len()).map_err(|_| bad("too_many_rows"))?;
+        row.row_index = *positions.entry(row.row_index).or_insert(next);
+    }
     Ok(Some(GradientCollection {
-        keyed_by: if by_id { GradientKeyKind::Id } else { GradientKeyKind::RowIndex },
+        keyed_by: if by_id {
+            GradientKeyKind::Id
+        } else {
+            GradientKeyKind::RowIndex
+        },
         rows,
     }))
 }
@@ -508,19 +562,19 @@ pub fn merge_records<'a>(
     let mut rows = Vec::new();
     let mut offset = 0i64;
     for part in parts {
-        let positions = part.iter().map(|r| r.row_index).collect::<BTreeSet<_>>();
-        let mapping = positions
-            .into_iter()
-            .enumerate()
-            .map(|(i, p)| (p, i as i64 + offset))
-            .collect::<BTreeMap<_, _>>();
-        for row in part {
+        let mut ordered = part.iter().collect::<Vec<_>>();
+        ordered.sort_by_key(|r| r.answer_index);
+        let mut mapping = BTreeMap::new();
+        for row in ordered {
+            let next = offset + i64::try_from(mapping.len()).map_err(|_| bad("too_many_rows"))?;
+            let position = *mapping.entry(row.row_index).or_insert(next);
             let mut row = row.clone();
-            row.row_index = mapping[&row.row_index];
+            row.row_index = position;
+            row.answer_index = i64::try_from(rows.len()).map_err(|_| bad("too_many_rows"))?;
             rows.push(row);
         }
         offset = offset
-            .checked_add(mapping.len() as i64)
+            .checked_add(i64::try_from(mapping.len()).map_err(|_| bad("too_many_rows"))?)
             .ok_or_else(|| bad("too_many_rows"))?;
     }
     collection(rows)
@@ -529,41 +583,190 @@ pub fn merge_records<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn member_mut<'a>(v:&'a mut Value,name:&str)-> &'a mut Value { let Value::Object(fields)=v else {panic!("object")}; &mut fields.iter_mut().find(|(key,_)|key==name).unwrap().1 }
-    fn value(input:serde_json::Value)->Value { json::read(&serde_json::to_vec(&input).unwrap()).unwrap() }
-    fn tabular()->Value { value(serde_json::json!({"model":"kumo-tabular","predict":{"instance_table":{"columns":["age"],"rows":[[20],[40]]}}})) }
-    fn explanation(row:i64)->Value { value(serde_json::json!({"format":FORMAT,"details":{"input_space":"preprocessed_numerical","outputs":[{"kind":"prediction","statistic":"mean"}],"instance_table":{"row_indices":[row],"columns":["age"],"gradients":[[[0.25]]]},"related_tables":{}}})) }
+    fn member_mut<'a>(v: &'a mut Value, name: &str) -> &'a mut Value {
+        let Value::Object(fields) = v else {
+            panic!("object")
+        };
+        &mut fields.iter_mut().find(|(key, _)| key == name).unwrap().1
+    }
+    fn value(input: serde_json::Value) -> Value {
+        json::read(&serde_json::to_vec(&input).unwrap()).unwrap()
+    }
+    fn tabular() -> Value {
+        value(
+            serde_json::json!({"model":"kumo-tabular","predict":{"instance_table":{"columns":["age"],"rows":[[20],[40]]}}}),
+        )
+    }
+    fn explanation(row: i64) -> Value {
+        value(
+            serde_json::json!({"format":FORMAT,"details":{"input_space":"preprocessed_numerical","outputs":[{"kind":"prediction","statistic":"mean"}],"instance_table":{"row_indices":[row],"columns":["age"],"gradients":[[[0.25]]]},"related_tables":{}}}),
+        )
+    }
     #[test]
     fn each_tabular_row_and_unknown_legacy_format() {
-      let payload=tabular();let mut decoder=Decoder::new(&payload);
-      for row in 0..2 { let decoded=decoder.decode(Some(&explanation(row)),row).unwrap().unwrap(); assert_eq!(encoded(decoded.get("instance").unwrap()),r#"{"columns":["age"],"gradients":[[0.25]]}"#); }
-      assert!(decoder.decode(Some(&value(serde_json::json!({"format":"legacy","details":null}))),0).unwrap().is_none());
+        let payload = tabular();
+        let mut decoder = Decoder::new(&payload);
+        for row in 0..2 {
+            let decoded = decoder
+                .decode(Some(&explanation(row)), row)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                encoded(decoded.get("instance").unwrap()),
+                r#"{"columns":["age"],"gradients":[[0.25]]}"#
+            );
+        }
+        assert!(
+            decoder
+                .decode(
+                    Some(&value(
+                        serde_json::json!({"format":"legacy","details":null})
+                    )),
+                    0
+                )
+                .unwrap()
+                .is_none()
+        );
     }
     #[test]
     fn malformed_indices_shapes_and_columns_fail() {
-      let payload=tabular(); let mut decoder=Decoder::new(&payload);
-      for row in [-1,2] { assert!(decoder.decode(Some(&explanation(row)),0).is_err()); }
-      let mut malformed=explanation(0);let details=member_mut(&mut malformed,"details");
-      member_mut(details,"instance_table").set("gradients",value(serde_json::json!([[[0.1,0.2]]])));
-      assert!(decoder.decode(Some(&malformed),0).is_err());
-      let mut malformed=explanation(0);member_mut(member_mut(&mut malformed,"details"),"instance_table").set("columns",Value::texts(["missing"]));
-      assert!(decoder.decode(Some(&malformed),0).is_err());
+        let payload = tabular();
+        let mut decoder = Decoder::new(&payload);
+        for row in [-1, 2] {
+            assert!(decoder.decode(Some(&explanation(row)), 0).is_err());
+        }
+        let mut malformed = explanation(0);
+        let details = member_mut(&mut malformed, "details");
+        member_mut(details, "instance_table")
+            .set("gradients", value(serde_json::json!([[[0.1, 0.2]]])));
+        assert!(decoder.decode(Some(&malformed), 0).is_err());
+        let mut malformed = explanation(0);
+        member_mut(member_mut(&mut malformed, "details"), "instance_table")
+            .set("columns", Value::texts(["age", "age"]));
+        assert!(decoder.decode(Some(&malformed), 0).is_err());
     }
     #[test]
     fn hops_scope_numeric_join_and_wide_keys() {
-      let payload=value(serde_json::json!({"model":"kumo-relational","schema":{"related_tables":{"users":{"primary_key":["instance_id","id"],"columns":{"id":{"dtype":"int64"}}},"events":{"primary_key":["instance_id","id"],"columns":{"id":{"dtype":"int64"}}}},"relationships":[{"source_columns":["user"],"target_table":"users","target_columns":["id"]},{"source_table":"events","source_columns":["user"],"target_table":"users","target_columns":["id"]}]},"predict":{"instance_table":{"columns":["instance_id","user"],"rows":[[0,9007199254740993i64],[1,7]]},"related_tables":{"users":{"columns":["instance_id","id","age"],"rows":[[0,9007199254740993i64,42],[1,7,30]]},"events":{"columns":["instance_id","id","user","amount"],"rows":[[0,5,9007199254740993i64,10],[1,6,7.0,20],[0,7,7,30]]}}}}));
-      let mut wire=explanation(0);let details=member_mut(&mut wire,"details");details.set("instance_table",value(serde_json::json!({"row_indices":[0],"columns":[],"gradients":[[[]]]})));details.set("related_tables",value(serde_json::json!({"users":{"row_indices":[0],"columns":["age"],"gradients":[[[0.2]]]},"events":{"row_indices":[0,2],"columns":["amount"],"gradients":[[[0.1],[0.0]]]}})));
-      let decoded=Decoder::new(&payload).decode(Some(&wire),0).unwrap().unwrap();
-      assert_eq!(encoded(decoded.get("hops").unwrap()),r#"{"users":[0],"events":[1,null]}"#);
-      assert_eq!(encoded(decoded.get("related").unwrap().get("users").unwrap().get("keys").unwrap()),"[9007199254740993]");
-      let context=Decoder::new(&payload);assert!(context.context.is_none());
+        let payload = value(
+            serde_json::json!({"model":"kumo-relational","schema":{"related_tables":{"users":{"primary_key":["instance_id","id"],"columns":{"id":{"dtype":"int64"}}},"events":{"primary_key":["instance_id","id"],"columns":{"id":{"dtype":"int64"}}}},"relationships":[{"source_columns":["user"],"target_table":"users","target_columns":["id"]},{"source_table":"events","source_columns":["user"],"target_table":"users","target_columns":["id"]}]},"predict":{"instance_table":{"columns":["instance_id","user"],"rows":[[0,9007199254740993i64],[1,7]]},"related_tables":{"users":{"columns":["instance_id","id","age"],"rows":[[0,9007199254740993i64,42],[1,7,30]]},"events":{"columns":["instance_id","id","user","amount"],"rows":[[0,5,9007199254740993i64,10],[1,6,7.0,20],[0,7,7,30]]}}}}),
+        );
+        let mut wire = explanation(0);
+        let details = member_mut(&mut wire, "details");
+        details.set(
+            "instance_table",
+            value(serde_json::json!({"row_indices":[0],"columns":[],"gradients":[[[]]]})),
+        );
+        details.set("related_tables",value(serde_json::json!({"users":{"row_indices":[0],"columns":["age"],"gradients":[[[0.2]]]},"events":{"row_indices":[0,2],"columns":["amount"],"gradients":[[[0.1],[0.0]]]}})));
+        let decoded = Decoder::new(&payload)
+            .decode(Some(&wire), 0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            encoded(decoded.get("hops").unwrap()),
+            r#"{"users":[0],"events":[1,null]}"#
+        );
+        assert_eq!(
+            encoded(
+                decoded
+                    .get("related")
+                    .unwrap()
+                    .get("users")
+                    .unwrap()
+                    .get("keys")
+                    .unwrap()
+            ),
+            "[9007199254740993]"
+        );
+        let context = Decoder::new(&payload);
+        assert!(context.context.is_none());
     }
-    fn record(id:&str,row_index:i64,step:Option<i64>,explained:bool)->GradientRecord { GradientRecord {id:id.into(),row_index,forecast_step:step,explanation:explained.then(||"{}".into())} }
+    fn record(id: &str, row_index: i64, step: Option<i64>, explained: bool) -> GradientRecord {
+        GradientRecord {
+            id: id.into(),
+            row_index,
+            answer_index: row_index,
+            forecast_step: step,
+            explanation: explained.then(|| "{}".into()),
+        }
+    }
     #[test]
     fn duplicate_ids_use_global_positions_including_unexplained_rows() {
-      let first=[record("7",0,None,false),record("9",1,None,true)];let second=[record("7.0",0,None,true)];
-      let merged=merge_records([first.as_slice(),second.as_slice()]).unwrap().unwrap();
-      assert_eq!(merged.keyed_by,GradientKeyKind::RowIndex);assert_eq!(merged.rows.iter().map(|r|r.row_index).collect::<Vec<_>>(),[0,1,2]);
-      let forecast=collection(vec![record("9007199254740993",0,Some(1),true),record("9007199254740993",0,Some(2),true)]).unwrap().unwrap();assert_eq!(forecast.keyed_by,GradientKeyKind::Id);
+        let first = [record("7", 0, None, false), record("9", 1, None, true)];
+        let second = [record("7.0", 0, None, true)];
+        let merged = merge_records([first.as_slice(), second.as_slice()])
+            .unwrap()
+            .unwrap();
+        assert_eq!(merged.keyed_by, GradientKeyKind::RowIndex);
+        assert_eq!(
+            merged.rows.iter().map(|r| r.row_index).collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        let forecast = collection(vec![
+            record("9007199254740993", 0, Some(1), true),
+            record("9007199254740993", 0, Some(2), true),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(forecast.keyed_by, GradientKeyKind::Id);
+    }
+    #[test]
+    fn output_labels_share_prediction_column_rules() {
+        let payload = tabular();
+        for (answers, label, expected) in [
+            (predict::AnswerType::Int, "1", "1"),
+            (predict::AnswerType::Bool, "true", "True"),
+            (predict::AnswerType::FloatClass, "1", "1.0"),
+        ] {
+            let mut wire = explanation(0);
+            member_mut(&mut wire, "details").set(
+                "outputs",
+                value(serde_json::json!([{"kind":"probability","class":label}])),
+            );
+            let output = Decoder::new(&payload)
+                .with_answers(answers, |v| format!("{v:.1}"))
+                .decode(Some(&wire), 0)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                output.get("outputs").unwrap(),
+                &value(serde_json::json!([{"kind":"probability","class":expected}]))
+            );
+        }
+    }
+    #[test]
+    fn nested_merges_and_nonmonotonic_positions_keep_every_entry() {
+        let mut a = record("7", 5, None, true);
+        a.answer_index = 0;
+        let mut b = record("7", 2, None, true);
+        b.answer_index = 1;
+        let first = collection(vec![a, b]).unwrap().unwrap();
+        assert_eq!(
+            first.rows.iter().map(|r| r.row_index).collect::<Vec<_>>(),
+            [0, 1]
+        );
+        let last = [record("7", 0, None, true)];
+        let nested = merge_records([first.rows.as_slice(), last.as_slice()])
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            nested.rows.iter().map(|r| r.row_index).collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+    }
+    #[test]
+    fn complex_nonfinite_and_python_equal_ids_use_positions() {
+        for id in ["[1,2]", "{\"k\":1}", "NaN", "Infinity"] {
+            let result = collection(vec![record(id, 0, None, true)])
+                .unwrap()
+                .unwrap();
+            assert_eq!(result.keyed_by, GradientKeyKind::RowIndex);
+        }
+        let result = collection(vec![
+            record("1", 0, None, true),
+            record("true", 1, None, true),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(result.keyed_by, GradientKeyKind::RowIndex);
     }
 }

@@ -482,6 +482,7 @@ def bind_request(
     return _call(
         'bind_direct',
         {
+            'query': request.query,
             'model': model_id,
             'outputs': None if outputs is None else list(outputs),
             'kind': request.task.kind,

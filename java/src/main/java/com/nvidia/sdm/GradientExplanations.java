@@ -142,13 +142,17 @@ public final class GradientExplanations {
         if (line[2] != null) hop.setSafe(i, ((Number) line[2]).longValue());
         putKey(relatedKey,i,line[3],encodedKeys);
         row.setSafe(i, ((Number) line[4]).longValue());
-        output.setSafe(i, Json.write(line[5]));
+        output.setSafe(i, write(line[5]));
         column.setSafe(i, ((String) line[6]).getBytes(StandardCharsets.UTF_8));
         gradient.setSafe(i, ((Number) line[7]).doubleValue());
       }
       root.setRowCount(lines.size());
       return root;
     } catch (RuntimeException e) { root.close(); throw e; }
+  }
+  private static byte[] write(Object value) {
+    try {return Json.write(value);}
+    catch(Json.JsonException e){throw new StructuredDataException("invalid gradient value","INTERNAL_ERROR",Map.of(),null);}
   }
   private static boolean integral(Object value) {
     return value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long
@@ -165,7 +169,7 @@ public final class GradientExplanations {
   private static void putKey(FieldVector vector,int at,Object value,boolean json) {
     if (value == null) { vector.setNull(at); return; }
     if (vector instanceof BigIntVector longs) longs.setSafe(at,((Number)value).longValue());
-    else ((VarCharVector)vector).setSafe(at,json ? Json.write(value) : ((String)value).getBytes(StandardCharsets.UTF_8));
+    else ((VarCharVector)vector).setSafe(at,json ? write(value) : ((String)value).getBytes(StandardCharsets.UTF_8));
   }
 
 }

@@ -487,6 +487,10 @@ def _result(
         metadata=metadata,
         outputs=outputs,
     )
+    if explanation is None:
+        raw_explanation = (table.schema.metadata or {}).get(b'explanation')
+        if raw_explanation is not None:
+            explanation = raw_explanation.decode('utf-8')
     result = PredictionResult(
         model=model,
         request_id=request_id,

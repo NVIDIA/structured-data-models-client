@@ -92,6 +92,7 @@ KUMO_TABULAR = ModelSpec(
             {'prediction', 'probabilities', 'quantiles', 'explanation'}
         ),
         limits=TABULAR_LIMITS,
+        explanation_formats=('sdm_gradient_v1',),
     ),
 )
 

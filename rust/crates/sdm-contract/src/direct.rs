@@ -341,6 +341,8 @@ pub struct DirectDescription {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DirectCallFacts {
+    #[serde(default)]
+    pub query: Option<String>,
     pub model: String,
     pub outputs: Option<Vec<String>>,
     pub kind: String,

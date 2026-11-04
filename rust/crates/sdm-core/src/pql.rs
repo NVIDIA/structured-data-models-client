@@ -323,6 +323,7 @@ fn resolve_here(
 /// from. Nothing here grows with the step count (T1.36 fix 23).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForecastPlan {
+    explain: bool,
     /// `FORECAST n TIMEFRAMES`'s n, saturated at `u64::MAX`.
     pub count: u64,
     aggr: &'static str,
@@ -341,7 +342,8 @@ impl ForecastPlan {
         let span = self.end - self.start;
         let moved = i128::from(step.saturating_sub(1)) * span;
         format!(
-            "PREDICT {}({}, {}, {}, {}) {}",
+            "{}PREDICT {}({}, {}, {}, {}) {}",
+            if self.explain { "EXPLAIN " } else { "" },
             self.aggr,
             self.target,
             self.start + moved,
@@ -385,6 +387,7 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
         .to_i64()
         .map_or(u64::MAX, |n| u64::try_from(n).unwrap_or(0));
     Ok(Some(ForecastPlan {
+        explain: query.explain,
         count,
         aggr,
         target,
@@ -1255,11 +1258,8 @@ pub(crate) mod conversions {
 // Compare string literals using PQL's lexer and decoder, not JSON's escape rules.
 // Original text remains in session state and on the model wire.
 pub(crate) fn explained_query(text: &str) -> Option<&str> {
-    let text = text.trim_start();
-    let (prefix, query) = text.split_once(' ')?;
-    prefix
-        .eq_ignore_ascii_case("EXPLAIN")
-        .then(|| query.trim_start())
+    let (_, explain, query) = sdm_pql::visitor::query_prefix(text);
+    explain.then_some(query)
 }
 
 pub(crate) fn explanation_outputs(

@@ -295,6 +295,7 @@ fn bound(
 ) -> Result<Prepared, CoreError> {
     let description = prepare(asker, &input.request, context, scoring)?;
     let bound = direct::bind(DirectCallFacts {
+        query: None,
         model: input.model.clone(),
         outputs: crate::pql::explanation_outputs(
             input.request.query.as_deref().unwrap_or(""),
@@ -571,11 +572,15 @@ async fn score(
 ) -> Result<OperationResult, CoreError> {
     use tabular::session as policy;
     policy::validate_state(&input.session.state)?;
-    let query=input.request.query.as_deref().unwrap_or("");
+    let query = input.request.query.as_deref().unwrap_or("");
     if crate::pql::explained_query(query).is_some() {
-        let mut facts=input.session.state.bound.facts.clone();
-        facts.outputs=crate::pql::explanation_outputs(query,&input.request.task,Some(input.session.state.bound.outputs.clone()));
-        input.session.state.bound=direct::bind(facts)?;
+        let mut facts = input.session.state.bound.facts.clone();
+        facts.outputs = crate::pql::explanation_outputs(
+            query,
+            &input.request.task,
+            Some(input.session.state.bound.outputs.clone()),
+        );
+        input.session.state.bound = direct::bind(facts)?;
     }
     let state = &input.session.state;
     if state.closed {
@@ -585,9 +590,12 @@ async fn score(
         return Err(invalid("request does not match fitted target and task"));
     }
     let mut asked = question(&input.request);
-    let mut pinned=state.question.clone();
-    for question in [&mut asked,&mut pinned].into_iter().flatten() {
-        question.query=question.query.as_ref().map(|q|crate::pql::canonical_query(q));
+    let mut pinned = state.question.clone();
+    for question in [&mut asked, &mut pinned].into_iter().flatten() {
+        question.query = question
+            .query
+            .as_ref()
+            .map(|q| crate::pql::canonical_query(q));
     }
     if policy::check_question(pinned.as_ref(), asked.as_ref()).is_some() {
         return Err(invalid(

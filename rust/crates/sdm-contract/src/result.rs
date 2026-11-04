@@ -188,6 +188,7 @@ pub struct FeatureImportanceRow {
 #[serde(deny_unknown_fields)]
 pub struct GradientRecord {
     pub row_index: i64,
+    pub answer_index: i64,
     pub id: String,
     pub forecast_step: Option<i64>,
     pub explanation: Option<String>,
@@ -202,5 +203,8 @@ pub struct GradientCollection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all="snake_case")]
-pub enum GradientKeyKind { Id, RowIndex }
+#[serde(rename_all = "snake_case")]
+pub enum GradientKeyKind {
+    Id,
+    RowIndex,
+}

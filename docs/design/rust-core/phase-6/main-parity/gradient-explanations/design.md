@@ -84,3 +84,23 @@ Review the final algorithm and memory lifetime before designing that addition; d
 - One supported model/local-runtime E2E per model: classification and regression gradients explain the reported class order and mean/median/quantile outputs. Endpoint support must be verified, not inferred from client capability.
 
 Evidence: main's `explanations/{decoder,converter,explanations}.py` and explanation tests; current `rust/crates/sdm-request/src/predict.rs`, Python `result.py`, Java `PredictionResult.java`.
+
+## Implementation and retained checks
+
+Rust now owns a lazy per-response decoder, canonical row/step identity, typed joins/hops, output-label normalization and merge policy.
+One Arrow metadata collection carries decoded data; nested merges retain identity without changing existing prediction-item indices.
+Python merge sends compact identity markers and keeps decoded entry owners locally.
+Hosts only render pandas/Arrow views; the Python model adapter executes and converts tensors.
+The shared PQL prefix reader also accepts tabs/newlines, and forecast decomposition retains EXPLAIN.
+
+| Public surface | Presentation |
+|---|---|
+| Python `result.explanations` | Mapping; `to_pandas()` |
+| Java `result.explanations()` | Immutable typed `Key` entries; caller-owned `toArrow(allocator)` root |
+| Both singular explanation accessors | Existing raw/legacy views retained |
+
+Retained tests: `test_gradient_explanations.py`, `GradientExplanationsTest`, Rust gradient/merge/prefix cases.
+Real pretrained checks use `structured-data-models==0.2.1` on a local GPU: both models, classification and regression, with nonempty gradients and matching output labels.
+The configured remote relational endpoint explicitly refuses explanation output; live evidence therefore uses the actual local model runtime, including Java HTTP calls to it, not replayed answers.
+Run Python real-model checks with `SDM_RUN_LOCAL_MODEL=1`; Java uses `SDM_GRADIENT_URL` pointing to a supporting endpoint.
+No deployment or publication is part of this change.

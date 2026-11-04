@@ -38,8 +38,7 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         self._keyed_by = keyed_by
         self._hops = {key: dict(tables) for key, tables in (hops or {}).items()}
         self._records: list[dict[str, Any]] = []
-        # Each class as the NIM spells it, to the label of its frame column.
-        self._labels: dict[Any, str] = {}
+        self._entries_by_answer: dict[int, dict[str, Any]] = {}
 
     def to_pandas(self) -> pd.DataFrame:
         r"""Every gradient, one line each, across all explained rows.
@@ -65,9 +64,7 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
                 kind = output.get('kind')
                 if kind == 'probability':
                     label = output.get('class')
-                    outputs.append(
-                        f'probability_{self._labels.get(label, label)}'
-                    )
+                    outputs.append(f'probability_{label}')
                 elif kind == 'quantile':
                     outputs.append(f'quantile_{output.get("level")}')
                 else:
@@ -125,7 +122,9 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
 
     @classmethod
     def _from_core(
-        cls, collection: dict[str, Any] | None
+        cls,
+        collection: dict[str, Any] | None,
+        entries: Mapping[int, dict[str, Any]] | None = None,
     ) -> GradientExplanations:
         if collection is None:
             result = cls()
@@ -135,7 +134,13 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         stepped = any(row['forecast_step'] is not None for row in records)
         kind = collection['keyed_by']
         result = cls(keyed_by=(kind, 'forecast_step') if stepped else (kind,))
-        result._records = records
+        result._records = [
+            dict(
+                row,
+                explanation='{}' if row['explanation'] is not None else None,
+            )
+            for row in records
+        ]
         for row in records:
             if row['explanation'] is None:
                 continue
@@ -143,7 +148,14 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
                 json.loads(row['id']) if kind == 'id' else row['row_index']
             )
             key = (identity, row['forecast_step']) if stepped else identity
-            entry = json.loads(row['explanation'])
-            result._hops[key] = entry.pop('hops', {})
-            result[key] = entry
+            entry = (
+                entries[row['answer_index']]
+                if entries is not None
+                else json.loads(row['explanation'])
+            )
+            result._entries_by_answer[row['answer_index']] = entry
+            result._hops[key] = entry.get('hops', {})
+            result[key] = {
+                name: value for name, value in entry.items() if name != 'hops'
+            }
         return result

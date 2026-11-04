@@ -173,7 +173,7 @@ pub(crate) fn prepare_score(
     input: SessionScoreInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
-    let request: PrepareTabularScore = take_json(&mut attached, input.input)?;
+    let mut request: PrepareTabularScore = take_json(&mut attached, input.input)?;
     if request.predict != input.predict {
         return Err(CoreError::protocol(
             sdm_contract::Sentence::InvalidMessage,
@@ -186,6 +186,15 @@ pub(crate) fn prepare_score(
             sdm_contract::Sentence::InvalidMessage,
             "cannot prepare a scoring call for a closed session",
         ));
+    }
+    if crate::pql::explained_query(request.query.as_deref().unwrap_or("")).is_some() {
+        let mut facts = request.state.bound.facts.clone();
+        facts.outputs = crate::pql::explanation_outputs(
+            request.query.as_deref().unwrap_or(""),
+            &facts.kind,
+            Some(request.state.bound.outputs.clone()),
+        );
+        request.state.bound = sdm_request::direct::bind(facts)?;
     }
     let table = take_value(&mut attached, request.predict)?;
     let mut payload = object([

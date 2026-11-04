@@ -57,6 +57,7 @@ class TabularTest {
     boolean failDelete;
     int deleteFailuresRemaining;
     boolean wrongId;
+    boolean gradients;
     Endpoint() throws Exception {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext("/", exchange -> {
@@ -82,6 +83,10 @@ class TabularTest {
               Map<String,Object> row = new java.util.LinkedHashMap<>();
               row.put("row_index", at); row.put("prediction", 42.5);
               if (wrongId) row.put("id", "[99999]");
+              if (gradients) row.put("explanation",Map.of("format","sdm_gradient_v1","details",Map.of(
+                  "input_space","preprocessed_numerical","outputs",List.of(Map.of("kind","prediction","statistic","mean")),
+                  "instance_table",Map.of("row_indices",List.of(at),"columns",List.of("x"),"gradients",List.of(List.of(List.of(0.25)))),
+                  "related_tables",Map.of())));
               predictions.add(row);
             }
             answer = Json.write(Map.of("object", "prediction.response", "id", "r1",
