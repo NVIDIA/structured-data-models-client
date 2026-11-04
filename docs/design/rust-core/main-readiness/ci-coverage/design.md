@@ -62,3 +62,19 @@ The relevant upstream `pandas/_libs/algos.pyx` is byte-identical to 3.1.0; exten
 The Rust sorting algorithm and live acceptance requirements remain unchanged.
 
 Code: [workflow](../../../../../.github/workflows/parity-live.yml), [release gate](../../../../../.github/workflows/publish.yml), [runner guide](../../../../../tests/parity/README.md).
+
+## CI turnaround
+
+Target roughly 10 minutes for a warm run; measure execution separately from hosted-runner queue delays.
+Run `41902328500` spent 29.6 minutes in Rust validation and 12–13 minutes in Intel macOS builds.
+Manual branch runs were forbidden from saving Rust caches, and their sibling `rust-core` caches were outside GitHub's normal [cache lookup scope](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching).
+
+| Change | Purpose |
+|---|---|
+| Let trusted manual runs save existing Rust/pip caches | Repeated branch runs can reuse downloaded and compiled dependencies |
+| Restore pip downloads before installation in Python jobs | Avoid downloading identical wheels across runs; still resolve dependencies and install the candidate |
+| Enable Maven caching in the remaining Java test jobs | Reuse dependencies before compiling tests |
+| Compare a cache-populating run with a warm rerun | Verify cache hits and actual time savings without dropping checks |
+
+Cache state is not test evidence: every required assertion still runs, and published artifact receipts remain tied to the candidate commit.
+If test execution itself exceeds the target after caching, report that separately; do not claim the target from cache configuration alone.

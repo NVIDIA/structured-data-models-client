@@ -673,9 +673,7 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
     'ref', ['main', 'rust-core', 'feature-x', 'rust-core-phase-5']
 )
 @pytest.mark.parametrize('event', ['push', 'pull_request', 'workflow_dispatch'])
-def test_superseded_runs_cancel_and_only_integration_pushes_save_caches(
-    ref, event
-):
+def test_superseded_runs_cancel_and_trusted_runs_warm_caches(ref, event):
     workflow = _workflow()
     assert workflow['concurrency']['cancel-in-progress'] is True
     context = {
@@ -683,11 +681,27 @@ def test_superseded_runs_cancel_and_only_integration_pushes_save_caches(
         'github.ref_name': ref,
         'github.ref': f'refs/heads/{ref}',
     }
-    saves = event == 'push' and ref in ('main', 'rust-core')
-    assert _evaluate(workflow['env']['SAVE_CACHES'], context) is saves
-    assert _evaluate(workflow['env']['SAVE_PIP_CACHES'], context) is (
-        event == 'push' and ref == 'main'
+    saves = event == 'workflow_dispatch' or (
+        event == 'push' and ref in ('main', 'rust-core')
     )
+    assert _evaluate(workflow['env']['SAVE_CACHES'], context) is saves
+    assert _evaluate(workflow['env']['SAVE_PIP_CACHES'], context) is saves
+
+
+def test_dependency_caches_restore_before_python_and_java_installation():
+    workflow = _workflow()
+    for name, job in workflow['jobs'].items():
+        steps = job.get('steps', [])
+        for index, step in enumerate(steps):
+            if 'setup-python@' in step.get('uses', '') and name != 'test':
+                assert (
+                    steps[index + 1].get('uses')
+                    == './.github/actions/python-cache'
+                )
+            if name in ('java', 'java-db') and 'setup-java@' in step.get(
+                'uses', ''
+            ):
+                assert step['with']['cache'] == 'maven'
 
 
 # --- CI7: aarch64 wheels and the Databricks runtime cells (KO2-38, KO2-40) ---

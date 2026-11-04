@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: Cache Python downloads
+description: Restore pip downloads before installation without caching installed environments.
+runs:
+  using: composite
+  steps:
+    - id: cache
+      shell: bash
+      run: |
+        python - <<'PY'
+        import datetime, os, subprocess, sys
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+            print('directory=' + subprocess.check_output([sys.executable, '-m', 'pip', 'cache', 'dir'], text=True).strip(), file=out)
+            print('python=' + '.'.join(map(str, sys.version_info[:3])), file=out)
+            print('week=' + datetime.datetime.now(datetime.timezone.utc).strftime('%G-%V'), file=out)
+        PY
+    # Per-job keys prevent a tiny early job from freezing every larger job's cache.
+    # GitHub's normal branch scope isolates untrusted PR writes from protected refs.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.cache.outputs.directory }}
+        key: pip-v2-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.cache.outputs.python }}-${{ steps.cache.outputs.week }}-${{ hashFiles('packages/*/pyproject.toml') }}
+        restore-keys: pip-v2-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.cache.outputs.python }}-

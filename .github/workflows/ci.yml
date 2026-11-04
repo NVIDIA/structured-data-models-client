@@ -42,11 +42,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Save reusable native caches on the integration branches only.
-  # Topic branches restore caches but do not fill the repository quota.
-  SAVE_CACHES: ${{ github.event_name == 'push' && contains(fromJSON('["main", "rust-core"]'), github.ref_name) }}
-  # Python dependency caches are shared from main.
-  SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+  # Trusted manual runs warm their own branch; integration pushes warm shared bases.
+  # GitHub scopes caches by branch, so a sibling integration cache is not a fallback.
+  SAVE_CACHES: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(fromJSON('["main", "rust-core"]'), github.ref_name)) }}
+  SAVE_PIP_CACHES: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(fromJSON('["main", "rust-core"]'), github.ref_name)) }}
   # Manual runs can check the latest compatible Rust dependencies.
   FRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh }}
   # The process's time zone, named for every job (M5): a test that sets
@@ -85,6 +84,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -114,6 +114,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel
@@ -163,6 +164,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - run: pip install --upgrade pip 'ruff==0.16.*'
       - run: ruff check .
       - run: ruff format --check .
@@ -177,6 +179,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - run: python scripts/check_repo_hygiene.py all
 
   # The Rust core (CONTRIBUTING.md). Each
@@ -342,6 +345,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - run: pip install duckdb==1.5.6 pyarrow==25.0.1 pyyaml jsonschema
       - run: cargo test --workspace --locked
         env:
@@ -521,6 +525,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.10'
+      - uses: ./.github/actions/python-cache
       # The connectors are for the canary test's journey over DuckDB
       # (T1.11d), which tests_test_ops runs here at the floor, and psycopg
       # for the Postgres provider's test, and ADBC's SQLite driver for L5's,
@@ -622,6 +627,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - run: rustup toolchain install
         working-directory: rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -664,6 +670,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.10'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel
@@ -785,6 +792,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel
@@ -850,7 +858,7 @@ jobs:
           path: native
       # pip's downloads and built wheels, keyed on the week and on every
       # distribution's manifest and restored from the newest of this job's
-      # otherwise; saved on main alone, which every branch restores (E131).
+      # otherwise; trusted manual runs can also warm their own branch.
       # pip still resolves each requirement against the index, so the cache
       # only saves downloads and changes no version (CI1).
       - id: week
@@ -915,6 +923,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - &contract-wheel
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -1009,6 +1018,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel
@@ -1042,6 +1052,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       - *contract-gate
@@ -1061,6 +1072,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.10'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       - *contract-gate
@@ -1083,6 +1095,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       # Exercise the installed native provider and preserve SQL observations.
@@ -1131,6 +1144,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       # Fails, never stands down, when the service is not there (H26).
@@ -1182,6 +1196,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       - *contract-database
@@ -1206,6 +1221,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       - *contract-postgres-required
@@ -1228,6 +1244,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.10'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       - *contract-database
@@ -1252,6 +1269,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.10'
+      - uses: ./.github/actions/python-cache
       - *contract-wheel
       - *contract-install
       - *contract-postgres-required
@@ -1341,6 +1359,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel-test-ops
@@ -1368,6 +1387,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       # The image's compilers and CMake, which a source build uses; the
       # runner image carries them, so nothing is installed (CI1).
       - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
@@ -1423,6 +1443,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wheels
@@ -1528,6 +1549,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wheels
@@ -1596,6 +1618,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wheels
@@ -1758,6 +1781,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - name: Run Java tests and verify the maintained API ledger
         run: python tests/parity/check_junit.py --run
       - name: Test the JUnit result checker
@@ -1895,9 +1919,11 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
+          cache: maven
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - name: The S0 cases on the Java host
         run: |
           pip install pytest pyyaml jsonschema
@@ -1981,9 +2007,11 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
+          cache: maven
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       # The reference cell's data-library pins, DuckDB 2 and
       # the drivers the contract loader writes SQLite and Postgres with:
       # what the runner's capture and the loader read with, never what the
@@ -2052,6 +2080,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel-aarch64
