@@ -43,7 +43,12 @@ import pandas as pd
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
-from sdm_client.schema import Schema, supports_dtype
+from sdm_client.schema import (
+    Schema,
+    _adopt_inferred_key,
+    _inferred_key_of,
+    supports_dtype,
+)
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
 
@@ -716,13 +721,7 @@ class Request:
             table = schema[entity_table]
             if target in _as_key_tuple(table.primary_key):
                 beside = history.drop(columns=[target])
-                table.primary_key = (
-                    Schema.from_data({entity_table: beside})[
-                        entity_table
-                    ].primary_key
-                    if len(beside.columns)
-                    else None
-                )
+                _adopt_inferred_key(table, _inferred_key_of(beside), beside)
                 table[target].stype = 'numerical'
         _check_scored_values_mean_what_the_schema_says(
             history, schema, entity_table

@@ -131,6 +131,30 @@ def test_an_identifier_beside_the_target_is_the_key_instead(forecast, order):
     assert request.schema['instance']['grid'].stype == 'numerical'
 
 
+@pytest.mark.parametrize(
+    'order', [['grid', 'sensor_id'], ['sensor_id', 'grid']]
+)
+def test_the_key_that_replaces_the_target_is_held_to_what_inference_allows(
+    forecast, order
+):
+    """Inference tolerates a key with a null in it, warning instead of
+    refusing. The replacement key is inferred too, so refusing it made the
+    same frame forecastable or not depending on which column came first."""
+    rows = len(history())
+    frame = pd.DataFrame(
+        {
+            'grid': np.arange(rows, dtype=float) * 1.5,
+            'sensor_id': [None, *range(101, 100 + rows)],
+        }
+    )[order]
+
+    with pytest.warns(SDMWarning, match='have no value'):
+        request = Request.forecast(frame, target='grid', horizon=3)
+
+    assert request.schema['instance'].primary_key == 'sensor_id'
+    assert request.schema['instance']['grid'].stype == 'numerical'
+
+
 def test_a_series_alone_has_no_key_to_fall_back_to(forecast):
     """The other end of the rule above: nothing beside it means no key."""
     frame = pd.DataFrame({'grid': np.arange(40, dtype=float) * 1.5})
