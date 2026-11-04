@@ -258,7 +258,7 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
             code='INVALID_REQUEST',
         )
     if values.dtype.kind == 'O' and not all(
-        value == 0 or value == 1 for value in values
+        _reads_as_a_decision(value) for value in values
     ):
         raise _a_score_rather_than_a_decision()
     try:
@@ -282,6 +282,30 @@ def _a_score_rather_than_a_decision() -> StructuredDataError:
         'threshold first; percentile_thresholds finds one',
         code='INVALID_REQUEST',
     )
+
+
+def _reads_as_a_decision(value: Any) -> bool:
+    r"""Whether ``value`` is true or false and does not merely round to one.
+
+    The question is put to ``value`` in its own type rather than against the
+    whole numbers 0 and 1, because the answer to a comparison across types
+    is the type's own business: ``sympy.Float(0) == 0`` is false. Taken back
+    through its own constructor there is nothing to disagree about, and a
+    value that only rounds to a decision does not survive the round trip:
+    ``Decimal('0.99999999999999999999')`` comes back as ``Decimal('1')``.
+
+    Anything a value raises on the way is read as an answer of no. These
+    arrive from the caller and may be of any type at all, including one
+    whose comparison raises -- ``Decimal('sNaN')`` does -- and a report is
+    not the place to learn that from a traceback.
+    """
+    try:
+        converted = float(value)
+        if converted not in (0.0, 1.0):
+            return False
+        return bool(type(value)(converted) == value)
+    except Exception:
+        return False
 
 
 def _is_a_real_number(value: Any) -> bool:

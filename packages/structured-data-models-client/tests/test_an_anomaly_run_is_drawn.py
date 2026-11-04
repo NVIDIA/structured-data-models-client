@@ -353,13 +353,15 @@ def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
 
 @pytest.mark.parametrize(
     'nearly',
-    [Decimal('0.99999999999999999999'), Decimal('1e-1000')],
+    [Decimal('0.99999999999999999999'), Decimal('1e-1000'), Decimal('sNaN')],
 )
 def test_supplied_detections_that_only_round_to_a_decision_are_refused(
     anomaly, tmp_path, nearly
 ):
-    """Neither is zero or one, and converting rounds them to one and to
-    zero: a score arrived as a column of decisions."""
+    """None of these is zero or one, and converting rounds the first two to
+    one and to zero: a score arrived as a column of decisions. The third
+    raises when it is compared at all, which a report is not the place to
+    learn from a traceback."""
     frame = readings()
 
     with pytest.raises(StructuredDataError) as caught:
@@ -372,12 +374,28 @@ def test_supplied_detections_that_only_round_to_a_decision_are_refused(
     assert 'threshold' in str(caught.value)
 
 
-@pytest.mark.parametrize('spelling', [np.bool_, Decimal])
+class Measured(float):
+    """A number that will not compare equal to a whole number.
+
+    What `sympy.Float` does, written out here rather than depended on:
+    `sympy.Float(0) == 0` is false, and a column of them was read as a
+    column of scores because of it.
+    """
+
+    def __eq__(self, other):
+        return isinstance(other, Measured) and float(self) == float(other)
+
+    def __hash__(self):
+        return hash(float(self))
+
+
+@pytest.mark.parametrize('spelling', [np.bool_, Decimal, Measured])
 def test_detections_spelled_in_other_ways_are_still_detections(
     anomaly, tmp_path, spelling
 ):
-    """Neither of these is a `numbers.Real`, and both are ordinary ways of
-    writing a decision about a row."""
+    """A `numpy.bool_` and a `Decimal` are not `numbers.Real`, and a
+    `Measured` does not compare equal to the whole number it is. All three
+    are ordinary ways of writing a decision about a row."""
     frame = readings()
 
     assert anomaly_report(
