@@ -236,12 +236,12 @@ def test_an_inference_option_is_read_as_the_type_it_is(
 def test_a_fault_in_the_client_is_raised_as_itself(client_for, monkeypatch):
     """What the client makes of an answer is the same code on both backends,
     so a fault in it is raised as it is, not reported as the model's."""
-    from sdm_client._rust import direct_response
+    from sdm_client.result import PredictionResult
 
     def broken(*args, **kwargs):
         raise RuntimeError('broken')
 
-    monkeypatch.setattr(direct_response, 'present', broken)
+    monkeypatch.setattr(PredictionResult, '__init__', broken)
     with client_for('kumo-tabular') as client:
         with pytest.raises(RuntimeError, match='broken'):
             client.predict(

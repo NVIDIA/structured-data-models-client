@@ -62,7 +62,7 @@ def test_t312_each_s1_leg_runs_the_cases_with_its_drivers() -> None:
         assert 'contract/runners/run_java.py --database' in text, database
         assert '--drivers jar/jdbc' in text
         assert (
-            '-Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest test'
+            '-Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest,PostgresKeylessOrderTest test'
             in text
         )
         assert '-Dsdm.natives=' in text
