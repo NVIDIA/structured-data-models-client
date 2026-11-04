@@ -9,6 +9,7 @@
 
 mod arrow_logical;
 pub mod attached;
+mod batch_session;
 pub mod big_integer;
 pub mod compose;
 mod describe;
@@ -28,9 +29,11 @@ pub mod pql;
 mod predict;
 pub mod profiles;
 mod ranking;
+mod rebind;
 mod result;
 pub mod run;
 mod session;
+mod sql_column;
 mod subgraph;
 mod tabular_arrow;
 mod tabular_selection;
@@ -64,5 +67,6 @@ pub use materialize::frames::FrameGraph;
 
 mod frame_schema;
 mod frame_session;
+mod timeseries;
 
 mod split;

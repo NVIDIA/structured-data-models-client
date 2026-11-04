@@ -447,6 +447,18 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
+    ("Operation/add_sql_column.input", "sql_column_input"),
+    ("Operation/add_sql_column.schema", "Materialize.schema"),
+    ("Operation/rebind_source.schema", "Materialize.schema"),
+    ("Operation/materialize_examples.input", "example_input"),
+    (
+        "Operation/materialize_examples.inference",
+        "Materialize.values",
+    ),
+    ("ExampleSource/sql.schema", "Materialize.schema"),
+    ("Operation/labels_frames.input", "Labels.input"),
+    ("Operation/labels_source.input", "Labels.input"),
+    ("Operation/labels_source.schema", "Materialize.schema"),
     ("Operation/read_result_items.input", "ReadResultItems.input"),
     ("Operation/merge_results.input", "MergeResults.input"),
     ("Operation/describe_frame_tables.names", "FrameTables.names"),
@@ -657,6 +669,22 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.native_layout",
     ),
+    (
+        "Operation/prepare_time_series.input",
+        "PrepareTimeSeries.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepare_time_series",
+    ),
+    (
+        "Operation/feature_importance.input",
+        "FeatureImportance.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.feature_importance",
+    ),
     ("Operation/plan_result_merge.input", "PlanResultMerge.input"),
     (
         "OperationResult/direct_value.value",
@@ -826,6 +854,15 @@ const JSON: &[(&str, &str)] = &[
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: &[(&str, &str)] = &[
     (
+        "Operation/materialize_examples.context",
+        "Arrow examples with their schema",
+    ),
+    (
+        "Operation/materialize_examples.predict",
+        "Arrow examples with their schema",
+    ),
+    ("ExampleSource/frames.graph", "the prepared frame graph"),
+    (
         "Operation/read_result_items.table",
         "normalized Arrow result",
     ),
@@ -866,6 +903,11 @@ const OTHER: &[(&str, &str)] = &[
     ("Operation/materialize.table", "Arrow table"),
     ("Operation/materialize_predict.table", "Arrow table"),
     ("Operation/materialize_predict.predict", "Arrow table"),
+    ("Operation/labels_frames.graph", "native frame graph"),
+    ("OperationResult/labels.data", "Arrow table"),
+    ("Operation/prepare_time_series.table", "Arrow table"),
+    ("TimeSeriesPrepared.entity", "Arrow table"),
+    ("TimeSeriesPrepared.target", "Arrow table"),
     ("Operation/fit.context", "Arrow table"),
     ("Operation/fit.predict", "Arrow table"),
     ("Operation/score.predict", "Arrow table"),

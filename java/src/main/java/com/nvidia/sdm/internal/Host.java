@@ -381,6 +381,7 @@ public final class Host {
     List<Map<String, Object>> warnings = new ArrayList<>();
     String driverClass = null;
     Refused refused = null;
+    boolean cleanupRefusal = false;
     Trace trace = Trace.installed();
     while (true) {
       NativeMessage step;
@@ -408,7 +409,9 @@ public final class Host {
           }
         }
         StructuredDataException error = error(failed, call.held(), details);
-        if (refused != null) {
+        if (refused != null && (!cleanupRefusal
+            || (refused.status != null && error.details().get("status") instanceof Number status && status.intValue() == refused.status)
+            || (refused.status == null && "TRANSPORT_ERROR".equals(error.code())))) {
           throw carried(refused, error);
         }
         throw error;
@@ -433,7 +436,10 @@ public final class Host {
         return new Finished(result, Collections.unmodifiableList(warnings), run);
       }
       if ("call_model".equals(kind) && call.model() != null) {
-        refused = model(run, read, call.model());
+        Refused latest = model(run, read, call.model());
+        // Cleanup must not replace the primary prediction refusal.
+        boolean deleting = read.get("endpoint") instanceof Map<?, ?> endpoint && endpoint.containsKey("delete_session");
+        if (refused == null || !deleting) { refused = latest; cleanupRefusal = deleting; }
         continue;
       }
       if (!"fetch".equals(kind) || call.provider() == null) {

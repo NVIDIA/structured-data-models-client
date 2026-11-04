@@ -4,7 +4,9 @@
 
 # Restore missing user capabilities
 
-**Status: proposed; implementation has not started.**
+**Status: the nine scoped restorations and three approved follow-ups are complete and merged into `rust-core-phase-6`.**
+See [follow-up evidence](../../phase-6/followup-completion.md) for rebinding, batching/retries, typed settings and optional summaries.
+Integration branch and engine boundaries are in the [Phase 6 design](../../phase-6/design.md).
 Restore the useful capabilities identified in the [deleted API audit](audit.md), through the maintained Python and Java clients.
 Keep the shared Rust architecture; recovering a feature does not require recovering its old import path or Python engine.
 The earlier green CI proves its tested scope, not completion of this work.
@@ -21,7 +23,8 @@ Python / Java public API
                                          in-memory data or warehouse
 ```
 
-Rust owns rules that must agree across languages: inference, validation, transformations, eligibility and result aggregation.
+Rust owns engine semantics: inference, validation, typed data preparation, eligibility and numerical result interpretation.
+Code being reusable across languages is not sufficient reason to put it in Rust.
 Python/Java own presentation and I/O, with thin wrappers around shared operations.
 Use existing crates and message contracts; no new callback cycle or parallel Python sampling implementation.
 Python returns pandas-friendly views; Java uses the existing Arrow conventions.
@@ -35,32 +38,39 @@ All four provide useful functionality in **both Python and Java**; notebook disp
 3. [Sanitization reports](sanitization/design.md)
 4. [RelBench loading](relbench/design.md)
 
-These are proposals for review, not implemented APIs.
+All four are implemented in both languages, independently reviewed and tested.
+See [completion evidence](../../phase-6/completion.md).
 
 ## Implementation order and tracker
 
-All rows are **not started**; effort is relative, not an ETA.
+The nine rows below are complete.
+See [final restoration evidence](../../phase-6/final-restorations.md) for end-time, SQL columns and supplied examples.
+See [restoration completion](../../phase-6/restoration-completion.md) for the latest evidence.
+See the [implementation tracker](../../phase-6/implementation.md) for validation status.
+Effort is relative, not an ETA.
 Names below describe proposed API placement, not frozen signatures.
 
-| Order | Capability and proposed API | Ownership / existing implementation | Size |
+| Order / status | Capability and proposed API | Ownership / existing implementation | Size |
 |---|---|---|---|
-| 1 | `Schema.to_mermaid()` / Java equivalent; `visualize()` and HTML/file output | Small shared schema formatter in `sdm-schema`; hosts handle rendering, notebooks and files | Small |
-| 1 | Schema/table metadata and link reports; explanation accessors/printing on `PredictionResult` | Hosts format existing descriptors/results; shared numeric feature-importance aggregation belongs in Rust | Small–moderate |
-| 1 | Structured sanitization report on prepared requests/sessions | Expose existing `sdm-engine` snapshot drop counts through preparation results; hosts provide read-only views | Small |
-| 1 | RelBench loading into `Schema` | Host download/cache/parquet I/O; common pinned dataset metadata; existing schema admission | Small–moderate |
-| 2 | Explicit metadata/link inference and safe table/link edit helpers | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
-| 2 | Time-series builder returning schema plus predictive query | Rust expands Arrow observation arrays and constructs tables/query; hosts adapt inputs/results | Moderate |
-| 2 | Labels-only operation on `PredictiveQuery`, replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
-| 3 | End-time-column configuration | Carry through both facades, shared schema, engine graph, provider projections and eligibility | Substantive |
-| 3 | Generic expression-column and task editing | Define useful edits first; Rust validates expressions, dependencies, entity references and row alignment; providers execute source expressions | Substantive; scope review required |
+| 1 / Complete | `Schema.to_mermaid()` / Java equivalent; `visualize()` and HTML/file output | Host formatters/rendering over existing schema metadata; common renderer assets and semantic fixtures | Small |
+| 1 / Complete | Schema/table metadata and link reports; explanation accessors/printing on `PredictionResult` | Hosts format existing descriptors/results; shared numeric feature-importance aggregation belongs in Rust | Small–moderate |
+| 1 / Complete | Structured sanitization report on prepared requests/sessions | Expose existing `sdm-engine` snapshot drop counts through preparation results; hosts provide read-only views | Small |
+| 1 / Complete | RelBench loading into `Schema` | Host download/cache/parquet I/O; common pinned dataset metadata; existing schema admission | Small–moderate |
+| 2 / Complete | [Explicit inference and safe edits](inference-edits/design.md) | Reuse `sdm-schema` inference and `SchemaEdit`; add provenance for inferred links and atomic cleanup when removing tables | Moderate |
+| 2 / Complete | [Time-series builder](timeseries/design.md) | Hosts expose a preparation recipe; bounded Rust Arrow transformation handles row/time correctness; existing schema/PQL validates outputs | Moderate |
+| 2 / Complete | [Labels-only operation](labels-only/design.md), replacing `get_train_table()` | Production Rust labeling operation using existing eligibility/aggregation/provider machinery; return entity, anchor and target columns | Moderate |
+| 3 / Complete | [End-time column](end-time/design.md) | Both hosts declare the role; Rust handles sampled eligibility and hides future end dates through existing provider reads | Substantive |
+| 3 / Complete | [SQL columns and custom relational examples](expressions-tasks/design.md) | Providers execute dialect SQL; Rust admits schema changes and supplied relational examples; hosts adapt/slice inputs | Substantive; two bounded workflows |
 
 **Sampling impact:** presentation, reports and loaders need no sampler changes.
 Inference/edit conveniences reuse existing algorithms; warehouse metadata previews may be reread.
 Labels-only requires a distinct labeling mode, without neighbor gathering or model inference.
-End-time support changes entity eligibility, including warehouse selection.
-Generic expression editing changes source projection/planning; these two items need focused push-down regression coverage.
+End-time support changes sampled eligibility and masks future end dates after existing provider reads; explicit prediction IDs have separate semantics.
+SQL columns extend provider projections across the five SQL connectors.
+Custom examples reuse graph gathering with supplied IDs/labels.
+These need focused push-down regression checks, not a sampling-algorithm rewrite.
 
-## Contracts to settle before coding each affected row
+## Preserved contracts
 
 - **Presentation:** preserve offline HTML and Mermaid source; explicitly distinguish network-backed image export, keep rendering safe, and restore bundled-asset notices/security checks.
   Notebook display is language-specific; shared diagram content and file export should be available in both languages.
@@ -70,7 +80,8 @@ Generic expression editing changes source projection/planning; these two items n
 - **Labels:** zero training rows, at most `size` output labels, bounded trials, correct default anchor/forecast horizon and explicit empty-result behavior.
   The existing test-only labels operation is not equivalent and must not simply be exposed.
 - **End time:** eligibility includes `end > anchor OR end IS NULL`; the existing optional contract field alone does not implement this behavior.
-- **Expressions/tasks:** choose explicit operations such as adding a validated derived column or selecting aligned rows; do not resurrect arbitrary mutable engine task objects.
+- **Expressions/tasks:** keep SQL text in the provider dialect; Rust validates schema structure and task/ID/label alignment.
+  Restore external relational labels without requiring PQL; do not resurrect mutable engine task objects.
 - **Loaders/transforms:** preserve RelBench key/link/time metadata and dataset overrides; define empty/mismatched histories, timestamps, timezones and dtype handling for the time-series builder.
 
 ## Completion checks
@@ -85,7 +96,8 @@ Obtain independent contract/design review before substantive changes, then imple
 Document replacement usage and explicitly resolve the audit's partial mappings: task editing, connection rebinding, retry/batch scoping and old typed configuration/explanation imports.
 Lagged prediction features already exist through `lag_timesteps`; test/document that route rather than creating another computation path.
 Standalone Python PQL/engine internals remain retired; package-retirement approval must not be reused as blanket approval to omit user capabilities.
-Merge readiness remains open until every missing/partial capability has implementation evidence or an explicit accepted retirement decision.
+The approved partial mappings are resolved by the replacements in [the current API explanation](../../phase-6/remaining-api-mappings.md).
+This completes the approved Phase 6 scope; it does not authorize merging into `rust-core`/`main` or publishing.
 
 ## Clarification from the old implementation
 
@@ -96,4 +108,5 @@ Adding an in-memory expression language would therefore be new functionality, no
 Task narrowing was used internally to cap context rows and split prediction batches (`rfm.py`), with direct tests in `test_task_table.py`.
 Tests also constructed `TaskTable` objects with explicit labels/entity IDs/timestamps and passed them to `predict_task()`.
 Source docstrings document these APIs; the search of tracked Markdown/notebooks found no user tutorial for general task editing.
-Restore demonstrated workflows before committing to a general task editor; existing automatic batching does not itself require exposing task mutation.
+The direct `Request` constructor is Tabular-only and does not restore custom relational labels.
+The implemented APIs restore supplied relational examples; users slice their input tables before admission rather than mutate a prepared task.

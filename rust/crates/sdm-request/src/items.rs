@@ -259,6 +259,8 @@ mod tests {
             scores: None,
             rankings: None,
             explanation: None,
+            gradient: None,
+            gradient_position: None,
             metadata: None,
             quantiles: None,
             embeddings: None,

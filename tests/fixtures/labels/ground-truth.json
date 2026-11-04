@@ -1,0 +1,20 @@
+{
+  "users": {"user_id": [1, 2, 3], "value": [10, 20, 30], "segment": ["red", "blue", "red"]},
+  "items": {"item_id": [7, 8]},
+  "orders": {
+    "order_id": [1, 2, 3, 4, 5, 6],
+    "user_id": [1, 1, 1, 2, 2, 3],
+    "item_id": [7, 7, 8, 7, 8, 8],
+    "price": [100.0, 2.0, 3.0, 5.0, 7.0, 11.0],
+    "time": ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-02", "2024-01-04", "2024-01-05"]
+  },
+  "anchor": "2024-01-01",
+  "cases": [
+    {"name": "regression", "target": "users.value", "expected": {"1": 10, "2": 20, "3": 30}},
+    {"name": "classification", "target": "users.segment", "expected": {"1": "red", "2": "blue", "3": "red"}},
+    {"name": "sum", "target": "SUM(orders.price, 0, 2, days)", "expected": {"1": 5.0, "2": 5.0, "3": 0.0}},
+    {"name": "binary", "target": "COUNT(orders.*, 0, 2, days) > 0", "expected": {"1": true, "2": true, "3": false}},
+    {"name": "links", "target": "LIST_DISTINCT(orders.item_id, 0, 2, days)", "expected": {"1": [7, 8], "2": [7]}}
+  ],
+  "forecast": {"query": "PREDICT SUM(orders.price, 0, 1, days) FORECAST 3 TIMEFRAMES FOR users.user_id = 1", "entity": [1, 1, 1], "anchors": ["2024-01-01", "2024-01-02", "2024-01-03"], "target": [2.0, 3.0, 0.0]}
+}

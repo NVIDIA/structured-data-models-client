@@ -9,6 +9,22 @@ The earlier “no remaining acceptance gap” conclusion was too broad.
 Restoration is tracked in [design.md](design.md).
 Do not use the green prediction matrix as evidence that these missing utilities are covered.
 
+## Phase 6 resolution
+
+The tables below preserve the original audit findings, not the current implementation status.
+The nine scoped restorations are complete; see [restoration evidence](../../phase-6/final-restorations.md).
+The additional mappings now have these replacements in Python and Java; passing final combined validation is recorded in [completion evidence](../../phase-6/followup-completion.md).
+
+| Former gap | Maintained replacement and deliberate difference |
+|---|---|
+| Connection rebinding | `Schema.with_source` / `withSource` returns an independent schema; Rust revalidates declarations and hosts retain connection ownership. |
+| Retry/batch scoping | Explicit batch options, including supplied examples; one transport retry policy and Rust-managed temporary sessions for identical contexts. No mutable block-scoped settings or stacked retries. |
+| Typed inference settings | Immutable `InferenceConfig` in both languages; Rust still supplies defaults and validates options. Old `RunMode` and engine imports stay retired. |
+| Explanation helpers and generated prose | `ExplanationView` provides structured access; explicit `ExplanationSummarizer` optionally calls a configured text endpoint. No implicit second model call. |
+| Task editing | `RelationalTask` plus supplied context/prediction tables; slice inputs before materialization instead of mutating a prepared task. |
+
+Standalone Python parser/AST APIs and internal engine samplers remain retired; they are not restored by these user-facing replacements.
+
 ## What was compared
 
 Candidate: `304da1e94`.

@@ -591,11 +591,13 @@ pub(crate) fn describe(
         }
         let (time_column, inferred_time) = times.get(&logical.name).cloned().unwrap_or_default();
         described.push(DescribedTable {
+            calculated_columns: vec![],
             name: logical.name.clone(),
             source: Relation::named(logical.name.clone()),
             columns,
             primary_key: logical.primary_key.iter().cloned().collect(),
             time_column,
+            end_time_column: None,
             time_column_inferred: inferred_time,
             duplicate_keys: None,
         });
@@ -620,6 +622,7 @@ pub(crate) fn describe(
         .collect();
     Ok((
         SourceDescription {
+            inference: None,
             tables: described,
             links,
         },
@@ -877,13 +880,30 @@ pub(crate) async fn located(
             .with_field("table", Detail::text(&table.name))
             .with_field("reason", Detail::text(reason)));
         };
-        let relation = converted
+        let mut relation = converted
             .relations
             .iter()
             .find(|(name, _)| Some(name.as_str()) == table.source.single())
             .map(|(_, r)| r.clone())
             .ok_or_else(|| internal("a view's table has no relation"))?;
         for column in &table.columns {
+            if table
+                .calculated_columns
+                .iter()
+                .any(|added| added.name == column.name)
+            {
+                if fresh.columns.iter().any(|c| c.name == column.name) {
+                    return Err(CoreError::new(
+                        Sentence::SchemaRefinement,
+                        "calculated column now conflicts with a source-owned column",
+                    )
+                    .with_field(
+                        "reason",
+                        Detail::text("calculated column now conflicts with a source-owned column"),
+                    ));
+                }
+                continue;
+            }
             let Some(now) = fresh.columns.iter().find(|c| c.name == column.name) else {
                 let reason = converted
                     .omitted_columns
@@ -911,6 +931,46 @@ pub(crate) async fn located(
                 (table.name.clone(), column.name.clone()),
                 sdm_schema::held::facts_of(&relation, now),
             );
+        }
+        if !table.calculated_columns.is_empty() {
+            relation = crate::sql_column::project(
+                &relation,
+                fresh.columns.iter().map(|c| c.name.clone()),
+                &table.calculated_columns,
+            )?;
+            let read = crate::discover::table(
+                asker,
+                &sdm_contract::ops::NamedTable {
+                    name: table.name.clone(),
+                    source: relation.clone(),
+                    columns: Some(table.columns.iter().map(|c| c.name.clone()).collect()),
+                },
+                true,
+                None,
+            )
+            .await?;
+            let added_facts: BTreeMap<_, _> =
+                crate::discover::facts_read(&table.name, &relation, read)?
+                    .into_iter()
+                    .collect();
+            for column in &table.columns {
+                let key = (table.name.clone(), column.name.clone());
+                if table
+                    .calculated_columns
+                    .iter()
+                    .any(|added| added.name == column.name)
+                {
+                    found.insert(
+                        key.clone(),
+                        added_facts
+                            .get(&key)
+                            .ok_or_else(|| internal("calculated column has no source facts"))?
+                            .clone(),
+                    );
+                } else if let Some(fact) = found.get_mut(&key) {
+                    fact.relation = relation.clone();
+                }
+            }
         }
         let current = located
             .tables

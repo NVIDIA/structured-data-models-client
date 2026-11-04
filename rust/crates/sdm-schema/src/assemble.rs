@@ -204,7 +204,7 @@ pub fn assemble_converted(
 ) -> Result<Assembled, CoreError> {
     apply_described_keys_and_times(&mut description.tables, primary_keys, time_columns)?;
     let timed = time_columns.keys().cloned().collect();
-    assemble_described(
+    let mut assembled = assemble_described(
         description.tables,
         choices,
         description.links,
@@ -213,7 +213,11 @@ pub fn assemble_converted(
             relationships,
         },
         false,
-    )
+    )?;
+    if let Some(state) = &mut assembled.description.inference {
+        state.key_declared.extend(primary_keys.keys().cloned());
+    }
+    Ok(assembled)
 }
 
 /// Assemble in-memory tables whose column and time observations are complete.
@@ -237,7 +241,7 @@ pub fn assemble_frames(
     }
     apply_described_keys_and_times(&mut description.tables, primary_keys, time_columns)?;
     let timed = time_columns.keys().cloned().collect();
-    assemble_described(
+    let mut assembled = assemble_described(
         description.tables,
         choices,
         Vec::new(),
@@ -246,7 +250,11 @@ pub fn assemble_frames(
             relationships,
         },
         true,
-    )
+    )?;
+    if let Some(state) = &mut assembled.description.inference {
+        state.key_declared.extend(primary_keys.keys().cloned());
+    }
+    Ok(assembled)
 }
 
 fn assemble_described(
@@ -293,6 +301,35 @@ fn assemble_described(
         links
     };
 
+    let inference = ops::SchemaInference {
+        unknown_tables: BTreeSet::new(),
+        key_declared: BTreeSet::new(),
+        time_declared: given.time_columns.cloned().unwrap_or_default(),
+        times: described
+            .iter()
+            .zip(&choices)
+            .map(|(table, choice)| {
+                (
+                    table.name.clone(),
+                    ops::InferredTime {
+                        column: choice.fallback.clone().or_else(|| choice.column.clone()),
+                        only_unlinked: choice.fallback.is_some(),
+                    },
+                )
+            })
+            .collect(),
+        links: links
+            .iter()
+            .map(|link| ops::LinkOrigin {
+                link: link.clone(),
+                origin: if given.relationships.is_some() || declared.contains(link) {
+                    ops::InferenceOrigin::Declared
+                } else {
+                    ops::InferenceOrigin::Inferred
+                },
+            })
+            .collect(),
+    };
     // A lone edit stamp, settled by the links, unless the caller named the
     // table's time column.
     let inferred: Vec<Option<String>> = choices.iter().map(|c| c.column.clone()).collect();
@@ -315,6 +352,7 @@ fn assemble_described(
     }
 
     let mut description = SourceDescription {
+        inference: Some(inference),
         tables: described,
         links: once(links),
     };
@@ -331,6 +369,7 @@ fn assemble_described(
 /// A table's inferred source facts as the common schema description.
 fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> DescribedTable {
     DescribedTable {
+        calculated_columns: vec![],
         name: table.name,
         source: table.source,
         columns: table
@@ -350,6 +389,7 @@ fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> Describe
             .collect(),
         primary_key: table.primary_key,
         time_column: table.time_column,
+        end_time_column: None,
         time_column_inferred: None,
         duplicate_keys: duplicates,
     }
@@ -799,7 +839,7 @@ pub(crate) fn meaning_not_carried(
 /// (`_infer_relationships`): only an exact name match against a key of one
 /// column counts, and a name more than one table is keyed by links
 /// nothing.
-fn by_name(tables: &[DescribedTable]) -> Vec<Link> {
+pub(crate) fn by_name(tables: &[DescribedTable]) -> Vec<Link> {
     let mut ambiguous = BTreeSet::new();
     let mut keys: BTreeMap<&str, &str> = BTreeMap::new();
     for table in tables {

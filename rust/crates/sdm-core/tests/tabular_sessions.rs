@@ -117,6 +117,7 @@ fn send(endpoint: Endpoint, payload: Vec<u8>, response: Value) -> Value {
 #[test]
 fn fit_score_twice_and_retry_close_with_remapped_attachments() {
     let bound = sdm_request::direct::bind(DirectCallFacts {
+        query: None,
         model: "kumo-tabular".into(),
         outputs: Some(vec!["prediction".into()]),
         kind: "regression".into(),
@@ -264,6 +265,7 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
                 })
             },
             &PrepareTabularScore {
+                query: None,
                 state: state.clone(),
                 predict: AttachmentId(151),
                 request_id: format!("score-{id}"),

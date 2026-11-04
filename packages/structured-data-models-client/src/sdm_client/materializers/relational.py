@@ -16,6 +16,7 @@ from sdm_client.schema import Schema
 
 if TYPE_CHECKING:
     from sdm_client._rust.results import CoreQuery
+    from sdm_client.sanitization import SanitizationReport
 
 
 # Host memory limits passed to Rust for request-size enforcement.
@@ -25,6 +26,8 @@ MOST_CALLS = 100
 
 class RelationalMaterializer:
     """Retain host resources while Rust owns sampling and request construction."""
+
+    _sanitization_report: SanitizationReport
 
     _MATERIALIZE_OPTIONS = frozenset(
         {
@@ -60,6 +63,13 @@ class RelationalMaterializer:
         options: dict[str, Any],
         candidates: Sequence[Any] | None = None,
     ) -> Request:
+        from sdm_client.inference import InferenceConfig
+
+        if isinstance(options.get('inference_config'), InferenceConfig):
+            options = {
+                **options,
+                'inference_config': options['inference_config'].to_dict(),
+            }
         unknown = sorted(set(options) - self._MATERIALIZE_OPTIONS)
         if unknown:
             raise StructuredDataError(
@@ -88,4 +98,6 @@ class RelationalMaterializer:
             },
         )
         request._core = retained
+        if self.schema.source is None:
+            request._sanitization_report = self._sanitization_report
         return request

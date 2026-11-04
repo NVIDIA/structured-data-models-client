@@ -61,6 +61,35 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::LabelsFrames(request) => Run::new(move |asker| async move {
+            crate::materialize::frames::labels(asker, request, attachments, facts, zones).await
+        }),
+        Operation::MaterializeExamples(request) => {
+            crate::materialize::examples::start(root, request, attachments, facts)?
+        }
+        Operation::RebindSource(request) => {
+            crate::rebind::start(root, request, attachments, facts)?
+        }
+        Operation::AddSqlColumn(request) => {
+            crate::sql_column::start(root, request, attachments, facts)?
+        }
+        Operation::LabelsSource(request) => {
+            crate::materialize::label_query::source(root, request, attachments, facts, zones)?
+        }
+        Operation::PrepareTimeSeries(request) => {
+            let input = take_json(&mut attachments, request.input)?;
+            let Some(Attachment::Arrow(table)) = attachments.remove(&request.table) else {
+                return Err(internal("time-series input is not Arrow"));
+            };
+            Run::new(move |asker| async move { crate::timeseries::prepare(&asker, input, table) })
+        }
+        Operation::FeatureImportance(request) => {
+            let input: sdm_contract::result::FeatureImportanceInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::result::feature_importance(&input)?)
+            })
+        }
         Operation::PlanResultMerge(request) => {
             let input: sdm_contract::result::PlanResultMerge =
                 take_json(&mut attachments, request.input)?;
@@ -312,9 +341,14 @@ pub fn start(
             )
         }
         Operation::BindDirect(request) => {
-            let input: sdm_contract::direct::DirectCallFacts =
+            let mut input: sdm_contract::direct::DirectCallFacts =
                 take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
+                input.outputs = crate::pql::explanation_outputs(
+                    input.query.as_deref().unwrap_or(""),
+                    &input.kind,
+                    input.outputs,
+                );
                 crate::direct::value(&asker, &sdm_request::direct::bind(input)?)
             })
         }
@@ -469,6 +503,7 @@ pub fn start(
                 }
             };
             let inputs = crate::predict::Inputs {
+                supports_sessions: request.supports_sessions,
                 payload: asked.payload,
                 query: asked.query,
                 model: request.model,

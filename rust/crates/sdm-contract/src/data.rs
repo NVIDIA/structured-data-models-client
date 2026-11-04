@@ -611,6 +611,10 @@ pub struct Window {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TieTerm {
+    /// A keyless tie column whose engine dtype is string-like. Dialects
+    /// may need a comparable representation (PostgreSQL json/xml domains).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub string_like: bool,
     pub column: String,
     /// Order by `CAST(column AS TIMESTAMP)`, the source's wall clock,
     /// rather than the column's own values.

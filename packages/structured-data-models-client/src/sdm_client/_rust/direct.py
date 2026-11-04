@@ -224,6 +224,7 @@ def _schema(
     from sdm_client.schema import Column, Schema, Table
 
     made = Schema.__new__(Schema)
+    object.__setattr__(made, '_inference', held.get('inference'))
     tables = {}
     for definition in held['tables']:
         table = Table.__new__(Table)
@@ -287,6 +288,7 @@ def _schema(
                     definition['time_column'], definition['time_column']
                 ),
             ),
+            ('end_time_column', definition.get('end_time_column')),
             (
                 'duplicate_keys',
                 0
@@ -323,6 +325,9 @@ def construct(
 ) -> None:
     from sdm_client._rust import direct_admission, direct_schema
     from sdm_client.request import Split, Target, Task
+    from sdm_client.sanitization import SanitizationReport
+
+    request._sanitization_report = SanitizationReport('not_applicable')
 
     related = direct_admission.arguments(
         context, predict, related_tables, task, _call
@@ -477,6 +482,7 @@ def bind_request(
     return _call(
         'bind_direct',
         {
+            'query': request.query,
             'model': model_id,
             'outputs': None if outputs is None else list(outputs),
             'kind': request.task.kind,

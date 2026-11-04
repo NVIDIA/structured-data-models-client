@@ -120,6 +120,7 @@ pub struct Snapshot {
     graph: Graph,
     tables: BTreeMap<String, Table>,
     adjacency: Vec<Adjacency>,
+    /// Accounting for every prepared table, including tables with zero drops.
     pub dropped: Vec<DroppedRows>,
 }
 
@@ -236,6 +237,21 @@ pub enum FrameNeighbor {
 }
 
 impl Snapshot {
+    /// Physical storage of one admitted column, without scanning or sampling rows.
+    pub fn column_type(&self, table: &str, column: &str) -> Result<DataType, CoreError> {
+        let rows = &self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("unknown table"))?
+            .rows;
+        Ok(rows
+            .schema()
+            .field_with_name(column)
+            .map_err(|_| invalid("unknown column"))?
+            .data_type()
+            .clone())
+    }
+
     pub fn new(graph: &Graph, input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
         Self::prepare(graph, input, None, BTreeMap::new())
     }
@@ -424,15 +440,13 @@ impl Snapshot {
                     }),
                 ));
             }
-            if null_keys + duplicate_keys + null_times > 0 {
-                dropped.push(DroppedRows {
-                    table: table.name.clone(),
-                    input: rows.num_rows(),
-                    null_keys,
-                    duplicate_keys,
-                    null_times,
-                });
-            }
+            dropped.push(DroppedRows {
+                table: table.name.clone(),
+                input: rows.num_rows(),
+                null_keys,
+                duplicate_keys,
+                null_times,
+            });
             let bounds = time.as_ref().map(|time| {
                 let values = valid.iter().filter_map(|&row| time[row]);
                 (values.clone().min(), values.max())
@@ -515,6 +529,7 @@ impl Snapshot {
         let detail = self
             .dropped
             .iter()
+            .filter(|row| row.null_keys + row.duplicate_keys + row.null_times > 0)
             .map(|row| {
                 let mut causes = Vec::new();
                 if row.null_keys > 0 {
@@ -539,7 +554,7 @@ impl Snapshot {
             })
             .collect::<Vec<_>>()
             .join("; ");
-        Some(format!("[{detail}]"))
+        (!detail.is_empty()).then(|| format!("[{detail}]"))
     }
 
     /// The graph's valid nanosecond values, before second sampler cuts.

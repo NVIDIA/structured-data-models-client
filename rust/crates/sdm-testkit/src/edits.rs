@@ -156,10 +156,12 @@ impl SchemaEdit {
 /// name and with what the source said of it.
 pub fn held(described: &SourceDescription) -> HeldSchema {
     HeldSchema {
+        inference: None,
         tables: described
             .tables
             .iter()
             .map(|table| HeldTable {
+                calculated_columns: vec![],
                 name: table.name.clone(),
                 source: table.source.clone(),
                 columns: table
@@ -183,6 +185,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
+                end_time_column: table.end_time_column.clone(),
                 duplicate_keys: table.duplicate_keys.clone(),
             })
             .collect(),
@@ -212,16 +215,19 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
             });
         }
         tables.push(DescribedTable {
+            calculated_columns: vec![],
             name: table.name.clone(),
             source: table.source.clone(),
             columns,
             primary_key: table.primary_key.clone(),
             time_column: table.time_column.clone(),
+            end_time_column: table.end_time_column.clone(),
             time_column_inferred: None,
             duplicate_keys: table.duplicate_keys.clone(),
         });
     }
     Some(SourceDescription {
+        inference: None,
         tables,
         links: held.links.clone(),
     })

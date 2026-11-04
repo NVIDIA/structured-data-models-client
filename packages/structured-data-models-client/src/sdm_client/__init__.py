@@ -30,19 +30,48 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
+from sdm_client.explanations import GradientExplanations
+from sdm_client.inference import InferenceConfig
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
+from sdm_client.relational_task import RelationalTask
+from sdm_client.reports import (
+    ColumnMetadata,
+    ExplanationView,
+    FeatureImportance,
+    FeatureImportanceRow,
+    LinkMetadata,
+    LinkReport,
+    MetadataReport,
+    TableMetadata,
+)
 from sdm_client.request import Request, Split, Target, Task
 from sdm_client.result import PredictionResult
+from sdm_client.sanitization import SanitizationReport, TableSanitizationReport
 from sdm_client.schema import (
     Column,
     Relationship,
+    RelationshipOrigin,
     Schema,
     SourceTable,
     Table,
 )
+from sdm_client.summaries import ExplanationSummarizer
 
 __all__ = [
+    'InferenceConfig',
+    'ExplanationSummarizer',
+    'RelationalTask',
+    'ForecastInput',
+    'build_timeseries',
+    'ColumnMetadata',
+    'TableMetadata',
+    'MetadataReport',
+    'LinkMetadata',
+    'LinkReport',
+    'ExplanationView',
+    'FeatureImportance',
+    'FeatureImportanceRow',
     'SDMWarning',
     'Column',
     'FittedModel',
@@ -53,10 +82,14 @@ __all__ = [
     'ModelCapabilities',
     'NimRequestError',
     'PredictionResult',
+    'GradientExplanations',
     'PredictiveQuery',
     'Relationship',
+    'RelationshipOrigin',
     'Request',
     'Schema',
+    'SanitizationReport',
+    'TableSanitizationReport',
     'Split',
     'SDMClient',
     'SourceTable',
@@ -68,3 +101,5 @@ __all__ = [
     'UnsupportedRequestError',
     '__version__',
 ]
+
+from sdm_client.timeseries import ForecastInput, build_timeseries

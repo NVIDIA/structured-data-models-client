@@ -1,0 +1,45 @@
+{
+  "tables": [
+    {
+      "name": "orders",
+      "columns": [
+        {
+          "name": "tenant",
+          "dtype": "int64",
+          "stype": "ID"
+        },
+        {
+          "name": "id",
+          "dtype": "int64",
+          "stype": "ID"
+        },
+        {
+          "name": "at",
+          "dtype": "timestamp[us]",
+          "stype": "timestamp"
+        }
+      ],
+      "primary_key": [
+        "tenant",
+        "id"
+      ],
+      "time_column": "at"
+    },
+    {
+      "name": "empty",
+      "columns": [],
+      "primary_key": [],
+      "time_column": null
+    }
+  ],
+  "text": "orders\n  tenant: int64, ID (primary key)\n  id: int64, ID (primary key)\n  at: timestamp[us], timestamp (time column)\nempty",
+  "links": [
+    {
+      "source_table": "orders",
+      "source_column": "id",
+      "target_table": "users",
+      "target_column": "id"
+    }
+  ],
+  "link_text": "orders.id -> users.id"
+}

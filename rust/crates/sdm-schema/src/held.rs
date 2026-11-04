@@ -360,17 +360,25 @@ fn read_with_frame_widths(
             });
         }
         tables.push(DescribedTable {
+            calculated_columns: table.calculated_columns.clone(),
             name: table.name,
             source: table.source,
             columns,
             primary_key: table.primary_key,
             time_column: table.time_column,
+            end_time_column: table.end_time_column,
             time_column_inferred: None,
             duplicate_keys: table.duplicate_keys,
         });
     }
+    let description = SourceDescription {
+        inference: held.inference,
+        tables,
+        links,
+    };
+    crate::edit::validate_end_times(&description)?;
     Ok(Read {
-        description: SourceDescription { tables, links },
+        description,
         unfacted,
         missing_dtypes,
         retyped,
@@ -395,10 +403,12 @@ pub fn held(
     retyped: &BTreeMap<ColumnAt, Dtype>,
 ) -> HeldSchema {
     HeldSchema {
+        inference: description.inference.clone(),
         tables: description
             .tables
             .iter()
             .map(|table| HeldTable {
+                calculated_columns: table.calculated_columns.clone(),
                 name: table.name.clone(),
                 source: table.source.clone(),
                 columns: table
@@ -408,6 +418,7 @@ pub fn held(
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
+                end_time_column: table.end_time_column.clone(),
                 duplicate_keys: table.duplicate_keys.clone(),
             })
             .collect(),

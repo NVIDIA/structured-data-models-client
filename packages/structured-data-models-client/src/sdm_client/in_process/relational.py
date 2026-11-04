@@ -32,7 +32,7 @@ from sdm_client.in_process.tables import values
 INSTANCE_TABLE = 'instance_table'
 INSTANCE_ID = 'instance_id'
 
-_CLASSIFIED = ('prediction', 'probabilities')
+_CLASSIFIED = ('prediction', 'probabilities', 'explanation')
 _INFERENCE_OPTIONS = frozenset(
     {'run_mode', 'use_prediction_time', 'inference_config'}
 )
@@ -58,7 +58,7 @@ class Relational:
         'classification': _CLASSIFIED,
         'binary_classification': _CLASSIFIED,
         'multiclass_classification': _CLASSIFIED,
-        'regression': ('prediction', 'quantiles'),
+        'regression': ('prediction', 'quantiles', 'explanation'),
     }
 
     @staticmethod

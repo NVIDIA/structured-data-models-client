@@ -58,11 +58,13 @@ fn int(name: &str) -> DescribedColumn {
 
 fn table(name: &str, columns: Vec<DescribedColumn>, key: Option<&str>) -> DescribedTable {
     DescribedTable {
+        calculated_columns: vec![],
         name: name.into(),
         source: name.into(),
         columns,
         primary_key: key.map(Into::into).into_iter().collect(),
         time_column: None,
+        end_time_column: None,
         time_column_inferred: None,
         duplicate_keys: Some(Scalar::UInt64(0)),
     }
@@ -108,6 +110,7 @@ fn shop(users_key: Option<ExactNumber>, orders_key: Option<ExactNumber>) -> Sour
     let column =
         |kind: Option<ExactNumber>| kind.map_or_else(|| int("user_id"), |k| exact("user_id", k));
     SourceDescription {
+        inference: None,
         tables: vec![
             table(
                 "users",

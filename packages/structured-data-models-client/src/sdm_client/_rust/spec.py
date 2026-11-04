@@ -58,12 +58,20 @@ def held_schema(schema: Schema) -> dict[str, Any]:
             'columns': columns,
             'primary_key': [] if key is None else list(_as_key_tuple(key)),
             'time_column': table.time_column,
+            'end_time_column': getattr(table, 'end_time_column', None),
+            'calculated_columns': [
+                dict(c) for c in getattr(table, '_calculated_columns', ())
+            ],
         }
         repeated = getattr(table, 'duplicate_keys', None)
         if repeated is not None:
             held['duplicate_keys'] = codec.integer('u64', int(repeated))
         tables.append(held)
-    return {'tables': tables, 'links': _links(schema)}
+    return {
+        'tables': tables,
+        'links': _links(schema),
+        'inference': getattr(schema, '_inference', None),
+    }
 
 
 def _links(schema: Schema) -> list[list[dict[str, str]]]:

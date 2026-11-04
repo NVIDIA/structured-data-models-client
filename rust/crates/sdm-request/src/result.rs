@@ -59,7 +59,7 @@ pub fn candidate(value: Value) -> C {
         },
     }
 }
-fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
+pub(crate) fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
     Ok(Some(match value {
         C::Json { value } => {
             match json::read_answer(value.as_bytes())
@@ -158,6 +158,9 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
         batch_request_ids: parts.iter().map(|p| p.request_id.clone()).collect(),
         explanation_part: None,
         candidate_positions: vec![],
+        gradients: crate::gradients::merge_records(
+            parts.iter().map(|p| p.gradient_rows.as_slice()),
+        )?,
         names_rows: true,
         names_step: false,
     };
@@ -237,6 +240,7 @@ mod tests {
             names_rows: true,
             names_step: false,
             candidates,
+            gradient_rows: vec![],
         }
     }
     fn json(s: &str) -> C {
@@ -318,5 +322,131 @@ mod tests {
             Some(&Detail::text("custom"))
         );
         assert_eq!(plan(&[]).unwrap_err().sentence, Sentence::ResultMergeEmpty);
+    }
+}
+
+/// Shared signed attribution policy, invoked only by explicit report requests.
+pub fn feature_importance(
+    input: &sdm_contract::result::FeatureImportanceInput,
+) -> Result<sdm_contract::result::FeatureImportanceOutput, CoreError> {
+    use sdm_contract::result::{FeatureImportanceOutput, FeatureImportanceRow};
+    let invalid = |path: &str| {
+        CoreError::new(
+            Sentence::FeatureImportanceScore,
+            "explanation score must be finite numeric attribution",
+        )
+        .with_field("path", sdm_contract::Detail::text(path))
+    };
+    let mut scores = std::collections::BTreeMap::<(&str, &str), f64>::new();
+    for cell in &input.cells {
+        let value: serde_json::Value =
+            serde_json::from_str(&cell.score).map_err(|_| invalid(&cell.path))?;
+        let value = value
+            .as_f64()
+            .filter(|v| v.is_finite())
+            .ok_or_else(|| invalid(&cell.path))?;
+        let score = scores.entry((&cell.table, &cell.column)).or_default();
+        *score += value;
+        if !score.is_finite() {
+            return Err(invalid(&cell.path));
+        }
+    }
+    // Scale before summing to avoid overflow of the absolute normalization mass.
+    let max = scores.values().map(|v| v.abs()).fold(0.0_f64, f64::max);
+    let mass: f64 = if input.normalize && max > 0.0 {
+        scores.values().map(|v| (v / max).abs()).sum()
+    } else {
+        0.0
+    };
+    Ok(FeatureImportanceOutput {
+        rows: scores
+            .into_iter()
+            .map(|((table, column), score)| FeatureImportanceRow {
+                table: table.into(),
+                column: column.into(),
+                score: if input.normalize && mass > 0.0 {
+                    (score / max) / mass
+                } else {
+                    score
+                },
+            })
+            .collect(),
+    })
+}
+
+#[cfg(test)]
+mod feature_importance_tests {
+    use super::*;
+    use sdm_contract::result::{AttributionCell, FeatureImportanceInput};
+
+    fn cell(column: &str, score: &str) -> AttributionCell {
+        AttributionCell {
+            table: "t".into(),
+            column: column.into(),
+            score: score.into(),
+            path: column.into(),
+        }
+    }
+
+    #[test]
+    fn signed_aggregate_normalization_and_empty() {
+        let input = FeatureImportanceInput {
+            cells: vec![cell("b", "4"), cell("a", "-2"), cell("b", "2")],
+            normalize: true,
+        };
+        let out = feature_importance(&input).unwrap();
+        assert_eq!(out.rows[0].column, "a");
+        assert_eq!(out.rows[0].score, -0.25);
+        assert_eq!(out.rows[1].score, 0.75);
+        assert!(
+            feature_importance(&FeatureImportanceInput {
+                cells: vec![],
+                normalize: true
+            })
+            .unwrap()
+            .rows
+            .is_empty()
+        );
+        let zeros = feature_importance(&FeatureImportanceInput {
+            cells: vec![cell("a", "-0.0")],
+            normalize: true,
+        })
+        .unwrap();
+        assert_eq!(zeros.rows[0].score, 0.0);
+    }
+
+    #[test]
+    fn rejects_invalid_scores_and_overflow() {
+        for value in [
+            "true",
+            "\"2\"",
+            "NaN",
+            "Infinity",
+            "-Infinity",
+            "1e400",
+            "{}",
+        ] {
+            assert!(
+                feature_importance(&FeatureImportanceInput {
+                    cells: vec![cell("bad", value)],
+                    normalize: false
+                })
+                .is_err(),
+                "{value}"
+            );
+        }
+        assert!(
+            feature_importance(&FeatureImportanceInput {
+                cells: vec![cell("a", "1e308"), cell("a", "1e308")],
+                normalize: false
+            })
+            .is_err()
+        );
+        let huge = feature_importance(&FeatureImportanceInput {
+            cells: vec![cell("a", "123456789012345678901234567890")],
+            normalize: false,
+        })
+        .unwrap();
+        assert!(huge.rows[0].score.is_finite());
     }
 }

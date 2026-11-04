@@ -85,7 +85,9 @@ def test_fit_two_scores_holdout_and_idempotent_close(client):
     client, endpoint = client
     context = frame()
     opening = request(context, pd.DataFrame({'id': [4], 'x': [4.5]}))
+    assert opening.sanitization_report.status == 'not_applicable'
     fitted = client.fit(opening, model=KumoTabular(), holdout=[2])
+    assert fitted.sanitization_report == opening.sanitization_report
     assert fitted._tabular_session is not None
     uploaded = endpoint.created[0]
     assert 'predict' not in uploaded

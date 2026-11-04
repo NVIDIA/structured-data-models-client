@@ -145,6 +145,7 @@ pub(crate) async fn run(
             constraints,
             preview,
             source_types: types,
+            ..
         } = crate::discover::table(&asker, table, caller_named, None).await?;
         source_types.push(types);
         primary_constraints.push(
@@ -309,6 +310,9 @@ pub(crate) async fn run(
         },
         duplicates,
     )?;
+    if let Some(state) = &mut description.inference {
+        state.key_declared.extend(spec.primary_keys.keys().cloned());
+    }
     for warning in warnings {
         asker.warn(warning);
     }
@@ -832,6 +836,28 @@ async fn read_as_it_stands(
     asker: &Asker,
     held: &HeldSchema,
 ) -> Result<SourceDescription, CoreError> {
+    let mut projected = held.clone();
+    for table in &mut projected.tables {
+        let original_source = table.source.clone();
+        table.source = crate::sql_column::project(
+            &table.source,
+            table
+                .columns
+                .iter()
+                .filter(|c| !table.calculated_columns.iter().any(|x| x.name == c.name))
+                .map(|c| c.name.clone()),
+            &table.calculated_columns,
+        )?;
+        // Preserve existing numeric admission evidence while resolving the source.
+        for column in &mut table.columns {
+            if let Some(facts) = &mut column.source
+                && facts.relation == original_source
+            {
+                facts.relation = table.source.clone();
+            }
+        }
+    }
+    let held = &projected;
     let unsettled = asker
         .data()
         .is_some_and(crate::compose::DataAccess::unsettled);
@@ -882,6 +908,22 @@ async fn read_as_it_stands(
             columns: Some(columns),
         };
         let read = crate::discover::table(asker, &named, true, None).await?;
+        for table in &tables {
+            if table
+                .calculated_columns
+                .iter()
+                .any(|c| read.physical_names.contains(&c.name))
+            {
+                return Err(CoreError::new(
+                    Sentence::SchemaRefinement,
+                    "calculated column conflicts with a source-owned column",
+                )
+                .with_field(
+                    "reason",
+                    Detail::text("calculated column conflicts with a source-owned column"),
+                ));
+            }
+        }
         // Which columns the source holds is its catalog's to say, before
         // its rows are read.
         for table in &tables {

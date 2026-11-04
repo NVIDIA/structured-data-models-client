@@ -947,8 +947,7 @@ case "$*" in
   *version_info*) echo cp312 ;;
   *numpy*) cat "$STATE/numpy" ;;
   *'"pandas"'*) [ -f "$STATE/pandas" ] && cat "$STATE/pandas" ;;
-  -\\ *)
-    cat > /dev/null
+  scripts/check_wheel_provenance.py\\ *)
     echo "python $*" >> "$STATE/calls"
     [ "$FAULT" = swapped ] && { echo 'no longer the candidate wheel' >&2; exit 1; }
     exit 0 ;;
@@ -972,7 +971,7 @@ esac
 
 def _run_install(
     tmp_path: Path, fault: str, pandas: str | None = '1.5.3'
-) -> tuple[subprocess.CompletedProcess[str], list[str], str]:
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     state = tmp_path / 'state'
     state.mkdir()
     (state / 'numpy').write_text('1.23.5\n')
@@ -988,20 +987,13 @@ def _run_install(
         f'PATH="{runtime / "bin"}:$PATH"\n'
     )
     work = tmp_path / 'work'
-    for directory, name in (
-        ('dist', X86),
-        ('dist', 'structured_data_models_api-1.0.0-py3-none-any.whl'),
-        (
-            'engine',
-            'structured_data_models_relational_engine-1.0.0-cp312-cp312-manylinux_2_28_x86_64.whl',
-        ),
-        (
-            'engine',
-            'structured_data_models_relational_engine-1.0.0-cp311-cp311-manylinux_2_28_x86_64.whl',
-        ),
+    for name in (
+        X86,
+        'structured_data_models_api-1.0.0-py3-none-any.whl',
+        'structured_data_models_connectors-1.0.0-py3-none-any.whl',
     ):
-        (work / directory).mkdir(parents=True, exist_ok=True)
-        (work / directory / name).write_bytes(b'')
+        (work / 'dist').mkdir(parents=True, exist_ok=True)
+        (work / 'dist' / name).write_bytes(b'')
     run = str(_install_step()['run']).replace('/tmp/runtime', str(runtime))
     done = subprocess.run(
         ['bash', '-e', '-c', run],
@@ -1010,6 +1002,7 @@ def _run_install(
             'PATH': os.environ['PATH'],
             'STATE': str(state),
             'FAULT': fault,
+            'GITHUB_WORKSPACE': str(work),
         },
         capture_output=True,
         text=True,
@@ -1025,10 +1018,7 @@ def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
     done, calls = _run_install(tmp_path, 'none')
     assert done.returncode == 0, done.stderr
     candidate = ' '.join(
-        [
-            'dist/structured_data_models_api-1.0.0-py3-none-any.whl',
-            f'dist/{X86}',
-        ]
+        str(path) for path in sorted((tmp_path / 'work' / 'dist').glob('*.whl'))
     )
     assert calls == [
         # Install the candidate wheels before resolving connector extras.
@@ -1037,7 +1027,7 @@ def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
         'structured-data-models-client[relational,databricks,databricks-serving] '
         'numpy==1.23.5',
         'pip check',
-        f'python - {candidate}',
+        f'python scripts/check_wheel_provenance.py --installed {candidate}',
         'pip freeze --all',
     ]
     assert "pandas: the runtime's 1.5.3, after the install 2.3.3" in done.stdout

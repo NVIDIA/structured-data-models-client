@@ -64,7 +64,7 @@ public final class ClientOptions {
       return this;
     }
 
-    /** How many times a transient failure (429, 502, 503, 504, a dropped connection) is retried. */
+    /** How many times a transient failure (408, 429, 502, 503, 504, a dropped connection) is retried. */
     public Builder maxRetries(int maxRetries) {
       this.maxRetries = maxRetries;
       return this;

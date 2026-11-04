@@ -92,8 +92,10 @@ fn shop() -> SourceDescription {
         zone: None,
     };
     SourceDescription {
+        inference: None,
         tables: vec![
             DescribedTable {
+                calculated_columns: vec![],
                 name: "orders".into(),
                 source: "orders".into(),
                 columns: vec![
@@ -110,10 +112,12 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
+                end_time_column: None,
                 time_column_inferred: None,
                 duplicate_keys: None,
             },
             DescribedTable {
+                calculated_columns: vec![],
                 name: "users".into(),
                 source: "users".into(),
                 columns: vec![
@@ -128,6 +132,7 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["user_id".into()],
                 time_column: None,
+                end_time_column: None,
                 time_column_inferred: None,
                 duplicate_keys: None,
             },
@@ -670,6 +675,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         false,
     ));
     parent.tables.push(DescribedTable {
+        calculated_columns: vec![],
         name: "countries".into(),
         source: "countries".into(),
         columns: vec![column(
@@ -681,6 +687,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         )],
         primary_key: vec!["code".into()],
         time_column: None,
+        end_time_column: None,
         time_column_inferred: None,
         duplicate_keys: None,
     });

@@ -57,7 +57,9 @@
 //! P1B-3), and the requests and policies it needs of its provider before
 //! anything is fetched.
 
+pub(crate) mod examples;
 pub(crate) mod frames;
+pub(crate) mod label_query;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -377,7 +379,7 @@ fn query_schema(description: &SourceDescription) -> QuerySchema {
                     _ => None,
                 },
                 time_column: t.time_column.clone(),
-                end_time_column: None,
+                end_time_column: t.end_time_column.clone(),
             })
             .collect(),
         links: description
@@ -902,6 +904,52 @@ pub(crate) fn aliased<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Arra
             "an answer lacks a column it asked for",
         )
     })
+}
+
+/// Hide future end dates only in owned model-input columns, per sampled copy.
+pub(crate) fn mask_future_end_times(
+    graph: &Graph,
+    walked: &mut crate::subgraph::Walked,
+    anchors: &[i64],
+) -> Result<(), CoreError> {
+    for table in &mut walked.tables {
+        let Some(end) = graph
+            .table(&table.name)
+            .and_then(|t| t.end_time_column.as_ref())
+        else {
+            continue;
+        };
+        let Some((_, sdm_request::payload::SampledColumn::Arrow(values))) =
+            table.columns.iter_mut().find(|(name, _)| name == end)
+        else {
+            continue;
+        };
+        let times = times_ns(values, end)?;
+        let indices = times
+            .iter()
+            .enumerate()
+            .map(|(row, value)| {
+                let batch = table
+                    .batch
+                    .get(row)
+                    .ok_or_else(|| internal("end-time rows misaligned"))?;
+                let anchor = anchors
+                    .get(*batch)
+                    .ok_or_else(|| internal("end-time anchor absent"))?;
+                Ok::<_, CoreError>(if value.is_some_and(|value| value > *anchor) {
+                    None
+                } else {
+                    Some(row as u64)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if indices.iter().any(Option::is_none) {
+            *values =
+                arrow_select::take::take(values, &arrow_array::UInt64Array::from(indices), None)
+                    .map_err(|_| internal("end-time mask failed"))?;
+        }
+    }
+    Ok(())
 }
 
 /// A time column's values in nanoseconds, a zone-less timestamp's only.
@@ -2769,6 +2817,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                     });
                 }
                 Ok(OperationResult::Materialize(Materialized {
+                    examples: None,
                     state: RequestState {
                         version: REQUEST_STATE_VERSION,
                         payload,
@@ -2875,6 +2924,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     }
     let first = attached.remove(0);
     Ok(OperationResult::Materialize(Materialized {
+        examples: None,
         state: RequestState {
             version: REQUEST_STATE_VERSION,
             payload: first.payload,
@@ -3446,6 +3496,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     if let Some(time) = &entity.time_column {
         entity_columns.insert(time.clone());
     }
+    if let Some(end) = &entity.end_time_column {
+        entity_columns.insert(end.clone());
+    }
     asked.target.entity_columns(&mut entity_columns);
     for shape in &asked.choosing {
         shape.entity_columns(&mut entity_columns);
@@ -3543,12 +3596,24 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
     // not cast is the caller's error, never the core's (E41(l)).
     let indices = keys::cast(&indices, entity_key.data_type())?;
+    let entity_end = entity
+        .end_time_column
+        .as_ref()
+        .map(|end| {
+            let values = times_ns(named(&sampled, end)?, end)?;
+            Ok::<_, CoreError>(kept.iter().map(|&i| values[i]).collect::<Vec<_>>())
+        })
+        .transpose()?;
+    let validity = sample::Validity {
+        start: entity_time.as_deref(),
+        end: entity_end.as_deref(),
+    };
     let mut rng = default_rng(&entropy);
     let examples = match &span {
-        Some((start, end)) => sample::temporal_examples(
+        Some((start, end)) => sample::temporal_examples_with_validity(
             &mut rng,
             kept.len(),
-            entity_time.as_deref(),
+            validity,
             context_anchor,
             timeframe(*start, *end, "anchor_time")?,
             earliest.unwrap_or(TIME_MAX),
@@ -3561,7 +3626,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             sample::MISSING_ANCHOR,
         ),
         None => {
-            sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), context_anchor)
+            sample::static_examples_with_validity(&mut rng, kept.len(), validity, context_anchor)?
         }
     };
 
@@ -3598,85 +3663,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     };
     let fetched = labelling.read(&labelled_fetches).await?;
 
-    // The examples the entity filter and the assumption choose: each
-    // condition's truth over the examples, and-ed (`execute`'s `mask`).
-    let mut chosen: Option<Vec<bool>> = None;
-    for shape in &asked.choosing {
-        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
-        chosen = Some(match chosen {
-            None => holds,
-            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
-        });
-    }
-    let mut labelled = if let Shape::Links(window) = &asked.target {
-        let rows = fetched
-            .get(&window.table)
-            .ok_or_else(|| internal("link target rows were not read"))?;
-        let column = window
-            .column
-            .as_ref()
-            .ok_or_else(|| internal("link target has no column"))?;
-        let values = named(&rows.rows, column)?;
-        let kept = window
-            .filter
-            .as_ref()
-            .map(|filter| labels::truth(&row_condition(filter, &rows.rows)?).map(|v| v.values))
-            .transpose()?;
-        let starts = shifted(&examples.anchors, window.start, "anchor_time")?;
-        let ends = shifted(&examples.anchors, window.end, "anchor_time")?;
-        let linked = sdm_engine::frame_labels::distinct_identifiers(
-            examples.index.len(),
-            &rows.batch,
-            values,
-            &rows.times,
-            labels::Bounds {
-                starts: Some(&starts),
-                ends: &ends,
-            },
-            kept.as_deref(),
-        )?;
-        PreparedLabelled {
-            mask: linked.mask,
-            labels: PreparedLabels::Links(linked.labels),
-        }
-    } else {
-        let target = labelling.build(&asked.target, &fetched, true)?;
-        let scalar = if matches!(asked.task, Task::Multiclass) {
-            labels::label_classes(&target)?
-        } else {
-            labels::label(&target)?
-        };
-        PreparedLabelled {
-            mask: scalar.mask,
-            labels: PreparedLabels::Scalar(scalar.labels),
-        }
-    };
-    drop(fetched);
-    null_compared(&asked.target, &labelled.mask)?;
-    // The examples the entity filter or the assumption leaves out keep no
-    // label (`out[mask[_mask]]`, `mask & _mask`).
-    if let Some(chosen) = &chosen {
-        let keep: Vec<bool> = (0..labelled.mask.len())
-            .filter(|&row| labelled.mask[row])
-            .map(|row| chosen[row])
-            .collect();
-        for (row, holds) in chosen.iter().enumerate() {
-            labelled.mask[row] &= *holds;
-        }
-        labelled.labels = labelled.labels.kept(&keep);
-    }
-    // An example of an entity whose key is NaN is left out of the context
-    // once labelled, as the reference leaves it out (T2.12).
-    if !nan_key.is_empty() {
-        let keep: Vec<bool> = (0..labelled.mask.len())
-            .filter(|&row| labelled.mask[row])
-            .map(|row| !nan_key.contains(&examples.index[row]))
-            .collect();
-        for row in 0..labelled.mask.len() {
-            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
-        }
-        labelled.labels = labelled.labels.kept(&keep);
-    }
+    let labelled = label_examples(&asked, &labelling, fetched, &examples, &nan_key)?;
     // The examples with a label, in order, the first a context holds.
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
         .filter(|&row| labelled.mask[row])
@@ -3820,14 +3807,23 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         };
         return labels_result(asker, &train_keys, &anchors, scalar).map(Gathered::Done);
     }
-    // How many entities one call scores: the endpoint's 10,000, or fewer
+    // How many entities one call scores: 200 for temporal links, otherwise
+    // the endpoint's 10,000, or fewer
     // where the caller asked (`rows_per_call`); a request of more is
     // gathered as several calls, each with a context of its own, at most as
     // many as the host's limit, 100 where it names none, refused once the
     // context is gathered, as the client refuses it after its engine's task
     // table (`_refuse_more_entities_than_fit_in_memory`, `main`'s 1fc5a686).
-    let per_call = usize::try_from(options::rows_one_call_scores(rows_per_call))
-        .map_err(|_| internal("a call's rows past usize"))?;
+    let batch_task = if matches!(asked.target, Shape::Links(_)) {
+        options::BatchTask::TemporalLink
+    } else {
+        options::BatchTask::Ordinary
+    };
+    let per_call = usize::try_from(options::rows_one_task_call_scores(
+        rows_per_call,
+        batch_task,
+    ))
+    .map_err(|_| internal("a call's rows past usize"))?;
     let num_test = indices.len();
     let calls = num_test.div_ceil(per_call);
     let most = most_calls.unwrap_or(MOST_CALLS);
@@ -4081,19 +4077,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .map_err(|_| internal("the entity rows do not make one batch"))?;
 
         // The neighbors of each example's entity, hop by hop.
-        let walked = if let Some(frames) = &frames {
-            frames.walk(
-                &graph,
-                frames::SeedRows {
-                    entity,
-                    keys: &all_keys,
-                    anchors: &anchors,
-                },
-                &walk_hops,
-                &excluded,
-                (!unseeded).then(|| seed.to_u128()).flatten(),
-            )?
-        } else {
+        let walked = walk_examples(
             crate::subgraph::Walk {
                 link_entity: match &asked.target {
                     Shape::Links(window) => graph.edges.iter().find_map(|edge| {
@@ -4111,10 +4095,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 neighbors: &walk_hops,
                 excluded: &excluded,
                 lookback: &lookback,
-            }
-            .run(entity_rows)
-            .await?
-        };
+            },
+            frames.as_ref(),
+            &all_keys,
+            entity_rows,
+            (!unseeded).then(|| seed.to_u128()).flatten(),
+        )
+        .await?;
         keep_stored_times(&mut memo, &read_times);
         // The subgraph carries at most as many tables as the endpoint
         // reads, refused as the reference's engine refuses it
@@ -5206,6 +5193,125 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
         DataType::Float64 => Scalar::Float64(array.as_primitive::<Float64Type>().value(row)),
         _ => Scalar::Null,
     }
+}
+
+/// Apply the same target/filter rules to prediction context or standalone labels.
+fn label_examples(
+    asked: &Asked,
+    labelling: &Labelling<'_>,
+    fetched: BTreeMap<String, Fetched>,
+    examples: &sample::Examples,
+    nan_key: &BTreeSet<usize>,
+) -> Result<PreparedLabelled, CoreError> {
+    // The examples the entity filter and the assumption choose: each
+    // condition's truth over the examples, and-ed (`execute`'s `mask`).
+    let mut chosen: Option<Vec<bool>> = None;
+    for shape in &asked.choosing {
+        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
+        chosen = Some(match chosen {
+            None => holds,
+            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
+        });
+    }
+    let mut labelled = if let Shape::Links(window) = &asked.target {
+        let rows = fetched
+            .get(&window.table)
+            .ok_or_else(|| internal("link target rows were not read"))?;
+        let column = window
+            .column
+            .as_ref()
+            .ok_or_else(|| internal("link target has no column"))?;
+        let values = named(&rows.rows, column)?;
+        let kept = window
+            .filter
+            .as_ref()
+            .map(|filter| labels::truth(&row_condition(filter, &rows.rows)?).map(|v| v.values))
+            .transpose()?;
+        let starts = shifted(&examples.anchors, window.start, "anchor_time")?;
+        let ends = shifted(&examples.anchors, window.end, "anchor_time")?;
+        let linked = sdm_engine::frame_labels::distinct_identifiers(
+            examples.index.len(),
+            &rows.batch,
+            values,
+            &rows.times,
+            labels::Bounds {
+                starts: Some(&starts),
+                ends: &ends,
+            },
+            kept.as_deref(),
+        )?;
+        PreparedLabelled {
+            mask: linked.mask,
+            labels: PreparedLabels::Links(linked.labels),
+        }
+    } else {
+        let target = labelling.build(&asked.target, &fetched, true)?;
+        let scalar = if matches!(asked.task, Task::Multiclass) {
+            labels::label_classes(&target)?
+        } else {
+            labels::label(&target)?
+        };
+        PreparedLabelled {
+            mask: scalar.mask,
+            labels: PreparedLabels::Scalar(scalar.labels),
+        }
+    };
+    drop(fetched);
+    null_compared(&asked.target, &labelled.mask)?;
+    // The examples the entity filter or the assumption leaves out keep no
+    // label (`out[mask[_mask]]`, `mask & _mask`).
+    if let Some(chosen) = &chosen {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| chosen[row])
+            .collect();
+        for (row, holds) in chosen.iter().enumerate() {
+            labelled.mask[row] &= *holds;
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
+    // An example of an entity whose key is NaN is left out of the context
+    // once labelled, as the reference leaves it out (T2.12).
+    if !nan_key.is_empty() {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| !nan_key.contains(&examples.index[row]))
+            .collect();
+        for row in 0..labelled.mask.len() {
+            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
+    Ok(labelled)
+}
+
+/// Shared sampling boundary for PQL-derived and caller-supplied examples.
+async fn walk_examples(
+    walk: crate::subgraph::Walk<'_>,
+    frames: Option<&frames::FrameGraph>,
+    keys: &ArrayRef,
+    entity_rows: RecordBatch,
+    seed: Option<u128>,
+) -> Result<crate::subgraph::Walked, CoreError> {
+    let graph = walk.graph;
+    let anchors = walk.anchors;
+    let mut sampled = if let Some(frames) = frames {
+        frames.walk(
+            graph,
+            frames::SeedRows {
+                entity: walk.entity,
+                keys,
+                anchors,
+            },
+            walk.neighbors,
+            walk.excluded,
+            seed,
+        )?
+    } else {
+        walk.run(entity_rows).await?
+    };
+    mask_future_end_times(graph, &mut sampled, anchors)?;
+    Ok(sampled)
 }
 
 #[cfg(test)]

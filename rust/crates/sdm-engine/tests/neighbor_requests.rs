@@ -54,6 +54,7 @@ fn table(name: &str) -> Table {
         ],
         primary_key: Some("eid".into()),
         time_column: Some("ts".into()),
+        end_time_column: None,
     }
 }
 

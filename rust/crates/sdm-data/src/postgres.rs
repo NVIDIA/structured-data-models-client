@@ -119,6 +119,23 @@ const MOST_PARTS: usize = 2;
 pub(crate) struct Postgres;
 
 impl SqlDialect for Postgres {
+    fn derived(&self, _request: &DataRequest, relation: &Relation, source: &str) -> Option<String> {
+        let projected = self.projected(relation, source);
+        if relation.found
+            || matches!(
+                _request,
+                DataRequest::Lookup { .. } | DataRequest::Neighbors { .. }
+            )
+        {
+            Some(projected)
+        } else {
+            Some(format!(
+                "{projected} AS {}",
+                self.identifier("__sdm_projection")
+            ))
+        }
+    }
+
     fn name(&self) -> &'static str {
         NAME
     }
@@ -129,7 +146,7 @@ impl SqlDialect for Postgres {
             compares_stored_times: false,
             opaque_vendor: None,
             samples_by_key_dtype: false,
-            derived_relations: false,
+            derived_relations: true,
             neighbor_lookback: false,
             keys_optional: false,
             key_enforcement: false,
@@ -242,6 +259,26 @@ impl SqlDialect for Postgres {
             ));
         }
         text
+    }
+
+    fn order_term(&self, term: &TieTerm, alias: &str, _windowed: Option<&str>) -> String {
+        let column = format!("{alias}{}", self.identifier(&term.column));
+        let value = if term.as_timestamp {
+            self.as_time(&column)
+        } else if term.string_like {
+            format!("CAST({column} AS text)")
+        } else {
+            column
+        };
+        format!(
+            "{value} {} {}",
+            if term.descending { "DESC" } else { "ASC" },
+            if term.nulls_last {
+                "NULLS LAST"
+            } else {
+                "NULLS FIRST"
+            }
+        )
     }
 
     /// The reference's `_by_fkey` on Postgres with a limit per seed:

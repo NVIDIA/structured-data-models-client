@@ -104,6 +104,40 @@ class PredictiveQuery:
         )
         self._relational_materializer = RelationalMaterializer(self.schema)
 
+    def labels(
+        self,
+        size: int,
+        *,
+        anchor_time: pd.Timestamp | str | None = None,
+        random_seed: int | None = 42,
+        max_iterations: int = 10,
+    ) -> pd.DataFrame:
+        """Compute historical ground truth without calling a model.
+
+        Returns ENTITY, ANCHOR_TIMESTAMP and TARGET columns, with at most
+        ``size`` rows. Rust evaluates the query using at most
+        ``size * max_iterations`` candidate examples. Link targets contain
+        lists of identifiers. Forecasts select one entity and return one
+        scalar target per successive anchor, capped by ``size``.
+
+        ``anchor_time='entity'`` uses each entity's timestamp for static
+        targets. A missing anchor uses historical bounds and the full
+        forecast horizon. No eligible entity is an error; eligible entities
+        with no qualifying labels produce a typed empty DataFrame.
+        Decimal categories use strings if numeric conversion would merge
+        distinct classes; zero-row output cannot observe those collisions.
+        """
+        from sdm_client._rust.labels import extract
+
+        return extract(
+            self._relational_materializer,
+            self.text,
+            size,
+            anchor_time,
+            random_seed,
+            max_iterations,
+        )
+
     def materialize(
         self,
         *,
@@ -495,6 +529,7 @@ class PredictiveQuery:
                 entity_table=whole.entity_table,
                 requested_inference=whole.requested_inference,
             )
+            part._sanitization_report = whole.sanitization_report
             part._core = CoreRequest(version=version)
             gathered.append((part, query, position, named))
         carrier = copy.copy(gathered[0][0])
@@ -552,6 +587,7 @@ class PredictiveQuery:
                 entity_table=whole.entity_table,
                 requested_inference=whole.requested_inference,
             )
+            part._sanitization_report = whole.sanitization_report
             part._core = CoreRequest(version=version)
             gathered.append((part, query, step))
         carrier = copy.copy(gathered[0][0])

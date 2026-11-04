@@ -2127,6 +2127,7 @@ fn predict(
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(RequestState {
                 version: state.version,

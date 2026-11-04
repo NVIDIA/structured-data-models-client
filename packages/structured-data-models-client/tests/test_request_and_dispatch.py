@@ -221,10 +221,10 @@ def test_an_output_field_the_model_cannot_produce_is_refused_by_name():
         client(endpoint).predict(
             simple_request(),
             model=KumoTabular(),
-            outputs=('prediction', 'explanation'),
+            outputs=('prediction', 'embeddings'),
         )
     message = str(error.value)
-    assert 'explanation' in message
+    assert 'embeddings' in message
     assert 'probabilities' in message
     assert endpoint.calls == []
 

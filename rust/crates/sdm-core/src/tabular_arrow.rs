@@ -295,8 +295,13 @@ fn bound(
 ) -> Result<Prepared, CoreError> {
     let description = prepare(asker, &input.request, context, scoring)?;
     let bound = direct::bind(DirectCallFacts {
+        query: None,
         model: input.model.clone(),
-        outputs: input.outputs.clone(),
+        outputs: crate::pql::explanation_outputs(
+            input.request.query.as_deref().unwrap_or(""),
+            &input.request.task,
+            input.outputs.clone(),
+        ),
         kind: input.request.task.clone(),
         anchored: input
             .request
@@ -562,20 +567,37 @@ async fn fit(
 }
 async fn score(
     asker: &Asker,
-    input: ArrowScore,
+    mut input: ArrowScore,
     scoring: ArrowData,
 ) -> Result<OperationResult, CoreError> {
     use tabular::session as policy;
+    policy::validate_state(&input.session.state)?;
+    let query = input.request.query.as_deref().unwrap_or("");
+    if crate::pql::explained_query(query).is_some() {
+        let mut facts = input.session.state.bound.facts.clone();
+        facts.outputs = crate::pql::explanation_outputs(
+            query,
+            &input.request.task,
+            Some(input.session.state.bound.outputs.clone()),
+        );
+        input.session.state.bound = direct::bind(facts)?;
+    }
     let state = &input.session.state;
-    policy::validate_state(state)?;
     if state.closed {
         return Err(invalid("session is closed"));
     }
     if input.request.target != state.columns.target || input.request.task != state.pinned_kind {
         return Err(invalid("request does not match fitted target and task"));
     }
-    let asked = question(&input.request);
-    if policy::check_question(state.question.as_ref(), asked.as_ref()).is_some() {
+    let mut asked = question(&input.request);
+    let mut pinned = state.question.clone();
+    for question in [&mut asked, &mut pinned].into_iter().flatten() {
+        question.query = question
+            .query
+            .as_ref()
+            .map(|q| crate::pql::canonical_query(q));
+    }
+    if policy::check_question(pinned.as_ref(), asked.as_ref()).is_some() {
         return Err(invalid(
             "request question or context does not match fitted session",
         ));

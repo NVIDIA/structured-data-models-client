@@ -34,10 +34,12 @@ Nothing here contacts a model. Inference reads your frames locally.
 from __future__ import annotations
 
 import functools
+import io
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
@@ -45,6 +47,14 @@ import pandas as pd
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
+from sdm_client.inference import InferenceConfig
+from sdm_client.reports import (
+    ColumnMetadata,
+    LinkMetadata,
+    LinkReport,
+    MetadataReport,
+    TableMetadata,
+)
 from sdm_client.wire import (
     UNTYPED,
     infer_tfm_dtype,
@@ -55,6 +65,8 @@ if TYPE_CHECKING:
     from sdm_connectors import Source
 
     from sdm_client._rust.results import SourceFacts
+    from sdm_client.relational_task import RelationalTask
+    from sdm_client.request import Request
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -327,7 +339,30 @@ class _TableShape:
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None
     time_column: str | None
+    end_time_column: str | None
     duplicate_keys: int | None
+
+    def metadata_report(self) -> TableMetadata:
+        """Snapshot existing metadata without reading table rows."""
+        key = self.primary_key
+        return TableMetadata(
+            self.name,
+            tuple(
+                ColumnMetadata(c.name, c.dtype, c.stype)
+                for c in self.columns.values()
+            ),
+            ()
+            if key is None
+            else (key,)
+            if isinstance(key, str)
+            else tuple(key),
+            self.time_column,
+            getattr(self, 'end_time_column', None),
+        )
+
+    def print_metadata(self) -> None:
+        """Print existing table metadata locally."""
+        self.metadata_report().print()
 
     def _own_columns(self) -> None:
         r"""Point every column at this table, and take a copy of any that is
@@ -378,6 +413,10 @@ class _TableShape:
             and _as_key_tuple(self.primary_key)
             == _as_key_tuple(other.primary_key)
             and self.time_column == other.time_column
+            and getattr(self, 'end_time_column', None)
+            == getattr(other, 'end_time_column', None)
+            and getattr(self, '_calculated_columns', ())
+            == getattr(other, '_calculated_columns', ())
             and getattr(self, 'source_name', None)
             == getattr(other, 'source_name', None)
         )
@@ -402,12 +441,15 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key in ('primary_key', 'time_column'):
+        if key in ('primary_key', 'time_column', 'end_time_column'):
             from sdm_client._rust import edits
 
             if edits.table(self, key, value):
                 return
-        if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
+        if (
+            key in ('primary_key', 'time_column', 'end_time_column')
+            and 'columns' in self.__dict__
+        ):
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
             # `__post_init__` (which runs after the fields are assigned), so
@@ -686,6 +728,7 @@ class Table(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used.
     #: Inference tolerates a few, deliberately; this is what it tolerated.
     #: Not an init argument: the generated ``__init__`` assigns fields in
@@ -745,6 +788,7 @@ class SourceTable(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used, as
     #: :meth:`Schema.from_source` counted them in the source. Zero for a key
     #: the source enforces, and for a table with no key. ``None`` where
@@ -826,6 +870,13 @@ class Relationship:
         )
 
 
+class RelationshipOrigin(NamedTuple):
+    """An existing relationship and its engine-recorded origin."""
+
+    relationship: Relationship
+    origin: str
+
+
 class Schema:
     r"""The tables a request is about.
 
@@ -893,12 +944,164 @@ class Schema:
         for table in self._tables.values():
             object.__setattr__(table, '_core_origin', origin)
             object.__setattr__(table, '_schema', self)
+        # Fresh declarations are distinguishable from older records whose
+        # inference history was never recorded. Missing choices stay inferable.
+        self._inference: dict[str, Any] | None = {
+            'unknown_tables': [],
+            'key_declared': [
+                name
+                for name, table in self._tables.items()
+                if table.primary_key
+            ],
+            'time_declared': [
+                name
+                for name, table in self._tables.items()
+                if table.time_column is not None
+            ],
+            'times': {},
+            'links': [],
+        }
         object.__setattr__(self, 'relationships', _Links([], self))
         self.relationships = relationships
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
         self._conversion_notes: tuple[str, ...] = ()
+
+    def materialize_examples(
+        self,
+        task: RelationalTask,
+        context: Any,
+        predict: Any,
+        *,
+        num_neighbors: Sequence[int] | None = None,
+        rows_per_call: int | None = None,
+        random_seed: int = 42,
+        inference: Mapping[str, Any] | InferenceConfig | None = None,
+    ) -> Request:
+        """Gather a Relational request from supplied labels and entity IDs.
+
+        Use RelationalTask for task meaning and DataFrame/Arrow example tables.
+        Context has ENTITY, TARGET and optional ANCHOR_TIMESTAMP; predictions
+        omit TARGET. Rust validates and snapshots every input before returning.
+        """
+        from sdm_client._rust.examples import materialize
+
+        return materialize(
+            self,
+            task,
+            context,
+            predict,
+            num_neighbors=num_neighbors,
+            rows_per_call=rows_per_call,
+            random_seed=random_seed,
+            inference=inference,
+        )
+
+    def with_source(self, source: Source) -> Schema:
+        """Return this schema using a replacement caller-owned database source.
+
+        Backend, namespace, source kind and semantic-model settings must match.
+        Rust checks the replacement tables and column types without reinference
+        or a full key-uniqueness scan. Neither connection is closed or changed.
+        Existing queries and requests retain their original source.
+        """
+        from sdm_client._rust.rebind import rebind
+
+        return rebind(self, source)
+
+    def with_sql_column(self, table: str, name: str, expression: str) -> Schema:
+        """Return a schema with a provider-dialect SQL column over physical source columns.
+
+        The source evaluates caller-supplied SQL under its existing credentials.
+        Existing columns cannot be overwritten. No warehouse table is modified.
+        In-memory inputs should calculate their columns before schema admission.
+        """
+        from sdm_client._rust.sql_column import add
+
+        return add(self, table, name, expression)
+
+    def infer_metadata(self) -> Schema:
+        """Return a schema with missing, non-disabled key/time choices inferred."""
+        from sdm_client._rust.refine import infer
+
+        return infer(self, False)
+
+    def infer_links(self) -> Schema:
+        """Return a schema with unambiguous missing relationships inferred."""
+        from sdm_client._rust.refine import infer
+
+        return infer(self, True)
+
+    def without_table(self, name: str) -> Schema:
+        """Return a schema without a table and all its incident relationships."""
+        from sdm_client._rust.refine import changed
+        from sdm_client.errors import StructuredDataError
+
+        if not isinstance(name, str):
+            raise StructuredDataError(
+                'table name must be a string', code='INVALID_REQUEST'
+            )
+        return changed(self, {'edit': 'remove_table', 'table': name})
+
+    def with_relationship(self, relationship: Relationship) -> Schema:
+        """Add a relationship atomically; identical additions are idempotent."""
+        from sdm_client._rust.refine import link_edit
+
+        return link_edit(self, relationship, False)
+
+    def without_relationship(self, relationship: Relationship) -> Schema:
+        """Remove an existing relationship atomically."""
+        from sdm_client._rust.refine import link_edit
+
+        return link_edit(self, relationship, True)
+
+    @property
+    def link_origins(self) -> tuple[RelationshipOrigin, ...]:
+        """Ordered engine provenance; historical records are explicitly unknown."""
+        state = getattr(self, '_inference', None) or {}
+        origins = {}
+        for record in state.get('links', ()):
+            foreign, primary = record['link']
+            link = Relationship(
+                foreign['table'],
+                foreign['column'],
+                primary['table'],
+                primary['column'],
+            )
+            origins[link] = record['origin']
+        return tuple(
+            RelationshipOrigin(link, origins.get(link, 'unknown'))
+            for link in self.relationships
+        )
+
+    def to_mermaid(self, show_columns: bool = True) -> str:
+        """Return an offline schema diagram from metadata, without reading rows."""
+        from sdm_client._visualization import mermaid
+
+        return mermaid(self, show_columns)
+
+    def to_html(self, show_columns: bool = True) -> str:
+        """Return self-contained offline HTML with the bundled Mermaid renderer."""
+        from sdm_client._visualization import document
+
+        return document(self.to_mermaid(show_columns))
+
+    def visualize(
+        self,
+        path: Path | str | io.BytesIO | None = None,
+        show_columns: bool = True,
+        height: int = 540,
+    ) -> None:
+        """Display in a notebook or export .mmd/.html/.png/.svg.
+
+        HTML and Mermaid stay offline. Explicit PNG/SVG and BytesIO exports
+        send schema metadata (never rows) to https://mermaid.ink.
+        BytesIO receives PNG and stays open. Other environments print Mermaid.
+        """
+        from sdm_client._visualization import visualize
+
+        visualize(self, path, show_columns, height)
 
     @property
     def source(self) -> Source | None:
@@ -1006,6 +1209,7 @@ class Schema:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             self.relationships = list(state.get('relationships') or ())
+        object.__setattr__(self, '_inference', state.get('_inference'))
 
     def _settle(self, links: Sequence[Relationship]) -> list[Relationship]:
         r"""The relationships as this schema will hold them, having said so.
@@ -1062,6 +1266,9 @@ class Schema:
             object.__setattr__(
                 copied, 'relationships', _Links(self.relationships, copied)
             )
+            import copy
+
+            copied._inference = copy.deepcopy(getattr(self, '_inference', None))
             copied._engine_tables = self._engine_tables
             copied._conversion_notes = self._conversion_notes
             return copied
@@ -1070,6 +1277,9 @@ class Schema:
             list(self.relationships),
             source=self._source,
         )
+        import copy
+
+        copied._inference = copy.deepcopy(getattr(self, '_inference', None))
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
@@ -1125,6 +1335,24 @@ class Schema:
             time_columns=time_columns,
             relationships=relationships,
         )
+
+    @classmethod
+    def from_relbench(
+        cls,
+        name: str,
+        *,
+        cache_dir: str | Path | None = None,
+        offline: bool = False,
+    ) -> Schema:
+        """Load a pinned RelBench dataset with its declared keys, times and links.
+
+        Downloads are cached and SHA-256 verified on every use.
+        ``offline=True`` requires a complete valid cache and never uses HTTP.
+        The default cache is ``~/.cache/sdm/relbench``.
+        """
+        from sdm_client._relbench import load
+
+        return load(cls, name, cache_dir=cache_dir, offline=offline)
 
     @classmethod
     def from_source(
@@ -1230,6 +1458,34 @@ class Schema:
             relationships=relationships,
             check_keys=check_keys,
         )
+
+    def metadata_report(self) -> MetadataReport:
+        """Snapshot existing table descriptors without inference or source reads."""
+        return MetadataReport(
+            tuple(t.metadata_report() for t in self.tables.values())
+        )
+
+    def link_report(self) -> LinkReport:
+        """Snapshot existing directed relationships."""
+        return LinkReport(
+            tuple(
+                LinkMetadata(
+                    r.source_table,
+                    r.source_column,
+                    r.target_table,
+                    r.target_column,
+                )
+                for r in self.relationships
+            )
+        )
+
+    def print_metadata(self) -> None:
+        """Print existing schema metadata locally."""
+        self.metadata_report().print()
+
+    def print_links(self) -> None:
+        """Print existing schema relationships locally."""
+        self.link_report().print()
 
     @property
     def tables(self) -> dict[str, Table | SourceTable]:
@@ -1521,7 +1777,7 @@ def _copy_table(table: _T) -> _T:
     """
     copied = type(table).__new__(type(table))
     object.__setattr__(copied, 'name', table.name)
-    for held in ('data', 'source_name'):
+    for held in ('data', 'source_name', '_calculated_columns'):
         if hasattr(table, held):
             object.__setattr__(copied, held, getattr(table, held))
     object.__setattr__(
@@ -1531,8 +1787,13 @@ def _copy_table(table: _T) -> _T:
     )
     if getattr(table, '_core_origin', None) == 'frames':
         object.__setattr__(copied, '_core_origin', 'frames')
-    for carried in ('primary_key', 'time_column', 'duplicate_keys'):
-        object.__setattr__(copied, carried, getattr(table, carried))
+    for carried in (
+        'primary_key',
+        'time_column',
+        'end_time_column',
+        'duplicate_keys',
+    ):
+        object.__setattr__(copied, carried, getattr(table, carried, None))
     for column in copied.columns.values():
         object.__setattr__(column, '_table', copied)
     return copied
@@ -2410,7 +2671,7 @@ def query_schema(schema: Schema) -> dict[str, Any]:
                 # An empty name is none, as the language's table reads it.
                 'primary_key': key if isinstance(key, str) and key else None,
                 'time_column': table.time_column or None,
-                'end_time_column': None,
+                'end_time_column': getattr(table, 'end_time_column', None),
             }
         )
     links = [

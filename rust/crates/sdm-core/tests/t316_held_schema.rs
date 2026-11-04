@@ -125,8 +125,10 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
         users.push(held_column("ghost", Dtype::Float, Stype::Numerical, None));
     }
     HeldSchema {
+        inference: None,
         tables: vec![
             HeldTable {
+                calculated_columns: vec![],
                 name: "orders".into(),
                 source: "orders".into(),
                 columns: vec![
@@ -157,14 +159,17 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
                 ],
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
+                end_time_column: None,
                 duplicate_keys: None,
             },
             HeldTable {
+                calculated_columns: vec![],
                 name: "users".into(),
                 source: "users".into(),
                 columns: users,
                 primary_key: vec!["user_id".into()],
                 time_column: None,
+                end_time_column: None,
                 duplicate_keys: None,
             },
         ],

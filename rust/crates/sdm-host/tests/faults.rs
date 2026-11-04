@@ -684,6 +684,7 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
     HostRun::start(
         &sdm_host::default_root(),
         &start_message(Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(RequestState {
                 version,

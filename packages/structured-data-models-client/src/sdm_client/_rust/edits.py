@@ -190,7 +190,10 @@ def _store(
             table._own_columns()
     else:
         schema._own_tables()
+    object.__setattr__(schema, '_inference', answer.get('inference'))
     answered = {table['name']: table for table in answer['tables']}
+    for gone in set(schema.tables) - set(answered):
+        del schema._tables[gone]
     for name, table in schema.tables.items():
         given = answered[name]
         keys = tuple(given['primary_key'])
@@ -198,6 +201,9 @@ def _store(
             key = None if not keys else keys[0] if len(keys) == 1 else keys
             object.__setattr__(table, 'primary_key', key)
         object.__setattr__(table, 'time_column', given['time_column'])
+        object.__setattr__(
+            table, 'end_time_column', given.get('end_time_column')
+        )
         repeated = given.get('duplicate_keys')
         object.__setattr__(
             table,
@@ -292,13 +298,13 @@ def table(table: Any, key: str, value: Any) -> bool:
         return True
     _made(
         schema,
-        {'edit': 'time_column', 'table': name, 'column': _name_or_none(value)},
+        {'edit': key, 'table': name, 'column': _name_or_none(value)},
     )
     # The time column as the caller gave it, which the answer names: a
     # ``str`` subclass (``np.str_``) kept as given, as the reference keeps
     # it, and as the key above.
     if value is not None:
-        object.__setattr__(table, 'time_column', value)
+        object.__setattr__(table, key, value)
     return True
 
 

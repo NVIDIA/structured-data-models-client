@@ -161,7 +161,7 @@ class NimRequestError(StructuredDataError):
     :attr:`status_code`, which is the endpoint's own answer, kept as it was.
 
     Branch on :attr:`code`, not on the status. ``INVALID_REQUEST`` means the
-    request has to change and sending it again cannot help; ``429``, ``502``,
+    request has to change and sending it again cannot help; ``408``, ``429``, ``502``,
     ``503`` and ``504`` are worth retrying, and this client retries them. The
     two can disagree: the
     endpoint reports some caller mistakes with a ``500`` and an internal code,

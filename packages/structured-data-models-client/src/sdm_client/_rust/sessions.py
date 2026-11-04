@@ -289,6 +289,7 @@ def fit(
     )
     fitted._tabular_session = state
     fitted._tabular_session_keys = pinned_keys
+    fitted._sanitization_report = request.sanitization_report
     client._pinned.add(fitted)
     return fitted
 
@@ -351,6 +352,7 @@ def predict(fitted: Any, request: Any) -> Any:
     finished = direct._run(
         'prepare_tabular_score',
         {
+            'query': request.query,
             'state': state,
             'predict': 3,
             'request_id': _request_id(),

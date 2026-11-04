@@ -129,6 +129,7 @@ def assemble(
         object.__setattr__(rebound[name], '_core_origin', 'frames')
         object.__setattr__(rebound[name], '_schema', result)
     for name, value in (
+        ('_inference', description.get('inference')),
         ('_tables', rebound),
         ('_source', None),
         ('_core_origin', 'frames'),

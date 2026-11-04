@@ -160,6 +160,7 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         })),
         start(Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(state.clone()),
             held: None,
@@ -171,6 +172,7 @@ pub fn messages() -> Vec<ControlMessage> {
             model_endpoint: None,
         })),
         start(Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(state.clone()),
             held: None,
@@ -249,12 +251,14 @@ pub fn messages() -> Vec<ControlMessage> {
                         per_seed: Some(32_u64.into()),
                         order: Some(TieBreak(vec![
                             TieTerm {
+                                string_like: false,
                                 column: "ts".into(),
                                 as_timestamp: true,
                                 descending: true,
                                 nulls_last: true,
                             },
                             TieTerm {
+                                string_like: false,
                                 column: "order_id".into(),
                                 as_timestamp: false,
                                 descending: false,
@@ -444,7 +448,11 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         }),
         ControlMessage::Step(Step::Done {
-            result: OperationResult::Materialize(Materialized { state, query: None }),
+            result: OperationResult::Materialize(Materialized {
+                examples: None,
+                state,
+                query: None,
+            }),
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {

@@ -746,9 +746,11 @@ warning_codes! {
     InvalidStringEscape = "INVALID_STRING_ESCAPE",
     ViewReadInPart = "VIEW_READ_IN_PART",
     SeedIgnored = "SEED_IGNORED",
+    SessionCleanup = "SESSION_CLEANUP",
 }
 
 sentences! {
+    SessionCleanup = "session_cleanup", W::SessionCleanup;
     DirectColumnNames = "direct_column_names", E::InvalidRequest;
     DirectConstantClass = "direct_constant_class", W::FrameSchema;
     DirectNativeConstantClass = "direct_native_constant_class", W::FrameSchema;
@@ -824,6 +826,9 @@ sentences! {
     TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
     TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
     RequestSplitInvalid = "request_split_invalid", E::InvalidRequest;
+    TimeSeriesInput = "time_series_input", E::InvalidRequest;
+    LabelsInvalid = "labels_invalid", E::InvalidRequest;
+    FeatureImportanceScore = "feature_importance_score", E::InvalidRequest;
     ResultMergeEmpty = "result_merge_empty", E::InternalError;
     ResultMergeModels = "result_merge_models", E::InternalError;
     ResultMergeOutputs = "result_merge_outputs", E::InternalError;
@@ -1057,6 +1062,7 @@ sentences! {
     SamplerStateUnread = "sampler_state_unread", E::InvalidRequest;
     TimeConstantOffset = "time_constant_offset", E::InvalidRequest;
     TimeConstantPast = "time_constant_past", E::InvalidRequest;
+    TimeSeriesIrregular = "time_series_irregular", W::FrameSchema;
     FrameRowsDropped = "frame_rows_dropped", W::FrameSchema;
     FrameTimeUnread = "frame_time_unread", E::InvalidRequest;
     FrameTimeEmpty = "frame_time_empty", E::InvalidRequest;
@@ -1068,6 +1074,7 @@ sentences! {
     CompositeKeyNameTaken = "composite_key_name_taken", E::InvalidRequest;
     ReservedName = "reserved_name", E::InvalidRequest;
     ReservedNames = "reserved_names", E::InvalidRequest;
+    SchemaRefinement = "schema_refinement", E::InvalidRequest;
     SchemaLinkUnread = "schema_link_unread", E::InvalidRequest;
     WireReservedOne = "wire_reserved_one", E::InvalidSchema;
     WireReservedSeveral = "wire_reserved_several", E::InvalidSchema;

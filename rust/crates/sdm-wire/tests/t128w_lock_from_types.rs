@@ -109,6 +109,8 @@ fn full() -> StatePayload {
     StatePayload {
         model: text("m"),
         task: Task {
+            step_size: None,
+            num_forecasts: None,
             kind: text("regression"),
             target: Target {
                 column_name: text("y"),

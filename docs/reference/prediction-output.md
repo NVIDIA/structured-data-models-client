@@ -117,3 +117,53 @@ joined = to_score.reset_index(names='row_index').merge(answers, on='row_index')
 | `quantiles` | `quantile_<level>`, one per level |
 | `scores`, `embeddings` | one column holding a list |
 | `rankings` | one column holding a list of dicts |
+
+## Reading an explanation
+
+Request `outputs=["prediction", "explanation"]` or prefix PQL with `EXPLAIN PREDICT`.
+For a model that returns `sdm_gradient_v1`, `result.explanations` maps each prediction to its validated gradients; `result.explanations.to_pandas()` gives one row per gradient.
+Java exposes `result.explanations().entries()` and `toArrow(allocator)`; callers close the returned Arrow root before closing their allocator.
+
+Keys are entity IDs when unique, otherwise positions in result order; forecasts add the forecast step to each key.
+Merging results preserves every explanation, including repeated IDs and repeated merges.
+Related rows and hop distances refer to the exact sampled request, without additional warehouse reads.
+Gradient columns describe the model's **preprocessed numerical features**, including derived datetime features; they are not causal effects or general feature importance.
+Java Arrow views retain ordinary string/integer key types; mixed or wider keys use lossless JSON text with explicit schema metadata.
+
+`EXPLAIN` changes requested outputs, not a fitted session's question identity.
+The endpoint must support gradients; client-assembled candidate rankings remain unsupported.
+Unknown explanation formats remain available through the raw accessors below.
+
+`result.explanation` remains the raw endpoint payload.
+`result.explanation_view` provides an immutable snapshot of that payload, or `None` when there is no explanation.
+The view exposes `raw`, nested `details`, `summary`, `warnings`, `cohorts` and `subgraphs`.
+Missing fields are `None`; malformed requested fields raise `StructuredDataError` with code `INVALID_REQUEST` and a field path.
+Unknown fields remain available through `raw`.
+
+```python
+view = result.explanation_view
+if view is not None:
+    view.print()
+    importance = view.feature_importance(normalize=True)
+    if importance is not None:
+        print(importance.to_pandas())
+```
+
+Feature importance is available for `kumo_rfm_v2_1` subgraph cell attribution.
+It sums signed scores by table and column, skipping missing/null scores and rejecting nonnumeric or nonfinite scores.
+Normalization divides aggregated scores by their total absolute magnitude: `-2, 6` becomes `-0.25, 0.75`.
+Zero totals remain zero.
+An absent or unsupported attribution returns `None`, while an explicitly empty attribution returns an empty report.
+The view reads no prediction rows and makes no warehouse, model or summary-generation calls.
+Only an explicit feature-importance request invokes local Rust numerical processing.
+
+Java offers `result.explanationView()`, nullable accessors with the same meaning, `toText()` and `featureImportance(boolean normalize)` returning immutable records.
+Python text, print and pandas views are local presentation helpers.
+
+## Schema metadata reports
+
+`schema.metadata_report()` and `schema.link_report()` snapshot the schema's existing table descriptors and directed relationships.
+Individual tables expose `table.metadata_report()`.
+Reports provide immutable records, `to_text()`, `to_pandas()` and `print()`; `schema.print_metadata()` and `schema.print_links()` are shortcuts.
+They do not read source rows, infer new metadata or change the schema.
+Java provides corresponding `metadataReport()`, `linkReport()` and `toText()` methods with immutable records.

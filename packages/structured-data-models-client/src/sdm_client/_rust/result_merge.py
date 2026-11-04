@@ -119,8 +119,35 @@ def _candidate(
 
 
 def merge(cls: Any, parts: Any) -> Any:
-    # Only small descriptors cross the ABI. No item, metadata or explanation
-    # is encoded, converted to Arrow, copied into Rust, or reconstructed.
+    # Rust chooses identity/order from compact observations. Existing decoded
+    # entry owners stay in Python rather than copying sampled rows through the ABI.
+    gradients = len(parts) > 1 and any(part.explanations for part in parts)
+
+    def records(part: Any) -> list[dict[str, Any]]:
+        if not gradients:
+            return []
+        if part.explanations._records:
+            return part.explanations._records
+        values = []
+        for index, item in enumerate(part.items):
+            identity = item.id
+            if isinstance(
+                identity, (np.bool_, np.integer, np.floating, np.str_)
+            ):
+                identity = identity.item()
+            if type(identity) not in (type(None), bool, int, float, str):
+                identity = None
+            values.append(
+                {
+                    'row_index': index,
+                    'answer_index': index,
+                    'forecast_step': item.forecast_step,
+                    'id': json.dumps(identity),
+                    'explanation': None,
+                }
+            )
+        return values
+
     descriptors = [
         {
             'model': part.model,
@@ -129,6 +156,7 @@ def merge(cls: Any, parts: Any) -> Any:
             'has_explanation': False
             if len(parts) == 1
             else bool(part.explanation),
+            'gradient_rows': records(part),
             'names_rows': part._names_its_rows,
             'names_step': part._names_its_step,
             'candidates': []
@@ -159,6 +187,21 @@ def merge(cls: Any, parts: Any) -> Any:
         unscored_candidates=[
             candidates[i] for i in plan['candidate_positions']
         ],
+    )
+    from sdm_client.explanations import GradientExplanations
+
+    entries = {}
+    offset = 0
+    for part in parts:
+        entries.update(
+            {
+                offset + index: entry
+                for index, entry in part.explanations._entries_by_answer.items()
+            }
+        )
+        offset += len(part.items)
+    result.explanations = GradientExplanations._from_core(
+        plan['gradients'], entries
     )
     result._names_its_rows = plan['names_rows']
     result._names_its_step = plan['names_step']

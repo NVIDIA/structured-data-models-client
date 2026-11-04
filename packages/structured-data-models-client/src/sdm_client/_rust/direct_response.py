@@ -288,9 +288,11 @@ def finish(
         payload['inference'] = options
     # Transport may mutate this payload. The reference consumes that same
     # object only after parsing the complete native response.
-    response = Reader(call).response(
-        client._send(_adapter(client, model_id), payload), model_id
-    )
+    reply = client._send(_adapter(client, model_id), payload)
+    decoded = decoded_reply(reply, payload, description['bound'])
+    if decoded is not None:
+        return decoded
+    response = Reader(call).response(reply, model_id)
     return present(response, payload, description['bound'], call)
 
 
@@ -530,23 +532,25 @@ def restore(
     return restored_items
 
 
-def _json_tree(value: Any, active: set[int]) -> bool:
+def _json_tree(
+    value: Any, active: set[int], allow_nonfinite: bool = False
+) -> bool:
     """Recognize exact JSON owners without invoking user conversion methods."""
     kind = type(value)
     if value is None or kind in (str, bool, int):
         return True
     if kind is float:
-        return math.isfinite(value)
+        return allow_nonfinite or math.isfinite(value)
     if kind not in (dict, list) or id(value) in active:
         return False
     active.add(id(value))
     try:
         if kind is dict:
             return all(
-                type(key) is str and _json_tree(item, active)
+                type(key) is str and _json_tree(item, active, allow_nonfinite)
                 for key, item in value.items()
             )
-        return all(_json_tree(item, active) for item in value)
+        return all(_json_tree(item, active, allow_nonfinite) for item in value)
     finally:
         active.remove(id(value))
 
@@ -565,7 +569,7 @@ def decoded_reply(
     from sdm_client._rust import codec, direct, predict, results
 
     try:
-        ordinary = _json_tree(reply, set()) and _json_tree(payload, set())
+        ordinary = _json_tree(reply, set(), True) and _json_tree(payload, set())
     except RecursionError:
         ordinary = False
     if not ordinary:
@@ -574,11 +578,16 @@ def decoded_reply(
         finished = direct._run(
             'decode_direct_response',
             {'bound': bound, 'payload': 2, 'response': 3},
-            {2: codec.attachment(payload), 3: codec.attachment(reply)},
+            {
+                2: codec.attachment(payload),
+                3: json.dumps(reply, allow_nan=True).encode(),
+            },
             payload=2,
             response=3,
         )
-    except StructuredDataError:
+    except StructuredDataError as error:
+        if error.details.get('field') == 'prediction.explanation':
+            raise
         return None
     if finished.result['op'] == 'native_direct_response':
         results.expect(finished.result, results.NativeDirectResponse)

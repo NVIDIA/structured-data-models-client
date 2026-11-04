@@ -443,6 +443,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::TabularRowRepeated => said(r#"the response answers row {index} more than once"#),
         S::TabularRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
         S::RequestSplitInvalid => said("cannot inspect request data: {reason}"),
+        S::TimeSeriesInput => said(r#"{reason}"#),
+        S::TimeSeriesIrregular => said(
+            "History intervals differ; using their median. Pass time_delta explicitly to override.",
+        ),
+        S::LabelsInvalid => said("invalid labels {field}: {reason}"),
+        S::FeatureImportanceScore => said("explanation score must be finite numeric attribution"),
         S::ResultMergeEmpty => said("no parts to merge"),
         S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
         S::ResultMergeOutputs => said(
@@ -1092,6 +1098,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::ReservedNames => said(
             r#"{reserved!c} use names reserved by the SQL backends: a column may not start with {prefix!r}, because the generated joins already select columns of that name and the reference would be ambiguous. Rename the column, or project it under another name."#,
         ),
+        S::SchemaRefinement => said("{reason}"),
         S::SchemaLinkUnread => said(
             r#"a relationship of the schema cannot be sampled: it does not join a foreign key to its table's primary key"#,
         ),
@@ -1531,6 +1538,7 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"Unspecified 'schema' for table '{table}' in database '{in_database}'"#)
         }
         S::TableNoColumns => said(r#"Table '{table}' has no columns"#),
+        S::SessionCleanup => said("temporary session cleanup failed"),
         S::SeedIgnored => said(
             r#"The '{database}' backend does not support seeded random sampling, so 'random_seed' is ignored when drawing in-context examples. Repeated calls with the same seed may return different predictions."#,
         ),

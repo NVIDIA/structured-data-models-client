@@ -112,29 +112,46 @@
   "sdm_client": {
     "__all__": [
       "Column",
+      "ColumnMetadata",
+      "ExplanationSummarizer",
+      "ExplanationView",
+      "FeatureImportance",
+      "FeatureImportanceRow",
       "FittedModel",
+      "ForecastInput",
+      "GradientExplanations",
+      "InferenceConfig",
       "KumoRelational",
       "KumoTabular",
+      "LinkMetadata",
+      "LinkReport",
+      "MetadataReport",
       "MissingExtraError",
       "Model",
       "ModelCapabilities",
       "NimRequestError",
       "PredictionResult",
       "PredictiveQuery",
+      "RelationalTask",
       "Relationship",
+      "RelationshipOrigin",
       "Request",
       "SDMClient",
       "SDMWarning",
+      "SanitizationReport",
       "Schema",
       "SourceTable",
       "Split",
       "StructuredDataError",
       "Table",
+      "TableMetadata",
+      "TableSanitizationReport",
       "Target",
       "Task",
       "UnknownModelError",
       "UnsupportedRequestError",
-      "__version__"
+      "__version__",
+      "build_timeseries"
     ],
     "members": {
       "Column": {
@@ -149,11 +166,67 @@
         },
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
       },
+      "ColumnMetadata": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "ExplanationSummarizer": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "summarize": "(self, view: 'ExplanationView', query: 'str', prediction: 'Any') -> 'str'"
+        },
+        "signature": "(endpoint: 'str', model: 'str', *, api_key: 'str | None' = None, timeout: 'float' = 60.0) -> 'None'"
+      },
+      "ExplanationView": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "cohorts",
+          "details",
+          "subgraphs",
+          "summary",
+          "warnings"
+        ],
+        "public_methods": {
+          "feature_importance": "(self, normalize: 'bool' = False) -> 'FeatureImportance | None'",
+          "print": "(self) -> 'None'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(raw: 'Mapping[str, Any]') -> 'None'"
+      },
+      "FeatureImportance": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(rows: 'tuple[FeatureImportanceRow, ...]', normalized: 'bool') -> None"
+      },
+      "FeatureImportanceRow": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(table: 'str', column: 'str', score: 'float') -> None"
+      },
       "FittedModel": {
         "bases": [],
         "kind": "class",
         "public_attributes": [
           "model",
+          "sanitization_report",
           "session_id"
         ],
         "public_methods": {
@@ -161,6 +234,41 @@
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
         "signature": "() -> 'None'"
+      },
+      "ForecastInput": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(schema: 'Schema', query: 'PredictiveQuery', anchor_time: 'pd.Timestamp | None') -> None"
+      },
+      "GradientExplanations": {
+        "bases": [
+          "builtins.dict"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "to_pandas": "(self) -> 'pd.DataFrame'"
+        },
+        "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
+      },
+      "InferenceConfig": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "category_shuffle",
+          "class_shuffle",
+          "column_shuffle",
+          "hop_shuffle",
+          "num_estimators",
+          "output_type",
+          "target_transforms"
+        ],
+        "public_methods": {
+          "to_dict": "(self) -> dict[str, typing.Any]"
+        },
+        "signature": "(num_estimators: int | None = None, column_shuffle: bool | None = None, category_shuffle: bool | None = None, hop_shuffle: bool | None = None, class_shuffle: bool | None = None, target_transforms: collections.abc.Sequence[str | None] | None = None, output_type: str | None = None) -> None"
       },
       "KumoRelational": {
         "bases": [
@@ -183,6 +291,39 @@
         ],
         "public_methods": {},
         "signature": "()"
+      },
+      "LinkMetadata": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(source_table: 'str', source_column: 'str', target_table: 'str', target_column: 'str') -> None"
+      },
+      "LinkReport": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(links: 'tuple[LinkMetadata, ...]') -> None"
+      },
+      "MetadataReport": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(tables: 'tuple[TableMetadata, ...]') -> None"
       },
       "MissingExtraError": {
         "bases": [
@@ -227,6 +368,7 @@
         "kind": "class",
         "public_attributes": [
           "explanation",
+          "explanation_view",
           "unscored_candidates"
         ],
         "public_methods": {
@@ -241,9 +383,21 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
+          "labels": "(self, size: 'int', *, anchor_time: 'pd.Timestamp | str | None' = None, random_seed: 'int | None' = 42, max_iterations: 'int' = 10) -> 'pd.DataFrame'",
           "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, candidates: 'Sequence[Any] | None' = None, task: 'str | None' = None, **options: 'Any') -> 'Request'"
         },
         "signature": "(query: 'str', data: 'Schema | Mapping[str, pd.DataFrame]') -> 'None'"
+      },
+      "RelationalTask": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "link_target_table",
+          "num_forecasts",
+          "step_size_ns"
+        ],
+        "public_methods": {},
+        "signature": "(kind: Literal['regression', 'binary_classification', 'multiclass_classification', 'temporal_link_prediction', 'forecasting'], entity_table: str, link_target_table: str | None = None, step_size_ns: int | None = None, num_forecasts: int | None = None) -> None"
       },
       "Relationship": {
         "bases": [],
@@ -251,6 +405,18 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(source_table: 'str', source_column: 'str', target_table: 'str', target_column: 'str') -> None"
+      },
+      "RelationshipOrigin": {
+        "bases": [
+          "builtins.tuple"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "origin",
+          "relationship"
+        ],
+        "public_methods": {},
+        "signature": "(relationship: ForwardRef('Relationship'), origin: ForwardRef('str'))"
       },
       "Request": {
         "bases": [],
@@ -266,6 +432,7 @@
           "predict",
           "predict_rows",
           "query",
+          "sanitization_report",
           "target_moves_with_time"
         ],
         "public_methods": {
@@ -300,19 +467,45 @@
         "public_methods": {},
         "signature": null
       },
+      "SanitizationReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "tables"
+        ],
+        "public_methods": {},
+        "signature": "(status: Literal['available', 'unavailable', 'not_applicable'], tables: tuple[sdm_client.sanitization.TableSanitizationReport, ...] = ()) -> None"
+      },
       "Schema": {
         "bases": [],
         "kind": "class",
         "public_attributes": [
           "conversion_notes",
+          "link_origins",
           "source",
           "tables"
         ],
         "public_methods": {
           "check_consistent": "(self) -> 'None'",
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
+          "from_relbench": "(name: 'str', *, cache_dir: 'str | Path | None' = None, offline: 'bool' = False) -> 'Schema'",
           "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
-          "snapshot": "(self) -> 'Schema'"
+          "infer_links": "(self) -> 'Schema'",
+          "infer_metadata": "(self) -> 'Schema'",
+          "link_report": "(self) -> 'LinkReport'",
+          "materialize_examples": "(self, task: 'RelationalTask', context: 'Any', predict: 'Any', *, num_neighbors: 'Sequence[int] | None' = None, rows_per_call: 'int | None' = None, random_seed: 'int' = 42, inference: 'Mapping[str, Any] | InferenceConfig | None' = None) -> 'Request'",
+          "metadata_report": "(self) -> 'MetadataReport'",
+          "print_links": "(self) -> 'None'",
+          "print_metadata": "(self) -> 'None'",
+          "snapshot": "(self) -> 'Schema'",
+          "to_html": "(self, show_columns: 'bool' = True) -> 'str'",
+          "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
+          "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'",
+          "with_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
+          "with_source": "(self, source: 'Source') -> 'Schema'",
+          "with_sql_column": "(self, table: 'str', name: 'str', expression: 'str') -> 'Schema'",
+          "without_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
+          "without_table": "(self, name: 'str') -> 'Schema'"
         },
         "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"
       },
@@ -323,11 +516,15 @@
         "kind": "class",
         "public_attributes": [
           "duplicate_keys",
+          "end_time_column",
           "primary_key",
           "time_column"
         ],
-        "public_methods": {},
-        "signature": "(name: 'str', source_name: 'str', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+        "public_methods": {
+          "metadata_report": "(self) -> 'TableMetadata'",
+          "print_metadata": "(self) -> 'None'"
+        },
+        "signature": "(name: 'str', source_name: 'str', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None, end_time_column: 'str | None' = None) -> None"
       },
       "Split": {
         "bases": [],
@@ -352,11 +549,37 @@
         "kind": "class",
         "public_attributes": [
           "duplicate_keys",
+          "end_time_column",
           "primary_key",
           "time_column"
         ],
+        "public_methods": {
+          "metadata_report": "(self) -> 'TableMetadata'",
+          "print_metadata": "(self) -> 'None'"
+        },
+        "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None, end_time_column: 'str | None' = None) -> None"
+      },
+      "TableMetadata": {
+        "bases": [
+          "sdm_client.reports._Printable"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "end_time_column"
+        ],
+        "public_methods": {
+          "print": "(self) -> 'None'",
+          "to_pandas": "(self) -> 'pd.DataFrame'",
+          "to_text": "(self) -> 'str'"
+        },
+        "signature": "(name: 'str', columns: 'tuple[ColumnMetadata, ...]', primary_key: 'tuple[str, ...]', time_column: 'str | None', end_time_column: 'str | None' = None) -> None"
+      },
+      "TableSanitizationReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
         "public_methods": {},
-        "signature": "(name: 'str', data: 'pd.DataFrame', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
+        "signature": "(table: str, input_rows: int, output_rows: int, null_primary_key_rows: int, duplicate_primary_key_rows: int, null_time_rows: int) -> None"
       },
       "Target": {
         "bases": [],
@@ -398,6 +621,10 @@
       "__version__": {
         "kind": "str",
         "value": "2.0.0rc1"
+      },
+      "build_timeseries": {
+        "kind": "callable",
+        "signature": "(frame: 'pd.DataFrame | pa.Table', timeseries_col: 'str', *, timestamps_col: 'str | None' = None, time_delta: 'pd.Timedelta | None' = None, anchor_time: 'pd.Timestamp | None' = None, entity_col: 'str | None' = None, num_timeframes: 'int' = 1) -> 'ForecastInput'"
       }
     }
   },

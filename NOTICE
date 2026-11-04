@@ -12,6 +12,13 @@ Their licenses and notices are collected in
 packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt.
 Optional Python connector dependencies are resolved at installation time.
 
+The offline schema visualization includes Mermaid 11.15.0, distributed under
+the MIT license, and its bundled dependencies.
+The upstream license, source and full dependency attribution are retained in
+packages/structured-data-models-client/src/sdm_client/assets/MERMAID_LICENSE,
+VENDORED.md and THIRD-PARTY-NOTICES-MERMAID.txt in that directory.
+Both Python and Java distributions include these resources.
+
 --------------------------------------------------------------------------------
 Test data
 --------------------------------------------------------------------------------

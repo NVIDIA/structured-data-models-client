@@ -32,6 +32,8 @@ fn snapshot() -> (Edge, Snapshot) {
                 columns: vec![],
                 primary_key: Some("id".into()),
                 time_column: None,
+
+                end_time_column: None,
             },
             Table {
                 name: "orders".into(),
@@ -39,6 +41,8 @@ fn snapshot() -> (Edge, Snapshot) {
                 columns: vec![],
                 primary_key: Some("id".into()),
                 time_column: Some("time".into()),
+
+                end_time_column: None,
             },
         ],
         edges: vec![edge.clone()],
@@ -200,6 +204,8 @@ fn a_temporal_self_edge_keeps_initial_seeds_then_new_nodes_per_example() {
             columns: vec![],
             primary_key: Some("id".into()),
             time_column: Some("time".into()),
+
+            end_time_column: None,
         }],
         edges: vec![edge.clone()],
     };
@@ -310,4 +316,56 @@ fn temporal_link_labels_use_the_same_rows_exact_window_and_first_seen_order() {
             vec![sdm_engine::frame_labels::LinkValue::Int(16)],
         ]
     );
+}
+
+#[test]
+fn sanitization_counts_include_clean_tables_without_changing_warning() {
+    let (_, snapshot) = snapshot();
+    let clean = snapshot
+        .dropped
+        .iter()
+        .find(|row| row.table == "users")
+        .unwrap();
+    assert_eq!(clean.input, 3);
+    assert_eq!(
+        (clean.null_keys, clean.duplicate_keys, clean.null_times),
+        (0, 0, 0)
+    );
+    assert_eq!(
+        snapshot.dropped_summary().as_deref(),
+        Some(
+            "[orders: 3 of 9 rows dropped (1 with no primary key, 1 with a repeated primary key, 1 with no time)]"
+        )
+    );
+}
+
+#[test]
+fn no_primary_key_tables_count_only_time_drops_and_clean_tables_do_not_warn() {
+    let graph = Graph {
+        tables: vec![Table {
+            name: "events".into(),
+            source: "events".into(),
+            columns: vec![],
+            primary_key: None,
+            time_column: Some("time".into()),
+
+            end_time_column: None,
+        }],
+        edges: vec![],
+    };
+    for times in [vec![Some(1), None], vec![Some(1), Some(2)]] {
+        let rows = RecordBatch::try_from_iter([(
+            "time",
+            Arc::new(TimestampNanosecondArray::from(times.clone())) as ArrayRef,
+        )])
+        .unwrap();
+        let snapshot = Snapshot::new(&graph, BTreeMap::from([("events".into(), rows)])).unwrap();
+        let counts = &snapshot.dropped[0];
+        assert_eq!(
+            (counts.input, counts.null_keys, counts.duplicate_keys),
+            (2, 0, 0)
+        );
+        assert_eq!(counts.null_times, usize::from(times[1].is_none()));
+        assert_eq!(snapshot.dropped_summary().is_none(), times[1].is_some());
+    }
 }

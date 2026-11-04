@@ -798,10 +798,12 @@ fn each_metric_view_converts_as_the_old_client_converted_it_on_a_sql_warehouse()
 fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
     use sdm_contract::ops::{HeldColumn, HeldSchema, HeldTable, SourceFacts};
     HeldSchema {
+        inference: None,
         tables: description
             .tables
             .iter()
             .map(|table| HeldTable {
+                calculated_columns: vec![],
                 name: table.name.clone(),
                 source: table.source.clone(),
                 columns: table
@@ -825,6 +827,7 @@ fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
+                end_time_column: table.end_time_column.clone(),
                 duplicate_keys: None,
             })
             .collect(),

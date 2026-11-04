@@ -11,6 +11,74 @@
       "description": "What is predicted, of which entity: a task of each kind, its kind's\nname and its target. The schema of [`Task`] of each target, for the\nschema only.",
       "anyOf": [
         {
+          "description": "Supplied forecasting keeps scalar history labels and an explicit fixed step.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "forecasting"
+              ]
+            },
+            "target": {
+              "description": "The label column of the instance table: a regression's.",
+              "type": "object",
+              "properties": {
+                "column_name": {
+                  "type": "string"
+                },
+                "dtype": {
+                  "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                  "type": "string",
+                  "enum": [
+                    "int64",
+                    "float32",
+                    "float64",
+                    "string",
+                    "stringlist",
+                    "bool",
+                    "timestamp[us]"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "column_name",
+                "dtype"
+              ]
+            },
+            "entity_table_names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "anchor_time_column": {
+              "type": "string"
+            },
+            "step_size": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "num_forecasts": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "entity_table_names",
+            "anchor_time_column",
+            "step_size"
+          ]
+        },
+        {
           "description": "The two entity roles of an in-memory link query, in query order.",
           "type": "object",
           "properties": {

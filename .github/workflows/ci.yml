@@ -230,6 +230,8 @@ jobs:
       # from Cargo.lock and compared with the committed file.
       - run: python3 scripts/rust_core/rust_notices.py --check
         working-directory: .
+      - run: python3 scripts/mermaid_notices.py --check
+        working-directory: .
       # The open source inventory main's 4cfbcd18 added for nSpect's scan,
       # uv.lock, current with every distribution's requirements (T2.0c).
       # Reading the client's version builds its metadata with maturin, so
@@ -917,16 +919,16 @@ jobs:
           name: native-wheel
           path: native
       # The cell's pins as constraints, so nothing installed after moves
-      # them; DuckDB at the reference's version; the SQLite and Postgres
+      # them; DuckDB 2 for Python 3.12; the SQLite and Postgres
       # drivers (ADBC's SQLite, psycopg), one step for every database's job
       # (T2.1a); the engine, which a case's materialize needs, built from
       # source with the runner image's compilers and CMake.
       - &contract-install
         name: Install the cell
         run: |
-          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==2.0.0 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
              "$(ls native/*.whl)[test]"
@@ -1143,7 +1145,7 @@ jobs:
       # key (P2-T2.14c-1).
       - &contract-postgres-vectors
         name: T2.3's Postgres regression and key vectors, T2.21's exact-key vectors and T2.14c's numeric spellings, on the service
-        run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_t221_exact_keys.py -q
+        run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_t221_exact_keys.py packages/structured-data-models-client/tests/test_postgres_keyless_order.py -q -m "not live_nim"
       # T2.14b's Postgres JSON regressions (a document escaping a lone
       # surrogate kept as the reference keeps it), on the service, in the
       # reference cell (T2.14b fix 7).
@@ -1384,17 +1386,7 @@ jobs:
       # Every distribution carries the one version they are released together
       # at, read from what was just built rather than written here.
       - run: |
-          python - <<'EOF'
-          import pathlib, re, sys
-          names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
-          versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
-          print('\n'.join(names))
-          if len(names) != 3:
-              sys.exit(f'expected 3 wheels, built {len(names)}')
-          if len(versions) != 1:
-              sys.exit(f'distributions disagree on the version: {sorted(versions)}')
-          pathlib.Path('dist/VERSION').write_text(versions.pop())
-          EOF
+          python scripts/check_wheel_provenance.py --write-version dist/VERSION dist/*.whl
       # Building each one proves nothing about installing them together. A pin
       # only one distribution carries makes the set unsatisfiable, and the
       # resolver is the only thing that says so.
@@ -1448,6 +1440,7 @@ jobs:
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
+          python "$GITHUB_WORKSPACE/scripts/check_wheel_provenance.py" --installed "$GITHUB_WORKSPACE"/dist/*.whl
           python - <<'EOF'
           import pathlib
           import sdm_api, sdm_client, sdm_connectors
@@ -1540,8 +1533,7 @@ jobs:
           # The candidate's wheels stand in for the published ones of the
           # same version: installed first, without their dependencies, so
           # the line finds them satisfied and resolves everything else.
-          candidate=$(ls dist/*.whl)
-          pip install --quiet --no-deps $candidate
+          pip install --quiet --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --only-binary=:all: "structured-data-models-client[relational,databricks,databricks-serving]" $keep_numpy
           now="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
           if [ "$now" != "$keep_numpy" ]; then
@@ -1559,15 +1551,7 @@ jobs:
             exit 1
           fi
           # Still the candidate's wheels, as pip recorded their install.
-          python - $candidate <<'EOF'
-          import importlib.metadata, json, pathlib, sys
-          for wheel in map(pathlib.Path, sys.argv[1:]):
-              name = wheel.name.split('-')[0].replace('_', '-')
-              record = importlib.metadata.distribution(name).read_text('direct_url.json')
-              url = json.loads(record or '{}').get('url', '')
-              if not url.endswith('/' + wheel.name):
-                  sys.exit(f'{name} is no longer the candidate wheel {wheel.name}: {url!r}')
-          EOF
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           pip freeze --all
       - name: The binding's and the client's tests in the runtime
         run: |
@@ -1577,6 +1561,7 @@ jobs:
           keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
           pip install --quiet --only-binary=:all: pytest requests-mock jsonschema \
             "structured-data-models-client[sqlite,duckdb,snowflake]" $keep_numpy
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production
           cd /tmp
@@ -1608,6 +1593,7 @@ jobs:
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1983,15 +1969,15 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
-      # The reference cell's pins, DuckDB at the reference's version and
+      # The reference cell's data-library pins, DuckDB 2 and
       # the drivers the contract loader writes SQLite and Postgres with:
       # what the runner's capture and the loader read with, never what the
       # Java host reads with (its JDBC drivers, in the JAR's artifact).
       - name: Install the runner's environment
         run: |
-          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==2.0.0 pyyaml jsonschema pytest \
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' "$(ls native/*.whl)"
       - name: Java JDBC behavior on this platform
@@ -2000,7 +1986,7 @@ jobs:
         run: |
           unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
-            -Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest test
+            -Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest,PostgresKeylessOrderTest test
       - name: The S1 cases on the Java host
         run: |
           python contract/runners/run_java.py --database "$DATABASE" \

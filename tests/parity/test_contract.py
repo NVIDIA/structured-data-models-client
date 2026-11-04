@@ -5,6 +5,7 @@
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -267,7 +268,12 @@ def data():
 def test_public(data):
     assert data == 1
 """)
-    monkeypatch.setenv('PYTHONPATH', str(HERE))
+    monkeypatch.setenv(
+        'PYTHONPATH',
+        os.pathsep.join(
+            filter(None, [str(HERE), os.environ.get('PYTHONPATH')])
+        ),
+    )
     ran = subprocess.run(
         [sys.executable, '-m', 'pytest', '-q', str(tmp_path)],
         text=True,
@@ -299,6 +305,22 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'release-metadata',
         'relational-materialization',
         'in-process-models',
+        'relbench',
+        'sanitization-reports',
+        'schema-notebook-display',
+        'schema-visualization',
+        'metadata-explanation-reports',
+        'timeseries-preparation',
+        'schema-refinement',
+        'labels-only',
+        'end-time',
+        'sql-columns',
+        'custom-examples',
+        'connection-rebinding',
+        'automatic-batch-sessions',
+        'typed-inference-settings',
+        'explanation-summaries',
+        'gradient-explanations',
     }
 
 

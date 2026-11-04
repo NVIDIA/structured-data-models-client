@@ -360,3 +360,142 @@ def test_generated_temporal_context_matches_independent_join_sum(seed):
     scoring = payload['predict']['instance_table']
     entity_column = scoring['columns'].index('__kumo_entity_ref_0')
     assert [row[entity_column] for row in scoring['rows']] == requested
+
+
+def test_sanitization_report_is_durable_and_includes_clean_tables():
+    import dataclasses
+    import pickle
+
+    data = schema()
+    query = PredictiveQuery('PREDICT users.value FOR EACH users.id', data)
+    request = query.materialize(
+        indices=[1, 2], random_seed=7, model=KumoRelational()
+    )
+    report = request.sanitization_report
+    assert report.status == 'available'
+    assert len(report.tables) == 1
+    table = report.tables[0]
+    assert (table.table, table.input_rows, table.output_rows) == (
+        'users',
+        20,
+        20,
+    )
+    assert (
+        table.null_primary_key_rows,
+        table.duplicate_primary_key_rows,
+        table.null_time_rows,
+    ) == (0, 0, 0)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        table.input_rows = 0
+    data['users'].data.loc[:, 'value'] = 999.0
+    again = query.materialize(
+        indices=[1, 2], random_seed=7, model=KumoRelational()
+    )
+    assert again.sanitization_report == report
+    assert pickle.loads(pickle.dumps(request)).sanitization_report == report
+
+
+def test_sanitization_exclusive_drop_precedence_and_no_key_table():
+    users = pd.DataFrame(
+        {'id': range(20), 'value': [float(i) for i in range(20)]}
+    )
+    events = pd.DataFrame(
+        {
+            'id': pd.array(range(30), dtype='Int64'),
+            'user_id': [i % 20 for i in range(30)],
+            'time': pd.date_range('2024-01-01', periods=30),
+        }
+    )
+    no_key = pd.DataFrame(
+        {'value': [1.0, 2.0], 'time': pd.date_range('2024-01-01', periods=2)}
+    )
+    data = Schema.from_data(
+        {'users': users, 'events': events, 'no_key': no_key},
+        primary_keys={'users': 'id', 'events': 'id'},
+        time_columns={'events': 'time', 'no_key': 'time'},
+    )
+    data['users']['value'].stype = 'numerical'
+    data['events'].data.loc[25:, 'id'] = [25, 25, 26, 26, pd.NA]
+    data['events'].data.loc[[25, 28, 29], 'time'] = pd.NaT
+    data['no_key'].data.loc[1, 'time'] = pd.NaT
+    with warnings.catch_warnings(record=True) as emitted:
+        warnings.simplefilter('always')
+        request = PredictiveQuery(
+            'PREDICT users.value FOR EACH users.id', data
+        ).materialize(indices=[1, 2], random_seed=7, model=KumoRelational())
+    tables = {row.table: row for row in request.sanitization_report.tables}
+    row = tables['events']
+    assert (
+        row.input_rows,
+        row.output_rows,
+        row.null_primary_key_rows,
+        row.duplicate_primary_key_rows,
+        row.null_time_rows,
+    ) == (30, 26, 1, 2, 1)
+    row = tables['no_key']
+    assert (
+        row.input_rows,
+        row.output_rows,
+        row.null_primary_key_rows,
+        row.duplicate_primary_key_rows,
+        row.null_time_rows,
+    ) == (2, 1, 0, 0, 1)
+    assert tables['users'].output_rows == 20
+    assert any('4 of 30 rows dropped' in str(w.message) for w in emitted)
+
+    # Nonzero reasons must survive persistence too, not just clean zero counts.
+    import pickle
+
+    restored = pickle.loads(pickle.dumps(request))
+    assert restored.sanitization_report == request.sanitization_report
+    assert restored.payloads == request.payloads
+
+
+def test_legacy_saved_requests_report_unavailable_or_not_applicable():
+    import pickle
+
+    from sdm_client import Request
+
+    data = schema()
+    prepared = PredictiveQuery(
+        'PREDICT users.value FOR EACH users.id', data
+    ).materialize(indices=[1], random_seed=7, model=KumoRelational())
+    del prepared._sanitization_report
+    assert (
+        pickle.loads(pickle.dumps(prepared)).sanitization_report.status
+        == 'unavailable'
+    )
+    direct = Request(
+        pd.DataFrame({'x': [1.0, 2.0], 'y': [3.0, 4.0]}),
+        pd.DataFrame({'x': [5.0]}),
+        target='y',
+        task='regression',
+    )
+    assert direct.sanitization_report.status == 'not_applicable'
+    del direct._sanitization_report
+    assert (
+        pickle.loads(pickle.dumps(direct)).sanitization_report.status
+        == 'not_applicable'
+    )
+
+
+@pytest.mark.parametrize('ranking', [False, True])
+def test_decomposed_requests_retain_sanitization_report(ranking):
+    data = link_schema()
+    text = (
+        'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 2 '
+        if ranking
+        else 'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 2 TIMEFRAMES '
+    ) + 'FOR EACH users.user_id'
+    request = PredictiveQuery(text, data).materialize(
+        indices=[1, 2],
+        random_seed=7,
+        model=KumoRelational(),
+        **({'candidates': [1, 2, 3]} if ranking else {}),
+    )
+    assert request.sanitization_report.status == 'available'
+    assert request.parts
+    assert all(
+        part.sanitization_report == request.sanitization_report
+        for part in request.parts
+    )

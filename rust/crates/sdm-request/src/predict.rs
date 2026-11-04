@@ -66,7 +66,8 @@ pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
 pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
 
 /// The task kinds whose call this build writes.
-const CALLED: [&str; 4] = [
+const CALLED: [&str; 5] = [
+    "forecasting",
     "regression",
     "binary_classification",
     "multiclass_classification",
@@ -97,9 +98,6 @@ pub const CONTEXT_ROWS_MAX: usize = 10_000;
 
 /// The context the mode that explains takes at most (`context_rows_fast`).
 pub const CONTEXT_ROWS_FAST: usize = 1_000;
-
-/// The rows an explanation covers (`explanation_predict_rows`).
-pub const EXPLANATION_PREDICT_ROWS: usize = 1;
 
 /// What the wire calls the target column whatever the question was.
 const WIRE_TARGET: &str = "TARGET";
@@ -197,7 +195,7 @@ const KUMO_RELATIONAL: Spec = Spec {
         "rankings",
         "scores",
     ],
-    explanation_formats: &[],
+    explanation_formats: &[crate::gradients::FORMAT],
     sessions: true,
 };
 
@@ -206,8 +204,8 @@ const KUMO_TABULAR: Spec = Spec {
     id: TABULAR,
     shapes: &["static"],
     tasks: &["classification", "regression"],
-    outputs: &["prediction", "probabilities", "quantiles"],
-    explanation_formats: &[],
+    outputs: &["explanation", "prediction", "probabilities", "quantiles"],
+    explanation_formats: &[crate::gradients::FORMAT],
     sessions: true,
 };
 
@@ -555,11 +553,11 @@ pub fn preflight(
 /// Ordinary prediction uses both halves through `preflight` unchanged.
 pub fn preflight_halves(
     payloads: &[Value],
-    outputs: &[String],
+    _outputs: &[String],
     query: &str,
     model: &str,
     sends_context: bool,
-    sends_predict: bool,
+    _sends_predict: bool,
 ) -> Result<Vec<Notice>, CoreError> {
     let mut notices = Vec::new();
     if sends_context {
@@ -643,56 +641,7 @@ pub fn preflight_halves(
             break;
         }
     }
-    if !outputs.iter().any(|o| o == "explanation") {
-        return Ok(notices);
-    }
-    let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
-    if sends_predict && scored != EXPLANATION_PREDICT_ROWS {
-        // The output and what to change, for the host's words (T2.13).
-        return Err(unsupported(
-            Sentence::ExplanationOneEntity,
-            model,
-            "an explanation covers one entity",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("one_entity"))
-        .with_field("scored", count(scored)));
-    }
-    if sends_context && asks_for_the_larger_context(payloads) {
-        return Err(unsupported(
-            Sentence::ExplanationFastMode,
-            model,
-            "an explanation is given only in the fast run mode",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("smaller_context"))
-        .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)));
-    }
     Ok(notices)
-}
-
-/// Whether the request selected the mode that does not explain: a run mode
-/// other than `fast` on any payload that names one, else more context rows
-/// than the fast mode takes (`_asks_for_the_larger_context`).
-fn asks_for_the_larger_context(payloads: &[Value]) -> bool {
-    let modes: Vec<String> = payloads
-        .iter()
-        .filter_map(
-            |p| match p.get("inference").and_then(|i| i.get("run_mode")) {
-                None | Some(Value::Null) => None,
-                Some(Value::Text(mode)) => Some(mode.clone()),
-                Some(other) => Some(String::from_utf8_lossy(&other.to_bytes()).into_owned()),
-            },
-        )
-        .collect();
-    if !modes.is_empty() {
-        return modes.iter().any(|m| m != "fast");
-    }
-    payloads
-        .iter()
-        .map(|p| rows_of(p, "context"))
-        .sum::<usize>()
-        > CONTEXT_ROWS_FAST
 }
 
 /// The constant-context notice, with how the host names the target
@@ -979,8 +928,8 @@ pub enum AnswerType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub row_index: i64,
-    /// The answer's forecast step, which only an answer given as written
-    /// (a payload with no entity-reference column) may carry.
+    /// The answer's native forecast step, validated against its task horizon;
+    /// legacy answers without entity references may also carry one.
     pub forecast_step: Option<i64>,
     /// The answer's place in the endpoint's order (across a merge's parts,
     /// the parts in order), which the result's items keep.
@@ -997,6 +946,8 @@ pub struct Row {
     /// The item's explanation, a mapping as `sdm_wire::response::mapping`
     /// lays one out (T2.13).
     pub explanation: Option<Value>,
+    pub gradient: Option<Value>,
+    pub gradient_position: Option<i64>,
     /// The item's own metadata, a mapping as the explanation (T2.13).
     pub metadata: Option<Value>,
     /// Each quantile's value, keyed as the answer wrote it, in the order
@@ -1207,7 +1158,7 @@ fn non_finite(value: &Value) -> Option<f64> {
 /// (`_as_the_column_spells_them`), left as written where reading them back
 /// would make two classes one; a float target's class as `float_text`
 /// spells the double it reads as.
-fn spelled(
+pub(crate) fn spelled(
     probabilities: &[(String, f64)],
     answers: AnswerType,
     float_text: fn(f64) -> String,
@@ -1244,8 +1195,8 @@ fn spelled(
 /// it. Where the payload's predicted instance table has a column named with
 /// the entity-reference prefix (the first such, by position), each answer
 /// is checked against the row it claims before it is given the entity of
-/// that row, read as [`entity`] reads it (in range, not a forecast's, once,
-/// under the instance id the row was asked under, every row answered).
+/// that row, read as [`entity`] reads it (in range, once per row or native forecast step,
+/// under the requested instance id, with every requested row/step answered).
 /// Where it has none, each answer is given back as written, as the
 /// reference gives it: its id the instance id it was answered under, as
 /// text, and no row checked (a `row_index` or forecast step past int64,
@@ -1268,6 +1219,7 @@ pub(crate) fn layout_with_answers(
     answers: AnswerType,
 ) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
+    let horizon = forecast_horizon(payload)?;
     let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
         Some(reference) => {
             let dtype = key_dtype(payload, names[reference]);
@@ -1280,13 +1232,16 @@ pub(crate) fn layout_with_answers(
                     reference,
                     dtype.as_deref(),
                     float_text,
+                    horizon,
                 )?,
                 text_ids,
             )
         }
+        None if horizon.is_some() => return Err(bad_payload("predict.entity_reference")),
         None => (as_written(response)?, true),
     };
 
+    let mut decoder = crate::gradients::Decoder::new(payload).with_answers(answers, float_text);
     let mut laid = Vec::with_capacity(placed.len());
     for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
         if let Some(field) = item.carried.first() {
@@ -1305,10 +1260,17 @@ pub(crate) fn layout_with_answers(
             scores: item.scores.clone(),
             rankings: item.rankings.clone(),
             explanation: item.explanation.clone(),
+            gradient: decoder.decode(item.explanation.as_ref(), row_index)?,
+            gradient_position: None,
             metadata: item.metadata.clone(),
             quantiles: item.quantiles.clone(),
             embeddings: item.embeddings.clone(),
         });
+    }
+    // Native forecast responses may arrive in any order. Keep the endpoint's
+    // answer_index as provenance while presenting rows in supplied-row/step order.
+    if horizon.is_some() {
+        laid.sort_by_key(|row| (row.row_index, row.forecast_step));
     }
     let explanation = response
         .predictions
@@ -1327,6 +1289,27 @@ pub(crate) fn layout_with_answers(
     })
 }
 
+/// Native forecasting uses one scalar history and a positive fixed horizon.
+/// The model's response must answer every requested row/step pair exactly once.
+fn forecast_horizon(payload: &Value) -> Result<Option<u32>, CoreError> {
+    if kind_of(payload)? != "forecasting" {
+        return Ok(None);
+    }
+    let count = match payload
+        .get("task")
+        .and_then(|task| task.get("num_forecasts"))
+    {
+        None => 1,
+        Some(Value::Number(token)) if is_integer_token(token) => token
+            .parse::<u32>()
+            .ok()
+            .filter(|count| *count > 0)
+            .ok_or_else(|| bad_payload("task.num_forecasts"))?,
+        _ => return Err(bad_payload("task.num_forecasts")),
+    };
+    Ok(Some(count))
+}
+
 /// Each answer's row, entity and forecast step, where the payload names
 /// its entities in the column at `reference` (`_named_entities`).
 fn named(
@@ -1336,6 +1319,7 @@ fn named(
     reference: usize,
     dtype: Option<&str>,
     float_text: fn(f64) -> String,
+    horizon: Option<u32>,
 ) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
     let instance = names.iter().position(|n| *n == INSTANCE_ID);
     let cell = |row: &Value, at: usize| -> Result<Value, CoreError> {
@@ -1357,19 +1341,41 @@ fn named(
         None => None,
     };
 
+    if horizon.is_some() && instances.is_none() {
+        return Err(bad_payload("predict.instance_id"));
+    }
     let mut answered = vec![false; entities.len()];
+    let mut forecast_pairs = BTreeSet::new();
     let mut named = Vec::with_capacity(response.predictions.len());
     for item in &response.predictions {
         let index = usize::try_from(item.row_index)
             .ok()
             .filter(|i| *i < entities.len())
             .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
-        if item.forecast_step.is_some() {
-            return Err(bad_response("prediction.forecast_step", "not_a_forecast"));
-        }
-        if answered[index] {
-            return Err(bad_response("prediction.row_index", "repeated"));
-        }
+        let forecast_step = match horizon {
+            Some(count) => {
+                let step = item
+                    .forecast_step
+                    .ok_or_else(|| bad_response("prediction.forecast_step", "missing"))?;
+                let step = u32::try_from(step)
+                    .ok()
+                    .filter(|step| *step > 0 && *step <= count)
+                    .ok_or_else(|| bad_response("prediction.forecast_step", "out_of_range"))?;
+                if !forecast_pairs.insert((index, step)) {
+                    return Err(bad_response("prediction.forecast_step", "repeated"));
+                }
+                Some(i64::from(step))
+            }
+            None => {
+                if item.forecast_step.is_some() {
+                    return Err(bad_response("prediction.forecast_step", "not_a_forecast"));
+                }
+                if answered[index] {
+                    return Err(bad_response("prediction.row_index", "repeated"));
+                }
+                None
+            }
+        };
         answered[index] = true;
         if let Some(instances) = &instances {
             let Some(id) = &item.id else {
@@ -1382,11 +1388,21 @@ fn named(
         named.push((
             i64::try_from(index).unwrap_or(i64::MAX),
             entities[index].clone(),
-            None,
+            forecast_step,
         ));
     }
     if answered.iter().any(|a| !a) {
         return Err(bad_response("prediction.row_index", "unanswered"));
+    }
+    if let Some(count) = horizon {
+        // Compare the complete grid size without allocating an untrusted horizon.
+        let expected = entities
+            .len()
+            .checked_mul(usize::try_from(count).map_err(|_| bad_payload("task.num_forecasts"))?)
+            .ok_or_else(|| bad_payload("task.num_forecasts"))?;
+        if forecast_pairs.len() != expected {
+            return Err(bad_response("prediction.forecast_step", "unanswered"));
+        }
     }
     Ok(named)
 }
@@ -1431,6 +1447,7 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
             names_rows: true,
             names_step: part.rows.iter().any(|row| row.forecast_step.is_some()),
             candidates: vec![],
+            gradient_rows: crate::gradients::records(&part.rows),
         })
         .collect::<Vec<_>>();
     let plan = crate::result::plan(&descriptors)?;
@@ -1466,8 +1483,19 @@ pub fn merge_planned(
             first.explanation = part.explanation;
         }
     }
+    let gradient_positions = plan
+        .gradients
+        .as_ref()
+        .map(|c| {
+            c.rows
+                .iter()
+                .map(|r| (r.answer_index, r.row_index))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
     for (at, row) in first.rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
+        row.gradient_position = gradient_positions.get(&row.answer_index).copied();
     }
     Ok(first)
 }
@@ -1893,6 +1921,12 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         metadata.insert(
             "explanation".to_owned(),
             String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
+        );
+    }
+    if let Some(collection) = crate::gradients::collection(crate::gradients::records(&part.rows))? {
+        metadata.insert(
+            "sdm.gradients".into(),
+            serde_json::to_string(&collection).map_err(|_| internal_layout())?,
         );
     }
     let schema = schema.with_metadata(metadata);
@@ -2407,12 +2441,13 @@ mod tests {
             ]
         );
         assert!(relational.single_table && relational.multiple_tables && relational.relationships);
-        assert!(relational.sessions && relational.explanation_formats.is_empty());
+        assert!(relational.sessions);
+        assert_eq!(relational.explanation_formats, [crate::gradients::FORMAT]);
         let tabular = &all[1];
         assert_eq!(tabular.tasks, ["classification", "regression"]);
         assert_eq!(
             tabular.outputs,
-            ["prediction", "probabilities", "quantiles"]
+            ["explanation", "prediction", "probabilities", "quantiles"]
         );
         assert!(tabular.single_table && !tabular.multiple_tables && !tabular.relationships);
         for each in &all {
@@ -2598,5 +2633,186 @@ mod tests {
         );
         let part = layout(&empty, &PredictionResponse::read(&none).unwrap(), spell).unwrap();
         assert!(left_out(&part).is_empty());
+    }
+    fn supplied_forecast_payload(rows: usize, horizon: Option<u32>) -> Value {
+        let mut task = serde_json::json!({"kind":"forecasting", "target":{"dtype":"float64"},
+            "anchor_time_column":"anchor", "step_size":86400000000000_i64});
+        if let Some(horizon) = horizon {
+            task["num_forecasts"] = horizon.into();
+        }
+        let predict: Vec<_> = (0..rows)
+            .map(|i| {
+                serde_json::json!([
+                    6 + i,
+                    3,
+                    if i == 0 {
+                        "2024-01-07T00:00:00Z"
+                    } else {
+                        "2024-01-09T00:00:00Z"
+                    }
+                ])
+            })
+            .collect();
+        sdm_wire::json::read(serde_json::json!({"task":task,
+            "predict":{"instance_table":{"columns":["instance_id","__kumo_entity_ref_0","anchor"],"rows":predict}}
+        }).to_string().as_bytes()).unwrap()
+    }
+
+    fn supplied_forecast_response(pairs: &[(usize, u32)]) -> PredictionResponse {
+        let items: Vec<_> = pairs.iter().map(|(row,step)| serde_json::json!({
+            "id":(6+row).to_string(),"row_index":row,"forecast_step":step,"prediction":row*10+*step as usize
+        })).collect();
+        PredictionResponse::read(&sdm_wire::json::read(serde_json::json!({
+            "id":"forecast-test","model":"kumo-relational","metadata":{"task_kind":"forecasting"},"predictions":items
+        }).to_string().as_bytes()).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn supplied_forecast_places_complete_grid_without_shifting_anchors() {
+        let payload = supplied_forecast_payload(2, Some(3));
+        let original = payload.clone();
+        let response =
+            supplied_forecast_response(&[(1, 3), (0, 2), (1, 1), (0, 1), (0, 3), (1, 2)]);
+        let part = layout(&payload, &response, |v| v.to_string()).unwrap();
+        assert_eq!(
+            part.rows
+                .iter()
+                .map(|r| (r.row_index, r.forecast_step))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, Some(1)),
+                (0, Some(2)),
+                (0, Some(3)),
+                (1, Some(1)),
+                (1, Some(2)),
+                (1, Some(3))
+            ]
+        );
+        for row in &part.rows {
+            assert_eq!(row.id, Entity::Integer(3));
+            assert_eq!(
+                row.prediction,
+                Answer::Int(row.row_index * 10 + row.forecast_step.unwrap())
+            );
+        }
+        assert_eq!(
+            part.rows.iter().map(|r| r.answer_index).collect::<Vec<_>>(),
+            vec![3, 1, 4, 2, 5, 0]
+        );
+        let numbered = numbered_from(part, 4).unwrap();
+        assert_eq!(
+            numbered
+                .rows
+                .iter()
+                .map(|r| r.row_index)
+                .collect::<Vec<_>>(),
+            vec![4, 4, 4, 5, 5, 5]
+        );
+        // Original anchors stay keyed by prediction row, not by forecast step.
+        assert_eq!(payload, original);
+        let sent = body(&payload, RELATIONAL, "request", &["prediction".into()], &[]).unwrap();
+        assert_eq!(sent.get("predict"), payload.get("predict"));
+        assert_eq!(sent.get("task"), payload.get("task"));
+    }
+
+    #[test]
+    fn supplied_forecast_refuses_missing_repeated_or_misaligned_steps() {
+        let payload = supplied_forecast_payload(2, Some(3));
+        let valid = supplied_forecast_response(&[(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]);
+        for (mutation, reason) in [
+            (0, "missing"),
+            (1, "out_of_range"),
+            (2, "out_of_range"),
+            (3, "repeated"),
+            (4, "not_the_row_s"),
+            (5, "out_of_range"),
+            (6, "unanswered"),
+            (7, "unanswered"),
+            (8, "missing"),
+        ] {
+            let mut response = valid.clone();
+            match mutation {
+                0 => response.predictions[0].forecast_step = None,
+                1 => response.predictions[0].forecast_step = Some(0),
+                2 => response.predictions[0].forecast_step = Some(4),
+                3 => response.predictions[0].forecast_step = Some(2),
+                4 => response.predictions[0].id = Some("7".into()),
+                5 => response.predictions[0].row_index = 2,
+                6 => {
+                    response.predictions.pop();
+                }
+                7 => response.predictions.retain(|item| item.row_index == 0),
+                _ => response.predictions[0].id = None,
+            }
+            let error = layout(&payload, &response, |v| v.to_string()).unwrap_err();
+            assert_eq!(
+                error.code,
+                ErrorCode::InvalidResponse,
+                "mutation {mutation}"
+            );
+            assert_eq!(
+                error.fields["reason"],
+                Detail::text(reason),
+                "mutation {mutation}"
+            );
+        }
+    }
+
+    #[test]
+    fn supplied_forecast_single_step_and_multiple_native_calls_align() {
+        let zero = supplied_forecast_payload(1, Some(0));
+        assert!(
+            layout(&zero, &supplied_forecast_response(&[(0, 1)]), |v| v
+                .to_string())
+            .is_err()
+        );
+        let omitted = supplied_forecast_payload(1, None);
+        assert_eq!(
+            layout(&omitted, &supplied_forecast_response(&[(0, 1)]), |v| v
+                .to_string())
+            .unwrap()
+            .rows[0]
+                .forecast_step,
+            Some(1)
+        );
+        assert!(
+            layout(&omitted, &supplied_forecast_response(&[(0, 2)]), |v| v
+                .to_string())
+            .is_err()
+        );
+        let payload = supplied_forecast_payload(1, Some(3));
+        let response = supplied_forecast_response(&[(0, 3), (0, 1), (0, 2)]);
+        let parts = (0..2)
+            .map(|start| {
+                numbered_from(
+                    layout(&payload, &response, |v| v.to_string()).unwrap(),
+                    start,
+                )
+                .unwrap()
+            })
+            .collect();
+        let merged = merge(parts).unwrap();
+        assert_eq!(
+            merged
+                .rows
+                .iter()
+                .map(|r| (r.row_index, r.forecast_step))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, Some(1)),
+                (0, Some(2)),
+                (0, Some(3)),
+                (1, Some(1)),
+                (1, Some(2)),
+                (1, Some(3))
+            ]
+        );
+        let mut ordinary = payload;
+        ordinary.set(
+            "task",
+            Value::Object(vec![("kind".into(), Value::text("regression"))]),
+        );
+        let error = layout(&ordinary, &response, |v| v.to_string()).unwrap_err();
+        assert_eq!(error.fields["reason"], Detail::text("not_a_forecast"));
     }
 }

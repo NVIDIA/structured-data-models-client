@@ -152,10 +152,57 @@ fn pragma(
 pub(crate) struct Sqlite;
 
 impl SqlDialect for Sqlite {
+    fn validate_projection(&self, relation: &Relation) -> Result<(), CoreError> {
+        if relation
+            .columns
+            .iter()
+            .any(|column| column.expression.is_some() && column.name.eq_ignore_ascii_case("rowid"))
+        {
+            return Err(CoreError::new(
+                sdm_contract::Sentence::SchemaRefinement,
+                "SQLite calculated column rowid would shadow the sampling row identity",
+            )
+            .with_field(
+                "reason",
+                sdm_contract::Detail::text(
+                    "SQLite calculated column rowid would shadow the sampling row identity",
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// SQLite holds no column types, only affinities: a declared type
     /// steers how a value is stored, never which values the column holds,
     /// and the old client reads any column as the type its caller gives
     /// (`SQLiteTable._to_dtype` by affinity, `_sanitize` by the caller's).
+    fn derived(&self, _request: &DataRequest, relation: &Relation, source: &str) -> Option<String> {
+        let mut relation = relation.clone();
+        let needs_rowid = match _request {
+            DataRequest::Preview { .. } | DataRequest::Neighbors { .. } => true,
+            DataRequest::SampleEntities { .. } => true,
+            DataRequest::Lookup { key, seeds, .. } => !seed_key_columns(key.len())
+                .iter()
+                .all(|column| marked(seeds, column, SEED_KEY_UNIQUE)),
+            _ => false,
+        };
+        if needs_rowid
+            && !relation.found
+            && !relation.columns.is_empty()
+            && !relation
+                .columns
+                .iter()
+                .any(|column| column.name.eq_ignore_ascii_case("rowid"))
+        {
+            relation.columns.push(sdm_contract::data::RelationColumn {
+                name: "rowid".into(),
+                column: Some("rowid".into()),
+                expression: None,
+            });
+        }
+        Some(self.projected(&relation, source))
+    }
+
     fn holds_column_types(&self) -> bool {
         false
     }
@@ -169,7 +216,7 @@ impl SqlDialect for Sqlite {
         ProviderCapabilities {
             opaque_vendor: None,
             reads_nan_as_missing: false,
-            derived_relations: false,
+            derived_relations: true,
             neighbor_lookback: false,
             keys_optional: false,
             key_enforcement: false,

@@ -626,6 +626,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
         let payload = asker.attach(Attachment::Bytes(b"payload".to_vec()))?;
         let query = asker.attach(json(&"PREDICT users.age FOR EACH users.user_id"))?;
         Ok(OperationResult::Materialize(Materialized {
+            examples: None,
             state: RequestState {
                 version: sdm_contract::ops::REQUEST_STATE_VERSION,
                 payload,
@@ -656,6 +657,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     state.query = AttachmentId(1);
     let predict = start_message(
         Operation::Predict(Predict {
+            supports_sessions: false,
             direct: None,
             state: Some(state),
             held: None,
@@ -732,6 +734,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             (
                 AttachmentId(1),
                 json(&SourceDescription {
+                    inference: None,
                     tables: vec![],
                     links: vec![],
                 }),

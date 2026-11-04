@@ -118,6 +118,29 @@ pub fn parse_query_held(
     (parsed, warned.into_inner())
 }
 
+/// Flags precede the grammar; every consumer uses the same keyword boundary.
+pub fn query_prefix(query: &str) -> (bool, bool, &str) {
+    let text = query.trim_start_matches(is_space);
+    let end = text
+        .char_indices()
+        .find(|(_, ch)| is_space(*ch))
+        .map_or(text.len(), |(at, _)| at);
+    let prefix = &text[..end];
+    let (evaluate, explain) = (
+        prefix.eq_ignore_ascii_case("EVALUATE"),
+        prefix.eq_ignore_ascii_case("EXPLAIN"),
+    );
+    (
+        evaluate,
+        explain,
+        if evaluate || explain {
+            text[end..].trim_start_matches(is_space)
+        } else {
+            text
+        },
+    )
+}
+
 fn visit(
     query: &str,
     mode: Mode,
@@ -127,23 +150,15 @@ fn visit(
 ) -> Visited<ParsedQuery> {
     // `EXPLAIN` and `EVALUATE` are flags, stripped before the grammar sees
     // the text; locations count from what is left.
-    let mut text: Vec<char> = query.chars().skip_while(|&c| is_space(c)).collect();
-    let first_space = text.iter().position(|&c| c == ' ');
-    let prefix: String = match first_space {
-        Some(k) => text[..k].iter().collect(),
-        // `query[:-1]`: all but the last character.
-        None => text[..text.len().saturating_sub(1)].iter().collect(),
-    };
-    let upper = prefix.to_uppercase();
-    let (evaluate, explain) = (upper == "EVALUATE", upper == "EXPLAIN");
+    let (evaluate, explain, remainder) = query_prefix(query);
+    let prefix = query
+        .trim_start_matches(is_space)
+        .split(is_space)
+        .next()
+        .unwrap_or("");
+    let text: Vec<char> = remainder.chars().collect();
     if evaluate || explain {
-        let from = first_space.map_or(0, |k| k + 1);
-        text = text[from..]
-            .iter()
-            .copied()
-            .skip_while(|&c| is_space(c))
-            .collect();
-        let after = text.iter().position(|&c| c == ' ').unwrap_or(text.len());
+        let after = text.iter().position(|&c| is_space(c)).unwrap_or(text.len());
         let word: String = text[..after].iter().collect();
         if word.to_uppercase() != "PREDICT" {
             let got = if is_plain(&word) {
@@ -530,4 +545,21 @@ fn check_escapes(text: &str) -> Visited<bool> {
         escaped = !escaped && c == '\\';
     }
     Ok(deprecated)
+}
+
+#[cfg(test)]
+mod prefix_tests {
+    #[test]
+    fn explanation_prefix_uses_parser_whitespace_and_exact_keyword() {
+        for text in [
+            "EXPLAIN PREDICT x FOR EACH y",
+            "explain\nPREDICT x FOR EACH y",
+            "EXPLAIN\tPREDICT x FOR EACH y",
+        ] {
+            let (_, explain, rest) = super::query_prefix(text);
+            assert!(explain);
+            assert_eq!(rest, "PREDICT x FOR EACH y");
+        }
+        assert!(!super::query_prefix("EXPLAINED PREDICT x").1);
+    }
 }

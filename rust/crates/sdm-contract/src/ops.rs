@@ -20,7 +20,7 @@
 //! documentation names the type. No inline field grows with column, table or
 //! row count.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,11 @@ use crate::types::ColumnType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    LabelsFrames(crate::labels::LabelsFrames),
+    LabelsSource(crate::labels::LabelsSource),
+    AddSqlColumn(crate::sql_column::SqlColumn),
+    RebindSource(crate::rebind::RebindSource),
+    MaterializeExamples(crate::examples::MaterializeExamples),
     FrameSession(crate::frame_session::FrameSessionOperation),
     DescribeFrameTables(crate::frames::DescribeFrameTables),
     PrepareFrameGraph(crate::frames::PrepareFrameGraph),
@@ -45,6 +50,8 @@ pub enum Operation {
     ReadResultItems(crate::result::ReadResultItems),
     ReadRequestSplit(crate::split::ReadRequestSplit),
     MergeResults(crate::result::MergeResults),
+    FeatureImportance(crate::direct::DirectInput),
+    PrepareTimeSeries(crate::frames::PrepareTimeSeries),
     PlanResultMerge(crate::direct::DirectInput),
     PrepareTabularFit(crate::session::SessionFitInput),
     AcceptTabularSession(crate::session::SessionAcceptInput),
@@ -120,7 +127,14 @@ impl Operation {
     /// The operation's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
+            Operation::PrepareTimeSeries(_) => "prepare_time_series",
+            Operation::LabelsFrames(_) => "labels_frames",
+            Operation::LabelsSource(_) => "labels_source",
+            Operation::AddSqlColumn(_) => "add_sql_column",
+            Operation::RebindSource(_) => "rebind_source",
+            Operation::MaterializeExamples(_) => "materialize_examples",
             Operation::TabularArrow(_) => "tabular_arrow",
+            Operation::FeatureImportance(_) => "feature_importance",
             Operation::PlanResultMerge(_) => "plan_result_merge",
             Operation::ReadResultItems(_) => "read_result_items",
             Operation::ReadRequestSplit(_) => "read_request_split",
@@ -192,6 +206,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::PrepareTimeSeries(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadResultItems(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
             Operation::MergeResults(v) => {
@@ -251,6 +266,27 @@ impl Operation {
                 ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
                 ids
             }
+            Operation::LabelsFrames(v) => {
+                vec![(v.graph, AttachmentKind::FrameGraph), (v.input, Bytes)]
+            }
+            Operation::LabelsSource(v) => vec![(v.schema, Bytes), (v.input, Bytes)],
+            Operation::MaterializeExamples(v) => {
+                let mut parts = vec![(v.input, Bytes), (v.context, Arrow), (v.predict, Arrow)];
+                match &v.source {
+                    crate::examples::ExampleSource::Frames { graph } => {
+                        parts.push((*graph, AttachmentKind::FrameGraph))
+                    }
+                    crate::examples::ExampleSource::Sql { schema, .. } => {
+                        parts.push((*schema, Bytes))
+                    }
+                }
+                if let Some(id) = v.inference {
+                    parts.push((id, Bytes));
+                }
+                parts
+            }
+            Operation::AddSqlColumn(v) => vec![(v.schema, Bytes), (v.input, Bytes)],
+            Operation::RebindSource(v) => vec![(v.schema, Bytes)],
             Operation::PrepareFrameGraph(v) => {
                 let mut ids = vec![(v.schema, Bytes), (v.names, Bytes)];
                 ids.extend(v.tables.iter().map(|id| (*id, Arrow)));
@@ -298,6 +334,7 @@ impl Operation {
             | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
+            | Operation::FeatureImportance(v)
             | Operation::PlanResultMerge(v)
             | Operation::CheckColumn(v)
             | Operation::CheckDirectOption(v)
@@ -393,6 +430,7 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    Labels(crate::labels::LabelRows),
     ResultItems(crate::result::ResultItems),
     RequestSplit(crate::split::RequestSplit),
     PreparedFrameGraph(crate::frames::PreparedFrameGraph),
@@ -749,6 +787,9 @@ impl ViewNote {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SourceDescription {
+    /// Engine-recorded inference choices; absent on older saved schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<SchemaInference>,
     pub tables: Vec<DescribedTable>,
     /// The relationships, each `[foreign key, referenced key]`, once: in a
     /// description `describe_source` answers, the declared foreign keys and
@@ -760,6 +801,9 @@ pub struct SourceDescription {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DescribedTable {
+    /// Explicit caller projections; source-owned columns remain independently checked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calculated_columns: Vec<crate::sql_column::CalculatedColumn>,
     pub name: String,
     /// The relation of the source this table reads (design choice 12): its
     /// own name, one part, unless the caller named it otherwise (decision
@@ -768,6 +812,9 @@ pub struct DescribedTable {
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
+    /// Optional exclusive end of sampled entity validity. Null cells mean no end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time_column: Option<String>,
     /// The column inference took as the time column, when the table's
     /// time column is now another or none: a lone stamp of the last edit a
     /// link then refused (decision E55), or the column inference took where
@@ -899,6 +946,9 @@ pub struct SchemaEdited {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HeldSchema {
+    /// Engine-recorded inference choices; absent on older saved schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<SchemaInference>,
     /// The host's tables as they stand, in its order, each by the name the
     /// schema gives it.
     pub tables: Vec<HeldTable>,
@@ -907,10 +957,47 @@ pub struct HeldSchema {
     pub links: Vec<Vec<ColumnRef>>,
 }
 
+/// Engine-owned inference provenance, retained without reconstructing history in hosts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaInference {
+    /// Older records have no evidence of whether missing choices were explicit.
+    pub unknown_tables: BTreeSet<String>,
+    pub key_declared: BTreeSet<String>,
+    pub time_declared: BTreeSet<String>,
+    pub times: BTreeMap<String, InferredTime>,
+    pub links: Vec<LinkOrigin>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InferredTime {
+    pub column: Option<String>,
+    pub only_unlinked: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceOrigin {
+    Declared,
+    Inferred,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LinkOrigin {
+    pub link: Vec<ColumnRef>,
+    pub origin: InferenceOrigin,
+}
+
 /// One table as the host holds it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HeldTable {
+    /// Explicit caller projections; source-owned columns remain independently checked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calculated_columns: Vec<crate::sql_column::CalculatedColumn>,
     pub name: String,
     /// The relation of the source it reads, as the host holds it (design
     /// choice 12).
@@ -918,6 +1005,9 @@ pub struct HeldTable {
     pub columns: Vec<HeldColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
+    /// Optional exclusive end of sampled entity validity. Null cells mean no end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time_column: Option<String>,
     /// Rows sharing a key value, as the host holds it
     /// ([`DescribedTable::duplicate_keys`]): a `u64` scalar, or none.
     /// `edit_schema` sets it as a key edit does; `materialize` does not
@@ -987,6 +1077,20 @@ pub struct SourceFacts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "edit", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SchemaEdit {
+    /// Merge fresh observations into missing metadata or infer missing links.
+    Infer {
+        candidate: HeldSchema,
+        links: bool,
+    },
+    RemoveTable {
+        table: String,
+    },
+    AddLink {
+        link: Vec<ColumnRef>,
+    },
+    RemoveLink {
+        link: Vec<ColumnRef>,
+    },
     /// Validate current meanings and links, restoring key roles without declaring meanings.
     Check {},
     /// A table's primary key set (`schema[table].primary_key = key`), its
@@ -998,6 +1102,10 @@ pub enum SchemaEdit {
     /// A table's time column set (`schema[table].time_column = column`),
     /// or cleared (`null`).
     TimeColumn {
+        table: String,
+        column: Given<Option<String>>,
+    },
+    EndTimeColumn {
         table: String,
         column: Given<Option<String>>,
     },
@@ -1016,7 +1124,9 @@ pub enum SchemaEdit {
     /// The relationships replaced (`schema.relationships = links`), or
     /// edited as a list, as the list stands after the edit; each
     /// `[foreign key, referenced key]`.
-    Relationships { links: Vec<Given<Vec<ColumnRef>>> },
+    Relationships {
+        links: Vec<Given<Vec<ColumnRef>>>,
+    },
 }
 
 /// A value a caller gave an edit or `describe_source`: the value, as the
@@ -1409,6 +1519,8 @@ impl JsonSchema for Seed {
 #[serde(deny_unknown_fields)]
 pub struct Materialized {
     pub state: RequestState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub examples: Option<crate::examples::ExampleFacts>,
     /// What the core resolved of the query it gathered (contract v26,
     /// T2.18), which a host reads instead of resolving the query itself:
     /// the core resolves a query naming any column (KO2-36), which a host's
@@ -1653,6 +1765,9 @@ pub struct HeldRanking {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predict {
+    /// The host can route session HTTP operations. Reuse policy remains in Rust.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub supports_sessions: bool,
     /// A direct request, mutually exclusive with gathered state/held inputs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub direct: Option<crate::direct::DirectModelInput>,
@@ -1801,6 +1916,14 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "PrepareTimeSeries.input")]
+    pub prepare_time_series_input: crate::frames::TimeSeriesOptions,
+    #[schemars(rename = "DirectValue.prepare_time_series")]
+    pub prepare_time_series_output: crate::frames::TimeSeriesPrepared,
+    #[schemars(rename = "FeatureImportance.input")]
+    pub feature_importance_input: crate::result::FeatureImportanceInput,
+    #[schemars(rename = "DirectValue.feature_importance")]
+    pub feature_importance_output: crate::result::FeatureImportanceOutput,
     #[schemars(rename = "PlanResultMerge.input")]
     pub plan_result_merge_input: crate::result::PlanResultMerge,
     #[schemars(rename = "DirectValue.plan_result_merge")]
@@ -1884,6 +2007,10 @@ pub struct Attachments {
     pub assembleframeschema_input: crate::frames::AssembleFrameSchema,
     #[schemars(rename = "FrameTables.names")]
     pub frame_tables_names: Vec<String>,
+    #[schemars(rename = "Labels.input")]
+    pub labels_input: crate::labels::LabelsCall,
+    pub sql_column_input: crate::sql_column::SqlColumnCall,
+    pub example_input: crate::examples::ExampleCall,
     #[schemars(rename = "MaterializeFrames.input")]
     pub materialize_frames_input: crate::frames::FrameCall,
     #[schemars(rename = "ObserveDirectSchema.input")]

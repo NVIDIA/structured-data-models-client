@@ -26,6 +26,7 @@ pub struct Table {
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Option<String>,
     pub time_column: Option<String>,
+    pub end_time_column: Option<String>,
 }
 
 impl Table {
@@ -183,6 +184,8 @@ impl Graph {
                 columns: table.columns.clone(),
                 primary_key,
                 time_column: table.time_column.clone(),
+
+                end_time_column: table.end_time_column.clone(),
             });
         }
         let mut graph = Graph {
@@ -305,6 +308,8 @@ impl NativeGraph {
                 columns: table.columns.clone(),
                 primary_key,
                 time_column: table.time_column.clone(),
+
+                end_time_column: table.end_time_column.clone(),
             });
         }
         let mut topology = Graph {

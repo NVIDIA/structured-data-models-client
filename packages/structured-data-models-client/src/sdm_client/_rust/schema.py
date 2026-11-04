@@ -207,6 +207,13 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         table_shape = SourceTable.__new__(SourceTable)
         object.__setattr__(table_shape, 'name', name)
         object.__setattr__(
+            table_shape,
+            '_calculated_columns',
+            tuple(
+                tuple(c.items()) for c in table.get('calculated_columns', [])
+            ),
+        )
+        object.__setattr__(
             table_shape, 'source_name', codec.relation_name(table['source'])
         )
         object.__setattr__(table_shape, 'columns', columns)
@@ -220,6 +227,9 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             None if not keys else keys[0] if len(keys) == 1 else keys,
         )
         object.__setattr__(table_shape, 'time_column', table['time_column'])
+        object.__setattr__(
+            table_shape, 'end_time_column', table.get('end_time_column')
+        )
         duplicates = table['duplicate_keys']
         object.__setattr__(
             table_shape,
@@ -243,4 +253,5 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
+    object.__setattr__(schema, '_inference', described.get('inference'))
     return schema

@@ -83,22 +83,27 @@ fn shop() -> SourceDescription {
     ];
     orders[1].stype_before_key = Some(Stype::Numerical);
     SourceDescription {
+        inference: None,
         tables: vec![
             DescribedTable {
+                calculated_columns: vec![],
                 name: "users".into(),
                 source: "users".into(),
                 columns: users,
                 primary_key: vec!["user_id".into()],
                 time_column: Some("signup".into()),
+                end_time_column: None,
                 time_column_inferred: None,
                 duplicate_keys: Some(Scalar::UInt64(0)),
             },
             DescribedTable {
+                calculated_columns: vec![],
                 name: "orders".into(),
                 source: "orders".into(),
                 columns: orders,
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
+                end_time_column: None,
                 time_column_inferred: None,
                 duplicate_keys: Some(Scalar::UInt64(0)),
             },
@@ -628,4 +633,95 @@ fn compatibility_ledger_names_each_semantic_assignment_contract() {
             );
         }
     }
+}
+
+#[test]
+fn refinement_preserves_unknown_origins_and_is_atomic() {
+    use sdm_contract::ops::InferenceOrigin;
+    let original = shop();
+    let link = original.links[0].clone();
+    let same = made(
+        original.clone(),
+        &SchemaEdit::AddLink { link: link.clone() },
+    )
+    .unwrap()
+    .description;
+    assert_eq!(same.links, original.links);
+    assert_eq!(
+        same.inference.as_ref().unwrap().links[0].origin,
+        InferenceOrigin::Unknown
+    );
+    let removed = made(same, &SchemaEdit::RemoveLink { link: link.clone() })
+        .unwrap()
+        .description;
+    assert!(removed.links.is_empty());
+    assert!(removed.inference.as_ref().unwrap().links.is_empty());
+    assert!(
+        made(
+            removed.clone(),
+            &SchemaEdit::RemoveLink { link: link.clone() }
+        )
+        .is_err()
+    );
+    let added = made(removed, &SchemaEdit::AddLink { link })
+        .unwrap()
+        .description;
+    assert_eq!(
+        added.inference.unwrap().links[0].origin,
+        InferenceOrigin::Declared
+    );
+    assert_eq!(original.links.len(), 1);
+    let removed = made(
+        original,
+        &SchemaEdit::RemoveTable {
+            table: "users".into(),
+        },
+    )
+    .unwrap()
+    .description;
+    assert!(removed.links.is_empty());
+    assert_eq!(removed.tables.len(), 1);
+    assert!(
+        made(
+            removed,
+            &SchemaEdit::RemoveTable {
+                table: "users".into()
+            }
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn link_removal_reconsiders_only_engine_chosen_time() {
+    use sdm_contract::ops::{InferredTime, SchemaInference};
+    let mut schema = shop();
+    schema.tables[0].time_column = None;
+    schema.inference = Some(SchemaInference {
+        times: [(
+            "users".into(),
+            InferredTime {
+                column: Some("signup".into()),
+                only_unlinked: true,
+            },
+        )]
+        .into(),
+        ..Default::default()
+    });
+    let link = schema.links[0].clone();
+    let removed = made(
+        schema.clone(),
+        &SchemaEdit::RemoveLink { link: link.clone() },
+    )
+    .unwrap()
+    .description;
+    assert_eq!(
+        table(&removed, "users").time_column.as_deref(),
+        Some("signup")
+    );
+    let declared = made(schema, &time("users", None)).unwrap().description;
+    let removed = made(declared, &SchemaEdit::RemoveLink { link })
+        .unwrap()
+        .description;
+    assert_eq!(table(&removed, "users").time_column, None);
 }

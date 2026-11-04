@@ -73,6 +73,7 @@ pub(crate) struct Asked {
 /// What a `predict` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {
+    pub supports_sessions: bool,
     /// The request state's payload, as the host attached it.
     pub payload: Vec<u8>,
     /// The question's text, as the state holds it.
@@ -125,7 +126,42 @@ fn warn(asker: &Asker, notice: Notice) {
 }
 
 pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationResult, CoreError> {
+    if crate::pql::explained_query(&inputs.query).is_some() {
+        let payload =
+            json::read(&inputs.payload).map_err(|_| internal("prediction payload invalid"))?;
+        let kind = payload
+            .get("task")
+            .and_then(|v| v.get("kind"))
+            .and_then(Value::as_text)
+            .unwrap_or("regression");
+        inputs.outputs = crate::pql::explanation_outputs(
+            &inputs.query,
+            kind,
+            (!inputs.default_outputs).then_some(inputs.outputs),
+        )
+        .unwrap();
+        inputs.default_outputs = false;
+    }
     if let Some((questions, top_k)) = inputs.ranking.take() {
+        if inputs.outputs.iter().any(|field| field == "explanation") {
+            return Err(CoreError::new(
+                Sentence::ModelLacksOutputs,
+                "explanations are unavailable for client-assembled candidate rankings",
+            )
+            .with_field("model", Detail::text(&inputs.model))
+            .with_field(
+                "unsupported_outputs",
+                Detail::List(vec![Scalar::Utf8("explanation".into())]),
+            )
+            .with_field(
+                "supported_outputs",
+                Detail::List(vec![
+                    Scalar::Utf8("prediction".into()),
+                    Scalar::Utf8("rankings".into()),
+                    Scalar::Utf8("scores".into()),
+                ]),
+            ));
+        }
         return crate::ranking::predict(asker, inputs, questions, top_k).await;
     }
     let Some(later) = inputs.forecast.take() else {
@@ -373,25 +409,64 @@ pub(crate) async fn one(
         // rows counted.
         let mut bodies = Vec::with_capacity(payloads.len());
         for (payload, request_id) in payloads.iter().zip(&ids) {
-            bodies.push(call_bytes(&body(
+            bodies.push(body(
                 payload,
                 &inputs.model,
                 request_id,
                 &outputs,
                 &inputs.inference_asked,
-            )?)?);
+            )?);
         }
+        let mut session = crate::batch_session::Session::eligible(
+            &bodies,
+            inputs.supports_sessions && inputs.endpoint.is_none(),
+        );
+        // Validate all full calls before any network effect, including their size.
+        // Retain only the small scoring half alongside encoded fallback bytes.
+        let plans = bodies
+            .into_iter()
+            .map(|body| {
+                let bytes = call_bytes(&body)?;
+                let scoring = if session.is_some() {
+                    sdm_request::frame_session::subset(
+                        &body,
+                        &["predict", "output", "inference", "metadata"],
+                    )
+                } else {
+                    Value::Null
+                };
+                Ok((scoring, bytes))
+            })
+            .collect::<Result<Vec<_>, CoreError>>()?;
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
-        for ((payload, bytes), start) in payloads.iter().zip(bodies).zip(starts) {
-            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
+        for ((payload, (body, bytes)), start) in payloads.iter().zip(plans).zip(starts) {
+            let response = async {
+                if let Some(session) = session.as_mut()
+                    && let Some(answer) = session.score(asker, &body).await?
+                {
+                    let response = PredictionResponse::read(&answer).map_err(refused)?;
+                    return layout(payload, &response, crate::pql::float_text);
+                }
+                call(asker, payload, bytes, inputs.endpoint.as_ref()).await
+            }
+            .await;
+            let answered = match response {
                 Ok(part) => numbered_from(part, start),
                 Err(error) => Err(error),
             };
             match answered {
                 Ok(part) => parts.push(part),
-                Err(error) => return Err(carry_calls(asker, error, parts, &outputs, start)),
+                Err(error) => {
+                    if let Some(session) = session.take() {
+                        session.close(asker).await;
+                    }
+                    return Err(carry_calls(asker, error, parts, &outputs, start));
+                }
             }
+        }
+        if let Some(session) = session {
+            session.close(asker).await;
         }
         merge(parts)?
     };

@@ -168,6 +168,7 @@ public final class SdmClient implements AutoCloseable {
     }
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "predict");
+    operation.put("supports_sessions", serving == null);
     operation.put("state", request.materialized().predictionState(SdmClient::requestId));
     operation.put("model", model); operation.put("request_id", requestId());
     operation.put("outputs", outputs == null ? List.of() : List.copyOf(outputs));
@@ -175,7 +176,7 @@ public final class SdmClient implements AutoCloseable {
     operation.put("inference_asked", request.inferenceAsked());
     if (serving != null) operation.put("model_endpoint", serving.modelEndpoint());
     try (Host.Finished finished = Host.run(operation, request.materialized().attachments(),
-        new Host.Call(null, this::call, request.materialized().held()))) {
+        new Host.Call(null, tabularTransport(), request.materialized().held()))) {
       Results.Predicted value = (Results.Predicted) Results.expect(finished.result(), "predict");
       return new PredictionResult(value.model(), value.requestId(), read(finished.bytes(value.metadata())),
           value.outputs(), finished.arrow(value.result()), request.materialized().candidates(value.unscoredCandidates()), request.materialized().candidateValues());

@@ -38,14 +38,14 @@ impl fmt::Debug for FrameGraph {
             .finish_non_exhaustive()
     }
 }
-struct Lease(FrameGraph);
+pub(super) struct Lease(FrameGraph);
 impl Drop for Lease {
     fn drop(&mut self) {
         self.0.0.busy.store(false, Ordering::Release);
     }
 }
 impl FrameGraph {
-    fn lease(&self) -> Result<Lease, CoreError> {
+    pub(super) fn lease(&self) -> Result<Lease, CoreError> {
         if self
             .0
             .busy
@@ -58,6 +58,12 @@ impl FrameGraph {
             ));
         }
         Ok(Lease(self.clone()))
+    }
+    pub(super) fn column_type(&self, table: &str, column: &str) -> Result<DataType, CoreError> {
+        self.0.snapshot.column_type(table, column)
+    }
+    pub(super) fn description(&self) -> SourceDescription {
+        self.0.description.clone()
     }
     pub(super) fn graph(&self) -> Graph {
         self.0.graph.clone()
@@ -290,6 +296,18 @@ pub(crate) fn prepare(
                 .with_field("summary", Detail::text(summary)),
         );
     }
+    let sanitization = snapshot
+        .dropped
+        .iter()
+        .map(|row| sdm_contract::frames::TableSanitizationReport {
+            table: row.table.clone(),
+            input_rows: row.input as u64,
+            output_rows: (row.input - row.null_keys - row.duplicate_keys - row.null_times) as u64,
+            null_primary_key_rows: row.null_keys as u64,
+            duplicate_primary_key_rows: row.duplicate_keys as u64,
+            null_time_rows: row.null_times as u64,
+        })
+        .collect();
     let owner = FrameGraph(Arc::new(Owner {
         description,
         snapshot,
@@ -300,7 +318,10 @@ pub(crate) fn prepare(
     }));
     let graph = asker.attach(Attachment::FrameGraph(owner))?;
     Ok(OperationResult::PreparedFrameGraph(
-        sdm_contract::frames::PreparedFrameGraph { graph },
+        sdm_contract::frames::PreparedFrameGraph {
+            graph,
+            sanitization,
+        },
     ))
 }
 
@@ -357,6 +378,45 @@ pub(crate) async fn materialize(
         labels_only: false,
     };
     run(asker, inputs).await
+}
+
+pub(crate) async fn labels(
+    asker: Asker,
+    request: sdm_contract::labels::LabelsFrames,
+    mut attachments: crate::run::Attachments,
+    facts: HostFacts,
+    zones: Arc<dyn sdm_engine::time::Zones>,
+) -> Result<OperationResult, CoreError> {
+    let Some(Attachment::FrameGraph(owner)) = attachments.remove(&request.graph) else {
+        return Err(internal("frame graph owner is absent"));
+    };
+    let _lease = owner.lease()?;
+    let call: sdm_contract::labels::LabelsCall =
+        crate::attached::take_json(&mut attachments, request.input)?;
+    let inputs = super::label_query::Inputs {
+        description: owner.0.description.clone(),
+        query: call.query,
+        pending: None,
+        types: owner.0.types.clone(),
+        facts,
+        zones,
+        anchor_time: call.anchor_time,
+        anchor_entity: call.anchor_entity,
+        seed: call.seed,
+        unseeded: call.unseeded,
+        source: "in_memory".into(),
+        frames: Some(owner),
+    };
+    let rows = super::label_query::extract(
+        &asker,
+        inputs,
+        super::label_query::Options {
+            size: call.size,
+            max_iterations: call.max_iterations,
+        },
+    )
+    .await?;
+    super::label_query::finish(&asker, rows)
 }
 
 fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {

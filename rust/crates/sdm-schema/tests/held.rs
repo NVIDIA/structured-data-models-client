@@ -28,7 +28,9 @@ fn facts(dtype: Dtype, received: ColumnType) -> SourceFacts {
 
 fn schema() -> HeldSchema {
     HeldSchema {
+        inference: None,
         tables: vec![HeldTable {
+            calculated_columns: vec![],
             name: "users".into(),
             source: "app_users".into(),
             columns: vec![
@@ -49,6 +51,7 @@ fn schema() -> HeldSchema {
             ],
             primary_key: vec!["user_id".into()],
             time_column: Some("seen".into()),
+            end_time_column: None,
             duplicate_keys: Some(Scalar::UInt64(3)),
         }],
         links: vec![],

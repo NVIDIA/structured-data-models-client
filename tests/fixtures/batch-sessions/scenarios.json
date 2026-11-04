@@ -1,0 +1,132 @@
+{
+  "cases": [
+    {
+      "mode": "ok",
+      "creates": 1,
+      "scores": 3,
+      "deletes": 1
+    },
+    {
+      "mode": "unsupported",
+      "creates": 1,
+      "scores": 3,
+      "deletes": 0
+    },
+    {
+      "mode": "expired",
+      "creates": 2,
+      "scores": 4,
+      "deletes": 2
+    },
+    {
+      "mode": "retry",
+      "creates": 1,
+      "scores": 4,
+      "deletes": 1
+    },
+    {
+      "mode": "alias",
+      "creates": 1,
+      "scores": 3,
+      "deletes": 1
+    }
+  ],
+  "tables": {
+    "users": {
+      "columns": [
+        "id",
+        "value"
+      ],
+      "rows": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          8
+        ],
+        [
+          5,
+          10
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          7,
+          14
+        ],
+        [
+          8,
+          16
+        ],
+        [
+          9,
+          18
+        ],
+        [
+          10,
+          20
+        ],
+        [
+          11,
+          22
+        ]
+      ]
+    }
+  },
+  "context": {
+    "columns": [
+      "ENTITY",
+      "TARGET"
+    ],
+    "rows": [
+      [
+        0,
+        0.0
+      ],
+      [
+        1,
+        1.0
+      ],
+      [
+        2,
+        2.0
+      ],
+      [
+        3,
+        3.0
+      ]
+    ]
+  },
+  "predict": {
+    "columns": [
+      "ENTITY"
+    ],
+    "rows": [
+      [
+        6
+      ],
+      [
+        7
+      ],
+      [
+        8
+      ]
+    ]
+  }
+}

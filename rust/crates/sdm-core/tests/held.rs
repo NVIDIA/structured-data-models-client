@@ -176,6 +176,7 @@ fn try_run(
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Predict(Predict {
+                supports_sessions: false,
                 direct: None,
                 state,
                 held,

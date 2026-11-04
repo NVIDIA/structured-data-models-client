@@ -26,6 +26,7 @@ import java.util.Objects;
 public final class RelationalMaterializer implements AutoCloseable {
   private final Schema schema;
   private NativeFrameGraph graph;
+  private SanitizationReport sanitizationReport = SanitizationReport.unavailable();
   private boolean closed;
 
   public RelationalMaterializer(Schema schema) {
@@ -34,7 +35,7 @@ public final class RelationalMaterializer implements AutoCloseable {
         "an in-memory materializer needs Schema.fromData()", "INVALID_REQUEST", Map.of(), null);
   }
 
-  private NativeFrameGraph graph() {
+  NativeFrameGraph graph() {
     if (graph != null) return graph;
     List<String> names = new ArrayList<>(schema.data().keySet());
     List<Integer> ids = new ArrayList<>();
@@ -46,10 +47,13 @@ public final class RelationalMaterializer implements AutoCloseable {
     Map<String, Object> op = Map.of("op", "prepare_frame_graph", "schema", 1, "names", 2, "tables", ids);
     try (Host.Finished finished = ArrowFrames.run(op,
         Map.of(1, Host.attachment(schema.toHeld()), 2, Host.attachment(names)), tables, Host.Call.none())) {
+      sanitizationReport = SanitizationReport.prepared(finished.result().get("sanitization"));
       graph = finished.graph(((Number) finished.result().get("graph")).intValue());
       return graph;
     }
   }
+
+  SanitizationReport sanitization() { return sanitizationReport; }
 
   synchronized Request materialize(PredictiveQuery query, MaterializeOptions options) {
     if (closed) throw new StructuredDataException("this materializer was closed", "INVALID_CONFIGURATION", Map.of(), null);
@@ -76,7 +80,16 @@ public final class RelationalMaterializer implements AutoCloseable {
       @SuppressWarnings("unchecked") Map<String, Object> state = (Map<String, Object>) finished.result().get("state");
       MaterializedRequest retained = new MaterializedRequest(state, finished);
       return new Request(schema, retained, query.text(), gathered.query(),
-          PredictiveQuery.inferenceAsked(options.options().get("inference_config")));
+          PredictiveQuery.inferenceAsked(options.options().get("inference_config"))).withSanitizationReport(sanitizationReport);
+    }
+  }
+
+  synchronized org.apache.arrow.vector.table.Table labels(PredictiveQuery query, LabelsOptions options) {
+    if (closed) throw new StructuredDataException("this materializer was closed", "INVALID_CONFIGURATION", Map.of(), null);
+    try (Host.Finished finished = Host.run(
+        Map.of("op", "labels_frames", "graph", 1, "input", 2),
+        Map.of(1, graph(), 2, Host.attachment(options.input(query.text()))))) {
+      return PredictiveQuery.labelTable(finished);
     }
   }
 

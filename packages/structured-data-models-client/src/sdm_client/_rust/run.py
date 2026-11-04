@@ -289,6 +289,7 @@ def _steps(
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
     refused: Refused | None = None
+    cleanup_refusal = False
     while True:
         error: StructuredDataError | None = None
         try:
@@ -301,7 +302,14 @@ def _steps(
             _answered(handle, failed, error)
         if error is not None:
             # Raised outside the handler, so nothing is its context.
-            if refused is not None:
+            if refused is not None and (
+                not cleanup_refusal
+                or (
+                    refused.status is not None
+                    and error.details.get('status') == refused.status
+                )
+                or (refused.status is None and error.code == 'TRANSPORT_ERROR')
+            ):
                 # The call's own failure, as the caller sees it, carrying
                 # what the core carried on its end of the run.
                 _carried(error, refused.raised)
@@ -320,7 +328,15 @@ def _steps(
         if step['step'] == 'call_model' and (
             model is not None or model_endpoints is not None
         ):
-            refused = _call(core, handle, step, model, model_endpoints)
+            latest = _call(core, handle, step, model, model_endpoints)
+            # Cleanup must not replace the primary prediction refusal.
+            deleting = (
+                isinstance(step['endpoint'], dict)
+                and 'delete_session' in step['endpoint']
+            )
+            if refused is None or not deleting:
+                refused = latest
+                cleanup_refusal = deleting
             continue
         if step['step'] != 'fetch' or provider is None:
             handle.cancel()

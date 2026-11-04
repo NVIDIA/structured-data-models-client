@@ -43,7 +43,26 @@ fn validate(state: &FrameSessionState) -> Result<(), CoreError> {
     }
     Ok(())
 }
-async fn call(asker: &Asker, endpoint: Endpoint, body: Value) -> Result<Value, CoreError> {
+/// Both explicit and temporary sessions accept the endpoint's ID aliases.
+pub(crate) fn session_id(answer: &Value) -> Result<&str, CoreError> {
+    answer
+        .get("session_id")
+        .and_then(Value::as_text)
+        .filter(|id| !id.is_empty())
+        .or_else(|| {
+            answer
+                .get("id")
+                .and_then(Value::as_text)
+                .filter(|id| !id.is_empty())
+        })
+        .ok_or_else(|| predict::bad_response("session_id", "missing"))
+}
+
+pub(crate) async fn call(
+    asker: &Asker,
+    endpoint: Endpoint,
+    body: Value,
+) -> Result<Value, CoreError> {
     match asker
         .call_model(
             endpoint,
@@ -116,6 +135,16 @@ pub(crate) async fn run(
             if model != predict::RELATIONAL {
                 return Err(invalid("frame sessions require kumo-relational"));
             }
+            let query = question
+                .as_ref()
+                .and_then(|q| q.query.as_deref())
+                .unwrap_or("");
+            let kind = payloads[0]
+                .get("task")
+                .and_then(|v| v.get("kind"))
+                .and_then(Value::as_text)
+                .unwrap_or("regression");
+            let outputs = crate::pql::explanation_outputs(query, kind, outputs);
             let default_outputs = outputs.is_none();
             let fields = predict::prepare(
                 &payloads,
@@ -149,17 +178,7 @@ pub(crate) async fn run(
             let pinned = subset(&body, &["model", "task", "schema"]);
             let state_keys = row_keys(&body, "context", windowed)?;
             let answer = call(&asker, Endpoint::CreateSession, body).await?;
-            let id = answer
-                .get("session_id")
-                .and_then(Value::as_text)
-                .filter(|s| !s.is_empty())
-                .or_else(|| {
-                    answer
-                        .get("id")
-                        .and_then(Value::as_text)
-                        .filter(|s| !s.is_empty())
-                })
-                .ok_or_else(|| predict::bad_response("session_id", "missing"))?;
+            let id = session_id(&answer)?;
             let state = FrameSessionState {
                 version: 1,
                 session_id: id.into(),
@@ -178,7 +197,7 @@ pub(crate) async fn run(
             )
         }
         FrameSessionInput::Predict {
-            state,
+            mut state,
             question,
             request_ids,
             inference_asked,
@@ -187,6 +206,12 @@ pub(crate) async fn run(
             if state.closed {
                 return Err(invalid("this fitted model is closed"));
             }
+            let query = question
+                .as_ref()
+                .and_then(|q| q.query.as_deref())
+                .unwrap_or("");
+            state.outputs =
+                crate::pql::explanation_outputs(query, "regression", Some(state.outputs)).unwrap();
             let mut pinned_question = state.question.clone();
             let mut asked_question = question.clone();
             normalize_question(&mut pinned_question);

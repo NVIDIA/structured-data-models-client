@@ -281,6 +281,10 @@ fn unquoted(expression: &str) -> String {
 }
 
 impl SqlDialect for Duckdb {
+    fn derived(&self, _request: &DataRequest, relation: &Relation, source: &str) -> Option<String> {
+        Some(self.projected(relation, source))
+    }
+
     fn name(&self) -> &'static str {
         NAME
     }
@@ -291,7 +295,7 @@ impl SqlDialect for Duckdb {
             compares_stored_times: false,
             reads_nan_as_missing: false,
             samples_by_key_dtype: false,
-            derived_relations: false,
+            derived_relations: true,
             neighbor_lookback: false,
             keys_optional: false,
             key_enforcement: false,

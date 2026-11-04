@@ -26,6 +26,7 @@ from typing import Any, TypeVar
 
 from sdm_client._rust.codec import CodecError
 from sdm_client.errors import StructuredDataError
+from sdm_client.sanitization import SanitizationReport, TableSanitizationReport
 
 __all__ = [
     'Batch',
@@ -420,12 +421,21 @@ class GatheredState:
 
 
 @dataclasses.dataclass(frozen=True)
+class ExampleFacts:
+    entity_table: str
+    kind: str
+    windowed: bool
+    num_forecasts: int
+
+
+@dataclasses.dataclass(frozen=True)
 class Gathered:
     r"""``materialize``'s result: the request state, and what the core
     resolved of the query."""
 
     state: GatheredState
     query: QueryFacts | None
+    examples: ExampleFacts | None = None
 
 
 def _state(value: Any) -> GatheredState:
@@ -644,23 +654,49 @@ def _predicted(read: dict[str, Any]) -> Predicted:
 @dataclasses.dataclass(frozen=True)
 class PreparedFrameGraph:
     graph: int
+    sanitization: SanitizationReport
+
+
+def _prepared_frame_graph(read: Mapping[str, Any]) -> PreparedFrameGraph:
+    tables = []
+    fields = (
+        'input_rows',
+        'output_rows',
+        'null_primary_key_rows',
+        'duplicate_primary_key_rows',
+        'null_time_rows',
+    )
+    for row in _list(read['sanitization'], 'sanitization'):
+        if not isinstance(row, dict) or set(row) != {'table', *fields}:
+            raise CodecError('invalid sanitization table record')
+        counts = {field: _int(row[field], field) for field in fields}
+        tables.append(
+            TableSanitizationReport(_text(row['table'], 'table'), **counts)
+        )
+    return PreparedFrameGraph(
+        _int(read['graph'], 'graph'),
+        SanitizationReport('available', tuple(tables)),
+    )
 
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'request_split': (('instance', 'related_tables'), (), _request_split),
     'result_items': (('segments',), (), _result_items),
     'prepared_frame_graph': (
-        ('graph',),
+        ('graph', 'sanitization'),
         (),
-        lambda read: PreparedFrameGraph(_int(read['graph'], 'graph')),
+        _prepared_frame_graph,
     ),
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
     'describe_source': (('description',), ('notes',), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),
-        ('query',),
+        ('query', 'examples'),
         lambda read: Gathered(
+            examples=None
+            if read['examples'] is None
+            else ExampleFacts(**read['examples']),
             state=_state(read['state']),
             query=(
                 None

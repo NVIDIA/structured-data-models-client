@@ -40,6 +40,7 @@ import java.util.function.Function;
  */
 public final class Schema {
   private Map<String, byte[]> data = Map.of();
+  private Map<String, Object> inference;
   Map<String, byte[]> data() { return data; }
 
   private final List<Table> tables;
@@ -57,6 +58,36 @@ public final class Schema {
     this.relationships = List.copyOf(relationships);
     this.source = source;
     this.conversionNotes = List.copyOf(conversionNotes);
+  }
+
+  /** Return an offline diagram of schema metadata, including all columns. */
+  public String toMermaid() { return toMermaid(true); }
+
+  /** Return an offline diagram; false shows only keys and time columns. */
+  public String toMermaid(boolean showColumns) { return SchemaVisualization.mermaid(this, showColumns); }
+
+  /** Return self-contained offline HTML including all columns. */
+  public String toHtml() { return toHtml(true); }
+
+  /** Return self-contained offline HTML with the bundled renderer. */
+  public String toHtml(boolean showColumns) { return SchemaVisualization.html(toMermaid(showColumns)); }
+
+  /** Export .mmd/.html offline; explicit .png/.svg sends metadata to https://mermaid.ink. */
+  public void visualize(java.nio.file.Path path) throws java.io.IOException { visualize(path, true); }
+
+  /** Export metadata only; no rows are read or transmitted. */
+  public void visualize(java.nio.file.Path path, boolean showColumns) throws java.io.IOException {
+    SchemaVisualization.export(this, path, showColumns);
+  }
+
+  /** Load a pinned RelBench dataset, using the default verified local cache. */
+  public static Schema fromRelbench(String name) {
+    return fromRelbench(name, RelBenchOptions.builder().build());
+  }
+
+  /** Load a pinned dataset with declared keys, times and links; offline mode never uses HTTP. */
+  public static Schema fromRelbench(String name, RelBenchOptions options) {
+    return RelBench.load(name, options);
   }
 
   /** Describe named in-memory Arrow tables, taking owned snapshots before returning. */
@@ -134,6 +165,7 @@ public final class Schema {
         throw Snapshots.invalid("snapshot frames do not match its schema tables", null);
       }
       Schema result = new Schema(checked.tables, checked.relationships, null, Snapshots.texts(saved.get("notes")));
+      result.inference = checked.inference;
       result.data = java.util.Collections.unmodifiableMap(frames);
       return result;
     } catch (ClassCastException | NullPointerException | IllegalArgumentException malformed) {
@@ -180,6 +212,16 @@ public final class Schema {
   }
 
   // --- what a schema holds ---------------------------------------------------------------
+
+  /** Snapshot existing descriptors without inference or source access. */
+  public MetadataReport metadataReport() {
+    return new MetadataReport(tables().stream().map(Table::metadataReport).toList());
+  }
+
+  /** Snapshot existing directed relationships. */
+  public LinkReport linkReport() {
+    return new LinkReport(relationships().stream().map(r -> new LinkMetadata(r.sourceTable(), r.sourceColumn(), r.targetTable(), r.targetColumn())).toList());
+  }
 
   /** Its tables, in order. */
   public List<Table> tables() {
@@ -233,7 +275,69 @@ public final class Schema {
       }
       said.add(Wording.said(Map.of("sentence", note.sentence(), "fields", note.fields())));
     }
-    return new Schema(tables, relationships, source, said);
+    Schema result = new Schema(tables, relationships, source, said);
+    result.inference = inference;
+    result.data = data;
+    return result;
+  }
+
+  /** Fill missing key/time choices without changing declared metadata or this schema. */
+  public Schema inferMetadata() { return infer(false); }
+
+  /** Infer missing links, preserving the links and key choices already held. */
+  public Schema inferLinks() { return infer(true); }
+
+  /** Return a schema without the named table and its incident links. */
+  public Schema withoutTable(String name) {
+    if (name == null) throw new StructuredDataException("table name is required", "INVALID_REQUEST", Map.of(), null);
+    return edited(Map.of("edit", "remove_table", "table", name));
+  }
+
+  /** Remove an existing relationship atomically. */
+  public Schema withoutRelationship(Relationship relationship) {
+    if (relationship == null) throw new StructuredDataException(
+        "relationship is required", "INVALID_REQUEST", Map.of(), null);
+    return edited(Map.of("edit", "remove_link", "link", links(List.of(relationship)).get(0)));
+  }
+
+  /** Ordered immutable provenance; older saved records have unknown origins. */
+  @SuppressWarnings("unchecked")
+  public List<RelationshipOrigin> linkOrigins() {
+    List<RelationshipOrigin> result = new ArrayList<>();
+    for (Relationship relationship : relationships) {
+      String origin = "unknown";
+      if (inference != null) for (Object entry : (List<?>) inference.get("links")) {
+        Map<String, Object> record = (Map<String, Object>) entry;
+        if (relationships(List.of(record.get("link"))).get(0).equals(relationship)) origin = (String) record.get("origin");
+      }
+      result.add(new RelationshipOrigin(relationship, origin));
+    }
+    return List.copyOf(result);
+  }
+
+  private Schema infer(boolean links) {
+    if (tables.isEmpty()) return this;
+    Schema candidate;
+    if (source != null) {
+      FromSourceOptions.Builder options = FromSourceOptions.builder();
+      for (Table table : tables) options.table(table.name(), table.sourceName());
+      candidate = fromSource(source, options.build());
+    } else {
+      if (data.isEmpty()) throw new StructuredDataException("inference requires table data", "INVALID_REQUEST", Map.of(), null);
+      Map<Integer, byte[]> imports = new LinkedHashMap<>();
+      List<Integer> ids = new ArrayList<>();
+      List<String> names = new ArrayList<>();
+      for (Table table : tables) {
+        int id = imports.size() + 2;
+        ids.add(id); names.add(table.name()); imports.put(id, data.get(table.name()));
+      }
+      try (Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(
+          Map.of("op", "describe_frame_tables", "names", 1, "tables", ids),
+          Map.of(1, Host.attachment(names)), imports, Host.Call.none())) {
+        candidate = held(com.nvidia.sdm.internal.ArrowTabular.value(finished), null);
+      }
+    }
+    return edited(Map.of("edit", "infer", "candidate", candidate.toHeld(), "links", links));
   }
 
   // --- edits ----------------------------------------------------------------------------
@@ -274,6 +378,24 @@ public final class Schema {
     return edited(edit);
   }
 
+  /** Declare the exclusive end of sampled entity validity. */
+  public Schema withEndTimeColumn(String table, String column) {
+    Map<String, Object> edit = new LinkedHashMap<>();
+    edit.put("edit", "end_time_column");
+    edit.put("table", table);
+    edit.put("column", FromSourceOptions.given(Objects.requireNonNull(column, "column")));
+    return edited(edit);
+  }
+
+  /** Clear the declared end-time role. */
+  public Schema withoutEndTimeColumn(String table) {
+    Map<String, Object> edit = new LinkedHashMap<>();
+    edit.put("edit", "end_time_column");
+    edit.put("table", table);
+    edit.put("column", FromSourceOptions.given(null));
+    return edited(edit);
+  }
+
   /** This schema with {@code table.column} meaning {@code stype}. */
   public Schema withStype(String table, String column, String stype) {
     Map<String, Object> edit = new LinkedHashMap<>();
@@ -293,6 +415,63 @@ public final class Schema {
     return edited(edit);
   }
 
+  /** Gather a Relational request from caller-supplied ENTITY/ANCHOR_TIMESTAMP/TARGET examples. */
+  public Request materializeExamples(RelationalTask task, org.apache.arrow.vector.table.Table context, org.apache.arrow.vector.table.Table predict) {
+    return materializeExamples(task,context,predict,ExamplesOptions.builder().build());
+  }
+
+  /** Supplied examples with explicit sampling/inference options; Arrow inputs remain caller-owned. */
+  public Request materializeExamples(RelationalTask task, org.apache.arrow.vector.table.Table context, org.apache.arrow.vector.table.Table predict, ExamplesOptions options) {
+    return Examples.materialize(this,task,context,predict,options);
+  }
+
+  /** Revalidate these declarations on a replacement caller-owned source.
+   * Backend, namespace, source kind and semantic settings must match.
+   * Neither connection is closed; existing queries and requests remain unchanged.
+   * This checks columns and types, not every row for key uniqueness.
+   */
+  public Schema withSource(Source replacement) {
+    Objects.requireNonNull(replacement, "source");
+    if (source == null) {
+      throw new StructuredDataException("rebinding requires a source-backed schema", "UNSUPPORTED_REQUEST", Map.of(), null);
+    }
+    Providers.Chosen previous = Providers.of(source);
+    Providers.Chosen chosen = Providers.of(replacement);
+    Map<String, Object> operation = Map.of("op", "rebind_source", "provider", chosen.choice(),
+        "previous_provider", previous.choice(), "source_kind", replacement.getClass().getSimpleName(),
+        "previous_source_kind", source.getClass().getSimpleName(), "schema", 1);
+    try (Host.Finished finished = Host.run(operation, Map.of(1, Host.attachment(toHeld())),
+        new Host.Call(chosen.provider(), null, Providers.held(replacement)))) {
+      Results.Described answer = (Results.Described) Results.expect(finished.result(), "describe_source");
+      Schema result = described(read(finished.bytes(answer.description())), replacement);
+      Schema noted = new Schema(result.tables, result.relationships, replacement, conversionNotes);
+      noted.inference = result.inference;
+      return noted;
+    }
+  }
+
+  /** Return a schema with a new provider-dialect SQL column over physical source columns.
+   * SQL is executed under the source credentials; no warehouse table is modified.
+   */
+  public Schema withSqlColumn(String table, String name, String expression) {
+    if (table == null || name == null || expression == null) {
+      throw new StructuredDataException("table, name and expression must be strings", "INVALID_REQUEST", Map.of(), null);
+    }
+    if (source == null) {
+      throw new StructuredDataException("SQL columns require a source-backed schema", "UNSUPPORTED_REQUEST", Map.of(), null);
+    }
+    Providers.Chosen chosen = Providers.of(source);
+    Map<String, Object> operation = Map.of("op", "add_sql_column", "provider", chosen.choice(), "schema", 1, "input", 2);
+    Map<Integer, Object> attachments = Map.of(1, Host.attachment(toHeld()), 2, Host.attachment(Map.of("table", table, "name", name, "expression", expression)));
+    try (Host.Finished finished = Host.run(operation, attachments, new Host.Call(chosen.provider(), null, Providers.held(source)))) {
+      Results.Described answer = (Results.Described) Results.expect(finished.result(), "describe_source");
+      Schema result = described(read(finished.bytes(answer.description())), source);
+      Schema noted = new Schema(result.tables, result.relationships, source, conversionNotes);
+      noted.inference = result.inference;
+      return noted;
+    }
+  }
+
   /** This schema with its relationships replaced by {@code relationships}, in order. */
   public Schema withRelationships(List<Relationship> relationships) {
     List<Object> links = new ArrayList<>();
@@ -307,9 +486,9 @@ public final class Schema {
 
   /** This schema with {@code relationship} added after its relationships. */
   public Schema withRelationship(Relationship relationship) {
-    List<Relationship> more = new ArrayList<>(relationships);
-    more.add(Objects.requireNonNull(relationship, "relationship"));
-    return withRelationships(more);
+    if (relationship == null) throw new StructuredDataException(
+        "relationship is required", "INVALID_REQUEST", Map.of(), null);
+    return edited(Map.of("edit", "add_link", "link", links(List.of(relationship)).get(0)));
   }
 
   /**
@@ -354,7 +533,10 @@ public final class Schema {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
       Schema changed = held(read(finished.bytes(edited.schema())), source);
       Schema result = new Schema(changed.tables, changed.relationships, source, conversionNotes);
-      result.data = data;
+      result.inference = changed.inference;
+      Map<String, byte[]> kept = new LinkedHashMap<>();
+      for (Table table : changed.tables) if (data.containsKey(table.name())) kept.put(table.name(), data.get(table.name()));
+      result.data = java.util.Collections.unmodifiableMap(kept);
       return result;
     }
   }
@@ -386,8 +568,10 @@ public final class Schema {
       held.put("name", table.name());
       held.put("source", Map.of("source", List.of(table.sourceName())));
       held.put("columns", columns);
+      held.put("calculated_columns", table.calculatedColumns());
       held.put("primary_key", table.primaryKey());
       held.put("time_column", table.timeColumn().orElse(null));
+      held.put("end_time_column", table.endTimeColumn().orElse(null));
       if (table.duplicateKeysOrNull() != null) {
         Map<String, Object> count = new LinkedHashMap<>();
         count.put("t", "u64");
@@ -399,6 +583,7 @@ public final class Schema {
     Map<String, Object> schema = new LinkedHashMap<>();
     schema.put("tables", written);
     schema.put("links", links(relationships));
+    if (inference != null) schema.put("inference", inference);
     return schema;
   }
 
@@ -413,7 +598,7 @@ public final class Schema {
           Map.of("name", c.name(), "dtype", dtypeNames.get(c.dtype()), "stype", c.stype())).toList());
       value.put("primary_key", table.primaryKey().size() == 1 ? table.primaryKey().get(0) : null);
       value.put("time_column", table.timeColumn().orElse(null));
-      value.put("end_time_column", null);
+      value.put("end_time_column", table.endTimeColumn().orElse(null));
       named.add(value);
     }
     return Map.of("tables", named, "links", links(relationships));
@@ -486,7 +671,9 @@ public final class Schema {
       }
       tables.add(table(table, columns));
     }
-    return new Schema(tables, relationships(description.get("links")), source);
+    Schema result = new Schema(tables, relationships(description.get("links")), source);
+    result.inference = (Map<String, Object>) description.get("inference");
+    return result;
   }
 
   /** The schema of a {@code HeldSchema} the core answered an edit with. */
@@ -509,7 +696,9 @@ public final class Schema {
       }
       tables.add(table(table, columns));
     }
-    return new Schema(tables, relationships(answer.get("links")), source);
+    Schema result = new Schema(tables, relationships(answer.get("links")), source);
+    result.inference = (Map<String, Object>) answer.get("inference");
+    return result;
   }
 
   @SuppressWarnings("unchecked")
@@ -533,7 +722,9 @@ public final class Schema {
         columns,
         key,
         (String) table.get("time_column"),
-        duplicates);
+        (String) table.get("end_time_column"),
+        duplicates,
+        (List<Map<String, Object>>) table.getOrDefault("calculated_columns", List.of()));
   }
 
   @SuppressWarnings("unchecked")
