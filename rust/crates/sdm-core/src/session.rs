@@ -117,7 +117,16 @@ pub(crate) fn check_question(
     input: DirectInput,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
-    let request: CheckTabularSessionQuestion = take_json(&mut attached, input.input)?;
+    let mut request: CheckTabularSessionQuestion = take_json(&mut attached, input.input)?;
+    for question in [&mut request.state.question, &mut request.question]
+        .into_iter()
+        .flatten()
+    {
+        question.query = question
+            .query
+            .as_ref()
+            .map(|q| crate::pql::canonical_query(q));
+    }
     policy::validate_state(&request.state)?;
     crate::direct::value(
         asker,

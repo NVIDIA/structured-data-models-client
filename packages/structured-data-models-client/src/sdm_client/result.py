@@ -35,6 +35,7 @@ from typing import Any
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
+from sdm_client.explanations import GradientExplanations
 from sdm_client.reports import ExplanationView
 
 # Emitted as columns when present on an item, in this order. ``row_index``
@@ -97,6 +98,7 @@ class PredictionResult:
         self._names_its_step = False
         self.metadata = dict(metadata or {})
         self._explanation = explanation
+        self.explanations = GradientExplanations()
         self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:

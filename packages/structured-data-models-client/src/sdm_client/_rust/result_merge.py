@@ -129,6 +129,16 @@ def merge(cls: Any, parts: Any) -> Any:
             'has_explanation': False
             if len(parts) == 1
             else bool(part.explanation),
+            'gradient_rows': part.explanations._records
+            or [
+                {
+                    'row_index': item.row_index,
+                    'forecast_step': item.forecast_step,
+                    'id': json.dumps(item.id),
+                    'explanation': None,
+                }
+                for item in part.items
+            ],
             'names_rows': part._names_its_rows,
             'names_step': part._names_its_step,
             'candidates': []
@@ -160,6 +170,9 @@ def merge(cls: Any, parts: Any) -> Any:
             candidates[i] for i in plan['candidate_positions']
         ],
     )
+    from sdm_client.explanations import GradientExplanations
+
+    result.explanations = GradientExplanations._from_core(plan['gradients'])
     result._names_its_rows = plan['names_rows']
     result._names_its_step = plan['names_step']
     return result

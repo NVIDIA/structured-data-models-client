@@ -198,7 +198,7 @@ const KUMO_RELATIONAL: Spec = Spec {
         "rankings",
         "scores",
     ],
-    explanation_formats: &[],
+    explanation_formats: &[crate::gradients::FORMAT],
     sessions: true,
 };
 
@@ -207,8 +207,8 @@ const KUMO_TABULAR: Spec = Spec {
     id: TABULAR,
     shapes: &["static"],
     tasks: &["classification", "regression"],
-    outputs: &["prediction", "probabilities", "quantiles"],
-    explanation_formats: &[],
+    outputs: &["explanation", "prediction", "probabilities", "quantiles"],
+    explanation_formats: &[crate::gradients::FORMAT],
     sessions: true,
 };
 
@@ -556,11 +556,11 @@ pub fn preflight(
 /// Ordinary prediction uses both halves through `preflight` unchanged.
 pub fn preflight_halves(
     payloads: &[Value],
-    outputs: &[String],
+    _outputs: &[String],
     query: &str,
     model: &str,
     sends_context: bool,
-    sends_predict: bool,
+    _sends_predict: bool,
 ) -> Result<Vec<Notice>, CoreError> {
     let mut notices = Vec::new();
     if sends_context {
@@ -644,56 +644,7 @@ pub fn preflight_halves(
             break;
         }
     }
-    if !outputs.iter().any(|o| o == "explanation") {
-        return Ok(notices);
-    }
-    let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
-    if sends_predict && scored != EXPLANATION_PREDICT_ROWS {
-        // The output and what to change, for the host's words (T2.13).
-        return Err(unsupported(
-            Sentence::ExplanationOneEntity,
-            model,
-            "an explanation covers one entity",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("one_entity"))
-        .with_field("scored", count(scored)));
-    }
-    if sends_context && asks_for_the_larger_context(payloads) {
-        return Err(unsupported(
-            Sentence::ExplanationFastMode,
-            model,
-            "an explanation is given only in the fast run mode",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("smaller_context"))
-        .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)));
-    }
     Ok(notices)
-}
-
-/// Whether the request selected the mode that does not explain: a run mode
-/// other than `fast` on any payload that names one, else more context rows
-/// than the fast mode takes (`_asks_for_the_larger_context`).
-fn asks_for_the_larger_context(payloads: &[Value]) -> bool {
-    let modes: Vec<String> = payloads
-        .iter()
-        .filter_map(
-            |p| match p.get("inference").and_then(|i| i.get("run_mode")) {
-                None | Some(Value::Null) => None,
-                Some(Value::Text(mode)) => Some(mode.clone()),
-                Some(other) => Some(String::from_utf8_lossy(&other.to_bytes()).into_owned()),
-            },
-        )
-        .collect();
-    if !modes.is_empty() {
-        return modes.iter().any(|m| m != "fast");
-    }
-    payloads
-        .iter()
-        .map(|p| rows_of(p, "context"))
-        .sum::<usize>()
-        > CONTEXT_ROWS_FAST
 }
 
 /// The constant-context notice, with how the host names the target
@@ -998,6 +949,7 @@ pub struct Row {
     /// The item's explanation, a mapping as `sdm_wire::response::mapping`
     /// lays one out (T2.13).
     pub explanation: Option<Value>,
+    pub gradient: Option<Value>,
     /// The item's own metadata, a mapping as the explanation (T2.13).
     pub metadata: Option<Value>,
     /// Each quantile's value, keyed as the answer wrote it, in the order
@@ -1291,6 +1243,7 @@ pub(crate) fn layout_with_answers(
         None => (as_written(response)?, true),
     };
 
+    let mut decoder = crate::gradients::Decoder::new(payload);
     let mut laid = Vec::with_capacity(placed.len());
     for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
         if let Some(field) = item.carried.first() {
@@ -1309,6 +1262,7 @@ pub(crate) fn layout_with_answers(
             scores: item.scores.clone(),
             rankings: item.rankings.clone(),
             explanation: item.explanation.clone(),
+            gradient: decoder.decode(item.explanation.as_ref(), row_index)?,
             metadata: item.metadata.clone(),
             quantiles: item.quantiles.clone(),
             embeddings: item.embeddings.clone(),
@@ -1494,6 +1448,7 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
             names_rows: true,
             names_step: part.rows.iter().any(|row| row.forecast_step.is_some()),
             candidates: vec![],
+            gradient_rows: crate::gradients::records(&part.rows),
         })
         .collect::<Vec<_>>();
     let plan = crate::result::plan(&descriptors)?;
@@ -1906,6 +1861,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
             (|r: &Row| r.quantiles.as_ref()) as fn(&Row) -> Option<&Value>,
         ),
         ("explanation", |r: &Row| r.explanation.as_ref()),
+        ("sdm.gradient", |r: &Row| r.gradient.as_ref()),
         ("metadata", |r: &Row| r.metadata.as_ref()),
     ] {
         if rows.iter().any(|r| of(r).is_some()) {
@@ -1956,6 +1912,12 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         metadata.insert(
             "explanation".to_owned(),
             String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
+        );
+    }
+    if let Some(collection) = crate::gradients::collection(crate::gradients::records(&part.rows))? {
+        metadata.insert(
+            "sdm.gradients".into(),
+            serde_json::to_string(&collection).map_err(|_| internal_layout())?,
         );
     }
     let schema = schema.with_metadata(metadata);

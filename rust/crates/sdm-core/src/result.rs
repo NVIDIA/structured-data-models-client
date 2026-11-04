@@ -276,6 +276,7 @@ fn decode(
                     embeddings: floats(cell(batch, "embeddings", i)?)?,
                     metadata: mapping(cell(batch, "metadata", i)?)?,
                     explanation: mapping(cell(batch, "explanation", i)?)?,
+                    gradient: mapping(cell(batch, "sdm.gradient", i)?)?,
                     quantiles: mapping(cell(batch, "quantiles", i)?)?,
                 },
                 candidates,
@@ -401,6 +402,7 @@ pub(crate) fn merge(
                 .is_some_and(sdm_request::result::truth),
             names_rows: true,
             names_step: part.rows.iter().any(|r| r.forecast_step.is_some()),
+            gradient_rows: sdm_request::gradients::records(&part.rows),
             candidates: description
                 .unscored_candidates
                 .iter()
@@ -424,6 +426,11 @@ pub(crate) fn merge(
     }
     let merged = predict::merge_planned(parts, &plan)?;
     let mut laid = predict::table(&merged)?;
+    if let Some(collection)=&plan.gradients {
+        let mut metadata=laid.schema().metadata().clone();
+        metadata.insert("sdm.gradients".into(),serde_json::to_string(collection).map_err(|_|internal("gradient metadata invalid"))?);
+        laid=RecordBatch::try_new(Arc::new(laid.schema().as_ref().clone().with_metadata(metadata)),laid.columns().to_vec()).map_err(|_|internal("gradient result layout invalid"))?;
+    }
     if positions.iter().any(Option::is_some) {
         let mut order: Vec<usize> = (0..merged.rows.len()).collect();
         order.sort_by_key(|&i| merged.rows[i].row_index);
@@ -479,6 +486,7 @@ mod tests {
                 scores: None,
                 rankings: None,
                 explanation: None,
+                gradient: None,
                 metadata: None,
                 quantiles: None,
                 embeddings: None,

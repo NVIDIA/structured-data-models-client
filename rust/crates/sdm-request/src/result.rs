@@ -59,7 +59,7 @@ pub fn candidate(value: Value) -> C {
         },
     }
 }
-fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
+pub(crate) fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
     Ok(Some(match value {
         C::Json { value } => {
             match json::read_answer(value.as_bytes())
@@ -158,6 +158,9 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
         batch_request_ids: parts.iter().map(|p| p.request_id.clone()).collect(),
         explanation_part: None,
         candidate_positions: vec![],
+        gradients: crate::gradients::merge_records(
+            parts.iter().map(|p| p.gradient_rows.as_slice()),
+        )?,
         names_rows: true,
         names_step: false,
     };
@@ -237,6 +240,7 @@ mod tests {
             names_rows: true,
             names_step: false,
             candidates,
+            gradient_rows: vec![],
         }
     }
     fn json(s: &str) -> C {

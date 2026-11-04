@@ -1254,7 +1254,36 @@ pub(crate) mod conversions {
 
 // Compare string literals using PQL's lexer and decoder, not JSON's escape rules.
 // Original text remains in session state and on the model wire.
+pub(crate) fn explained_query(text: &str) -> Option<&str> {
+    let text = text.trim_start();
+    let (prefix, query) = text.split_once(' ')?;
+    prefix
+        .eq_ignore_ascii_case("EXPLAIN")
+        .then(|| query.trim_start())
+}
+
+pub(crate) fn explanation_outputs(
+    query: &str,
+    kind: &str,
+    outputs: Option<Vec<String>>,
+) -> Option<Vec<String>> {
+    if explained_query(query).is_none() {
+        return outputs;
+    }
+    let mut fields = outputs.unwrap_or_else(|| {
+        sdm_request::predict::default_outputs(kind)
+            .iter()
+            .map(|v| (*v).into())
+            .collect()
+    });
+    if !fields.iter().any(|v| v == "explanation") {
+        fields.push("explanation".into());
+    }
+    Some(fields)
+}
+
 pub(crate) fn canonical_query(text: &str) -> String {
+    let text = explained_query(text).unwrap_or(text);
     let chars: Vec<char> = text.chars().collect();
     let Ok(tokens) = sdm_pql::lexer::tokenize(&chars) else {
         return text.to_owned();
