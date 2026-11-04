@@ -4,9 +4,10 @@
 
 # Final correctness and performance checks
 
-**Proposal: validate the maintained matrix on the final candidate, then benchmark changed paths with a small repeatable suite.**
+**Phase 8: validate the maintained matrix after cleanup, CI and ledger changes are integrated, then report comparable benchmarks.**
 Phase 6's focused tests do not establish whole-matrix correctness or performance.
-This is a plan, not a new test or benchmark result.
+This is an execution plan, not a new test or benchmark result.
+The coordinator owns comparison-baseline changes and final execution; the other three agents preserve fixture and ledger dependencies.
 
 ## Existing evidence
 
@@ -80,15 +81,17 @@ Cold Java runs can use command mode; warm measurements must stay inside a warmed
 Java's existing `internal/Trace.java` copies Arrow attachments: keep correctness captures off during performance runs.
 Add lightweight stage timers/counters, not a second capture framework; use a profiler for deeper attribution.
 
-Start on a quiet reference machine, alternate baseline/candidate runs and retain sample distributions before choosing thresholds.
+Start on a quiet reference machine, alternate baseline/candidate runs and retain sample distributions.
 Compare against both current `main` and pre-Phase-6 Rust `4b5df2e2e`, pinning dependency environments and separating dependency effects.
-New-only features need scaling/absolute budgets; the old accepted 15% cost does not authorize further regressions.
+Report new-only features as absolute/scaling measurements rather than invented old-client comparisons.
+The owner accepts minor latency regressions and explicitly requests no performance tuning from this campaign.
+Report larger regressions honestly with their measurement conditions; do not silently tune or redefine the comparison.
 
 ## Completion
 
 1. Map changed paths to cases, reuse decisions and executable live requirements using the [CI plan](../ci-coverage/design.md).
-2. Run correctness and bounded benchmarks; fix demonstrated issues and repeat affected checks.
+2. Run correctness and bounded benchmarks; fix demonstrated correctness issues and repeat affected checks, without performance tuning.
 3. Validate final platform artifacts and the full applicable live matrix; retain compact summaries and checksummed evidence outside Git.
 
 Before `main`, required correctness cells must pass or have explicit reviewed dispositions; unavailable resources stay incomplete.
-Performance requires stable per-scenario time/memory budgets or reviewed exceptions, not an arbitrary universal percentage.
+Performance deliverables are valid per-scenario latency/memory results with warm/cold/import conditions and limitations, not an arbitrary universal regression threshold.
