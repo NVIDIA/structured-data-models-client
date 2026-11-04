@@ -462,7 +462,43 @@ def _arrow(text: str) -> Any:
     return pa.ipc.open_stream(base64.b64decode(text)).read_all()
 
 
-def captured(events: list[dict[str, Any]]) -> Any:
+def rejected_session_probes(
+    events: list[dict[str, Any]], received: Any
+) -> dict[int, dict[str, Any]]:
+    """Identify only actual 404 session probes on the prediction-only fixture."""
+    if received is None or not received.prediction_only:
+        return {}
+    calls = [
+        (index, event['step'])
+        for index, event in enumerate(events)
+        if event['event'] == 'stepped'
+        and event['step'].get('step') == 'call_model'
+    ]
+    if len(calls) != len(received.requests) or len(calls) != len(
+        received.responses
+    ):
+        raise RunnerFailure('model call/HTTP response trace length differs')
+    probes = {}
+    for (index, step), request, status in zip(
+        calls, received.requests, received.responses, strict=True
+    ):
+        if step.get('endpoint') != 'create_session':
+            continue
+        method, path, body = request
+        if (method, path, status) != ('POST', '/v1/sessions', 404):
+            raise RunnerFailure(
+                'prediction-only fixture did not reject its session probe'
+            )
+        probes[index] = {
+            'method': method,
+            'path': path,
+            'status': status,
+            'body': body,
+        }
+    return probes
+
+
+def captured(events: list[dict[str, Any]], received: Any = None) -> Any:
     r"""What crossed the binding, as the Python runner's capture records the
     Python host's (``_Capture``): each event the Java program was told,
     replayed into one, in order."""
@@ -470,7 +506,16 @@ def captured(events: list[dict[str, Any]]) -> Any:
     from types import SimpleNamespace
 
     capture = run_python._Capture()
-    for event in events:
+    probes = rejected_session_probes(events, received)
+    capture.session_probes = list(probes.values())
+    probe_body: int | None = None
+    for index, event in enumerate(events):
+        if index in probes:
+            probe_body = event['step']['body']
+            continue
+        if event['event'] == 'taken' and event['id'] == probe_body:
+            probe_body = None
+            continue
         kind = event['event']
         if kind == 'started':
             attachments: dict[int, Any] = {}
@@ -722,7 +767,23 @@ def s1_observation(
             'the Java host reports providers this runner does not run legs for'
         )
     check_sent(case, answer['events'], received)
-    capture = captured(answer['events'])
+    capture = captured(answer['events'], received)
+    for probe in capture.session_probes:
+        print(
+            'rejected-session-probe '
+            + json.dumps(
+                {
+                    'case': case['id'],
+                    'method': probe['method'],
+                    'path': probe['path'],
+                    'status': probe['status'],
+                    'body_sha256': run_python.digest(probe['body']),
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+
     outcome = answer['outcome']
     versions = {'java': identity['java']}
     if database == 'duckdb':
@@ -901,6 +962,7 @@ def run(
                 with (
                     loaded(case, bases, database) as connect,
                     serve(
+                        prediction_only=True,
                         fail_call=given.get('fail_call'),
                         probabilities=given.get('probabilities', False),
                         quantiles=given.get('quantiles', False),

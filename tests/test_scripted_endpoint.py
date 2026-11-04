@@ -428,3 +428,35 @@ def test_the_embeddings_vectors_are_not_vacuous() -> None:
             assert all('embeddings' not in i for i in answer['predictions'])
         _, answer, _ = _served(vector)
         assert all('embeddings' not in i for i in answer['predictions'])
+
+
+@pytest.mark.parametrize('fail_call', [None, 0])
+def test_prediction_only_probe_is_recorded_without_consuming_ordinal(fail_call):
+    vector = next(v for v in vectors if v['status'] == 200)
+    body = vector['body'].encode()
+    with endpoint.serve(prediction_only=True, fail_call=fail_call) as (
+        url,
+        received,
+    ):
+        with pytest.raises(urllib.error.HTTPError) as probe:
+            urllib.request.urlopen(
+                urllib.request.Request(url + '/v1/sessions', b'{}')
+            )
+        assert probe.value.code == 404
+        request = urllib.request.Request(url + endpoint.PREDICTIONS, body)
+        if fail_call is None:
+            with urllib.request.urlopen(request) as response:
+                actual = json.load(response)
+            assert (
+                actual
+                == endpoint.answer('POST', endpoint.PREDICTIONS, body, call=0)[
+                    1
+                ]
+            )
+            assert received.responses == [404, 200]
+        else:
+            with pytest.raises(urllib.error.HTTPError) as failed:
+                urllib.request.urlopen(request)
+            assert failed.value.code == endpoint.FAILED
+            assert received.responses == [404, endpoint.FAILED]
+        assert len(received.requests) == 2

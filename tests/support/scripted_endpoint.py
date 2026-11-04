@@ -331,9 +331,12 @@ def answer(
 @dataclass
 class Received:
     r"""What the endpoint was sent, in order: method, path and body bytes;
-    a request's position is its call's number."""
+    a request's position is its call's number unless prediction_only excludes
+    rejected capability probes from prediction ordinals."""
 
     requests: list[tuple[str, str, bytes]] = field(default_factory=list)
+    responses: list[int | None] = field(default_factory=list)
+    prediction_only: bool = False
     fail_call: int | None = None
     probabilities: bool = False
     quantiles: bool = False
@@ -347,6 +350,7 @@ class Received:
         r"""Records a request; its call's number."""
         with self.lock:
             self.requests.append((method, path, body))
+            self.responses.append(None)
             return len(self.requests) - 1
 
 
@@ -364,7 +368,21 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length') or 0)
         body = self.rfile.read(length) if length else b''
         received: Received = self.server.received  # type: ignore[attr-defined]
-        call = received.take(self.command, self.path, body)
+        request_index = received.take(self.command, self.path, body)
+        call = request_index
+        if received.prediction_only:
+            # Capability probes are recorded, but do not consume a prediction's
+            # scripted value or fail_call ordinal.
+            with received.lock:
+                call = (
+                    sum(
+                        method == 'POST' and path == PREDICTIONS
+                        for method, path, _ in received.requests[
+                            : request_index + 1
+                        ]
+                    )
+                    - 1
+                )
         # The chosen call fails here, and every other is the rule's, called
         # as one request is with the call's number and whether to answer
         # probabilities and quantiles as keywords (a test may stand a rule
@@ -380,6 +398,7 @@ class _Handler(BaseHTTPRequestHandler):
         status, reply = (
             _failed(call)
             if call == received.fail_call
+            and (not received.prediction_only or self.path == PREDICTIONS)
             else answer(
                 self.command,
                 self.path,
@@ -390,6 +409,8 @@ class _Handler(BaseHTTPRequestHandler):
                 **told,
             )
         )
+        with received.lock:
+            received.responses[request_index] = status
         out = received.encode(json.dumps(reply))
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
@@ -421,6 +442,7 @@ def serve(
     embeddings: bool = False,
     encode: Callable[[str], bytes] = str.encode,
     host: str | None = None,
+    prediction_only: bool = False,
 ) -> Iterator[tuple[str, Received]]:
     r"""The endpoint on a free localhost port: its base URL, and what it
     receives; the call numbered ``fail_call`` is failed, a classification
@@ -431,6 +453,9 @@ def serve(
     embeddings with one on each item where ``embeddings`` does; each
     answer's JSON text written to bytes by ``encode``, UTF-8 unless told.
 
+    ``prediction_only`` records every HTTP response but counts only prediction
+    requests for scripted values and ``fail_call``; session probes still get 404.
+
     It listens on ``host``, else ``SDM_SCRIPTED_ENDPOINT_HOST``, else
     ``127.0.0.1``: an IPv6 address (``::1``) is served as IPv6, since a
     host may refuse IPv4 loopback (Databricks serverless, the second early
@@ -440,6 +465,7 @@ def serve(
         (host, 0), _Handler
     )
     received = Received(
+        prediction_only=prediction_only,
         fail_call=fail_call,
         probabilities=probabilities,
         quantiles=quantiles,
