@@ -112,7 +112,7 @@ Neither can be fitted into a session. Each part needs the context its own
 labels come from, so a ranking and a forecast are asked with `predict()` and
 `fit()` refuses them.
 
-An explanation is asked for as an output, `outputs=[..., 'explanation']`, never
-an `explain=` argument, and read from `result.explanation`. It covers one
-scored row at a time. A ranking refuses it locally, and the shipping endpoint
-refuses it everywhere else, so treat `result.explanation` as possibly `None`.
+An explanation is requested with `outputs=[..., 'explanation']` or `EXPLAIN PREDICT`, not an `explain=` argument.
+For `sdm_gradient_v1`, read each prediction through `result.explanations` and its numerical gradients through `to_pandas()`.
+The model must support that output; client-assembled rankings refuse it locally.
+`result.explanation` remains the singular raw compatibility view, including unknown formats.

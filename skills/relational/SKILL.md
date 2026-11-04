@@ -181,14 +181,13 @@ many calls.
 
 **The table limit is on the graph a request carries, not on the schema.** A
 schema may describe far more than fifteen tables; what counts is how many the
-query actually reaches. An explanation has a second limit besides its one row:
-it must fit the 1,000-row context budget.
+query actually reaches.
+Gradient explanations follow the model endpoint's supported outputs; the client does not impose a separate one-row or fast-context limit.
 
 ## Asking for more than one answer each
 
-A ranking is a call per candidate and a forecast a call per step; an
-explanation is an output, over one scored row. Each has limits and refusals of
-its own, and they are in
+A ranking is a call per candidate and a forecast a call per step; an explanation is an output for each scored row.
+Endpoint support and task restrictions are described in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
 
 ## Asking the same context more than once
@@ -273,6 +272,6 @@ change. The ones worth knowing:
 | more than 100,000 entities at once | every batch is built before any is sent; ask about fewer at a time |
 | more than 100 calls at once | a context is gathered per call; ask about fewer entities, or raise `rows_per_call` if you lowered it |
 | more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
-| an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
+| an output this question cannot give | `rankings` on a regression, `explanation` on a client-assembled ranking |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |
