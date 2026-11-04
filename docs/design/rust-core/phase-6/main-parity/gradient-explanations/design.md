@@ -7,6 +7,22 @@
 **Gap:** main can explain each prediction; Phase 6 still exposes mainly a single raw explanation and rejects some supported requests.
 This is the largest remaining product change.
 
+## Approved engine and language boundaries
+
+Main advanced to `847a1e9e3`: PR #62 makes `EXPLAIN PREDICT` request explanations, including forecast and fitted-session handling.
+Rust must interpret that flag before decomposition, combine requested outputs and preserve question identity independently of the output prefix.
+Do not implement separate Python/Java interpretations of PQL; retain main's refusal for explanations of client-assembled candidate rankings.
+
+The model computes gradients; Rust interprets them, ties them to the exact input rows and assembles results.
+The language-neutral engine result must preserve row position, typed entity ID, forecast step, explained outputs and per-table row/key/hop/gradient records.
+Python dictionaries/pandas and Java views/Arrow are adapters over that contract, not competing decoders.
+Malformed model output must fail consistently in Rust; old opaque explanation formats remain available without pretending they are validated gradients.
+No extra warehouse reads or Python callbacks are needed for decoding.
+
+PR #63 is still open, now at inspected head `f240fe448`; its `.gradients`/`.columns` container is not final.
+If approved, column-cohort calculations and exact context/holdout/session reuse belong in the Rust engine because they define explanation semantics over the prediction request.
+Tensor execution remains in the model service or optional Python model runtime; plotting, pandas/Arrow conversion and explicitly configured LLM prose remain language-side presentation/integration.
+
 ## Applicability (source-audited)
 
 | Dimension | Scope |
@@ -54,7 +70,7 @@ Share immutable request data where possible; avoid cloning every sampled table s
 
 ## PR #63 affects this API
 
-At inspected head `61d6935c7`, the open PR changes `.explanations` to a container with `.gradients` and `.columns`.
+At inspected head `f240fe448`, the open PR changes `.explanations` to a container with `.gradients` and `.columns`.
 The latter summarizes labelled context by column/cohort, computed once per prediction or after fit holdout, then reused by that session.
 **Keep this pending, not approved scope.**
 If merged, its context/holdout/forecast semantics belong alongside Rust request/session preparation; pandas/Arrow formatting stays in the hosts.

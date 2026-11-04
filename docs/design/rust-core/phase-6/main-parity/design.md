@@ -6,7 +6,9 @@
 
 **Inventory: four product fixes, two CI improvements, and one evidence follow-up.**
 Temporal-link batching, wheel provenance and Java analysis are now implemented and merged; see [completion evidence](implementation.md).
-The other three implementation designs remain proposals.
+The remaining three designs now record the approved DuckDB version policy, explanation ownership boundaries and PostgreSQL correction.
+Implementation has not started; PR #63’s final explanation API remains pending upstream review.
+The latest investigation also records main `847a1e9e3` (PR#62, `EXPLAIN PREDICT`) in the explanation design; the original audit remains pinned to its earlier snapshot.
 Based on the [commit audit](../main-commit-audit.md): main `1c5e2e71d` versus Phase 6 `2e29a56a9`.
 These are missing behaviors, not a proposal to restore the old Python engine.
 
@@ -47,7 +49,7 @@ None of these designs replaces push-down sampling; PostgreSQL ordering is a narr
 
 ## Pending upstream change
 
-[PR #63](https://github.com/NVIDIA/structured-data-models-client/pull/63) is **open**, inspected at head `61d6935c7` on November 4.
+[PR #63](https://github.com/NVIDIA/structured-data-models-client/pull/63) is **open**, latest inspection at head `f240fe448` on November 4.
 It proposes `result.explanations.gradients` plus client-computed `.columns`, changing the explanation API and fit/predict lifecycle.
 Do not freeze the new public explanation shape or claim final main parity until its reviewed outcome is reconciled.
 The other designs can proceed independently.

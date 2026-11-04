@@ -7,6 +7,15 @@
 **Gap:** keyless neighbor tables can generate an `ORDER BY` that PostgreSQL cannot execute.
 The affected columns include JSON, XML and domains wrapping those types.
 
+## Approved correction, in plain terms
+
+A customer's two notes have the same timestamp and no unique note ID, but different JSON bodies.
+To keep only one neighbor consistently, sampling needs a tie-break after the timestamp.
+PostgreSQL cannot sort its raw `json` or `xml` values, so the current generated query can fail.
+The old fix effectively uses `ORDER BY timestamp DESC, CAST(body AS TEXT)` for that string-like tie term.
+This changes how tied rows are selected; it does not modify stored JSON, flatten tables or move sampling into Python.
+Ordinary keyed tables, other database dialects and Tabular prediction do not need this correction.
+
 ## Applicability (source-audited)
 
 | Dimension | Scope |

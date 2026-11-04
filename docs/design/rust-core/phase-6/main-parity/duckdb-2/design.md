@@ -6,12 +6,34 @@
 
 **Gap:** installation still prohibits DuckDB 2, and the native client's Python provider uses a result-reading path that makes extra copies there.
 
+## Approved version policy and SQL checks
+
+Fetched main `847a1e9e3` declares `duckdb>=1.5.0`: it allows both 1.5 and 2, rather than requiring 2.
+The cached DuckDB 2 wheel declares Python >=3.11; our client/connectors still declare Python >=3.10.
+Use DuckDB 2.x as the primary target and retain DuckDB 1.5 compatibility for Python 3.10.
+Do not silently drop Python 3.10 support or introduce separate sampling implementations for the two versions.
+Java already tests DuckDB JDBC 2.0.0.0.
+
+This is more than an Arrow-read patch: audit generated SQL and provider lifecycle on both drivers before changing support claims.
+
+| Area | Concrete check |
+|---|---|
+| Expressions | Regex matching changes; old lambda arrows are disabled; integer modulo/division by zero now errors. Audit calculated expressions and filters, not just sampling SQL. |
+| Catalog/sampling | Exercise keys/FKs, quoted names, null/type discovery, reservoir sampling, seeded keys and window/neighbor queries. |
+| Ownership | Test failed transactions, concurrent cursors, pending results and Arrow batch boundaries; never silently change a borrowed connection's compatibility settings. |
+| Files | New 2.0 files are not readable by 1.x by default; test existing-file access without upgrading user storage implicitly. |
+
+Local probes confirmed regex/modulo/lambda differences between 1.5.6 and 2.0.0; simple catalog column indices and seeded reservoir results matched.
+That is narrow evidence, not a complete SQL compatibility verdict.
+[DuckDB SQL migration](https://duckdb.org/docs/2.0/operations_manual/migration) and [Python migration](https://duckdb.org/docs/2.0/clients/python/migration) are the upstream checklist.
+If shared Rust SQL needs correction, test it through Python and Java; Python-only driver changes remain host-owned.
+
 ## Applicability (source-audited)
 
 | Dimension | Scope |
 |---|---|
-| Connector/language | **Python DuckDB only**, including `duckdb`/aggregate extras that pull that dependency. Java DuckDB uses JDBC, not the Python driver or this version cap. |
-| Relational | DuckDB source description and push-down materialization use `DuckDBProvider`; the final-result read change applies here. SQL planning/neighbor policy remains Rust-owned and unchanged. |
+| Connector/language | Dependency/provider changes apply to Python DuckDB, including aggregate extras. Shared SQL compatibility checks apply to Python and Java; Java JDBC does not use the Python version cap. |
+| Relational | DuckDB source description and push-down materialization use `DuckDBProvider`; the final-result read change applies here. SQL planning/neighbor policy remains Rust-owned; change it only for a demonstrated compatibility defect. |
 | Tabular | Can consume a DuckDB table after `read_table()` loads it into memory. That reader already uses relations; removing the dependency cap enables installation, but the provider optimization does not change Tabular execution. No Tabular `Schema.from_source()` support is added. |
 | Other input paths | Other databases and native file/S3 readers are unaffected. If a user explicitly exposes file/S3 data through a DuckDB connection/view, its DuckDB query result does use this provider. In-memory prediction itself is unaffected. |
 | Tasks | Provider result reading is task-independent, for tasks already supported by the selected model/path; it adds no prediction task. |
@@ -46,7 +68,7 @@ Keep an isolated cursor, registered Arrow key relations, statement order, full r
 Use a relation for the final result-producing query without accidentally executing setup twice or dropping earlier statements.
 Keep the borrowed connection open and clean up temporary cursor resources on failure.
 Then remove the dependency cap and regenerate the lock using the normal resolver.
-Do not change the Java JDBC dependency solely because the Python package moved to version 2; Java needs only a no-regression check for shared contracts.
+Java already targets JDBC2; run shared SQL compatibility cases there too, while keeping Python driver adaptation separate.
 
 ## Tests and acceptance
 
