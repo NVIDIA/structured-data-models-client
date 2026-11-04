@@ -15,8 +15,11 @@ import json
 import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -65,6 +68,43 @@ def test_target_cpu_is_refused_wherever_it_is_set() -> None:
 def test_a_log_with_no_rustc_invocation_is_refused() -> None:
     script = _script()
     assert script.target_cpu_refusal({}, {}, script._rustc_flags('Fresh x'))
+
+
+@pytest.mark.parametrize(
+    'cached',
+    [
+        'sdm_client/__pycache__/schema.cpython-312.pyc',
+        'sdm_client/schema.pyc',
+        'sdm_client/schema.pyo',
+        'sdm_client/_rust/__pycache__/cache-marker',
+    ],
+)
+def test_wheel_members_refuse_interpreter_cache_artifacts(
+    tmp_path: Path, cached: str
+) -> None:
+    wheel = tmp_path / 'client.whl'
+    with zipfile.ZipFile(wheel, 'w') as archive:
+        archive.writestr('sdm_client/schema.py', '# current source\n')
+        archive.writestr('sdm_client/_native.abi3.so', b'native')
+        archive.writestr(cached, b'local interpreter cache')
+    refusal = _script().wheel_contents_refusal(wheel)
+    assert refusal is not None and cached in refusal
+
+
+def test_wheel_members_keep_sources_stubs_assets_and_native(
+    tmp_path: Path,
+) -> None:
+    wheel = tmp_path / 'client.whl'
+    with zipfile.ZipFile(wheel, 'w') as archive:
+        for name in (
+            'schema.py',
+            '_native.pyi',
+            'py.typed',
+            'assets/a.png',
+            '_native.abi3.so',
+        ):
+            archive.writestr(f'sdm_client/{name}', b'content')
+    assert _script().wheel_contents_refusal(wheel) is None
 
 
 #: Stands in for maturin: its version, and a build that writes one wheel

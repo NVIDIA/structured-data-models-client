@@ -92,6 +92,7 @@ manifest-path = "../../rust/bindings/sdm-py/Cargo.toml"
 module-name = "sdm_client._native"
 python-source = "src"
 locked = true
+exclude = ["**/__pycache__/**", "**/*.pyc", "**/*.pyo"]
 
 [tool.ruff]
 extend = "../../pyproject.toml"
