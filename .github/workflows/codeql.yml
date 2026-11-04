@@ -51,6 +51,9 @@ jobs:
           # Python APIs, host adapters and connectors.
           - language: python
             build-mode: none
+          # Compile the shipped Java sources with their actual Maven dependencies.
+          - language: java-kotlin
+            build-mode: manual
           # The Rust core, the client's native module, read from the tree.
           - language: rust
             build-mode: none
@@ -62,18 +65,35 @@ jobs:
         with:
           python-version: '3.12'
 
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        if: matrix.language == 'java-kotlin'
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          db-location: ${{ runner.temp }}/codeql-databases
           # security-extended over the default pack: it adds queries of lower
           # precision and lower severity, so it finds more and is wrong more
           # often. This is a library other people install, and that trade buys
           # coverage with our triage rather than with their incident.
           queries: security-extended
 
+      # Compile only: no tests, JNI loading, native build or model endpoint.
+      # clean prevents incremental compilation from hiding sources from the tracer.
+      - name: Extract all shipped Java sources
+        if: matrix.language == 'java-kotlin'
+        run: mvn --batch-mode --no-transfer-progress -f java/pom.xml clean compile
+
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           category: /language:${{ matrix.language }}
+
+      - name: Verify Java extraction coverage
+        if: matrix.language == 'java-kotlin'
+        run: python scripts/check_codeql_java.py "$RUNNER_TEMP/codeql-databases/java/src.zip"
