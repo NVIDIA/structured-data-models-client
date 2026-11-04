@@ -2,36 +2,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.13's exits on ``python-core`` (the package's test author's): the
-query and option long tail.
+"""Query-option contracts on DuckDB, SQLite and PostgreSQL.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t213_options.py -q
+Archived cases and vectors retain the original Python reference observations.
+Current-client checks compare every payload, result, warning and item field against
+that reference, except the explicit Phase 6 EXPLAIN improvements.
+EXPLAIN now requests explanations by default and supports multiple entities.
+The current expectations below preserve the archived files and check each entity's
+raw explanation independently, including the legacy first-explanation alias.
 
-Written from the design's T2.13 row (each item an exit: ``entity_filter``,
-``entity_ids``, ``assuming``, ``evaluate``, ``explain``,
-``target_transform_null``, ``inference_config_text``; ``response_field``
-for explanations and item metadata; U1) and the reference (python-ref at
-``contract/reference-env.txt``'s commit), before the implementation.
-``sdm-testkit``'s ``tests/t213_options.rs`` holds ``rust-host`` to the
-same exits.
-
-The cases, ``contract/cases/s1/{filter,ids,assuming,evaluate,explain,
-metadata,transforms,config-text,date}.*.json``, each run on DuckDB, SQLite
-and Postgres over the shop base, anchored at 2023-05-01; the values the
-reference takes and the values it refuses, for each rule (see
-``CASE_IDS``). The scripted endpoint answers an explanation and each
-item's metadata where a case says so (``input.explanation`` and
-``input.item_metadata``).
-
-Each test's one line says the exit it proves. Two kinds of evidence, both
-from the reference: its committed lines (``run_python.py``: the outcome,
-each request the endpoint received, the result's digest) and
-``contract/t213-option-vectors.json`` (``option_record.py``: the rows each
-call scores, the result's rows, its explanation, each item's metadata, the
-warnings the exits name, a refusal's message and details), which
-``python-core`` is observed against by the same code.
-
+Run with SDM_POSTGRES_TEST_DSN to exercise PostgreSQL as well as local drivers.
 """
 
 from __future__ import annotations
@@ -240,7 +220,9 @@ def key(case_id: str, database: str) -> str:
 
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
-NAMED_KEYS = tuple(key(c, d) for d in DATABASES for c in NAMED)
+NAMED_KEYS = tuple(
+    key(c, d) for d in DATABASES for c in NAMED if c != 'explain.two-entities'
+)
 
 
 def test_every_option_case_is_named_here() -> None:
@@ -301,7 +283,7 @@ def test_the_assuming_evaluate_and_explain_cases() -> None:
     r"""Exits "``assuming``", "``evaluate``" and "``explain``": each case
     says ASSUMING, EVALUATE or EXPLAIN as it names; an explanation case
     asks predict for an explanation, the endpoint explaining where it
-    says, over one entity but where two are refused."""
+    says, over one or two entities (the archive refused two)."""
     for case_id in ASSUMING:
         assert ' ASSUMING ' in _case(case_id)['input']['pql'], case_id
     for case_id in EVALUATE:
@@ -528,6 +510,71 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
             assert word in vector['message'], (word, vector['message'])
 
 
+# Current EXPLAIN admission follows the approved Phase 6 gradient design:
+# the prefix requests explanations and multiple entities are supported.
+# Keep archived cases/vectors immutable; every other field still compares exactly.
+def current_line(case_key: str) -> dict[str, Any]:
+    case_id, _, database = case_key.partition('@')
+    if case_id not in {'explain.query', 'explain.two-entities'}:
+        return reference_lines()[case_key]
+    given = cases()[case_id][0]['input']
+    source = cases()['explain.query'][0]['input']
+    assert {
+        k: v for k, v in given.items() if k not in {'outputs', 'explanation'}
+    } == source
+    line = copy.deepcopy(
+        reference_lines()[key('explain.query', database or 'duckdb')]
+    )
+    for payload in line['public']['payloads']:
+        payload['parsed']['output']['fields'] = ['prediction', 'explanation']
+    return line
+
+
+def current_vector(case_key: str) -> dict[str, Any]:
+    case_id, _, database = case_key.partition('@')
+    if case_id not in {'explain.query', 'explain.two-entities'}:
+        return vectors()['vectors'][case_key]
+    vector = copy.deepcopy(
+        vectors()['vectors'][key('explain.query', database or 'duckdb')]
+    )
+    if case_id == 'explain.query':
+        vector['warnings'] = [
+            [
+                'SDMWarning',
+                "kumo-relational answered without ['explanation'], which this request asked for, "
+                'so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected.',
+            ]
+        ]
+    else:
+        vector['explanation'] = _explained(0, 0)
+    return vector
+
+
+@pytest.mark.parametrize('database', DATABASES)
+def test_each_explained_entity_retains_its_own_raw_response(
+    database, monkeypatch
+):
+    if database == 'postgres' and not _server():
+        return
+    record = recorder()
+    project = record.projection
+    observed = []
+
+    def inspect(result):
+        observed.extend(
+            (item.row_index, item.explanation) for item in result.items
+        )
+        return project(result)
+
+    monkeypatch.setattr(record, 'projection', inspect)
+    got = record.observe(cases()['explain.two-entities'][0], database)
+    assert got['outcome']['result'] == 'success'
+    assert observed == [(0, _explained(0, 0)), (1, _explained(0, 1))]
+    assert got['explanation'] == _explained(0, 0)
+    assert got['calls'] == [2]
+    assert got['warnings'] == []
+
+
 # --- python-core against the reference ---------------------------------------------
 
 
@@ -649,7 +696,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = reference_lines()[case_key]
+        want = current_line(case_key)
         assert same_outcome(_outcome(want), _outcome(line)), (
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )
@@ -687,7 +734,7 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
         return
 
     def check() -> None:
-        want = vectors()['vectors'][case_key]
+        want = current_vector(case_key)
         got = core_carried(case_key)
         outcome = (
             _outcome({'outcome': want['outcome']}),
@@ -729,7 +776,7 @@ def test_python_core_names_what_the_reference_names(case_key: str) -> None:
         return
 
     def check() -> None:
-        want = vectors()['vectors'][case_key]
+        want = current_vector(case_key)
         got = core_carried(case_key)
         outcome = (
             _outcome({'outcome': want['outcome']}),

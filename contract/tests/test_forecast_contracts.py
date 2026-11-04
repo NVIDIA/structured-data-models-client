@@ -59,6 +59,8 @@ def _forecast(schema, steps):
 
 def _predict(request):
     with _endpoint() as (url, received), SDMClient(url) as client:
+        # This fixture models stateless prediction replies, not session creation.
+        client._transport.serves_sessions = False
         client.predict(request, model=KumoRelational())
     return [json.loads(body) for _, _, body in received.requests]
 
