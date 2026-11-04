@@ -10,13 +10,19 @@ that nothing is downloaded and no GPU is needed.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pytest
 
 from sdm_client import Request
+
+# Installed-wheel tests run outside the checkout, including in isolated Python.
+# Make repository fixture decoders available without adding package source roots.
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 
 @pytest.fixture(scope='module')
