@@ -88,8 +88,3 @@ Fix the test setup while retaining every matrix assertion; fixture reads alone d
 For readiness dispatch, use `gh workflow run ci.yml --ref rust-core-phase-8 -f fresh=false`.
 The optional `fresh=true` mode upgrades dependencies and is a separate compatibility experiment.
 Run `41916333063` accidentally used that mode and failed the exact Arrow fixture-version check after upgrading 58.4.0 to 58.4.1; it is not passing readiness evidence.
-
-Connector shards run concurrently, using separate disposable namespaces and runner-local services.
-The former two-shard limit unnecessarily serialized local checks behind warehouse checks.
-The measured warm Rust job improved from 29.5 to 15.4 minutes; its main test step still took 11.7 minutes.
-The 10-minute target is not met, and cache reuse alone does not solve test execution or warehouse latency.
