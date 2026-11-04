@@ -230,7 +230,10 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
     reason: converting a complex number to a float keeps the real part and
     drops the rest without a word, so ``2j`` arrived as a detection. An
     array of objects is read element by element, because its own dtype says
-    only that the elements were not all one thing.
+    only that the elements were not all one thing, and what each element is
+    worth is read there too: converting rounds, and
+    ``Decimal('0.99999999999999999999')`` became a detection while
+    ``Decimal('1e-1000')`` became the absence of one.
     """
     values = np.asarray(
         detections.to_numpy()
@@ -254,6 +257,10 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
             f'decision about a row. Pass true and false, one per row',
             code='INVALID_REQUEST',
         )
+    if values.dtype.kind == 'O' and not all(
+        value == 0 or value == 1 for value in values
+    ):
+        raise _a_score_rather_than_a_decision()
     try:
         numeric = np.asarray(values, dtype=float)
     except (TypeError, ValueError) as error:
@@ -263,13 +270,18 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
             code='INVALID_REQUEST',
         ) from error
     if not bool(np.isin(numeric, (0.0, 1.0)).all()):
-        raise StructuredDataError(
-            'detected_by carries values other than true and false, so it is '
-            'a score rather than a decision about one. Compare it against a '
-            'threshold first; percentile_thresholds finds one',
-            code='INVALID_REQUEST',
-        )
+        raise _a_score_rather_than_a_decision()
     return numeric.astype(bool)
+
+
+def _a_score_rather_than_a_decision() -> StructuredDataError:
+    r"""What is said about a value that is neither true nor false."""
+    return StructuredDataError(
+        'detected_by carries values other than true and false, so it is a '
+        'score rather than a decision about one. Compare it against a '
+        'threshold first; percentile_thresholds finds one',
+        code='INVALID_REQUEST',
+    )
 
 
 def _is_a_real_number(value: Any) -> bool:

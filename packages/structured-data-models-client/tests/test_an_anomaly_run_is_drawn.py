@@ -351,6 +351,27 @@ def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
     assert 'detected_by' in str(caught.value)
 
 
+@pytest.mark.parametrize(
+    'nearly',
+    [Decimal('0.99999999999999999999'), Decimal('1e-1000')],
+)
+def test_supplied_detections_that_only_round_to_a_decision_are_refused(
+    anomaly, tmp_path, nearly
+):
+    """Neither is zero or one, and converting rounds them to one and to
+    zero: a score arrived as a column of decisions."""
+    frame = readings()
+
+    with pytest.raises(StructuredDataError) as caught:
+        anomaly_report(
+            scored(anomaly, frame),
+            frame,
+            tmp_path / 'run.pdf',
+            detected_by=np.array([nearly] * len(frame), dtype=object),
+        )
+    assert 'threshold' in str(caught.value)
+
+
 @pytest.mark.parametrize('spelling', [np.bool_, Decimal])
 def test_detections_spelled_in_other_ways_are_still_detections(
     anomaly, tmp_path, spelling
