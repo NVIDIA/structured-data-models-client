@@ -4820,6 +4820,10 @@ def _calls(
                     else {}
                 )
                 with SDMClient(url) as client:
+                    # This fixture serves prediction requests only. Session
+                    # probing would consume its scripted call ordinals and
+                    # does not belong to these stateless payload contracts.
+                    client._transport.serves_sessions = False
                     result = client.predict(
                         request, model=KumoRelational(), **outputs
                     )
