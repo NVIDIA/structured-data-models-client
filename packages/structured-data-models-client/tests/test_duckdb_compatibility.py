@@ -90,10 +90,14 @@ def test_provider_does_not_use_copying_dbapi_arrow_output():
             return Cursor()
 
     table = DuckDBProvider(Connection())(
-        plan('CREATE TEMP TABLE value AS SELECT 1 AS n', 'SELECT n FROM value')
+        plan(
+            'CREATE TEMP TABLE value AS SELECT 1 AS n',
+            'INSERT INTO value VALUES (2)',
+            'SELECT n FROM value ORDER BY n',
+        )
     )
-    assert table.to_pydict() == {'n': [1]}
-    assert [kind for kind, _ in calls] == ['execute', 'sql']
+    assert table.to_pydict() == {'n': [1, 2]}
+    assert [kind for kind, _ in calls] == ['execute', 'execute', 'sql']
     connection.close()
 
 
