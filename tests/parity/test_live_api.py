@@ -324,3 +324,34 @@ def test_private_bridge_identity_is_bound_to_route_without_claiming_attestation(
         model_identities(config)['relational']['route_sha256']
         != identity['route_sha256']
     )
+
+
+def test_case_model_overrides_reference_recorded_primary_identities():
+    from live_api import model_identities
+
+    config = {
+        'endpoints': {
+            'tabular': {'version': '2', 'transport': 'databricks'},
+            'relational': {'version': '27', 'transport': 'databricks'},
+            'link': {'version': '28', 'transport': 'databricks'},
+        },
+        'live_api': {
+            'model_versions': {
+                'pretrained': 'weights-v1',
+                'gradients': 'weights-v1',
+            }
+        },
+    }
+    config['endpoints_by_case'] = {
+        'relational.forecast': {'relational': dict(config['endpoints']['link'])}
+    }
+    result = model_identities(config)
+    assert result['link']['version'] == '28'
+    assert result['case_routes'] == {
+        'relational.forecast': {'relational': 'link'}
+    }
+    config['endpoints_by_case']['relational.forecast']['relational'][
+        'version'
+    ] = '29'
+    with pytest.raises(ValueError, match='recorded primary route'):
+        model_identities(config)
