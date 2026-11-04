@@ -206,13 +206,11 @@ def test_ordinary_merge_does_not_serialize_user_ids():
 @pytest.mark.parametrize('model_name', ['tabular', 'relational'])
 @pytest.mark.parametrize('task', ['classification', 'regression'])
 def test_pretrained_local_model_gradients(model_name, task):
-    """Opt-in GPU E2E with actual pretrained weights; no model-server fixture."""
+    """Opt-in CPU E2E with actual pretrained weights; no model-server fixture."""
     import os
 
     if os.environ.get('SDM_RUN_LOCAL_MODEL') != '1':
-        pytest.skip(
-            'set SDM_RUN_LOCAL_MODEL=1 with the optional model runtime and GPU'
-        )
+        pytest.skip('set SDM_RUN_LOCAL_MODEL=1 with the optional model runtime')
     from sample_tables import graph
 
     from sdm_client import KumoRelational, PredictiveQuery
@@ -242,7 +240,7 @@ def test_pretrained_local_model_gradients(model_name, task):
             random_seed=7,
         )
         model = KumoRelational()
-    with SDMClient.in_process(device='cuda') as client:
+    with SDMClient.in_process(device='cpu') as client:
         result = client.predict(
             req,
             model=model,

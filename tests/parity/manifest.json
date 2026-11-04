@@ -10092,13 +10092,13 @@
       "api_contract": "gradient-explanations",
       "test": "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_pretrained_local_model_gradients",
       "evidence_level": "live-required",
-      "note": "Opt-in actual pretrained GPU models: Tabular/Relational classification and regression. Python uses the optional local runtime; Java calls that runtime over HTTP. No blanket warehouse or deployed-endpoint gradient claim."
+      "note": "Opt-in actual pretrained CPU models: Tabular/Relational classification and regression. Python uses the optional local runtime; Java calls that runtime over HTTP. No blanket warehouse or deployed-endpoint gradient claim."
     },
     {
       "api_contract": "gradient-explanations",
       "test": "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#realModelEndpointGradients",
       "evidence_level": "live-required",
-      "note": "Opt-in actual pretrained GPU models: Tabular/Relational classification and regression. Python uses the optional local runtime; Java calls that runtime over HTTP. No blanket warehouse or deployed-endpoint gradient claim."
+      "note": "Opt-in actual pretrained CPU models: Tabular/Relational classification and regression. Python uses the optional local runtime; Java calls that runtime over HTTP. No blanket warehouse or deployed-endpoint gradient claim."
     }
   ]
 }

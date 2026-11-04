@@ -88,3 +88,35 @@ Preflight checks authentication, bounded fixture reads and endpoint readiness be
 4. Final local acceptance and bounded benchmarks run after integration; measure a configured trusted CI run before selecting operational budgets or claiming scheduled coverage.
 
 Code: [CI](../../../../../.github/workflows/ci.yml), [live workflow](../../../../../.github/workflows/parity-live.yml), [release gate](../../../../../.github/workflows/publish.yml), [runner guide](../../../../../tests/parity/README.md), [ledger](../../../../../tests/parity/manifest.json).
+
+## Final hosted-CI revision
+
+This revision supersedes the required full remote matrix described above; previous Phase 8 evidence remains unchanged.
+The supplied Snowflake and Databricks API credentials are validated and stored as encrypted `parity-live` secrets.
+
+| Lane | Required work | External dependency |
+|---|---|---|
+| Every PR | Existing engine/host contracts, local PostgreSQL, generated CSV/Parquet and local S3-emulator reader checks | None |
+| Push to main or approved manual branch run | Real Snowflake and Databricks reader/SQL journeys in both languages, using disposable generated fixtures | Snowflake and Databricks API credentials |
+| Small model smoke | Pretrained CPU classification/regression and gradients for both models; Python and Java public paths, plus necessary session checks | Model-weight download access, to verify on a clean runner |
+| Optional only | Real S3, Lakebase and giant-value stress | Explicitly configured resources |
+
+Do not multiply pretrained inference across every connector/type combination.
+Use deterministic responses for broad client behavior and small real-model checks for model integration; receipts must distinguish those execution modes.
+Local S3 emulation and PostgreSQL are not evidence of real AWS or Lakebase service behavior.
+
+Implementation order:
+1. Verify clean model downloads and Java CPU timings; select bounded model smoke coverage.
+2. Make fixture provisioning portable, add local PostgreSQL/S3 services, and consume dedicated warehouse secrets without exposing values.
+3. Update triggers, protected manual execution, coverage accounting and release gates together; remove frozen-client transport dependencies.
+4. Run the revised hosted workflow on the implementation branch, review failures and publish concise timing/coverage evidence.
+
+Remove the weekly trigger.
+Only trusted branch code approved for secret access may run the warehouse lane; ordinary fork PR checks receive no secrets.
+Keep release publication and merges into `rust-core` or `main` outside this goal.
+
+CPU feasibility is verified locally with two CPU threads and GPU visibility disabled.
+Four Python pretrained gradient checks passed with a fresh model cache and implicit download authentication disabled: 32.2 seconds process wall time and about 2.6 GiB peak RSS.
+Java's four model/task combinations passed through the maintained CPU backend over loopback HTTP: 10.5 seconds test time, 19.9 seconds including Maven startup.
+These are local measurements, not hosted-runner timing claims.
+The test server uses no archived reference client or Databricks transport bridge.
