@@ -49,17 +49,22 @@ Each process has one cold iteration, ten warmups and twenty measured iterations.
 |---|---:|---:|---:|---:|
 | Tabular fit → predict → close | 18.47 | 62.27 | 66.75 | 15.59 |
 | Relational in-memory prediction | 25.91 | 45.41 | 48.39 | 17.02 |
+| Relational SQLite prediction | 36.45 | 26.35 | 27.64 | 43.99 |
+| Tabular with gradients | 20.05 | Unsupported | 68.00 | 14.94 |
+| Tabular, 10,000 context rows | 130.85 | 158.70 | 160.57 | 56.82 |
 
-Inputs use 1,000 rows, ten scoring rows and four features; relational degree is four.
+Unless the row specifies otherwise, inputs use 1,000 rows, ten scoring rows and four features; relational degree is four.
 Independent review confirmed matching request work counts and common Python dependencies.
 The largest Python differences occur before HTTP, in request preparation and schema construction; most of the gap already exists before Phase 6.
 These are substantial regressions, reported without performance tuning as requested.
 Java uses Arrow result views and Python uses pandas, so host conversion costs differ.
+SQLite's old sampler produced 29–32 context rows versus 31 in the Rust clients; its timings therefore do not represent identical sampled work.
+Gradient timing excludes explicit result merge in both hosts because the old API does not support the same repeated-result merge workload.
 
 Import/startup and cold timings remain separate from this table.
 Memory samples cover the whole process lifetime, including imports, rather than warm-only or isolated Rust memory.
 The retained raw results are `benchmark-real/fixed-tabular-session.json` and `benchmark-real/fixed-relational-memory.json` in the external Phase 8 archive.
-Scaling, gradients, SQLite and real-model measurements are still pending; these two workloads do not establish overall performance.
+Further width/degree scaling, relational gradients and real-model measurements remain pending; these results do not establish overall performance.
 
 ## Evidence and remaining work
 
