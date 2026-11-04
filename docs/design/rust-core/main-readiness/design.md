@@ -37,7 +37,7 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Live matrix | All 740 Python/Java non-S3 cells pass across 13 connectors with observed subprocesses |
 | Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
 | Current-main comparison | All 370 non-S3 cells executed with matched dependencies: 277 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
-| Benchmarks | Tabular and relational memory measured with scaling, gradients and real models; remaining SQLite workloads running, see [results](validation-performance/verification.md) |
+| Benchmarks | All 17 workloads completed, including scaling, gradients and real models; independently reviewed [latency and memory results](validation-performance/performance.md) |
 
 The matrix/benchmark artifacts remain identified as `08d027795`.
 A later Arrow 14 labels-adapter repair is tested separately in the fresh `d140e0d6d` wheel; its native binary is unchanged.
