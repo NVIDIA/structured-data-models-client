@@ -38,6 +38,14 @@ def test_a_run_that_is_not_made_of_distances_is_refused():
     assert 'negative' in str(caught.value)
 
 
+def test_a_run_of_very_large_scores_still_has_a_line():
+    """How scattered the scores are is worked out on the values scaled by
+    the largest of them, which is what a coefficient of variation is. Taken
+    on the values themselves the mean of these overflowed, the spread came
+    back NaN, and a run that is not scattered at all had no line at all."""
+    assert percentile_thresholds([1.7e308] * 100) == (1.7e308, 1.7e308)
+
+
 def test_a_line_that_no_score_could_clear_is_refused():
     """Widening scores near the largest float overflows: the
     silent-detects-nothing failure the finite check is there to prevent,

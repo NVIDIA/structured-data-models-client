@@ -18,6 +18,7 @@ drawn. Row order is wronger still, because answers may arrive in any order.
 
 from __future__ import annotations
 
+import numbers
 from collections.abc import Hashable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -226,7 +227,9 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
     the one the caller asked for and looks exactly like the one they asked
     for. What the values are is read before they are converted, for the same
     reason: converting a complex number to a float keeps the real part and
-    drops the rest without a word, so ``2j`` arrived as a detection.
+    drops the rest without a word, so ``2j`` arrived as a detection. An
+    array of objects is read element by element, because its own dtype says
+    only that the elements were not all one thing.
     """
     values = np.asarray(
         detections.to_numpy()
@@ -241,7 +244,10 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
         )
     if values.dtype == bool:
         return values
-    if values.dtype.kind not in 'biufO':
+    if values.dtype.kind not in 'biufO' or (
+        values.dtype.kind == 'O'
+        and not all(isinstance(value, numbers.Real) for value in values)
+    ):
         raise StructuredDataError(
             f'detected_by carries {values.dtype} values, which are not a '
             f'decision about a row. Pass true and false, one per row',

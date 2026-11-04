@@ -324,8 +324,16 @@ def test_an_answer_from_another_model_is_refused(anomaly, tmp_path):
     assert 'kumo-tabular' in str(caught.value)
 
 
+@pytest.mark.parametrize(
+    'detections',
+    [
+        lambda rows: np.full(rows, 2j),
+        lambda rows: np.array([2j] * rows, dtype=object),
+        lambda rows: np.array(['1'] * rows),
+    ],
+)
 def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
-    anomaly, tmp_path
+    anomaly, tmp_path, detections
 ):
     """Converting these to a float keeps the real part and drops the rest
     without a word, so they arrived as detections."""
@@ -336,7 +344,7 @@ def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
             scored(anomaly, frame),
             frame,
             tmp_path / 'run.pdf',
-            detected_by=np.full(len(frame), 2j),
+            detected_by=detections(len(frame)),
         )
     assert 'detected_by' in str(caught.value)
 
