@@ -17,6 +17,8 @@ asked for separately.
 from __future__ import annotations
 
 import json
+import math
+import numbers
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -353,13 +355,29 @@ def _saved_as_json(out_dir: Path, carried: dict[str, Any]) -> Path:
     diagnostics block and for the values they only summarise, and nothing
     wrote one, so the reader was sent to a file that was never there.
 
-    What is written is the answer's own explanation, unchanged: the pages
-    read nothing else, so anything derived here could disagree with them.
+    What is written is the answer's own explanation: the pages read nothing
+    else, so anything derived here could disagree with them. The only thing
+    changed on the way out is that a value no JSON reader accepts is
+    written as null, which is what the explanation already does to the
+    arrays it carries and had not done to the summaries nested inside them.
+    Writing one as it stood raised, and this is written before a page is
+    drawn, so one such value cost the whole report.
     """
     out_path = out_dir / 'explanation.json'
     with out_path.open('w', encoding='utf-8') as handle:
-        json.dump(carried, handle, indent=2, allow_nan=False)
+        json.dump(_readable(carried), handle, indent=2, allow_nan=False)
     return out_path
+
+
+def _readable(value: Any) -> Any:
+    r"""``value`` with everything JSON has no spelling for written as null."""
+    if isinstance(value, dict):
+        return {name: _readable(held) for name, held in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_readable(held) for held in value]
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return value
+    return None if not math.isfinite(float(value)) else value
 
 
 def _without_the_unmeasured(

@@ -274,6 +274,25 @@ def test_the_files_the_pages_name_are_written(explained, tmp_path):
     assert 'explanation.json' in written
 
 
+def test_a_value_json_cannot_spell_does_not_cost_the_report(
+    explained, tmp_path
+):
+    """The explanation is written out before any page is drawn, so one
+    value no JSON reader accepts took the whole report with it."""
+    import json
+
+    artifacts = tmp_path / 'artifacts'
+    carried = dict(explained.explanation)
+    carried['diagnostics'] = {'top': [{'share': float('nan')}]}
+
+    forecast_report(
+        Carrying(carried), tmp_path / 'f.pdf', artifacts_dir=artifacts
+    )
+    written = json.loads((artifacts / 'explanation.json').read_text())
+
+    assert written['diagnostics']['top'][0]['share'] is None
+
+
 def test_the_series_own_channel_is_not_ranked_among_the_measured(
     forecast, tmp_path
 ):
