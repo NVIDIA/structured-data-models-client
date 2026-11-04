@@ -227,3 +227,24 @@ def test_live_lanes_share_resources_and_exact_artifacts_without_rebuilds():
     assert 'ci_shards.py' in aggregate
     assert '--connector' not in aggregate and '--language' not in aggregate
     assert 'test "$SHARDS_RESULT" = success' in aggregate
+
+
+def test_installed_api_failure_retains_accounting_and_diagnostics():
+    steps = workflow('ci.yml')['jobs']['installed-wheel']['steps']
+    run = next(
+        step
+        for step in steps
+        if step.get('name')
+        == 'Required Python API cases and collected result identities'
+    )
+    assert 'set -o pipefail' in run['run']
+    assert '--run --out "$RUNNER_TEMP/python-api-results.json"' in run['run']
+    assert 'tee "$RUNNER_TEMP/python-api.log"' in run['run']
+    upload = next(
+        step
+        for step in steps
+        if step.get('with', {}).get('name') == 'installed-wheel-api-results'
+    )
+    assert upload['if'] == 'always()'
+    assert 'python-api-results.json' in upload['with']['path']
+    assert 'python-api.log' in upload['with']['path']

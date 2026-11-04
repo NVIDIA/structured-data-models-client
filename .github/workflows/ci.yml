@@ -1476,7 +1476,18 @@ jobs:
 
       - name: Required Python API cases and collected result identities
         run: |
-          python tests/parity/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json"
+          set -o pipefail
+          python tests/parity/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json" \
+            2>&1 | tee "$RUNNER_TEMP/python-api.log"
+      - name: Retain required API accounting and diagnostics on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installed-wheel-api-results
+          path: |
+            ${{ runner.temp }}/python-api-results.json
+            ${{ runner.temp }}/python-api.log
+          if-no-files-found: warn
 
   # Installed-client and binding checks across supported native runtimes.
   runtime-install:

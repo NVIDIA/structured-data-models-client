@@ -169,3 +169,67 @@ def test_runner_makes_repository_fixture_helpers_importable(tmp_path):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads((tmp_path / 'result.json').read_text())['passed'] == 1
+
+
+@pytest.mark.parametrize('registered', [True, False])
+def test_local_gate_excludes_only_explicit_live_ownership(tmp_path, registered):
+    suite = tmp_path / 'test_owned.py'
+    suite.write_text(
+        'import pytest\n'
+        'def test_local():\n    assert True\n'
+        '@pytest.mark.parametrize("value", [1, 2])\n'
+        'def test_live(value):\n    pytest.skip("endpoint required")\n'
+    )
+    owner = ['test_owned.py::test_live'] if registered else []
+    runner = (
+        'import json, pytest\n'
+        'from api_contracts import Outcomes\n'
+        f'outcomes = Outcomes(live_owned={owner!r})\n'
+        f'pytest.main({[str(suite), "-q"]!r}, plugins=[outcomes])\n'
+        'print(json.dumps({"complete": outcomes.complete, '
+        '"expected": outcomes.expected, "completed": outcomes.completed, '
+        '"live_owned": outcomes.live_owned_tests, "skipped": outcomes.skipped_tests}))\n'
+    )
+    result = subprocess.run(
+        [sys.executable, '-c', runner],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            'PYTHONPATH': str(Path(__file__).parent.resolve()),
+            'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1',
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    evidence = json.loads(result.stdout.splitlines()[-1])
+    assert evidence['complete'] is registered
+    assert evidence['completed'] == ['test_owned.py::test_local']
+    live = ['test_owned.py::test_live[1]', 'test_owned.py::test_live[2]']
+    assert evidence['live_owned'] == (live if registered else [])
+    assert evidence['skipped'] == ([] if registered else live)
+    assert evidence['expected'] == ['test_owned.py::test_local'] + (
+        [] if registered else live
+    )
+
+
+def test_required_local_skip_remains_incomplete_with_live_ownership():
+    from types import SimpleNamespace
+
+    from api_contracts import Outcomes
+
+    outcomes = Outcomes(live_owned=['test.py::test_live'])
+    items = [
+        SimpleNamespace(nodeid='test.py::test_local'),
+        SimpleNamespace(nodeid='test.py::test_live[1]'),
+    ]
+    outcomes.pytest_collection_modifyitems(items)
+    outcomes.pytest_collection_finish(SimpleNamespace(items=items))
+    outcomes.pytest_runtest_logreport(
+        SimpleNamespace(
+            nodeid='test.py::test_local', failed=False, skipped=True
+        )
+    )
+    assert not outcomes.complete
+    assert outcomes.expected == ['test.py::test_local']
+    assert outcomes.skipped_tests == ['test.py::test_local']

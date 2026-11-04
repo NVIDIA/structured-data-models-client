@@ -139,13 +139,30 @@ def validate_live_targets(data, capabilities):
 
 
 class Outcomes:
-    def __init__(self):
+    def __init__(self, live_owned=()):
+        self.live_owned = frozenset(live_owned)
+        self.live_owned_tests = []
+        self.skipped_tests = []
         self.passed = 0
         self.failed = 0
         self.skipped = 0
         self.expected = []
         self.completed = []
         self.deselected = []
+
+    def pytest_collection_modifyitems(self, items):
+        # Whole-module local ownership must not pull explicitly registered live
+        # methods into an offline gate. All other skips remain failures.
+        retained = []
+        for item in items:
+            if (
+                item.nodeid.split('[', 1)[0].replace('\\', '/')
+                in self.live_owned
+            ):
+                self.live_owned_tests.append(item.nodeid)
+            else:
+                retained.append(item)
+        items[:] = retained
 
     def pytest_collection_finish(self, session):
         self.expected = [item.nodeid for item in session.items]
@@ -170,6 +187,7 @@ class Outcomes:
             self.failed += 1
         elif report.skipped:
             self.skipped += 1
+            self.skipped_tests.append(report.nodeid)
         elif report.when == 'call' and report.passed:
             self.passed += 1
             self.completed.append(report.nodeid)
@@ -292,11 +310,20 @@ def main():
     sys.path.insert(0, str(ROOT))
     import pytest
 
-    outcomes = Outcomes()
+    outcomes = Outcomes(
+        live_owned=(
+            record['test']
+            for record in data['live_api_tests']
+            if '::' in record['test']
+        )
+        if args.gate == 'local'
+        else ()
+    )
     status = pytest.main(
         [
             *(str(ROOT / node) for node in nodes),
             '-q',
+            '-ra',
             *(['-m', '', '-o', 'addopts='] if args.gate == 'live' else []),
         ],
         plugins=[outcomes],
@@ -319,6 +346,8 @@ def main():
                 'expected_tests': outcomes.expected,
                 'completed_tests': outcomes.completed,
                 'deselected_tests': outcomes.deselected,
+                'live_owned_tests': outcomes.live_owned_tests,
+                'skipped_tests': outcomes.skipped_tests,
             },
             indent=2,
         )

@@ -153,11 +153,8 @@ def test_dropped_physical_dependency_is_refused_on_refresh(source):
         ).labels(100)
 
 
+@pytest.mark.parametrize('source', ['sqlite'], indirect=True)
 def test_sqlite_calculated_rowid_cannot_change_sampling_identity(source):
-    from sdm_connectors import SQLiteSource
-
-    if not isinstance(source, SQLiteSource):
-        pytest.skip('SQLite sampling identity constraint')
     original = Schema.from_source(
         source, {'orders': 'orders'}, primary_keys={'orders': 'id'}
     )
