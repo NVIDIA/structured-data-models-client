@@ -55,6 +55,10 @@ class DuckDBProvider:
         with self._connection.cursor() as cursor:
             for relation, attachment in relations.items():
                 cursor.register(relation, arrow_table((keys or {})[attachment]))
-            for statement in statements:
+            for statement in statements[:-1]:
                 cursor.execute(statement['text'])
-            return cursor.to_arrow_table(self._batch_rows)
+            # The final query owns its result until Arrow has consumed it.
+            # DuckDB 2's DB-API Arrow conversion copies the complete result.
+            return cursor.sql(statements[-1]['text']).to_arrow_table(
+                self._batch_rows
+            )

@@ -919,16 +919,16 @@ jobs:
           name: native-wheel
           path: native
       # The cell's pins as constraints, so nothing installed after moves
-      # them; DuckDB at the reference's version; the SQLite and Postgres
+      # them; DuckDB 2 for Python 3.12; the SQLite and Postgres
       # drivers (ADBC's SQLite, psycopg), one step for every database's job
       # (T2.1a); the engine, which a case's materialize needs, built from
       # source with the runner image's compilers and CMake.
       - &contract-install
         name: Install the cell
         run: |
-          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==2.0.0 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
              "$(ls native/*.whl)[test]"
@@ -1969,15 +1969,15 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
-      # The reference cell's pins, DuckDB at the reference's version and
+      # The reference cell's data-library pins, DuckDB 2 and
       # the drivers the contract loader writes SQLite and Postgres with:
       # what the runner's capture and the loader read with, never what the
       # Java host reads with (its JDBC drivers, in the JAR's artifact).
       - name: Install the runner's environment
         run: |
-          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==2.0.0 pyyaml jsonschema pytest \
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' "$(ls native/*.whl)"
       - name: Java JDBC behavior on this platform

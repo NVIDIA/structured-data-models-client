@@ -79,3 +79,25 @@ Use a bounded large-result check to compare memory/time before and after, withou
 Finish with one source read → predict endpoint check and dependency-resolution checks for the connector extras.
 
 Evidence: main `09ed6af4b`; connectors `pyproject.toml:67`, `reader.py:230`, and client `_rust/providers/duckdb.py:60`.
+
+## Implemented and verified
+
+Python executes setup statements once, then consumes the final relation before its isolated cursor closes.
+No Rust SQL, public API, connection setting or storage format was changed.
+Connector extras now select DuckDB 1.5 on Python 3.10 and DuckDB 2 on Python 3.11+; this deliberately narrows main's unrestricted `>=1.5` policy.
+Existing Python CI version jobs exercise both supported combinations; Python 3.12 contract jobs now pin 2.0 instead of conflicting with the new requirement.
+
+| Evidence | Result |
+|---|---|
+| Public source/reader, calculated columns, temporal links, end times, provider ownership and SQL suites | 252 passed, 4 optional skips on **each** real DuckDB 1.5.6 and 2.0.0. |
+| New driver regressions | Four tests cover Arrow attachment lifetime, exact unsigned/decimal values, empty results, multiple batches, pending parent results, transaction failure cleanup and concurrent cursors. |
+| Minimum runtime | Actual Python 3.10.22 connector-extra installation selected 1.5.6; all four new tests passed. |
+| Java JDBC 2 | Nine large-value, streaming, calculated-column and temporal-link tests passed. |
+| Live model prediction | Maintained shop `node.regression` journey passed through both Relational source sampling and Tabular `read_table()` on both DuckDB versions, with legacy routing prohibited. Existing model endpoints were reused. |
+| Existing storage | A database created by 1.5 remained readable by 1.5 after 2.0 read and inserted a row. No compatibility setting was changed. |
+| Bounded performance check | Fresh-process 250,000-row Arrow read: old DB-API 0.134 s / 143,284 KiB peak RSS; relation 0.092 s / 120,232 KiB. One local observation, not a general speed or zero-copy guarantee. |
+
+The Python/Java checks used the existing native build `e74b32178699`; this patch changes only the Python driver adapter and dependency selection.
+DuckDB's changed regex, lambda and division/modulo semantics still apply to user-written SQL expressions.
+We neither rewrite those expressions nor emulate 1.5 settings on borrowed connections.
+No incompatibility requiring a shared Rust SQL change was found in these checks.
