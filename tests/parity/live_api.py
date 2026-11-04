@@ -40,6 +40,7 @@ def environment(config_path, config, inherited):
     for model, variable in [
         ('relational', 'SDM_RELATIONAL_URL'),
         ('tabular', 'SDM_TABULAR_LIVE_URL'),
+        ('link', 'SDM_LINK_URL'),
     ]:
         url = (
             config.get('endpoints', {})
@@ -50,11 +51,16 @@ def environment(config_path, config, inherited):
         if url:
             env.setdefault(variable, url)
     overrides = config.get('live_api', {}).get('environment', {})
-    if set(overrides) - set(REQUIRED_VARIABLES):
+    if set(overrides) - {*REQUIRED_VARIABLES, 'SDM_LINK_URL'}:
         raise ValueError('unknown live API environment key')
     if any(not isinstance(value, str) for value in overrides.values()):
         raise ValueError('live API environment values must be strings')
     env.update(overrides)
+    link_url = (
+        config.get('endpoints', {}).get('link', {}).get('client', {}).get('url')
+    )
+    if env.get('SDM_LINK_URL') and env['SDM_LINK_URL'] != link_url:
+        raise ValueError('link URL must match the recorded configured endpoint')
     return env
 
 

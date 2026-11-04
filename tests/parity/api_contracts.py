@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from ledger import python_symbols, validate_api_inventory
@@ -287,6 +288,8 @@ def main():
         parser.error(
             '--run uses installed Python pytest and requires --out; Java/Rust reuse their existing test runners'
         )
+    # Pytest fixtures also import repository-owned tests.parity helpers.
+    sys.path.insert(0, str(ROOT))
     import pytest
 
     outcomes = Outcomes()

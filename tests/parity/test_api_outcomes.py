@@ -142,3 +142,30 @@ def test_api_ledger_checks_windows_checkout(monkeypatch, changed):
             validate(manifest())
     else:
         validate(manifest())
+
+
+def test_runner_makes_repository_fixture_helpers_importable(tmp_path):
+    suite = tmp_path / 'test_import.py'
+    suite.write_text(
+        'def test_import():\n    from tests.parity.routes import LegacyGuard\n    assert LegacyGuard\n'
+    )
+    runner = (
+        'import sys, api_contracts as api\n'
+        "sys.argv = ['api_contracts', '--run', '--out', sys.argv[1]]\n"
+        f"api.groups = lambda *args: [{{'id': 'probe', 'tests': {{'python': [{str(suite)!r}]}}}}]\n"
+        'raise SystemExit(api.main())\n'
+    )
+    env = dict(
+        os.environ,
+        PYTHONPATH=str(Path(__file__).parent.resolve()),
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD='1',
+    )
+    result = subprocess.run(
+        [sys.executable, '-c', runner, str(tmp_path / 'result.json')],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads((tmp_path / 'result.json').read_text())['passed'] == 1
