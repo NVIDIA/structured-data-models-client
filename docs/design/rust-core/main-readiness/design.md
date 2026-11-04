@@ -21,8 +21,10 @@ Audit baseline: `origin/main` at `847a1e9e3`, checked November 4, 2026.
 
 All work integrates into `rust-core-phase-8`, starting at `4e3f4a86f`.
 Three isolated implementation branches run concurrently; final acceptance runs after their integration.
-Developer enforcement is integrated, including validated applicability links and the change guide; fixture cleanup and CI wiring are in progress.
+Cleanup, CI wiring, developer enforcement and benchmark tooling are integrated; final candidate validation is in progress.
 The comparator now accepts an explicitly pinned clean baseline, with archived-reference defaults preserved.
+Full recordings are preserved outside Git with hashes; maintained fixtures keep independently verified expectations.
+CI secrets remain unavailable, and the local AWS login needs renewal for S3 acceptance; neither is counted as passing live evidence.
 
 | Owner | Changes | Shared contract |
 |---|---|---|
