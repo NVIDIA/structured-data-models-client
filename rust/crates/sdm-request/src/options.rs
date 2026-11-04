@@ -797,15 +797,32 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
 
 /// The most rows one model call scores (`predict_rows_max`, the serving
 /// layer's `TFM_MAX_TEST_ROWS`, which the reference's client and engine
-/// hold at 10,000 from `main`'s 1fc5a686). A temporal link prediction,
-/// which scores 200, is not a task this core gathers.
+/// hold at 10,000 from `main`'s 1fc5a686).
 pub const PREDICT_ROWS: u64 = 10_000;
 
 /// How many entities one call scores, as the caller asked or as the
 /// endpoint allows (`rows_one_call_scores`): the caller's size only ever
 /// lowers the endpoint's.
 pub fn rows_one_call_scores(asked: Option<u64>) -> u64 {
-    asked.map_or(PREDICT_ROWS, |n| n.min(PREDICT_ROWS))
+    rows_one_task_call_scores(asked, BatchTask::Ordinary)
+}
+
+/// The task distinction that determines an entity batch's model limit.
+/// Forecast/ranking decomposition keeps its separate per-part policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BatchTask {
+    Ordinary,
+    TemporalLink,
+}
+
+/// Apply the task's serving limit after validating the requested positive size.
+/// PQL and supplied examples use the same policy; hosts do not split rows.
+pub fn rows_one_task_call_scores(asked: Option<u64>, task: BatchTask) -> u64 {
+    let limit = match task {
+        BatchTask::Ordinary => PREDICT_ROWS,
+        BatchTask::TemporalLink => 200,
+    };
+    asked.map_or(limit, |n| n.min(limit))
 }
 
 /// A task's kind, as the engine names it.
