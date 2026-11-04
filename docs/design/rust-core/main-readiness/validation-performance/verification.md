@@ -4,7 +4,7 @@
 
 # Validation checkpoint
 
-**Phase 8 is not yet accepted: corrected platform CI, S3 and performance measurements remain pending.**
+**Phase 8 is not yet accepted: final platform CI and S3 validation remain pending.**
 This checkpoint records completed evidence, not a release approval.
 
 ## Live behavior
@@ -42,38 +42,17 @@ Repeated public calls confirm that its context order changes, while the Rust cli
 This supports a reproducibility improvement, not a claim of identical predictions or improved model accuracy.
 Independent review checked the classification and the retained raw differences.
 
-## Initial performance results
+## Performance and final local checks
 
-These are fixed-response client measurements, not model latency.
-Each number is the median of six independent process medians of summed timed warm stages, in milliseconds.
-Each process has one cold iteration, ten warmups and twenty measured iterations.
+All 17 benchmark workloads completed; two independent reviewers checked the report, raw hashes and all 65 supported warm medians.
+See [performance results](performance.md) for all variants, scaling, gradients, real-model timings, startup and memory.
+Python preparation/schema stages are slower than old main, with much of the gap already present before Phase 6.
+No performance tuning was performed.
 
-| Workload | Old main Python | Pre-Phase-6 Python | Current Python | Current Java |
-|---|---:|---:|---:|---:|
-| Tabular fit → predict → close | 18.47 | 62.27 | 66.75 | 15.59 |
-| Relational in-memory prediction | 25.91 | 45.41 | 48.39 | 17.02 |
-| Relational SQLite prediction | 36.45 | 26.35 | 27.64 | 43.99 |
-| Tabular with gradients | 20.05 | Unsupported | 68.00 | 14.94 |
-| Tabular, 10,000 context rows | 130.85 | 158.70 | 160.57 | 56.82 |
-| Tabular, 16 features | 39.58 | 128.99 | 135.84 | 20.36 |
-
-Unless the row specifies otherwise, inputs use 1,000 rows, ten scoring rows and four features; relational degree is four.
-Independent review confirmed matching request work counts and common Python dependencies.
-The largest Python differences occur before HTTP, in request preparation and schema construction; most of the gap already exists before Phase 6.
-These are substantial regressions, reported without performance tuning as requested.
-Java uses Arrow result views and Python uses pandas, so host conversion costs differ.
-SQLite's old sampler produced 29–32 context rows versus 31 in the Rust clients; its timings therefore do not represent identical sampled work.
-Gradient timing excludes explicit result merge in both hosts because the old API does not support the same repeated-result merge workload.
-
-Import/startup and cold timings remain separate from this table.
-Memory samples cover the whole process lifetime, including imports, rather than warm-only or isolated Rust memory.
-The retained raw results are `benchmark-real/fixed-tabular-session.json` and `benchmark-real/fixed-relational-memory.json` in the external Phase 8 archive.
-Further width/degree scaling, relational gradients and real-model measurements remain pending; these results do not establish overall performance.
-
-The separate real-model Tabular run completed all 24 processes successfully against the pinned endpoint.
-Using the same warm-stage aggregation, it measured **260.31 ms main Python, 327.13 ms pre-Phase-6 Python, 338.78 ms current Python and 342.18 ms current Java**.
-These numbers include model I/O; remote cache/startup state is uncontrolled, and client HTTP work counters are unavailable in this lane.
-The raw result is `benchmark-real/real-tabular-session.json`; relational real-model runs remain pending.
+The integrated installed-wheel API gate passed 637 cases without skips; 91 tooling integration tests also passed.
+The ledger passes against actual main with 240 Python and 534 Java symbols.
+Lint, formatting, type checks over 112 source files and repository hygiene pass.
+The fresh labels-fix wheel passes 60 focused cases on both Arrow 14 and Arrow 26; each run skips one SQLite-only check's inapplicable DuckDB parameter.
 
 ## Evidence and remaining work
 
@@ -82,5 +61,6 @@ Key reports are `non-s3-validated-report.json`, `main-matched-non-s3-comparison.
 No credentials or full warehouse captures are committed.
 
 S3 credentials remain expired; dedicated CI identities are owner-deferred.
-Benchmark harness smoke checks passed; the remaining measured campaign is running, and smoke timings are not performance results.
-Final measurements must report imports/cold/warm conditions, actual sampled work and process-memory scope, without performance tuning.
+Full CI run `41800680419` tests integrated code `24f48e6f7`; later report changes do not alter executable code.
+Its DBR 16.4 artifact download encountered a connection reset before tests, and that job needs a bounded retry after the run finishes.
+This infrastructure failure is not counted as passing coverage.
