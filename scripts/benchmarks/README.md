@@ -78,14 +78,19 @@ python scripts/benchmarks/client_cost.py \
 Run `relational-memory` and `relational-sqlite` with the same configuration and dimensions.
 Vary one of rows, width, or degree at a time using bounded values supported by all compared clients.
 Inputs are generated from identical formulas in Python and Java; no large fixture is retained.
-The relational query predicts the entity's numerical target with one-hop related events, explicit keys/relationships, seed 7, and at most 32 context examples.
+For Tabular sessions, `rows` is the context size and `scores` adds disjoint scoring IDs starting at `rows`; no unused event graph is allocated.
+For relational workloads, `rows` is the users-table size, the last `scores` users are queried, and the events table has `rows × degree` rows.
+Each child reports these actual input row counts separately from the request-row counts observed by the HTTP fixture.
+The relational query predicts the entity's numerical target with one-hop related events, explicit keys/relationships and numerical target/feature types, seed 7, and at most 32 context examples.
 The SQLite route uses ADBC in Python and JDBC in Java, and preserves each driver's ordinary representations.
 It includes real source schema discovery and SQL pushdown; it is not a reader-normalized memory substitute.
 Tabular sessions measure request preparation, fit, score, close, result conversion, and merge.
 All workloads measure result merge and check independent expected row counts and fixed-response values.
 
-Repeat the Tabular session workload with `--gradients` for current clients.
-Fixed-response relational gradients are explicitly unsupported because this small fixture does not construct nonempty related-table gradients; use the real-model lane for that scope.
+Repeat each workload with `--gradients` for clients exporting the public gradient view.
+The relational fixture assigns gradients to the known `users.x*` numerical features, using actual related-table positions filtered by each prediction’s `instance_id`.
+It omits gradients for other tables rather than inventing values or interpreting every feature as numerical.
+Both hosts require nonempty gradient views and record their cell counts for comparison.
 The fixed HTTP fixture independently constructs regression gradients of 0.25 with correct row/output/column dimensions, and the clients check gradient values and merge identities.
 A historical client lacking the gradient API reports unsupported; it is not counted as a successful zero-cost measurement.
 This measures gradient response handling, not model differentiation or model quality.
@@ -108,7 +113,10 @@ Stage timers use monotonic clocks and do not overlap.
 `materialize_sample_encode` combines all work inside the public materialize call.
 Python result views produce pandas frames, while Java result views read Arrow batches; both validate the same answers but have different host conversion costs.
 The HTTP fixture runs in the coordinator process and uses the same response policy for every client.
+Accepted fixture sockets disable Nagle buffering so separate header/body writes do not add a delayed-ACK pause.
 HTTP call and payload-byte counters include cold, warmup, and warm iterations.
+Each HTTP request also records context/predict instance-row counts and related-table row counts, without retaining payloads.
+Compare these work counts before attributing a timing difference to implementation cost; sampling differences must remain visible.
 Native call counts and SQLite query counts are unavailable without additional instrumentation and are explicitly null.
 Memory-route SQL counts are zero.
 No correctness trace listener or attachment-copy instrumentation is enabled.

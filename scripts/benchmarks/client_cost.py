@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import platform
+import socket
 import subprocess
 import tempfile
 import threading
@@ -62,10 +63,39 @@ def answer(payload, model, gradients):
         if model == 'kumo-relational':
             item['id'] = str(row[table['columns'].index('instance_id')])
         if gradients:
+
+            def block(positions, columns):
+                return {
+                    'row_indices': positions,
+                    'columns': columns,
+                    'gradients': [[[0.25] * len(columns) for _ in positions]],
+                }
+
             columns = [
                 name for name in table['columns'] if name.startswith('x')
             ]
-            if not columns:
+            related = {}
+            if model == 'kumo-relational':
+                # The entity's numerical features live in its related users table.
+                # Positions are local to the actual outgoing table, scoped by owner.
+                users = payload['predict']['related_tables']['users']
+                owner_column = users['columns'].index('instance_id')
+                owner = row[table['columns'].index('instance_id')]
+                positions = [
+                    at
+                    for at, values in enumerate(users['rows'])
+                    if values[owner_column] == owner
+                ]
+                feature_columns = [
+                    name for name in users['columns'] if name.startswith('x')
+                ]
+                if not positions or not feature_columns:
+                    raise ValueError(
+                        'relational gradient fixture needs owned users rows and numerical x features'
+                    )
+                related['users'] = block(positions, feature_columns)
+                columns = []
+            elif not columns:
                 raise ValueError(
                     'fixed gradient fixture requires numerical feature columns'
                 )
@@ -74,12 +104,8 @@ def answer(payload, model, gradients):
                 'details': {
                     'input_space': 'preprocessed_numerical',
                     'outputs': [{'kind': 'prediction', 'statistic': 'mean'}],
-                    'instance_table': {
-                        'row_indices': [index],
-                        'columns': columns,
-                        'gradients': [[[0.25] * len(columns)]],
-                    },
-                    'related_tables': {},
+                    'instance_table': block([index], columns),
+                    'related_tables': related,
                 },
             }
         predictions.append(item)
@@ -91,11 +117,36 @@ def answer(payload, model, gradients):
     }
 
 
+def request_rows(payload, kind):
+    """Counts only: retain no full request data or captured Arrow attachments."""
+    counts = {'kind': kind}
+    for half in ('context', 'predict'):
+        part = payload.get(half, {})
+        counts[half] = {
+            'present': half in payload,
+            'instance_rows': len(
+                part.get('instance_table', {}).get('rows', [])
+            ),
+            'related_rows': {
+                name: len(table.get('rows', []))
+                for name, table in part.get('related_tables', {}).items()
+            },
+        }
+    return counts
+
+
 class Fixture(ThreadingHTTPServer):
+    def get_request(self):
+        connection, address = super().get_request()
+        # Separate header/body writes must not add a fixture-induced delayed ACK.
+        connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        return connection, address
+
     def __init__(self, gradients):
         super().__init__(('127.0.0.1', 0), Handler)
         self.gradients = gradients
         self.sessions = {}
+        self.row_counts = []
         self.counts = {
             'predict': 0,
             'fit': 0,
@@ -128,6 +179,11 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(self.headers['Content-Length']))
         self.server.counts['request_bytes'] += len(raw)
         payload = json.loads(raw)
+        self.server.row_counts.append(
+            request_rows(
+                payload, 'fit' if self.path == '/v1/sessions' else 'predict'
+            )
+        )
         if self.path == '/v1/sessions':
             self.server.counts['fit'] += 1
             sid = str(self.server.counts['fit'])
@@ -407,21 +463,6 @@ def verify_variant(variant):
 
 
 def run(args):
-    if (
-        args.gradients
-        and args.workload != 'tabular-session'
-        and not args.real_config
-    ):
-        args.out.write_text(
-            json.dumps(
-                {
-                    'status': 'unsupported',
-                    'reason': 'Fixed gradient fixture covers direct Tabular numerical columns; relational related-table gradients require the real-model lane.',
-                }
-            )
-            + '\n'
-        )
-        return
     config = json.loads(args.config.read_text())
     variants = config['variants']
     if len({v['label'] for v in variants}) != len(variants):
@@ -450,6 +491,7 @@ def run(args):
             for index in order:
                 identity, command = verified[index]
                 before = dict(server.counts) if server else None
+                before_rows = len(server.row_counts) if server else 0
                 env = runtime_environment()
                 env['SDM_BENCH_URL'] = endpoint
                 env['SDM_BENCH_FIXED'] = '1' if server else '0'
@@ -501,6 +543,9 @@ def run(args):
                     }
                     if server
                     else None
+                )
+                result['http_request_rows'] = (
+                    server.row_counts[before_rows:] if server else None
                 )
                 results.append(result)
                 args.out.write_text(

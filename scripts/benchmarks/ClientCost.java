@@ -110,7 +110,7 @@ public final class ClientCost {
     List<Map<String, Object>> iterations = new ArrayList<>();
     long setup = System.nanoTime();
     try (RootAllocator allocator = new RootAllocator(); Table users = users(allocator, rows, width, 0, true);
-         Table scoring = users(allocator, scores, width, rows - scores, false); Table events = events(allocator, rows, degree);
+         Table scoring = users(allocator, scores, width, tabular ? rows : rows - scores, false); Table events = tabular ? null : events(allocator, rows, degree);
          Connection connection = sqlite ? DriverManager.getConnection("jdbc:sqlite::memory:") : null;
          SdmClient client = SdmClient.connect(System.getenv("SDM_BENCH_URL"))) {
       if (sqlite) populate(connection, rows, width, degree);
@@ -124,9 +124,13 @@ public final class ClientCost {
           try { result = timed(times, "score_http_decode", () -> fitted.predict(request)); }
           finally { timed(times, "session_close_http", () -> { fitted.close(); return null; }); }
         } else {
-          Schema schema = timed(times, "schema", () -> (sqlite ? Schema.fromSource(SqliteSource.of(connection)) : Schema.fromData(Map.of("users", users, "events", events)))
-              .withPrimaryKey("users", "id").withPrimaryKey("events", "event_id").withStype("users", "y", "numerical")
-              .withRelationships(List.of(new Relationship("events", "id", "users", "id"))));
+          Schema schema = timed(times, "schema", () -> {
+            Schema declared = (sqlite ? Schema.fromSource(SqliteSource.of(connection)) : Schema.fromData(Map.of("users", users, "events", events)))
+                .withPrimaryKey("users", "id").withPrimaryKey("events", "event_id").withStype("users", "y", "numerical")
+                .withRelationships(List.of(new Relationship("events", "id", "users", "id")));
+            for (int column = 0; column < width; column++) declared = declared.withStype("users", "x" + column, "numerical");
+            return declared;
+          });
           PredictiveQuery query = timed(times, "pql", () -> PredictiveQuery.parse("PREDICT users.y FOR EACH users.id"));
           List<Long> indices = new ArrayList<>();
           for (long id = rows - scores; id < rows; id++) indices.add(id);
@@ -136,9 +140,11 @@ public final class ClientCost {
           result = timed(times, "predict_http_decode", () -> client.predict(request, model, outputs));
         }
         if (timed(times, "result_view", () -> view(result, allocator, fixed)) != scores) throw new AssertionError("row count differs");
+        int gradientCells = 0;
         if (gradients) {
-          timed(times, "gradient_view", () -> {
+          gradientCells = timed(times, "gradient_view", () -> {
             try (VectorSchemaRoot table = result.explanations().toArrow(allocator)) {
+              if (table.getRowCount() == 0) throw new AssertionError("empty gradient view");
               if (fixed) for (int row = 0; row < table.getRowCount(); row++) {
                 if (((Number)table.getVector("gradient").getObject(row)).doubleValue() != 0.25) throw new AssertionError("gradient differs");
               }
@@ -150,10 +156,11 @@ public final class ClientCost {
         PredictionResult merged = timed(times, "result_merge", () -> PredictionResult.merge(List.of(result, result)));
         if (merged.rows() != 2 * scores) throw new AssertionError("merge row count differs");
         if (gradients && merged.explanations().entries().size() != 2 * scores) throw new AssertionError("merge lost explanations");
-        iterations.add(Map.of("phase", iteration == 0 ? "cold-first" : iteration <= warmups ? "warmup" : "warm", "seconds", times));
+        iterations.add(Map.of("phase", iteration == 0 ? "cold-first" : iteration <= warmups ? "warmup" : "warm", "seconds", times, "gradient_cells", gradientCells));
       }
       Map<String, Object> result = new LinkedHashMap<>();
       result.put("entry_epoch_seconds", entryEpoch); result.put("status", "passed"); result.put("inputs", args); result.put("iterations", iterations);
+      result.put("input_rows", Map.of("users", rows, "scores", scores, "events", tabular ? 0 : rows * degree));
       result.put("setup_seconds", setupSeconds); result.put("native_load", "included in setup or first public operation; not isolated");
       result.put("sql_query_count", sqlite ? null : 0); result.put("native_call_count", null);
       result.put("process_highwater_rss_bytes", null); result.put("gc", "JVM default, no forced collection");

@@ -42,7 +42,18 @@ def test_independent_response_preserves_relational_identity_and_gradient_shape()
             'instance_table': {
                 'columns': ['instance_id', 'x0', 'x1'],
                 'rows': [['[12]', 4.0, 5.0], ['[17]', 8.0, 9.0]],
-            }
+            },
+            'related_tables': {
+                'users': {
+                    'columns': ['instance_id', 'id', 'x0', 'x1'],
+                    'rows': [
+                        ['[17]', 17, 8.0, 9.0],
+                        ['[12]', 12, 4.0, 5.0],
+                        ['[99]', 99, 1.0, 2.0],
+                        ['[12]', 13, 6.0, 7.0],
+                    ],
+                }
+            },
         }
     }
     plain = bench.answer(payload, 'kumo-relational', False)
@@ -54,9 +65,19 @@ def test_independent_response_preserves_relational_identity_and_gradient_shape()
     assert details['outputs'] == [{'kind': 'prediction', 'statistic': 'mean'}]
     assert details['instance_table'] == {
         'row_indices': [1],
+        'columns': [],
+        'gradients': [[[]]],
+    }
+    assert details['related_tables']['users'] == {
+        'row_indices': [0],
         'columns': ['x0', 'x1'],
         'gradients': [[[0.25, 0.25]]],
     }
+    first = explained['predictions'][0]['explanation']['details'][
+        'related_tables'
+    ]['users']
+    assert first['row_indices'] == [1, 3]
+    assert first['gradients'] == [[[0.25, 0.25], [0.25, 0.25]]]
 
 
 def test_actual_http_session_fixture_and_counters():
@@ -153,3 +174,128 @@ def test_wheel_proof_checks_installed_bytes_and_clean_revision(tmp_path):
         bench.verify_wheel(
             wheel, receipt, 'pinned', {'sdm_client': str(installed)}
         )
+
+
+def test_current_gradient_export_is_detected_with_instance_only_attribute():
+    import sdm_client
+
+    spec = importlib.util.spec_from_file_location(
+        'python_case', Path(bench.__file__).with_name('python_case.py')
+    )
+    child = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(child)
+    result = sdm_client.PredictionResult(
+        model='kumo-tabular', request_id='fixture', items=[]
+    )
+    assert isinstance(result.explanations, sdm_client.GradientExplanations)
+    assert child.gradient_capable(sdm_client)
+
+
+def test_fixture_accepted_socket_disables_nagle():
+    import socket
+
+    server = bench.Fixture(False)
+    try:
+        with socket.create_connection(server.server_address):
+            connection, _ = server.get_request()
+            with connection:
+                assert (
+                    connection.getsockopt(
+                        socket.IPPROTO_TCP, socket.TCP_NODELAY
+                    )
+                    == 1
+                )
+    finally:
+        server.server_close()
+
+
+@pytest.mark.parametrize('relational', [False, True])
+def test_fixed_fixture_nonempty_gradients_through_public_client(relational):
+    import pandas as pd
+    from sdm_client import (
+        KumoRelational,
+        KumoTabular,
+        PredictiveQuery,
+        Schema,
+        SDMClient,
+    )
+    from sdm_client import Request as ModelRequest
+
+    users = pd.DataFrame(
+        {
+            'id': range(12),
+            'x0': [float(i) for i in range(12)],
+            'y': [float(i % 3) for i in range(12)],
+        }
+    )
+    if relational:
+        schema = Schema.from_data(
+            {'users': users}, primary_keys={'users': 'id'}
+        )
+        schema['users']['y'].stype = 'numerical'
+        schema['users']['x0'].stype = 'numerical'
+        model = KumoRelational()
+        request = PredictiveQuery(
+            'PREDICT users.y FOR EACH users.id', schema
+        ).materialize(
+            model=model, indices=[10, 11], num_context_samples=4, random_seed=7
+        )
+    else:
+        model = KumoTabular()
+        request = ModelRequest(
+            users.iloc[:-2],
+            users.drop(columns=['y']).iloc[-2:],
+            target='y',
+            task='regression',
+        )
+    server = bench.Fixture(True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with SDMClient(url=f'http://127.0.0.1:{server.server_port}') as client:
+            result = client.predict(
+                request, model=model, outputs=['prediction', 'explanation']
+            )
+        frame = result.explanations.to_pandas()
+        assert len(result.explanations) == 2
+        assert len(frame) == 2
+        assert (frame.gradient == 0.25).all()
+        assert set(frame.column) == {'x0'}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_request_row_counts_keep_context_and_related_work_separate():
+    payload = {
+        'context': {
+            'instance_table': {'rows': [[1], [2]]},
+            'related_tables': {'users': {'rows': [[1], [2], [3]]}},
+        },
+        'predict': {
+            'instance_table': {'rows': [[4]]},
+            'related_tables': {
+                'users': {'rows': [[4], [5]]},
+                'events': {'rows': [[6]]},
+            },
+        },
+    }
+    assert bench.request_rows(payload, 'predict') == {
+        'kind': 'predict',
+        'context': {
+            'present': True,
+            'instance_rows': 2,
+            'related_rows': {'users': 3},
+        },
+        'predict': {
+            'present': True,
+            'instance_rows': 1,
+            'related_rows': {'users': 2, 'events': 1},
+        },
+    }
+    assert bench.request_rows({}, 'fit')['predict'] == {
+        'present': False,
+        'instance_rows': 0,
+        'related_rows': {},
+    }

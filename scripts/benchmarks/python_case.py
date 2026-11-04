@@ -58,9 +58,16 @@ def probe():
     }
 
 
+def gradient_capable(client):
+    """The public view export survives instance-only result attributes."""
+    view = getattr(client, 'GradientExplanations', None)
+    return view is not None and callable(getattr(view, 'to_pandas', None))
+
+
 def run(args):
     imported = time.perf_counter()
     import pandas as pd
+    import sdm_client
     from sdm_client import (
         KumoRelational,
         KumoTabular,
@@ -82,7 +89,7 @@ def run(args):
     outputs = (
         ['prediction', 'explanation'] if args.gradients else ['prediction']
     )
-    if args.gradients and not hasattr(PredictionResult, 'explanations'):
+    if args.gradients and not gradient_capable(sdm_client):
         print(
             json.dumps(
                 {
@@ -107,17 +114,37 @@ def run(args):
             'y': [float(row % 31) for row in range(args.rows)],
         }
     )
-    scoring = users.drop(columns=['y']).iloc[-args.scores :].copy()
-    events = pd.DataFrame(
+    score_start = (
+        args.rows
+        if args.workload == 'tabular-session'
+        else args.rows - args.scores
+    )
+    scoring = pd.DataFrame(
         {
-            'event_id': range(args.rows * args.degree),
-            'id': [
-                row // args.degree for row in range(args.rows * args.degree)
-            ],
-            'value': [
-                float(row % 13) for row in range(args.rows * args.degree)
-            ],
+            'id': range(score_start, score_start + args.scores),
+            **{
+                f'x{column}': [
+                    float((row + column) % 97)
+                    for row in range(score_start, score_start + args.scores)
+                ]
+                for column in range(args.width)
+            },
         }
+    )
+    events = (
+        None
+        if args.workload == 'tabular-session'
+        else pd.DataFrame(
+            {
+                'event_id': range(args.rows * args.degree),
+                'id': [
+                    row // args.degree for row in range(args.rows * args.degree)
+                ],
+                'value': [
+                    float(row % 13) for row in range(args.rows * args.degree)
+                ],
+            }
+        )
     )
     source = connection = None
     if args.workload == 'relational-sqlite':
@@ -189,6 +216,8 @@ def run(args):
                         Relationship('events', 'id', 'users', 'id')
                     ]
                     schema['users']['y'].stype = 'numerical'
+                    for column in range(args.width):
+                        schema['users'][f'x{column}'].stype = 'numerical'
                     return schema
 
                 schema = timed('schema', schema_for_inputs)
@@ -222,15 +251,17 @@ def run(args):
                 raise AssertionError(
                     'fixed response row/value contract differs'
                 )
+            gradient_cells = 0
             if args.gradients:
                 explanations = timed(
                     'gradient_view',
                     lambda result=result: result.explanations.to_pandas(),
                 )
-                if len(result.explanations) != args.scores or (
-                    fixed
-                    and len(explanations)
-                    and not (explanations['gradient'] == 0.25).all()
+                gradient_cells = len(explanations)
+                if (
+                    not gradient_cells
+                    or len(result.explanations) != args.scores
+                    or (fixed and not (explanations['gradient'] == 0.25).all())
                 ):
                     raise AssertionError('gradient response contract differs')
             merged = timed(
@@ -249,6 +280,7 @@ def run(args):
                     if iteration <= args.warmups
                     else 'warm',
                     'seconds': values,
+                    'gradient_cells': gradient_cells,
                 }
             )
     finally:
@@ -272,6 +304,13 @@ def run(args):
                 'client_close_seconds': close_seconds,
                 'iterations': results,
                 'inputs': vars(args),
+                'input_rows': {
+                    'users': args.rows,
+                    'scores': args.scores,
+                    'events': 0
+                    if args.workload == 'tabular-session'
+                    else args.rows * args.degree,
+                },
                 'process_highwater_rss_bytes': highwater,
                 'native_load': 'included in import or first public native operation; not separately observable',
                 'sql_query_count': None if source else 0,
