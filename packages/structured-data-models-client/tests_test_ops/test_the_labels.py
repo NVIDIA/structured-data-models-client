@@ -80,7 +80,7 @@ def _base(name: str) -> list[str]:
 
 
 def _reference(case: str) -> Any:
-    for path in sorted((CONTRACT / 'reference').glob('*.jsonl')):
+    for path in sorted((CONTRACT / 'fixtures/maintained').glob('*.jsonl')):
         for line in path.read_text(encoding='utf-8').splitlines():
             observed = json.loads(line)
             if observed['case'] == case:

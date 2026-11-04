@@ -108,7 +108,7 @@ fn datetime(text: &str) -> Shown {
 
 #[test]
 fn each_value_is_written_as_python_wrote_it() {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     let vectors = document["vectors"].as_array().unwrap();
     let mut wrong = Vec::new();
     let mut held = 0;
@@ -194,3 +194,6 @@ fn python_s_printability_is_its_own_table() {
     assert_eq!(text_repr("\u{2066}"), "'\\u2066'");
     assert_eq!(text_repr("\u{1F600}"), "'\u{1F600}'");
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

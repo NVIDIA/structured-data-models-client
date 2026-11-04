@@ -47,7 +47,7 @@ fn contract() -> PathBuf {
 
 /// The committed reference observation of `case`.
 fn reference(case: &str) -> Value {
-    let directory = contract().join("reference");
+    let directory = contract().join("fixtures/maintained");
     for entry in std::fs::read_dir(&directory).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {

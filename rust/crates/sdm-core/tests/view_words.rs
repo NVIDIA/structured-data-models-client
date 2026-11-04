@@ -46,7 +46,7 @@ fn dialect(value: &Json) -> Option<ExprDialect> {
 /// Runs `check` over the vectors of `kind` in `document`, and fails listing
 /// each that differs.
 fn each(document: &str, kind: &str, least: usize, check: impl Fn(&Json) -> Option<String>) {
-    let document: Json = serde_json::from_str(document).unwrap();
+    let document: Json = fixture_tables::read(document);
     let vectors = document[kind].as_array().unwrap();
     assert!(vectors.len() >= least, "{} {kind} vectors", vectors.len());
     let wrong: Vec<String> = vectors.iter().filter_map(check).collect();
@@ -145,7 +145,7 @@ fn loaded(json: &Json) -> Option<(Document, NodeId)> {
 
 #[test]
 fn a_yaml_value_is_quoted_as_the_old_client_quoted_it() {
-    let document: Json = serde_json::from_str(YAML).unwrap();
+    let document: Json = fixture_tables::read(YAML);
     let mut wrong = Vec::new();
     for vector in document["vectors"].as_array().unwrap() {
         let Some(repr) = vector["repr"].as_str() else {
@@ -591,3 +591,6 @@ fn a_long_token_s_refusal_is_worded_as_the_old_client_worded_it() {
             .then(|| format!("{r}: {reason:?}"))
     });
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

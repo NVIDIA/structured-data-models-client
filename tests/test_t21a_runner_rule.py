@@ -82,7 +82,7 @@ SQLITE_BOTH = {
 
 
 def _reference_line(case: str) -> dict[str, Any]:
-    path = next((ROOT / 'contract/reference').glob('*.jsonl'))
+    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
     for line in path.read_text().splitlines():
         found: dict[str, Any] = json.loads(line)
         if found['case'] == case:

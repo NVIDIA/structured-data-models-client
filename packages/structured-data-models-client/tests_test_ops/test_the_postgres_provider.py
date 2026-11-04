@@ -564,28 +564,11 @@ def _reference_lookups() -> list[tuple[str, list[str], list[str]]]:
     ``@postgres`` lines (``contract/reference-env.txt``'s file): the
     statement that keeps the first row of each batch, with its result's
     column names and Postgres types."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    commit = next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-    found = []
-    path = ROOT / f'contract/reference/{commit}.jsonl'
-    for line in path.read_text(encoding='utf-8').splitlines():
-        observation = json.loads(line)
-        if not observation['case'].endswith('@postgres'):
-            continue
-        capture = (observation.get('driver') or {}).get('capture') or {}
-        for statement in capture.get('statements') or []:
-            if 'WHERE __KUMO_ROW__ = 1' not in statement['sql']:
-                continue
-            for result in statement['results']:
-                values = result['values']
-                found.append(
-                    (statement['sql'], values['columns'], values['types'])
-                )
-    return found
+    from scripts.rust_core.fixture_tables import unpack
+
+    path = ROOT / 'contract/fixtures/maintained/postgres-statements.json'
+    document = unpack(json.loads(path.read_text()))
+    return [tuple(lookup) for lookup in document['lookups']]
 
 
 def _helpers(columns: list[str]) -> tuple[list[str], list[str]]:

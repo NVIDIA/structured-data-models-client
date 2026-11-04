@@ -48,7 +48,7 @@ use sdm_data::view_expr::Spaces;
 const VECTORS: &str = include_str!("../../../../contract/view-expr-vectors.json");
 
 fn document() -> Json {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     assert_eq!(document["format"], "sdm-view-expr-vectors/1");
     document
 }
@@ -262,3 +262,6 @@ fn a_megabyte_of_any_token_is_answered() {
         let _ = view_expr::strip_comments(&expr, spaces());
     }
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

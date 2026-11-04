@@ -932,15 +932,8 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
 }
 
 
-def reference_observations() -> dict[str, dict[str, Any]]:
-    r"""The committed ``python-ref`` observations, by case."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    commit = next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-    path = ROOT / f'contract/reference/{commit}.jsonl'
+def reference_observations(path: Path) -> dict[str, dict[str, Any]]:
+    r"""Read archived ``python-ref`` observations from an explicit external file."""
     out = {}
     for line in path.read_text(encoding='utf-8').splitlines():
         observation = json.loads(line)
@@ -948,8 +941,8 @@ def reference_observations() -> dict[str, dict[str, Any]]:
     return out
 
 
-def cases_projection() -> dict[str, Any]:
-    observed = reference_observations()
+def cases_projection(reference_path: Path) -> dict[str, Any]:
+    observed = reference_observations(reference_path)
     return {
         case: project(observed[case], {'columns': columns})
         for case, columns in CASE_COLUMNS.items()

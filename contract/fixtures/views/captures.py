@@ -97,17 +97,20 @@ def main() -> None:
     commit = git('rev-parse', ref).decode().strip()
     tables: dict[str, str] = {}
     cases = [case(ref, directory, tables) for directory in captures(ref)]
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from scripts.rust_core.fixture_tables import dumps, pack
+
     OUT.write_text(
-        json.dumps(
-            {
-                'format': FORMAT,
-                'recordings': commit,
-                'cases': cases,
-                'tables': dict(sorted(tables.items())),
-            },
-            indent=1,
+        dumps(
+            pack(
+                {
+                    'format': FORMAT,
+                    'recordings': commit,
+                    'cases': cases,
+                    'tables': dict(sorted(tables.items())),
+                }
+            )
         )
-        + '\n'
     )
 
 

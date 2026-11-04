@@ -68,7 +68,7 @@ fn node_text(spec: &ViewSpec, node: Option<sdm_schema::view::yaml::NodeId>) -> O
 
 #[test]
 fn each_definition_reads_as_the_old_client_reads_it() {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     let definitions: Vec<&Json> = document["vectors"]
         .as_array()
         .unwrap()
@@ -309,3 +309,6 @@ fn a_key_and_a_pair_are_indexed_as_python_indexes_them() {
     let refusal = read(&format!("{base}    primary_key: {{columns: 7}}\n")).unwrap_err();
     assert_eq!(refusal.reason, RefusalReason::NotAList("columns".into()));
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

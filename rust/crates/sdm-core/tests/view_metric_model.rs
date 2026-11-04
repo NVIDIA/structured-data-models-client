@@ -46,7 +46,7 @@ fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
 const VECTORS: &str = include_str!("../../../../contract/view-metric-vectors.json");
 
 fn vectors() -> Vec<Json> {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     assert_eq!(document["format"], "sdm-view-metric-vectors/1");
     document["metric_views"].as_array().unwrap().clone()
 }
@@ -571,3 +571,6 @@ fn each_definition_reads_whole_as_the_old_client_read_it() {
         wrong.join("\n")
     );
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

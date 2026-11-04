@@ -52,7 +52,7 @@ fn pairs(value: &Json) -> Vec<(String, String)> {
 
 #[test]
 fn a_description_is_read_as_the_old_client_read_it() {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     let vectors = document["describe"].as_array().unwrap();
     assert!(vectors.len() >= 20, "{} descriptions", vectors.len());
     let mut wrong = Vec::new();
@@ -151,3 +151,6 @@ fn a_description_missing_its_type_or_text_is_refused() {
     assert_eq!(read.catalog.as_deref(), Some("c"));
     assert_eq!(read.schema, None);
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

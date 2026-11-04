@@ -51,23 +51,17 @@ const DB: &str = "{catalog}";
 const SCHEMA: &str = "{schema}";
 
 fn captures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/captures")
-}
-
-/// The directory of `case`'s capture: C-1's, else the packages' own (S2).
-fn capture_dir(case: &str) -> PathBuf {
-    let c1 = captures().join("snowflake").join(case);
-    if c1.join("capture.json").exists() {
-        return c1;
-    }
-    let s2 = captures().join("s2").join("snowflake").join(case);
-    assert!(s2.join("capture.json").exists(), "no capture of {case}");
-    s2
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/fixtures/maintained")
 }
 
 fn capture(case: &str) -> Value {
-    let text = std::fs::read_to_string(capture_dir(case).join("capture.json")).unwrap();
-    serde_json::from_str(&text).unwrap()
+    let text = std::fs::read_to_string(captures().join("snowflake.json")).unwrap();
+    let cases: Value = serde_json::from_str(&text).unwrap();
+    assert!(
+        cases.get(case).is_some(),
+        "no extracted Snowflake case {case}"
+    );
+    cases[case].clone()
 }
 
 /// A parameter as the recording writes it, as text.
@@ -117,8 +111,8 @@ fn recorded_result(case: &str, text: &str, params: &[&str]) -> Vec<RecordBatch> 
 }
 
 /// A recorded table, as the Arrow IPC stream holds it.
-fn arrow(case: &str, file: &str) -> Vec<RecordBatch> {
-    let path = capture_dir(case).join(file);
+fn arrow(_case: &str, file: &str) -> Vec<RecordBatch> {
+    let path = captures().join("snowflake").join(file);
     let reader =
         arrow_ipc::reader::StreamReader::try_new(BufReader::new(File::open(path).unwrap()), None)
             .unwrap();

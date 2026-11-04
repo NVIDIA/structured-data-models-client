@@ -217,10 +217,9 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     // inputs and the step trace are the ones python-core records
     // (contract/pinned, which contract/tests holds python-core to), so CI
     // gates the two hosts' equality.
-    let pinned: Value = serde_json::from_slice(
-        &std::fs::read(contract().join("pinned/base.regression.core.json")).unwrap(),
-    )
-    .unwrap();
+    let pinned: Value = fixture_tables::read(
+        &std::fs::read_to_string(contract().join("pinned/base.regression.core.json")).unwrap(),
+    );
     assert_eq!(described, pinned["described"]);
     assert_eq!(materialized, pinned["materialized"]);
     assert_eq!(Value::from(observed.fetches), pinned["fetches"]);
@@ -788,14 +787,10 @@ fn arrow_name(duckdb_type: &str) -> String {
 
 /// The committed reference observation of `case`.
 fn reference_of(case: &str) -> Value {
-    let directory = contract().join("reference");
-    let mut files: Vec<_> = std::fs::read_dir(directory)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|e| e == "jsonl"))
-        .collect();
-    assert_eq!(files.len(), 1, "one reference observation file");
-    let text = std::fs::read_to_string(files.remove(0)).unwrap();
+    let text = std::fs::read_to_string(
+        contract().join("fixtures/maintained/reference-observations.jsonl"),
+    )
+    .unwrap();
     text.lines()
         .map(|line| serde_json::from_str::<Value>(line).unwrap())
         .find(|observation| observation["case"] == case)
@@ -1479,3 +1474,6 @@ fn a_sampler_state_the_core_refuses_is_dropped_on_its_word() {
         assert!(calls[1].materialized.is_some(), "{field}");
     }
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

@@ -170,7 +170,7 @@ fn no_text_panics_a_reader() {
             .collect();
         read_every_way(&text);
     }
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     let texts: Vec<&str> = document["vectors"]
         .as_array()
         .unwrap()
@@ -192,3 +192,6 @@ fn no_text_panics_a_reader() {
         read_every_way(&format!("{}{piece}{}", &a[..i], &b[j..]));
     }
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

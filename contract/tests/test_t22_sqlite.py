@@ -213,7 +213,9 @@ def test_every_statement_python_core_ran_on_sqlite_is_a_golden() -> None:
 
 
 def recorded() -> dict[str, Any]:
-    found: dict[str, Any] = json.loads(VECTORS_FILE.read_text('utf-8'))
+    from scripts.rust_core.fixture_tables import unpack
+
+    found: dict[str, Any] = unpack(json.loads(VECTORS_FILE.read_text('utf-8')))
     return found
 
 

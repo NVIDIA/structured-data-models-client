@@ -305,7 +305,9 @@ def test_python_ref_s_line_is_at_each_wording_case_file() -> None:
     assert vectors()['reference'] == commit
     lines = {
         json.loads(line)['case']: json.loads(line)
-        for line in (ROOT / f'contract/reference/{commit}.jsonl')
+        for line in (
+            ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+        )
         .read_text(encoding='utf-8')
         .splitlines()
     }

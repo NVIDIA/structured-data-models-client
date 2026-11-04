@@ -48,8 +48,10 @@ class _MetricWarehouse(_warehouse._CompletingWarehouse):
         self.definition = self.definition.replace(
             'source.price > 20', 'source.order_id < 40'
         )
-        captures = json.loads(
-            (ROOT / 'contract/view-captures.json').read_text()
+        from scripts.rust_core.fixture_tables import unpack
+
+        captures = unpack(
+            json.loads((ROOT / 'contract/view-captures.json').read_text())
         )
         recorded = next(
             c
