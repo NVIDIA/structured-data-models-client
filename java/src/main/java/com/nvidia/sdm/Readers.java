@@ -83,7 +83,7 @@ public final class Readers {
     if (!s3 && scheme != null && !"file".equalsIgnoreCase(scheme)) {
       throw new IllegalArgumentException("supported file schemes are file and s3");
     }
-    if (!s3 && (options.profile() != null || options.accessKey() != null || options.region() != null)) {
+    if (!s3 && (options.profile() != null || options.accessKey() != null || options.region() != null || options.endpoint() != null)) {
       throw new IllegalArgumentException("S3 access options require an s3 URI");
     }
     String path = s3 ? uri.toString() : (scheme == null ? Path.of(uri.toString()) : Path.of(uri)).toString();
@@ -165,6 +165,10 @@ public final class Readers {
       if (options.sessionToken() != null) secret.append(", SESSION_TOKEN ").append(literal(options.sessionToken()));
     }
     if (options.region() != null) secret.append(", REGION ").append(literal(options.region()));
+    if (options.endpoint() != null) {
+      secret.append(", ENDPOINT ").append(literal(options.endpoint().getRawAuthority()));
+      secret.append(", URL_STYLE 'path', USE_SSL ").append("https".equals(options.endpoint().getScheme()));
+    }
     secret.append(')');
     try (Statement statement = connection.createStatement()) {
       statement.execute(secret.toString());

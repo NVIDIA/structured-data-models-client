@@ -3360,7 +3360,8 @@
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#csvTablesFeedTheNativeTabularRequestAfterReaderResourcesClose",
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#ordinaryJavaWorksWithoutSparkOrSnowflakeRuntime",
           "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
-          "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection"
+          "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection",
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#customS3EndpointIsScopedAndValidated"
         ]
       },
       "gate": "local",
@@ -6369,6 +6370,48 @@
       "com.nvidia.sdm.DuckDbSource#public static com.nvidia.sdm.DuckDbSource of(java.sql.Connection);": {
         "capability": "readers"
       },
+      "com.nvidia.sdm.ExamplesOptions": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions#public static com.nvidia.sdm.ExamplesOptions$Builder builder();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions build();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder inference(java.util.Map<java.lang.String, java.lang.Object>);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder numNeighbors(java.util.List<java.lang.Integer>);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder randomSeed(long);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder rowsPerCall(long);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String, java.lang.String, java.time.Duration);": {
+        "capability": "explanation-summaries"
+      },
+      "com.nvidia.sdm.ExplanationSummarizer#public java.lang.String summarize(com.nvidia.sdm.ExplanationView, java.lang.String, java.lang.Object);": {
+        "capability": "explanation-summaries"
+      },
       "com.nvidia.sdm.ExplanationView": {
         "capability": "metadata-explanation-reports"
       },
@@ -6528,6 +6571,93 @@
       "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder timeColumn(java.lang.String, java.lang.String);": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.GradientExplanations": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations#public java.util.Map<com.nvidia.sdm.GradientExplanations$Key, java.util.Map<java.lang.String, java.lang.Object>> entries();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations#public java.util.Map<java.lang.String, java.lang.Object> get(com.nvidia.sdm.GradientExplanations$Key);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations#public org.apache.arrow.vector.VectorSchemaRoot toArrow(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public com.nvidia.sdm.GradientExplanations$Key(com.nvidia.sdm.GradientExplanations$Kind, java.lang.Object, java.lang.Long);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public com.nvidia.sdm.GradientExplanations$Kind kind();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public final boolean equals(java.lang.Object);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public final int hashCode();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public final java.lang.String toString();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public java.lang.Long forecastStep();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public java.lang.Object value();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static com.nvidia.sdm.GradientExplanations$Kind valueOf(java.lang.String);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static com.nvidia.sdm.GradientExplanations$Kind[] values();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static final com.nvidia.sdm.GradientExplanations$Kind ID;": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static final com.nvidia.sdm.GradientExplanations$Kind ROW_INDEX;": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.InferenceConfig": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig#public java.util.Map<java.lang.String, java.lang.Object> toMap();": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig#public static com.nvidia.sdm.InferenceConfig$Builder builder();": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig build();": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder categoryShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder classShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder columnShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder hopShuffle(boolean);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder numEstimators(int);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder outputType(java.lang.String);": {
+        "capability": "typed-inference-settings"
+      },
+      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder targetTransforms(java.util.List<java.lang.String>);": {
+        "capability": "typed-inference-settings"
+      },
       "com.nvidia.sdm.JdbcSource": {
         "capability": "readers"
       },
@@ -6656,6 +6786,9 @@
       },
       "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder indices(java.util.List<?>);": {
         "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
+        "capability": "typed-inference-settings"
       },
       "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder model(java.lang.String);": {
         "capability": "direct-dtypes-options"
@@ -6813,6 +6946,9 @@
       "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.ExplanationView explanationView();": {
         "capability": "metadata-explanation-reports"
       },
+      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.GradientExplanations explanations();": {
+        "capability": "gradient-explanations"
+      },
       "com.nvidia.sdm.PredictionResult#public java.lang.String model();": {
         "capability": "results-merge"
       },
@@ -6905,6 +7041,15 @@
       },
       "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder csvTypes(java.util.Map<java.lang.String, com.nvidia.sdm.ReadOptions$CsvType>);": {
         "capability": "readers"
+      },
+      "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder endpoint(java.net.URI);": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ReadersTest.java#customS3EndpointIsScopedAndValidated",
+            "behavior": "Rejects non-HTTP origins, credentials and paths; endpoint options cannot affect local-file reads."
+          }
+        ]
       },
       "com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder format(com.nvidia.sdm.ReadOptions$Format);": {
         "capability": "readers"
@@ -7001,6 +7146,75 @@
       },
       "com.nvidia.sdm.RelationalMaterializer#public synchronized void close();": {
         "capability": "relational-materialization"
+      },
+      "com.nvidia.sdm.RelationalTask": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public com.nvidia.sdm.RelationalTask$Kind kind();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public com.nvidia.sdm.RelationalTask(com.nvidia.sdm.RelationalTask$Kind, java.lang.String, java.lang.String, java.lang.Long, java.lang.Integer);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public final boolean equals(java.lang.Object);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public final int hashCode();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public final java.lang.String toString();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.Integer numForecasts();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.Long stepSizeNs();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.String entityTable();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public java.lang.String linkTargetTable();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask binary(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask forecast(java.lang.String, long, int);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask link(java.lang.String, java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask multiclass(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask regression(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static com.nvidia.sdm.RelationalTask$Kind valueOf(java.lang.String);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static com.nvidia.sdm.RelationalTask$Kind[] values();": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind BINARY_CLASSIFICATION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind FORECASTING;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind MULTICLASS_CLASSIFICATION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind REGRESSION;": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind TEMPORAL_LINK_PREDICTION;": {
+        "capability": "custom-examples"
       },
       "com.nvidia.sdm.Relationship": {
         "capability": "schema-edits"
@@ -7200,6 +7414,12 @@
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.MetadataReport metadataReport();": {
         "capability": "metadata-explanation-reports"
       },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Request materializeExamples(com.nvidia.sdm.RelationalTask, org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table);": {
+        "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Request materializeExamples(com.nvidia.sdm.RelationalTask, org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table, com.nvidia.sdm.ExamplesOptions);": {
+        "capability": "custom-examples"
+      },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema inferLinks();": {
         "capability": "schema-refinement"
       },
@@ -7208,6 +7428,9 @@
       },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema snapshot();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withEndTimeColumn(java.lang.String, java.lang.String);": {
+        "capability": "end-time"
       },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withPrimaryKey(java.lang.String, java.lang.String...);": {
         "capability": "schema-edits"
@@ -7218,6 +7441,12 @@
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withRelationships(java.util.List<com.nvidia.sdm.Relationship>);": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSource(com.nvidia.sdm.Source);": {
+        "capability": "connection-rebinding"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSqlColumn(java.lang.String, java.lang.String, java.lang.String);": {
+        "capability": "sql-columns"
+      },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withStype(java.lang.String, java.lang.String, java.lang.String);": {
         "capability": "schema-edits"
       },
@@ -7226,6 +7455,9 @@
       },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutColumn(java.lang.String, java.lang.String);": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutEndTimeColumn(java.lang.String);": {
+        "capability": "end-time"
       },
       "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutPrimaryKey(java.lang.String);": {
         "capability": "schema-edits"
@@ -7458,6 +7690,9 @@
       "com.nvidia.sdm.Table#public java.util.List<java.lang.String> primaryKey();": {
         "capability": "schema-edits"
       },
+      "com.nvidia.sdm.Table#public java.util.Optional<java.lang.String> endTimeColumn();": {
+        "capability": "end-time"
+      },
       "com.nvidia.sdm.Table#public java.util.Optional<java.lang.String> timeColumn();": {
         "capability": "schema-edits"
       },
@@ -7470,6 +7705,9 @@
       "com.nvidia.sdm.TableMetadata#public com.nvidia.sdm.TableMetadata(java.lang.String, java.util.List<com.nvidia.sdm.ColumnMetadata>, java.util.List<java.lang.String>, java.lang.String);": {
         "capability": "metadata-explanation-reports"
       },
+      "com.nvidia.sdm.TableMetadata#public com.nvidia.sdm.TableMetadata(java.lang.String, java.util.List<com.nvidia.sdm.ColumnMetadata>, java.util.List<java.lang.String>, java.lang.String, java.lang.String);": {
+        "capability": "end-time"
+      },
       "com.nvidia.sdm.TableMetadata#public final boolean equals(java.lang.Object);": {
         "capability": "metadata-explanation-reports"
       },
@@ -7478,6 +7716,9 @@
       },
       "com.nvidia.sdm.TableMetadata#public final java.lang.String toString();": {
         "capability": "metadata-explanation-reports"
+      },
+      "com.nvidia.sdm.TableMetadata#public java.lang.String endTimeColumn();": {
+        "capability": "end-time"
       },
       "com.nvidia.sdm.TableMetadata#public java.lang.String name();": {
         "capability": "metadata-explanation-reports"
@@ -7559,237 +7800,6 @@
       },
       "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timestampsColumn(java.lang.String);": {
         "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withEndTimeColumn(java.lang.String, java.lang.String);": {
-        "capability": "end-time"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withoutEndTimeColumn(java.lang.String);": {
-        "capability": "end-time"
-      },
-      "com.nvidia.sdm.Table#public java.util.Optional<java.lang.String> endTimeColumn();": {
-        "capability": "end-time"
-      },
-      "com.nvidia.sdm.TableMetadata#public com.nvidia.sdm.TableMetadata(java.lang.String, java.util.List<com.nvidia.sdm.ColumnMetadata>, java.util.List<java.lang.String>, java.lang.String, java.lang.String);": {
-        "capability": "end-time"
-      },
-      "com.nvidia.sdm.TableMetadata#public java.lang.String endTimeColumn();": {
-        "capability": "end-time"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSqlColumn(java.lang.String, java.lang.String, java.lang.String);": {
-        "capability": "sql-columns"
-      },
-      "com.nvidia.sdm.ExamplesOptions": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder numNeighbors(java.util.List<java.lang.Integer>);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public final int hashCode();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask forecast(java.lang.String, long, int);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder inference(java.util.Map<java.lang.String, java.lang.Object>);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static com.nvidia.sdm.RelationalTask$Kind[] values();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public com.nvidia.sdm.RelationalTask(com.nvidia.sdm.RelationalTask$Kind, java.lang.String, java.lang.String, java.lang.Long, java.lang.Integer);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public java.lang.Integer numForecasts();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask regression(java.lang.String);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind TEMPORAL_LINK_PREDICTION;": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public final boolean equals(java.lang.Object);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public java.lang.Long stepSizeNs();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask link(java.lang.String, java.lang.String);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask binary(java.lang.String);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder randomSeed(long);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind FORECASTING;": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Request materializeExamples(com.nvidia.sdm.RelationalTask, org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table, com.nvidia.sdm.ExamplesOptions);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions#public static com.nvidia.sdm.ExamplesOptions$Builder builder();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static com.nvidia.sdm.RelationalTask$Kind valueOf(java.lang.String);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Request materializeExamples(com.nvidia.sdm.RelationalTask, org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public com.nvidia.sdm.RelationalTask$Kind kind();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind MULTICLASS_CLASSIFICATION;": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public java.lang.String entityTable();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public static com.nvidia.sdm.RelationalTask multiclass(java.lang.String);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions build();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind REGRESSION;": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask$Kind#public static final com.nvidia.sdm.RelationalTask$Kind BINARY_CLASSIFICATION;": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public final java.lang.String toString();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.RelationalTask#public java.lang.String linkTargetTable();": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.ExplanationSummarizer": {
-        "capability": "explanation-summaries"
-      },
-      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String);": {
-        "capability": "explanation-summaries"
-      },
-      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String, java.lang.String);": {
-        "capability": "explanation-summaries"
-      },
-      "com.nvidia.sdm.ExplanationSummarizer#public com.nvidia.sdm.ExplanationSummarizer(java.lang.String, java.lang.String, java.lang.String, java.time.Duration);": {
-        "capability": "explanation-summaries"
-      },
-      "com.nvidia.sdm.ExplanationSummarizer#public java.lang.String summarize(com.nvidia.sdm.ExplanationView, java.lang.String, java.lang.Object);": {
-        "capability": "explanation-summaries"
-      },
-      "com.nvidia.sdm.InferenceConfig": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig#public java.util.Map<java.lang.String, java.lang.Object> toMap();": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig#public static com.nvidia.sdm.InferenceConfig$Builder builder();": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig build();": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder categoryShuffle(boolean);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder classShuffle(boolean);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder columnShuffle(boolean);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder hopShuffle(boolean);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder numEstimators(int);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder outputType(java.lang.String);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder targetTransforms(java.util.List<java.lang.String>);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder inferenceConfig(com.nvidia.sdm.InferenceConfig);": {
-        "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.Schema#public com.nvidia.sdm.Schema withSource(com.nvidia.sdm.Source);": {
-        "capability": "connection-rebinding"
-      },
-      "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder rowsPerCall(long);": {
-        "capability": "custom-examples"
-      },
-      "com.nvidia.sdm.GradientExplanations": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations#public java.util.Map<com.nvidia.sdm.GradientExplanations$Key, java.util.Map<java.lang.String, java.lang.Object>> entries();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations#public java.util.Map<java.lang.String, java.lang.Object> get(com.nvidia.sdm.GradientExplanations$Key);": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations#public org.apache.arrow.vector.VectorSchemaRoot toArrow(org.apache.arrow.memory.BufferAllocator);": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public com.nvidia.sdm.GradientExplanations$Key(com.nvidia.sdm.GradientExplanations$Kind, java.lang.Object, java.lang.Long);": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public com.nvidia.sdm.GradientExplanations$Kind kind();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public final boolean equals(java.lang.Object);": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public final int hashCode();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public final java.lang.String toString();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public java.lang.Long forecastStep();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Key#public java.lang.Object value();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Kind": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Kind#public static com.nvidia.sdm.GradientExplanations$Kind valueOf(java.lang.String);": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Kind#public static com.nvidia.sdm.GradientExplanations$Kind[] values();": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Kind#public static final com.nvidia.sdm.GradientExplanations$Kind ID;": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.GradientExplanations$Kind#public static final com.nvidia.sdm.GradientExplanations$Kind ROW_INDEX;": {
-        "capability": "gradient-explanations"
-      },
-      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.GradientExplanations explanations();": {
-        "capability": "gradient-explanations"
       }
     }
   },
@@ -8401,6 +8411,16 @@
       "record": "api_inventory/python/sdm_client.PredictionResult.explanations",
       "reason": "The snapshot declaration moved from a class-visible property to the retained instance-owned GradientExplanations field. This is a representation change, not removal of the public instance API; test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge verifies nonempty per-row explanations and nested merging.",
       "retained_test": "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge"
+    },
+    {
+      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
+      "record": "api_inventory/java/com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder endpoint(java.net.URI);",
+      "reason": "Expose explicit per-read S3 endpoint configuration, matching Python storage_options, so ordinary tests and external maintainers require no AWS account. Host I/O only; no Rust engine change."
+    },
+    {
+      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
+      "record": "api_contracts/readers",
+      "reason": "Require the public per-read endpoint validation test; emulator E2E additionally executes the existing S3 reader test."
     }
   ],
   "capabilities": [

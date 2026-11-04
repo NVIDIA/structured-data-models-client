@@ -174,11 +174,24 @@ class ReadersTest {
   @Test void configuredS3FixtureUsesThePublicReader() throws Exception {
     String uri = System.getenv("SDM_TEST_S3_READER_URI");
     org.junit.jupiter.api.Assumptions.assumeTrue(uri != null, "S3 fixture not configured");
-    ReadOptions options = ReadOptions.builder().region("us-west-2")
+    ReadOptions.Builder builder = ReadOptions.builder().region("us-west-2")
         .credentials(System.getenv("AWS_ACCESS_KEY_ID"), System.getenv("AWS_SECRET_ACCESS_KEY"),
-            System.getenv("AWS_SESSION_TOKEN")).build();
+            System.getenv("AWS_SESSION_TOKEN"));
+    String endpoint = System.getenv("SDM_TEST_S3_ENDPOINT");
+    if (endpoint != null) builder.endpoint(java.net.URI.create(endpoint));
+    ReadOptions options = builder.build();
     try (RootAllocator allocator = new RootAllocator(); Table rows = Readers.read(java.net.URI.create(uri), options, allocator)) {
       assertEquals(40, rows.getRowCount());
+    }
+  }
+
+  @Test void customS3EndpointIsScopedAndValidated() throws Exception {
+    for (String invalid : java.util.List.of("file:///tmp/data", "https://user:secret@host", "https://host/path", "https://host?token=secret")) {
+      assertThrows(IllegalArgumentException.class, () -> ReadOptions.builder().endpoint(java.net.URI.create(invalid)));
+    }
+    ReadOptions options = ReadOptions.builder().endpoint(java.net.URI.create("http://127.0.0.1:5000")).build();
+    try (RootAllocator allocator = new RootAllocator()) {
+      assertThrows(IllegalArgumentException.class, () -> Readers.read(java.net.URI.create("file:///tmp/table.csv"), options, allocator));
     }
   }
 

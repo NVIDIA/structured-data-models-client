@@ -235,7 +235,12 @@ def source_tables(stack, connector, config, fixture):
             paths = settings.get('paths')
             if not paths:
                 raise Incomplete('missing configured S3 fixture paths')
-            tables = {name: read(path) for name, path in paths.items()}
+            tables = {
+                name: read(
+                    path, storage_options=settings.get('storage_options')
+                )
+                for name, path in paths.items()
+            }
         else:
             directory = Path(stack.enter_context(tempfile.TemporaryDirectory()))
             for name, table in tables.items():

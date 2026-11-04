@@ -23,6 +23,14 @@ import org.apache.arrow.vector.types.pojo.*;
 
 /** Public installed-client journeys; only observation formatting lives here. */
 public final class ParityRunner {
+  private static ReadOptions fileReadOptions(Map<String, Object> settings) {
+    ReadOptions.Builder builder = ReadOptions.builder();
+    if (settings.get("s3_endpoint") != null) {
+      builder.endpoint(java.net.URI.create(text(settings.get("s3_endpoint"))))
+          .region("us-east-1").credentials("testing", "testing", null);
+    }
+    return builder.build();
+  }
   private ParityRunner() {}
 
   static final class Incomplete extends Exception {
@@ -1009,7 +1017,7 @@ public final class ParityRunner {
                     URI.create(text(entry.getValue())).getScheme() == null
                         ? Path.of(text(entry.getValue())).toUri()
                         : URI.create(text(entry.getValue())),
-                    ReadOptions.builder().build(),
+                    fileReadOptions(settings),
                     allocator));
         } else {
           if (!connector.equals("parquet")) {
