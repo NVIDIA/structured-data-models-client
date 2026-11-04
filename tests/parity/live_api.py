@@ -121,10 +121,45 @@ def model_identities(config):
         if (
             not isinstance(version, str)
             or not version
-            or transport not in ('nim', 'databricks')
+            or transport not in ('nim', 'databricks', 'private-bridge')
         ):
             raise ValueError('live endpoint version/transport is missing')
         models[model] = {'version': version, 'transport': transport}
+        if transport == 'private-bridge':
+            route = (
+                config.get('live_api', {})
+                .get('bridge_routes', {})
+                .get(model, {})
+            )
+            url = endpoint.get('client', {}).get('url')
+            entity = endpoint.get('entity')
+            if (
+                not isinstance(url, str)
+                or not url
+                or not isinstance(entity, str)
+                or not entity
+                or route.get('url') != url
+                or route.get('entity') != entity
+                or route.get('version') != version
+                or route.get('transport') != 'databricks'
+                or not isinstance(route.get('endpoint'), str)
+                or not route['endpoint']
+            ):
+                raise ValueError(
+                    'private bridge route identity is missing or inconsistent'
+                )
+            declared = {
+                key: route[key]
+                for key in ('url', 'entity', 'version', 'transport', 'endpoint')
+            }
+            models[model].update(
+                identity_basis='configured-route',
+                route_sha256=hashlib.sha256(
+                    json.dumps(
+                        declared, sort_keys=True, separators=(',', ':')
+                    ).encode()
+                ).hexdigest(),
+            )
     for model in ('pretrained', 'gradients'):
         version = (
             config.get('live_api', {}).get('model_versions', {}).get(model)

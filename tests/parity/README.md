@@ -177,3 +177,9 @@ It retains sequential Python/Java execution, explicit model identity and the 24 
 Ordinary live parity no longer requires giant-value resources.
 Publication requires successful ordinary-live and stress workflows on the exact release commit.
 No live workflow runs on pull requests, and configuring dedicated CI credentials or environment branch policies remains a separate owner task.
+
+Private HTTP bridges retain `transport: private-bridge` rather than being relabeled as direct model endpoints.
+For each such endpoint, `live_api.bridge_routes` must declare the matching `url`, `entity` and `version`, plus upstream `transport: databricks` and serving `endpoint`.
+The sanitized receipt records a route digest and explicitly labels its basis `configured-route`.
+This validates configuration consistency, not live model attestation.
+Keep the separate observed process-route and downstream-version preflight evidence privately with the acceptance receipt.
