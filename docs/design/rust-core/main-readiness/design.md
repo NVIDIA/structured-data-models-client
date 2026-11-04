@@ -33,7 +33,7 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Maintained Python suite | 6,881 passed; nine skips accounted for separately |
 | Repaired contract files on the integrated branch | 629 passed, no skips |
 | Repository tooling | 164 passed, no skips |
-| Platform CI | [Run 41791796675](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41791796675) finished with 49 successful and 32 failed jobs; failures map to eight validation-tooling causes, with the final Java capture repair under verification |
+| Platform CI | Eight validation-tooling causes repaired; corrected full [run 41796680139](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41796680139) is running at `bf5f7f412` |
 | Live matrix | All 740 Python/Java non-S3 cells pass across 13 connectors with observed subprocesses |
 | Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
 | Current-main comparison | All 370 non-S3 cells executed with matched dependencies: 277 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
@@ -43,6 +43,8 @@ The installed candidate artifacts are from `08d027795`; the platform CI runner i
 Later reviewed runners repair test endpoint selection and authentication observation; product source remains unchanged.
 The historical live comparison matches pandas 2.3.3, NumPy 2.5.4 and Arrow 24; earlier mismatched-dependency observations are diagnostics only.
 These partial results do not establish completion.
+The final source audit found outstanding CI resource/preflight/artifact-sharing work and developer-ledger first-adoption/evidence-view gaps.
+These are being completed before acceptance; the tested product implementation remains unchanged.
 
 | Owner | Changes | Shared contract |
 |---|---|---|
