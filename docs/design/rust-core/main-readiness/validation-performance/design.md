@@ -81,6 +81,11 @@ Cold Java runs can use command mode; warm measurements must stay inside a warmed
 Java's existing `internal/Trace.java` copies Arrow attachments: keep correctness captures off during performance runs.
 Add lightweight stage timers/counters, not a second capture framework; use a profiler for deeper attribution.
 
+Implementation uses the small shared subprocess runner in `scripts/benchmarks/` instead of a second pyperf execution layer.
+It keeps warm stages inside each Python/JVM process, verifies installed artifacts, alternates variants and samples RSS with psutil.
+Independent review verifies the process-level aggregation and work counts; no statistical confidence or universal regression threshold is claimed.
+SQL/native call counters remain explicitly unavailable where observing them would require invasive tracing.
+
 Start on a quiet reference machine, alternate baseline/candidate runs and retain sample distributions.
 Compare against both current `main` and pre-Phase-6 Rust `4b5df2e2e`, pinning dependency environments and separating dependency effects.
 Report new-only features as absolute/scaling measurements rather than invented old-client comparisons.
