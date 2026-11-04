@@ -183,3 +183,6 @@ For each such endpoint, `live_api.bridge_routes` must declare the matching `url`
 The sanitized receipt records a route digest and explicitly labels its basis `configured-route`.
 This validates configuration consistency, not live model attestation.
 Keep the separate observed process-route and downstream-version preflight evidence privately with the acceptance receipt.
+
+The model identity receipt includes every configured primary endpoint, including specialized link or forecast models.
+Each `endpoints_by_case` override must match exactly one recorded primary endpoint; the receipt retains the case-to-route mapping.

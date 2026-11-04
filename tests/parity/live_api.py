@@ -114,8 +114,9 @@ def artifact_identities(
 def model_identities(config):
     """Record caller-pinned versions, never endpoint addresses or credentials."""
     models = {}
-    for model in ('tabular', 'relational'):
-        endpoint = config.get('endpoints', {}).get(model, {})
+    endpoints = config.get('endpoints', {})
+    for model in dict.fromkeys(('tabular', 'relational', *endpoints)):
+        endpoint = endpoints.get(model, {})
         version = endpoint.get('version')
         transport = endpoint.get('transport')
         if (
@@ -160,6 +161,22 @@ def model_identities(config):
                     ).encode()
                 ).hexdigest(),
             )
+    case_routes = {}
+    for case, overrides in config.get('endpoints_by_case', {}).items():
+        case_routes[case] = {}
+        for model, override in overrides.items():
+            matches = [
+                name
+                for name, endpoint in endpoints.items()
+                if endpoint == override
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    'case endpoint must identify one recorded primary route'
+                )
+            case_routes[case][model] = matches[0]
+    if case_routes:
+        models['case_routes'] = case_routes
     for model in ('pretrained', 'gradients'):
         version = (
             config.get('live_api', {}).get('model_versions', {}).get(model)
