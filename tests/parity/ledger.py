@@ -25,6 +25,102 @@ def python_symbols(snapshot):
     return symbols
 
 
+def python_declarations(snapshot):
+    """Compare callable signatures without treating a new member as a class edit."""
+    declarations = {}
+    for module, surface in snapshot.items():
+        for name in surface['__all__']:
+            symbol = f'{module}.{name}'
+            member = surface['members'][name]
+            declarations[symbol] = {
+                key: value
+                for key, value in member.items()
+                if key not in {'public_attributes', 'public_methods'}
+            }
+            for attribute in member.get('public_attributes', []):
+                declarations[f'{symbol}.{attribute}'] = 'attribute'
+            for method, signature in member.get('public_methods', {}).items():
+                declarations[f'{symbol}.{method}'] = signature
+    return declarations
+
+
+def current_operations(root):
+    """The generated locked schema is the operation inventory."""
+    directory = root / 'rust/crates/sdm-contract/schema'
+    entries = [
+        line.split()
+        for line in (directory / 'contract.lock').read_text().splitlines()
+        if line.strip() and not line.startswith('#')
+    ]
+    current = max(entries, key=lambda entry: int(entry[0]))
+    schema = json.loads((directory / current[2]).read_text())
+    return {
+        variant['properties']['op']['const']
+        for variant in schema['$defs']['Operation']['oneOf']
+    }
+
+
+def validate_developer_contracts(data, root):
+    """Ownership is about engine boundaries, not stability of internal Rust items."""
+    operations = current_operations(root)
+    for group in data['api_contracts']:
+        name = group['id']
+        ownership = group.get('ownership', {})
+        if not ownership.get('paths') or any(
+            not (root / path).exists() for path in ownership['paths']
+        ):
+            raise ValueError(f'API ownership missing or stale: {name}')
+        linked = ownership.get('operations', [])
+        if not set(linked) <= operations:
+            raise ValueError(f'unknown native operation: {name}')
+        if not linked and not ownership.get('host_only_reason', '').strip():
+            raise ValueError(
+                f'API needs operations or host-only reason: {name}'
+            )
+        scope = group.get('scope', {})
+        for axis in ('models', 'input_paths', 'tasks', 'dtypes', 'stypes'):
+            if not isinstance(scope.get(axis), str) or not scope[axis].strip():
+                raise ValueError(f'API applicability missing: {name}/{axis}')
+        for language in data['languages']:
+            if language not in group.get('apis', {}):
+                raise ValueError(
+                    f'API language applicability missing: {name}/{language}'
+                )
+    groups = {group['id']: group for group in data['api_contracts']}
+    for language, inventory in data['api_inventory'].items():
+        for symbol, record in inventory.items():
+            for assertion in record.get('assertions', []):
+                group = groups[record['capability']]
+                if assertion.get('test') not in group['tests'].get(
+                    language, []
+                ):
+                    raise ValueError(
+                        f'behavior assertion needs a group test: {symbol}'
+                    )
+                if not assertion.get('behavior', '').strip():
+                    raise ValueError(
+                        f'behavior assertion needs a description: {symbol}'
+                    )
+
+
+def validate_changed_symbols(before, after, old_python, new_python):
+    """Existing group coverage is not retroactively called direct symbol coverage."""
+    old = python_declarations(old_python)
+    new = python_declarations(new_python)
+    changed = {
+        'python': {symbol for symbol in new if old.get(symbol) != new[symbol]},
+        'java': set(after['api_inventory']['java'])
+        - set(before['api_inventory']['java']),
+    }
+    for language, symbols in changed.items():
+        for symbol in symbols:
+            record = after['api_inventory'][language].get(symbol, {})
+            if not record.get('assertions'):
+                raise ValueError(
+                    f'changed API needs explicit behavior assertions: {language}/{symbol}'
+                )
+
+
 def validate_api_inventory(actual, mappings):
     """Require explicit per-symbol mappings, without wildcard escape hatches."""
     declared = set(mappings)
@@ -198,6 +294,7 @@ def main():
     data = manifest()
     validate(data)
     validate_coverage(data, root)
+    validate_developer_contracts(data, root)
     validate_api_inventory(
         json.loads(args.java_inventory.read_text()),
         data['api_inventory']['java'],
@@ -209,6 +306,12 @@ def main():
     if baseline_present:
         before = json.loads(git('show', f'{base}:tests/parity/manifest.json'))
         validate_changes(before, data, base)
+        validate_changed_symbols(
+            before,
+            data,
+            json.loads(git('show', f'{base}:tests/golden/public_api.json')),
+            json.loads((root / 'tests/golden/public_api.json').read_text()),
+        )
     print(
         json.dumps(
             {

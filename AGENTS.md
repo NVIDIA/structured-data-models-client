@@ -75,3 +75,5 @@ Every first-party source file carries an SPDX header.
 Sign off every commit (`git commit --signoff`); see
 [`CONTRIBUTING.md`](CONTRIBUTING.md). A pull request whose commits are not
 signed off cannot be merged.
+
+For capability changes, follow the [developer change guide](docs/development/change-guide.md).

@@ -121,3 +121,103 @@ def test_language_exceptions_are_required_and_cannot_be_stale():
     )
     with pytest.raises(AssertionError, match='stale exception'):
         validate(data)
+
+
+def test_developer_contracts_match_current_operations_and_owners():
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    validate_developer_contracts(manifest(), HERE.parents[1])
+
+
+@pytest.mark.parametrize(
+    ('mutate', 'message'),
+    [
+        (lambda group: group.pop('ownership'), 'ownership'),
+        (
+            lambda group: group['ownership'].update(operations=['invented']),
+            'unknown native operation',
+        ),
+        (
+            lambda group: group['ownership'].update(operations=[]),
+            'host-only reason',
+        ),
+        (lambda group: group['scope'].pop('tasks'), 'applicability missing'),
+        (
+            lambda group: group['apis'].pop('java'),
+            'language applicability missing',
+        ),
+    ],
+)
+def test_developer_contract_missing_information_fails(mutate, message):
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    data = manifest()
+    mutate(data['api_contracts'][0])
+    with pytest.raises(ValueError, match=message):
+        validate_developer_contracts(data, HERE.parents[1])
+
+
+def test_changed_signatures_need_direct_assertions_but_private_edits_do_not():
+    from ledger import validate_changed_symbols
+
+    before = {'api_inventory': {'python': {}, 'java': {}}}
+    after = copy.deepcopy(before)
+    old = {
+        'client': {
+            '__all__': ['read'],
+            'members': {'read': {'signature': '(source)'}},
+        }
+    }
+    new = copy.deepcopy(old)
+    validate_changed_symbols(before, after, old, new)
+    new['client']['members']['read']['signature'] = '(source, options=None)'
+    after['api_inventory']['python']['client.read'] = {'capability': 'readers'}
+    with pytest.raises(ValueError, match='explicit behavior assertions'):
+        validate_changed_symbols(before, after, old, new)
+    after['api_inventory']['python']['client.read']['assertions'] = [
+        {'test': 'test_read', 'behavior': 'Options preserve source ownership'}
+    ]
+    validate_changed_symbols(before, after, old, new)
+    after['api_inventory']['java']['Reader#read(Source, Options)'] = {
+        'capability': 'readers'
+    }
+    with pytest.raises(ValueError, match='java/Reader'):
+        validate_changed_symbols(before, after, old, new)
+
+
+def test_assertion_must_name_a_group_test_and_observable_behavior():
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    data = manifest()
+    symbol, record = next(iter(data['api_inventory']['python'].items()))
+    record['assertions'] = [{'test': 'missing', 'behavior': 'Expected output'}]
+    with pytest.raises(ValueError, match='needs a group test'):
+        validate_developer_contracts(data, HERE.parents[1])
+    group = next(
+        g for g in data['api_contracts'] if g['id'] == record['capability']
+    )
+    record['assertions'][0] = {
+        'test': group['tests']['python'][0],
+        'behavior': '',
+    }
+    with pytest.raises(ValueError, match='needs a description'):
+        validate_developer_contracts(data, HERE.parents[1])
+
+
+def test_disposable_view_does_not_turn_declarations_into_passes():
+    from developer_views import render
+
+    from contract import manifest
+
+    text = render(manifest())
+    assert 'Execution status is untested' in text
+    assert (
+        'existing group coverage; no direct symbol assertion declared' in text
+    )
+    assert 'gradient-explanations' in text
