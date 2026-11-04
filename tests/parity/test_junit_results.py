@@ -142,3 +142,61 @@ def test_live_missing_parameterized_invocation_fails(tmp_path):
         'expected 2 invocations, got 1' in problem
         for problem in report.problems
     )
+
+
+@pytest.mark.parametrize(
+    'fault',
+    [
+        None,
+        'missing-class',
+        'only-live',
+        'unknown-skip',
+        'failure',
+        'error',
+        'duplicate',
+        'missing-named-method',
+    ],
+)
+def test_local_class_requirements_keep_local_results_strict(tmp_path, fault):
+    from check_junit import Report, parity_junit_check
+
+    target = 'java/src/test/java/com/nvidia/sdm/ExampleTest.java'
+    required = [target]
+    if fault == 'missing-named-method':
+        required.append(target + '#missing')
+    ledger = tmp_path / 'tests/parity/manifest.json'
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(
+        json.dumps(
+            {
+                'api_contracts': [
+                    {'gate': 'local', 'tests': {'java': required}}
+                ],
+                'live_api_tests': [
+                    {'api_contract': 'example', 'test': target + '#live'}
+                ],
+            }
+        )
+    )
+    local = (
+        '<testcase classname="com.nvidia.sdm.ExampleTest" name="local(int)[1]">'
+    )
+    if fault in ('unknown-skip', 'failure', 'error'):
+        local += '<skipped/>' if fault == 'unknown-skip' else f'<{fault}/>'
+    local += '</testcase>'
+    live = '<testcase classname="com.nvidia.sdm.ExampleTest" name="live"><skipped/></testcase>'
+    cases = local + live
+    if fault == 'missing-class':
+        cases = ''
+    elif fault == 'only-live':
+        cases = live
+    elif fault == 'duplicate':
+        cases += local
+    reports = tmp_path / 'reports'
+    reports.mkdir()
+    (reports / 'TEST-ExampleTest.xml').write_text(
+        f'<testsuite>{cases}</testsuite>'
+    )
+    report = Report()
+    parity_junit_check(tmp_path, reports, report)
+    assert bool(report.problems) is (fault is not None), report.problems

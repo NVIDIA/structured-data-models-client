@@ -12,10 +12,10 @@ from pathlib import Path
 
 _TESTS = {
     'java': re.compile(
-        r'(?P<file>java/src/test/java/[A-Za-z0-9_./-]+\.java)#(?P<name>[A-Za-z0-9_]+)'
+        r'(?P<file>java/src/test/java/[A-Za-z0-9_./-]+\.java)(?:#(?P<name>[A-Za-z0-9_]+))?'
     )
 }
-_FORM = {'java': 'java/src/test/java/<file>.java#<method>'}
+_FORM = {'java': 'java/src/test/java/<file>.java[#<method>]'}
 
 
 class Report:
@@ -56,7 +56,7 @@ def junit_problem(test: str, ran: set[tuple[str, str]]) -> str | None:
     )
     owner = name.replace('/', '.')
     if any(
-        method == found['name']
+        (found['name'] is None or method == found['name'])
         and (cls == owner or cls.startswith(owner + '$'))
         for cls, method in ran
     ):
@@ -89,6 +89,12 @@ def parity_junit_check(
         .replace('/', '.')
         for node in required_tests
     }
+    class_requirements = {test for test in required_tests if '#' not in test}
+    live_methods = {
+        record['test']
+        for record in data.get('live_api_tests', [])
+        if '#' in record['test']
+    }
     expected_counts = (
         {
             record['test']: record.get('invocations', 1)
@@ -113,11 +119,21 @@ def parity_junit_check(
             if not matches:
                 continue
             method = re.split(r'[(\[]', name, maxsplit=1)[0]
-            if not any(
-                test.endswith('#' + method)
-                and junit_problem(test, {(owner, method)}) is None
+            explicit_method = any(
+                '#' in test and junit_problem(test, {(owner, method)}) is None
                 for test in required_tests
-            ):
+            )
+            class_method = any(
+                junit_problem(test, {(owner, method)}) is None
+                for test in class_requirements
+            )
+            registered_live = gate == 'local' and any(
+                junit_problem(test, {(owner, method)}) is None
+                for test in live_methods
+            )
+            # Whole-class local references cover local methods, not separately
+            # registered live requirements. Explicit method selections stay strict.
+            if not explicit_method and (not class_method or registered_live):
                 continue
             for test in invocation_counts:
                 if junit_problem(test, {(owner, method)}) is None:
