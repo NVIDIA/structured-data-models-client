@@ -83,6 +83,19 @@ def test_a_source_is_the_class_that_fits_its_connection(
         assert type(source) is cls
         assert source.connection is opened
         assert (source.backend, source.namespace) == (backend, namespace)
+        assert source.kind == {'databricks': 'databricks-sql'}.get(
+            backend, backend
+        )
+        assert (
+            source.namespace_parts()
+            == {
+                'duckdb': [],
+                'sqlite': [],
+                'databricks': ['main', 'sales'],
+                'snowflake': ['DB', None],
+                'postgres': ['public'],
+            }[backend]
+        )
 
 
 @pytest.mark.parametrize(

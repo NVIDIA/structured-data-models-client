@@ -4,6 +4,7 @@
 """Inventory and change checks for the existing compatibility manifest."""
 
 import argparse
+import ast
 import hashlib
 import json
 import subprocess
@@ -58,6 +59,43 @@ def current_operations(root):
         variant['properties']['op']['const']
         for variant in schema['$defs']['Operation']['oneOf']
     }
+
+
+def covered_test(node, required):
+    """A selected file/class includes its explicitly named child tests."""
+    return any(
+        node == parent
+        or node.startswith(parent + '::')
+        or (parent.endswith('.java') and node.startswith(parent + '#'))
+        for parent in required
+    )
+
+
+def validate_assertion_node(node, required, root):
+    if not covered_test(node, required):
+        raise ValueError('behavior assertion needs a group test: ' + node)
+    if '::' in node:
+        path, *parts = node.split('::')
+        scope = ast.parse((root / path).read_text()).body
+        for part in parts:
+            found = [
+                item for item in scope if getattr(item, 'name', None) == part
+            ]
+            if len(found) != 1:
+                raise ValueError(
+                    'behavior assertion names a missing test: ' + node
+                )
+            scope = getattr(found[0], 'body', [])
+        if not parts[-1].startswith('test_') or not isinstance(
+            found[0], (ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            raise ValueError(
+                'behavior assertion must name a collected test: ' + node
+            )
+        if any(not part.startswith('Test') for part in parts[:-1]):
+            raise ValueError(
+                'behavior assertion must name a collected test class: ' + node
+            )
 
 
 def validate_developer_contracts(data, root):
@@ -141,25 +179,28 @@ def validate_developer_contracts(data, root):
         for symbol, record in inventory.items():
             for assertion in record.get('assertions', []):
                 group = groups[record['capability']]
-                if assertion.get('test') not in group['tests'].get(
-                    language, []
-                ):
-                    raise ValueError(
-                        f'behavior assertion needs a group test: {symbol}'
-                    )
+                validate_assertion_node(
+                    assertion.get('test', ''),
+                    group['tests'].get(language, []),
+                    root,
+                )
                 if not assertion.get('behavior', '').strip():
                     raise ValueError(
                         f'behavior assertion needs a description: {symbol}'
                     )
 
 
-def validate_changed_symbols(before, after, old_python, new_python):
+def validate_changed_symbols(
+    before, after, old_python, new_python, *, introduced_java=False
+):
     """Existing group coverage is not retroactively called direct symbol coverage."""
     old = python_declarations(old_python)
     new = python_declarations(new_python)
     changed = {
         'python': {symbol for symbol in new if old.get(symbol) != new[symbol]},
-        'java': set(after['api_inventory']['java'])
+        'java': set()
+        if introduced_java
+        else set(after['api_inventory']['java'])
         - set(before['api_inventory']['java']),
     }
     for language, symbols in changed.items():
@@ -169,6 +210,52 @@ def validate_changed_symbols(before, after, old_python, new_python):
                 raise ValueError(
                     f'changed API needs explicit behavior assertions: {language}/{symbol}'
                 )
+
+
+def validate_introduction(
+    data, old_python, new_python, base_commit, *, baseline_has_java
+):
+    """Compare actual baseline declarations without inventing a historical ledger."""
+    if baseline_has_java:
+        raise ValueError(
+            'first adoption needs a reviewed Java baseline inventory; baseline Java is not an introduction'
+        )
+    decisions = {
+        item['record']: item
+        for item in data.get('contract_changes', [])
+        if item.get('base_commit') == base_commit
+        and item.get('reason', '').strip()
+    }
+    if 'api_inventory/java' not in decisions:
+        raise ValueError(
+            'Java introduction needs an explicit baseline rationale'
+        )
+    removed = python_symbols(old_python) - python_symbols(new_python)
+    for symbol in removed:
+        if 'api_inventory/python/' + symbol not in decisions:
+            raise ValueError(
+                'baseline declaration removal needs a reviewed reason: '
+                + symbol
+            )
+    for symbol in removed:
+        decision = decisions['api_inventory/python/' + symbol]
+        if decision.get('retained_test'):
+            validate_assertion_node(
+                decision['retained_test'],
+                [
+                    test
+                    for group in data['api_contracts']
+                    for test in group['tests'].get('python', [])
+                ],
+                Path(__file__).resolve().parents[2],
+            )
+    validate_changed_symbols(
+        {'api_inventory': {'java': {}}},
+        data,
+        old_python,
+        new_python,
+        introduced_java=True,
+    )
 
 
 def validate_api_inventory(actual, mappings):
@@ -353,14 +440,26 @@ def main():
     baseline_present = bool(
         git('ls-tree', '--name-only', base, 'tests/parity/manifest.json')
     )
+    old_python = json.loads(git('show', f'{base}:tests/golden/public_api.json'))
+    new_python = json.loads((root / 'tests/golden/public_api.json').read_text())
     if baseline_present:
         before = json.loads(git('show', f'{base}:tests/parity/manifest.json'))
         validate_changes(before, data, base)
         validate_changed_symbols(
             before,
             data,
-            json.loads(git('show', f'{base}:tests/golden/public_api.json')),
-            json.loads((root / 'tests/golden/public_api.json').read_text()),
+            old_python,
+            new_python,
+        )
+    else:
+        validate_introduction(
+            data,
+            old_python,
+            new_python,
+            base,
+            baseline_has_java=bool(
+                git('ls-tree', '--name-only', base, 'java/pom.xml')
+            ),
         )
     print(
         json.dumps(

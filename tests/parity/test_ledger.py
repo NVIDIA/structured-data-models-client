@@ -219,7 +219,7 @@ def test_disposable_view_does_not_turn_declarations_into_passes():
     from contract import manifest
 
     text = render(manifest())
-    assert 'Execution status is untested' in text
+    assert 'absent evidence is untested' in text
     assert (
         'existing group coverage; no direct symbol assertion declared' in text
     )
@@ -284,3 +284,106 @@ def test_type_journey_requires_linked_group_scenario():
     group['scope']['type_contracts']['refs'] = ['reader-model-type-journeys']
     with pytest.raises(ValueError, match='type journey not linked'):
         validate_developer_contracts(data, HERE.parents[1])
+
+
+@pytest.mark.parametrize('change', ['added', 'signature'])
+def test_first_adoption_requires_direct_python_assertions(change):
+    from ledger import validate_introduction
+
+    old = {
+        'client': {
+            '__all__': ['read'],
+            'members': {'read': {'signature': '(source)'}},
+        }
+    }
+    new = copy.deepcopy(old)
+    if change == 'added':
+        new['client']['__all__'].append('write')
+        new['client']['members']['write'] = {'signature': '(source)'}
+        symbol = 'client.write'
+    else:
+        new['client']['members']['read']['signature'] = '(source, options=None)'
+        symbol = 'client.read'
+    data = {
+        'api_inventory': {'python': {symbol: {}}, 'java': {}},
+        'contract_changes': [
+            {
+                'base_commit': 'base',
+                'record': 'api_inventory/java',
+                'reason': 'Baseline contains no Java artifact.',
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match='explicit behavior assertions'):
+        validate_introduction(data, old, new, 'base', baseline_has_java=False)
+    data['api_inventory']['python'][symbol]['assertions'] = [
+        {
+            'test': 'test_public.py::test_options',
+            'behavior': 'Independent expected options are retained.',
+        }
+    ]
+    validate_introduction(data, old, new, 'base', baseline_has_java=False)
+    with pytest.raises(ValueError, match='Java baseline'):
+        validate_introduction(data, old, new, 'base', baseline_has_java=True)
+
+
+def test_first_adoption_removal_needs_actual_baseline_decision():
+    from ledger import validate_introduction
+
+    old = {
+        'client': {
+            '__all__': ['read'],
+            'members': {'read': {'signature': '()'}},
+        }
+    }
+    new = {'client': {'__all__': [], 'members': {}}}
+    data = {
+        'api_inventory': {'python': {}, 'java': {}},
+        'contract_changes': [
+            {
+                'base_commit': 'base',
+                'record': 'api_inventory/java',
+                'reason': 'New Java host.',
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match='removal needs'):
+        validate_introduction(data, old, new, 'base', baseline_has_java=False)
+    data['contract_changes'].append(
+        {
+            'base_commit': 'different',
+            'record': 'api_inventory/python/client.read',
+            'reason': 'Reviewed replacement.',
+        }
+    )
+    with pytest.raises(ValueError, match='removal needs'):
+        validate_introduction(data, old, new, 'base', baseline_has_java=False)
+    data['contract_changes'][-1]['base_commit'] = 'base'
+    validate_introduction(data, old, new, 'base', baseline_has_java=False)
+
+
+def test_assertion_child_node_must_exist_in_selected_file(tmp_path):
+    from ledger import validate_assertion_node
+
+    (tmp_path / 'test_public.py').write_text('def test_read(): pass\n')
+    validate_assertion_node(
+        'test_public.py::test_read', ['test_public.py'], tmp_path
+    )
+    with pytest.raises(ValueError, match='missing test'):
+        validate_assertion_node(
+            'test_public.py::test_missing', ['test_public.py'], tmp_path
+        )
+    with pytest.raises(ValueError, match='group test'):
+        validate_assertion_node(
+            'other.py::test_read', ['test_public.py'], tmp_path
+        )
+
+
+def test_assertion_helper_is_not_a_collected_test(tmp_path):
+    from ledger import validate_assertion_node
+
+    (tmp_path / 'test_public.py').write_text('def helper(): pass\n')
+    with pytest.raises(ValueError, match='collected test'):
+        validate_assertion_node(
+            'test_public.py::helper', ['test_public.py'], tmp_path
+        )

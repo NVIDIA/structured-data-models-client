@@ -271,3 +271,29 @@ def test_cyclic_summary_input_is_refused_before_http(summary_server):
         )
     assert error.value.code == 'INVALID_REQUEST'
     assert state['calls'] == []
+
+
+def test_each_typed_setting_preserves_its_explicit_value():
+    config = InferenceConfig(
+        num_estimators=3,
+        column_shuffle=False,
+        category_shuffle=True,
+        hop_shuffle=False,
+        class_shuffle=True,
+        target_transforms=('clip', None),
+        output_type='mean',
+    )
+    expected = {
+        'num_estimators': 3,
+        'column_shuffle': False,
+        'category_shuffle': True,
+        'hop_shuffle': False,
+        'class_shuffle': True,
+        'target_transforms': ['clip', None],
+        'output_type': 'mean',
+    }
+    assert config.to_dict() == expected
+    for field, value in expected.items():
+        assert getattr(config, field) == (
+            tuple(value) if field == 'target_transforms' else value
+        )

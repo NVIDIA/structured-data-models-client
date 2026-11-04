@@ -23,10 +23,10 @@ The scenarios declare 792 language/model/connector cells; declaration is not pas
 | Type contracts | Arrow admission/inference, semantic-type edits, selected reader journeys | Full dtype × stype × connector × model coverage |
 | Schema locks and Rust boundary scans | Host/core message shapes, crate dependencies, SQL/runtime ownership | Connection from user capability to engine operation |
 
-The 16 `live_api_tests` records have no execution consumer or test-target validation.
-The live workflow runs general scenarios and giant-value tests instead.
+At the start of Phase 8, the 16 `live_api_tests` records had no execution consumer or test-target validation.
+The implemented live lane validates and executes those records, retaining independent outcome receipts.
 Guidance exists in `CONTRIBUTING.md`, `tests/parity/README.md` and `docs/reference/stability.md`, but not as one complete feature-change workflow.
-`rust/README.md` still describes Java as planned and Python as the only host.
+The Rust crate guide now describes both maintained hosts and the shared engine boundary.
 
 ## Preserve the boundaries
 
@@ -71,6 +71,8 @@ Neither substitutes for behavior tests.
 Do not expand every theoretical combination: test shared engine rules in Rust, host conversions in both languages, and affected driver representations through connector journeys.
 An omitted combination cannot become “never supported” without evidence.
 Keep generated views as disposable artifacts; retain compact declarations and necessary fixtures.
+The implemented view accepts original local/live observation receipts and live-registry receipts, reuses existing validation, and never promotes aggregate counts to per-test evidence.
+First adoption compares the actual main Python snapshot even when main has no manifest; Java's initial introduction is explicitly distinguished from historical declaration changes.
 
 ## Example and acceptance
 

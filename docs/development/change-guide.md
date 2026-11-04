@@ -30,8 +30,13 @@ Generate a readable, disposable view with:
 ```
 
 This view reports declarations, existing group coverage, explicit per-symbol assertion links, language exceptions, scenario scope, and type boundaries.
-It deliberately does not claim that a test has passed.
-Use local and live runner receipts tied to the exact candidate, installed artifact, configuration, and model identity for execution evidence.
+Without execution receipts it does not claim that a test has passed.
+Attach existing local/live observation JSONL files with `--local-observations` or `--live-observations`, plus `--candidate-commit <full-artifact-commit>`.
+The view reuses the maintained comparator to validate fixture, artifact, route, model and outcome evidence, and keeps declared support separate from local/live status.
+Use `--live-api-receipt` for existing live-registry output; a mapped test must appear among completed identities before its row can say live passed.
+Aggregate-only or missing API evidence remains unavailable, and missing scenario evidence remains untested.
+Bare local API count receipts lack artifact binding and cannot establish pass status in this view; use the existing local observation receipts instead.
+Receipts identify their actual artifact commit, never an inferred later HEAD, and recorded configured routes do not become independent server attestation.
 A missing or unavailable receipt remains incomplete, and an omitted combination is not automatically unsupported.
 
 ## Change behavior and protect it
@@ -48,7 +53,7 @@ For an added or changed public symbol:
 2. Regenerate Python API/wire snapshots using the commands in CONTRIBUTING, and collect Java declarations with `scripts/snapshot_java_api.py` after compilation.
 3. Update its `api_inventory` mapping and the group's ownership, applicability, test links, and language exceptions.
 4. Add an `assertions` list to that symbol's inventory record.
-   Each item contains `test`, an exact test already in the group's language-specific test list, and `behavior`, the observable assertion it protects.
+   Each item contains `test`, an exact test in the group's language-specific selection (including a checked child test of a selected file/class), and `behavior`, the observable assertion it protects.
    Shared tests are valid when each covered symbol names its relevant assertion explicitly.
 5. Update affected scenario/capability requirements and type contracts without silently narrowing their scope.
 6. Record each changed manifest record in `contract_changes`, with the actual merge-base commit and a specific reason.
@@ -57,6 +62,10 @@ For example, a new result accessor can name the existing test that checks its ou
 Merely mapping it to a broad result group is insufficient.
 The gate detects Python callable signature changes from snapshots and Java additions/signature changes from compiled declaration identities.
 Unchanged historical symbols retain their existing group coverage without claiming that all have direct symbol assertions.
+When the target has no ledger yet, the gate still compares its actual Python public snapshot and requires direct links for added or changed declarations.
+Removed snapshot declarations need a review reason tied to that actual base in `contract_changes`, including representation changes that retain instance behavior.
+Java introduction requires proof that the baseline has no Java artifact plus an explicit introduction rationale and validated group behavior coverage; it does not fabricate historical per-symbol assertions.
+A baseline that already contains Java but no ledger fails closed rather than silently treating Java as newly introduced.
 Review must still judge assertion quality, behavior-only changes, and compatibility implications that inventories cannot infer.
 
 A removal needs a deprecation or migration decision and replacement coverage where appropriate.

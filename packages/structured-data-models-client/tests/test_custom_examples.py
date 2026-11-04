@@ -60,8 +60,11 @@ def column(table, name):
 def test_shared_examples_labels_order_ownership_and_persistence(case):
     schema = schema_for(case)
     context, predict = frame(case['context']), frame(case['predict'])
+    task = RelationalTask(**case['task'])
+    for field in ('link_target_table', 'num_forecasts', 'step_size_ns'):
+        assert getattr(task, field) == case['task'].get(field)
     request = schema.materialize_examples(
-        RelationalTask(**case['task']), context, predict, num_neighbors=[10, 10]
+        task, context, predict, num_neighbors=[10, 10]
     )
     payload = request.payloads[0]
     expected = case['expected']['context_targets']

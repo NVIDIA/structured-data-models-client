@@ -35,6 +35,7 @@ def test_infer_links_records_actual_origin_and_is_detached():
     assert original.relationships == []
     assert inferred.relationships == [LINK]
     assert inferred.link_origins[0].origin == 'inferred'
+    assert inferred.link_origins[0].relationship == LINK
     assert inferred.infer_links().link_origins == inferred.link_origins
     inferred['customers']['value'].stype = 'categorical'
     assert original['customers']['value'].stype != 'categorical'

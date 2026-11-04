@@ -217,3 +217,27 @@ def test_missing_dtype_survives_frame_constructor_edits_and_checks():
     schema.check_consistent()
     assert schema['items']['value'].dtype is None
     assert schema['items']['value']._source is None
+
+
+def test_standalone_table_constructors_preserve_end_time_role():
+    columns = {
+        'id': Column('id', 'int64', 'ID'),
+        'closed': Column('closed', 'timestamp[ns]', 'timestamp'),
+    }
+    frame = pd.DataFrame({'id': [1], 'closed': pd.to_datetime(['2024-01-01'])})
+    tables = [
+        Table(
+            'users', frame, columns, primary_key='id', end_time_column='closed'
+        ),
+        SourceTable(
+            'users',
+            'users',
+            columns,
+            primary_key='id',
+            end_time_column='closed',
+        ),
+    ]
+    for table in tables:
+        assert table.end_time_column == 'closed'
+        assert table.metadata_report().end_time_column == 'closed'
+        assert table.time_column is None

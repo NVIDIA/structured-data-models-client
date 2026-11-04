@@ -2926,7 +2926,8 @@
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_copy_and_pickle_preserve_origin_and_edit_isolation",
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_adopted_frame_tables_retain_origin_and_relationship_rules",
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_time_edit_preserves_key_exclusion_and_origin",
-          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_manual_and_core_frame_table_adoption_use_shared_edits"
+          "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_manual_and_core_frame_table_adoption_use_shared_edits",
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructors_preserve_end_time_role"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#theShopIsDescribedAsTheReferenceDescribesIt",
@@ -3345,7 +3346,9 @@
           "packages/structured-data-models-connectors/tests/test_reader.py::test_the_duckdb_backend_opens_an_in_memory_database",
           "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake",
           "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_trusts_only_built_in_functions_by_default",
-          "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order"
+          "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order",
+          "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+          "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_says_its_kind"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#parquetPreservesTimezoneNanosecondsAndNulls",
@@ -4958,49 +4961,139 @@
         "capability": "schema-edits"
       },
       "sdm_client.ColumnMetadata": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.ExplanationView": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.ExplanationView.cohorts": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.ExplanationView.details": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.ExplanationView.feature_importance": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_attribution_fixtures",
+            "behavior": "Attribution rows, normalization and DataFrame columns match independent signed-score fixtures."
+          }
+        ]
       },
       "sdm_client.ExplanationView.print": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_report_rendering_does_not_call_native",
+            "behavior": "Printing yields exact captured text without native calls."
+          }
+        ]
       },
       "sdm_client.ExplanationView.subgraphs": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_accessor_precedence_and_lazy_errors",
+            "behavior": "Subgraph access matches independent accessor fixtures and rejects malformed fields lazily at the named path."
+          }
+        ]
       },
       "sdm_client.ExplanationView.summary": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.ExplanationView.to_text": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.ExplanationView.warnings": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.FeatureImportance": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_attribution_fixtures",
+            "behavior": "Attribution rows, normalization and DataFrame columns match independent signed-score fixtures."
+          }
+        ]
       },
       "sdm_client.FeatureImportance.print": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.FeatureImportance.to_pandas": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_attribution_fixtures",
+            "behavior": "Attribution rows, normalization and DataFrame columns match independent signed-score fixtures."
+          }
+        ]
       },
       "sdm_client.FeatureImportance.to_text": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.FeatureImportanceRow": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_attribution_fixtures",
+            "behavior": "Attribution rows, normalization and DataFrame columns match independent signed-score fixtures."
+          }
+        ]
       },
       "sdm_client.FittedModel": {
         "capability": "sessions"
@@ -5015,13 +5108,25 @@
         "capability": "sessions"
       },
       "sdm_client.FittedModel.sanitization_report": {
-        "capability": "sanitization-reports"
+        "capability": "sanitization-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_frame_sessions_core.py::test_sanitization_report_survives_prediction_and_close",
+            "behavior": "The fitted-model sanitization report survives prediction and close unchanged."
+          }
+        ]
       },
       "sdm_client.FittedModel.session_id": {
         "capability": "sessions"
       },
       "sdm_client.ForecastInput": {
-        "capability": "timeseries-preparation"
+        "capability": "timeseries-preparation",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_timeseries.py::test_shared_history_preparation",
+            "behavior": "History preparation preserves source ownership and matches independent expected entity, timestamp and value vectors."
+          }
+        ]
       },
       "sdm_client.KumoRelational": {
         "capability": "direct-dtypes-options"
@@ -5036,31 +5141,85 @@
         "capability": "direct-dtypes-options"
       },
       "sdm_client.LinkMetadata": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.LinkReport": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.LinkReport.print": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.LinkReport.to_pandas": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.LinkReport.to_text": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.MetadataReport": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.MetadataReport.print": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_report_rendering_does_not_call_native",
+            "behavior": "Printing yields exact captured text without native calls."
+          }
+        ]
       },
       "sdm_client.MetadataReport.to_pandas": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_metadata_reports_are_detached_and_keep_order",
+            "behavior": "Reports retain independent ordered rows and key metadata after the source schema is mutated."
+          }
+        ]
       },
       "sdm_client.MetadataReport.to_text": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.MissingExtraError": {
         "capability": "errors"
@@ -5087,7 +5246,13 @@
         "capability": "errors"
       },
       "sdm_client.PredictionResult": {
-        "capability": "results-merge"
+        "capability": "results-merge",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_result_merge_core.py::test_merge_preserves_owners_without_row_or_metadata_serialization",
+            "behavior": "Public keyword construction and merge retain original owners without serializing rows or metadata."
+          }
+        ]
       },
       "sdm_client.PredictionResult.absent": {
         "capability": "results-merge"
@@ -5096,7 +5261,13 @@
         "capability": "results-merge"
       },
       "sdm_client.PredictionResult.explanation_view": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_view_preserves_raw_and_freezes_only_explanation",
+            "behavior": "Public view access preserves original payload identity, frozen nested values, expected prose/warnings and absent attribution."
+          }
+        ]
       },
       "sdm_client.PredictionResult.merge": {
         "capability": "results-merge"
@@ -5111,7 +5282,13 @@
         "capability": "direct-dtypes-options"
       },
       "sdm_client.PredictiveQuery.labels": {
-        "capability": "labels-only"
+        "capability": "labels-only",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_labels.py::test_shared_ground_truth",
+            "behavior": "Labels match independent expected entities and ground-truth targets for each fixture."
+          }
+        ]
       },
       "sdm_client.PredictiveQuery.materialize": {
         "capability": "direct-dtypes-options"
@@ -5120,13 +5297,31 @@
         "capability": "schema-edits"
       },
       "sdm_client.RelationshipOrigin": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_infer_links_records_actual_origin_and_is_detached",
+            "behavior": "Inference records the expected relationship and inferred origin, remains detached, and preserves origins through persistence."
+          }
+        ]
       },
       "sdm_client.RelationshipOrigin.origin": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_infer_links_records_actual_origin_and_is_detached",
+            "behavior": "Inference records the expected relationship and inferred origin, remains detached, and preserves origins through persistence."
+          }
+        ]
       },
       "sdm_client.RelationshipOrigin.relationship": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_infer_links_records_actual_origin_and_is_detached",
+            "behavior": "Inference records the expected relationship and inferred origin, remains detached, and preserves origins through persistence."
+          }
+        ]
       },
       "sdm_client.Request": {
         "capability": "direct-dtypes-options"
@@ -5165,7 +5360,13 @@
         "capability": "direct-dtypes-options"
       },
       "sdm_client.Request.sanitization_report": {
-        "capability": "sanitization-reports"
+        "capability": "sanitization-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
+            "behavior": "Public report access retains exact input/output and dropped-row counters, frozen values and persistence."
+          }
+        ]
       },
       "sdm_client.Request.target_moves_with_time": {
         "capability": "direct-dtypes-options"
@@ -5204,10 +5405,22 @@
         "capability": "errors"
       },
       "sdm_client.SanitizationReport": {
-        "capability": "sanitization-reports"
+        "capability": "sanitization-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
+            "behavior": "Public report access retains exact input/output and dropped-row counters, frozen values and persistence."
+          }
+        ]
       },
       "sdm_client.SanitizationReport.tables": {
-        "capability": "sanitization-reports"
+        "capability": "sanitization-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
+            "behavior": "Public report access retains exact input/output and dropped-row counters, frozen values and persistence."
+          }
+        ]
       },
       "sdm_client.Schema": {
         "capability": "schema-edits"
@@ -5222,31 +5435,79 @@
         "capability": "schema-edits"
       },
       "sdm_client.Schema.from_relbench": {
-        "capability": "relbench"
+        "capability": "relbench",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_relbench.py::test_offline_metadata_rows_and_no_http",
+            "behavior": "Offline public loading yields the pinned metadata and rows without HTTP."
+          }
+        ]
       },
       "sdm_client.Schema.from_source": {
         "capability": "schema-edits"
       },
       "sdm_client.Schema.infer_links": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_infer_links_records_actual_origin_and_is_detached",
+            "behavior": "Inference records the expected relationship and inferred origin, remains detached, and preserves origins through persistence."
+          }
+        ]
       },
       "sdm_client.Schema.infer_metadata": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_explicit_none_and_types_survive_metadata_rerun",
+            "behavior": "Metadata inference preserves explicitly cleared keys/time roles and declared semantic types."
+          }
+        ]
       },
       "sdm_client.Schema.link_origins": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_infer_links_records_actual_origin_and_is_detached",
+            "behavior": "Inference records the expected relationship and inferred origin, remains detached, and preserves origins through persistence."
+          }
+        ]
       },
       "sdm_client.Schema.link_report": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_metadata_reports_are_detached_and_keep_order",
+            "behavior": "Reports retain independent ordered rows and key metadata after the source schema is mutated."
+          }
+        ]
       },
       "sdm_client.Schema.metadata_report": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_metadata_reports_are_detached_and_keep_order",
+            "behavior": "Reports retain independent ordered rows and key metadata after the source schema is mutated."
+          }
+        ]
       },
       "sdm_client.Schema.print_links": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.Schema.print_metadata": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.Schema.snapshot": {
         "capability": "schema-edits"
@@ -5258,37 +5519,91 @@
         "capability": "schema-edits"
       },
       "sdm_client.Schema.to_html": {
-        "capability": "schema-visualization"
+        "capability": "schema-visualization",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_visualization.py::test_empty_schema_public_journey",
+            "behavior": "Public text/HTML/file exports preserve the expected graph format and safe self-contained document."
+          }
+        ]
       },
       "sdm_client.Schema.to_mermaid": {
-        "capability": "schema-visualization"
+        "capability": "schema-visualization",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_visualization.py::test_empty_schema_public_journey",
+            "behavior": "Public text/HTML/file exports preserve the expected graph format and safe self-contained document."
+          }
+        ]
       },
       "sdm_client.Schema.visualize": {
-        "capability": "schema-visualization"
+        "capability": "schema-visualization",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_visualization.py::test_empty_schema_public_journey",
+            "behavior": "Public text/HTML/file exports preserve the expected graph format and safe self-contained document."
+          }
+        ]
       },
       "sdm_client.Schema.with_relationship": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_table_and_link_edits_are_atomic_and_keep_original",
+            "behavior": "Public table/relationship edits preserve the original schema, remove dependent relationships, and reject invalid edits atomically."
+          }
+        ]
       },
       "sdm_client.Schema.without_relationship": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_table_and_link_edits_are_atomic_and_keep_original",
+            "behavior": "Public table/relationship edits preserve the original schema, remove dependent relationships, and reject invalid edits atomically."
+          }
+        ]
       },
       "sdm_client.Schema.without_table": {
-        "capability": "schema-refinement"
+        "capability": "schema-refinement",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_table_and_link_edits_are_atomic_and_keep_original",
+            "behavior": "Public table/relationship edits preserve the original schema, remove dependent relationships, and reject invalid edits atomically."
+          }
+        ]
       },
       "sdm_client.SourceTable": {
-        "capability": "schema-edits"
+        "capability": "schema-edits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructors_preserve_end_time_role",
+            "behavior": "Table and SourceTable constructors retain the explicit end-time keyword and report role without inventing a time column."
+          }
+        ]
       },
       "sdm_client.SourceTable.duplicate_keys": {
         "capability": "schema-edits"
       },
       "sdm_client.SourceTable.metadata_report": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.SourceTable.primary_key": {
         "capability": "schema-edits"
       },
       "sdm_client.SourceTable.print_metadata": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.SourceTable.time_column": {
         "capability": "schema-edits"
@@ -5300,37 +5615,85 @@
         "capability": "errors"
       },
       "sdm_client.Table": {
-        "capability": "schema-edits"
+        "capability": "schema-edits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructors_preserve_end_time_role",
+            "behavior": "Table and SourceTable constructors retain the explicit end-time keyword and report role without inventing a time column."
+          }
+        ]
       },
       "sdm_client.Table.duplicate_keys": {
         "capability": "schema-edits"
       },
       "sdm_client.Table.metadata_report": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.Table.primary_key": {
         "capability": "schema-edits"
       },
       "sdm_client.Table.print_metadata": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.Table.time_column": {
         "capability": "schema-edits"
       },
       "sdm_client.TableMetadata": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
+            "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
       },
       "sdm_client.TableMetadata.print": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.TableMetadata.to_pandas": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.TableMetadata.to_text": {
-        "capability": "metadata-explanation-reports"
+        "capability": "metadata-explanation-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_reports.py::test_public_report_and_schema_rendering_accessors",
+            "behavior": "Public table/schema/report accessors produce independently specified text, rows and printed output; signed importance is retained."
+          }
+        ]
       },
       "sdm_client.TableSanitizationReport": {
-        "capability": "sanitization-reports"
+        "capability": "sanitization-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_sanitization_report_is_durable_and_includes_clean_tables",
+            "behavior": "Public report access retains exact input/output and dropped-row counters, frozen values and persistence."
+          }
+        ]
       },
       "sdm_client.Target": {
         "capability": "request-inspection"
@@ -5354,10 +5717,22 @@
         "capability": "errors"
       },
       "sdm_client.__version__": {
-        "capability": "release-metadata"
+        "capability": "release-metadata",
+        "assertions": [
+          {
+            "test": "tests/test_release_contract.py::TestPublicSurface::test_the_exported_api_matches_the_recorded_snapshot",
+            "behavior": "The exported version value matches the maintained public API snapshot."
+          }
+        ]
       },
       "sdm_client.build_timeseries": {
-        "capability": "timeseries-preparation"
+        "capability": "timeseries-preparation",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_timeseries.py::test_shared_history_preparation",
+            "behavior": "History preparation preserves source ownership and matches independent expected entity, timestamp and value vectors."
+          }
+        ]
       },
       "sdm_connectors.ConnectorError": {
         "capability": "errors"
@@ -5372,13 +5747,25 @@
         "capability": "readers"
       },
       "sdm_connectors.DatabricksSource.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.DatabricksSource.namespace": {
         "capability": "readers"
       },
       "sdm_connectors.DatabricksSource.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.DatabricksSource.semantic_model": {
         "capability": "readers"
@@ -5393,13 +5780,25 @@
         "capability": "readers"
       },
       "sdm_connectors.DuckDBSource.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.DuckDBSource.namespace": {
         "capability": "readers"
       },
       "sdm_connectors.DuckDBSource.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.MissingBackendError": {
         "capability": "errors"
@@ -5414,13 +5813,25 @@
         "capability": "readers"
       },
       "sdm_connectors.PostgresSource.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.PostgresSource.namespace": {
         "capability": "readers"
       },
       "sdm_connectors.PostgresSource.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SQLiteSource": {
         "capability": "readers"
@@ -5432,13 +5843,25 @@
         "capability": "readers"
       },
       "sdm_connectors.SQLiteSource.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SQLiteSource.namespace": {
         "capability": "readers"
       },
       "sdm_connectors.SQLiteSource.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SemanticModel": {
         "capability": "readers"
@@ -5450,7 +5873,13 @@
         "capability": "readers"
       },
       "sdm_connectors.SemanticModel.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_says_its_kind",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SemanticModel.name": {
         "capability": "readers"
@@ -5459,7 +5888,13 @@
         "capability": "readers"
       },
       "sdm_connectors.SemanticModel.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SemanticModel.source": {
         "capability": "readers"
@@ -5477,13 +5912,25 @@
         "capability": "readers"
       },
       "sdm_connectors.SnowflakeSource.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SnowflakeSource.namespace": {
         "capability": "readers"
       },
       "sdm_connectors.SnowflakeSource.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.SnowflakeSource.semantic_model": {
         "capability": "readers"
@@ -5498,16 +5945,34 @@
         "capability": "readers"
       },
       "sdm_connectors.Source.kind": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.Source.namespace": {
         "capability": "readers"
       },
       "sdm_connectors.Source.namespace_parts": {
-        "capability": "readers"
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
+            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
+          }
+        ]
       },
       "sdm_connectors.__version__": {
-        "capability": "release-metadata"
+        "capability": "release-metadata",
+        "assertions": [
+          {
+            "test": "tests/test_release_contract.py::TestPublicSurface::test_the_exported_api_matches_the_recorded_snapshot",
+            "behavior": "The exported version value matches the maintained public API snapshot."
+          }
+        ]
       },
       "sdm_connectors.databricks.lakebase": {
         "capability": "readers"
@@ -5528,67 +5993,193 @@
         "capability": "sql-helpers"
       },
       "sdm_client.SourceTable.end_time_column": {
-        "capability": "end-time"
+        "capability": "end-time",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
+            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
+          }
+        ]
       },
       "sdm_client.Table.end_time_column": {
-        "capability": "end-time"
+        "capability": "end-time",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
+            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
+          }
+        ]
       },
       "sdm_client.TableMetadata.end_time_column": {
-        "capability": "end-time"
+        "capability": "end-time",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
+            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
+          }
+        ]
       },
       "sdm_client.Schema.with_sql_column": {
-        "capability": "sql-columns"
+        "capability": "sql-columns",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_sql_columns.py::test_sql_column_values_ownership_refresh_and_materialization",
+            "behavior": "Provider-computed values, independent schema ownership, refresh and materialization retain expected results."
+          }
+        ]
       },
       "sdm_client.Schema.materialize_examples": {
-        "capability": "custom-examples"
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
       },
       "sdm_client.RelationalTask.num_forecasts": {
-        "capability": "custom-examples"
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
       },
       "sdm_client.RelationalTask.link_target_table": {
-        "capability": "custom-examples"
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
       },
       "sdm_client.RelationalTask": {
-        "capability": "custom-examples"
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
       },
       "sdm_client.RelationalTask.step_size_ns": {
-        "capability": "custom-examples"
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
       },
       "sdm_client.ExplanationSummarizer": {
-        "capability": "explanation-summaries"
+        "capability": "explanation-summaries",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_summary_request_is_explicit_preserves_prose_and_freezes_data",
+            "behavior": "Explicit summarization preserves existing prose and verifies the authorized HTTP request and unchanged source view."
+          }
+        ]
       },
       "sdm_client.ExplanationSummarizer.summarize": {
-        "capability": "explanation-summaries"
+        "capability": "explanation-summaries",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_summary_request_is_explicit_preserves_prose_and_freezes_data",
+            "behavior": "Explicit summarization preserves existing prose and verifies the authorized HTTP request and unchanged source view."
+          }
+        ]
       },
       "sdm_client.InferenceConfig": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.category_shuffle": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.class_shuffle": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.column_shuffle": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.hop_shuffle": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.num_estimators": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.output_type": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.target_transforms": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.InferenceConfig.to_dict": {
-        "capability": "typed-inference-settings"
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
       },
       "sdm_client.Schema.with_source": {
-        "capability": "connection-rebinding"
+        "capability": "connection-rebinding",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_rebinding.py::test_rebind_uses_new_connection_preserves_declarations_and_old_requests",
+            "behavior": "Rebinding uses the new connection while preserving declarations and existing request ownership."
+          }
+        ]
       },
       "sdm_client.GradientExplanations": {
         "capability": "gradient-explanations"
@@ -7799,6 +8390,17 @@
       "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
       "record": "api_contracts/gradient-explanations",
       "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
+    },
+    {
+      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
+      "record": "api_inventory/java",
+      "reason": "Pinned main has no java/pom.xml or Java public artifact. This first Java introduction has validated public inventory mappings and required group behavior tests; it does not claim historical per-symbol assertions for all Java declarations."
+    },
+    {
+      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
+      "record": "api_inventory/python/sdm_client.PredictionResult.explanations",
+      "reason": "The snapshot declaration moved from a class-visible property to the retained instance-owned GradientExplanations field. This is a representation change, not removal of the public instance API; test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge verifies nonempty per-row explanations and nested merging.",
+      "retained_test": "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge"
     }
   ],
   "capabilities": [

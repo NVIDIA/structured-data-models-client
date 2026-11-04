@@ -276,3 +276,58 @@ def test_explanation_depth_boundary_and_reused_containers():
         _ = result({'child': payload}).explanation_view
     assert caught.value.code == 'INVALID_REQUEST'
     assert caught.value.details['path'] == '$' + '.child' * 129
+
+
+def test_public_report_and_schema_rendering_accessors(capsys):
+    import pandas as pd
+
+    from sdm_client import FeatureImportance, FeatureImportanceRow, SourceTable
+
+    expected_text = 'users\n  id: int64, ID (primary key)'
+    expected_rows = [
+        dict(
+            table='users',
+            column='id',
+            dtype='int64',
+            stype='ID',
+            primary_key=True,
+            time_column=False,
+        )
+    ]
+    table = Table(
+        'users',
+        pd.DataFrame({'id': [1]}),
+        columns={'id': Column('id', 'int64', 'ID')},
+        primary_key='id',
+    )
+    source = SourceTable(
+        'users',
+        'warehouse.users',
+        {'id': Column('id', 'int64', 'ID')},
+        primary_key='id',
+    )
+    for owner in (table, source):
+        report = owner.metadata_report()
+        assert report.to_text() == expected_text
+        assert report.to_pandas().to_dict('records') == expected_rows
+        report.print()
+        assert capsys.readouterr().out == expected_text + '\n'
+        owner.print_metadata()
+        assert capsys.readouterr().out == expected_text + '\n'
+    schema = Schema({'users': table})
+    schema.print_metadata()
+    assert capsys.readouterr().out == expected_text + '\n'
+    assert schema.link_report().to_text() == ''
+    schema.link_report().print()
+    assert capsys.readouterr().out == '\n'
+    schema.print_links()
+    assert capsys.readouterr().out == '\n'
+    importance = FeatureImportance(
+        (FeatureImportanceRow('users', 'id', -0.25),), False
+    )
+    assert importance.to_text() == 'users.id: -0.25'
+    assert importance.to_pandas().to_dict('records') == [
+        dict(table='users', column='id', score=-0.25)
+    ]
+    importance.print()
+    assert capsys.readouterr().out == 'users.id: -0.25\n'
