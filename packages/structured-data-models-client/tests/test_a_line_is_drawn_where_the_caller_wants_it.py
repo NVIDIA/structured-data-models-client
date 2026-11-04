@@ -16,8 +16,8 @@ def test_a_scattered_run_has_to_clear_a_higher_bar():
     """The upper threshold is widened by how scattered the scores are: at
     the same percentile a scattered run reaches it with ordinary rows."""
     rng = np.random.default_rng(0)
-    tight = 1.0 + 0.01 * rng.normal(size=1000)
-    scattered = 1.0 + 1.0 * rng.normal(size=1000)
+    tight = 5.0 + 0.01 * rng.normal(size=1000)
+    scattered = 5.0 + 1.0 * rng.normal(size=1000)
 
     def widening(scores):
         _, upper = percentile_thresholds(scores)
@@ -27,16 +27,31 @@ def test_a_scattered_run_has_to_clear_a_higher_bar():
     assert widening(tight) == pytest.approx(1.0, abs=0.02)
 
 
-def test_the_quiet_line_is_never_below_zero():
-    """A score is a reconstruction error and cannot be negative, so neither
-    can the line beneath which one is ordinary."""
-    lower, _ = percentile_thresholds(np.linspace(-5.0, 5.0, 100))
+def test_a_run_that_is_not_made_of_distances_is_refused():
+    """A score is how far a reading sat from what was reconstructed, so it
+    has no direction. Widening is a multiplication, and multiplying a
+    negative threshold held a scattered run to a looser line than a settled
+    one rather than a stricter one."""
+    with pytest.raises(StructuredDataError) as caught:
+        percentile_thresholds(np.linspace(-5.0, 5.0, 100))
 
-    assert lower == 0.0
+    assert 'negative' in str(caught.value)
+
+
+def test_a_line_that_no_score_could_clear_is_refused():
+    """Widening scores near the largest float overflows: the
+    silent-detects-nothing failure the finite check is there to prevent,
+    reached from scores that are every one of them finite."""
+    with pytest.raises(StructuredDataError) as caught:
+        percentile_thresholds([1.7e308] * 50 + [0.0] * 50)
+
+    assert 'detect nothing' in str(caught.value)
 
 
 def test_a_stricter_percentile_detects_no_more_than_a_looser_one():
-    scores = np.concatenate([np.random.default_rng(0).normal(size=500), [40.0]])
+    scores = np.concatenate(
+        [np.abs(np.random.default_rng(0).normal(size=500)), [40.0]]
+    )
 
     _, loose = percentile_thresholds(scores, upper_percentile=90.0)
     _, strict = percentile_thresholds(scores, upper_percentile=99.9)

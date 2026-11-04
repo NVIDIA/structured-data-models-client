@@ -304,3 +304,56 @@ def test_supplied_detections_need_no_thresholder_in_the_answer(
         tmp_path / 'run.pdf',
         detected_by=np.zeros(len(frame), dtype=bool),
     ).exists()
+
+
+def test_an_answer_from_another_model_is_refused(anomaly, tmp_path):
+    """Every page reads the score as a reconstruction error and says so.
+    Supplied detections ask the answer for nothing but a score, so nothing
+    else was left to notice that another model had answered."""
+    frame = readings()
+    result = scored(anomaly, frame)
+    result.model = 'kumo-tabular'
+
+    with pytest.raises(StructuredDataError) as caught:
+        anomaly_report(
+            result,
+            frame,
+            tmp_path / 'run.pdf',
+            detected_by=np.zeros(len(frame), dtype=bool),
+        )
+    assert 'kumo-tabular' in str(caught.value)
+
+
+def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
+    anomaly, tmp_path
+):
+    """Converting these to a float keeps the real part and drops the rest
+    without a word, so they arrived as detections."""
+    frame = readings()
+
+    with pytest.raises(StructuredDataError) as caught:
+        anomaly_report(
+            scored(anomaly, frame),
+            frame,
+            tmp_path / 'run.pdf',
+            detected_by=np.full(len(frame), 2j),
+        )
+    assert 'detected_by' in str(caught.value)
+
+
+@pytest.mark.parametrize('supplied', [False, True])
+def test_the_note_page_says_where_the_detections_came_from(supplied):
+    """The page said the flag came from thresholding the score, which is
+    what it came from only when a thresholder was named."""
+    from sdm_client.reporting import _pages
+
+    figure = _pages._create_mae_note_page(
+        page_number=1, detections_supplied=supplied
+    )
+
+    drawn = [text.get_text() for text in figure.axes[0].texts]
+    thresholded = any(
+        'applying the selected threshold strategy' in line for line in drawn
+    )
+    assert thresholded is not supplied
+    assert any('supplied by the caller' in line for line in drawn) is supplied

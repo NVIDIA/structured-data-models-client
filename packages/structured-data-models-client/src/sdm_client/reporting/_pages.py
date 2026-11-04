@@ -413,7 +413,10 @@ def _create_feature_page(
 
 
 def _create_mae_note_page(
-    *, page_number: int, uses_row_numbers: bool = False
+    *,
+    page_number: int,
+    uses_row_numbers: bool = False,
+    detections_supplied: bool = False,
 ) -> Figure:
     figure = Figure(figsize=(11.0, 8.5), facecolor='white')
     axis = figure.add_axes((0.09, 0.12, 0.82, 0.76))
@@ -448,7 +451,9 @@ def _create_mae_note_page(
     )
     notes = [
         'A larger MAE means the detector reconstructed that sample less accurately.',
-        'The anomaly flag is produced by applying the selected threshold strategy to the MAE sequence.',
+        'The anomaly flag was supplied by the caller alongside this run, so where the line falls is theirs and need not follow from the MAE sequence.'
+        if detections_supplied
+        else 'The anomaly flag is produced by applying the selected threshold strategy to the MAE sequence.',
         'MAE scale depends on preprocessing and feature scaling, so values should be interpreted in the context of the same model and data pipeline.',
         'A high MAE identifies unusual reconstruction behavior; by itself, it does not establish physical causality or root cause.',
     ]
@@ -492,6 +497,7 @@ def generate_anomaly_detection_report(
     anomaly_column: str = 'Anomaly',
     score_column: str = 'MAE',
     title: str = 'Kumo-Anomaly Report',
+    detections_supplied: bool = False,
     max_features_per_page: int = 4,
     max_report_pages: int = DEFAULT_MAX_REPORT_PAGES,
 ) -> Path:
@@ -615,6 +621,7 @@ def generate_anomaly_detection_report(
             _create_mae_note_page(
                 page_number=page_count,
                 uses_row_numbers=x_label.startswith('Row number'),
+                detections_supplied=detections_supplied,
             )
         )
     return destination

@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
+from sdm_client.models import TFM_MODEL_KUMO_ANOMALY
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
     from sdm_client.result import PredictionResult
@@ -130,6 +131,7 @@ def anomaly_report(
         anomaly_column=detected,
         score_column=score,
         title=_titled(title, detected_by),
+        detections_supplied=not isinstance(detected_by, str),
         max_report_pages=max_report_pages,
     )
 
@@ -159,6 +161,15 @@ def _rejoined(
     A label is not converted to a whole number here. 0.9 is not a label, and
     truncating it would turn it into one before anything checked it.
     """
+    if result.model != TFM_MODEL_KUMO_ANOMALY:
+        raise StructuredDataError(
+            f'this answer came from {result.model!r} and every page here '
+            f'reads it as {TFM_MODEL_KUMO_ANOMALY!r}: the score it draws is '
+            f'a reconstruction error and it says so on the page. Another '
+            f"model's answer would be drawn under that label and read as "
+            f'something it is not',
+            code='INVALID_REQUEST',
+        )
     answer = result.to_pandas()
     named = isinstance(detected_by, str)
     label = f'probability_{detected_by}' if named else None
@@ -213,7 +224,9 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
     A score is refused rather than read as a detection. Drawn as one it
     marks every row whose score rounds up, which is a different report from
     the one the caller asked for and looks exactly like the one they asked
-    for.
+    for. What the values are is read before they are converted, for the same
+    reason: converting a complex number to a float keeps the real part and
+    drops the rest without a word, so ``2j`` arrived as a detection.
     """
     values = np.asarray(
         detections.to_numpy()
@@ -228,7 +241,20 @@ def _supplied(detections: Sequence[Any] | np.ndarray, rows: int) -> np.ndarray:
         )
     if values.dtype == bool:
         return values
-    numeric = np.asarray(values, dtype=float)
+    if values.dtype.kind not in 'biufO':
+        raise StructuredDataError(
+            f'detected_by carries {values.dtype} values, which are not a '
+            f'decision about a row. Pass true and false, one per row',
+            code='INVALID_REQUEST',
+        )
+    try:
+        numeric = np.asarray(values, dtype=float)
+    except (TypeError, ValueError) as error:
+        raise StructuredDataError(
+            'detected_by carries values that are not true or false, so '
+            'nothing in it says which rows were detected',
+            code='INVALID_REQUEST',
+        ) from error
     if not bool(np.isin(numeric, (0.0, 1.0)).all()):
         raise StructuredDataError(
             'detected_by carries values other than true and false, so it is '

@@ -45,15 +45,24 @@ def percentile_thresholds(
 
     Returns:
         The lower and the upper threshold. A score above the upper one is the
-        detection; the lower one is the floor an ordinary score sits above,
-        and is never negative.
+        detection; the lower one is the floor an ordinary score sits above.
 
     Raises:
         StructuredDataError: If the percentiles are not between 0 and 100 and
-            in that order, or if the scores are empty or not all finite. A
-            single NaN carries into every percentile and into the mean, and
-            the thresholds come back NaN, which compares false against every
-            score and silently detects nothing at all.
+            in that order, if the scores are empty, not all finite or not all
+            positive, or if a threshold worked out from them is not finite. A
+            threshold that is NaN or infinite compares false against every
+            score and silently detects nothing at all, which is the one
+            failure this must not have; a single NaN score carries into every
+            percentile and into the mean, and scores near the largest float
+            overflow when the mean of them is taken.
+
+            Scores are the distance between what was observed and what the
+            model reconstructed, so a negative one is not a score this knows
+            how to read. The widening below is a multiplication, and
+            multiplying a negative threshold by more than one lowers the bar
+            rather than raising it, so a scattered run of them would be held
+            to a *looser* line than a settled one.
 
     >>> result = client.predict(Request.anomaly(readings), model=KumoAnomaly())
     >>> scores = result.to_pandas()['prediction']
@@ -90,10 +99,40 @@ def percentile_thresholds(
             'from them detects nothing at all',
             code='INVALID_REQUEST',
         )
+    if bool((values < 0.0).any()):
+        raise StructuredDataError(
+            'these scores include a negative one, and a score is how far '
+            'the reading sat from what was reconstructed, which has no '
+            'direction. Pass the distances themselves',
+            code='INVALID_REQUEST',
+        )
 
-    lower = float(max(0.0, np.percentile(values, float(lower_percentile))))
+    lower = float(np.percentile(values, float(lower_percentile)))
     upper = float(np.percentile(values, float(upper_percentile)))
+    widened = upper * (1.0 + 0.5 * min(_spread(values), 1.0))
+    if not np.isfinite(widened):
+        raise StructuredDataError(
+            f'the upper threshold these scores give is {widened}, which no '
+            f'score is above, so the report would detect nothing at all. '
+            f'Scale them down before asking where the line falls',
+            code='INVALID_REQUEST',
+        )
+    return lower, widened
 
-    mean = float(values.mean())
-    spread = float(values.std()) / mean if mean > 0 else 1.0
-    return lower, upper * (1.0 + 0.5 * min(spread, 1.0))
+
+def _spread(values: np.ndarray) -> float:
+    r"""How scattered ``values`` are, as a share of how large they are.
+
+    The coefficient of variation, worked out on the values divided by the
+    largest of them. That ratio is what the coefficient of variation is, so
+    dividing first changes nothing about the answer, and it keeps every sum
+    taken on the way within the range of a float: scores near the largest
+    float sum to infinity, and the spread of them came back NaN, which
+    widened the threshold to NaN and detected nothing.
+    """
+    largest = float(values.max())
+    if largest <= 0.0:
+        return 1.0
+    scaled = values / largest
+    mean = float(scaled.mean())
+    return float(scaled.std()) / mean if mean > 0 else 1.0
