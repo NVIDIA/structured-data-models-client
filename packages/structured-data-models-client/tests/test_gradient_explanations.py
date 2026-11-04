@@ -361,3 +361,28 @@ def test_native_reply_nonfinite_gradient_uses_shared_refusal():
         )
     assert caught.value.code == 'INVALID_RESPONSE'
     assert caught.value.details['field'] == 'prediction.explanation'
+
+
+def test_explain_candidate_ranking_is_refused_before_model_call(endpoint):
+    from test_frame_materialize_core import link_schema
+
+    from sdm_client import (
+        KumoRelational,
+        PredictiveQuery,
+        UnsupportedRequestError,
+    )
+
+    url, calls = endpoint
+    req = PredictiveQuery(
+        'EXPLAIN PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id',
+        link_schema(),
+    ).materialize(
+        indices=[1, 2],
+        candidates=[1, 2],
+        num_context_samples=12,
+        random_seed=7,
+        model=KumoRelational(),
+    )
+    with SDMClient(url=url) as client, pytest.raises(UnsupportedRequestError):
+        client.predict(req, model=KumoRelational())
+    assert not calls

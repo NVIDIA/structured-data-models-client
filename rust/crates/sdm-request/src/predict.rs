@@ -99,9 +99,6 @@ pub const CONTEXT_ROWS_MAX: usize = 10_000;
 /// The context the mode that explains takes at most (`context_rows_fast`).
 pub const CONTEXT_ROWS_FAST: usize = 1_000;
 
-/// The rows an explanation covers (`explanation_predict_rows`).
-pub const EXPLANATION_PREDICT_ROWS: usize = 1;
-
 /// What the wire calls the target column whatever the question was.
 const WIRE_TARGET: &str = "TARGET";
 
