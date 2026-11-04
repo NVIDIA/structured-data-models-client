@@ -60,5 +60,6 @@ The Java finding (`java/comparison-with-wider-type`, alert #8) points to the int
 Inspection of the pinned Arrow 19 bytecode confirms that `BaseTable` stores an integer row count and `getRowCount()` merely widens it; ordinary Table constructors also accept integer counts.
 No supported-input overflow defect was established, and no product code or alert suppression was added.
 An arbitrary custom subclass overriding that invariant was not treated as a normal Arrow input contract.
-The Python lane also succeeded; its existing open findings concern test-only workflow credential assertions, not a newly established product vulnerability.
+The entire branch workflow completed successfully, including Python and Rust.
+Rust analysis `2091129751` reported zero results/errors; existing Python findings concern test-only workflow credential assertions, not a newly established product vulnerability.
 Extraction coverage and successful analysis do not certify absence of vulnerabilities or connector/model E2E parity.
