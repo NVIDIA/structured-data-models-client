@@ -117,6 +117,8 @@ Accepted fixture sockets disable Nagle buffering so separate header/body writes 
 HTTP call and payload-byte counters include cold, warmup, and warm iterations.
 Each HTTP request also records context/predict instance-row counts and related-table row counts, without retaining payloads.
 Compare these work counts before attributing a timing difference to implementation cost; sampling differences must remain visible.
+The pinned old client's SQLite sampler ignores the seed, so its sampled context count can differ after scoring rows are excluded.
+Report those actual context/related-row counts alongside latency; do not describe that comparison as identical sampled work or attribute the entire difference to engine speed.
 Native call counts and SQLite query counts are unavailable without additional instrumentation and are explicitly null.
 Memory-route SQL counts are zero.
 No correctness trace listener or attachment-copy instrumentation is enabled.
