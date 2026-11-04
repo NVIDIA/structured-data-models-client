@@ -307,3 +307,46 @@ def test_jni_cannot_contain_provider_specific_words(
     assert any('sdm-jni/src/lib.rs' in p and 'snowflake' in p for p in found), (
         found
     )
+
+
+@pytest.mark.parametrize(
+    'relative, declaration',
+    [
+        (
+            'dispatch.rs',
+            'Operation::AddSqlColumn(request); crate::sql_column::start();',
+        ),
+        ('describe.rs', 'crate::sql_column::project();'),
+        ('lib.rs', 'mod sql_column;'),
+        ('materialize/examples.rs', 'ExampleSource::Sql { schema };'),
+        ('rebind.rs', 'sdm_contract::data::ProviderChoice::Sql { provider };'),
+        (
+            'sql_column.rs',
+            'use sdm_contract::sql_column::{SqlColumn, SqlColumnCall}; fn f(request: SqlColumn, call: SqlColumnCall) {}',
+        ),
+        ('view.rs', 'crate::sql_column::project();'),
+    ],
+)
+def test_core_orchestration_references_keep_sql_and_provider_bans(
+    tmp_path, monkeypatch, relative, declaration
+):
+    scan = _tool('l0_scan')
+    monkeypatch.setattr(scan, 'SQL_FREE_CRATES', ('sdm-core',))
+    path = tmp_path / 'rust/crates/sdm-core/src' / relative
+    path.parent.mkdir(parents=True)
+    path.write_text(declaration)
+    assert scan.check_sql(tmp_path) == []
+    for fault in (
+        'const Q: &str = "SELECT x FROM y WHERE x = 1";',
+        'let provider = Provider::Duckdb;',
+        'fn render_sql() {}',
+        'OtherSource::Sql { schema };',
+        'OtherOperation::AddSqlColumn(request);',
+        'use unrelated::{SqlColumn, SqlColumnCall};',
+    ):
+        path.write_text(declaration + '\n' + fault)
+        assert scan.check_sql(tmp_path), fault
+    # The same symbols in an unreviewed module must still be rejected.
+    path.unlink()
+    (path.parent / 'unreviewed.rs').write_text(declaration)
+    assert scan.check_sql(tmp_path)

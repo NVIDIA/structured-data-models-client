@@ -1003,6 +1003,45 @@ PROVIDER_WORDS = frozenset(
 )
 
 
+# Phase 6 final-restorations.md restores provider-computed columns and typed
+# example sources. Their contracts are sdm-contract/src/sql_column.rs,
+# data.rs (ProviderChoice), and examples.rs (ExampleSource). Core orchestrates
+# these opaque requests; SQL rendering and provider knowledge stay in sdm-data.
+# Match reviewed qualified references/declarations, never entire files or words.
+_SQL_ORCHESTRATION = {
+    'describe.rs': (r'crate::sql_column',),
+    'dispatch.rs': (r'Operation::AddSqlColumn', r'crate::sql_column'),
+    'lib.rs': (r'mod sql_column;',),
+    'materialize/examples.rs': (r'ExampleSource::Sql',),
+    'rebind.rs': (r'sdm_contract::data::ProviderChoice::Sql',),
+    'sql_column.rs': (
+        r'sdm_contract::sql_column',
+        r'sdm_contract::sql_column::\{\s*SqlColumn,\s*SqlColumnCall\s*\}',
+        r'\b(?:request|call):\s*SqlColumn(?:Call)?\b',
+    ),
+    'view.rs': (r'crate::sql_column',),
+}
+
+
+def orchestration_reference(rel: Path, source: Source, offset: int) -> bool:
+    prefix = Path('rust/crates/sdm-core/src')
+    if not rel.is_relative_to(prefix):
+        return False
+    for pattern in _SQL_ORCHESTRATION.get(
+        rel.relative_to(prefix).as_posix(), ()
+    ):
+        # Spaces around Rust path separators do not alter their identity.
+        pattern = pattern.replace('::', r'\s*::\s*')
+        if pattern[0].isalpha():
+            pattern = r'\b' + pattern
+        for match in re.finditer(
+            pattern + r'(?![A-Za-z0-9_])', source.skeleton
+        ):
+            if match.start() <= offset < match.end():
+                return True
+    return False
+
+
 def check_sql(root: Path) -> list[str]:
     problems: list[str] = []
     members: Verified | None = None
@@ -1044,7 +1083,10 @@ def check_sql(root: Path) -> list[str]:
                 )
             for offset, name in identifiers(source):
                 hit = PROVIDER_WORDS.intersection(words(name))
-                if hit:
+                if hit and not (
+                    hit == {'sql'}
+                    and orchestration_reference(rel, source, offset)
+                ):
                     problems.append(
                         f'{rel}:{source.line(offset)}: `{name}` names a provider or '
                         f'SQL ({", ".join(sorted(hit))}); {crate} matches on none'
