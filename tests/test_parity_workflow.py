@@ -29,7 +29,15 @@ def test_live_credentials_only_on_approved_runs():
         in data['jobs']['preflight']['if']
     )
     assert data['jobs']['shards']['environment'] == 'parity-live'
-    assert data['permissions'] == {'contents': 'read', 'actions': 'read'}
+    assert data['permissions'] == {
+        'contents': 'read',
+        'actions': 'read',
+        'packages': 'read',
+    }
+    assert data['jobs']['shards']['services']['postgres']['credentials'] == {
+        'username': '${{ github.actor }}',
+        'password': '${{ secrets.GITHUB_TOKEN }}',
+    }
     assert 'env' not in data['jobs']['models']
     for name, value in data['jobs']['shards']['env'].items():
         if 'secrets.' in value:

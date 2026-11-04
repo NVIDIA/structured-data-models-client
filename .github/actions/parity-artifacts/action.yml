@@ -71,10 +71,11 @@ runs:
           "$PARITY_DIR/candidate/bin/pip" install 'structured-data-models>=0.2.1,<0.3' \
             > "$PARITY_DIR/private/model-install.log" 2>&1
         fi
+        # Resolve aiobotocore's narrow botocore range alongside Moto's boto3.
         if ! "$PARITY_DIR/candidate/bin/pip" install \
           ./packages/structured-data-models-api \
           './packages/structured-data-models-connectors[all,test]' \
-          "$PARITY_WHEEL" databricks-connect==17.3.11 'jsonschema>=4.18' pytest 'moto[server,s3]' \
+          "$PARITY_WHEEL" databricks-connect==17.3.11 'jsonschema>=4.18' pytest 'moto[server,s3]' aiobotocore \
           > "$PARITY_DIR/private/install.log" 2>&1; then
           echo '::error::Live dependencies could not be installed; private diagnostics retained.'
           exit 1

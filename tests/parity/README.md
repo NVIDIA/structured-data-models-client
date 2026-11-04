@@ -167,15 +167,13 @@ A missing or invalid Git reference remains an error.
 
 ## Executing the live API registry
 
-The ordinary live workflow runs the prediction matrix and every `live_api_tests` requirement.
-The dedicated CI identities are not configured yet; local acceptance uses caller-provided private configuration without uploading it.
-Both live workflows share a repository-wide concurrency limit of one; connector shards also run one at a time.
-They reuse production wheel, JAR and JNI artifacts from successful full CI for the exact candidate commit, rather than rebuilding distribution artifacts.
-The matrix loads the exact JAR; focused Java API and giant tests compile the exact clean source commit and load the verified packaged JNI, and record this as source-equivalent execution.
-Set the same `ci_run_id` dispatch input on both lanes to pin identical bytes across reruns; sanitized receipts retain that run and artifact hashes.
-The ordinary workflow runs bounded authentication/read probes and endpoint readiness checks before its manifest-derived connector shards, then requires every shard and the unfiltered matrix comparison before running the API registry once.
-`resource_preflight.py` records optional remote model listing separately; readiness and configuration do not certify task, session or gradient support.
-Use the installed candidate Python interpreter, its optional pretrained model runtime, a CUDA GPU, the candidate JNI library and Maven:
+This optional full live-model registry remains available for targeted/manual acceptance.
+The required hosted workflow uses the materialization profile and bounded CPU smoke described above; it does not claim to execute this entire registry.
+Both workflows share one repository-wide concurrency group, while the required profile permits two connector shards at a time.
+They reuse production wheel, JAR and JNI artifacts from successful full CI for the exact candidate commit.
+The matrix loads the exact JAR; focused Java API and giant tests compile the exact clean source commit and load the verified packaged JNI, recording source-equivalent execution.
+Set the same `ci_run_id` dispatch input to pin identical bytes across reruns.
+For the optional registry, use the installed candidate Python interpreter, its pretrained model runtime, the candidate JNI library and Maven:
 
 ```sh
 CANDIDATE_PYTHON tests/parity/live_api.py \
@@ -195,7 +193,7 @@ The ordinary source/endpoint config is the default for `SDM_LABELS_WAREHOUSE_CON
 Existing environment variables can point these at separate fixture configurations.
 Endpoint client URLs supply `SDM_RELATIONAL_URL` and `SDM_TABULAR_LIVE_URL` when unset.
 The private config may additionally contain `live_api.environment`, with overrides for those variables plus `SDM_TEST_S3_READER_URI`, `SDM_GRADIENT_URL` and `SDM_RUN_LOCAL_MODEL`.
-Set the last to `1` only with the actual pretrained CUDA runtime available.
+Set the last to `1` only with the actual pretrained CPU runtime available.
 The private configuration must also supply `live_api.model_versions.pretrained` and `live_api.model_versions.gradients`, identifying the actual pretrained and gradient models.
 Endpoint entries must supply their immutable `version` and `transport`.
 The receipt retains these identities without endpoint URLs.
