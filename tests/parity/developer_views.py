@@ -46,9 +46,45 @@ def render(data):
     lines += ['', '## Applicability and assertion links', '']
     for group in data['api_contracts']:
         lines += [f'### {group["id"]}', '']
-        lines += [
-            f'- {axis}: {scope}' for axis, scope in group['scope'].items()
+        scope = group['scope']
+        cases = [
+            case
+            for case in data['scenarios']
+            if case['id'] in scope['scenarios']['refs']
         ]
+        if cases:
+            for axis in ('models', 'connectors', 'task'):
+                values = sorted(
+                    {
+                        value
+                        for case in cases
+                        for value in (
+                            [case[axis]]
+                            if isinstance(case[axis], str)
+                            else case[axis]
+                        )
+                    }
+                )
+                lines.append(
+                    f'- {axis}: {", ".join(values)} (per referenced scenarios, not their Cartesian product)'
+                )
+        for axis, entry in scope.items():
+            lines.append(
+                f'- {axis}: {", ".join(entry["refs"]) or entry["reason"]}'
+            )
+        for name in scope['input_paths']['refs']:
+            lines.append(
+                f'  - {name}: {json.dumps(data["input_paths"][name], sort_keys=True)}'
+            )
+        for record in data['type_contracts']:
+            if record['id'] in scope['type_contracts']['refs']:
+                types = record.get(
+                    'semantic_types',
+                    record.get('required_vectors', record.get('families', [])),
+                )
+                lines.append(
+                    f'  - {record["id"]}: {len(types)} declared types/families; {record["boundary"]}'
+                )
         for language, inventory in data['api_inventory'].items():
             for symbol, record in inventory.items():
                 if record['capability'] != group['id']:

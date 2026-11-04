@@ -2953,11 +2953,41 @@
         ]
       },
       "scope": {
-        "models": "Per linked scenarios: types.date.inferred, types.null.inferred, types.null.provider, types.null.session, types.numeric.inferred, types.numeric.provider, types.sequence.declared, types.tags.declared, types.temporal.inferred, types.temporal.provider, types.text-null.declared, types.text-null.inferred, types.text-short.declared, types.text-short.inferred, types.text-short.session, types.text.inferred",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "types.date.inferred",
+            "types.null.inferred",
+            "types.null.provider",
+            "types.null.session",
+            "types.numeric.inferred",
+            "types.numeric.provider",
+            "types.sequence.declared",
+            "types.tags.declared",
+            "types.temporal.inferred",
+            "types.temporal.provider",
+            "types.text-null.declared",
+            "types.text-null.inferred",
+            "types.text-short.declared",
+            "types.text-short.inferred",
+            "types.text-short.session",
+            "types.text.inferred"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types",
+            "reader-model-type-journeys"
+          ]
+        }
       }
     },
     {
@@ -3043,11 +3073,52 @@
         ]
       },
       "scope": {
-        "models": "Per linked scenarios: direct.regression, node.binary, node.multiclass, node.regression, reader.raw.regression, relational.aggregate, relational.condition, relational.forecast, relational.foreign-key, relational.ranking, relational.temporal-link, types.date.inferred, types.null.inferred, types.null.provider, types.null.session, types.numeric.inferred, types.numeric.provider, types.sequence.declared, types.tags.declared, types.temporal.inferred, types.temporal.provider, types.text-null.declared, types.text-null.inferred, types.text-short.declared, types.text-short.inferred, types.text-short.session, types.text.inferred",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "direct.regression",
+            "node.binary",
+            "node.multiclass",
+            "node.regression",
+            "reader.raw.regression",
+            "relational.aggregate",
+            "relational.condition",
+            "relational.forecast",
+            "relational.foreign-key",
+            "relational.ranking",
+            "relational.temporal-link",
+            "types.date.inferred",
+            "types.null.inferred",
+            "types.null.provider",
+            "types.null.session",
+            "types.numeric.inferred",
+            "types.numeric.provider",
+            "types.sequence.declared",
+            "types.tags.declared",
+            "types.temporal.inferred",
+            "types.temporal.provider",
+            "types.text-null.declared",
+            "types.text-null.inferred",
+            "types.text-short.declared",
+            "types.text-short.inferred",
+            "types.text-short.session",
+            "types.text.inferred"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types",
+            "reader-model-type-journeys"
+          ]
+        }
       }
     },
     {
@@ -3082,11 +3153,18 @@
         "host_only_reason": "HTTP endpoint discovery and readiness are host I/O."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Endpoint capability discovery is host I/O; no prediction task is performed."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3132,11 +3210,25 @@
         ]
       },
       "scope": {
-        "models": "Per linked scenarios: outputs.binary, outputs.regression.batched, outputs.regression.tabular",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "outputs.binary",
+            "outputs.regression.batched",
+            "outputs.regression.tabular"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3181,11 +3273,33 @@
         "host_only_reason": "Serialization and restoring public containers belong to the hosts."
       },
       "scope": {
-        "models": "Per linked scenarios: lifecycle.fitted, lifecycle.holdout, persistence.request, persistence.tabular-read, refusal.source-persistence, refusal.tabular.aggregate, refusal.tabular.condition, refusal.tabular.forecast, refusal.tabular.foreign-key, refusal.tabular.ranking, refusal.tabular.temporal-link",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "lifecycle.fitted",
+            "lifecycle.holdout",
+            "persistence.request",
+            "persistence.tabular-read",
+            "refusal.source-persistence",
+            "refusal.tabular.aggregate",
+            "refusal.tabular.condition",
+            "refusal.tabular.forecast",
+            "refusal.tabular.foreign-key",
+            "refusal.tabular.ranking",
+            "refusal.tabular.temporal-link"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3255,11 +3369,41 @@
         "host_only_reason": "Drivers and file I/O remain host-owned; admission is tested separately."
       },
       "scope": {
-        "models": "Per linked scenarios: types.date.inferred, types.null.inferred, types.null.provider, types.null.session, types.numeric.inferred, types.numeric.provider, types.sequence.declared, types.tags.declared, types.temporal.inferred, types.temporal.provider, types.text-null.declared, types.text-null.inferred, types.text-short.declared, types.text-short.inferred, types.text-short.session, types.text.inferred",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "types.date.inferred",
+            "types.null.inferred",
+            "types.null.provider",
+            "types.null.session",
+            "types.numeric.inferred",
+            "types.numeric.provider",
+            "types.sequence.declared",
+            "types.tags.declared",
+            "types.temporal.inferred",
+            "types.temporal.provider",
+            "types.text-null.declared",
+            "types.text-null.inferred",
+            "types.text-short.declared",
+            "types.text-short.inferred",
+            "types.text-short.session",
+            "types.text.inferred"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types",
+            "reader-model-type-journeys"
+          ]
+        }
       }
     },
     {
@@ -3289,11 +3433,20 @@
         "host_only_reason": "Hosts execute engine SQL through the provider protocol, rather than a user operation."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Provider execution is model-independent; native provider tests define the SQL boundary."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types"
+          ]
+        }
       }
     },
     {
@@ -3330,11 +3483,19 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Dedicated large-memory tests define size limits; these are not scenario-matrix acceptance."
+        },
+        "input_paths": {
+          "refs": [
+            "warehouse-relational"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3413,11 +3574,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused refusal tests define preflight behavior; no successful prediction scope is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3457,11 +3625,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Request inspection is model-independent container access."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3499,11 +3674,25 @@
         ]
       },
       "scope": {
-        "models": "Per linked scenarios: outputs.binary, outputs.regression.batched, outputs.regression.tabular",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "outputs.binary",
+            "outputs.regression.batched",
+            "outputs.regression.tabular"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3553,11 +3742,33 @@
         ]
       },
       "scope": {
-        "models": "Per linked scenarios: lifecycle.fitted, lifecycle.holdout, persistence.request, persistence.tabular-read, refusal.source-persistence, refusal.tabular.aggregate, refusal.tabular.condition, refusal.tabular.forecast, refusal.tabular.foreign-key, refusal.tabular.ranking, refusal.tabular.temporal-link",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "lifecycle.fitted",
+            "lifecycle.holdout",
+            "persistence.request",
+            "persistence.tabular-read",
+            "refusal.source-persistence",
+            "refusal.tabular.aggregate",
+            "refusal.tabular.condition",
+            "refusal.tabular.forecast",
+            "refusal.tabular.foreign-key",
+            "refusal.tabular.ranking",
+            "refusal.tabular.temporal-link"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3612,11 +3823,18 @@
         "host_only_reason": "Hosts translate core error codes to language-specific exceptions."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Exception translation is model-independent; operation-specific refusals belong to their capability tests."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3672,11 +3890,18 @@
         "host_only_reason": "Generated wire vocabulary describes HTTP, independently of core operations."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Generated endpoint vocabulary describes wire shapes rather than prediction applicability."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3707,11 +3932,18 @@
         "host_only_reason": "Public connector SQL helpers are host utilities, not engine policy."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "SQL helper formatting is model-independent connector utility behavior."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3736,11 +3968,18 @@
         "host_only_reason": "Package metadata is a distribution concern."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Distribution metadata has no model, task, input, or type applicability."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3790,11 +4029,34 @@
         ]
       },
       "scope": {
-        "models": "Per linked scenarios: direct.regression, node.binary, node.multiclass, node.regression, reader.raw.regression, relational.aggregate, relational.condition, relational.forecast, relational.foreign-key, relational.ranking, relational.temporal-link",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [
+            "direct.regression",
+            "node.binary",
+            "node.multiclass",
+            "node.regression",
+            "reader.raw.regression",
+            "relational.aggregate",
+            "relational.condition",
+            "relational.forecast",
+            "relational.foreign-key",
+            "relational.ranking",
+            "relational.temporal-link"
+          ]
+        },
+        "input_paths": {
+          "refs": [
+            "frames",
+            "warehouse-relational",
+            "warehouse-tabular",
+            "files"
+          ]
+        },
+        "type_contracts": {
+          "refs": [
+            "reader-model-type-journeys"
+          ]
+        }
       }
     },
     {
@@ -3823,11 +4085,18 @@
         "host_only_reason": "The host provides model execution to the same core request protocol."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused runtime tests cover the local model adapter; no live scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3865,11 +4134,18 @@
         "host_only_reason": "Rendering is host presentation."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Schema graph rendering is model-independent presentation."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3896,11 +4172,18 @@
         "host_only_reason": "Notebook display is host presentation."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Notebook schema rendering is model-independent presentation."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3940,11 +4223,18 @@
         "host_only_reason": "Dataset adaptation is host input conversion."
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "RelBench adaptation converts dataset objects; focused tests define the adapter boundary."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -3987,11 +4277,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Sanitization report tests inspect prepared inputs; no separate scenario scope is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4027,11 +4324,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Metadata and explanation presentation is covered by focused report tests."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4066,11 +4370,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused forecast preparation tests define temporal transformations; model execution scope is not enumerated here."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4112,11 +4423,20 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Schema refinement is model-independent; focused tests cover inference edits."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [
+            "arrow-admission-and-inference",
+            "semantic-types"
+          ]
+        }
       }
     },
     {
@@ -4150,11 +4470,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Ground-truth label computation does not execute a model; focused memory and warehouse tests define scope."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4190,11 +4517,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused temporal tests cover end-time selection and prediction; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4225,11 +4559,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused warehouse tests cover calculated columns; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4263,11 +4604,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused supplied-example tests define materialization; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4300,11 +4648,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused option tests define accepted inference settings; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4336,11 +4691,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Summary generation is a separate text-service adapter, not a tabular/relational prediction task."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4372,11 +4734,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused connection tests cover source replacement and ownership; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4413,11 +4782,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused batching tests cover session reuse; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     },
     {
@@ -4482,11 +4858,18 @@
         ]
       },
       "scope": {
-        "models": "Model-independent API contract; model execution is not established by this group.",
-        "input_paths": "Routes exercised by the group tests and linked scenarios; see input_paths for public entry points. Unlisted compositions remain untested.",
-        "tasks": "Task applicability follows linked scenario expectations and focused group tests; no cross-task equivalence is inferred.",
-        "dtypes": "Shared admission is declared in type_contracts/arrow-admission-and-inference; driver/model acceptance requires the linked journey tests.",
-        "stypes": "Schema semantics are declared in type_contracts/semantic-types; model acceptance requires the linked journey tests."
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused local/live gradient tests define supported tasks and models; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
       }
     }
   ],

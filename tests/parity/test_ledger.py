@@ -143,7 +143,10 @@ def test_developer_contracts_match_current_operations_and_owners():
             lambda group: group['ownership'].update(operations=[]),
             'host-only reason',
         ),
-        (lambda group: group['scope'].pop('tasks'), 'applicability missing'),
+        (
+            lambda group: group['scope'].pop('scenarios'),
+            'applicability missing',
+        ),
         (
             lambda group: group['apis'].pop('java'),
             'language applicability missing',
@@ -221,3 +224,63 @@ def test_disposable_view_does_not_turn_declarations_into_passes():
         'existing group coverage; no direct symbol assertion declared' in text
     )
     assert 'gradient-explanations' in text
+
+
+@pytest.mark.parametrize('axis', ['scenarios', 'input_paths', 'type_contracts'])
+def test_stale_structured_scope_reference_fails(axis):
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    data = manifest()
+    data['api_contracts'][0]['scope'][axis]['refs'].append('missing')
+    with pytest.raises(ValueError, match='stale scope reference'):
+        validate_developer_contracts(data, HERE.parents[1])
+
+
+def test_existing_scenario_cannot_be_attached_to_unrelated_group():
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    data = manifest()
+    group = next(
+        group
+        for group in data['api_contracts']
+        if group['id'] == 'release-metadata'
+    )
+    group['scope']['scenarios']['refs'] = [data['scenarios'][0]['id']]
+    with pytest.raises(ValueError, match='scope scenario linkage differs'):
+        validate_developer_contracts(data, HERE.parents[1])
+
+
+def test_input_route_must_link_to_group_or_scenario_entry_points():
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    data = manifest()
+    group = next(
+        group
+        for group in data['api_contracts']
+        if group['id'] == 'release-metadata'
+    )
+    group['scope']['input_paths']['refs'] = ['frames']
+    with pytest.raises(ValueError, match='scope input route not linked'):
+        validate_developer_contracts(data, HERE.parents[1])
+
+
+def test_type_journey_requires_linked_group_scenario():
+    from ledger import validate_developer_contracts
+
+    from contract import HERE, manifest
+
+    data = manifest()
+    group = next(
+        group
+        for group in data['api_contracts']
+        if group['id'] == 'release-metadata'
+    )
+    group['scope']['type_contracts']['refs'] = ['reader-model-type-journeys']
+    with pytest.raises(ValueError, match='type journey not linked'):
+        validate_developer_contracts(data, HERE.parents[1])

@@ -78,9 +78,59 @@ def validate_developer_contracts(data, root):
                 f'API needs operations or host-only reason: {name}'
             )
         scope = group.get('scope', {})
-        for axis in ('models', 'input_paths', 'tasks', 'dtypes', 'stypes'):
-            if not isinstance(scope.get(axis), str) or not scope[axis].strip():
-                raise ValueError(f'API applicability missing: {name}/{axis}')
+        allowed_scenarios = {
+            required['scenario']
+            for capability in data['capabilities']
+            if name in capability['api_contracts']
+            for required in capability['requirements']
+        }
+        scenarios = {case['id']: case for case in data['scenarios']}
+        for axis, declarations in (
+            ('scenarios', scenarios),
+            ('input_paths', data['input_paths']),
+            (
+                'type_contracts',
+                {item['id']: item for item in data['type_contracts']},
+            ),
+        ):
+            entry = scope.get(axis, {})
+            refs = entry.get('refs')
+            if not isinstance(refs, list) or len(refs) != len(set(refs)):
+                raise ValueError(
+                    f'API applicability missing or duplicate: {name}/{axis}'
+                )
+            if not set(refs) <= declarations.keys():
+                raise ValueError(f'stale scope reference: {name}/{axis}')
+            if not refs and not entry.get('reason', '').strip():
+                raise ValueError(f'empty scope needs a reason: {name}/{axis}')
+        if set(scope['scenarios']['refs']) != allowed_scenarios:
+            raise ValueError(f'scope scenario linkage differs: {name}')
+        for record in data['type_contracts']:
+            if (
+                record['id'] in scope['type_contracts']['refs']
+                and record.get('scenarios')
+                and not set(record['scenarios']) & allowed_scenarios
+            ):
+                raise ValueError(
+                    f'type journey not linked to group scenarios: {name}'
+                )
+        for route in scope['input_paths']['refs']:
+            declaration = data['input_paths'][route]
+            if not any(
+                set(declaration.get(language, []))
+                & (
+                    set(group['apis'].get(language, []))
+                    | {
+                        api
+                        for case in scope['scenarios']['refs']
+                        for api in scenarios[case]['apis'].get(language, [])
+                    }
+                )
+                for language in data['languages']
+            ):
+                raise ValueError(
+                    f'scope input route not linked to APIs: {name}/{route}'
+                )
         for language in data['languages']:
             if language not in group.get('apis', {}):
                 raise ValueError(

@@ -18,6 +18,10 @@ Do not move a utility into Rust solely because both hosts use it.
 Consult the [Rust crate guide](../../rust/README.md), then the API group's `ownership` and `scope` in the manifest.
 Operation names are checked against the current generated locked schema, not a second operation inventory.
 Host-only groups require an explicit reason.
+Scope contains validated references to existing scenarios, input paths, and type contracts.
+Scenario references must match the group’s capability links, and input routes must name a public entry point linked by the group or its scenarios.
+Empty reference lists require an explicit boundary reason; focused tests without scenario links do not acquire an invented model/task matrix.
+The generated view derives model, task, connector, and type values from referenced declarations.
 
 Generate a readable, disposable view with:
 
