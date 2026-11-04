@@ -4,7 +4,7 @@
 
 # File-by-file merge disposition
 
-**All incoming files are resolved and verified on Phase 7; integration into `rust-core` is pending.**
+**All incoming files are resolved, verified and integrated into `rust-core` in merge commit `711968587`.**
 See [verification](verification.md) for passing checks and limits.
 Baseline: main `847a1e9e3`, Rust `d184fb269`, common ancestor `12955d397`.
 `C/` means `packages/structured-data-models-client/src/sdm_client/`; `T/` means that package's `tests/` directory.

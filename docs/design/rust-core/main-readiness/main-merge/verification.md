@@ -5,7 +5,7 @@
 # Main merge verification
 
 Status: implementation, independent review and final checks passed on Phase 7.
-Integration into `rust-core` is pending.
+Integrated into `rust-core` in merge commit `711968587`.
 Merge parents are Phase 7 `ff08b03d7` and main `847a1e9e3`.
 The [file disposition](files.md) covers every incoming file, including clean merges.
 

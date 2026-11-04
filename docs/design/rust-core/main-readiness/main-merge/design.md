@@ -6,7 +6,7 @@
 
 **Do this before the other readiness work: merge main's contracts and improvements into the Rust architecture, then prove which paths execute.**
 Implemented and independently reviewed on `rust-core-phase-7`; all required checks pass.
-Integration into `rust-core` remains pending.
+Integrated into `rust-core` as merge commit `711968587`, preserving main `847a1e9e3` as an ancestor.
 See [verification](verification.md) for results and evidence limits.
 
 ## What we audited
