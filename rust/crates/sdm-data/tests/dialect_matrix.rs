@@ -105,6 +105,7 @@ fn two_keys() -> Vec<Field> {
 
 fn term(column: &str, as_timestamp: bool, descending: bool, nulls_last: bool) -> TieTerm {
     TieTerm {
+        string_like: false,
         column: column.to_owned(),
         as_timestamp,
         descending,

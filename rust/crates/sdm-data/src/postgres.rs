@@ -261,6 +261,26 @@ impl SqlDialect for Postgres {
         text
     }
 
+    fn order_term(&self, term: &TieTerm, alias: &str, _windowed: Option<&str>) -> String {
+        let column = format!("{alias}{}", self.identifier(&term.column));
+        let value = if term.as_timestamp {
+            self.as_time(&column)
+        } else if term.string_like {
+            format!("CAST({column} AS text)")
+        } else {
+            column
+        };
+        format!(
+            "{value} {} {}",
+            if term.descending { "DESC" } else { "ASC" },
+            if term.nulls_last {
+                "NULLS LAST"
+            } else {
+                "NULLS FIRST"
+            }
+        )
+    }
+
     /// The reference's `_by_fkey` on Postgres with a limit per seed:
     /// the first rows of each seed in
     /// `order`, read for each seed (`JOIN LATERAL`, as the reference reads

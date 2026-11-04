@@ -415,6 +415,7 @@ pub fn tie_break(table: &Table, fkey: &str, nulls: NullOrder) -> Result<TieBreak
     let mut terms = Vec::new();
     if let Some(time) = &table.time_column {
         terms.push(TieTerm {
+            string_like: false,
             column: time.clone(),
             as_timestamp: true,
             descending: true,
@@ -422,7 +423,7 @@ pub fn tie_break(table: &Table, fkey: &str, nulls: NullOrder) -> Result<TieBreak
         });
     }
     let Some(key) = &table.primary_key else {
-        let mut names: Vec<&str> = table
+        let mut columns: Vec<_> = table
             .columns
             .iter()
             .filter(|c| {
@@ -434,13 +435,19 @@ pub fn tie_break(table: &Table, fkey: &str, nulls: NullOrder) -> Result<TieBreak
                             | sdm_contract::ops::Dtype::Stringlist
                     )
             })
-            .map(|c| c.name.as_str())
+            .map(|c| (c.name.as_str(), c.dtype == sdm_contract::ops::Dtype::String))
             .collect();
-        names.sort_unstable();
-        if names.is_empty() {
-            names.push(fkey);
+        columns.sort_unstable_by_key(|(name, _)| *name);
+        if columns.is_empty() {
+            columns.push((
+                fkey,
+                table
+                    .column(fkey)
+                    .is_some_and(|c| c.dtype == sdm_contract::ops::Dtype::String),
+            ));
         }
-        terms.extend(names.into_iter().map(|name| TieTerm {
+        terms.extend(columns.into_iter().map(|(name, string_like)| TieTerm {
+            string_like,
             column: name.to_owned(),
             as_timestamp: false,
             descending: false,
@@ -449,6 +456,7 @@ pub fn tie_break(table: &Table, fkey: &str, nulls: NullOrder) -> Result<TieBreak
         return Ok(TieBreak(terms));
     };
     terms.push(TieTerm {
+        string_like: false,
         column: key.clone(),
         as_timestamp: false,
         descending: false,

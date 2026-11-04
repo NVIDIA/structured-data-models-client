@@ -434,6 +434,7 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
             window: None,
             per_seed: Some(2_u64.into()),
             order: Some(sdm_contract::data::TieBreak(vec![TieTerm {
+                string_like: false,
                 column: "at".into(),
                 as_timestamp: true,
                 descending: true,
@@ -556,4 +557,40 @@ fn the_shared_builder_refuses_for_every_dialect_alike() {
     })
     .unwrap_err();
     assert_eq!(field_of(described, "field"), Some(Detail::text("tables")));
+}
+
+#[test]
+fn only_postgres_normalizes_keyless_string_tie_terms() {
+    let mut term = TieTerm {
+        column: "body\"quoted".to_owned(),
+        string_like: true,
+        as_timestamp: false,
+        descending: false,
+        nulls_last: true,
+    };
+    assert_eq!(
+        dialect("postgres").order_term(&term, "t.", None),
+        "CAST(t.\"body\"\"quoted\" AS text) ASC NULLS LAST"
+    );
+    for name in ["duckdb", "sqlite", "databricks", "snowflake"] {
+        let marked = dialect(name).order_term(&term, "t.", None);
+        term.string_like = false;
+        assert_eq!(
+            marked,
+            dialect(name).order_term(&term, "t.", None),
+            "{name}"
+        );
+        term.string_like = true;
+    }
+    term.string_like = false;
+    assert_eq!(
+        dialect("postgres").order_term(&term, "t.", None),
+        "t.\"body\"\"quoted\" ASC NULLS LAST"
+    );
+    term.string_like = true;
+    term.as_timestamp = true;
+    assert_eq!(
+        dialect("postgres").order_term(&term, "t.", None),
+        "t.\"body\"\"quoted\" ASC NULLS LAST"
+    );
 }

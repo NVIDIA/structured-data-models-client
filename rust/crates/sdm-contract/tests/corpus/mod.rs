@@ -251,12 +251,14 @@ pub fn messages() -> Vec<ControlMessage> {
                         per_seed: Some(32_u64.into()),
                         order: Some(TieBreak(vec![
                             TieTerm {
+                                string_like: false,
                                 column: "ts".into(),
                                 as_timestamp: true,
                                 descending: true,
                                 nulls_last: true,
                             },
                             TieTerm {
+                                string_like: false,
                                 column: "order_id".into(),
                                 as_timestamp: false,
                                 descending: false,
