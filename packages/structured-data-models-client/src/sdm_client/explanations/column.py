@@ -506,7 +506,7 @@ class ColumnExplanations:
         edges = np.concatenate(
             [bins[:1], (bins if zero_bin else bins[1:])[keep]]
         )
-        text = [f'{value:.4g}' for value in edges.tolist()]
+        text = [f'{value:.2f}'.removesuffix('.00') for value in edges.tolist()]
         cohorts = []
         for at, (start, end) in enumerate(
             zip(text[:-1], text[1:], strict=True)

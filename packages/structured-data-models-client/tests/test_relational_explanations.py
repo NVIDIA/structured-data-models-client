@@ -21,6 +21,7 @@ import warnings
 from collections.abc import Callable
 from typing import Any
 
+import pandas as pd
 import pytest
 from sample_tables import graph
 
@@ -1407,7 +1408,7 @@ def test_a_forecast_analyses_a_table_only_some_steps_reached(
     assert analysed['seconds'][0] == ['[10 - 12]', '(12 - 20]', '(20 - 30]']
     assert analysed['seconds'][1] == pytest.approx([1 / 3] * 3)
     assert analysed['seconds'][2] == pytest.approx([100.0, 200.0, 300.0])
-    assert analysed['amount'][0] == ['[1 - 1.2]', '(1.2 - 2]', '(2 - 3]']
+    assert analysed['amount'][0] == ['[1 - 1.20]', '(1.20 - 2]', '(2 - 3]']
     assert analysed['amount'][2] == pytest.approx([0.0, 10.0, 0.0])
 
 
@@ -1468,6 +1469,71 @@ def test_time_cohorts_hold_every_rows_age():
     ]
     assert list(cohorts['share']) == pytest.approx([1 / 4, 1 / 4, 1 / 2])
     assert list(cohorts['mean']) == pytest.approx([10.0, 10.0, 100.0])
+
+
+def numbered(values: list[float]) -> pd.DataFrame:
+    """The analysis of a regression context whose ``users.tenure_days``,
+    analysed as numerical, holds ``values``, one entity each."""
+    entities = [(at + 1, float(at)) for at in range(len(values))]
+    payload = labelled(gathered(5, 7, task='regression'), entities)
+    users = payload['schema']['related_tables']['users']
+    users['columns']['tenure_days']['stype'] = 'numerical'
+    rows = payload['context']['related_tables']['users']['rows']
+    for row, value in zip(rows, values, strict=True):
+        row[2] = value
+    return ColumnExplanations(payload).to_pandas()
+
+
+def test_large_numeric_edges_keep_distinct_labels():
+    """Cohort edges of large, close values print in full, so no two cohort
+    labels collide and none is in scientific notation.
+
+    Assumptions:
+    - Ten entities with ``tenure_days`` 10000 to 10009, one row each.
+    - Hand-computed: the deciles step by 0.9 (10000, 10000.90, ...); four
+      significant digits would print most of them as ``1e+04``.
+    """
+    frame = numbered([10000.0 + at for at in range(10)])
+
+    labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    assert len(labels) == 10
+    assert all('e+' not in label and 'e-' not in label for label in labels)
+
+
+def test_whole_number_edges_print_without_decimals():
+    """Whole-number cohort edges, numerical and ``COUNT(*)``, print with no
+    ``.00``.
+
+    Assumptions:
+    - Eleven entities with ``tenure_days`` 0 to 10, one ``users`` row each.
+    - Hand-computed: the deciles are 0, 1, ..., 10, each value but 0 ending
+      its own bin; every entity has 1 linked row, so ``COUNT(*)`` is one
+      cohort, open-ended.
+    """
+    frame = numbered([float(at) for at in range(11)])
+
+    tenure = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    count = list(frame[frame['column'] == 'COUNT(*)']['cohort'].unique())
+    assert tenure == [
+        '[0 - 1]',
+        *(f'({at} - {at + 1}]' for at in range(1, 10)),
+    ]
+    assert count == ['[1 - 1+]']
+
+
+def test_fractional_edges_keep_two_decimals():
+    """A fractional cohort edge prints rounded to two decimals.
+
+    Assumptions:
+    - Two entities with ``tenure_days`` 0 and 1660 / 7 (237.142857...).
+    - Hand-computed: the deciles step by 23.714285...; 0 falls in the first
+      bin and 1660 / 7 in the last, and the empty bins between merge into
+      it, so the second cohort opens at 23.714285...
+    """
+    frame = numbered([0.0, 1660 / 7])
+
+    labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    assert labels == ['[0 - 23.71]', '(23.71 - 237.14]']
 
 
 def test_a_forecast_not_explained_is_not_analysed(
