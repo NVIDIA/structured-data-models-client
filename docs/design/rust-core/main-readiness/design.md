@@ -26,6 +26,22 @@ The comparator now accepts an explicitly pinned clean baseline, with archived-re
 Full recordings are preserved outside Git with hashes; maintained fixtures keep independently verified expectations.
 CI secrets remain unavailable, and the local AWS login needs renewal for S3 acceptance; neither is counted as passing live evidence.
 
+### Validation checkpoint – November 4
+
+| Check | Current evidence |
+|---|---|
+| Maintained Python suite | 6,881 passed; nine skips accounted for separately |
+| Repaired contract files on the integrated branch | 629 passed, no skips |
+| Repository tooling | 164 passed, no skips |
+| Platform CI | [Run 41791796675](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41791796675) is running; SQL architecture guard needs investigation |
+| Live matrix | Python Spark authentication observation is being verified; Java completed journeys but its subprocess audit remains unproven |
+| Current-main comparison | First 130 cells: 79 strict matches, 51 differences under investigation; warehouse comparison continues |
+| Benchmarks | Four artifact/source variants verified; measurements have not started |
+
+The installed candidate artifacts are from `08d027795`; the validation runner is `7f6fbbc8e`.
+Product source is unchanged between those commits; later changes repair tests and validation tooling.
+These partial results do not establish completion.
+
 | Owner | Changes | Shared contract |
 |---|---|---|
 | Repository-size agent | Archive/extract fixtures, remove obsolete captures/schemas, enforce size and consumers | Preserve independent expectations and all declared type fixtures; provide gate command to CI |
@@ -45,7 +61,7 @@ Improve guide/ledger ──┼→ final candidate → matrix + benchmarks → ma
 Configure CI lanes ───┘
 ```
 
-No fixture deletion, history rewrite, CI reconfiguration or new benchmark campaign was performed in this audit.
+The initial audit made no implementation changes; Phase 8 now implements its authorized recommendations.
 The owner authorized the four remaining efforts for `rust-core-phase-8` after the main merge completes.
 Reconcile their dependencies first, use at most three concurrent implementation agents, and run final correctness and performance checks last.
 Report comparable warm/cold latency and memory measurements without performance tuning; minor latency regressions are acceptable.
