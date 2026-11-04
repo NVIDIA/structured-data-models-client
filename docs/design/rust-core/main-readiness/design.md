@@ -4,7 +4,7 @@
 
 # What remains before merging into main
 
-**Phase 7 is complete and pushed to `rust-core` at `4e3f4a86f`; Phase 8 implements the four remaining readiness efforts.**
+**Phase 8 implements all four readiness efforts and passes ordinary acceptance on `rust-core-phase-8`; integration remains a separate owner decision.**
 Main `847a1e9e3` was merged with Rust ownership preserved in `711968587`.
 The [main merge plan](main-merge/design.md) is complete; [verification](main-merge/verification.md) records the evidence and limits.
 Audit baseline: `origin/main` at `847a1e9e3`, checked November 4, 2026.
@@ -21,10 +21,10 @@ Audit baseline: `origin/main` at `847a1e9e3`, checked November 4, 2026.
 
 All work integrates into `rust-core-phase-8`, starting at `4e3f4a86f`.
 Three isolated implementation branches run concurrently; final acceptance runs after their integration.
-Cleanup, CI wiring, developer enforcement and benchmark tooling are integrated; final candidate validation is in progress.
+Cleanup, CI wiring, developer enforcement and benchmark tooling are integrated; final candidate validation is complete.
 The comparator now accepts an explicitly pinned clean baseline, with archived-reference defaults preserved.
 Full recordings are preserved outside Git with hashes; maintained fixtures keep independently verified expectations.
-CI secrets remain unavailable, and the local AWS login needs renewal for S3 acceptance; neither is counted as passing live evidence.
+Dedicated CI secrets remain owner-deferred; local acceptance used authorized credentials, including refreshed AWS access.
 
 ### Validation checkpoint – November 4
 
@@ -34,18 +34,19 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Repaired contract files on the integrated branch | 629 passed, no skips |
 | Repository tooling | 164 passed, no skips |
 | Platform CI | [Run 41800680419](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41800680419), attempt 2: 81 successful jobs and one intentional skip on integrated `24f48e6f7` |
-| Live matrix | All 740 Python/Java non-S3 cells pass across 13 connectors with observed subprocesses |
-| Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
-| Current-main comparison | All 370 non-S3 cells executed with matched dependencies: 277 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
+| Live matrix | All 792 Python/Java cells pass across 15 connectors with observed subprocesses |
+| Live API registry | All 24 Python invocations and seven Java methods pass, including S3 |
+| Current-main comparison | All 396 cells executed with matched dependencies: 303 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
 | Benchmarks | All 17 workloads completed, including scaling, gradients and real models; independently reviewed [latency and memory results](validation-performance/performance.md) |
 
 The matrix/benchmark artifacts remain identified as `08d027795`.
 A later Arrow 14 labels-adapter repair is tested separately in the fresh `d140e0d6d` wheel; its native binary is unchanged.
 Other changes repair validation tooling, test ownership and evidence accounting.
 The historical live comparison matches pandas 2.3.3, NumPy 2.5.4 and Arrow 24; earlier mismatched-dependency observations are diagnostics only.
-These partial results do not establish completion.
+Independent final review verified the complete ordinary acceptance scope.
 The final source audit identified CI resource/preflight/artifact-sharing work and developer-ledger first-adoption/evidence-view gaps.
-Their reviewed implementations are integrated, with focused tests and final platform CI passing; S3 acceptance remains pending.
+Their reviewed implementations are integrated, with focused tests, final platform CI and S3 acceptance passing.
+Operational hosted live CI, manual stress execution and release approval remain separate and are not claimed.
 
 | Owner | Changes | Shared contract |
 |---|---|---|

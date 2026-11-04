@@ -4,17 +4,17 @@
 
 # Validation checkpoint
 
-**Platform CI and available local/live checks pass; Phase 8 acceptance still requires S3 validation.**
+**Phase 8 implementation and ordinary acceptance are complete on `rust-core-phase-8`.**
 This checkpoint records completed evidence, not a release approval.
 
 ## Live behavior
 
 | Scope | Evidence |
 |---|---|
-| Current Python, both models | All 370 applicable non-S3 cells pass across 13 connectors |
-| Focused live APIs | All 24 Python invocations and six available Java methods pass; Java S3 is unavailable |
-| Current Java matrix | All 370 applicable non-S3 cells pass; combined Python/Java comparison passes all 740 cells with no unobserved subprocesses |
-| Old Python comparison | All 370 non-S3 cells executed with matched dependencies; 277 strict matches and 93 classified differences |
+| Current Python, both models | All 396 applicable cells pass across 15 connectors |
+| Focused live APIs | All 24 Python invocations and seven Java methods pass, including the public S3 reader |
+| Current Java matrix | All 396 applicable cells pass; combined Python/Java comparison passes all 792 cells with no unobserved subprocesses |
+| Old Python comparison | All 396 cells executed with matched dependencies; 303 strict matches and 93 classified differences |
 
 The matrix and benchmark evidence uses production artifacts built at `08d027795`.
 Later CI exposed one product compatibility bug: `query.labels()` used an Arrow helper absent in Arrow 14.
@@ -57,11 +57,17 @@ The fresh labels-fix wheel passes 60 focused cases on both Arrow 14 and Arrow 26
 ## Evidence and remaining work
 
 Raw observations, artifact identities, dependency inventories, checksums and reproducible classification scripts are retained outside Git in the Phase 8 validation archive.
-Key reports are `non-s3-validated-report.json`, `main-matched-non-s3-comparison.json`, `main-matched-difference-proof.json` and `sqlite-order-repeat-proof.json`.
+Key reports are `full-report.json`, `main-s3-comparison.json`, `main-matched-non-s3-comparison.json`, `main-matched-difference-proof.json` and `sqlite-order-repeat-proof.json`.
 No credentials or full warehouse captures are committed.
 
-S3 credentials remain expired; dedicated CI identities are owner-deferred.
+The refreshed AWS login enabled all 52 remaining S3 matrix cells, which pass.
+All 26 S3 historical comparisons match strictly.
+Dedicated CI identities remain owner-deferred.
 Full CI run `41800680419` tests integrated code `24f48e6f7`; later report changes do not alter executable code.
 Attempt 2 completed successfully: 81 successful jobs and one intentional targeted-PQL skip.
 The only retry was DBR 16.4 after an artifact-download connection reset; its installation and runtime tests subsequently passed.
-The remaining 52 S3 matrix cells and S3-specific live API checks are incomplete until authorized AWS credentials are refreshed.
+The focused Java S3 reader test passed without skips using its separate 40-row fixture and verified packaged JNI.
+Focused Java tests are source-equivalent runs; the matrix uses the exact recorded JAR.
+Independent review verified matrix composition, artifact identities, historical dispositions and scoped plan coverage.
+Hosted live CI credentials remain owner-deferred; manual stress execution and release approval are not claimed.
+No Phase 8 merge into `rust-core` or `main`, release publication or history rewrite was performed.
