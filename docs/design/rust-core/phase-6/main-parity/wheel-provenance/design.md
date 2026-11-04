@@ -40,3 +40,20 @@ Run the existing installed-wheel job against its actual artifacts and check all 
 No model endpoint or GPU is needed.
 
 Evidence: main `09ed6af4b`; `.github/workflows/ci.yml` build/installed-wheel/runtime-install jobs and `scripts/rust_core/wheel_smoke.py`.
+
+## Implemented and checked
+
+CI now requires exactly one candidate for each of the three distributions, at one version, and checks exact installed artifact paths plus import resolution after extras installation.
+The general installed-wheel, runtime-install and CI/release SBOM paths share the same small standard-library check.
+Native wheel manifest/hash checks remain unchanged; no product API or engine code changed.
+
+- 13 focused tests passed, including wrong-directory same-name wheels, missing/duplicate distributions, version mismatch, escaped paths and source-checkout shadowing.
+- Real wheels installed with the installed-wheel job's extras passed; reinstalling the identical client wheel from another directory reproduced the old false pass and was rejected by the new check.
+- All three packages and the native module imported from the isolated environment; Ruff and targeted mypy passed.
+- Independent review found no material issue.
+
+The API/connectors wheels were built from package sources at `10f47a63c`; their SHA256 values are `861dc4d8109704f749c2fdc78d23d97d00b6a720c5bca66c32b4b3ba6eb80e7d` and `e2325ec9cde3957fbe2b5d07c1dcade4f39ed62b1236138e4facb249acf028dd`.
+The reused client wheel is SHA256 `00d6f371cffc035871164c2044db2fd5c2df751601d4a6db95d7723f97e19dc5`; its existing manifest names `b6e238bb4d4a53674cfc50ac76aa8b1e36586991` and `tree_clean: false`.
+That is valid input for testing installation provenance, not a clean-release build claim.
+Local logs and artifact identities are under `/tmp/sdm-p6-wheel-provenance/`.
+The full GitHub CI/release workflow and cross-platform runtime matrix were not rerun for this tooling-only change; release publishing was not invoked.

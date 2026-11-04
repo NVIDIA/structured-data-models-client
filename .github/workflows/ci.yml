@@ -1386,17 +1386,7 @@ jobs:
       # Every distribution carries the one version they are released together
       # at, read from what was just built rather than written here.
       - run: |
-          python - <<'EOF'
-          import pathlib, re, sys
-          names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
-          versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
-          print('\n'.join(names))
-          if len(names) != 3:
-              sys.exit(f'expected 3 wheels, built {len(names)}')
-          if len(versions) != 1:
-              sys.exit(f'distributions disagree on the version: {sorted(versions)}')
-          pathlib.Path('dist/VERSION').write_text(versions.pop())
-          EOF
+          python scripts/check_wheel_provenance.py --write-version dist/VERSION dist/*.whl
       # Building each one proves nothing about installing them together. A pin
       # only one distribution carries makes the set unsatisfiable, and the
       # resolver is the only thing that says so.
@@ -1450,6 +1440,7 @@ jobs:
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
+          python "$GITHUB_WORKSPACE/scripts/check_wheel_provenance.py" --installed "$GITHUB_WORKSPACE"/dist/*.whl
           python - <<'EOF'
           import pathlib
           import sdm_api, sdm_client, sdm_connectors
@@ -1542,8 +1533,7 @@ jobs:
           # The candidate's wheels stand in for the published ones of the
           # same version: installed first, without their dependencies, so
           # the line finds them satisfied and resolves everything else.
-          candidate=$(ls dist/*.whl)
-          pip install --quiet --no-deps $candidate
+          pip install --quiet --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --only-binary=:all: "structured-data-models-client[relational,databricks,databricks-serving]" $keep_numpy
           now="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
           if [ "$now" != "$keep_numpy" ]; then
@@ -1561,15 +1551,7 @@ jobs:
             exit 1
           fi
           # Still the candidate's wheels, as pip recorded their install.
-          python - $candidate <<'EOF'
-          import importlib.metadata, json, pathlib, sys
-          for wheel in map(pathlib.Path, sys.argv[1:]):
-              name = wheel.name.split('-')[0].replace('_', '-')
-              record = importlib.metadata.distribution(name).read_text('direct_url.json')
-              url = json.loads(record or '{}').get('url', '')
-              if not url.endswith('/' + wheel.name):
-                  sys.exit(f'{name} is no longer the candidate wheel {wheel.name}: {url!r}')
-          EOF
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           pip freeze --all
       - name: The binding's and the client's tests in the runtime
         run: |
@@ -1579,6 +1561,7 @@ jobs:
           keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
           pip install --quiet --only-binary=:all: pytest requests-mock jsonschema \
             "structured-data-models-client[sqlite,duckdb,snowflake]" $keep_numpy
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production
           cd /tmp
@@ -1610,6 +1593,7 @@ jobs:
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
