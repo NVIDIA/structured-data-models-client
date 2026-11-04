@@ -66,7 +66,6 @@ jobs:
     environment: parity-live
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
     services:
       postgres:
