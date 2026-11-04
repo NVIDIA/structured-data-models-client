@@ -88,3 +88,27 @@ def test_only_spark_runner_requires_connect_runtime(
         if arg.startswith('-Dsdm.parity.connect.classpath=')
     ]
     assert bool(runtime) == (connector == 'databricks-spark')
+
+
+def test_shared_parquet_preserves_nanosecond_timezone_and_cleans_up():
+    from pathlib import Path
+
+    import pandas as pd
+    import pyarrow.parquet as pq
+    from hosted_fixtures import parquet
+
+    with parquet() as config:
+        paths = config['fixture_sources']['fixtures/shop-temporal.json'][
+            'parquet'
+        ]['paths']
+        path = Path(paths['users'])
+        data = pq.read_table(path)
+        dtype = data.schema.field('observed_at').type
+        assert dtype.unit == 'ns'
+        assert dtype.tz == 'America/Los_Angeles'
+        assert (
+            data['observed_at'][1].value
+            == pd.Timestamp('2024-03-10T03:00:00.987654321-07:00').value
+        )
+        assert data['observed_at'][0].as_py() is None
+    assert not path.exists()

@@ -12,12 +12,14 @@ import sys
 import time
 from pathlib import Path
 
-from hosted_fixtures import postgres, s3
+from hosted_fixtures import parquet, postgres, s3
 from hosted_profile import EMULATED, LOCAL, WAREHOUSE, profile
 from hosted_warehouses import warehouse
 
 
 def provision(connector):
+    if connector == 'parquet':
+        return parquet()
     if connector == 'postgres':
         return postgres()
     if connector in EMULATED:

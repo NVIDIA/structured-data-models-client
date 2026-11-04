@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -36,6 +37,29 @@ def config_for(connector, settings):
             name: {connector: value} for name, value in settings.items()
         },
     }
+
+
+@contextlib.contextmanager
+def parquet():
+    """Share exact Arrow files; DuckDB fixture writers lose nanosecond timezones."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    with tempfile.TemporaryDirectory(prefix='sdm-parity-parquet-') as directory:
+        settings = {}
+        for name, fixture in fixtures('parquet').items():
+            paths = {}
+            folder = Path(directory) / Path(name).stem
+            folder.mkdir()
+            for table, frame in tables_of(fixture).items():
+                path = folder / (table + '.parquet')
+                data = pa.Table.from_pandas(frame, preserve_index=False)
+                # Arrow types suffice for both readers; pandas extension metadata
+                # is unnecessary and is not portable across pandas backends.
+                pq.write_table(data.replace_schema_metadata(None), path)
+                paths[table] = str(path)
+            settings[name] = {'paths': paths}
+        yield config_for('parquet', settings)
 
 
 @contextlib.contextmanager
