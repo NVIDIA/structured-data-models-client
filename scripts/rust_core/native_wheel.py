@@ -161,6 +161,20 @@ def target_cpu_refusal(
     return None
 
 
+def wheel_contents_refusal(wheel: pathlib.Path) -> str | None:
+    """Interpreter caches are machine-local artifacts, never wheel inputs."""
+    with zipfile.ZipFile(wheel) as archive:
+        cached = [
+            name
+            for name in archive.namelist()
+            if '__pycache__' in pathlib.PurePosixPath(name).parts
+            or pathlib.PurePosixPath(name).suffix in {'.pyc', '.pyo'}
+        ]
+    if cached:
+        return f'{wheel.name}: wheel contains interpreter cache artifacts: {cached}'
+    return None
+
+
 def _native_sha256(wheel: pathlib.Path) -> str:
     """The SHA-256 of the extension module inside the wheel: unlike the
     wheel's, it is the same for every build of one commit, since maturin's
@@ -267,6 +281,9 @@ def _build(
     if len(built) != 1:
         sys.exit(f'expected one wheel from the build, found {built}')
     wheel = built[0]
+    refusal = wheel_contents_refusal(wheel)
+    if refusal:
+        sys.exit(refusal)
 
     flags = _rustc_flags(log)
     refusal = target_cpu_refusal(environment, configs, flags)
