@@ -1089,14 +1089,39 @@ def test_a_listed_table_is_held_to_the_schema_s_rule_on_names(
     assert core.value.details['field'] == 'tables'
 
 
+# DuckDB 2 adds MAP-valued tags to duckdb_columns and untyped NULL
+# fields to pg_class. These remain outside the supported source type contract.
+_CATALOG_COLUMN_RULE = (
+    'column_type' if int(duckdb.__version__.split('.')[0]) >= 2 else None
+)
 SYSTEM_VIEWS = [
     ('one table', 'duckdb_tables', 'column_type', 'RuntimeError'),
     ('shop', 'duckdb_tables', 'column_type', 'RuntimeError'),
     ('one table', 'duckdb_views', 'empty_table', 'RuntimeError'),
-    ('one table', 'duckdb_columns', None, None),
-    ('one table', 'pg_class', None, None),
-    ('shop', 'pg_class', None, None),
-    ('shop', 'duckdb_columns', None, None),
+    (
+        'one table',
+        'duckdb_columns',
+        _CATALOG_COLUMN_RULE,
+        None,
+    ),
+    (
+        'one table',
+        'pg_class',
+        _CATALOG_COLUMN_RULE,
+        None,
+    ),
+    (
+        'shop',
+        'pg_class',
+        _CATALOG_COLUMN_RULE,
+        None,
+    ),
+    (
+        'shop',
+        'duckdb_columns',
+        _CATALOG_COLUMN_RULE,
+        None,
+    ),
 ]
 
 
@@ -1125,6 +1150,19 @@ def test_a_system_view_named_as_a_table_is_pinned_on_both_routes(
     core_rule: str | None,
     old: str | None,
 ) -> None:
+    if _CATALOG_COLUMN_RULE and view in ('duckdb_columns', 'pg_class'):
+        connection = _system_view_source(base)
+        try:
+            types = dict(
+                (row[0], row[1])
+                for row in connection.sql(f'DESCRIBE "{view}"').fetchall()
+            )
+        finally:
+            connection.close()
+        if view == 'duckdb_columns':
+            assert types['tags'] == 'MAP(VARCHAR, VARCHAR)'
+        else:
+            assert types['relacl'] == '"NULL"'
     if core_rule is None:
         assert list(_named_view(base, view).tables) == ['x']
     else:
