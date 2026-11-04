@@ -6,7 +6,7 @@
 
 **The 22 million added lines are real: retained migration recordings dominate, not Rust code.**
 Audit: `rust-core` after Phase 6, `db8f88528`, against main `847a1e9e3`.
-This proposes cleanup; nothing has been deleted.
+The audit below records the pre-cleanup state; Phase 8 implementation and verification are recorded at the end.
 
 ## Size and cause
 
@@ -86,3 +86,42 @@ History rewriting is a separate owner decision, not part of this cleanup.
 LFS, minification and GitHub hiding rules do not remove unnecessary data.
 
 Reproduce with `git diff --numstat origin/main...db8f88528`, `git diff --numstat origin/main db8f88528`, `git ls-tree -rl db8f88528`, and `git count-objects -vH`.
+
+## Phase 8 execution plan
+
+Preserve the original contract fixtures and schema directory outside Git in a checksummed archive before deletion.
+Extract only consumed Snowflake statements/results and reference observations, with source hashes and extractor provenance.
+Represent repetitive vector inputs and independent expected values as shared tables, preserving all expanded cases exactly.
+Remove unlocked historical schemas through maintenance tooling, retaining all locked versions including 70 and the embedded state payload.
+Add aggregate tracked-byte/added-line, fixture-consumer and orphan-schema gates, then run focused extraction and consumer checks.
+The integration owner runs final correctness and performance checks after all four efforts merge.
+
+## Implemented checkout cleanup
+
+Phase 8 preserved 18,525 original contract/schema files in an external archive and per-file SHA-256 manifest before removing migration bulk.
+The uncompressed archive SHA-256 is `7756758481b8e8af1be5fbb97c5f9b78b5e4e805411156d75e7f2e73e9fdea72`.
+The compressed archival copy SHA-256 is `6f1a65c775d6f543964780420d55806876da6b050eb77fba6ec59ed938fc0ee3`.
+The archive remains outside Git; retained fixtures carry source and extraction-tool provenance.
+
+| Measurement | Before | After extraction |
+|---|---:|---:|
+| Tracked checkout bytes | 1,652,168,033 | approximately 74.1 million |
+| Tracked files | 19,894 | approximately 2,110 |
+| Added lines against main `847a1e9e3` | more than 22 million | approximately 978,000 |
+
+The exact final integrated totals come from `scripts/rust_core/repository_size.py --base 847a1e9e3`.
+The enforced limits are strictly below 100,000,000 bytes and 1,000,000 added lines.
+The gate also rejects returning migration archives, unlocked versioned schemas, oversized fixtures without named consumers, missing consumers and corrupt shared-table expansions.
+Generated API snapshots and the parity manifest retain their existing dedicated gates.
+
+The extraction retains 345 consumed reference observations, 21 Snowflake statement/result cases and all cases in eight shared-table fixtures.
+Every shared-table expansion is compared to its original independent recording, including order and JSON types.
+Three orphan vector recordings were removed; decimal recordings were projected to the inputs used by current exact-join assertions.
+The type-set and semantic-type fixtures and their parity hashes were preserved.
+The two large batching inputs remain explicit to preserve their cross-language byte-level identities; they have reviewed byte bounds.
+All nine locked contract versions, including newly merged version 70, remain unchanged, alongside validated-query version 2 and the embedded state payload.
+The 36 unlocked historical schema files were removed by the new `contract_lock.py --prune-unlocked` maintenance mode after lock validation.
+
+See [maintained fixture provenance and regeneration](../../../../../contract/fixtures/maintained/README.md).
+Focused archive-equivalence, fixture consumers, schema pruning and budget checks run during implementation.
+The integration owner runs final cross-language correctness and performance checks after the other Phase 8 efforts merge.

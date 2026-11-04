@@ -38,11 +38,11 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 
 
 def _reference() -> dict[str, dict[str, Any]]:
-    [path] = sorted((ROOT / 'contract/reference').glob('*.jsonl'))
-    return {
-        line['case']: line
-        for line in map(json.loads, path.read_text().splitlines())
-    }
+    from scripts.rust_core.fixture_tables import unpack
+
+    path = ROOT / 'contract/fixtures/maintained/reference-inventory.json'
+    document = unpack(json.loads(path.read_text()))
+    return {line['case']: line for line in document['cases']}
 
 
 def _cases() -> list[dict[str, Any]]:
@@ -66,10 +66,8 @@ def _wanted() -> list[str]:
     ]
 
 
-def _statements(line: dict[str, Any]) -> list[Any]:
-    capture = (line.get('driver') or {}).get('capture') or {}
-    found: list[Any] = capture.get('statements') or []
-    return found
+def _statement_count(line: dict[str, Any]) -> int:
+    return line['statement_count']
 
 
 def test_every_case_has_its_duckdb_line() -> None:
@@ -80,7 +78,7 @@ def test_every_case_has_its_duckdb_line() -> None:
     assert len(cases) >= 86
     assert {case['slice'] for case in cases} <= {'S0', 'S1'}
     assert [c['id'] for c in cases if c['id'] not in reference] == []
-    assert sum(bool(_statements(reference[c['id']])) for c in cases) > 40
+    assert sum(bool(_statement_count(reference[c['id']])) for c in cases) > 40
 
 
 def test_every_case_has_a_line_on_each_database() -> None:
@@ -107,7 +105,7 @@ def test_the_capture_records_the_reference_s_statements_there(
             reference[case['id']],
             reference[_key(case['id'], database)],
         )
-        if _statements(bare) and not _statements(there):
+        if _statement_count(bare) and not _statement_count(there):
             short.append(case['id'])
         assert there['identity']['runner'] == 'python-ref'
         assert there['identity']['reference'] == bare['identity']['reference']

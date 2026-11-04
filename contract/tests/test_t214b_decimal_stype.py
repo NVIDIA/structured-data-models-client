@@ -69,13 +69,7 @@ def case() -> tuple[dict[str, Any], str]:
 @functools.cache
 def reference_lines() -> dict[str, dict[str, Any]]:
     r"""python-ref's committed lines, by key."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    commit = next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-    path = ROOT / f'contract/reference/{commit}.jsonl'
+    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
     return {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()

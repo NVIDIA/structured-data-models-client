@@ -45,7 +45,7 @@ use sdm_data::view_expr::Spaces;
 const VECTORS: &str = include_str!("../../../../contract/view-step-vectors.json");
 
 fn document() -> Json {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     assert_eq!(document["format"], "sdm-view-step-vectors/1");
     document
 }
@@ -399,3 +399,6 @@ fn join_keys_resolve_as_the_old_client_resolved_them() {
         (keys != expected).then(|| format!("{vector}: {keys:?}"))
     });
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

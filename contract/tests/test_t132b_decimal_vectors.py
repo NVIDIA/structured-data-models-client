@@ -15,7 +15,9 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-RECORDED = json.loads((ROOT / 'contract/decimal-vectors.json').read_text())
+RECORDED = json.loads(
+    (ROOT / 'contract/fixtures/maintained/decimal-key-inputs.json').read_text()
+)
 BY_ID = {v['id']: v for v in RECORDED['vectors']}
 
 PAIRS = [v['id'] for v in RECORDED['vectors'] if v['id'].startswith('key.pair')]

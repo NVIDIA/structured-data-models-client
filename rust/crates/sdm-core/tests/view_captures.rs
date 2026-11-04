@@ -66,7 +66,7 @@ fn facts() -> HostFacts {
 }
 
 fn captures() -> Json {
-    let document: Json = serde_json::from_str(CAPTURES).unwrap();
+    let document: Json = fixture_tables::read(CAPTURES);
     assert_eq!(document["format"], "sdm-view-captures/1");
     document
 }
@@ -1585,3 +1585,6 @@ fn metric_view_physical_time_columns_keep_their_declared_window_kind() {
     };
     assert_eq!(window.source_type.as_deref(), Some("timestamp_ntz"));
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

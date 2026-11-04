@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Iterable
@@ -212,6 +213,26 @@ def _base_lock(base: str, lock: Path) -> list[tuple[str, str]]:
     return [(merge_base, _git('show', f'{merge_base}:{lock}'))]
 
 
+def unlocked_schemas(root: Path = REPO_ROOT) -> list[Path]:
+    """Obsolete versioned files only; embedded payloads are never candidates."""
+    directory = root / SCHEMA_DIR
+    locked = {
+        name
+        for lock in LOCKS
+        for _, name in parse_lock(
+            (root / lock).read_text(encoding='utf-8')
+        ).values()
+    }
+    return sorted(
+        path
+        for path in directory.glob('*.json')
+        if re.fullmatch(
+            r'(?:sdm-contract|pql-validated-query)-[0-9]+\.json', path.name
+        )
+        and path.name not in locked
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -229,6 +250,11 @@ def main(argv: list[str] | None = None) -> int:
         action='store_true',
         help='retain merged entries and only the newest working entry; preserve schema files',
     )
+    parser.add_argument(
+        '--prune-unlocked',
+        action='store_true',
+        help='remove obsolete versioned schema files absent from both validated locks',
+    )
     args = parser.parse_args(argv)
     if args.prune_working and args.no_base:
         parser.error('--prune-working requires a verified merge base')
@@ -236,6 +262,10 @@ def main(argv: list[str] | None = None) -> int:
     failed = False
     for lock in LOCKS:
         failed |= _check_lock(lock, args.base, args.no_base, args.prune_working)
+    if args.prune_unlocked and not failed:
+        for path in unlocked_schemas():
+            path.unlink()
+            print(f'removed unlocked schema {path.name}')
     return 1 if failed else 0
 
 

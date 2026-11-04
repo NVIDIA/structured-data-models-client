@@ -155,7 +155,7 @@ fn outside_as_recorded(vector: &Json, what: &Outside) -> bool {
 
 #[test]
 fn each_text_reads_as_pyyaml_read_it() {
-    let document: Json = serde_json::from_str(VECTORS).unwrap();
+    let document: Json = fixture_tables::read(VECTORS);
     assert_eq!(document["format"], "sdm-view-yaml-vectors/1");
     let vectors = document["vectors"].as_array().unwrap();
     assert!(vectors.len() > 350, "{} vectors", vectors.len());
@@ -467,3 +467,6 @@ fn many_block_scalars_read_in_linear_time() {
     let (small, large) = (best(&text(2_500)), best(&text(20_000)));
     assert!(large / small.max(1e-6) < 24.0, "{small} s, then {large} s");
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

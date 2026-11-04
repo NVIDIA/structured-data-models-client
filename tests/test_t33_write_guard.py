@@ -1052,21 +1052,19 @@ def test_every_statement_the_old_client_recorded_on_postgres_passes() -> None:
     # read allowlist holds what the old client sends.
     guard = wg.WriteGuard('postgres', None, 'public')
     checked = 0
-    for path in (ROOT / 'contract/reference').glob('*.jsonl'):
-        for line in path.read_text(encoding='utf-8').splitlines():
-            record = json.loads(line)
-            if not record['case'].endswith('@postgres'):
-                continue
-            capture = (record.get('driver') or {}).get('capture') or {}
-            for statement in capture.get('statements') or []:
-                try:
-                    guard.check(statement['sql'])
-                except wg.WriteRefused as refused:
-                    # A case left out of Lakebase's live plan, for its name.
-                    case = record['case'].partition('@')[0]
-                    assert 'lakebase' in captures.NOT_LIVE[case][0], refused
-                    assert 'quoted name' in str(refused), refused
-                checked += 1
+    from scripts.rust_core.fixture_tables import unpack
+
+    path = ROOT / 'contract/fixtures/maintained/postgres-statements.json'
+    facts = unpack(json.loads(path.read_text()))
+    for statement in facts['statements']:
+        try:
+            guard.check(statement['sql'])
+        except wg.WriteRefused as refused:
+            # Preserve each original case's explicitly unsupported quoted-name rule.
+            case = statement['case'].partition('@')[0]
+            assert 'lakebase' in captures.NOT_LIVE[case][0], refused
+            assert 'quoted name' in str(refused), refused
+        checked += statement['count']
     assert checked > 1000, checked
 
 

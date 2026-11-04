@@ -29,7 +29,7 @@ use serde_json::Value as Json;
 const VECTORS: &str = include_str!("../../../../contract/view-step-vectors.json");
 
 fn document() -> Json {
-    serde_json::from_str(VECTORS).unwrap()
+    fixture_tables::read(VECTORS)
 }
 
 fn texts(value: &Json) -> Vec<String> {
@@ -579,3 +579,6 @@ fn invalid_edges_are_dropped_and_an_empty_model_is_refused() {
     assert!(view.edges.is_empty());
     assert!(view.validate().is_ok());
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

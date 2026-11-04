@@ -194,7 +194,7 @@ fn no_expression_panics_a_reader() {
             .collect();
         read_every_way(&expr, &table);
     }
-    let document: Json = serde_json::from_str(EXPR).unwrap();
+    let document: Json = fixture_tables::read(EXPR);
     let exprs: Vec<&str> = document["unsafe"]
         .as_array()
         .unwrap()
@@ -258,3 +258,6 @@ fn no_description_panics_its_reader() {
         let _ = view_expr::describe::describe_view(&rows, spaces());
     }
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

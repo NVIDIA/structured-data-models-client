@@ -18,7 +18,7 @@ const STEPS: &str = include_str!("../../../../contract/view-step-vectors.json");
 
 #[test]
 fn each_text_default_converts_as_python_converted_it() {
-    let document: Json = serde_json::from_str(STEPS).unwrap();
+    let document: Json = fixture_tables::read(STEPS);
     let mut wrong = Vec::new();
     let mut held = 0;
     for vector in document["default_text"].as_array().unwrap() {
@@ -145,3 +145,6 @@ fn no_text_panics_a_conversion() {
         let _ = datetime_text(&text);
     }
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;

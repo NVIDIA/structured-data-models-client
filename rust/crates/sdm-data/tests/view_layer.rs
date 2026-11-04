@@ -393,7 +393,7 @@ fn batch(rows: &[Json]) -> RecordBatch {
 /// quoted.
 #[test]
 fn a_metric_view_s_definition_is_read_as_the_old_client_read_it() {
-    let document: Json = serde_json::from_str(STEPS).unwrap();
+    let document: Json = fixture_tables::read(STEPS);
     let vectors = document["describe"].as_array().unwrap();
     assert!(vectors.len() > 20);
     let layer = Data::reading_views(spaces());
@@ -459,3 +459,6 @@ fn a_views_kind_is_known_before_its_definition_is_fetched() {
         Some(ViewKind::Semantic)
     );
 }
+
+#[path = "../../../testdata/fixture_tables.rs"]
+mod fixture_tables;
