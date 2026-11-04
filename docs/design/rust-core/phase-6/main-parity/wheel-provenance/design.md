@@ -51,9 +51,12 @@ Native wheel manifest/hash checks remain unchanged; no product API or engine cod
 - Real wheels installed with the installed-wheel job's extras passed; reinstalling the identical client wheel from another directory reproduced the old false pass and was rejected by the new check.
 - All three packages and the native module imported from the isolated environment; Ruff and targeted mypy passed.
 - Independent review found no material issue.
+- The existing CI shell tests were updated for the shared checker while preserving swapped-wheel, dependency-resolution, NumPy and pandas fault controls; 67 combined CI/provenance tests and 24 related parity/release workflow tests passed.
 
 The API/connectors wheels were built from package sources at `10f47a63c`; their SHA256 values are `861dc4d8109704f749c2fdc78d23d97d00b6a720c5bca66c32b4b3ba6eb80e7d` and `e2325ec9cde3957fbe2b5d07c1dcade4f39ed62b1236138e4facb249acf028dd`.
-The reused client wheel is SHA256 `00d6f371cffc035871164c2044db2fd5c2df751601d4a6db95d7723f97e19dc5`; its existing manifest names `b6e238bb4d4a53674cfc50ac76aa8b1e36586991` and `tree_clean: false`.
-That is valid input for testing installation provenance, not a clean-release build claim.
+The initial negative-control client wheel is SHA256 `00d6f371cffc035871164c2044db2fd5c2df751601d4a6db95d7723f97e19dc5`; its existing manifest names `b6e238bb4d4a53674cfc50ac76aa8b1e36586991` and `tree_clean: false`.
+That initial artifact was valid input for installation-path tests, not a clean-release build claim.
+Final verification reinstalled the clean temporal-fix client from `e74b32178699dfd3e4580a18e95e35ac1bf90031`, SHA256 `9f35eee4b2e414ae7144b3a22497f64d1ada8694c642ebc48b47d321fae9dfda`, with manifest `tree_clean: true`.
+The exact three-wheel provenance check and native import passed again in the extras-resolved environment; no native rebuild was performed for this task.
 Local logs and artifact identities are under `/tmp/sdm-p6-wheel-provenance/`.
 The full GitHub CI/release workflow and cross-platform runtime matrix were not rerun for this tooling-only change; release publishing was not invoked.
