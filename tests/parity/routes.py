@@ -4,6 +4,7 @@
 """Whole-journey policy tripwires, including fixtures and worker threads."""
 
 import contextlib
+import hashlib
 import importlib
 import os
 import platform
@@ -131,6 +132,86 @@ def snowflake_platform_probe(event, args):
     return saw_stdlib and saw_driver
 
 
+def databricks_auth_process(event, args):
+    """Observe only SDK-bound CLI identity and OAuth-token acquisition."""
+    if event != 'subprocess.Popen' or len(args) != 4:
+        return None
+    executable, command, cwd, env = args
+    if (
+        cwd is not None
+        or env is not None
+        or not isinstance(command, list)
+        or not isinstance(executable, str)
+    ):
+        return None
+    program = shutil.which('databricks')
+    if not program or not command or command[0] != executable:
+        return None
+    path = Path(program).resolve()
+    if Path(executable).resolve() != path:
+        return None
+    sdk = sys.modules.get('databricks.sdk.credentials_provider')
+    if sdk is None:
+        return None
+    source = getattr(sdk, 'DatabricksCliTokenSource', None)
+    base = getattr(sdk, 'CliTokenSource', None)
+    if source is None or base is None:
+        return None
+    probe = getattr(source, '_probe_cli_version', None)
+    if probe is None:
+        return None
+    probe = getattr(probe, '__wrapped__', probe)
+    is_version = command[1:] == ['version', '--output', 'json']
+    is_token = (
+        len(command) in (5, 6)
+        and command[1:3] == ['auth', 'token']
+        and command[3] in ('--profile', '--host')
+        and isinstance(command[4], str)
+        and bool(command[4])
+        and (len(command) == 5 or command[5] == '--force-refresh')
+    )
+    if not (is_version or is_token):
+        return None
+    saw_runner = saw_origin = False
+    frame = sys._getframe(1)
+    while frame is not None:
+        if frame.f_globals is sdk.__dict__:
+            saw_runner |= frame.f_code is sdk._run_subprocess.__code__
+            if is_version and frame.f_code is probe.__code__:
+                saw_origin |= frame.f_locals.get('cli_path') == executable
+            if is_token and frame.f_code is base._exec_cli_command.__code__:
+                instance = frame.f_locals.get('self')
+                saw_origin |= (
+                    type(instance) is source
+                    and frame.f_locals.get('cmd') == command
+                    and instance._cmd == command
+                )
+        frame = frame.f_back
+    if not (saw_runner and saw_origin):
+        return None
+    return {
+        'pid': 'not-yet-spawned',
+        'command': ['databricks', 'version', '--output', 'json']
+        if is_version
+        else [
+            'databricks',
+            'auth',
+            'token',
+            command[3],
+            '<redacted>',
+            *command[5:],
+        ],
+        'origin': 'databricks.sdk.credentials_provider.'
+        + (
+            'DatabricksCliTokenSource._probe_cli_version'
+            if is_version
+            else 'CliTokenSource._exec_cli_command'
+        ),
+        'scope': 'authentication-only',
+        'executable_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
 class LegacyGuard(contextlib.AbstractContextManager):
     def __init__(self, targets=None, *, raise_caught=True):
         self.default_targets = targets is None
@@ -228,6 +309,10 @@ class LegacyGuard(contextlib.AbstractContextManager):
                         'origin': 'snowflake.connector.description -> platform._Processor.from_subprocess',
                     }
                 )
+                return
+            auth = databricks_auth_process(event, args)
+            if auth is not None:
+                self.report['observed_subprocesses'].append(auth)
                 return
             # Do not retain arguments: they may include credentials. A child
             # without its own observation cannot establish route coverage.
