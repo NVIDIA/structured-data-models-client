@@ -25,6 +25,7 @@ from sdm_client import (
     Request,
     Schema,
     SDMClient,
+    SDMWarning,
 )
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model
@@ -975,3 +976,121 @@ def test_a_session_fit_without_explanation_analyses_when_asked(
     assert (result.explanations.columns is not None) is analysed
     if analysed:
         assert south_share(result) == pytest.approx(19 / 58)
+
+
+# --- a failed column analysis blocks nothing --------------------------------
+
+
+def column_analysis_warnings(caught) -> list[str]:
+    """The messages among ``caught`` that report a failed column analysis."""
+    return [
+        str(warning.message)
+        for warning in caught
+        if 'column analysis' in str(warning.message)
+    ]
+
+
+def test_a_failed_analysis_does_not_block_fit(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """A fit whose column analysis raises still pins the context and returns
+    a handle that scores, and says nothing when no explanation was asked.
+
+    Assumptions:
+    - The analysis is made to raise; the fit asks for the default outputs.
+    """
+    client, endpoint = tabular_endpoint
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+    result = fitted.predict(tabular_asked(CHURN))
+
+    assert column_analysis_warnings(caught) == []
+    assert fitted.session_id == 's1'
+    assert len(result) == 2
+
+
+def test_a_failed_analysis_warns_a_fit_that_asked_for_explanations(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """A fit asked for an explanation warns at fit time that its analysis
+    failed, naming the error.
+
+    Assumptions:
+    - The analysis is made to raise; the fit names ``'explanation'``.
+    """
+    client, _ = tabular_endpoint
+
+    with pytest.warns(
+        SDMWarning, match=f'pinned context failed.*{failing_analysis}'
+    ):
+        client.fit(
+            tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
+        )
+
+
+@pytest.mark.parametrize('rows', [2, 0], ids=['rows', 'no rows'])
+def test_a_session_whose_analysis_failed_warns_an_explained_predict(
+    tabular_endpoint, tabular_request, failing_analysis, rows
+):
+    """An explained predict on a session whose analysis failed warns, and its
+    answer carries no column analysis, whether or not it has rows to score.
+
+    Assumptions:
+    - The analysis is made to raise at fit; the fit pinned
+      ``'explanation'``, so every later predict asks for one.
+    """
+    client, _ = tabular_endpoint
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fitted = client.fit(
+            tabular_request(rows=2), model=KumoTabular(), outputs=list(EXPLAIN)
+        )
+
+    with pytest.warns(SDMWarning, match='pinned context failed'):
+        result = fitted.predict(tabular_request(rows=rows))
+
+    assert result.explanations.columns is None
+
+
+def test_a_session_whose_analysis_failed_is_silent_on_a_plain_predict(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """A predict that asks for no explanation says nothing about the failed
+    analysis.
+
+    Assumptions:
+    - The analysis is made to raise at fit; neither call asks to explain.
+    """
+    client, _ = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = fitted.predict(tabular_asked(CHURN))
+
+    assert column_analysis_warnings(caught) == []
+    assert len(result) == 2
+
+
+def test_a_failed_analysis_does_not_block_a_one_shot_predict(
+    tabular_endpoint, quiet, failing_analysis
+):
+    """An explained one-shot predict whose analysis raises warns, naming the
+    error, and still answers every row with no column analysis.
+
+    Assumptions:
+    - The analysis is made to raise; two persons are scored.
+    """
+    client, _ = tabular_endpoint
+
+    with pytest.warns(
+        SDMWarning, match=f'this request failed.*{failing_analysis}'
+    ):
+        result = client.predict(
+            tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
+        )
+
+    assert len(result) == 2
+    assert result.explanations.columns is None

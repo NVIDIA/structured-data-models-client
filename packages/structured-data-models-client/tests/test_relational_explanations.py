@@ -32,6 +32,7 @@ from sdm_client import (
     Request,
     Schema,
     SDMClient,
+    SDMWarning,
 )
 from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.core.backend import NimBackend
@@ -1491,4 +1492,35 @@ def test_a_forecast_not_explained_is_not_analysed(
             outputs=['prediction'],
         )
 
+    assert result.explanations.columns is None
+
+
+def test_a_failed_analysis_does_not_block_a_forecast(
+    monkeypatch, relational_endpoint, failing_analysis
+):
+    """An explained forecast whose analysis raises warns, naming the error,
+    and still answers every step with no column analysis.
+
+    Assumptions:
+    - The analysis is made to raise; two steps over users 5 and 7, gathering
+      stood in for.
+    """
+    client, _ = relational_endpoint()
+    request = relational_asked(monkeypatch, FORECAST, kind='regression')
+
+    with pytest.warns(
+        SDMWarning, match=f'this request failed.*{failing_analysis}'
+    ):
+        result = client.predict(
+            request,
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    assert sorted(result.explanations.gradients) == [
+        (5, 1),
+        (5, 2),
+        (7, 1),
+        (7, 2),
+    ]
     assert result.explanations.columns is None

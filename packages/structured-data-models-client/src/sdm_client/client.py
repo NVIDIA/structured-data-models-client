@@ -118,6 +118,7 @@ class FittedModel:
     _pinned: dict[str, Any]
     _question: Question | None
     _columns: ColumnExplanations | None
+    _columns_warning: str | None
     _closed: bool
 
     def __init__(self) -> None:
@@ -140,6 +141,7 @@ class FittedModel:
         held_back: int = 0,
         question: Question | None = None,
         columns: ColumnExplanations | None = None,
+        columns_warning: str | None = None,
     ) -> FittedModel:
         r"""The handle for a session ``SDMClient.fit`` has just created."""
         fitted = cls.__new__(cls)
@@ -156,6 +158,7 @@ class FittedModel:
         fitted._pinned = pinned or {}
         fitted._question = question
         fitted._columns = columns
+        fitted._columns_warning = columns_warning
         fitted._closed = False
         return fitted
 
@@ -199,6 +202,12 @@ class FittedModel:
         fields = self._outputs if outputs is None else tuple(outputs)
         # Fit-time analysis, whatever this call's rows; never recomputed.
         columns = self._columns if 'explanation' in fields else None
+        if 'explanation' in fields and self._columns_warning is not None:
+            warnings.warn(
+                self._columns_warning,
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
         if request.nothing_to_score:
             empty = _empty_answer(self.model, fields, request)
             empty.explanations.columns = columns
@@ -538,7 +547,9 @@ class SDMClient:
                 code='INVALID_REQUEST',
             )
         columns = (
-            ColumnExplanations(_LabelledRows.of(request, calls[0]))
+            _analysed_or_warned(
+                lambda: ColumnExplanations(_LabelledRows.of(request, calls[0]))
+            )
             if analysed and 'explanation' in fields
             else None
         )
@@ -586,7 +597,11 @@ class SDMClient:
         wanted = _RANKING_PARTS if ranking else outputs
         # A forecast's analysis reads every step's labelled rows at once.
         columns = (
-            ColumnExplanations(_LabelledRows().across(request.parts or ()))
+            _analysed_or_warned(
+                lambda: ColumnExplanations(
+                    _LabelledRows().across(request.parts or ())
+                )
+            )
             if not ranking and outputs is not None and 'explanation' in outputs
             else None
         )
@@ -762,7 +777,21 @@ class SDMClient:
         held = _held_back(payload, holdout)
         # Always, on exactly the rows being pinned: a later scoring call
         # carries no context to analyse.
-        columns = ColumnExplanations(payload)
+        columns_warning = None
+        try:
+            columns: ColumnExplanations | None = ColumnExplanations(payload)
+        except Exception as error:
+            columns = None
+            columns_warning = (
+                f'the column analysis of the pinned context failed, so answers '
+                f'from this session carry no column analysis: {error}'
+            )
+            if 'explanation' in fields:
+                warnings.warn(
+                    columns_warning,
+                    category=SDMWarning,
+                    stacklevel=caller_stacklevel(),
+                )
         session_id = self._backend.create_session(adapter, payload)
         fitted = FittedModel._open(
             self,
@@ -784,6 +813,7 @@ class SDMClient:
             pinned_over_a_window=request.target_moves_with_time,
             question=request._question,
             columns=columns,
+            columns_warning=columns_warning,
         )
         self._pinned.add(fitted)
         return fitted
@@ -1254,6 +1284,22 @@ def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
         for name, described in columns.items()
         if isinstance(described, Mapping) and described.get('dtype')
     }
+
+
+def _analysed_or_warned(
+    analyse: Callable[[], ColumnExplanations],
+) -> ColumnExplanations | None:
+    r"""The request's column analysis, or a warning and None if it fails."""
+    try:
+        return analyse()
+    except Exception as error:
+        warnings.warn(
+            f'the column analysis for this request failed, so the result '
+            f'carries no column analysis: {error}',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+        return None
 
 
 def _warn_scoring_what_was_pinned(
