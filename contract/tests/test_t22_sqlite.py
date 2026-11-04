@@ -157,6 +157,24 @@ def goldens(directory: Path = GOLDENS) -> set[str]:
     }
 
 
+def _scratch_shape(sql: str) -> str:
+    """Ignore only opaque scratch-name digests, preserving distinct relations."""
+    names: dict[str, int] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        name = match.group()
+        if match.lastgroup != 'scratch':
+            return name
+        return f'"__sdm_seeds_digest_{names.setdefault(name, len(names))}__"'
+
+    tokens = re.compile(
+        r"'(?:[^']|'')*'|--[^\n]*|/\*.*?\*/|"
+        r'(?P<scratch>"__sdm_seeds_[0-9a-f]{16}__")(?!")|"(?:[^"]|"")*"',
+        re.DOTALL,
+    )
+    return tokens.sub(replace, sql)
+
+
 def unpinned(
     observations: dict[str, dict[str, Any]], pinned: set[str]
 ) -> list[str]:
@@ -171,7 +189,12 @@ def unpinned(
     ]
     if not ran:
         return ['no statement ran: no evidence']
-    return [f'{k} {stage}: {sql}' for k, stage, sql in ran if sql not in pinned]
+    shapes = {_scratch_shape(sql) for sql in pinned}
+    return [
+        f'{k} {stage}: {sql}'
+        for k, stage, sql in ran
+        if _scratch_shape(sql) not in shapes
+    ]
 
 
 def test_the_golden_check_reads_rust_and_fails_closed() -> None:
@@ -199,11 +222,33 @@ def test_the_golden_check_reads_rust_and_fails_closed() -> None:
     assert unpinned({}, {'SELECT 1'}) == ['no statement ran: no evidence']
 
 
+def test_scratch_digest_matching_preserves_all_other_sql() -> None:
+    first = 'SELECT * FROM temp."__sdm_seeds_0123456789abcdef__" WHERE x = 1'
+    second = first.replace('0123456789abcdef', 'fedcba9876543210')
+    assert _scratch_shape(first) == _scratch_shape(second)
+    assert _scratch_shape(first) != _scratch_shape(
+        second.replace('x = 1', 'x = 2')
+    )
+    assert _scratch_shape(first) != _scratch_shape(
+        second.replace('temp.', 'main.')
+    )
+    assert _scratch_shape(first) != _scratch_shape(
+        second.replace('fedcba9876543210', 'bad')
+    )
+    for wrapper in ("SELECT '%s'", '-- %s\nSELECT 1', '/* %s */ SELECT 1'):
+        left = wrapper % '"__sdm_seeds_0123456789abcdef__"'
+        right = wrapper % '"__sdm_seeds_fedcba9876543210__"'
+        assert _scratch_shape(left) != _scratch_shape(right)
+    # Two distinct key sets cannot collapse into one relation.
+    assert _scratch_shape(first + second) != _scratch_shape(first + first)
+
+
 def test_every_statement_python_core_ran_on_sqlite_is_a_golden() -> None:
     r"""Exit "L4 goldens executed" (SQLite): every statement python-core ran
-    on SQLite, over every case, is pinned verbatim in
+    on SQLite, over every case, is pinned apart from scratch-name digests in
     ``rust/crates/sdm-data/tests/sqlite*.rs``: each golden that matches was
-    executed on SQLite, and a SQL change without a golden update fails."""
+    executed on SQLite, and any other SQL change without a golden update fails.
+    The digest includes current resolved request metadata absent from old pins."""
 
     def check() -> None:
         problems = unpinned(_cases_on_sqlite(), goldens())

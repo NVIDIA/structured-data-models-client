@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import copy
 import functools
 import importlib.util
 import json
@@ -89,6 +90,25 @@ def _projection(answer: dict[str, Any]) -> dict[str, Any]:
     return {k: answer[k] for k in ('outcome', 'schema', 'payloads')}
 
 
+def _observe_with_generated_key(
+    vector: dict[str, Any], dsn: str
+) -> dict[str, Any]:
+    """Assert the added wire metadata, then retain the historical body digest."""
+    regressions = R._regressions()
+    original = regressions.payloads_projection
+
+    def projection(payloads: Any) -> dict[str, Any] | None:
+        bodies = copy.deepcopy([dict(body) for body in payloads])
+        assert bodies
+        for body in bodies:
+            assert body.pop('client_generated_keys') == {'orders': '__node_id'}
+        return original(bodies)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(regressions, 'payloads_projection', projection)
+        return R.observe(vector, dsn)
+
+
 def _differs(got: dict[str, Any], want: dict[str, Any]) -> list[str]:
     return sorted(k for k in want if got.get(k) != want[k])
 
@@ -105,7 +125,9 @@ def test_python_core_answers_a_catalog_key_as_the_reference(
 
     def check() -> None:
         want = BY_ID[vector_id]['reference']
-        got = R.observe(BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN'])
+        got = _observe_with_generated_key(
+            BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN']
+        )
         found = _differs(got, want)
         assert not found, (
             f'{vector_id}: {found} differ: got {got["outcome"]}, the '
@@ -133,7 +155,9 @@ def test_python_core_answers_a_given_or_edited_key_as_a_catalog_key(
         control = R.CONTROL[vector_id]
         want = _projection(BY_ID[control]['reference'])
         got = _projection(
-            R.observe(BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN'])
+            _observe_with_generated_key(
+                BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN']
+            )
         )
         found = _differs(got, want)
         assert not found, (
