@@ -202,9 +202,9 @@ def test_live_temporal_link_batches_preserve_entity_identity():
 
     from sdm_client import Relationship
 
-    url = os.environ.get('SDM_RELATIONAL_URL')
+    url = os.environ.get('SDM_LINK_URL') or os.environ.get('SDM_RELATIONAL_URL')
     if not url:
-        pytest.skip('SDM_RELATIONAL_URL is required')
+        pytest.skip('SDM_LINK_URL or SDM_RELATIONAL_URL is required')
     fixture = json.loads(
         (
             Path(__file__).resolve().parents[3]

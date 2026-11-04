@@ -355,3 +355,11 @@ def test_case_model_overrides_reference_recorded_primary_identities():
     ] = '29'
     with pytest.raises(ValueError, match='recorded primary route'):
         model_identities(config)
+
+
+def test_link_route_is_optional_and_matches_recorded_identity(tmp_path):
+    config = {'endpoints': {'link': {'client': {'url': 'link-route'}}}}
+    assert environment(tmp_path, config, {})['SDM_LINK_URL'] == 'link-route'
+    assert 'SDM_LINK_URL' not in environment(tmp_path, {}, {})
+    with pytest.raises(ValueError, match='recorded configured endpoint'):
+        environment(tmp_path, config, {'SDM_LINK_URL': 'wrong-route'})
