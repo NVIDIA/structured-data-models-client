@@ -259,3 +259,68 @@ def test_model_identity_requires_versions_and_omits_addresses():
     del config['live_api']['model_versions']['gradients']
     with pytest.raises(ValueError, match='versions'):
         model_identities(config)
+
+
+@pytest.mark.parametrize(
+    'fault',
+    [None, 'missing', 'url', 'entity', 'version', 'transport', 'endpoint'],
+)
+def test_private_bridge_identity_is_bound_to_route_without_claiming_attestation(
+    fault,
+):
+    from live_api import model_identities
+
+    route = {
+        'url': 'http://private-bridge.invalid',
+        'entity': 'private-entity',
+        'endpoint': 'private-serving-name',
+        'version': '27',
+        'transport': 'databricks',
+    }
+    config = {
+        'endpoints': {
+            'relational': {
+                'version': '27',
+                'transport': 'private-bridge',
+                'entity': route['entity'],
+                'client': {'url': route['url']},
+            },
+            'tabular': {'version': '2', 'transport': 'databricks'},
+        },
+        'live_api': {
+            'bridge_routes': {'relational': dict(route)},
+            'model_versions': {
+                'pretrained': 'weights-v1',
+                'gradients': 'weights-v1',
+            },
+        },
+    }
+    if fault == 'missing':
+        config['live_api']['bridge_routes'] = {}
+    elif fault:
+        config['live_api']['bridge_routes']['relational'][fault] = (
+            '' if fault == 'endpoint' else 'wrong'
+        )
+    if fault:
+        with pytest.raises(ValueError, match='route identity'):
+            model_identities(config)
+        return
+    observed = model_identities(config)
+    identity = observed['relational']
+    assert identity['transport'] == 'private-bridge'
+    assert identity['version'] == '27'
+    assert identity['identity_basis'] == 'configured-route'
+    assert len(identity['route_sha256']) == 64
+    assert not any(
+        secret in json.dumps(observed)
+        for secret in (route['url'], route['entity'], route['endpoint'])
+    )
+    # Configuration validation alone is no live model attestation.
+    assert 'status' not in identity and 'verified' not in identity
+    config['live_api']['bridge_routes']['relational']['endpoint'] = (
+        'another-private-serving-name'
+    )
+    assert (
+        model_identities(config)['relational']['route_sha256']
+        != identity['route_sha256']
+    )
