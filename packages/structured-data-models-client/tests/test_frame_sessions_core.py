@@ -209,11 +209,10 @@ def test_fit_explanation_validates_context_then_score_validates_rows(client):
         model=KumoRelational(),
         outputs=['prediction', 'explanation'],
     )
-    with pytest.raises(StructuredDataError, match='one|exactly'):
-        fitted.predict(gather(asked, [3, 4]))
-    assert not endpoint.scored
+    # Gradient-capable models explain every scored row, including a fitted batch.
+    assert len(fitted.predict(gather(asked, [3, 4]))) == 2
     fitted.predict(gather(asked, [3]))
-    assert len(endpoint.scored) == 1
+    assert len(endpoint.scored) == 2
 
 
 def test_holding_back_all_context_is_refused_before_upload(client):

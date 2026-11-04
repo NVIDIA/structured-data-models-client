@@ -126,7 +126,42 @@ fn warn(asker: &Asker, notice: Notice) {
 }
 
 pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationResult, CoreError> {
+    if crate::pql::explained_query(&inputs.query).is_some() {
+        let payload =
+            json::read(&inputs.payload).map_err(|_| internal("prediction payload invalid"))?;
+        let kind = payload
+            .get("task")
+            .and_then(|v| v.get("kind"))
+            .and_then(Value::as_text)
+            .unwrap_or("regression");
+        inputs.outputs = crate::pql::explanation_outputs(
+            &inputs.query,
+            kind,
+            (!inputs.default_outputs).then_some(inputs.outputs),
+        )
+        .unwrap();
+        inputs.default_outputs = false;
+    }
     if let Some((questions, top_k)) = inputs.ranking.take() {
+        if inputs.outputs.iter().any(|field| field == "explanation") {
+            return Err(CoreError::new(
+                Sentence::ModelLacksOutputs,
+                "explanations are unavailable for client-assembled candidate rankings",
+            )
+            .with_field("model", Detail::text(&inputs.model))
+            .with_field(
+                "unsupported_outputs",
+                Detail::List(vec![Scalar::Utf8("explanation".into())]),
+            )
+            .with_field(
+                "supported_outputs",
+                Detail::List(vec![
+                    Scalar::Utf8("prediction".into()),
+                    Scalar::Utf8("rankings".into()),
+                    Scalar::Utf8("scores".into()),
+                ]),
+            ));
+        }
         return crate::ranking::predict(asker, inputs, questions, top_k).await;
     }
     let Some(later) = inputs.forecast.take() else {

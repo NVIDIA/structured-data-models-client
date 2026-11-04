@@ -186,6 +186,8 @@ pub struct PreparedTabularFit {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareTabularScore {
+    #[serde(default)]
+    pub query: Option<String>,
     pub state: TabularSessionState,
     pub predict: AttachmentId,
     pub request_id: String,

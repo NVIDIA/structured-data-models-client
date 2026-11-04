@@ -341,9 +341,14 @@ pub fn start(
             )
         }
         Operation::BindDirect(request) => {
-            let input: sdm_contract::direct::DirectCallFacts =
+            let mut input: sdm_contract::direct::DirectCallFacts =
                 take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
+                input.outputs = crate::pql::explanation_outputs(
+                    input.query.as_deref().unwrap_or(""),
+                    &input.kind,
+                    input.outputs,
+                );
                 crate::direct::value(&asker, &sdm_request::direct::bind(input)?)
             })
         }

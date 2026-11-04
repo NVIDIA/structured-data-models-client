@@ -212,7 +212,11 @@ pub(crate) async fn materialize(
     let mut gathered = Vec::with_capacity(questions.len());
     for (position, named, question) in questions {
         let mut asked = inputs.clone();
-        asked.query = question;
+        asked.query = if crate::pql::explained_query(&inputs.query).is_some() {
+            format!("EXPLAIN {question}")
+        } else {
+            question
+        };
         asked.memo = None;
         asked.candidates = None;
         asked.values.clone_from(&values);

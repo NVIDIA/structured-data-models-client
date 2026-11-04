@@ -487,6 +487,10 @@ def _result(
         metadata=metadata,
         outputs=outputs,
     )
+    if explanation is None:
+        raw_explanation = (table.schema.metadata or {}).get(b'explanation')
+        if raw_explanation is not None:
+            explanation = raw_explanation.decode('utf-8')
     result = PredictionResult(
         model=model,
         request_id=request_id,
@@ -497,6 +501,12 @@ def _result(
     )
     # A forecast's answer names its step, rows or none (`_by_step`).
     result._names_its_step = by_step
+    from sdm_client.explanations import GradientExplanations
+
+    raw_gradients = (table.schema.metadata or {}).get(b'sdm.gradients')
+    result.explanations = GradientExplanations._from_core(
+        json.loads(raw_gradients) if raw_gradients is not None else None
+    )
     return result
 
 

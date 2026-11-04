@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import dataclasses
 import sys
 import threading
 import uuid
@@ -24,8 +25,16 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.in_process.answers import QUANTILE_LEVELS, classified, regressed
+from sdm_client.in_process.answers import (
+    QUANTILE_LEVELS,
+    class_order,
+    classified,
+    interpolated,
+    point,
+    regressed,
+)
 from sdm_client.in_process.columns import Context
+from sdm_client.in_process.gradients import GradientConverter
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
 
@@ -128,7 +137,8 @@ class InProcessBackend:
             fields = _fields(served, model, task['kind'], payload)
             context = served.context(payload)
             query = served.query(context, payload, payload['schema'])
-            answer = _run(_fit(model, context), query)
+            fitted = _fit(model, context)
+            answer = _run(fitted, query)
             items = _items(
                 served,
                 task,
@@ -138,6 +148,10 @@ class InProcessBackend:
                 answer,
                 fields,
             )
+            if 'explanation' in fields:
+                items = _explained(
+                    items, fitted, query, context, task['kind'], payload, fields
+                )
         return _response(items, served.model_id, payload)
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -188,6 +202,16 @@ class InProcessBackend:
                 answer,
                 fields,
             )
+            if 'explanation' in fields:
+                items = _explained(
+                    items,
+                    session.fitted,
+                    query,
+                    session.context,
+                    task['kind'],
+                    payload,
+                    fields,
+                )
         return _response(items, served.model_id, payload)
 
     def delete_session(self, session_id: str) -> None:
@@ -475,3 +499,95 @@ def _response(
         'predictions': [asdict(item) for item in items],
         'metadata': {},
     }
+
+
+def _explained(
+    items: list[Any],
+    fitted: Any,
+    query: tuple[Any, Any],
+    context: Context,
+    kind: str,
+    payload: Mapping[str, Any],
+    fields: Sequence[str],
+) -> list[Any]:
+    r"""``items``, each carrying the explanation a NIM sends for its row."""
+    import torch
+    from sdm.explain import GradientExplainer
+
+    if kind != 'regression':
+        outputs = GradientConverter.class_outputs(context.labels)
+        reported = _Reported(
+            fitted,
+            lambda numbers, output: numbers[
+                ..., class_order(output, context.encoded)
+            ],
+        )
+    else:
+        statistic = _statistic(payload)
+        levels = list(_levels(payload)) if 'quantiles' in fields else []
+        outputs = GradientConverter.regression_outputs(statistic, levels)
+        reported = _Reported(
+            fitted,
+            lambda numbers, _: torch.stack(
+                [
+                    point(numbers, statistic),
+                    *(interpolated(numbers, level) for level in levels),
+                ],
+                dim=-1,
+            ),
+        )
+    device = _placement(fitted)
+    x, related = _placed(query, device)
+    with (
+        _autocast(device),
+        torch.inference_mode(False),
+        torch.enable_grad(),
+    ):
+        instance, attributed = GradientExplainer().explain(reported, x, related)
+    sent = payload['predict'].get('related_tables') or {}
+    explained = GradientConverter.convert(
+        outputs,
+        instance,
+        attributed,
+        rows=len(payload['predict']['instance_table']['rows']),
+        related_rows={name: len(table['rows']) for name, table in sent.items()},
+        owners=None
+        if related is None
+        else GradientConverter.entity_rows(x, related),
+    )
+    return [
+        dataclasses.replace(item, explanation=record)
+        for item, record in zip(items, explained, strict=True)
+    ]
+
+
+class _Reported:
+    r"""A fitted model answering only the scores a response reports, so the
+    explainer differentiates those and nothing else, as a NIM's does."""
+
+    def __init__(self, fitted: Any, scores: Any) -> None:
+        self._fitted = fitted
+        self._scores = scores
+
+    @property
+    def _cache(self) -> Any:
+        return self._fitted._cache
+
+    def predict(
+        self, x: Any, related_tables: Any = None, *, callbacks: Any = None
+    ) -> Any:
+        from sdm import TableTensor
+
+        output = self._fitted.predict(
+            x=x, related_tables=related_tables, callbacks=callbacks
+        )
+        scores = self._scores(output.numerical, output)
+        return TableTensor(
+            columns={'numerical': [str(i) for i in range(scores.shape[-1])]},
+            numerical=scores,
+        )
+
+
+def _placed(query: tuple[Any, Any], device: Any) -> tuple[Any, Any]:
+    x, related = query
+    return x.to(device), None if related is None else related.to(device)

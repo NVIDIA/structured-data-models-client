@@ -49,6 +49,8 @@ pub struct MergeDescriptor {
     pub names_rows: bool,
     pub names_step: bool,
     pub candidates: Vec<MergeCandidate>,
+    #[serde(default)]
+    pub gradient_rows: Vec<GradientRecord>,
 }
 
 /// Native values, not Python equality callbacks. NaNs compare unequal.
@@ -105,6 +107,7 @@ pub struct ResultMergePlan {
     pub batch_request_ids: Vec<String>,
     pub explanation_part: Option<usize>,
     pub candidate_positions: Vec<u32>,
+    pub gradients: Option<GradientCollection>,
     pub names_rows: bool,
     pub names_step: bool,
 }
@@ -178,4 +181,30 @@ pub struct FeatureImportanceRow {
     pub table: String,
     pub column: String,
     pub score: f64,
+}
+
+/// A language-neutral explanation owner; JSON text preserves exact typed keys/values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GradientRecord {
+    pub row_index: i64,
+    pub answer_index: i64,
+    pub id: String,
+    pub forecast_step: Option<i64>,
+    pub explanation: Option<String>,
+}
+
+/// Identity selection is an engine decision; hosts provide presentation adapters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GradientCollection {
+    pub keyed_by: GradientKeyKind,
+    pub rows: Vec<GradientRecord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GradientKeyKind {
+    Id,
+    RowIndex,
 }

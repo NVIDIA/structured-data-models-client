@@ -3921,9 +3921,41 @@
       },
       "gate": "local",
       "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison. PQL and supplied temporal-link batches share the 200-row model cap, with ordered entity identities on memory, DuckDB and SQLite routes."
+    },
+    {
+      "id": "gradient-explanations",
+      "gate": "local",
+      "apis": {
+        "python": [
+          "PredictionResult.explanations",
+          "GradientExplanations.to_pandas"
+        ],
+        "java": [
+          "PredictionResult.explanations",
+          "GradientExplanations.entries",
+          "GradientExplanations.get",
+          "GradientExplanations.toArrow"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge",
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_malformed_gradient_is_not_silently_discarded",
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_tabular_session_explain_is_an_output_not_a_new_question",
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_partial_relational_batches_keep_completed_explanations",
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_explain_forecast_keeps_step_identity",
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_native_reply_nonfinite_gradient_uses_shared_refusal",
+          "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_explain_candidate_ranking_is_refused_before_model_call"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#publicGradientCollectionSurvivesNestedMergesAndSessions",
+          "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#immutableViewsRetainWideKey"
+        ]
+      },
+      "note": "Rust validates gradient shapes, row identities, class labels and forecast/batch/session association; hosts present collections and tables. Local contract tests do not certify gradient support for every connector or deployed model."
     }
   ],
-  "public_api_snapshot_sha256": "61115913e10880746b6992f1011ef590046c26f0127adf7b36125a626979a412",
+  "public_api_snapshot_sha256": "de768e8e8f62f63f7139ffd1efde3bf2c660bdc263a3e557b6506a0de69190d2",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4639,6 +4671,12 @@
       },
       "sdm_client.Schema.with_source": {
         "capability": "connection-rebinding"
+      },
+      "sdm_client.GradientExplanations": {
+        "capability": "gradient-explanations"
+      },
+      "sdm_client.GradientExplanations.to_pandas": {
+        "capability": "gradient-explanations"
       }
     },
     "java": {
@@ -6189,6 +6227,60 @@
       },
       "com.nvidia.sdm.ExamplesOptions$Builder#public com.nvidia.sdm.ExamplesOptions$Builder rowsPerCall(long);": {
         "capability": "custom-examples"
+      },
+      "com.nvidia.sdm.GradientExplanations": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations#public java.util.Map<com.nvidia.sdm.GradientExplanations$Key, java.util.Map<java.lang.String, java.lang.Object>> entries();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations#public java.util.Map<java.lang.String, java.lang.Object> get(com.nvidia.sdm.GradientExplanations$Key);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations#public org.apache.arrow.vector.VectorSchemaRoot toArrow(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public com.nvidia.sdm.GradientExplanations$Key(com.nvidia.sdm.GradientExplanations$Kind, java.lang.Object, java.lang.Long);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public com.nvidia.sdm.GradientExplanations$Kind kind();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public final boolean equals(java.lang.Object);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public final int hashCode();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public final java.lang.String toString();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public java.lang.Long forecastStep();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Key#public java.lang.Object value();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static com.nvidia.sdm.GradientExplanations$Kind valueOf(java.lang.String);": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static com.nvidia.sdm.GradientExplanations$Kind[] values();": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static final com.nvidia.sdm.GradientExplanations$Kind ID;": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.GradientExplanations$Kind#public static final com.nvidia.sdm.GradientExplanations$Kind ROW_INDEX;": {
+        "capability": "gradient-explanations"
+      },
+      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.GradientExplanations explanations();": {
+        "capability": "gradient-explanations"
       }
     }
   },
@@ -6503,12 +6595,12 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_inventory",
-      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
+      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks. Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "public_api_snapshot_sha256",
-      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
+      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks. Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
@@ -6548,7 +6640,7 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "live_api_tests",
-      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
+      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks. Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
@@ -6584,6 +6676,31 @@
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/automatic-batch-sessions",
       "reason": "Add reviewed automatic exact-context batch sessions and supplied batch controls in Python/Java, preserving partial results and safe lifecycle behavior with controlled HTTP and real endpoint tests."
+    },
+    {
+      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
+    },
+    {
+      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
+    },
+    {
+      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
+      "record": "api_inventory",
+      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
+    },
+    {
+      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
+      "record": "live_api_tests",
+      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
+    },
+    {
+      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
     }
   ],
   "capabilities": [
@@ -8270,6 +8387,18 @@
       "api_contract": "automatic-batch-sessions",
       "test": "java/src/test/java/com/nvidia/sdm/TemporalLinkBatchingTest.java#liveShopBatches",
       "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "gradient-explanations",
+      "test": "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_pretrained_local_model_gradients",
+      "evidence_level": "live-required",
+      "note": "Opt-in actual pretrained GPU models: Tabular/Relational classification and regression. Python uses the optional local runtime; Java calls that runtime over HTTP. No blanket warehouse or deployed-endpoint gradient claim."
+    },
+    {
+      "api_contract": "gradient-explanations",
+      "test": "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#realModelEndpointGradients",
+      "evidence_level": "live-required",
+      "note": "Opt-in actual pretrained GPU models: Tabular/Relational classification and regression. Python uses the optional local runtime; Java calls that runtime over HTTP. No blanket warehouse or deployed-endpoint gradient claim."
     }
   ]
 }

@@ -223,6 +223,17 @@ public final class PredictionResult {
     return count;
   }
 
+  /** Validated per-row gradients; empty when the endpoint supplied none. */
+  @SuppressWarnings("unchecked")
+  public GradientExplanations explanations() {
+    try (ArrowReader reader = read(ArrowData.allocator())) {
+      String raw = reader.getVectorSchemaRoot().getSchema().getCustomMetadata().get("sdm.gradients");
+      return new GradientExplanations(raw == null ? null : (Map<String,Object>) Json.read(raw.getBytes(StandardCharsets.UTF_8)));
+    } catch (IOException | Json.JsonException e) {
+      throw new StructuredDataException("gradient records cannot be read", "INTERNAL_ERROR", Map.of(), null);
+    }
+  }
+
   /** An immutable local explanation view, without reading prediction rows. */
   public ExplanationView explanationView() {
     Map<String, Object> raw = explanation();

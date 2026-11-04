@@ -29,15 +29,15 @@ with SDMClient(url='http://localhost:8000') as client:
 | | `kumo-tabular` |
 |---|---|
 | Tasks | `classification`, `regression` |
-| Outputs | `prediction`, `probabilities`, `quantiles` |
+| Outputs | `prediction`, `probabilities`, `quantiles`, `explanation` |
 | Several tables | no |
 | Relationships | no |
-| Explanations | no |
+| Explanations | yes |
 | Sessions | yes |
 | Context rows | 10,000 |
 
 Anything outside that list belongs to the relational model. Asking for
-`rankings`, an `explanation`, or a forecast here is refused before a request
+`rankings` or a forecast here is refused before a request
 is sent.
 
 Outputs narrow again by task, and that narrowing happens at the endpoint rather
@@ -45,6 +45,9 @@ than in the client: `probabilities` on a classification, `quantiles` on a
 regression, and asking for the wrong one comes back as
 `422 UNSUPPORTED_OUTPUT`. `quantiles` gives a column per decile,
 `quantile_0.1` through `quantile_0.9`, beside the point prediction.
+
+Gradient-capable models also accept `outputs=['prediction', 'explanation']` or `EXPLAIN PREDICT`.
+Read per-row gradients with `result.explanations.to_pandas()`; these describe preprocessed numerical features, not causal effects.
 
 ## The whole interface
 
@@ -205,7 +208,7 @@ names what to change.
 | Refusal | Cause |
 |---|---|
 | a task the model does not serve | `forecasting`, `temporal_link_prediction` and the rest are relational |
-| an output it does not produce | `rankings`, `explanation`, `embeddings`, `scores` |
+| an output it does not produce | `rankings`, `embeddings`, `scores` |
 | a context above the cap | more than 10,000 labelled rows in a direct `Request` |
 | relationships | this model reads one table; use `kumo-relational` |
 

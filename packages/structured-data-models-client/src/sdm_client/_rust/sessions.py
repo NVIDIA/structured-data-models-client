@@ -352,6 +352,7 @@ def predict(fitted: Any, request: Any) -> Any:
     finished = direct._run(
         'prepare_tabular_score',
         {
+            'query': request.query,
             'state': state,
             'predict': 3,
             'request_id': _request_id(),

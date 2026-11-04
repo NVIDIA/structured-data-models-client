@@ -120,6 +120,20 @@ joined = to_score.reset_index(names='row_index').merge(answers, on='row_index')
 
 ## Reading an explanation
 
+Request `outputs=["prediction", "explanation"]` or prefix PQL with `EXPLAIN PREDICT`.
+For a model that returns `sdm_gradient_v1`, `result.explanations` maps each prediction to its validated gradients; `result.explanations.to_pandas()` gives one row per gradient.
+Java exposes `result.explanations().entries()` and `toArrow(allocator)`; callers close the returned Arrow root before closing their allocator.
+
+Keys are entity IDs when unique, otherwise positions in result order; forecasts add the forecast step to each key.
+Merging results preserves every explanation, including repeated IDs and repeated merges.
+Related rows and hop distances refer to the exact sampled request, without additional warehouse reads.
+Gradient columns describe the model's **preprocessed numerical features**, including derived datetime features; they are not causal effects or general feature importance.
+Java Arrow views retain ordinary string/integer key types; mixed or wider keys use lossless JSON text with explicit schema metadata.
+
+`EXPLAIN` changes requested outputs, not a fitted session's question identity.
+The endpoint must support gradients; client-assembled candidate rankings remain unsupported.
+Unknown explanation formats remain available through the raw accessors below.
+
 `result.explanation` remains the raw endpoint payload.
 `result.explanation_view` provides an immutable snapshot of that payload, or `None` when there is no explanation.
 The view exposes `raw`, nested `details`, `summary`, `warnings`, `cohorts` and `subgraphs`.

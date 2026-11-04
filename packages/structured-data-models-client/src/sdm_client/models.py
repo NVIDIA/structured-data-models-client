@@ -57,7 +57,6 @@ RELATIONAL_LIMITS = {
     'context_rows_max': 10_000,
     'predict_rows_max': 10_000,
     'predict_rows_temporal_link_prediction': 200,
-    'explanation_predict_rows': 1,
     'hops_max': 6,
     'tables_max': 15,
     'classes_max': 10,
@@ -89,8 +88,11 @@ KUMO_TABULAR = ModelSpec(
         # The endpoint takes the coarse kind only and decides binary versus
         # multiclass itself, so this client never narrows it here.
         tasks=frozenset({'classification', 'regression'}),
-        outputs=frozenset({'prediction', 'probabilities', 'quantiles'}),
+        outputs=frozenset(
+            {'prediction', 'probabilities', 'quantiles', 'explanation'}
+        ),
         limits=TABULAR_LIMITS,
+        explanation_formats=('sdm_gradient_v1',),
     ),
 )
 
@@ -122,7 +124,7 @@ KUMO_RELATIONAL = ModelSpec(
         # Empty because nothing here takes a format argument: the contract's
         # `OutputSpec` is only `{fields: [...]}`, and the endpoint names the
         # shape it returns. Two names declared here appeared in no response.
-        explanation_formats=(),
+        explanation_formats=('sdm_gradient_v1',),
         limits=RELATIONAL_LIMITS,
         unread_feature_stypes=frozenset({'text'}),
         # Inference-config keys this client forwards, rather than keys the
