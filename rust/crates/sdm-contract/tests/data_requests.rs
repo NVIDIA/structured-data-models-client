@@ -18,6 +18,7 @@ use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 fn term(column: &str) -> TieTerm {
     TieTerm {
+        string_like: false,
         column: column.into(),
         as_timestamp: false,
         descending: false,

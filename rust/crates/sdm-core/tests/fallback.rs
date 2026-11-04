@@ -312,6 +312,7 @@ fn neighbors(window: bool, per_seed: Option<u64>, seeds: &RecordBatch) -> DataRe
         per_seed: per_seed.map(Into::into),
         order: per_seed.map(|_| {
             TieBreak(vec![TieTerm {
+                string_like: false,
                 column: "at".into(),
                 as_timestamp: true,
                 descending: true,
