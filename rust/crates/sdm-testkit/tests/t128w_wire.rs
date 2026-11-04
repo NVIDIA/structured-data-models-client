@@ -67,7 +67,8 @@ fn numbers(value: Value) -> Value {
 
 /// The keys the wire's payload writes only when it has them: each may be
 /// left out, so dropping one is not a change of shape.
-const OPTIONAL: [&str; 7] = [
+const OPTIONAL: [&str; 8] = [
+    "client_generated_keys",
     "anchor_time_column",
     "stype",
     "nullable",
@@ -145,7 +146,7 @@ fn mutations(value: &Value, path: &mut Vec<String>, out: &mut Vec<(String, Value
 fn open_map(path: &[String]) -> bool {
     matches!(
         path.last().map(String::as_str),
-        Some("related_tables" | "columns")
+        Some("related_tables" | "columns" | "client_generated_keys")
     )
 }
 
