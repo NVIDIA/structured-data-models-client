@@ -921,16 +921,18 @@ jobs:
           name: native-wheel
           path: native
       # The cell's pins as constraints, so nothing installed after moves
-      # them; DuckDB 2 for Python 3.12; the SQLite and Postgres
+      # them; DuckDB 1.5 for Python 3.10 and 2 for newer runtimes; the SQLite and Postgres
       # drivers (ADBC's SQLite, psycopg), one step for every database's job
       # (T2.1a); the engine, which a case's materialize needs, built from
       # source with the runner image's compilers and CMake.
       - &contract-install
         name: Install the cell
         run: |
-          printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
+          printf '%s\n' $CELL_PINS \
+            'duckdb==1.5.6; python_version < "3.11"' \
+            'duckdb==2.0.0; python_version >= "3.11"' > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==2.0.0 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
              "$(ls native/*.whl)[test]"

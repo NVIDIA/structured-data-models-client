@@ -1233,3 +1233,49 @@ def test_database_observations_use_current_expectations_and_keep_sql():
     assert '--reference' not in script
     assert 'ratchet.py' not in script
     subprocess.run(['bash', '-n'], input=script, text=True, check=True)
+
+
+@pytest.mark.parametrize(
+    ('job_name', 'version', 'duckdb_pin'),
+    [
+        ('contract-python-floor-pandas2-2', '3.10', '1.5.6'),
+        ('contract-python-floor-pandas2-2-sqlite', '3.10', '1.5.6'),
+        ('contract-python-floor-pandas2-2-postgres', '3.10', '1.5.6'),
+        ('contract-python-ref-pandas3', '3.12', '2.0.0'),
+        ('contract-python-dbr17-pandas2', '3.12', '2.0.0'),
+    ],
+)
+def test_contract_installer_preserves_supported_duckdb_runtime(
+    tmp_path, job_name, version, duckdb_pin
+):
+    from packaging.requirements import Requirement
+
+    job = _workflow()['jobs'][job_name]
+    setup = next(
+        step for step in job['steps'] if 'setup-python@' in step.get('uses', '')
+    )
+    assert setup['with']['python-version'] == version
+    install = next(
+        step['run']
+        for step in job['steps']
+        if step.get('name') == 'Install the cell'
+    )
+    constraints_script = install.split('pip install --upgrade pip')[0]
+    subprocess.run(
+        ['bash', '-euc', constraints_script],
+        check=True,
+        env={
+            **os.environ,
+            'RUNNER_TEMP': str(tmp_path),
+            'CELL_PINS': job['env']['CELL_PINS'],
+        },
+    )
+    active = [
+        requirement
+        for line in (tmp_path / 'cell.txt').read_text().splitlines()
+        if (requirement := Requirement(line)).name == 'duckdb'
+        and requirement.marker.evaluate({'python_version': version})
+    ]
+    assert len(active) == 1
+    assert str(active[0].specifier) == '==' + duckdb_pin
+    assert '$CELL_PINS duckdb pyyaml' in install
