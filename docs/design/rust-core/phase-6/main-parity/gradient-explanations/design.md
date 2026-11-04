@@ -110,3 +110,7 @@ Validation also covers malformed HTTP/custom-backend responses, partial batches,
 Focused checks passed: 146 Rust unit cases, 11 schema/integration cases, 85 Python regression cases, and 193 static skill checks.
 Rust Clippy, Python Ruff/mypy, and repository hygiene checks passed.
 Two independent reviews verified the Rust/host boundaries and result identity contracts.
+
+Final clean artifacts from `62df972a8` passed all 8 public Python contract cases and all 4 pretrained Python model/task cases without source overlays.
+Java passed all 3 retained tests, including 4 actual pretrained model/task HTTP calls and the session/nested-merge/wide-key checks.
+The API snapshot and parity ledger are regenerated and validated; no model deployment or publication was needed.
