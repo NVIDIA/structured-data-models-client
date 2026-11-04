@@ -71,14 +71,16 @@ def test_release_requires_success_for_exact_commit(tmp_path, conclusion):
     )
     assert (result.returncode == 0) == (conclusion == 'success')
     actual = args.read_text().splitlines()
-    assert actual[actual.index('--workflow') + 1] == 'parity-live.yml'
+    assert actual[actual.index('--workflow') + 1] == (
+        'parity-stress.yml' if conclusion == 'success' else 'parity-live.yml'
+    )
     assert actual[actual.index('--commit') + 1] == 'exact-release-commit'
     assert actual[actual.index('--branch') + 1] == 'main'
     assert actual[actual.index('--status') + 1] == 'completed'
 
 
 def test_giant_acceptance_is_mandatory_sequential_and_private():
-    job = workflow('parity-live.yml')['jobs']['parity']
+    job = workflow('parity-stress.yml')['jobs']['parity']
     assert 'PARITY_RUNNER_LABELS' in job['runs-on']
     setup = next(
         step
@@ -124,7 +126,7 @@ def test_giant_reports_require_exactly_one_passed_case(
 
     step = next(
         step
-        for step in workflow('parity-live.yml')['jobs']['parity']['steps']
+        for step in workflow('parity-stress.yml')['jobs']['parity']['steps']
         if step.get('name')
         == 'Validate giant values against the real model sequentially'
     )
@@ -167,3 +169,17 @@ def test_live_workflow_validates_current_clients_without_frozen_install():
         'structured-data-models-pql',
     ):
         assert retired not in scripts
+
+
+def test_ordinary_live_has_registry_without_giant_prerequisites():
+    data = workflow('parity-live.yml')
+    scripts = '\n'.join(
+        step.get('run', '') for step in data['jobs']['parity']['steps']
+    )
+    assert 'tests/parity/live_api.py' in scripts
+    assert '--preflight' in scripts
+    assert 'MemAvailable' not in scripts
+    assert 'PYGIANT' not in scripts
+    stress = workflow('parity-stress.yml')
+    assert set(stress['on']) == {'workflow_dispatch'}
+    assert stress['jobs']['parity']['environment'] == 'parity-live'

@@ -19,6 +19,19 @@ ROOT = HERE.parents[1]
 
 
 def groups(data, gate='local', selected=None):
+    if gate == 'live':
+        return [
+            {
+                'id': record['api_contract'],
+                'tests': {
+                    'java' if '#' in record['test'] else 'python': [
+                        record['test']
+                    ]
+                },
+            }
+            for record in data['live_api_tests']
+            if not selected or record['api_contract'] in selected
+        ]
     return [
         group
         for group in data['api_contracts']
@@ -54,6 +67,7 @@ def validate(data):
                         ]
                         assert len(matches) == 1, node
                         scope = getattr(matches[0], 'body', [])
+    validate_live_targets(data, seen)
     inventory = data['api_inventory']
     validate_api_inventory(
         python_symbols(
@@ -88,6 +102,39 @@ def validate(data):
                 language,
             )
     return seen
+
+
+def validate_live_targets(data, capabilities):
+    """Resolve every live registry entry without connecting to any service."""
+    seen = set()
+    for record in data['live_api_tests']:
+        node = record['test']
+        identity = (record['api_contract'], node)
+        assert identity not in seen, ('duplicate live requirement', identity)
+        seen.add(identity)
+        assert record['api_contract'] in capabilities, identity
+        assert record['evidence_level'] == 'live-required', identity
+        path, separator, name = node.partition('#' if '#' in node else '::')
+        source = ROOT / path
+        assert separator and name and source.is_file(), node
+        if separator == '::':
+            scope = ast.parse(source.read_text()).body
+            for part in name.split('::'):
+                matches = [
+                    item
+                    for item in scope
+                    if getattr(item, 'name', None) == part
+                ]
+                assert len(matches) == 1, node
+                scope = getattr(matches[0], 'body', [])
+        else:
+            assert (
+                type(record.get('invocations', 1)) is int
+                and record.get('invocations', 1) > 0
+            ), node
+            assert re.search(
+                r'\bvoid\s+' + re.escape(name) + r'\s*\(', source.read_text()
+            ), node
 
 
 class Outcomes:
@@ -198,7 +245,7 @@ def main():
     )
     parser.add_argument(
         '--gate',
-        choices=['local', 'native', 'large-memory', 'in-process'],
+        choices=['local', 'native', 'large-memory', 'in-process', 'live'],
         default='local',
     )
     parser.add_argument('--group', action='append')
@@ -244,7 +291,12 @@ def main():
 
     outcomes = Outcomes()
     status = pytest.main(
-        [*(str(ROOT / node) for node in nodes), '-q'], plugins=[outcomes]
+        [
+            *(str(ROOT / node) for node in nodes),
+            '-q',
+            *(['-m', '', '-o', 'addopts='] if args.gate == 'live' else []),
+        ],
+        plugins=[outcomes],
     )
     complete = bool(nodes) and status == 0 and outcomes.complete
     args.out.write_text(

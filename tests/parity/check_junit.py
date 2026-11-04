@@ -64,7 +64,9 @@ def junit_problem(test: str, ran: set[tuple[str, str]]) -> str | None:
     return 'not a test JUnit ran (target/surefire-reports)'
 
 
-def parity_junit_check(repo: Path, reports: Path, report: Report) -> None:
+def parity_junit_check(
+    repo: Path, reports: Path, report: Report, gate='local'
+) -> None:
     """Hold the maintained API ledger to this same fresh Surefire run."""
     import xml.etree.ElementTree as ElementTree
 
@@ -73,10 +75,11 @@ def parity_junit_check(repo: Path, reports: Path, report: Report) -> None:
         report.fail('parity API', f'missing ledger: {ledger}')
         return
     data = json.loads(ledger.read_text())
+    from api_contracts import groups
+
     required_tests = {
         node
-        for group in data['api_contracts']
-        if group['gate'] == 'local'
+        for group in groups(data, gate)
         for node in group['tests'].get('java', [])
     }
     required = {
@@ -86,6 +89,16 @@ def parity_junit_check(repo: Path, reports: Path, report: Report) -> None:
         .replace('/', '.')
         for node in required_tests
     }
+    expected_counts = (
+        {
+            record['test']: record.get('invocations', 1)
+            for record in data.get('live_api_tests', [])
+            if '#' in record['test']
+        }
+        if gate == 'live'
+        else {}
+    )
+    invocation_counts = dict.fromkeys(expected_counts, 0)
     seen = set()
     reached = set()
     for path in sorted(reports.glob('TEST-*.xml')):
@@ -106,6 +119,9 @@ def parity_junit_check(repo: Path, reports: Path, report: Report) -> None:
                 for test in required_tests
             ):
                 continue
+            for test in invocation_counts:
+                if junit_problem(test, {(owner, method)}) is None:
+                    invocation_counts[test] += 1
             identity = (owner, name)
             if identity in seen:
                 report.fail('parity API', f'duplicate JUnit result: {identity}')
@@ -121,6 +137,12 @@ def parity_junit_check(repo: Path, reports: Path, report: Report) -> None:
                 )
     for owner in sorted(required - reached):
         report.fail('parity API', f'missing required JUnit class: {owner}')
+    for test, expected in expected_counts.items():
+        if invocation_counts[test] != expected:
+            report.fail(
+                'parity API',
+                f'expected {expected} invocations, got {invocation_counts[test]}: {test}',
+            )
     ran = junit_ran(reports)
     for test in sorted(required_tests):
         problem = junit_problem(test, ran)
@@ -139,24 +161,78 @@ def main():
         help='Run Maven verify with fresh reports before checking.',
     )
     parser.add_argument('--maven', default='mvn')
+    parser.add_argument('--gate', choices=['local', 'live'], default='local')
+    parser.add_argument('--maven-arg', action='append', default=[])
+    parser.add_argument('--out', type=Path)
     args = parser.parse_args()
     repo = args.repo.resolve()
     reports = repo / 'java/target/surefire-reports'
     if args.run:
         if reports.exists():
             shutil.rmtree(reports)
+        selection = []
+        if args.gate == 'live':
+            from api_contracts import groups, validate_live_targets
+
+            data = json.loads((repo / 'tests/parity/manifest.json').read_text())
+            validate_live_targets(
+                data, {item['id'] for item in data['api_contracts']}
+            )
+            nodes = {
+                node
+                for group in groups(data, 'live')
+                for node in group['tests'].get('java', [])
+            }
+            if not nodes:
+                parser.error('no live Java tests selected')
+            selection = [
+                '-Dtest='
+                + ','.join(
+                    sorted(
+                        Path(node.split('#')[0]).stem + '#' + node.split('#')[1]
+                        for node in nodes
+                    )
+                )
+            ]
         completed = subprocess.run(
-            [args.maven, '-B', '-f', 'java/pom.xml', 'verify'],
+            [
+                args.maven,
+                '-B',
+                '-f',
+                'java/pom.xml',
+                *selection,
+                *args.maven_arg,
+                'verify',
+            ],
             cwd=repo,
             check=False,
         )
-        if completed.returncode:
-            return completed.returncode
+    else:
+        completed = None
     report = Report()
-    parity_junit_check(repo, reports, report)
+    parity_junit_check(repo, reports, report, args.gate)
     for problem in report.problems:
         print(problem)
-    return int(bool(report.problems))
+    failed = bool(report.problems) or (
+        completed is not None and completed.returncode != 0
+    )
+    if args.out:
+        args.out.write_text(
+            json.dumps(
+                {
+                    'gate': args.gate,
+                    'status': 'failed' if failed else 'passed',
+                    'problems': report.problems,
+                },
+                indent=2,
+            )
+            + '\n'
+        )
+    return (
+        completed.returncode
+        if completed is not None and completed.returncode
+        else int(failed)
+    )
 
 
 if __name__ == '__main__':

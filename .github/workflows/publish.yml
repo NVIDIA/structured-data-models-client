@@ -82,13 +82,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          conclusion=$(gh run list --workflow parity-live.yml --commit "$GITHUB_SHA" \
+          for acceptance_workflow in parity-live.yml parity-stress.yml; do
+          conclusion=$(gh run list --workflow "$acceptance_workflow" --commit "$GITHUB_SHA" \
             --branch main --status completed --limit 100 \
             --json conclusion,event --jq '[.[] | select(.event == "schedule" or .event == "workflow_dispatch")] | first | .conclusion // "missing"')
           if [ "$conclusion" != "success" ]; then
-            echo "::error::Full live parity for this release commit is '$conclusion'. Run Live parity on main at this commit before releasing."
+            echo "::error::$acceptance_workflow for this release commit is '$conclusion'. Run Live parity on main at this commit before releasing."
             exit 1
           fi
+          done
 
       # A tag can be put on any commit, including one that never reached a
       # pull request. The gates run on `main` and on pull requests, so a tag

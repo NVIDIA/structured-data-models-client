@@ -55,7 +55,10 @@ python tests/parity/compare.py --comparison current-clients --candidate candidat
 ```
 
 Historical old-client comparison is an effort 3 investigation, using the preserved reference and recipes.
-The optional `--comparison historical --baseline baseline.jsonl` mode keeps that distinction explicit; routine CI installs only current clients.
+The optional `--comparison historical --baseline baseline.jsonl --baseline-commit BASELINE_COMMIT` mode keeps that distinction explicit; routine CI installs only current clients.
+Generate new baseline observations with `python_runner.py --phase baseline --commit BASELINE_COMMIT` in an isolated environment importing the clean baseline checkout.
+The explicit commit must match the imported source and every compared baseline observation; mixed source hashes fail comparison.
+Omitting `--baseline-commit` retains the historical frozen baseline identity for archived receipts.
 
 `--local` compares local materialization evidence only.
 Comparison filters also accept repeated `--case`, `--connector`, `--model` and `--language`.
@@ -131,3 +134,45 @@ Typed fixture declarations describe data before source creation; they never repa
 When the target branch has no compatibility ledger or Java package yet, the checks report that introduction explicitly.
 Current inventory and behavior requirements still apply; historical ledger/API comparisons begin once that baseline exists.
 A missing or invalid Git reference remains an error.
+
+## Executing the live API registry
+
+The ordinary live workflow runs the prediction matrix and every `live_api_tests` requirement.
+The dedicated CI identities are not configured yet; local acceptance uses caller-provided private configuration without uploading it.
+Use the installed candidate Python interpreter, its optional pretrained model runtime, a CUDA GPU, the candidate JNI library and Maven:
+
+```sh
+CANDIDATE_PYTHON tests/parity/live_api.py \
+  --config PRIVATE_CONFIG --commit CANDIDATE_COMMIT \
+  --out EVIDENCE/live-api.json --private-dir PRIVATE_DIAGNOSTICS \
+  --provenance WHEEL_PROVENANCE.json --java-provenance JAVA_PROVENANCE.json \
+  --java-jar CANDIDATE.jar --java-native CANDIDATE_JNI_LIBRARY
+```
+
+`--preflight` checks configuration presence only; it never reports successful execution.
+All source authentication, endpoint capabilities, pretrained model availability and actual assertions must still pass during execution.
+The runner reuses `api_contracts.py --gate live` and `check_junit.py --gate live`, including fresh Java reports and exact Python parameterized invocation accounting.
+Every live Java record requires one invocation by default; a parameterized method must declare its positive `invocations` count.
+Missing methods, deselection, skipped tests, duplicate results and failed invocations fail acceptance.
+
+The ordinary source/endpoint config is the default for `SDM_LABELS_WAREHOUSE_CONFIG`, `SDM_END_TIME_CONFIG`, `SDM_SQL_COLUMN_CONFIG` and `SDM_EXAMPLES_CONFIG`.
+Existing environment variables can point these at separate fixture configurations.
+Endpoint client URLs supply `SDM_RELATIONAL_URL` and `SDM_TABULAR_LIVE_URL` when unset.
+The private config may additionally contain `live_api.environment`, with overrides for those variables plus `SDM_TEST_S3_READER_URI`, `SDM_GRADIENT_URL` and `SDM_RUN_LOCAL_MODEL`.
+Set the last to `1` only with the actual pretrained CUDA runtime available.
+The private configuration must also supply `live_api.model_versions.pretrained` and `live_api.model_versions.gradients`, identifying the actual pretrained and gradient models.
+Endpoint entries must supply their immutable `version` and `transport`.
+The receipt retains these identities without endpoint URLs.
+Execution verifies the installed Python wheel through the existing provenance checker and validates Java JAR/JNI hashes, contract version and clean candidate checkout before running Maven.
+A gradient-capable endpoint and the pretrained Python runtime are separate requirements from ordinary model prediction endpoints.
+The current fixture tests also require their declared source namespaces and values; configuration presence does not certify fixture compatibility.
+
+Raw runner logs and detailed failure reports stay under the private diagnostics directory.
+The public summary contains registry targets, execution status and the candidate commit, without private connection values or failure messages.
+Keep private diagnostics outside any uploaded evidence directory.
+
+Giant-value acceptance moved to the manually dispatched `parity-stress.yml` workflow.
+It retains sequential Python/Java execution, explicit model identity and the 24 GiB available-RAM preflight.
+Ordinary live parity no longer requires giant-value resources.
+Publication requires successful ordinary-live and stress workflows on the exact release commit.
+No live workflow runs on pull requests, and configuring dedicated CI credentials or environment branch policies remains a separate owner task.
