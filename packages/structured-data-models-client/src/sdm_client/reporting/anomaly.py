@@ -297,6 +297,11 @@ def _reads_as_a_decision(value: Any) -> bool:
     comparison would decide which decision to ask about and then signal a
     decimal context mixing the two, leaving a flag set on the caller.
 
+    Asked as two inclusive comparisons rather than as neither of the strict
+    ones, because a value can be unordered with respect to a whole number
+    rather than below or above it: a float subclass holding a NaN is
+    neither, and read as equal to whichever decision it was asked about.
+
     Anything a value raises on the way is read as an answer of no. These
     arrive from the caller and may be of any type at all, including one
     that raises on being compared -- ``Decimal('sNaN')`` does -- and a
@@ -307,7 +312,7 @@ def _reads_as_a_decision(value: Any) -> bool:
         if converted not in (0.0, 1.0):
             return False
         whole = int(converted)
-        return not (value < whole or value > whole)
+        return bool(value <= whole and value >= whole)
     except Exception:
         return False
 
@@ -319,7 +324,14 @@ def _is_a_real_number(value: Any) -> bool:
     where it does not: ``numpy.bool_`` and :class:`~decimal.Decimal` are
     neither :class:`numbers.Real` nor :class:`numbers.Complex`, and both are
     ordinary spellings of a detection.
+
+    A length of time is a :class:`numbers.Real` and is not one of them. It
+    carries a unit, and comparing it against a whole number reads that
+    number in its own unit, so a duration of one nanosecond was a
+    detection.
     """
+    if isinstance(value, (np.timedelta64, np.datetime64)):
+        return False
     if isinstance(value, (bool, np.bool_, Decimal)):
         return True
     return isinstance(value, numbers.Real)

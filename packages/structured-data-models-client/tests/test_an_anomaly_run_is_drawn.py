@@ -359,16 +359,14 @@ def test_a_decimal_context_is_not_changed_by_being_read():
 
     from sdm_client.reporting.anomaly import _reads_as_a_decision
 
-    context = decimal.getcontext()
-    context.clear_flags()
-    context.traps[decimal.FloatOperation] = True
-    try:
+    with decimal.localcontext() as context:
+        context.clear_flags()
+        context.traps[decimal.FloatOperation] = True
         read = [_reads_as_a_decision(Decimal(whole)) for whole in (0, 1)]
-    finally:
-        context.traps[decimal.FloatOperation] = False
+        raised = context.flags[decimal.FloatOperation]
 
     assert read == [True, True]
-    assert not context.flags[decimal.FloatOperation]
+    assert not raised
 
 
 @pytest.mark.parametrize(
@@ -407,6 +405,36 @@ class Measured(float):
 
     def __hash__(self):
         return hash(float(self))
+
+
+class Unordered(float):
+    """A number that is neither below nor above the whole number it reads
+    as, because it is a NaN that says it is something else."""
+
+    def __float__(self):
+        return 0.0
+
+
+@pytest.mark.parametrize(
+    'value',
+    [Unordered('nan'), np.timedelta64(1, 'ns')],
+)
+def test_supplied_detections_that_are_not_numbers_of_rows_are_refused(
+    anomaly, tmp_path, value
+):
+    """A NaN is unordered rather than equal, and a length of time carries a
+    unit, so comparing one against a whole number reads that number in its
+    own unit and a nanosecond was a detection."""
+    frame = readings()
+
+    with pytest.raises(StructuredDataError) as caught:
+        anomaly_report(
+            scored(anomaly, frame),
+            frame,
+            tmp_path / 'run.pdf',
+            detected_by=np.array([value] * len(frame), dtype=object),
+        )
+    assert 'detected_by' in str(caught.value)
 
 
 @pytest.mark.parametrize('spelling', [np.bool_, Decimal, Measured])
