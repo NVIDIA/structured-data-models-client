@@ -221,10 +221,68 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
         &std::fs::read(contract().join("pinned/base.regression.core.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(described, pinned["described"]);
-    assert_eq!(materialized, pinned["materialized"]);
-    assert_eq!(Value::from(observed.fetches), pinned["fetches"]);
-    assert_eq!(Value::from(observed.inputs.clone()), pinned["inputs"]);
+    // The historical snapshot predates retained inference provenance.
+    // Assert the new contract explicitly without rewriting that snapshot.
+    let mut expected_description = pinned["described"].clone();
+    expected_description["inference"] = serde_json::json!({
+        "unknown_tables": [], "key_declared": [], "time_declared": [],
+        "times": {
+            "orders": {"column": "ts", "only_unlinked": false},
+            "users": {"column": null, "only_unlinked": false}
+        },
+        "links": [{
+            "link": [
+                {"table": "orders", "column": "user_id"},
+                {"table": "users", "column": "user_id"}
+            ],
+            "origin": "inferred"
+        }]
+    });
+    assert_eq!(described, expected_description);
+    let mut expected_materialized = pinned["materialized"].clone();
+    expected_materialized["payload"]["client_generated_keys"] =
+        serde_json::json!({"orders": "__node_id"});
+    assert_eq!(materialized, expected_materialized);
+    // Resolved table references now retain column mappings for expression
+    // planning. Derive their expected identities from the independent schema.
+    fn resolved_table(table: &mut Value, described: &Value) {
+        let source = table["source"][0].as_str().unwrap();
+        let schema = described["tables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["name"] == source)
+            .unwrap();
+        table["columns"] = Value::Array(
+            schema["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|column| serde_json::json!({"name": column["name"], "column": column["name"]}))
+                .collect(),
+        );
+        table["found"] = Value::Bool(true);
+    }
+    let mut expected_fetches = pinned["fetches"].clone();
+    for fetch in expected_fetches.as_array_mut().unwrap() {
+        let request = &mut fetch["request"];
+        if let Some(table) = request.get_mut("table") {
+            resolved_table(table, &pinned["described"]);
+        }
+        for group in ["keys", "columns"] {
+            if let Some(entries) = request.get_mut(group).and_then(Value::as_array_mut) {
+                for entry in entries {
+                    if let Some(table) = entry.get_mut("table") {
+                        resolved_table(table, &pinned["described"]);
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(Value::from(observed.fetches), expected_fetches);
+    let mut expected_inputs = pinned["inputs"].clone();
+    expected_inputs[2]["state"] = expected_materialized;
+    assert_eq!(Value::from(observed.inputs.clone()), expected_inputs);
     // predict's call and result (T1.11d): the call's request id compared by
     // presence and type only, as capture_check.masked compares it (decision
     // E35, approved by the owner on 2026-10-10, the one exclusion of
