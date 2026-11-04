@@ -595,3 +595,21 @@ def test_binding_log_reconciliation_cannot_hide_unobserved_statements():
     ) == ['', registered, unrelated]
     log.statements.append({'sql': registered})
     assert run_python._binding_queries(log, [registered]) == [registered]
+
+
+def test_sql_capability_is_only_advertised_when_the_driver_provides_it():
+    for database in ('sqlite', 'postgres'):
+        log = run_python.DriverLog()
+        proxy = run_python.capture(object(), log, database)
+        assert not hasattr(proxy, 'sql')
+        assert log.incomplete == []
+        assert log.passed == []
+    connection = duckdb.connect()
+    try:
+        proxy = run_python.capture(connection, run_python.DriverLog())
+        assert hasattr(proxy, 'sql')
+        assert proxy.sql('SELECT 1 AS value').to_arrow_table().to_pylist() == [
+            {'value': 1}
+        ]
+    finally:
+        connection.close()

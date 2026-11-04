@@ -2229,7 +2229,7 @@ class _Captured:
             return derived
         return self._same(answer)
 
-    def sql(self, query: str, **keywords: Any) -> Any:
+    def _sql(self, query: str, **keywords: Any) -> Any:
         """Keep DuckDB relation binding lazy; record execution at Arrow read."""
         statement = {
             'handle': self._handle,
@@ -2410,6 +2410,10 @@ class _Captured:
         return repr(self._driver)
 
     def __getattr__(self, name: str) -> Any:
+        if name == 'sql':
+            # Attribute discovery must expose only the underlying driver API.
+            getattr(self._driver, name)
+            return self._sql
         if name in _UNRECORDED or name in _UNCAPTURED:
             self._log.incomplete.append(name)
         else:
