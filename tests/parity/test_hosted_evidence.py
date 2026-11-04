@@ -61,3 +61,30 @@ def test_cleanup_failure_is_recorded_as_incomplete(tmp_path, monkeypatch):
     receipt = json.loads((tmp_path / 'evidence/execution.json').read_text())
     assert receipt['completed'] is False
     assert not (tmp_path / 'private/fixture-config.json').exists()
+
+
+@pytest.mark.parametrize('connector', ['memory', 'sqlite', 'databricks-spark'])
+def test_only_spark_runner_requires_connect_runtime(
+    tmp_path, monkeypatch, connector
+):
+    import hosted_runner
+
+    monkeypatch.setattr(
+        hosted_runner, 'provision', lambda _: contextlib.nullcontext({})
+    )
+    commands = []
+
+    def execute(command, **kwargs):
+        commands.append(command)
+        return type('Result', (), {'returncode': 0})()
+
+    monkeypatch.setattr(hosted_runner.subprocess, 'run', execute)
+    for name in ('PARITY_PROVENANCE', 'PARITY_NATIVE', 'PARITY_JAR'):
+        monkeypatch.setenv(name, 'test-only')
+    hosted_runner.run(connector, tmp_path, 'candidate')
+    runtime = [
+        arg
+        for arg in commands[1]
+        if arg.startswith('-Dsdm.parity.connect.classpath=')
+    ]
+    assert bool(runtime) == (connector == 'databricks-spark')

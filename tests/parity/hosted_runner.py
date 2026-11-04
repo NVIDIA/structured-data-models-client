@@ -81,11 +81,15 @@ def run(connector, root, commit):
                     '-Dsdm.parity.output=' + str(evidence / 'java.jsonl'),
                     '-Dsdm.parity.connectors=' + connector,
                     '-Dsdm.parity.mode=local',
-                    '-Dsdm.parity.connect.classpath='
-                    + str(root / 'connect-classpath.txt'),
                     'test',
                 ],
             }
+            if connector == 'databricks-spark':
+                commands['java'].insert(
+                    -1,
+                    '-Dsdm.parity.connect.classpath='
+                    + str(root / 'connect-classpath.txt'),
+                )
             outcomes = {}
             for language, command in commands.items():
                 with (private / (language + '.log')).open('w') as log:
