@@ -117,8 +117,12 @@ class TemporalLinkBatchingTest {
     }
   }
 
-  @Test @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="SDM_RELATIONAL_URL", matches=".+")
+  @Test
   void liveShopBatches() throws Exception {
+    String url = System.getenv("SDM_LINK_URL");
+    if (url == null || url.isBlank()) url = System.getenv("SDM_RELATIONAL_URL");
+    org.junit.jupiter.api.Assumptions.assumeTrue(url != null && !url.isBlank(),
+        "SDM_LINK_URL or SDM_RELATIONAL_URL is required");
     var fixture = ParityRunner.read(java.nio.file.Path.of("../tests/parity/fixtures/shop.json"));
     var original = object(fixture.get("tables"));
     List<List<Object>> users = new ArrayList<>(), events = new ArrayList<>();
@@ -150,7 +154,7 @@ class TemporalLinkBatchingTest {
           .materialize(schema, MaterializeOptions.builder().model(SdmClient.KUMO_RELATIONAL)
               .indices(new ArrayList<>(ids)).option("random_seed", 7).build());
       assertEquals(List.of(200, 1), sizes(request));
-      try (SdmClient client = SdmClient.connect(System.getenv("SDM_RELATIONAL_URL"),
+      try (SdmClient client = SdmClient.connect(url,
           ClientOptions.builder().timeout(java.time.Duration.ofSeconds(180)).build())) {
         var result = client.predict(request, SdmClient.KUMO_RELATIONAL);
         assertEquals(201, result.rows());
