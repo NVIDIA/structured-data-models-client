@@ -5,6 +5,8 @@
 # Final three main-parity implementations
 
 Completed: all three approved implementations are independently reviewed, tested and merged into `rust-core-phase-6`.
+**Follow-up audit:** the [main merge plan](../../main-readiness/main-merge/design.md) records four additional reproduced contract gaps and a generated-key concern requiring verification.
+The evidence below remains valid for the tested scope; it does not establish complete main parity.
 Follow the [design index](design.md) and the three linked task designs.
 Implementation baseline: `21c3a3f7b`; main reference: `847a1e9e3`, including gradients and `EXPLAIN PREDICT`.
 PR #63 remains open at `f240fe448`; its unfinished cohort/container API is not silently included as approved scope.
