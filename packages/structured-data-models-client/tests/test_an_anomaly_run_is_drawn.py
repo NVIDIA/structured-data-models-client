@@ -351,6 +351,26 @@ def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
     assert 'detected_by' in str(caught.value)
 
 
+def test_a_decimal_context_is_not_changed_by_being_read():
+    """Comparing a Decimal with a float signals the two being mixed, which
+    leaves a flag set on the caller's context and, where they have asked for
+    it to be trapped, refuses an ordinary Decimal(0) outright."""
+    import decimal
+
+    from sdm_client.reporting.anomaly import _reads_as_a_decision
+
+    context = decimal.getcontext()
+    context.clear_flags()
+    context.traps[decimal.FloatOperation] = True
+    try:
+        read = [_reads_as_a_decision(Decimal(whole)) for whole in (0, 1)]
+    finally:
+        context.traps[decimal.FloatOperation] = False
+
+    assert read == [True, True]
+    assert not context.flags[decimal.FloatOperation]
+
+
 @pytest.mark.parametrize(
     'nearly',
     [Decimal('0.99999999999999999999'), Decimal('1e-1000'), Decimal('sNaN')],

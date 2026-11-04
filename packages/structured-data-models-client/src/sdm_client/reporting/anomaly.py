@@ -287,23 +287,27 @@ def _a_score_rather_than_a_decision() -> StructuredDataError:
 def _reads_as_a_decision(value: Any) -> bool:
     r"""Whether ``value`` is true or false and does not merely round to one.
 
-    The question is put to ``value`` in its own type rather than against the
-    whole numbers 0 and 1, because the answer to a comparison across types
-    is the type's own business: ``sympy.Float(0) == 0`` is false. Taken back
-    through its own constructor there is nothing to disagree about, and a
-    value that only rounds to a decision does not survive the round trip:
-    ``Decimal('0.99999999999999999999')`` comes back as ``Decimal('1')``.
+    Asked by ordering rather than by equality, and against a whole number
+    rather than a float. A type decides for itself what equals what, and
+    some say no to the whole number they are, while ordering is the
+    arithmetic every real number agrees on. Nothing is converted, so a
+    value that only rounds to a decision is still on one side of it:
+    ``Decimal('0.99999999999999999999')`` sits below one, and
+    ``Decimal('1e-1000')`` above zero. A float on the other side of the
+    comparison would decide which decision to ask about and then signal a
+    decimal context mixing the two, leaving a flag set on the caller.
 
     Anything a value raises on the way is read as an answer of no. These
     arrive from the caller and may be of any type at all, including one
-    whose comparison raises -- ``Decimal('sNaN')`` does -- and a report is
-    not the place to learn that from a traceback.
+    that raises on being compared -- ``Decimal('sNaN')`` does -- and a
+    report is not the place to learn that from a traceback.
     """
     try:
         converted = float(value)
         if converted not in (0.0, 1.0):
             return False
-        return bool(type(value)(converted) == value)
+        whole = int(converted)
+        return not (value < whole or value > whole)
     except Exception:
         return False
 
