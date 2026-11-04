@@ -20,14 +20,15 @@ Type records reuse the existing Arrow vectors and explicit schema tests.
 Support declarations and local checks do not replace the live evidence matrix below.
 
 ```sh
-python scripts/check_java_api.py --base origin/rust-core
+python scripts/check_java_api.py --base origin/main
 python scripts/snapshot_java_api.py --out java/target/public-api.json
-python tests/parity/ledger.py --base origin/rust-core --java-inventory java/target/public-api.json
+python tests/parity/ledger.py --base origin/main --java-inventory java/target/public-api.json
 python tests/parity/api_contracts.py --run --out python-api-results.json
 python tests/parity/api_contracts.py --gate native --run --out python-type-results.json
 python tests/parity/api_contracts.py --language rust --gate native --run --out rust-contract-results.json
 ```
 
+Use the actual PR target for `--base`; `origin/main` above is the ordinary main-target example.
 Use an installed candidate Python client with its test extras, JDK/Maven and the pinned Rust toolchain.
 Java behavior tests use the existing `tests/parity/check_junit.py --run` command and its fresh Surefire reports; local Postgres is required for its database cases.
 CI reuses its built wheel/native artifacts and existing Python, Java and Cargo jobs.

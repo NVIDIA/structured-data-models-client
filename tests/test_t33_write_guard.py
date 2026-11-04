@@ -33,7 +33,7 @@ def _load(name: str, path: Path) -> Any:
 
 
 wg = _load('t33_write_guard', ROOT / 'scripts/live/write_guard.py')
-captures = _load('t33_guard_captures', ROOT / 'contract/runners/captures.py')
+live_policy = _load('t33_guard_policy', ROOT / 'scripts/live/runner_guard.py')
 databases = _load('t33_guard_databases', ROOT / 'contract/runners/databases.py')
 
 #: Made-up names; Snowflake stores unquoted names upper-cased.
@@ -557,7 +557,7 @@ def test_the_test_schema_comes_from_the_environment(
 def test_every_case_the_loader_writes_passes_in_the_test_schema_only() -> None:
     # Every statement the loader writes for every S1 case passes in the
     # test schema, on each warehouse and on Lakebase, but for the cases the
-    # live plan leaves out by name on that leg (captures.NOT_LIVE, Claude
+    # live plan leaves out by name on that leg (live_policy.NOT_LIVE, Claude
     # r9 P1-2), each refused for its quoted name; in another schema every
     # write is refused.
     runner = _load(
@@ -619,7 +619,9 @@ def _admitted(guard: Any, statements: list[str], case: str, leg: str) -> None:
                 statement[:200],
             )
             refused.append(statement)
-    assert bool(refused) == (leg in captures.NOT_LIVE.get(case, ((), ''))[0]), (
+    assert bool(refused) == (
+        leg in live_policy.NOT_LIVE.get(case, ((), ''))[0]
+    ), (
         case,
         leg,
         refused[:1],
@@ -1064,7 +1066,7 @@ def test_every_statement_the_old_client_recorded_on_postgres_passes() -> None:
                 except wg.WriteRefused as refused:
                     # A case left out of Lakebase's live plan, for its name.
                     case = record['case'].partition('@')[0]
-                    assert 'lakebase' in captures.NOT_LIVE[case][0], refused
+                    assert 'lakebase' in live_policy.NOT_LIVE[case][0], refused
                     assert 'quoted name' in str(refused), refused
                 checked += 1
     assert checked > 1000, checked

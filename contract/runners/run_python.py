@@ -2100,6 +2100,8 @@ class DriverLog:
 
     def __init__(self) -> None:
         self.statements: list[dict[str, Any]] = []
+        # DuckDB logs the rendered relation, while captures retain caller SQL.
+        self.executed_sql: dict[int, str] = {}
         self.bindings: list[dict[str, Any]] = []
         self.events: list[dict[str, Any]] = []
         self.incomplete: list[str] = []
@@ -2226,6 +2228,34 @@ class _Captured:
             object.__setattr__(derived, '_statement', statement)
             return derived
         return self._same(answer)
+
+    def sql(self, query: str, **keywords: Any) -> Any:
+        """Keep DuckDB relation binding lazy; record execution at Arrow read."""
+        statement = {
+            'handle': self._handle,
+            'stage': self._log.stage,
+            'sql': query,
+            'parameters': _parameters(keywords.get('params')),
+            'results': [],
+            'error': None,
+        }
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
+        try:
+            relation = self._driver.sql(query, **keywords)
+        except BaseException as error:
+            statement['error'] = type(error).__name__
+            self._log.statements.append(statement)
+            raise
+        if relation is None:
+            # DDL and other non-query statements execute immediately.
+            self._log.statements.append(statement)
+            return None
+        if relation.type == 'MATERIALIZED_RELATION':
+            # Some driver versions eagerly bind parameters or PRAGMA results.
+
+            self._log.statements.append(statement)
+        return _CapturedRelation(relation, self._log, statement)
 
     def _fetch(self, method: str, *arguments: Any, **keywords: Any) -> Any:
         # Execution can succeed while fetching fails (Databricks' FK
@@ -2390,6 +2420,29 @@ class _Captured:
         setattr(self._driver, name, value)
 
 
+class _CapturedRelation(_Captured):
+    """An unchanged lazy relation, observed when converted to an Arrow table."""
+
+    __slots__ = ('_pending',)
+
+    def __init__(
+        self, relation: Any, log: DriverLog, statement: dict[str, Any]
+    ):
+        super().__init__(relation, log)
+        object.__setattr__(self, '_pending', statement)
+
+    def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        if method != 'to_arrow_table':
+            # Do not certify stream/row cursor accounting we have not observed.
+            self._log.incomplete.append('relation:' + method)
+            return getattr(self._driver, method)(*arguments, **keywords)
+        statement = {**self._pending, 'results': [], 'error': None}
+        self._log.statements.append(statement)
+        object.__setattr__(self, '_statement', statement)
+        self._log.executed_sql[id(statement)] = self._driver.sql_query()
+        return super()._read(method, *arguments, **keywords)
+
+
 # Under the driver's own package, which the reference's backend dispatch
 # reads (sdm_connectors.source._DRIVER_MODULES); a test-only name no import
 # resolves.
@@ -2428,6 +2481,30 @@ def capture(connection: Any, log: DriverLog, database: str = 'duckdb') -> Any:
     return _CAPTURES[database](connection, log)
 
 
+def _binding_queries(log: DriverLog | None, logged: list[str]) -> list[str]:
+    """Identify DuckDB 2 registration entries using observed API bindings only."""
+    if log is None:
+        # The uncaptured control has no wrapper metadata. Recognize only the
+        # driver's exact registration log shape; captured runs additionally
+        # require an observed register call and reject explicit SQL lookalikes.
+        pattern = r'CREATE TEMPORARY VIEW "(?:[^"]|"")*" AS SELECT 1'
+        return ['' if re.fullmatch(pattern, text) else text for text in logged]
+    remaining: dict[str, int] = {}
+    explicit = {statement['sql'] for statement in log.statements}
+    for binding in log.bindings:
+        name = str(binding['name']).replace('"', '""')
+        text = f'CREATE TEMPORARY VIEW "{name}" AS SELECT 1'
+        remaining[text] = remaining.get(text, 0) + 1
+    output = []
+    for text in logged:
+        if text not in explicit and remaining.get(text, 0):
+            output.append('')
+            remaining[text] -= 1
+        else:
+            output.append(text)
+    return output
+
+
 def _logged_texts(
     log: DriverLog | None, logged: list[str]
 ) -> tuple[int, list[int]]:
@@ -2437,14 +2514,14 @@ def _logged_texts(
     function it runs; binding names are the same in both, being one run's.
     With no capture, or counts that differ (which completeness reports),
     nothing is compared."""
-    ran = [text for text in logged if text]
+    ran = [text for text in _binding_queries(log, logged) if text]
     if log is None or len(ran) != len(log.statements):
         return 0, []
     compared, differing = 0, []
     for position, (statement, text) in enumerate(
         zip(log.statements, ran, strict=True)
     ):
-        sql = statement['sql']
+        sql = log.executed_sql.get(id(statement), statement['sql'])
         if sql is None or sql.lstrip().upper().startswith('PRAGMA'):
             continue
         compared += 1
@@ -4720,6 +4797,7 @@ def _call(
             outcome, logged, shown = calls(statements)
     else:
         outcome, logged, shown = calls(None)
+    logged = _binding_queries(log, logged)
     compared, differing = _logged_texts(log, logged)
     driver = {
         'capture': log.record() if log is not None else None,

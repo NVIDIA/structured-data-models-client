@@ -2,14 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The recording mode's own checks (T3.2; Phase 3 design choice 2): the
-warehouse drivers' captures, the placeholders a capture is written with,
-the draws read from its statements, ``capture_check.py captures`` holding
-a capture complete, and ``captures-only`` holding a captures commit to the
-final candidate. The acceptance tests are the test author's; these are the
-implementer's own.
+"""Current driver transparency, redaction, case loading and native-version checks.
 
-    python -m pytest contract/tests/test_t32_recording_own.py -q
+These checks protect the maintained contract runners without requiring
+archived observations or the retired warehouse-capture file format.
 """
 
 from __future__ import annotations
@@ -28,7 +24,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract' / 'runners'
-REFERENCE = ROOT / 'contract' / 'reference'
 
 
 def _load(name: str) -> ModuleType:
@@ -43,30 +38,6 @@ def _load(name: str) -> ModuleType:
 
 
 run = _load('run_python')
-
-
-def _duck_tables(
-    case: dict[str, Any], bases: dict[str, list[str]]
-) -> list[str]:
-    """Warehouse driver recording, privacy and case-loading contracts."""
-    import duckdb
-
-    connection = duckdb.connect()
-    try:
-        for statement in [
-            *bases[case['input']['base']],
-            *case['input'].get('setup', []),
-        ]:
-            connection.execute(statement)
-        return [
-            str(row[0])
-            for row in connection.execute(
-                'SELECT table_name FROM information_schema.tables '
-                "WHERE table_schema = 'main' ORDER BY table_name"
-            ).fetchall()
-        ]
-    finally:
-        connection.close()
 
 
 # --- fake warehouse drivers --------------------------------------------------------
@@ -158,25 +129,6 @@ def _drive(log: Any) -> None:
         cursor.fetchall_arrow()
 
 
-class FakeLive:
-    leg = 'databricks-sql'
-    zone = 'Etc/UTC'
-    names = NAMES
-    private = ['privcat_x', 'privschema_y', 'warehouse-host.invalid']
-
-    def __init__(self, tables: list[str]) -> None:
-        self.tables = [(name, pa.table({'x': [1]})) for name in tables]
-
-
-def _reference_line(key: str) -> dict[str, Any]:
-    path = next(REFERENCE.glob('*.jsonl'))
-    with path.open(encoding='utf-8') as handle:
-        for text in handle:
-            if '"case": "base.binary@postgres"' in text:
-                return json.loads(text)
-    raise AssertionError('no base.binary@postgres reference line')
-
-
 @functools.cache
 def _base_binary() -> dict[str, Any]:
     ((case, _),) = run.load_cases(
@@ -187,38 +139,6 @@ def _base_binary() -> dict[str, Any]:
 
 def _case() -> dict[str, Any]:
     return copy.deepcopy(_base_binary())
-
-
-def _capture() -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    case, line, tables = _built_capture()
-    return copy.deepcopy(case), copy.deepcopy(line), list(tables)
-
-
-@functools.cache
-def _built_capture() -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    r"""A complete capture of base.binary on databricks-sql from the fake
-    driver, as the recording mode builds it, written and read back."""
-    case = _case()
-    bases = run.load_bases()
-    tables = _duck_tables(case, bases)
-    log = run.DriverLog()
-    log.recorder = run.Recorder()
-    _drive(log)
-    observation = _reference_line('base.binary@postgres')
-    observation['case'] = 'base.binary@databricks-sql'
-    observation['driver']['capture'] = log.record()
-    live = FakeLive(tables)
-    relations = [
-        {
-            'statement': 2,
-            'sql': _sql(VIEW_READ),
-            'table': pa.table({'price': [9.5, 12.0]}),
-        }
-    ]
-    line = run.capture_line(live, case, bases, log, observation, relations)
-    line['versions']['databricks-sql-connector'] = '4.0.0'
-    text = run.written(line, run.Placeheld(live.names, live.private))
-    return case, json.loads(text), tables
 
 
 # --- the warehouse captures --------------------------------------------------------
@@ -520,24 +440,6 @@ def test_the_live_configuration_reads_the_environment_and_marks_it_private(
     assert {'acct-1234', 'a-workspace-host', 'privdb_z', 'sch_test'} <= set(
         private
     )
-
-
-# --- capture_check.py captures -----------------------------------------------------------
-
-
-def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
-    case, line, tables = _capture()
-    text = json.dumps(line)
-    assert 'privcat_x' not in text and '{catalog}' in text
-    assert line['draws'] == [
-        {
-            'statement': 1,
-            'kind': 'tablesample',
-            'table': '`{catalog}`.`{schema}`.`users`',
-            'fraction': '12.5',
-            'seed': '7',
-        }
-    ]
 
 
 # --- the case format ------------------------------------------------------------------------
