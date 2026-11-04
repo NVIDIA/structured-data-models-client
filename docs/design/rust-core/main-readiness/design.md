@@ -36,7 +36,7 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Platform CI | [Run 41791796675](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41791796675) is running; SQL architecture guard needs investigation |
 | Live matrix | All 370 Python non-S3 cells pass across 13 connectors; Java is rerunning with reviewed authentication observation |
 | Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
-| Current-main comparison | With matched dependencies, 107 of 130 local cells match strictly; 23 generated-key/SQLite identity differences remain under investigation; warehouse comparison continues |
+| Current-main comparison | All 370 non-S3 cells executed with matched dependencies: 277 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
 | Benchmarks | Four artifact/source variants verified; measurements have not started |
 
 The installed candidate artifacts are from `08d027795`; the platform CI runner is `7f6fbbc8e`.
