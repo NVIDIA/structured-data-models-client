@@ -33,11 +33,11 @@ CI secrets remain unavailable, and the local AWS login needs renewal for S3 acce
 | Maintained Python suite | 6,881 passed; nine skips accounted for separately |
 | Repaired contract files on the integrated branch | 629 passed, no skips |
 | Repository tooling | 164 passed, no skips |
-| Platform CI | [Run 41791796675](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41791796675) is running; SQL architecture guard needs investigation |
-| Live matrix | All 370 Python non-S3 cells pass across 13 connectors; Java is rerunning with reviewed authentication observation |
+| Platform CI | [Run 41791796675](https://github.com/NVIDIA/structured-data-models-client/actions/runs/41791796675) finished with 49 successful and 32 failed jobs; failures map to eight validation-tooling causes, with the final Java capture repair under verification |
+| Live matrix | All 740 Python/Java non-S3 cells pass across 13 connectors with observed subprocesses |
 | Live API registry | All 24 Python invocations and six available Java methods pass; Java S3 remains unavailable |
 | Current-main comparison | All 370 non-S3 cells executed with matched dependencies: 277 strict matches and 93 reviewed differences; see [verification](validation-performance/verification.md) |
-| Benchmarks | Four artifact/source variants verified; measurements have not started |
+| Benchmarks | Two fixed-response workloads measured across four variants and independently reviewed; remaining workloads pending, see [results](validation-performance/verification.md) |
 
 The installed candidate artifacts are from `08d027795`; the platform CI runner is `7f6fbbc8e`.
 Later reviewed runners repair test endpoint selection and authentication observation; product source remains unchanged.
