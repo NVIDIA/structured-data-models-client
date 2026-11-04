@@ -4,7 +4,7 @@
 
 # Validation checkpoint
 
-**Phase 8 is not yet accepted: Java matrix completion, corrected platform CI, S3 and performance measurements remain pending.**
+**Phase 8 is not yet accepted: corrected platform CI, S3 and performance measurements remain pending.**
 This checkpoint records completed evidence, not a release approval.
 
 ## Live behavior
@@ -13,7 +13,7 @@ This checkpoint records completed evidence, not a release approval.
 |---|---|
 | Current Python, both models | All 370 applicable non-S3 cells pass across 13 connectors |
 | Focused live APIs | All 24 Python invocations and six available Java methods pass; Java S3 is unavailable |
-| Current Java matrix | Rerun in progress after a reviewed authentication-observation repair |
+| Current Java matrix | All 370 applicable non-S3 cells pass; combined Python/Java comparison passes all 740 cells with no unobserved subprocesses |
 | Old Python comparison | All 370 non-S3 cells executed with matched dependencies; 277 strict matches and 93 classified differences |
 
 The candidate uses production artifacts built at `08d027795`; subsequent changes repair validation tooling and tests, with unchanged product source.
@@ -42,9 +42,9 @@ Independent review checked the classification and the retained raw differences.
 ## Evidence and remaining work
 
 Raw observations, artifact identities, dependency inventories, checksums and reproducible classification scripts are retained outside Git in the Phase 8 validation archive.
-Key reports are `python-non-s3-final-report.json`, `main-matched-non-s3-comparison.json`, `main-matched-difference-proof.json` and `sqlite-order-repeat-proof.json`.
+Key reports are `non-s3-validated-report.json`, `main-matched-non-s3-comparison.json`, `main-matched-difference-proof.json` and `sqlite-order-repeat-proof.json`.
 No credentials or full warehouse captures are committed.
 
 S3 credentials remain expired; dedicated CI identities are owner-deferred.
-Benchmarks have only passed harness smoke checks so far; smoke timings are not performance results.
+Benchmark harness smoke checks passed; the measured campaign is running, and smoke timings are not performance results.
 Final measurements must report imports/cold/warm conditions, actual sampled work and process-memory scope, without performance tuning.
