@@ -3,69 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's joins over every pair of key types on SQLite
-into ``contract/sqlite-key-pair-vectors.json`` (T2.2's vectors).
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/sqlite_key_pairs_record.py
-
-Written by T2.2's test author before the implementation (design, choice
-5 and lesson 19: every package that binds or casts keys runs the key-type
-pair matrix on its own engine; T2.2's row: the key-type pair matrix on
-SQLite, and the decimal-key pair matrix with equal keys across scales).
-Each vector is ``contract/bases.yaml``'s ``shop`` with ``users.user_id``
-(the primary key) and ``orders.user_id`` (the foreign key) changed by its
-``setup`` (DuckDB statements), loaded into SQLite by the contract loader
-(``contract/runners/databases.py``, the one loader the reference and both
-core hosts read), and asked ``decimal.feature-38-0-wide``'s question for
-its ``indices`` (default ``[0, 1]``):
-
-- ``pair.<primary>.<foreign>``: every ordered pair of the key types a link
-  allows (lesson 19: signed, unsigned and big integers, decimals with and
-  without scale, floats, text), holding the shop's ids 0 to 7;
-- ``wide.<primary>.<foreign>``: keys past what float64 tells apart
-  (10**17 + i) and past int64 (2**63 + i);
-- ``decimal.<id>``: T2.0c's decimal-key pair matrix and its decimal
-  against integer keys (``contract/tools/decimal_record.py``'s
-  ``key.pair*``, ``key.foreign-only.*`` and ``key.primary-only.*``, with
-  their same-type control ``key.both.d9-0``), the setup theirs: equal keys
-  across scales (1.00 against 1.0000, both ways; scale 0 against 2), and
-  keys float64 would merge (10**17 + i at DECIMAL(38, 0) and (38, 2));
-  and equal keys across scales with a fraction (``key.pair-fraction``:
-  i + 0.25 at DECIMAL(10, 2) against 0.2500 at DECIMAL(12, 4), both
-  ways), the entities given as the texts '0.25' and '1.25'.
-
-The type map stores every integer up to UINTEGER as ``INTEGER``, a float
-as ``REAL``, and a UBIGINT, a HUGEINT, a decimal and text as ``TEXT`` (a
-decimal as its canonical text, so equal values of any scale have one
-text): ``sqlite`` records, for each key column, the type SQLite declares
-and each stored value as SQLite's ``quote()`` writes it, so what each
-vector puts to the hosts is visible, not assumed.
-
-The reference runs each vector as a case through
-``contract/runners/run_python.py --mode python-ref --database sqlite``,
-and this script keeps its answer as ``decimal_record.py``'s ``project``
-reads it (``reference``: the outcome, public schema, warnings, each
-request's digest as the ``payload`` rule compares it and its tables' row
-counts, the result, and the key columns as they reached the model), the
-statements per public call (``statements``), and whether each request the
-reference sent joins every row to its own entity (``joined``, by
-:func:`joins`: the shop's facts make a wrong join visible, whatever rows
-SQLite's sampling draws). ``case`` is the case each host runs (its routes
-left empty: the Python test forces the candidate's own).
-
-``register`` marks where a host may differ from the reference: the
-reference fails unnamed or with ``INTERNAL_ERROR`` (T1.32d's rule), or it
-answers with a wrong join. It is derived, never chosen; a host differing
-on any vector needs a register entry whose ``refs`` name it
-(``REGISTER_REF`` + its id).
-
-Nothing here is written by hand but the inputs. ``VECTORS``, ``joins`` and
-``REGISTER_REF`` are imported by ``contract/tests/test_sqlite_sql_key_joins.py``.
-"""
+"""Sqlite key scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 
@@ -102,7 +40,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 #: T1.32b's recorder: the case template, the projection and the statement
 #: counts are its, so both families' vectors are read by one code.
-R = _module('decimal_record', ROOT / 'contract/tools/decimal_record.py')
+R = _module('decimal_record', ROOT / 'contract/support/decimal_vectors.py')
 KEYS = R.KEYS
 
 # --- the vectors -------------------------------------------------------------------
@@ -233,7 +171,7 @@ def case_for(vector: dict[str, Any]) -> dict[str, Any]:
     case = R.case_for({**vector, 'id': vector['id']})
     case['id'] = f't22.{vector["id"]}'
     case['why'] = f'T2.2 vector {vector["id"]}'
-    case['source'] = 'contract/tools/sqlite_key_pairs_record.py'
+    case['source'] = 'contract/support/sqlite_key_scenarios.py'
     return case
 
 
@@ -359,7 +297,6 @@ def run(
     directory: Path,
     *,
     routes: Any = None,
-    reference: Path | None = None,
 ) -> dict[str, dict[str, Any]]:
     r"""``vectors`` as cases through ``run_python.py --mode mode --database
     sqlite``, in this interpreter: each observation by vector id. ``routes``
@@ -375,8 +312,6 @@ def run(
         )
     out = directory / f'{mode}.jsonl'
     command = [sys.executable, '-I', str(RUNNER), '--mode', mode]
-    if reference is not None:
-        command += ['--reference', str(reference)]
     command += ['--database', DATABASE, '--out', str(out), str(cases)]
     done = subprocess.run(
         command,

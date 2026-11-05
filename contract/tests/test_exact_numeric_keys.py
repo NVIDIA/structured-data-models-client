@@ -63,7 +63,7 @@ def runner() -> ModuleType:
     return _module('t221_run_python', RUNNER)
 
 
-R = _module('exact_keys_record', ROOT / 'contract/tools/exact_keys_record.py')
+R = _module('exact_keys_record', ROOT / 'contract/support/exact_key_scenarios.py')
 
 GIVEN_VECTORS = tuple(R.CONTROL)
 

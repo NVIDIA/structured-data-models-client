@@ -3,50 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's answers to T2.18's column-name vectors into
-``contract/column-name-vectors.json``.
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root, ``SDM_POSTGRES_TEST_DSN`` naming a Postgres 17 server
-the recorder may create databases on::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/column_names_record.py
-
-Written by T2.18's test author (KO2-36: any column name works). A vector
-is one character in one column's name, in one role, on one database:
-
-- the characters: each the reference's ``schema.py`` leaves a column out
-  for, a dot, a backtick, a line feed and a carriage return, in the name
-  ``a<character>b``, spelled in the query backtick-quoted, a backtick
-  doubled inside the quotes and a line break kept as it is;
-- the roles, over the contract's ``shop`` base (users and their orders):
-  ``feature``, a column of users the query does not name; ``target``, a
-  text class of users predicted; ``entity``, users' declared primary key,
-  which ``orders.user_id`` references, the query's entity; ``filter``, a
-  column of orders filtering the target's aggregation (back from its
-  deferral to T2.10, whose tests hold it); ``aggregation``, the column of
-  orders the target sums;
-- the databases: DuckDB, and SQLite and Postgres loaded from the DuckDB
-  tables by the contract loader, as a case is (``run_python._open``).
-
-Each role is recorded once more on each database with the column named
-``a_b``, its *twin*: the same data and query under a name the reference
-can say. Column names should not matter (KO2-36), so the core's answer for
-a vector is its twin's reference answer with the name ``a_b`` read as the
-vector's name and the twin's query as the vector's; the vector's own
-reference answer is what ``main`` does, a difference T2.18 registers.
-
-The answer is the public calls' (``Schema.from_source`` then
-``materialize``): the outcome (success, or the refusal's class,
-``StructuredDataError.code`` and the call it ended, no message text,
-H17), the public schema as ``run_python.py`` projects it, the number of
-SDMWarnings each call gave, and the request's payloads as JSON, each
-``metadata.request_id`` left out (for a vector, as the twin's are kept
-whole, their :func:`digest`). :func:`run` is imported by
-``contract/tests/test_column_names.py``, so ``python-core`` is run by
-the same code.
-"""
+"""Column name vectors: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

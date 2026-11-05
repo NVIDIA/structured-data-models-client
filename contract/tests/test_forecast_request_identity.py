@@ -36,7 +36,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 RUNNER = _module('run_python', ROOT / 'contract/runners/run_python.py')
-EN = _module('empty_null_record', ROOT / 'contract/tools/empty_null_record.py')
+EN = _module('empty_null_record', ROOT / 'contract/support/empty_null_vectors.py')
 SERVE = _module(
     'scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
 ).serve

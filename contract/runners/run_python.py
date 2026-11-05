@@ -378,61 +378,6 @@ def provider_for_leg(database: str) -> str:
     return 'postgres' if database == 'lakebase' else database
 
 
-def check_legs(
-    database: str,
-    providers: Mapping[str, Iterable[str]],
-    observations: Iterable[Mapping[str, Any]],
-) -> list[str]:
-    r"""The staging rule (design choice 2, "CI"; T2.1a), one definition for
-    ``gate.sh`` and CI: a database job runs cases, and each core leg runs
-    on ``database`` exactly when it reports a provider for it.
-
-    ``providers`` maps each core leg (``python-core``, ``rust-host``) to
-    the databases it reports (``sdm_client._native.PROVIDERS``,
-    ``sdm-contract-run --providers``); ``observations`` are the job's, each
-    keyed as :func:`case_key` keys it. The problems, each naming what
-    fails: no case observed on ``database``; a leg reporting a provider for
-    it with no observation there; a leg without a case the reference side
-    observed there (``python-ref``'s committed lines, or on DuckDB
-    ``python-old``'s), named by its key. A leg reporting no
-    provider for ``database`` is not required there."""
-    on = [
-        line
-        for line in observations
-        if isinstance(line.get('case'), str)
-        and (
-            '@' not in line['case']
-            if database == 'duckdb'
-            else line['case'].endswith(f'@{database}')
-        )
-    ]
-    if not on:
-        return [f'{database}: the job observed no case on {database}']
-    observed: dict[str, set[str]] = {}
-    for line in on:
-        runner = (line.get('identity') or {}).get('runner')
-        observed.setdefault(str(runner), set()).add(line['case'])
-    reference = observed.get('python-ref', set()) | observed.get(
-        'python-old', set()
-    )
-    problems = []
-    for leg in sorted(providers):
-        if provider_for_leg(database) not in tuple(providers[leg]):
-            continue
-        made = observed.get(leg, set())
-        if not made:
-            problems.append(
-                f'{database}: {leg} reports a {database} provider and made '
-                f'no observation on {database} (missing)'
-            )
-            continue
-        problems.extend(
-            f'{database}: {leg} reports a {database} provider and skipped {key}'
-            for key in sorted(reference - made)
-        )
-    return problems
-
-
 def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
     r"""The databases a loaded case runs on, in :data:`DATABASES` order:
     all three unless its ``databases`` (with its exclusion) narrows them;
@@ -5045,33 +4990,17 @@ def _native_sha256() -> str | None:
     return digest(Path(location).read_bytes())
 
 
-def _require_reference_client(reference: Path) -> None:
-    r"""``sdm_client`` is the reference checkout's own."""
-    import sdm_client
-
-    location = Path(sdm_client.__file__).resolve()
-    if not location.is_relative_to(reference.resolve()):
-        raise RunnerFailure("sdm_client is not the reference checkout's")
-
-
 def run(
     mode: str,
     cases: list[tuple[dict[str, Any], str]],
-    reference: Path | None,
     driver_capture: bool = True,
     database: str = 'duckdb',
     record_fetches: Path | None = None,
-    record: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Record cases supported by the selected installed native provider.
-
-    Legacy arguments are rejected explicitly for callers using the old helper
-    signature; frozen-client recording belongs to the archived runner.
-    """
-    if mode != 'python-core' or reference is not None or record is not None:
+    """Record cases through the installed native provider."""
+    if mode != 'python-core':
         raise RunnerFailure(
-            'this runner supports the current native client only; '
-            'use the archived runner for frozen-client recordings'
+            'this runner supports the current native client only'
         )
     cases = [pair for pair in cases if database in case_legs(pair[0])]
     if not cases:
@@ -5079,37 +5008,32 @@ def run(
     bases_path = BASES
     bases = load_bases(bases_path)
     bases_digest = digest(bases_path.read_bytes())
-    boundary = _Boundary() if mode == 'python-core' else None
+    boundary = _Boundary()
     try:
         versions = _versions()
         if 'duckdb' not in versions:
             raise RunnerFailure('duckdb is not installed')
-        if mode == 'python-core':
-            from sdm_client import _native
+        from sdm_client import _native
 
-            refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
-            if refused is not None:
-                raise RunnerFailure(refused)
-        if mode == 'python-core' and database != 'duckdb':
+        refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
+        if refused is not None:
+            raise RunnerFailure(refused)
+        if database != 'duckdb':
             from sdm_client import _native
 
             if provider_for_leg(database) not in _native.PROVIDERS:
                 raise RunnerFailure(
                     f'the core reports no {database} provider: the {database} '
-                    'job runs the reference side only'
+                    'job cannot run without its native provider'
                 )
         recorded = []
-        kept: list[dict[str, Any]] = []
         for case, case_digest in cases:
             capture = boundary.reset() if boundary is not None else None
             if capture is not None:
                 capture.recording = record_fetches is not None
-            keep: dict[str, Any] | None = {} if record is not None else None
             outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture, database, keep, capture
+                case, bases, driver_capture, database, None, capture
             )
-            if keep is not None and record is not None:
-                kept.append(keep)
             recorded.append(
                 (
                     case,
@@ -5123,10 +5047,9 @@ def run(
                     origins,
                 )
             )
-        reference_identity = None
-        native_sha256 = _native_sha256() if mode == 'python-core' else None
+        native_sha256 = _native_sha256()
         contract = None
-        if mode == 'python-core' and 'sdm_client._native' in sys.modules:
+        if 'sdm_client._native' in sys.modules:
             contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
         commit = _git(REPO)
         validate = validator('observation')
@@ -5150,7 +5073,7 @@ def run(
                     'cell': _cell(versions),
                     'platform': f'{sys.platform}-{platform.machine()}',
                     'commit': commit,
-                    'reference': reference_identity,
+                    'reference': None,
                     'native': (
                         {'sha256': native_sha256} if native_sha256 else None
                     ),
@@ -5161,14 +5084,7 @@ def run(
                     'inputs': {'case': case_digest, 'bases': bases_digest},
                 },
                 'outcome': outcome,
-                # Each warning's origin on the candidate's runners, which a
-                # cell other than the reference's compares (HOST-5); never on
-                # python-ref, whose committed lines it would change.
-                'host': (
-                    {'warnings': shown}
-                    if mode == 'python-ref'
-                    else {'warnings': shown, 'origins': origins}
-                ),
+                'host': {'warnings': shown, 'origins': origins},
                 'core': capture.core() if capture else None,
                 'driver': driver,
                 'public': public,
@@ -5179,10 +5095,6 @@ def run(
                     f'{case["id"]}: its observation is not valid: {problem}'
                 )
             observations.append(observation)
-        if database in WAREHOUSES and mode == 'python-ref':
-            observations = _held_observations(
-                observations, cases, bases, kept, record
-            )
         if record_fetches is not None:
             # The replay's recording (T2.3, KO2-20): each case's fetches, with
             # the answers the Postgres provider replied with, in order, and the
@@ -5205,59 +5117,6 @@ def run(
     finally:
         if boundary is not None:
             boundary.close()
-
-
-def _held_observations(
-    observations: list[dict[str, Any]],
-    cases: list[tuple[dict[str, Any], str]],
-    bases: dict[str, list[str]],
-    kept: list[dict[str, Any]],
-    record: Path | None,
-) -> list[dict[str, Any]]:
-    r"""A warehouse leg's observations with every private name as its
-    placeholder, and with ``record`` each case's capture written there,
-    one line each, all or nothing; a private value left in either fails
-    the run before anything is written (design choice 2)."""
-    spec_names: dict[str, str] = {}
-    private: list[str] = []
-    if kept:
-        spec_names, private = kept[0]['live'].names, kept[0]['live'].private
-    else:
-        _, spec_names, private = live_configuration(
-            observations[0]['case'].rpartition('@')[2]
-        )
-    held = Placeheld(spec_names, private)
-    out = []
-    for observation in observations:
-        placed = held.value(observation)
-        if held.leaked(json.dumps(placed, sort_keys=True, ensure_ascii=False)):
-            raise RunnerFailure(
-                f'{observation["case"]}: its observation holds a private name; '
-                'nothing is written'
-            )
-        out.append(placed)
-    if record is not None:
-        lines = [
-            written(
-                capture_line(
-                    keep['live'],
-                    case,
-                    bases,
-                    keep['log'],
-                    observation,
-                    keep['relations'],
-                ),
-                held,
-            )
-            + '\n'
-            for (case, _), keep, observation in zip(
-                cases, kept, observations, strict=True
-            )
-        ]
-        partial = record.with_name(record.name + '.partial')
-        partial.write_text(''.join(lines), encoding='utf-8')
-        partial.replace(record)
-    return out
 
 
 def _replay_line(
@@ -5333,38 +5192,6 @@ def _with_statements(
     return fetches
 
 
-def legs_main(argv: list[str]) -> int:
-    r"""``run_python.py legs --database D --providers FILE OBSERVATIONS...``:
-    :func:`check_legs` over the observations files, ``FILE`` the JSON
-    object of each core leg's providers; exit 1 naming each problem."""
-    parser = argparse.ArgumentParser(prog='run_python.py legs')
-    parser.add_argument('--database', choices=LEGS, required=True)
-    parser.add_argument('--providers', type=Path, required=True)
-    parser.add_argument('observations', type=Path, nargs='*')
-    arguments = parser.parse_args(argv)
-    try:
-        providers = json.loads(arguments.providers.read_text(encoding='utf-8'))
-        if not isinstance(providers, dict) or not all(
-            isinstance(listed, list)
-            and all(isinstance(name, str) for name in listed)
-            for listed in providers.values()
-        ):
-            raise ValueError('not an object of lists of names')
-        lines = [
-            json.loads(text)
-            for path in arguments.observations
-            for text in path.read_text(encoding='utf-8').splitlines()
-        ]
-    except (OSError, ValueError, RecursionError) as error:
-        print(f'legs: unreadable: {type(error).__name__}: {error}')
-        return 1
-    problems = check_legs(arguments.database, providers, lines)
-    for problem in problems:
-        print(f'FAILS legs: {problem}')
-    print(f'legs: {"FAIL" if problems else "ok"} on {arguments.database}')
-    return 1 if problems else 0
-
-
 def publish_observations(
     observations: list[dict[str, Any]], database: str
 ) -> list[dict[str, Any]]:
@@ -5426,8 +5253,6 @@ def _live_guard() -> Any:
 
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
-    if given[:1] == ['legs']:
-        return legs_main(given[1:])
     if given[:1] == ['publish']:
         return publish_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
@@ -5483,7 +5308,6 @@ def main(argv: list[str] | None = None) -> int:
         observations = run(
             arguments.mode,
             cases,
-            None,
             driver_capture=not arguments.no_capture,
             database=arguments.database,
             record_fetches=arguments.record_fetches,

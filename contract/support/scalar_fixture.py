@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Arrow-backed scalar encoding for prediction test inputs."""
+"""Scalar fixture: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

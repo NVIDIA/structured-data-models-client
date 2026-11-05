@@ -2,48 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Record the reference's ranking answers, predict side, for T2.8's tests.
-
-Run with the reference checkout's interpreter (the reference environment of
-``contract/reference-env.txt``), from this repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/ranking_record.py
-
-The S1 ranking cases (``contract/cases/s1/rank.*.json``) are answered by
-the scripted endpoint, which gives no probabilities, so they judge the
-decomposition, its refusals and each part's payload, but no score. These
-vectors judge the predict side (the design's T2.8b row): each is a call
-over the ranking cases' data (``contract/bases.yaml``'s ``shop`` and the
-cases' ``setup``, on DuckDB), the arguments of ``materialize`` and of
-``predict``, an optional edit of the gathered payload a caller can make
-(``Request.payloads``), and a script answering each model call
-(:func:`answer`), a function of the call's number and body. The reference
-runs each, and :func:`observe` keeps what the exits compare: the result
-through ``to_pandas()`` and ``.items`` (the ranked candidates, their scores,
-any ``scores`` or ``rankings`` an answer carried), its outputs, the
-candidates left unscored, the notices' classes, and every call's asked
-output fields with the status and text it was answered with, which
-``sdm-testkit``'s ``tests/t28_ranking.rs`` replays on rust-host; or the
-refusal's class, code and message.
-
-The exits, each vector naming the one it covers (:data:`EXITS`): scores
-and rankings, ``top_k`` and the outputs a ranking gives, ``candidates``
-left unscored, PD-1 (a NaN score never reaches the order: the reference
-refuses a non-finite probability, so a NaN never ranks), a part's failure
-said of its candidate, ``prediction_statistic``, ``response_field`` for
-``scores`` and ``rankings``, ``instance_id_type`` and ``prediction_type``.
-
-Nothing here is written by hand but the inputs; every expected value is the
-reference's. ``observe`` and ``answer`` are imported by
-``contract/tests/test_ranking.py``, so both routes are observed and
-answered by the same code.
-
-Beside the vectors it records ``controls``: each S1 case refused before
-any call (:data:`CONTROLS`), its own call's refusal on the reference (its
-message, which the case's line does not keep), and a control call with
-the refused argument changed, which the reference gathers, so each case
-is refused for the argument it names and not for another reason.
-"""
+"""Ranking scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 
@@ -754,13 +713,13 @@ def _refusal(error: BaseException) -> dict[str, Any]:
 def _raising_from(client: Any, call: int) -> None:
     r"""``client``'s transport raising ``ValueError`` on the model call
     numbered ``call`` from zero, before it is sent
-    (``contract/tools/multicall_record.py``'s ``_raising``)."""
+    (``contract/support/batch_prediction_scenarios.py``'s ``_raising``)."""
     import importlib.util
 
     name = 't28_multicall_record'
     if name not in sys.modules:
         found = importlib.util.spec_from_file_location(
-            name, ROOT / 'contract/tools/multicall_record.py'
+            name, ROOT / 'contract/support/batch_prediction_scenarios.py'
         )
         assert found is not None and found.loader is not None
         module = importlib.util.module_from_spec(found)

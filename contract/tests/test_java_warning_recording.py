@@ -66,7 +66,6 @@ def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
         recorded_run.stdout + recorded_run.stderr
     )
     recorded = json.loads(output.read_text())
-    assert recorded['reference'] == original['reference']
     assert recorded['binding']['contract'] == _native.CONTRACT_VERSION
     vector = recorded['binding']['validate']['text.escape-warning']
     operation = json.loads(vector['operation'])

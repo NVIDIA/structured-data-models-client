@@ -3,46 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what the reference says, in words, for T2.14b's wording cases
-into ``contract/t214b-wording-vectors.json``.
-
-Written by T2.14b's test author, before the implementation. Run with the
-reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root, a database at a time or all three::
-
-    <reference venv>/bin/python -I contract/tools/wording_record.py \
-        --reference <reference checkout> [--database duckdb sqlite postgres]
-
-Postgres needs ``SDM_POSTGRES_TEST_DSN``, as ``run_python.py`` does.
-
-The cases are :data:`CASE_IDS`: T2.14b's own ``wording.*`` cases and the
-committed S1 cases whose refusal the core route says in its code's generic
-sentence (``_rust/errors.py``'s ``ERRORS``, "the request is not one the core
-accepts") or whose warnings it words otherwise than the reference. Each
-runs its public calls on each database as ``run_python.py`` makes them
-(``option_record.py``'s way: its ``_open``, ``_source`` and arguments, the
-scripted endpoint told what the case tells it). What is kept, per case key:
-
-- ``outcome``: as the runner records it;
-- ``message``: a refusal's text, as ``str()`` gives it;
-- ``details``: ``StructuredDataError.details``, each value as JSON writes
-  it;
-- ``warnings``: every warning the calls gave, as its class name and text (a
-  core code's ``[CODE] `` prefix left out), each once, in the order first
-  given.
-
-Beside the cases, :data:`PROBES` (FX-4): ``Schema.from_source`` over the
-shop base and a table whose timestamp column is null in the 1,000 rows the
-preview reads and an infinity in the rest, on DuckDB only (a case would run
-on every database, and only DuckDB's ``fetchall`` hands an infinity over as
-``datetime.max``), each kept as ``warnings`` and ``outcome`` under
-``probes``.
-
-:func:`observe` and :func:`probe` are imported by
-``contract/tests/test_public_error_messages.py``, so ``python-core`` is observed by
-the same code.
-"""
+"""Error wording scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 
@@ -155,7 +116,9 @@ def _module(name: str, path: Path) -> ModuleType:
 def options() -> ModuleType:
     r"""``option_record.py``, whose runner, endpoint and JSON helpers this
     recorder shares."""
-    return _module('option_record', ROOT / 'contract/tools/option_record.py')
+    return _module(
+        'option_record', ROOT / 'contract/support/query_option_scenarios.py'
+    )
 
 
 def said(shown: list[Any]) -> list[list[str]]:

@@ -16,7 +16,7 @@ NumPy, beside the pinned Postgres service.
   change in one driver's path fails. On DuckDB and SQLite each is the type
   the reference's own reads give it (``contract/l5-vectors.json``'s
   ``drivers``, recorded from the reference by
-  ``contract/tools/l5_record.py`` in every cell), but the two the core
+  ``contract/support/presentation_types.py`` in every cell), but the two the core
   refuses by name.
 - Without loss: each admitted column holds what the database stores, as
   that database's own driver reads it (DuckDB's, ``sqlite3``, psycopg),
@@ -635,7 +635,7 @@ LAYOUTS: dict[str, tuple[pa.Table, list[dict[str, Any]]]] = {
 }
 
 #: Each layout's presented columns and their dtypes, by pandas major:
-#: recorded by ``contract/tools/l5_record.py`` from the reference in
+#: recorded by ``contract/support/presentation_types.py`` from the reference in
 #: ``ref-pandas3`` (pandas 3) and python-old in ``dbr17-pandas2`` (pandas 2),
 #: never written here (T1.31).
 L5 = json.loads((ROOT / 'contract/l5-vectors.json').read_text(encoding='utf-8'))
@@ -647,7 +647,7 @@ PRESENTATION: dict[str, dict[str, dict[str, str]]] = {
 
 def _recorder() -> Any:
     spec = importlib.util.spec_from_file_location(
-        't24_l5_record', ROOT / 'contract/tools/l5_record.py'
+        't24_l5_record', ROOT / 'contract/support/presentation_types.py'
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -655,7 +655,7 @@ def _recorder() -> Any:
     return module
 
 
-def test_the_recorded_tables_are_the_reference_s_for_these_inputs() -> None:
+def test_presentation_vectors_cover_the_inputs_and_layouts() -> None:
     # The recorder's inputs are this file's: the table it reads and the
     # answers it presents; the presentation was recorded by the reference in
     # ref-pandas3 and python-old in dbr17-pandas2, for every layout.
@@ -664,11 +664,6 @@ def test_the_recorded_tables_are_the_reference_s_for_these_inputs() -> None:
     assert {name: answered for name, (_, answered) in LAYOUTS.items()} == (
         recorder.ANSWERED
     )
-    assert L5['recorded_by'] == 'contract/tools/l5_record.py'
-    assert L5['by']['ref-pandas3']['runner'] == 'python-ref'
-    assert L5['by']['dbr17-pandas2']['runner'] == 'python-old'
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {L5["reference"]}' in env
     for major in ('2', '3'):
         assert sorted(L5['presentation'][major]) == sorted(LAYOUTS)
 

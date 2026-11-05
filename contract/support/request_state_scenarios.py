@@ -3,41 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what T2.14b's host facts give on the reference into
-``contract/t214b-host-vectors.json``.
-
-Written by T2.14b's test author, before the implementation. Run with the
-reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root::
-
-    <reference venv>/bin/python -I contract/tools/t214b_host_record.py \
-        --reference <reference checkout>
-
-The facts the core already returns, which T2.14b reads from the core
-instead of re-deriving them in Python (the T2.14a ledger's P2-4 and P2-2
-rows), each as the public calls show it, over one DuckDB connection holding
-the shop base and the ranking tables of ``rank.top-k`` (:data:`SETUP`):
-
-- ``facts``: for each query of :data:`QUERIES`, the materialized request's
-  ``entity_table`` and whether its target moves with time (``_windowed``,
-  which the reference's ``Request`` holds under that name), a forecast's
-  and a ranking's for each part too;
-- ``steps``: a forecast of two steps whose call ``fail_call`` the endpoint
-  fails, and a ranking of three candidates likewise: the refusal's class,
-  code, details and message, which name the step or the candidate;
-- ``repeats``: a ranking given candidates that repeat by Python's equality
-  (:data:`CANDIDATES`: ``1``, ``1.0``, ``True``, ``Decimal('1')`` and
-  ``np.int64(1)`` all one key of ``dict.fromkeys``, as are ``0.0`` and
-  ``-0.0``, and two scales of one decimal; and NumPy's one NaN given
-  twice; not a value ``dict.fromkeys`` cannot hash, which the reference
-  fails on unnamed and the core refuses by name, register P2D-1): the
-  candidate each call asks about, in order, and the result's rankings, or
-  the refusal.
-
-:func:`observe` is imported by ``contract/tests/test_request_state_endpoint_bytes.py``, so
-``python-core`` is observed by the same code, with the core routes forced.
-"""
+"""Request state scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

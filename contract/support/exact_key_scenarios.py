@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Exact-key PostgreSQL fixtures exercised through the installed public client."""
+"""Exact key scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ def _module(name: str, path: Path) -> ModuleType:
 def _regressions() -> ModuleType:
     return _module(
         'postgres_regressions_record',
-        ROOT / 'contract/tools/postgres_regressions_record.py',
+        ROOT / 'contract/support/postgres_scenarios.py',
     )
 
 

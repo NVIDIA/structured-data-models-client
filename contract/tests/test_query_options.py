@@ -27,7 +27,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-RECORDER = ROOT / 'contract/tools/option_record.py'
+RECORDER = ROOT / 'contract/support/query_option_scenarios.py'
 ENDPOINT = ROOT / 'tests/support/scripted_endpoint.py'
 CASES = ROOT / 'contract/cases/s1'
 

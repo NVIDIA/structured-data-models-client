@@ -26,7 +26,7 @@
 //! at the composition root (T2.7).
 
 /// The databases the pure-Rust host has a provider for (rust-host's marker
-/// for the staging rule, `contract/runners/run_python.py`'s `check_legs`;
+/// for native-provider admission;
 /// T2.1a): its DuckDB ([`duck`]), SQLite through the dev-only `rusqlite`
 /// provider ([`sqlite`], T2.2), and Postgres, by replaying recorded fetch
 /// results ([`replay`], T2.3, KO2-20). `sdm-contract-run --providers`

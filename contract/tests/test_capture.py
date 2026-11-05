@@ -371,8 +371,8 @@ def pair() -> tuple[Run, Run]:
     cases = run_python.load_cases(
         [ROOT / 'contract/cases/s1/base.regression.json']
     )
-    on = run_python.run('python-core', cases, None, driver_capture=True)
-    off = run_python.run('python-core', cases, None, driver_capture=False)
+    on = run_python.run('python-core', cases, driver_capture=True)
+    off = run_python.run('python-core', cases, driver_capture=False)
     return on, off
 
 

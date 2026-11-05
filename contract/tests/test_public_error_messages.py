@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-RECORDER = ROOT / 'contract/tools/wording_record.py'
+RECORDER = ROOT / 'contract/support/error_wording_scenarios.py'
 CASES = ROOT / 'contract/cases/s1'
 
 PREFIX = 'wording:'

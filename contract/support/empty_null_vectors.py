@@ -3,73 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's handling of empty tables, nulls and refused
-questions into ``contract/empty-null-vectors.json`` (T1.32d's vectors).
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/empty_null_record.py
-
-Written by T1.32d's independent test author before the implementation.
-Each vector is ``contract/bases.yaml``'s ``shop`` changed by its ``setup``
-(DuckDB statements), and asked ``null.feature-all-null``'s question unless
-it names its own ``pql``, for its own ``indices`` (default ``[0, 1]``), of
-the tables its ``from_source`` names (default every table):
-
-- ``empty.*``: tables with no rows, the fact table, the entity table, both,
-  a third table beside them, named or not, a view with no rows; and one
-  row (``edge.*`` also);
-- ``null.*``: a column ``f`` of every DuckDB type, every value null, on the
-  entity table and on the fact table; null primary keys, null foreign keys,
-  null times and null targets, some, all and one entity's;
-- ``refuse.*``: what ``refuse.unknown-column`` probes, a question the
-  schema cannot answer, by every part of the question that names a column
-  or a table, and the refusals of a context the request leaves empty or
-  unanswerable;
-- ``edge.*``: one row, every entity asked for, an entity with no facts, an
-  unknown entity, an empty entity list.
-
-Each vector is a case in ``contract/cases``' format, written to a temporary
-directory and run by ``contract/runners/run_python.py --mode python-ref``
-through the public calls (``Schema.from_source``, ``materialize``,
-``SDMClient.predict`` against the scripted endpoint), and this script keeps
-the reference's answer as ``project`` reads it from the observation:
-
-- ``outcome``: success, or the refusal's class, ``StructuredDataError.code``
-  and stage (no message text, H17);
-- ``schema``: the public schema ``Schema.from_source`` made, as the runner
-  records it (each table's columns with dtype and stype, its key, its time
-  column, the links), or null when there is none;
-- ``warnings``: the warning classes, in order;
-- ``payload``: each request the scripted endpoint received: its method and
-  path, the SHA-256 of its parsed body as the ``payload`` rule of
-  ``contract/compare-policy.yaml`` compares it (the policy's payload
-  exclusions masked to their type, each number as its kind and exact
-  value), and, per table the body carries rows of, the count of rows and
-  of null cells; null when no request was made;
-- ``result``: the result's projection as the runner records it.
-
-and, beside it, what DuckDB holds after the setup: each table's row count
-and, where the vector adds a column ``f``, its catalog type.
-
-``register`` marks the vectors where the core is expected to differ. It is
-derived from the reference's answer, never chosen: the reference fails
-with an unnamed exception (no ``StructuredDataError`` code) or with
-``INTERNAL_ERROR`` (E66(b)'s class: a named refusal or a success in its
-place is a change to register). The mark decides no policy: any vector,
-marked or not, may differ from the reference only under an approved
-register entry whose ``refs`` name it with exactly the transition it makes,
-``REGISTER_REF`` + ``<id or glob> <from> -> <to>``, each side ``success``
-or ``refusal <CODE>`` (``outcome_class``; the reference's unnamed
-exception is ``refusal UNNAMED``).
-
-Nothing here is written by hand but the inputs: every expected value is
-the reference's. ``VECTORS``, ``case_for``, ``run`` and ``project`` are
-imported by ``contract/tests/test_t132d_empty_null_vectors.py``, so
-``python-core`` is observed and projected by the same code.
-"""
+"""Empty null vectors: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

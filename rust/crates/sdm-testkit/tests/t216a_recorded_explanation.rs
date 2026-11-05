@@ -39,7 +39,7 @@ fn read_json(path: &Path) -> Value {
 
 fn vector(id: &str) -> Value {
     let all = read_json(&root().join("contract/t213-option-vectors.json"));
-    assert_eq!(all["recorded_by"], "contract/tools/option_record.py");
+    assert_eq!(all["recorded_by"], "contract/support/query_option_scenarios.py");
     all["vectors"][id].clone()
 }
 

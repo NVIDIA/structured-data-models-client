@@ -3,46 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what T2.13's cases give beside their observation lines into
-``contract/t213-option-vectors.json`` (the query and option long tail).
-
-Written by T2.13's test author, before the implementation. Run with the
-reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root, a database at a time or all three::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/option_record.py \
-        --reference ~/code/sdmc-reference [--database duckdb sqlite postgres]
-
-Postgres needs ``SDM_POSTGRES_TEST_DSN``, as ``run_python.py`` does.
-
-The cases are the ``contract/cases/s1`` files whose id starts with one of
-:data:`PREFIXES`; each runs its public calls on each database as
-``run_python.py`` makes them (its ``_open``, ``_source`` and arguments;
-the scripted endpoint told what the case tells it; ``predict`` asked for
-the case's ``outputs``). Their lines (``run_python.py --mode python-ref``,
-committed in ``contract/reference/``) hold the outcome, each request the
-endpoint received and the result's digest. What a line does not hold, and
-the package's exits name, is kept here, per case key:
-
-- ``calls``: how many rows each call the endpoint received scores, in
-  order (``predict.instance_table``);
-- ``result``: the answer through ``to_pandas()``, its columns, its row
-  count and its rows;
-- ``explanation``: ``PredictionResult.explanation``, as JSON writes it;
-- ``item_metadata``: each item's ``metadata`` with its ``row_index``,
-  ordered by ``row_index``, as JSON writes them (null for an item that
-  carries none);
-- ``warnings``: each warning the calls gave whose text one of
-  :data:`WARNINGS` opens, as its class name and text, each once, in the
-  order first given (the entity filter's, an explanation asked for and
-  not given, a day-first date literal);
-- for a refusal, ``message``: the exception's text, and ``details``:
-  ``StructuredDataError.details``, each value as JSON writes it.
-
-:func:`observe` is imported by ``contract/tests/test_query_options.py``,
-so ``python-core`` is observed by the same code.
-"""
+"""Query option scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

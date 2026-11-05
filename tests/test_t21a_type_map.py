@@ -4,7 +4,7 @@
 
 r"""T2.1a's acceptance tests for the type map's decimal vectors
 (``contract/type-map-vectors.json``, recorded by
-``contract/tools/type_map_record.py``) and the contract loader that loads
+``contract/support/type_map_scenarios.py``) and the contract loader that loads
 SQLite and Postgres from the DuckDB-built tables through Arrow (the
 independent test author's).
 

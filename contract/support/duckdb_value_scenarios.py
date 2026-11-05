@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-REFERENCE = Path.home() / 'code/sdmc-reference'
 PQL = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 INDICES = list(range(8))
 ANCHOR = '2024-03-01'

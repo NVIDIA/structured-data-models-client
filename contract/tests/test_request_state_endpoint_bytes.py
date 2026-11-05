@@ -29,7 +29,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-RECORDER = ROOT / 'contract/tools/t214b_host_record.py'
+RECORDER = ROOT / 'contract/support/request_state_scenarios.py'
 CASES = ROOT / 'contract/cases/s1'
 
 PREFIX = 'host:'

@@ -40,7 +40,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 M = _module(
     'sqlite_key_pairs_record',
-    ROOT / 'contract/tools/sqlite_key_pairs_record.py',
+    ROOT / 'contract/support/sqlite_key_scenarios.py',
 )
 
 R = M.R

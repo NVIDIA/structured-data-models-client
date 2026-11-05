@@ -3,65 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's answers to T2.3's round 1 regressions on
-Postgres into ``contract/postgres-regression-vectors.json``.
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``), from this repository's root, with
-``SDM_POSTGRES_TEST_DSN`` naming a Postgres 17 server the recorder may
-create databases on::
-
-    ~/code/sdmc-reference/.venv/bin/python -I \
-        contract/tools/postgres_regressions_record.py
-
-Written by T2.3's independent test author from the round 1 review's
-findings, each a public-API call over a ``psycopg`` connection, in a
-database of its own whose tables the vector's ``setup`` builds with
-Postgres's own types (which the contract loader does not make):
-
-- ``time.new-york-auto-anchor``: ``timestamptz`` facts read in a session
-  whose ``TimeZone`` is America/New_York, materialized with no anchor time,
-  so the automatic anchor and every training anchor come from the time
-  bounds (the reference's: 2024-04-10T00:00:00Z);
-- ``type.<name>``: a feature column of ``uuid``, ``inet``, unconstrained
-  ``numeric``, ``numeric[]`` or ``uuid[]`` beside the key and target;
-- ``relation.dollar``: the entity table named ``users$1``, a legal
-  quoted identifier holding what a bind marker looks like, read through
-  ``tables={'users': 'users$1'}`` and asked a keyed question;
-- from the second review, over the shop's shape (``users``, ``orders``),
-  asked ``SHOP_QUESTION``: ``key.real-fractional-linked``, a ``real`` key
-  of ``items`` holding fractional values (``i + 0.1``) that ``orders``
-  links to; ``key.real-fractional-entity``, the entity table's ``real``
-  key holding them, its entities given as those floats;
-  ``join.domain-not-null-text-key``, ``orders`` holding a ``NOT NULL``
-  domain column and joined on a text key; ``column.dollar``, an entity
-  column named ``cost$1``, read by the keyed lookup of ``users``; and
-  ``type.timetz``, a ``timetz`` column read by ``Schema.from_source``;
-- from Codex's second round: ``type.numeric-100-0-past-2-53``, integral
-  values past 2**53 in a ``numeric(100,0)``, and
-  ``join.domain-not-null-text-key-column-x``, the domain vector with a
-  column named ``x`` added to ``orders``;
-- from Codex's third round: ``type.json`` and ``type.jsonb``, a json or
-  jsonb feature, and ``type.numeric-100-0-nan``, a ``numeric(100,0)``
-  holding a NaN;
-- from Claude's second round: ``key.numeric-unconstrained-small`` and
-  ``key.numeric-unconstrained-past-2-53``, unconstrained ``numeric``
-  primary and foreign keys holding 0 to 7, and 10**17 + i, which must
-  not merge;
-- from Claude's third round: ``key.composite-primary`` and
-  ``key.composite-foreign``, a composite primary key and a composite
-  foreign key, which the reference refuses at ``Schema.from_source``
-  with an unnamed ValueError.
-
-For each the reference's public answer is kept: the outcome (result,
-stage, exception class and ``StructuredDataError`` code), the public
-schema (``run_python``'s projection), the digest of the request's
-payloads with ``metadata.request_id`` left out (as the comparator's
-payload rule does), each anchor time the payloads carry, and each
-Postgres column's type by name (``format_type``). ``observe`` is imported
-by ``contract/tests/test_t23_postgres_regressions.py``, so python-core is
-observed by the same code, forced onto the core's Postgres routes.
-"""
+"""Postgres scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

@@ -37,7 +37,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 R = _module(
-    'column_names_record', ROOT / 'contract/tools/column_names_record.py'
+    'column_names_record', ROOT / 'contract/support/column_name_vectors.py'
 )
 
 RECORDED: dict[str, Any] = {'vectors': R.vectors()}

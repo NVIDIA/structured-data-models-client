@@ -27,7 +27,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-RECORDER = ROOT / 'contract/tools/multicall_record.py'
+RECORDER = ROOT / 'contract/support/batch_prediction_scenarios.py'
 CASES = ROOT / 'contract/cases/s1'
 
 DATABASES = ('duckdb', 'sqlite', 'postgres')

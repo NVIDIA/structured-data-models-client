@@ -3,54 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what T2.8c's multi-call cases give beside their observation
-lines into ``contract/t28c-multicall-vectors.json`` (``main``'s 1fc5a686).
-
-Written by T2.8c's test author, before the implementation. Run with the
-reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root, a database at a time or all three::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/multicall_record.py \
-        --reference ~/code/sdmc-reference [--database duckdb sqlite postgres]
-
-Postgres needs ``SDM_POSTGRES_TEST_DSN``, as ``run_python.py`` does.
-
-The cases are ``contract/cases/s1/multicall.*.json``; each runs its public
-calls on each database as ``run_python.py`` makes them (its ``_open``,
-``_source`` and arguments; the scripted endpoint failing the case's
-``fail_call``). Their lines (``run_python.py --mode python-ref``, committed
-in ``contract/reference/``) hold the outcome, each request the endpoint
-received and the result's digest. What a line does not hold, and the
-package's exits name, is kept here, per case key:
-
-- ``calls``: how many rows each call the endpoint received scores, in
-  order (``predict.instance_table``);
-- ``result``: the answer through ``to_pandas()``, its columns and its rows
-  (every row up to :data:`ROWS_KEPT`, else the first and last
-  :data:`ENDS_KEPT` with the count), so the rows numbered across calls are
-  held row by row;
-- for a refusal, ``details``: ``StructuredDataError.details`` but
-  ``answered``, each value as JSON writes it (the ceilings' counts, the
-  failed call's ``calls_answered`` and ``rows_answered``, a forecast's
-  ``parts_answered``, the 30 MiB body's ``batch_too_large_to_send``);
-  ``answered``: ``details['answered']``, the calls (or a forecast's steps)
-  answered before the one that failed, projected as ``result`` is;
-  ``opening``: the message's first sentence; and ``remedy``: what the
-  client says to change for a call past the 30 MiB body (from "A call
-  already scores one row" or "What comes down is one of three" to the
-  end), or null.
-
-``raised`` holds, by the same keys, the cases :data:`RAISED` names
-observed with the client's transport raising a ``ValueError`` on the
-named call, an error that is not the client's own, as a transport may
-raise one mid-request (the Databricks SDK on a failed OAuth refresh):
-the reference raises it as it was, with the answers already received
-kept on it as for its own errors. ``--raised`` records that part alone.
-
-:func:`observe` is imported by ``contract/tests/test_prediction_batching.py``,
-so ``python-core`` is observed by the same code.
-"""
+"""Batch prediction scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

@@ -3,45 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the Postgres value rules' expectations (T2.14d; MID2 P2-3) into
-``contract/l5-vectors.json``'s ``postgres_values``, beside L5's tables.
-
-Written by T2.14b's test author (T2.14d rides along in that landing),
-before the implementation. Each rule is one the Postgres provider
-(``_rust/providers/postgres.py``) holds at T2.14a's ledger: an interval
-read as the driver's ``timedelta`` (a month folded into 30 days, no months
-left), a JSON scalar as Python's text of it (JSON ``true`` as ``True``), a
-``numeric`` past ``int64`` or past 76 digits read by its declaration, the
-key set bound as JSON text, and a seed time written as pandas'
-``Timestamp.isoformat`` writes it. Run twice, from this repository's root,
-each run writing its own part and keeping the other's, with
-``SDM_POSTGRES_TEST_DSN`` naming a Postgres server (a database is made for
-the run and dropped after it)::
-
-    <reference interpreter> -I contract/tools/postgres_values_record.py \
-        --reference CHECKOUT
-    <test-ops candidate interpreter> -I contract/tools/postgres_values_record.py
-
-- With ``--reference`` (the reference checkout at
-  ``contract/reference-env.txt``'s commit, its environment's interpreter):
-  for each column of :data:`COLUMNS`, each in a table of its own
-  (:data:`SETUP`), ``driver``, psycopg's rows of ``SELECT id, v ... ORDER
-  BY id`` as the reference's Postgres backend reads them (its ``_frame``),
-  each value's canonical cell (``run_python.py``'s ``canonical_cell``: what
-  the comparator holds a statement's result to); and ``reference``, the
-  same rows after the reference's own reading of the column's declared type
-  (``PostgresTable._to_dtype`` over ``information_schema``, then
-  ``_sanitize_postgres_frame``), each value's canonical cell, or the
-  exception that reading raises, by class, or ``unsupported`` where the
-  reference leaves the column out. For :data:`SEEDS`, ``seed_times``: the
-  text the reference binds each seed's key and time as
-  (``PostgresSampler._coerce_id`` and ``_serialize_time``).
-- Without it (the candidate's client, a test-ops build): for each column,
-  ``arrow``, the Arrow type the core admits it as through the Postgres
-  provider (the test-only fetch), as ``test_l5_conversion.py`` spells a
-  type, or the core's refusal by code; the conversion table's practice, so
-  a change of what reaches the core is a change here, reviewed.
-"""
+"""Postgres value scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 

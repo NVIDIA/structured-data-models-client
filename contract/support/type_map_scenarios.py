@@ -3,43 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the decimal part of the per-engine type map into
-``contract/type-map-vectors.json`` (T2.1a's vectors, design choice 2).
-
-Run from this repository's root with any interpreter that has DuckDB and
-pyarrow (the stdlib ``sqlite3`` is the SQLite probed)::
-
-    python -I contract/tools/type_map_record.py
-
-Written by T2.1a's independent test author before the implementation. The
-inputs are written here; every value the file states is computed:
-
-- ``canonical_text``: each DuckDB decimal literal of its type, read from
-  DuckDB through Arrow as the loader reads it (``to_pylist``, a
-  ``decimal.Decimal`` at the column's scale), and its canonical text by the
-  design's one definition: plain positional notation, no exponent, no
-  trailing fractional zeros, no trailing point, ``-0`` written ``0``.
-  DuckDB's own text (``CAST(... AS VARCHAR)``) and Python's ``str`` are
-  recorded beside it, so a vector whose canonical text equals both proves
-  nothing more than they do (``100.00`` and ``1E-38`` show where they
-  differ). Equal values of different scales have one text: ``100.00`` and
-  ``100``, ``-0.00`` and ``0``.
-- ``sqlite_distinct_keys``: two keys that agree in their first 15
-  significant digits (and more) and differ after, as a DuckDB decimal.
-  SQLite gives a column declared ``DECIMAL`` numeric affinity, which stores
-  the text as a REAL; the probe stores the pair in such a column and in a
-  ``TEXT`` column and records how many distinct values each kept, so the
-  vector is shown to be one the declared type would lose (KO2-35).
-- ``join_across_scales``: equal keys held as ``DECIMAL(10,2)`` on one table
-  and ``DECIMAL(12,4)`` on the other (lesson 19); DuckDB's own join of the
-  two is recorded, the count every loaded engine must match.
-- ``map``: the decimal's stored type per engine, as the design states it:
-  SQLite ``TEXT`` holding the canonical text, Postgres ``numeric`` with the
-  column's precision and scale.
-
-The rest of the type map (every other type of the type set, per engine) is
-the implementer's, added to the same file under review.
-"""
+"""Type map scenarios: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 
@@ -190,7 +154,7 @@ def record() -> dict[str, Any]:
         'about': (
             "T2.1a's type map (design, choice 2), written by the package's "
             'independent test author before the implementation, recorded by '
-            'contract/tools/type_map_record.py: the one definition of a '
+            'contract/support/type_map_scenarios.py: the one definition of a '
             "decimal's canonical text (plain positional notation, no "
             'exponent, no trailing fractional zeros, no trailing point, -0 '
             'written 0), which the Python loader and the Rust key binders '
@@ -222,7 +186,7 @@ def record() -> dict[str, Any]:
         'sqlite_distinct_keys': distinct,
         'join_across_scales': join,
         'recorded': {
-            'by': 'contract/tools/type_map_record.py',
+            'by': 'contract/support/type_map_scenarios.py',
             'environment': {
                 'python': platform.python_version(),
                 'duckdb': duckdb.__version__,

@@ -3,102 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's handling of DuckDB decimals into
-``contract/decimal-vectors.json`` (T1.32b's vectors).
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/decimal_record.py
-
-Written by T1.32b's independent test author before the implementation.
-This is ingestion, not model quality, so the data is generated: each vector
-is ``contract/bases.yaml``'s ``shop`` changed by its ``setup`` (DuckDB
-statements) and asked ``decimal.feature-38-0-wide``'s question unless it
-names its own ``pql``, for its own ``indices`` (default ``[0, 1]``) at its
-own ``anchor_time`` (default ``2024-03-01``; null leaves it out, as a static
-question's case does):
-
-- ``feature.*``: a column ``f`` of DECIMAL(p, s) for p in 4, 9, 18, 19 and
-  38 and s in 0, 2, 10 and p (where s <= p), on the entity table and on the
-  fact table, holding small values of both signs, zero and a null
-  (``spread``), or values at the declared precision (``max``: the largest
-  and smallest the type holds and their neighbours); and, for five types,
-  every value zero, every value negative, or every value null (the
-  DECIMAL(18, 2) all-null column is T1.32d's ``null.decimal-18-2``, which
-  T1.32b clears: it is not recorded again here);
-- ``wide.*``: what DuckDB holds past 38 digits, HUGEINT and UHUGEINT at
-  their ends, which DuckDB hands over as ``decimal128(38, 0)`` (DuckDB
-  produces no ``decimal256``: ``duckdb.arrow`` records the Arrow type it
-  gives for each vector's column, so a DuckDB that does is seen);
-- ``target.*``: a regression target over a decimal column, ``SUM`` of the
-  fact table's ``price`` held as each type (``spread`` and ``max`` values),
-  and ``AVG``, ``MIN``, ``MAX`` and ``COUNT`` over four types;
-- ``overflow.*``: a sum at and past the declared precision (DECIMAL(4, 0):
-  9999 + 1, and its neighbours, signs and wider types, 38 digits
-  included), two orders of one user in one label window;
-- ``class.*``: classification targets: a static decimal target of three
-  classes (as ``decimal.class-target-38-18``, at other types), a static
-  decimal target of many values, and binary questions comparing a decimal
-  sum or a decimal column with a number;
-- ``key.*``: decimal keys beyond T1.32a's (``key.decimal-18-0`` and
-  ``key.decimal-38-10``): other precisions, a scale above zero, the
-  foreign key alone or the primary key alone decimal, the fact table's own
-  key, negative keys, keys at the precision's end, and a null foreign key,
-  the entities given as integers (the reference fails INTERNAL_ERROR on
-  every decimal key it samples, so these are marked; the entities' cast is
-  T1.32a's);
-- ``time.*``: decimal columns beside the time column: an epoch in seconds
-  or with a fraction, and a date as yyyymmdd digits, as features and
-  declared as the time column, and a decimal in place of the time column.
-
-The core is handed the entities and anchor time as the client's bridge
-builds them (``core_indices``, T1.32a's ``host_arrow``; ``core_anchor``),
-recorded beside each vector for ``rust-host``; and the statements the
-reference ran per public call (``statements``, ``compare.py``'s counts, its
-capture complete against DuckDB's query log). The document's ``cases``
-holds the family's three cases' committed reference observations projected
-the same way.
-
-Each vector is a case in ``contract/cases``' format, written to a temporary
-directory and run by ``contract/runners/run_python.py --mode python-ref``
-through the public calls (``Schema.from_source``, ``materialize``,
-``SDMClient.predict`` against the scripted endpoint). The reference's answer
-is kept as ``contract/tools/empty_null_record.py``'s ``project`` reads it
-(the outcome: result, stage, class and code, no message text, H17; the
-public schema with each column's dtype and stype; the warning classes; each
-request as the ``payload`` rule compares it, its digest and the rows and
-null cells of each table it carries; the result), and beside it what this
-family is about, for each of the vector's ``columns``:
-
-- ``described``: the dtype and stype ``Schema.from_source`` gave it;
-- ``request``: how it reached the model, in each part of each request
-  (``context`` and ``predict``): the wire dtype and stype the request's
-  schema declares for it, and its cells, each as its JSON text (a number
-  ``{"number": "<digits>"}``, a text, or null) with how many times it
-  appears.
-
-A column is ``[table, column]``; the table ``instance_table`` is the
-request's own (``TARGET``, the labels). And what DuckDB holds after the
-setup: each named column's catalog type and the Arrow type DuckDB hands
-over for it.
-
-``register`` marks the vectors where the core is expected to differ. It is
-derived from the reference's answer, never chosen (T1.32d's rule): the
-reference fails with an unnamed exception (no ``StructuredDataError``
-code) or with ``INTERNAL_ERROR`` (E66(b)'s class). The mark decides no
-policy: any vector, marked or not, may differ from the reference only under
-an approved register entry whose ``refs`` name it with exactly the
-transition it makes, ``REGISTER_REF`` + ``<id or glob> <from> -> <to>``,
-each side ``success`` or ``refusal <CODE>`` (the reference's unnamed
-exception is ``refusal UNNAMED``).
-
-Nothing here is written by hand but the inputs. ``VECTORS``, ``case_for``,
-``run`` and ``project`` are imported by
-``contract/tests/test_decimal_key_joins.py``, so ``python-core`` is
-observed and projected by the same code.
-"""
+"""Decimal vectors: independent inputs and current-client test helpers."""
 
 from __future__ import annotations
 
@@ -146,7 +51,9 @@ def _module(name: str, path: Path) -> ModuleType:
 #: T1.32d's recorder: the public answer's projection (``project``), the
 #: payload rule's digest, the outcome classes and the register marks are
 #: its, so both families' vectors are read by one code.
-E = _module('empty_null_record', ROOT / 'contract/tools/empty_null_record.py')
+E = _module(
+    'empty_null_record', ROOT / 'contract/support/empty_null_vectors.py'
+)
 
 # --- the decimal types and their values --------------------------------------
 
@@ -761,7 +668,7 @@ def core_anchor(anchor: str | None) -> Any:
 
 
 #: Encode fixture entities as typed Arrow scalars.
-K = _module('scalar_fixture', ROOT / 'contract/tools/scalar_fixture.py')
+K = _module('scalar_fixture', ROOT / 'contract/support/scalar_fixture.py')
 
 
 def core_indices(indices: list[Any]) -> list[dict[str, Any]]:
@@ -798,7 +705,7 @@ def case_for(vector: dict[str, Any]) -> dict[str, Any]:
     case['core']['materialize']['anchor_time'] = core_anchor(anchor)
     case['expect'] = {'outcome': 'success', 'stage': 'predict'}
     case['why'] = f'T1.32b vector {vector["id"]}'
-    case['source'] = 'contract/tools/decimal_record.py'
+    case['source'] = 'contract/support/decimal_vectors.py'
     case.pop('register', None)
     return case
 

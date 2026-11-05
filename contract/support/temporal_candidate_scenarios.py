@@ -162,7 +162,8 @@ def host() -> ModuleType:
     r"""Shared shop, ranking and endpoint helpers, whose
     these scenarios reuse."""
     return _module(
-        't214b_host_record', ROOT / 'contract/tools/t214b_host_record.py'
+        't214b_host_record',
+        ROOT / 'contract/support/request_state_scenarios.py',
     )
 
 

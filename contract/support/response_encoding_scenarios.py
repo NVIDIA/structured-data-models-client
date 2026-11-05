@@ -125,7 +125,8 @@ def host() -> ModuleType:
     r"""T2.14b's host-facts recorder, whose shop, queries and endpoint
     these scenarios reuse."""
     return _module(
-        't214b_host_record', ROOT / 'contract/tools/t214b_host_record.py'
+        't214b_host_record',
+        ROOT / 'contract/support/request_state_scenarios.py',
     )
 
 

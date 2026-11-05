@@ -111,7 +111,7 @@ def test_recording_restores_native_boundary() -> None:
     data = path.read_bytes()
     original = run.native
     observations = runner.run(
-        'python-core', [(json.loads(data), runner.digest(data))], None
+        'python-core', [(json.loads(data), runner.digest(data))]
     )
     assert observations[0]['outcome']['result'] == 'success'
     assert run.native is original
@@ -133,7 +133,5 @@ def test_recording_restores_native_boundary_after_failure(
 
     monkeypatch.setattr(runner, '_versions', fail)
     with pytest.raises(RuntimeError, match='seeded environment failure'):
-        runner.run(
-            'python-core', [(json.loads(data), runner.digest(data))], None
-        )
+        runner.run('python-core', [(json.loads(data), runner.digest(data))])
     assert run.native is original

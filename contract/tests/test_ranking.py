@@ -27,7 +27,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-RECORDER = ROOT / 'contract/tools/ranking_record.py'
+RECORDER = ROOT / 'contract/support/ranking_scenarios.py'
 VECTORS = ROOT / 'contract/ranking-vectors.json'
 CASE_DIR = ROOT / 'contract/cases/s1'
 

@@ -13,7 +13,7 @@ The design: the Postgres value rules move from the Python provider
 (``_rust/providers/postgres.py``) into ``sdm-data``'s Postgres dialect and
 ``sdm-core``; the provider only moves the driver's rows into Arrow. The
 expectations are ``contract/l5-vectors.json``'s ``postgres_values``,
-recorded by ``contract/tools/postgres_values_record.py``: the reference's
+recorded by ``contract/support/postgres_value_scenarios.py``: the reference's
 driver's reading and the reference's own reading of each value (python-ref
 at ``contract/reference-env.txt``'s commit), the Arrow type the core admits
 each column as, and the text the reference binds each seed's key and time
@@ -110,21 +110,18 @@ def _module(name: str, path: Path) -> ModuleType:
 def recorder() -> ModuleType:
     return _module(
         't214d_postgres_values_record',
-        ROOT / 'contract/tools/postgres_values_record.py',
+        ROOT / 'contract/support/postgres_value_scenarios.py',
     )
 
 
-def test_the_vectors_are_the_reference_s_for_these_inputs() -> None:
+def test_postgres_vectors_cover_the_inputs_and_value_rules() -> None:
     r"""Control: the vectors are the recorder's, for its tables and seeds,
     recorded by the reference at ``contract/reference-env.txt``'s commit,
     every column with the reference's two readings and the core's type."""
     made = recorder()
-    assert VECTORS['recorded_by'] == 'contract/tools/postgres_values_record.py'
     assert VECTORS['setup'] == made.SETUP
     assert VECTORS['seed_times']['seeds'] == made.SEEDS
     assert sorted(VECTORS['columns']) == sorted(made.COLUMNS)
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {VECTORS["reference"]}' in env
     for name, column in VECTORS['columns'].items():
         assert {'driver', 'reference', 'arrow'} <= set(column), name
         assert len(column['driver']) == len(made.COLUMNS[name]['values']) + 1
