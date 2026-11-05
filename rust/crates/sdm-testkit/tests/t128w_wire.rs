@@ -67,7 +67,8 @@ fn numbers(value: Value) -> Value {
 
 /// The keys the wire's payload writes only when it has them: each may be
 /// left out, so dropping one is not a change of shape.
-const OPTIONAL: [&str; 8] = [
+const OPTIONAL: [&str; 9] = [
+    "client_analysis_delta",
     "client_generated_keys",
     "anchor_time_column",
     "stype",
