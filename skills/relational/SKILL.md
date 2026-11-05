@@ -55,7 +55,7 @@ one back there, so the refusal belongs to the deployment and not to the
 request.
 The optional `SDMClient.in_process()` runtime can return gradients too.
 `EXPLAIN PREDICT` adds explanation output to the ordinary outputs; it does not discard predictions.
-Read structured gradients from `result.explanations`; the singular raw view remains available.
+Read structured gradients from `result.explanations.gradients`; the singular raw view remains available.
 
 The task is not an argument. It follows from the query: see
 [`pql.md`](pql.md).

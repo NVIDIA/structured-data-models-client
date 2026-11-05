@@ -255,12 +255,14 @@ def run(args):
             if args.gradients:
                 explanations = timed(
                     'gradient_view',
-                    lambda result=result: result.explanations.to_pandas(),
+                    lambda result=result: (
+                        result.explanations.gradients.to_pandas()
+                    ),
                 )
                 gradient_cells = len(explanations)
                 if (
                     not gradient_cells
-                    or len(result.explanations) != args.scores
+                    or len(result.explanations.gradients) != args.scores
                     or (fixed and not (explanations['gradient'] == 0.25).all())
                 ):
                     raise AssertionError('gradient response contract differs')

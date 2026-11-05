@@ -200,7 +200,7 @@ def predict(fitted: Any, request: Any) -> Any:
     answered = results.expect(finished.result, results.Predicted)
     table = prediction._table(finished.take(answered.result))
     explained = (table.schema.metadata or {}).get(b'explanation')
-    return prediction._result(
+    result = prediction._result(
         table,
         model=answered.model,
         request_id=answered.request_id,
@@ -209,6 +209,8 @@ def predict(fitted: Any, request: Any) -> Any:
         by_step=False,
         explanation=None if explained is None else explained.decode(),
     )
+
+    return sessions.cached_columns(fitted, result)
 
 
 def close(fitted: Any) -> None:
@@ -219,4 +221,5 @@ def close(fitted: Any) -> None:
     fitted._relational_session = state
     fitted._closed = state['closed']
     if fitted._closed:
+        fitted._column_explanations = None
         fitted._client._pinned.discard(fitted)

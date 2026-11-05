@@ -421,7 +421,7 @@ pub(crate) async fn predict(
             request_id: asked_part.request_id.clone(),
         };
         let answered = answers.len();
-        let (part, _, _) = crate::predict::one(&asker, &asked_part, vec![call])
+        let (part, _, _) = crate::predict::one(&asker, &asked_part, vec![call], None)
             .await
             .map_err(|e| {
                 let e = tagged(position)(e);

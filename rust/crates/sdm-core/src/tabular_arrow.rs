@@ -385,26 +385,32 @@ async fn predict(
     check_options(&input.request.inference)?;
     let payload =
         tabular::complete_body(payload, &input.request_id, input.request.inference.clone())?;
+    let analysis = if crate::columns::requested(&prepared.bound.outputs) {
+        Some(crate::columns::compute(std::slice::from_ref(&payload))?)
+    } else {
+        None
+    };
+    let analysis = crate::columns::expose(asker, analysis.as_deref(), &prepared.bound.outputs)?;
     if header(&scoring).rows == 0 {
-        return crate::predict::finish(
-            asker,
-            tabular::response::empty(&input.model, &payload)?,
-            prepared.bound.outputs,
-        );
+        let mut part = tabular::response::empty(&input.model, &payload)?;
+        part.columns = analysis;
+        return crate::predict::finish(asker, part, prepared.bound.outputs);
     }
     let answer =
         crate::predict::call_answer(asker, payload.to_bytes(), input.endpoint.as_ref()).await?;
-    finish(asker, payload, answer, prepared.bound.outputs)
+    finish(asker, payload, answer, prepared.bound.outputs, analysis)
 }
 fn finish(
     asker: &Asker,
     payload: Value,
     answer: Value,
     outputs: Vec<String>,
+    analysis: Option<String>,
 ) -> Result<OperationResult, CoreError> {
     let response = sdm_wire::response::PredictionResponse::read(&answer)
         .map_err(sdm_request::predict::refused)?;
-    let part = tabular::response::portable_layout(&payload, &response, crate::pql::float_text)?;
+    let mut part = tabular::response::portable_layout(&payload, &response, crate::pql::float_text)?;
+    part.columns = analysis;
     crate::predict::finish(asker, part, outputs)
 }
 
@@ -541,6 +547,8 @@ async fn fit(
     check_options(&input.prediction.request.inference)?;
     // Validate the request's options without adding unsupported create-session fields.
     tabular::typed_inference(input.prediction.request.inference.clone())?;
+    let column_analysis = Some(crate::columns::compute(std::slice::from_ref(&payload))?);
+    crate::columns::expose(asker, column_analysis.as_deref(), &prepared.bound.outputs)?;
     let answer = session_call(asker, Endpoint::CreateSession, payload).await?;
     let session_id = answer
         .get("session_id")
@@ -550,6 +558,7 @@ async fn fit(
         .ok_or_else(|| sdm_request::predict::bad_response("session_id", "missing"))?
         .to_owned();
     let state = TabularSessionState {
+        column_analysis,
         version: TABULAR_SESSION_VERSION,
         session_id,
         closed: false,
@@ -701,12 +710,15 @@ async fn score(
             layout.set(name, value.clone());
         }
     }
+    let analysis = crate::columns::expose(
+        asker,
+        state.column_analysis.as_deref(),
+        &state.bound.outputs,
+    )?;
     if header(&scoring).rows == 0 {
-        return crate::predict::finish(
-            asker,
-            tabular::response::empty(&state.pinned_model, &layout)?,
-            state.bound.outputs.clone(),
-        );
+        let mut part = tabular::response::empty(&state.pinned_model, &layout)?;
+        part.columns = analysis;
+        return crate::predict::finish(asker, part, state.bound.outputs.clone());
     }
     let answer = session_call(
         asker,
@@ -716,7 +728,7 @@ async fn score(
         payload,
     )
     .await?;
-    finish(asker, layout, answer, state.bound.outputs.clone())
+    finish(asker, layout, answer, state.bound.outputs.clone(), analysis)
 }
 async fn close(asker: &Asker, mut session: ArrowSession) -> Result<OperationResult, CoreError> {
     tabular::session::validate_state(&session.state)?;

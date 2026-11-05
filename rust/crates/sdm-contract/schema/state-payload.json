@@ -3,6 +3,145 @@
   "description": "The payload of one prediction request: a regression's by default, a\nclassification's with [`ClassTarget`] and [`ClassificationConfig`].",
   "type": "object",
   "properties": {
+    "client_analysis_delta": {
+      "description": "Removed labelled rows only, for client analysis; never sent to a model.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "schema_json": {
+          "type": "string"
+        },
+        "instance_table": {
+          "type": "object",
+          "properties": {
+            "original_rows": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "positions": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              }
+            },
+            "removed": {
+              "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
+              "type": "object",
+              "properties": {
+                "format": {
+                  "description": "How rows are written: `arrays` alone.",
+                  "type": "string",
+                  "enum": [
+                    "arrays"
+                  ]
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": true
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "format",
+                "columns",
+                "rows"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "original_rows",
+            "positions",
+            "removed"
+          ]
+        },
+        "related_tables": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "original_rows": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              },
+              "positions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "removed": {
+                "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "description": "How rows are written: `arrays` alone.",
+                    "type": "string",
+                    "enum": [
+                      "arrays"
+                    ]
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": true
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "format",
+                  "columns",
+                  "rows"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "original_rows",
+              "positions",
+              "removed"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "schema_json",
+        "instance_table",
+        "related_tables"
+      ]
+    },
     "client_generated_keys": {
       "description": "Client-only generated keys, stripped before sending to a model.",
       "type": "object",

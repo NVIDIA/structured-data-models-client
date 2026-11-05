@@ -196,6 +196,7 @@ fn fit_score_twice_and_retry_close_with_remapped_attachments() {
         json!({"session_id":"session-1"}),
     );
     let state = TabularSessionState {
+        column_analysis: None,
         version: TABULAR_SESSION_VERSION,
         session_id: created["session_id"].as_str().unwrap().into(),
         closed: false,

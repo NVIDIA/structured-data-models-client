@@ -119,16 +119,18 @@ def _candidate(
     return {'kind': 'unsupported', 'type_name': owner.__name__}
 
 
-def merge(cls: Any, parts: Any) -> Any:
+def merge(cls: Any, parts: Any, *, columns: Any = None) -> Any:
     # Rust chooses identity/order from compact observations. Existing decoded
     # entry owners stay in Python rather than copying sampled rows through the ABI.
-    gradients = len(parts) > 1 and any(part.explanations for part in parts)
+    gradients = len(parts) > 1 and any(
+        part.explanations.gradients for part in parts
+    )
 
     def records(part: Any) -> list[dict[str, Any]]:
         if not gradients:
             return []
-        if part.explanations._records:
-            return part.explanations._records
+        if part.explanations.gradients._records:
+            return part.explanations.gradients._records
         values = []
         for index, item in enumerate(part.items):
             values.append(
@@ -146,16 +148,30 @@ def merge(cls: Any, parts: Any) -> Any:
     owners: list[dict[str, Any]] = []
 
     def manual_entries(part: Any) -> list[dict[str, Any]]:
-        if not gradients or part.explanations._records:
+        if not gradients or part.explanations.gradients._records:
             return []
         entries = []
-        for key, entry in part.explanations.items():
+        for key, entry in part.explanations.gradients.items():
             entries.append({'key': _candidate(key), 'owner': len(owners)})
             owners.append(entry)
         return entries
 
     descriptors = [
         {
+            'columns': json.dumps(
+                {
+                    'status': 'ready',
+                    'rows': list(
+                        (
+                            columns
+                            if columns is not None
+                            else part.explanations.columns
+                        )._rows
+                    ),
+                }
+            )
+            if (columns is not None or part.explanations.columns is not None)
+            else None,
             'model': part.model,
             'request_id': part.request_id,
             'outputs': list(part.outputs),
@@ -174,6 +190,8 @@ def merge(cls: Any, parts: Any) -> Any:
     ]
     plan = _call('plan_result_merge', {'parts': descriptors})
     if plan['single']:
+        if columns is not None:
+            parts[0].explanations.columns = columns
         return parts[0]
     first = parts[0]
     metadata = dict(first.metadata)
@@ -203,7 +221,7 @@ def merge(cls: Any, parts: Any) -> Any:
         entries.update(
             {
                 offset + index: entry
-                for index, entry in part.explanations._entries_by_answer.items()
+                for index, entry in part.explanations.gradients._entries_by_answer.items()
             }
         )
         offset += len(part.items)
@@ -221,10 +239,19 @@ def merge(cls: Any, parts: Any) -> Any:
         for row in plan['gradients']['rows']:
             if row.get('entry_owner') is not None:
                 entries[row['answer_index']] = owners[row['entry_owner']]
-    result.explanations = GradientExplanations._from_core(
+    result.explanations.gradients = GradientExplanations._from_core(
         plan['gradients'],
         entries,
         identities={index: item.id for index, item in enumerate(result.items)},
+    )
+    from sdm_client.explanations import ColumnExplanations
+
+    result.explanations.columns = (
+        columns
+        if columns is not None
+        else ColumnExplanations._from_core(
+            json.loads(plan['columns']) if plan['columns'] is not None else None
+        )
     )
     result._names_its_rows = plan['names_rows']
     result._names_its_step = plan['names_step']

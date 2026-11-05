@@ -289,6 +289,8 @@ def finish(
     # Transport may mutate this payload. The reference consumes that same
     # object only after parsing the complete native response.
     reply = client._send(_adapter(client, model_id), payload)
+    if description['column_analysis'] is not None:
+        payload['client_column_analysis'] = description['column_analysis']
     decoded = decoded_reply(reply, payload, description['bound'])
     if decoded is not None:
         return decoded
@@ -330,6 +332,14 @@ def present(
         items=restored,
         metadata=response.metadata,
         outputs=bound['outputs'],
+    )
+    import json
+
+    from sdm_client.explanations import ColumnExplanations
+
+    analysis = payload.get('client_column_analysis')
+    result.explanations.columns = ColumnExplanations._from_core(
+        json.loads(analysis) if analysis is not None else None
     )
     query = {
         'bound': bound,

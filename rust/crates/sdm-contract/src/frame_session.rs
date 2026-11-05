@@ -29,6 +29,8 @@ pub enum FrameSessionOperation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrameSessionState {
+    #[serde(default)]
+    pub column_analysis: Option<String>,
     pub version: u32,
     pub session_id: String,
     pub closed: bool,

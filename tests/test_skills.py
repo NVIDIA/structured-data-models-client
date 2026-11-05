@@ -2471,10 +2471,10 @@ def test_the_relational_endpoint_explains_every_entity(target, schema):
     # `resolve` asks about users 1 and 2.
     asked = [1, 2]
     assert sorted(int(one) for one in result.to_pandas()['id']) == asked
-    assert sorted(int(key) for key in result.explanations) == asked, (
-        f'{target} explained {sorted(result.explanations)}, asked {asked}'
+    assert sorted(int(key) for key in result.explanations.gradients) == asked, (
+        f'{target} explained {sorted(result.explanations.gradients)}, asked {asked}'
     )
-    for key, entry in result.explanations.items():
+    for key, entry in result.explanations.gradients.items():
         assert set(entry) == {'outputs', 'related'}, (
             f'{target} gave {key} the blocks {sorted(entry)}'
         )

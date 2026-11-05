@@ -163,3 +163,95 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
                 name: value for name, value in entry.items() if name != 'hops'
             }
         return result
+
+
+class ColumnExplanations:
+    """Context-column associations computed by the Rust engine.
+
+    ``payload`` is a model request with task, schema and labelled context.
+    Construction explicitly performs analysis; formatting does not recompute it.
+    """
+
+    def __init__(self, payload: Mapping[str, Any]) -> None:
+        from sdm_client._rust import results
+        from sdm_client._rust.predict import _payload
+        from sdm_client._rust.run import run
+
+        finished = run(
+            {'op': 'analyze_columns', 'payloads': [1]},
+            {1: _payload(dict(payload))},
+        )
+        value = results.expect(finished.result, results.DirectValue)
+        analysis = json.loads(finished.take(value.value))
+        if analysis['status'] != 'ready':
+            from sdm_client.errors import StructuredDataError
+
+            raise StructuredDataError(
+                'column analysis is unavailable: ' + analysis['reason'],
+                code='INVALID_REQUEST',
+            )
+        self._rows = tuple(dict(row) for row in analysis['rows'])
+
+    @classmethod
+    def _from_core(
+        cls, analysis: Mapping[str, Any] | None
+    ) -> ColumnExplanations | None:
+        if analysis is None:
+            return None
+        if analysis['status'] in ('unsupported', 'failed'):
+            return None
+        if analysis['status'] != 'ready':
+            raise RuntimeError('invalid engine column analysis status')
+        result = cls.__new__(cls)
+        result._rows = tuple(dict(row) for row in analysis['rows'])
+        return result
+
+    def to_pandas(self) -> pd.DataFrame:
+        """One row per column, cohort and class, in the engine's score order."""
+        rows = [
+            {
+                **{
+                    key: value
+                    for key, value in row.items()
+                    if key != 'class_json'
+                },
+                'class': json.loads(row['class_json']),
+            }
+            for row in self._rows
+        ]
+        return pd.DataFrame(
+            rows,
+            dtype=object,
+            columns=[
+                'table',
+                'hop',
+                'column',
+                'stype',
+                'cohort',
+                'class',
+                'share',
+                'mean',
+                'score',
+            ],
+        ).astype(
+            {
+                'hop': 'int64',
+                'share': 'float64',
+                'mean': 'float64',
+                'score': 'float64',
+            }
+        )
+
+
+class Explanations:
+    """Model gradients and context-column associations, kept separate."""
+
+    def __init__(
+        self,
+        gradients: GradientExplanations | None = None,
+        columns: ColumnExplanations | None = None,
+    ) -> None:
+        self.gradients = (
+            gradients if gradients is not None else GradientExplanations()
+        )
+        self.columns = columns

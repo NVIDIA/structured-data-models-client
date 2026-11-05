@@ -47,7 +47,7 @@ regression, and asking for the wrong one comes back as
 `quantile_0.1` through `quantile_0.9`, beside the point prediction.
 
 Gradient-capable models also accept `outputs=['prediction', 'explanation']` or `EXPLAIN PREDICT`.
-Read per-row gradients with `result.explanations.to_pandas()`; these describe preprocessed numerical features, not causal effects.
+Read per-row gradients with `result.explanations.gradients.to_pandas()`; these describe preprocessed numerical features, not causal effects.
 Each entry has `outputs` and `instance`, with numerical `columns` and `gradients[output][column]`; there are no related tables.
 Keys are unique entity IDs, or `row_index` when IDs are missing or repeated.
 The client imposes no separate explanation row limit; the endpoint must support gradients.

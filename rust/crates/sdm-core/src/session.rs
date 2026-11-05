@@ -79,7 +79,10 @@ pub(crate) fn prepare_fit(
     let context = policy::select_encoded_rows(context, &selected.retained_rows)?;
     payload.set("context", object([("instance_table", context)]));
     payload.set("metadata", metadata(request.request_id));
+    let column_analysis = Some(crate::columns::compute(std::slice::from_ref(&payload))?);
+    crate::columns::expose(asker, column_analysis.as_deref(), &request.bound.outputs)?;
     let prepared = PreparedTabularFit {
+        column_analysis,
         bound: request.bound,
         columns: request.columns,
         primary_key: request.primary_key,
@@ -225,7 +228,15 @@ pub(crate) fn prepare_score(
             layout.set(name, value.clone());
         }
     }
+    if let Some(analysis) = crate::columns::expose(
+        asker,
+        request.state.column_analysis.as_deref(),
+        &request.state.bound.outputs,
+    )? {
+        layout.set("client_column_analysis", Value::Text(analysis));
+    }
     let prepared = PreparedTabularScore {
+        empty: sdm_request::predict::nothing_to_score(&payload),
         bound: request.state.bound,
         payload: asker.attach(Attachment::Bytes(payload.to_bytes()))?,
         layout: asker.attach(Attachment::Bytes(layout.to_bytes()))?,

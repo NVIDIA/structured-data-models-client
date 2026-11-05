@@ -175,16 +175,19 @@ def test_public_multiple_rows_class_labels_and_nested_merge(endpoint):
             model=KumoTabular(),
             outputs=['prediction', 'probabilities', 'explanation'],
         )
-    assert len(result.explanations) == 2
-    frame = result.explanations.to_pandas()
+    assert len(result.explanations.gradients) == 2
+    frame = result.explanations.gradients.to_pandas()
     assert set(frame.output) == {'probability_0', 'probability_1'}
     assert set(frame.output) <= set(result.to_pandas().columns)
     merged = PredictionResult.merge(
         [PredictionResult.merge([result, result]), result]
     )
-    assert len(merged.explanations) == 6
-    assert set(merged.explanations) == set(range(6))
-    assert list(merged.explanations) == merged.to_pandas().row_index.tolist()
+    assert len(merged.explanations.gradients) == 6
+    assert set(merged.explanations.gradients) == set(range(6))
+    assert (
+        list(merged.explanations.gradients)
+        == merged.to_pandas().row_index.tolist()
+    )
     assert calls[0]['output']['fields'] == [
         'prediction',
         'probabilities',
@@ -247,8 +250,20 @@ def test_pretrained_local_model_gradients(model_name, task):
             outputs=['prediction', 'explanation']
             + (['quantiles'] if task == 'regression' else ['probabilities']),
         )
-        assert len(result) == len(result.explanations) == 2
-        frame = result.explanations.to_pandas()
+        assert result.explanations.columns is not None
+        associations = result.explanations.columns.to_pandas()
+        assert not associations.empty
+        import math
+
+        assert all(
+            math.isfinite(float(value))
+            for name in ('share', 'mean', 'score')
+            for value in associations[name]
+        )
+        assert associations['share'].between(0, 1).all()
+        assert associations['score'].between(0, 1).all()
+        assert len(result) == len(result.explanations.gradients) == 2
+        frame = result.explanations.gradients.to_pandas()
         assert not frame.empty
         assert set(frame.output) <= set(result.to_pandas().columns)
         assert all(
@@ -301,13 +316,17 @@ def test_tabular_session_explain_is_an_output_not_a_new_question(endpoint):
     explained = materialize('EXPLAIN\n' + query)
     with SDMClient(url=url) as client:
         assert (
-            len(client.predict(explained, model=KumoTabular()).explanations)
+            len(
+                client.predict(
+                    explained, model=KumoTabular()
+                ).explanations.gradients
+            )
             == 2
         )
         assert 'explanation' in calls[-1]['output']['fields']
         with client.fit(plain, model=KumoTabular()) as fitted:
             result = fitted.predict(explained)
-    assert len(result.explanations) == 2
+    assert len(result.explanations.gradients) == 2
     assert 'explanation' in calls[-1]['output']['fields']
     assert 'context' not in calls[-1]
 
@@ -330,7 +349,9 @@ def test_partial_relational_batches_keep_completed_explanations(endpoint):
             outputs=['prediction', 'explanation'],
         )
     partial = caught.value.details['answered']
-    assert len(partial.explanations) == 1
+    assert len(partial.explanations.gradients) == 1
+    assert partial.explanations.columns is not None
+    assert not partial.explanations.columns.to_pandas().empty
 
 
 def test_explain_forecast_keeps_step_identity(endpoint):
@@ -350,8 +371,10 @@ def test_explain_forecast_keeps_step_identity(endpoint):
     )
     with SDMClient(url=url) as client:
         result = client.predict(req, model=KumoRelational())
-    assert len(result.explanations) == 4
-    assert {key[1] for key in result.explanations} == {1, 2}
+    assert result.explanations.columns is not None
+    assert not result.explanations.columns.to_pandas().empty
+    assert len(result.explanations.gradients) == 4
+    assert {key[1] for key in result.explanations.gradients} == {1, 2}
     assert all(
         'explanation' in call['output']['fields']
         for call in calls

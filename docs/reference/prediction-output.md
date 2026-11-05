@@ -6,7 +6,7 @@ explanation.
 ```python
 result = client.predict(request, model=KumoRelational())
 result.to_pandas()  # always a frame
-result.explanations  # empty unless the model returned structured gradients
+result.explanations.gradients  # empty unless the model returned structured gradients
 result.metadata  # whatever the endpoint reported
 ```
 
@@ -121,8 +121,8 @@ joined = to_score.reset_index(names='row_index').merge(answers, on='row_index')
 ## Reading an explanation
 
 Request `outputs=["prediction", "explanation"]` or prefix PQL with `EXPLAIN PREDICT`.
-For a model that returns `sdm_gradient_v1`, `result.explanations` maps each prediction to its validated gradients; `result.explanations.to_pandas()` gives one row per gradient.
-Java exposes `result.explanations().entries()` and `toArrow(allocator)`; callers close the returned Arrow root before closing their allocator.
+For a model that returns `sdm_gradient_v1`, `result.explanations.gradients` maps each prediction to its validated gradients; `result.explanations.gradients.to_pandas()` gives one row per gradient.
+Java exposes `result.explanations().gradients().entries()` and `toArrow(allocator)`; callers close the returned Arrow root before closing their allocator.
 
 Keys are entity IDs when they identify rows uniquely, otherwise `row_index`; forecasts add the forecast step to each key.
 
@@ -199,3 +199,14 @@ Individual tables expose `table.metadata_report()`.
 Reports provide immutable records, `to_text()`, `to_pandas()` and `print()`; `schema.print_metadata()` and `schema.print_links()` are shortcuts.
 They do not read source rows, infer new metadata or change the schema.
 Java provides corresponding `metadataReport()`, `linkReport()` and `toText()` methods with immutable records.
+
+### Context column associations
+
+When explanation output is requested, `result.explanations.columns` describes how context feature cohorts relate to observed targets.
+These are associations, not causal effects or model gradients.
+Use `.to_pandas()` in Python, or `result.explanations().columns().toArrow(allocator)` in Java.
+Java callers close the Arrow root before its allocator.
+The table contains table, hop, column, semantic type, cohort, class, share, mean and normalized score.
+An empty labelled context produces an empty table; unsupported tasks or unavailable statistics produce no column analysis and a warning, while prediction remains usable.
+Fitted models analyze the context after holdout and reuse it, including when EXPLAIN is requested only on a later prediction.
+Merging results with different analyses requires an explicit `columns=` override (the corresponding Java overload), so an unrelated request's analysis is never silently chosen.

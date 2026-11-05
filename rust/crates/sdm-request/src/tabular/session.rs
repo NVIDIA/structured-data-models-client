@@ -452,6 +452,7 @@ pub fn close_after_success(
     let mut next = state.clone();
     if succeeded {
         next.closed = true;
+        next.column_analysis = None;
     }
     Ok(next)
 }

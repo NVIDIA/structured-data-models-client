@@ -172,7 +172,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
             request_id: inputs.request_id.clone(),
         }];
         calls.extend(inputs.batches.take().unwrap_or_default());
-        let (merged, outputs, _) = one(&asker, &inputs, calls).await?;
+        let (merged, outputs, _) = one(&asker, &inputs, calls, None).await?;
         return finish(&asker, merged, outputs);
     };
     // A forecast: each step's regression predicted as the client predicts
@@ -187,6 +187,16 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
         inputs.request_id.clone(),
     )];
     steps.extend(later);
+    let analysis = if crate::columns::requested(&inputs.outputs) {
+        let values = steps
+            .iter()
+            .map(|(_, bytes, _, _)| payload(bytes))
+            .collect::<Result<Vec<_>, _>>()?;
+        Some(crate::columns::compute(&values)?)
+    } else {
+        None
+    };
+    let analysis = crate::columns::expose(&asker, analysis.as_deref(), &inputs.outputs)?;
     let steps_asked = u32::try_from(steps.len()).unwrap_or(u32::MAX);
     let mut answers = Vec::with_capacity(steps.len());
     let mut outputs = Vec::new();
@@ -206,6 +216,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
                 payload,
                 request_id,
             }],
+            analysis.as_deref(),
         )
         .await
         .map_err(|e| crate::materialize::in_step(e, step, steps_asked));
@@ -227,7 +238,9 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
             warn(&asker, notice);
         }
     }
-    finish(&asker, by_step(answers)?, outputs)
+    let mut merged = by_step(answers)?;
+    merged.columns = analysis;
+    finish(&asker, merged, outputs)
 }
 
 /// `error`, carrying the answers a request asked in several calls had
@@ -381,6 +394,7 @@ pub(crate) async fn one(
     asker: &Asker,
     inputs: &Inputs,
     calls: Vec<LaterCall>,
+    provided_analysis: Option<&str>,
 ) -> Result<(Part, Vec<String>, usize), CoreError> {
     let mut payloads = Vec::with_capacity(calls.len());
     let mut ids = Vec::with_capacity(calls.len());
@@ -394,11 +408,21 @@ pub(crate) async fn one(
         &inputs.outputs,
         inputs.default_outputs,
     )?;
+    let computed = if provided_analysis.is_none() && crate::columns::requested(&outputs) {
+        Some(crate::columns::compute(&payloads[..1])?)
+    } else {
+        None
+    };
+    let analysis = if let Some(provided) = provided_analysis {
+        Some(provided.to_owned())
+    } else {
+        crate::columns::expose(asker, computed.as_deref(), &outputs)?
+    };
     let scored = payloads
         .iter()
         .map(|p| predict_rows(p).unwrap_or(0))
         .fold(0usize, usize::saturating_add);
-    let merged = if payloads.iter().all(nothing_to_score) {
+    let mut merged = if payloads.iter().all(nothing_to_score) {
         empty(&inputs.model, &payloads[0])
     } else {
         for notice in preflight(&payloads, &outputs, &inputs.query, &inputs.model)? {
@@ -456,7 +480,10 @@ pub(crate) async fn one(
                 Err(error) => Err(error),
             };
             match answered {
-                Ok(part) => parts.push(part),
+                Ok(mut part) => {
+                    part.columns = analysis.clone();
+                    parts.push(part)
+                }
                 Err(error) => {
                     if let Some(session) = session.take() {
                         session.close(asker).await;
@@ -470,6 +497,7 @@ pub(crate) async fn one(
         }
         merge(parts)?
     };
+    merged.columns = analysis;
     if !inputs.default_outputs {
         let left_out = absent(&merged, &outputs);
         if !left_out.is_empty() {

@@ -75,6 +75,9 @@ impl<T: JsonSchema> JsonSchema for Named<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields, rename = "StatePayload")]
 pub struct StatePayload<K = Task, C = InferenceConfig> {
+    /// Removed labelled rows only, for client analysis; never sent to a model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_analysis_delta: Option<AnalysisDelta>,
     /// Client-only generated keys, stripped before sending to a model.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub client_generated_keys: std::collections::BTreeMap<String, String>,
@@ -89,6 +92,23 @@ pub struct StatePayload<K = Task, C = InferenceConfig> {
     pub output: Output,
     pub inference: Inference<C>,
     pub metadata: Metadata,
+}
+
+/// Versioned reconstruction of only rows omitted by leakage trimming.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct AnalysisDelta {
+    pub version: u32,
+    pub schema_json: String,
+    pub instance_table: RemovedRows,
+    pub related_tables: Named<RemovedRows>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct RemovedRows {
+    pub original_rows: usize,
+    pub positions: Vec<usize>,
+    pub removed: Rows,
 }
 
 /// What is predicted, of which entity.

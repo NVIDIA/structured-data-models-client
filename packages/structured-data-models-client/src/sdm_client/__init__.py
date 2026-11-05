@@ -30,7 +30,11 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
-from sdm_client.explanations import GradientExplanations
+from sdm_client.explanations import (
+    ColumnExplanations,
+    Explanations,
+    GradientExplanations,
+)
 from sdm_client.inference import InferenceConfig
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
@@ -83,6 +87,8 @@ __all__ = [
     'NimRequestError',
     'PredictionResult',
     'GradientExplanations',
+    'ColumnExplanations',
+    'Explanations',
     'PredictiveQuery',
     'Relationship',
     'RelationshipOrigin',

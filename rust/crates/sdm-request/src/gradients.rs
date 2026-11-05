@@ -447,6 +447,27 @@ impl<'a> Table<'a> {
             .collect())
     }
 }
+/// Interpret relationship distances identically for gradients and context statistics.
+pub(crate) fn context_hops<'a>(
+    schema: &Value,
+    context: &'a Value,
+) -> Result<BTreeMap<&'a str, Vec<Option<usize>>>, CoreError> {
+    let instance = Table::read(
+        context
+            .get("instance_table")
+            .ok_or_else(|| bad("request_shape"))?,
+    )?;
+    let tables = members(
+        context
+            .get("related_tables")
+            .ok_or_else(|| bad("request_shape"))?,
+    )?
+    .iter()
+    .map(|(name, value)| Ok((name.as_str(), Table::read(value)?)))
+    .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
+    hops(schema, &instance, &tables)
+}
+
 type Node<'a> = (&'a str, usize);
 fn hops<'a>(
     schema: &Value,

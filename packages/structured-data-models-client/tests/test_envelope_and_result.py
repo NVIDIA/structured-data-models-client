@@ -430,4 +430,4 @@ def test_raw_explanation_constructor_remains_supported_without_expired_deprecati
         )
         assert result.explanation is raw
     assert not caught
-    assert not result.explanations
+    assert not result.explanations.gradients

@@ -145,6 +145,24 @@ pub(crate) fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
 }
 
 /// Empty/single/model/output ordering matches the public client; row owners stay host-side.
+fn merge_columns(parts: &[MergeDescriptor]) -> Result<Option<String>, CoreError> {
+    let mut selected = None;
+    for part in parts {
+        if let Some(raw) = &part.columns {
+            let normalized = serde_json::to_string(&crate::columns::validate(raw)?)
+                .map_err(|_| invalid("invalid analysis encoding"))?;
+            if selected.as_ref().is_some_and(|prior| prior != &normalized) {
+                return Err(CoreError::new(
+                    Sentence::ResultMergeColumns,
+                    "cannot merge different column analyses; supply request-level columns explicitly",
+                ));
+            }
+            selected = Some(normalized);
+        }
+    }
+    Ok(selected)
+}
+
 pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
     let Some(first) = parts.first() else {
         return Err(CoreError::new(
@@ -157,6 +175,7 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
         .map(crate::gradients::manual_records)
         .collect::<Result<Vec<_>, _>>()?;
     let mut plan = ResultMergePlan {
+        columns: merge_columns(parts)?,
         single: parts.len() == 1,
         batches: parts.len(),
         batch_request_ids: parts.iter().map(|p| p.request_id.clone()).collect(),
@@ -235,6 +254,7 @@ mod tests {
     use super::*;
     fn descriptor(candidates: Vec<C>) -> MergeDescriptor {
         MergeDescriptor {
+            columns: None,
             manual_gradients: vec![],
             model: "m".into(),
             request_id: "one".into(),

@@ -1397,6 +1397,41 @@ fn build_mode(
         }
     };
 
+    // Retain only leakage-excluded rows. Surviving rows already live in context.
+    // Positions restore original order; identity deduplication must not reorder rows.
+    let removed = |frame: &Frame, batch: &[usize]| -> sdm_wire::payload::RemovedRows {
+        let original: Vec<usize> = batch
+            .iter()
+            .enumerate()
+            .filter_map(|(r, &instance)| (instance < num_train).then_some(r))
+            .collect();
+        let positions = original
+            .iter()
+            .enumerate()
+            .filter_map(|(at, &r)| answered.contains(&batch[r]).then_some(at))
+            .collect();
+        sdm_wire::payload::RemovedRows {
+            original_rows: original.len(),
+            positions,
+            removed: frame.table(
+                |r| batch[r] < num_train && answered.contains(&batch[r]),
+                None,
+            ),
+        }
+    };
+    let client_analysis_delta = (!answered.is_empty()).then(|| sdm_wire::payload::AnalysisDelta {
+        version: 1,
+        schema_json: String::new(), // Filled after schema assembly below.
+        instance_table: removed(&instance, &(0..instance.rows).collect::<Vec<_>>()),
+        related_tables: Named(
+            frames
+                .iter()
+                .zip(&sampled.tables)
+                .map(|((name, frame, ..), table)| (name.clone(), removed(frame, &table.batch)))
+                .collect(),
+        ),
+    });
+
     let mut fields: Vec<String> = if link.is_some() {
         vec!["rankings".into()]
     } else {
@@ -1448,6 +1483,10 @@ fn build_mode(
         fields,
         prediction_statistic: sampled.statistic.clone(),
     };
+    let client_analysis_delta = client_analysis_delta.map(|mut delta| {
+        delta.schema_json = serde_json::to_string(&schema).expect("typed schema serializes");
+        delta
+    });
     let metadata = Metadata {
         source_query: (!sampled.source_query.is_empty()).then(|| sampled.source_query.clone()),
         num_context_examples: num_train as u64,
@@ -1467,6 +1506,7 @@ fn build_mode(
     };
     let bytes = if link.is_some() {
         StatePayload {
+            client_analysis_delta: client_analysis_delta.clone(),
             client_generated_keys,
             model,
             task: sdm_wire::payload::TemporalLinkTask {
@@ -1489,6 +1529,7 @@ fn build_mode(
         .to_bytes()
     } else if kind.is_classification() {
         StatePayload {
+            client_analysis_delta: client_analysis_delta.clone(),
             client_generated_keys,
             model,
             task: task!(ClassTarget {
@@ -1507,6 +1548,7 @@ fn build_mode(
         .to_bytes()
     } else {
         StatePayload {
+            client_analysis_delta: client_analysis_delta.clone(),
             client_generated_keys,
             model,
             task: task!(Target {
@@ -1529,7 +1571,14 @@ fn build_mode(
     // most rows a call of the request scores (`smaller_calls`); a call of
     // one row cannot, and only a narrower context helps
     // (`no_smaller_call`).
-    let model_bytes = bytes.len() - client_only_bytes;
+    let analysis_bytes = client_analysis_delta.as_ref().map_or(0, |delta| {
+        serde_json::to_vec(delta)
+            .expect("typed delta serializes")
+            .len()
+            + br#""client_analysis_delta":"#.len()
+            + 1
+    });
+    let model_bytes = bytes.len() - client_only_bytes - analysis_bytes;
     if model_bytes > PAYLOAD_BYTES {
         let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(

@@ -132,6 +132,8 @@ pub struct SessionQuestionDifference {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TabularSessionState {
+    #[serde(default)]
+    pub column_analysis: Option<String>,
     pub version: u32,
     pub session_id: String,
     pub closed: bool,
@@ -172,6 +174,8 @@ pub struct AcceptTabularSession {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedTabularFit {
+    #[serde(default)]
+    pub column_analysis: Option<String>,
     pub bound: BoundDirectCall,
     pub columns: TabularColumns,
     pub primary_key: Vec<String>,
@@ -212,6 +216,7 @@ pub struct TabularSessionOverlap {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedTabularScore {
+    pub empty: bool,
     pub bound: BoundDirectCall,
     pub payload: AttachmentId,
     pub layout: AttachmentId,
