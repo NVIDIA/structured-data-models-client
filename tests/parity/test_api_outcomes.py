@@ -147,7 +147,7 @@ def test_api_ledger_checks_windows_checkout(monkeypatch, changed):
 def test_runner_makes_repository_fixture_helpers_importable(tmp_path):
     suite = tmp_path / 'test_import.py'
     suite.write_text(
-        'def test_import():\n    from tests.parity.routes import LegacyGuard\n    assert LegacyGuard\n'
+        'def test_import():\n    from tests.parity.contract import manifest\n    assert manifest\n'
     )
     runner = (
         'import sys, api_contracts as api\n'

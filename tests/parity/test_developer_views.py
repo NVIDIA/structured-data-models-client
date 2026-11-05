@@ -8,14 +8,14 @@ import json
 import pytest
 from developer_views import execution_evidence, render
 from jsonschema import ValidationError
-from test_contract import one, paired
+from test_contract import current_records, one
 
 COMMIT = 'a' * 40
 
 
 def observations(tmp_path, *, live=True, mutation=None):
     data = one()
-    _, records = paired(data)
+    records = current_records(data)
     for record in records.values():
         record['artifact'].update(
             commit=COMMIT, package_hash='b' * 64, native_hash='c' * 64

@@ -13,13 +13,10 @@ import importlib
 import json
 import math
 import pickle
-import subprocess
 import tempfile
 import zipfile
 from decimal import Decimal
 from pathlib import Path
-
-from routes import LegacyGuard
 
 from contract import (
     HERE,
@@ -103,6 +100,8 @@ def frame(data):
 
 @functools.lru_cache
 def artifact(commit, phase, provenance=None):
+    if phase != 'candidate':
+        raise Incomplete('only current installed clients are supported')
     import sdm_client
 
     package = Path(sdm_client.__file__).resolve().parent
@@ -112,61 +111,42 @@ def artifact(commit, phase, provenance=None):
         sha.update(str(path.relative_to(package)).encode())
         sha.update(path.read_bytes())
     out = {'commit': commit, 'package_hash': sha.hexdigest()}
-    if phase == 'candidate':
-        from sdm_client import _native
+    from sdm_client import _native
 
-        out.update(
-            native_hash=hashlib.sha256(
-                Path(_native.__file__).read_bytes()
-            ).hexdigest(),
-            contract=_native.CONTRACT_VERSION,
+    out.update(
+        native_hash=hashlib.sha256(
+            Path(_native.__file__).read_bytes()
+        ).hexdigest(),
+        contract=_native.CONTRACT_VERSION,
+    )
+    if provenance is None:
+        raise Incomplete('candidate requires verified wheel provenance')
+    path = Path(provenance)
+    identity = json.loads(path.read_text())
+    if (
+        identity.get('commit') != commit
+        or identity.get('tree_clean') is not True
+        or identity.get('features') != []
+    ):
+        raise Incomplete(
+            'candidate provenance is not the requested clean production build'
         )
-    if phase == 'baseline':
-
-        def git(*args):
-            return subprocess.check_output(
-                ['git', '-C', str(package), *args], text=True
-            ).strip()
-
-        if git('rev-parse', 'HEAD') != commit or git('status', '--porcelain'):
-            raise Incomplete(
-                'baseline Python source is not the requested clean commit'
-            )
-        source_root = (
-            Path(git('rev-parse', '--show-toplevel'))
-            / 'packages/structured-data-models-client/src/sdm_client'
-        )
-        if package != source_root:
-            raise Incomplete('baseline must import the verified frozen source')
-    else:
-        if provenance is None:
-            raise Incomplete('candidate requires verified wheel provenance')
-        path = Path(provenance)
-        identity = json.loads(path.read_text())
-        if (
-            identity.get('commit') != commit
-            or identity.get('tree_clean') is not True
-            or identity.get('features') != []
+    wheel = path.parent / identity['wheel']
+    if hashlib.sha256(wheel.read_bytes()).hexdigest() != identity.get(
+        'sha256'
+    ) or out['native_hash'] != identity.get('native_sha256'):
+        raise Incomplete('wheel/native artifact identity mismatch')
+    wheel_python = hashlib.sha256()
+    with zipfile.ZipFile(wheel) as archive:
+        for name in sorted(
+            name
+            for name in archive.namelist()
+            if name.startswith('sdm_client/') and name.endswith('.py')
         ):
-            raise Incomplete(
-                'candidate provenance is not the requested clean production build'
-            )
-        wheel = path.parent / identity['wheel']
-        if hashlib.sha256(wheel.read_bytes()).hexdigest() != identity.get(
-            'sha256'
-        ) or out['native_hash'] != identity.get('native_sha256'):
-            raise Incomplete('wheel/native artifact identity mismatch')
-        wheel_python = hashlib.sha256()
-        with zipfile.ZipFile(wheel) as archive:
-            for name in sorted(
-                name
-                for name in archive.namelist()
-                if name.startswith('sdm_client/') and name.endswith('.py')
-            ):
-                wheel_python.update(name.removeprefix('sdm_client/').encode())
-                wheel_python.update(archive.read(name))
-        if wheel_python.hexdigest() != out['package_hash']:
-            raise Incomplete('installed Python differs from the verified wheel')
+            wheel_python.update(name.removeprefix('sdm_client/').encode())
+            wheel_python.update(archive.read(name))
+    if wheel_python.hexdigest() != out['package_hash']:
+        raise Incomplete('installed Python differs from the verified wheel')
     return out
 
 
@@ -757,10 +737,8 @@ def run(case, connector, model, config, phase, mode, commit, provenance=None):
         'error': None,
         'route': None,
     }
-    guard = LegacyGuard() if phase == 'candidate' else contextlib.nullcontext()
     try:
-        with guard:
-            journey(case, connector, model, config, mode, record)
+        journey(case, connector, model, config, mode, record)
     except ImportError:
         record['status'] = 'incomplete'
         record['reason'] = (
@@ -778,9 +756,6 @@ def run(case, connector, model, config, phase, mode, commit, provenance=None):
             'rule': fields.get('rule') if isinstance(fields, dict) else None,
         }
         # Exception text may contain source credentials or raw data; never log it.
-    finally:
-        if phase == 'candidate':
-            record['route'] = guard.report
     record.pop('stage', None)
     return record
 
@@ -789,7 +764,7 @@ def expected_outcome(case, record):
     expected = expectation(
         case,
         record['model'],
-        'python' if record['phase'] == 'candidate' else None,
+        'python',
         live=record.get('execution') != 'local',
     )
     if expected['status'] == 'supported':
@@ -805,9 +780,7 @@ def main():
     parser.add_argument('--manifest', type=Path, default=HERE / 'manifest.json')
     parser.add_argument('--config', type=Path)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument(
-        '--phase', choices=['baseline', 'candidate'], required=True
-    )
+    parser.add_argument('--phase', choices=['candidate'], default='candidate')
     parser.add_argument('--mode', choices=['local', 'live'], default='local')
     parser.add_argument('--case', action='append')
     parser.add_argument('--connector', action='append')

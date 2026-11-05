@@ -366,8 +366,22 @@ def changed_records(before, after):
         'capabilities',
         'type_contracts',
     ):
-        previous = {record['id']: record for record in before.get(section, [])}
-        current = {record['id']: record for record in after.get(section, [])}
+
+        def promises(record, section=section):
+            # Historical comparison annotations are not current support promises.
+            return {
+                key: value
+                for key, value in record.items()
+                if section != 'scenarios'
+                or key not in {'baseline', 'differences'}
+            }
+
+        previous = {
+            record['id']: promises(record) for record in before.get(section, [])
+        }
+        current = {
+            record['id']: promises(record) for record in after.get(section, [])
+        }
         for identifier in previous.keys() | current.keys():
             if previous.get(identifier) != current.get(identifier):
                 changes.add(f'{section}/{identifier}')

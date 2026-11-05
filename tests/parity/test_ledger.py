@@ -387,3 +387,33 @@ def test_assertion_helper_is_not_a_collected_test(tmp_path):
         validate_assertion_node(
             'test_public.py::helper', ['test_public.py'], tmp_path
         )
+
+
+def test_retired_comparison_annotations_are_not_current_support_promises():
+    before = {
+        'scenarios': [
+            {
+                'id': 'predict',
+                'models': ['relational', 'tabular'],
+                'expected': {'status': 'supported'},
+                'baseline': {'commit': 'retired-client'},
+                'differences': ['retired-comparison-waiver'],
+            }
+        ],
+    }
+    after = copy.deepcopy(before)
+    after['scenarios'][0].pop('baseline')
+    after['scenarios'][0].pop('differences')
+    validate_changes(before, after, 'base')
+    # Normalize both sides; legacy metadata never grants an approval either.
+    validate_changes(after, before, 'base')
+    for mutation in ('models', 'expected', 'deleted'):
+        changed = copy.deepcopy(after)
+        if mutation == 'models':
+            changed['scenarios'][0]['models'] = ['relational']
+        elif mutation == 'expected':
+            changed['scenarios'][0]['expected'] = {'status': 'refused'}
+        else:
+            changed['scenarios'] = []
+        with pytest.raises(ValueError, match='scenarios/predict'):
+            validate_changes(before, changed, 'base')

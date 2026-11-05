@@ -5,19 +5,12 @@
 
 import copy
 import json
-import os
-import subprocess
-import sys
-import threading
-import types
 
 import pytest
 from compare import assess as compare_assess
 from compare import difference, matrix
-from routes import LegacyGuard
 
 from contract import (
-    BASELINE,
     HERE,
     cells,
     digest,
@@ -27,8 +20,10 @@ from contract import (
 )
 
 
-def assess(*args, **kwargs):
-    return compare_assess(*args, candidate_commit='candidate', **kwargs)
+def assess(data, python, java, **kwargs):
+    return compare_assess(
+        data, {**python, **java}, candidate_commit='candidate', **kwargs
+    )
 
 
 def one():
@@ -53,7 +48,7 @@ def observation(case, phase='candidate', language='python'):
         'execution': 'live',
         'fixture_hash': fixture_hash(case),
         'artifact': {
-            'commit': BASELINE if phase == 'baseline' else 'candidate',
+            'commit': 'candidate',
             'package_hash': 'package',
             'native_hash': 'native',
             'contract': 54,
@@ -103,13 +98,15 @@ def observation(case, phase='candidate', language='python'):
 
 def paired(data):
     case = data['scenarios'][0]
-    old = observation(case, 'baseline')
-    new = observation(case)
     identity = tuple(next(cells(data)))
-    return {(*identity[:3], 'python'): old}, {
-        (*identity[:3], 'python'): new,
+    return {(*identity[:3], 'python'): observation(case)}, {
         (*identity[:3], 'java'): observation(case, language='java'),
     }
+
+
+def current_records(data):
+    python, java = paired(data)
+    return {**python, **java}
 
 
 def test_missing_scope_and_local_runs_cannot_finish_the_goal():
@@ -132,7 +129,6 @@ def test_missing_scope_and_local_runs_cannot_finish_the_goal():
         ('source_snapshot', 'other'),
         ('execution', 'local'),
         ('endpoint', {'kind': 'stub'}),
-        ('route', {'legacy_hits': []}),
         ('artifact', {'commit': 'candidate'}),
     ],
 )
@@ -222,67 +218,6 @@ def test_python_api_mappings_exist_on_installed_public_surface():
                 )
 
 
-def test_tripwires_catch_worker_aliases_even_when_worker_catches_error(
-    monkeypatch,
-):
-    module = types.ModuleType('parity_tripwire_probe')
-    exec('def legacy():\n    return 7\n', module.__dict__)
-    monkeypatch.setitem(sys.modules, module.__name__, module)
-    alias = module.legacy
-    guard = LegacyGuard({module.__name__: ('legacy',)})
-    with pytest.raises(AssertionError, match='invoked and caught'):
-        with guard:
-
-            def worker():
-                try:
-                    alias()
-                except AssertionError:
-                    pass
-
-            thread = threading.Thread(target=worker)
-            thread.start()
-            thread.join()
-    assert guard.report['legacy_hits']
-    assert len(guard.report['workers']) >= 2
-    assert module.legacy() == 7
-
-
-def test_subprocesses_are_not_silently_counted_as_observed():
-    with LegacyGuard({}) as guard:
-        subprocess.run([sys.executable, '-c', 'pass'], check=True)
-    assert guard.report['unobserved_subprocesses']
-
-
-def test_pytest_tripwire_wraps_fixture_setup_and_teardown(
-    tmp_path, monkeypatch
-):
-    # Run a deliberately failing public setup in a child pytest. Its local
-    # conftest uses the exact permanent hook, not a hand-written approximation.
-    (tmp_path / 'conftest.py').write_text((HERE / 'conftest.py').read_text())
-    (tmp_path / 'test_probe.py').write_text("""import pytest
-@pytest.fixture
-def data():
-    import predictive_query
-    return 1
-@pytest.mark.parity_default_routes
-def test_public(data):
-    assert data == 1
-""")
-    monkeypatch.setenv(
-        'PYTHONPATH',
-        os.pathsep.join(
-            filter(None, [str(HERE), os.environ.get('PYTHONPATH')])
-        ),
-    )
-    ran = subprocess.run(
-        [sys.executable, '-m', 'pytest', '-q', str(tmp_path)],
-        text=True,
-        capture_output=True,
-    )
-    assert ran.returncode != 0
-    assert 'retired runtime imported' in ran.stdout + ran.stderr
-
-
 def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
     from api_contracts import validate
 
@@ -321,6 +256,7 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'typed-inference-settings',
         'explanation-summaries',
         'gradient-explanations',
+        'column-explanations',
     }
 
 
@@ -329,28 +265,6 @@ def test_candidate_commit_and_artifact_mixing_fail_closed():
     old, new = paired(data)
     next(iter(new.values()))['artifact']['commit'] = 'another-commit'
     with pytest.raises(ValueError, match='requested commit'):
-        assess(data, old, new)
-
-
-def test_explicit_baseline_commit_preserves_historical_identity_checks():
-    data = one()
-    old, new = paired(data)
-    requested = '847a1e9e37735978bc6270d1b4425d0652302cea'
-    next(iter(old.values()))['artifact']['commit'] = requested
-    assert not assess(data, old, new)['scope_complete']
-    report = assess(data, old, new, baseline_commit=requested)
-    assert report['scope_complete']
-    assert report['baseline_commit'] == requested
-    assert not assess(data, old, new, baseline_commit='wrong')['scope_complete']
-
-
-def test_baseline_records_cannot_mix_installed_sources():
-    data = one()
-    old, new = paired(data)
-    record = copy.deepcopy(next(iter(old.values())))
-    record['artifact']['package_hash'] = 'different-package'
-    old[('another-case', 'memory', 'relational', 'python')] = record
-    with pytest.raises(ValueError, match='baseline records mix artifacts'):
         assess(data, old, new)
 
 
@@ -364,7 +278,7 @@ def test_model_tolerance_never_changes_input_or_reader_comparison():
     assert not assess(data, old, new)['goal_complete']
 
 
-def test_explicit_improvement_still_checks_the_exact_old_error():
+def test_declared_language_difference_still_checks_exact_errors():
     data = one()
     case = data['scenarios'][0]
     case['expected'] = {
@@ -383,7 +297,6 @@ def test_explicit_improvement_still_checks_the_exact_old_error():
             'verdict': 'Improvement',
         }
     }
-    case['differences'] = ['named-source-persistence-refusal']
     old, new = paired(data)
     for record in [*old.values(), *new.values()]:
         spec = case['expected_by_language'].get(
@@ -545,7 +458,7 @@ def test_runner_accepts_only_explicit_expected_failure():
         }
     }
     record = {
-        'phase': 'baseline',
+        'phase': 'candidate',
         'model': 'relational',
         'status': 'failed',
         'error': {'stage': 'restore', 'code': 'TypeError', 'rule': None},
@@ -609,229 +522,6 @@ def test_equal_raw_requests_do_not_need_fixture_identity_rewriting(monkeypatch):
     assert assess(data, old, new)['goal_complete']
 
 
-def test_temporal_entity_ref_improvement_is_exact_and_role_bound():
-    from compare import equivalent_derived_entity_refs
-
-    name = '__kumo_entity_ref_0'
-    fixture = {'primary_keys': {'items': 'id'}}
-
-    def payload(dtype, value):
-        table = {'columns': [name], 'rows': [[value], [None]]}
-        return {
-            'task': {
-                'kind': 'temporal_link_prediction',
-                'entity_table_names': ['items'],
-            },
-            'schema': {
-                'instance_table': {
-                    'columns': {name: {'dtype': dtype, 'stype': 'ID'}}
-                },
-                'relationships': [
-                    {
-                        'source_columns': [name],
-                        'target_columns': ['id'],
-                        'target_table': 'items',
-                    }
-                ],
-            },
-            'context': {'instance_table': copy.deepcopy(table)},
-            'predict': {'instance_table': copy.deepcopy(table)},
-        }
-
-    old, new = payload('float64', 2.0), payload('int64', 2)
-    equivalent_derived_entity_refs([old], [new], fixture)
-    assert old == new
-    for value, integer in [(1.5, 1), (float(2**53), 2**53 + 1), (True, 1)]:
-        old, new = payload('float64', value), payload('int64', integer)
-        equivalent_derived_entity_refs([old], [new], fixture)
-        assert (
-            old['schema']['instance_table']['columns'][name]['dtype']
-            == 'float64'
-        )
-    old, new = payload('float64', 2.0), payload('int64', 2)
-    for record in (old, new):
-        record['schema']['relationships'][0]['source_table'] = 'ordinary_source'
-    equivalent_derived_entity_refs([old], [new], fixture)
-    assert (
-        old['schema']['instance_table']['columns'][name]['dtype'] == 'float64'
-    )
-    old, new = payload('float64', 2.0), payload('int64', 2)
-    new['predict']['instance_table']['rows'][1][0] = 0
-    equivalent_derived_entity_refs([old], [new], fixture)
-    assert (
-        old['schema']['instance_table']['columns'][name]['dtype'] == 'float64'
-    )
-
-
-def test_derived_reference_alignment_precedes_identity_proof_without_hiding_changes(
-    monkeypatch,
-):
-    import compare
-
-    data = one()
-    case = data['scenarios'][0]
-    case['id'] = 'relational.temporal-link'
-    case['comparison'] = 'fixture-source-identity'
-    fixture = json.loads((HERE / case['fixture']).read_text())
-    name = '__kumo_entity_ref_0'
-    user = fixture['tables']['users']
-    columns = user['columns']
-    values = user['rows'][0]
-    kinds = ['int64', 'float64', 'string', 'bool']
-    related = {
-        'columns': {
-            'instance_id': {'dtype': 'int64'},
-            **{
-                column: {'dtype': dtype}
-                for column, dtype in zip(columns, kinds, strict=True)
-            },
-        },
-        'primary_key': ['instance_id', 'id'],
-    }
-
-    def payload(dtype, value):
-        half = {
-            'instance_table': {
-                'columns': ['instance_id', name],
-                'rows': [[0, value], [1, None]],
-            },
-            'related_tables': {
-                'users': {
-                    'columns': ['instance_id', *columns],
-                    'rows': [[0, *values]],
-                }
-            },
-        }
-        return {
-            'task': {
-                'kind': 'temporal_link_prediction',
-                'entity_table_names': ['items'],
-            },
-            'schema': {
-                'instance_table': {
-                    'columns': {name: {'dtype': dtype, 'stype': 'ID'}}
-                },
-                'related_tables': {'users': copy.deepcopy(related)},
-                'relationships': [
-                    {
-                        'source_columns': [name],
-                        'target_columns': ['item'],
-                        'target_table': 'items',
-                    }
-                ],
-            },
-            'context': copy.deepcopy(half),
-            'predict': copy.deepcopy(half),
-        }
-
-    old, new = paired(data)
-    for record in old.values():
-        record['semantic']['request'] = [payload('float64', 2.0)]
-        record['endpoint']['transport'] = 'private-bridge'
-    for record in new.values():
-        record['semantic']['request'] = [payload('int64', 2)]
-        record['endpoint']['transport'] = 'private-bridge'
-    raw_before = copy.deepcopy((old, new))
-    calls = []
-    canonical = compare.canonical
-
-    def observed(*args):
-        calls.append(True)
-        return canonical(*args)
-
-    monkeypatch.setattr(compare, 'canonical', observed)
-    report = assess(data, old, new)
-    assert report['goal_complete']
-    assert not calls
-    assert all(
-        row['verdict'] == 'Improvement (private bridge)'
-        for row in report['cells']
-    )
-    assert (old, new) == raw_before
-    # A changed source identity or feature must still invoke the original proof
-    # and fail, even though the derived nullable reference itself is equivalent.
-    for column in ('id', 'value'):
-        changed = copy.deepcopy(new)
-        record = next(iter(changed.values()))
-        table = record['semantic']['request'][0]['context']['related_tables'][
-            'users'
-        ]
-        table['rows'][0][table['columns'].index(column)] = 999
-        calls.clear()
-        report = assess(data, old, changed)
-        assert calls
-        assert not report['goal_complete']
-        assert any(
-            row.get('reason', '').startswith('identity proof failed:')
-            for row in report['cells']
-        )
-
-
-@pytest.mark.parametrize('linked_system_tool', [False, True])
-def test_snowflake_platform_probe_requires_exact_command_and_driver_origin(
-    linked_system_tool,
-):
-    pytest.importorskip('snowflake.connector')
-    code = """
-import json, subprocess
-from routes import LegacyGuard
-with LegacyGuard({}) as guard:
-    import snowflake.connector
-assert guard.report['unobserved_subprocesses'] == [], guard.report
-assert all(item['command'] == ['uname', '-p'] for item in guard.report['observed_subprocesses'])
-with LegacyGuard({}) as outside:
-    subprocess.run(['uname', '-p'], check=True, capture_output=True)
-assert outside.report['observed_subprocesses'] == []
-assert outside.report['unobserved_subprocesses'] == ['subprocess.Popen']
-print(json.dumps(guard.report))
-"""
-    if linked_system_tool:
-        code = (
-            """
-from pathlib import Path
-original_resolve = Path.resolve
-def system_resolve(self, *args, **kwargs):
-    resolved = original_resolve(self, *args, **kwargs)
-    if resolved == Path('/usr/bin/uname'):
-        return Path('/usr/lib/cargo/bin/coreutils/uname')
-    return resolved
-Path.resolve = system_resolve
-"""
-            + code
-        )
-    ran = subprocess.run(
-        [sys.executable, '-c', code],
-        cwd=HERE,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert ran.returncode == 0, ran.stderr
-    observed = json.loads(ran.stdout)['observed_subprocesses']
-    assert all(
-        item['origin']
-        == 'snowflake.connector.description -> platform._Processor.from_subprocess'
-        for item in observed
-    )
-
-
-def test_snowflake_probe_near_misses_remain_unobserved():
-    from routes import snowflake_platform_probe
-
-    assert not snowflake_platform_probe(
-        'subprocess.Popen', ('uname', ['uname', '-a'], None, None)
-    )
-    assert not snowflake_platform_probe(
-        'subprocess.Popen', ('uname', ['uname', '-p'], '/', None)
-    )
-    assert not snowflake_platform_probe(
-        'subprocess.Popen', ('uname', ['uname', '-p'], None, {})
-    )
-    assert not snowflake_platform_probe(
-        'os.posix_spawn', ('uname', ['uname', '-p'], None, None)
-    )
-
-
 def test_snowflake_reader_integer_encoding_requires_lossless_ordered_values():
     from compare import equivalent_snowflake_reader_integers
 
@@ -893,9 +583,7 @@ def test_raw_reader_identity_uses_equal_observations_and_rejects_changed_rows(
                 'rule': None,
             }
         record['reader']['users']['data']['rows'][0][2] = 0
-        record['semantic']['request'] = [
-            {'tag': 'old' if record['phase'] == 'baseline' else 'new'}
-        ]
+        record['semantic']['request'] = [{'tag': record['language']}]
     captured = []
 
     def checked(payload, fixture):
@@ -914,13 +602,15 @@ def test_raw_reader_identity_uses_equal_observations_and_rejects_changed_rows(
     report = assess(data, old, new)
     assert not report['goal_complete']
     assert not captured
-    assert all(
-        row['reason'] == 'raw reader rows differ before identity proof'
-        for row in report['cells']
+    assert (
+        next(row for row in report['cells'] if row['cell'][3] == 'java')[
+            'reason'
+        ]
+        == 'raw reader rows differ before identity proof'
     )
 
 
-def test_model_expectations_do_not_leak_across_models_or_into_baseline():
+def test_model_expectations_do_not_leak_across_models_or_languages():
     from contract import expectation
 
     supported = {'status': 'supported'}
@@ -1193,68 +883,6 @@ def test_raw_observation_equivalence_is_slot_typed_exact_and_detached():
         )
 
 
-def test_decimal_improvement_requires_exact_old_cast_and_closer_new_rounding():
-    from decimal import Decimal
-
-    import pyarrow as pa
-    from identity import equivalent_legacy_decimal_cast
-
-    exact = Decimal('21.123456')
-    legacy = (
-        pa.array([exact], type=pa.decimal128(20, 6))
-        .cast(pa.float64())[0]
-        .as_py()
-    )
-    nearest = float(exact)
-    assert legacy != nearest
-    fixture = {
-        'primary_keys': {'users': 'id'},
-        'tables': {
-            'users': {
-                'columns': ['id', 'fraction'],
-                'types': {'fraction': 'decimal128(20,6)'},
-                'rows': [[21, str(exact)], [22, None]],
-            }
-        },
-    }
-
-    def payload(value):
-        table = {
-            'columns': ['instance_id', 'id', 'fraction'],
-            'rows': [[0, 21, value], [0, 22, None]],
-        }
-        return [
-            {
-                'schema': {
-                    'related_tables': {
-                        'users': {
-                            'primary_key': ['instance_id', 'id'],
-                            'columns': {'fraction': {'dtype': 'float64'}},
-                        }
-                    }
-                },
-                'context': {'related_tables': {'users': copy.deepcopy(table)}},
-                'predict': {'related_tables': {'users': copy.deepcopy(table)}},
-            }
-        ]
-
-    old, new = payload(legacy), payload(nearest)
-    assert equivalent_legacy_decimal_cast(old, new, fixture)
-    assert old == new
-    for wrong_old, wrong_new in [
-        (nearest, legacy),
-        (legacy, nearest + 1e-12),
-        (legacy - 1e-12, nearest),
-    ]:
-        old, new = payload(wrong_old), payload(wrong_new)
-        before = copy.deepcopy(old)
-        assert not equivalent_legacy_decimal_cast(old, new, fixture)
-        assert old == before
-    old, new = payload(legacy), payload(nearest)
-    new[0]['predict']['related_tables']['users']['rows'][0][1] = 22
-    assert not equivalent_legacy_decimal_cast(old, new, fixture)
-
-
 def test_timezone_display_labels_require_exact_instants_and_keep_raw_metadata():
     from compare import equivalent_raw_observations
 
@@ -1349,103 +977,3 @@ def test_date_inspection_and_list_null_proofs_do_not_erase_times_or_numbers():
             a['reader']['users']['data']['rows'][0][2][0] = {'float': 'nan'}
         equivalent_raw_observations(a, b, fixture)
         assert a != b
-
-
-@pytest.mark.parametrize(
-    'module', ['predictive_query', 'sdm_relational_engine']
-)
-def test_default_guard_blocks_retired_package_imports(module):
-    import importlib
-
-    with LegacyGuard(raise_caught=False) as guard:
-        with pytest.raises(AssertionError, match='retired runtime imported'):
-            importlib.import_module(module)
-    assert guard.report['legacy_hits'] == [module]
-    assert guard.report['installed']
-
-
-@pytest.mark.parametrize(
-    'module', ['predictive_query', 'sdm_relational_engine']
-)
-def test_default_guard_rejects_preloaded_retired_packages(module, monkeypatch):
-    import sys
-    import types
-
-    monkeypatch.setitem(sys.modules, module, types.ModuleType(module))
-    guard = LegacyGuard()
-    with pytest.raises(
-        AssertionError, match='retired runtime already imported'
-    ):
-        with guard:
-            pytest.fail('a preloaded retired package must prevent the journey')
-    assert guard.report['legacy_hits'] == [module]
-    assert not guard.report['installed']
-
-
-@pytest.mark.parametrize(
-    'owner_name,method',
-    [
-        ('sdm_client.client', '_explained_if_asked'),
-        ('sdm_client.decompose', 'parts_of'),
-        ('sdm_client.adapters.tabular.TabularAdapter', 'answered'),
-    ],
-)
-def test_guard_catches_reintroduced_main_engine_helpers(
-    monkeypatch, owner_name, method
-):
-    from routes import owner
-
-    obj = owner(owner_name)
-    monkeypatch.setattr(obj, method, lambda: None, raising=False)
-    with LegacyGuard(raise_caught=False) as guard:
-        with pytest.raises(AssertionError, match='legacy policy executed'):
-            getattr(obj, method)()
-    assert guard.report['legacy_hits'] == [owner_name + '.' + method]
-
-
-def test_guard_tolerates_removed_nested_decoder_without_hiding_other_import_errors():
-    from routes import owner
-
-    assert (
-        owner(
-            'sdm_client.explanations.decoder.GradientDecoder', missing_ok=True
-        )
-        is None
-    )
-
-
-def test_default_guard_catches_reintroduced_gradient_decoder(monkeypatch):
-    import sdm_client.explanations as module
-
-    decoder = types.ModuleType('sdm_client.explanations.decoder')
-
-    class GradientDecoder:
-        def decode(self):
-            return {}
-
-    decoder.GradientDecoder = GradientDecoder
-    monkeypatch.setitem(sys.modules, decoder.__name__, decoder)
-    monkeypatch.setattr(module, 'decoder', decoder, raising=False)
-    with LegacyGuard(raise_caught=False) as guard:
-        with pytest.raises(AssertionError, match='legacy policy executed'):
-            GradientDecoder().decode()
-    assert guard.report['legacy_hits'] == [
-        'sdm_client.explanations.decoder.GradientDecoder.decode'
-    ]
-
-
-def test_missing_nested_owner_does_not_swallow_dependency_import_failure(
-    monkeypatch,
-):
-    import routes
-
-    def missing_dependency(name):
-        raise ModuleNotFoundError(
-            "No module named 'required_dependency'", name='required_dependency'
-        )
-
-    monkeypatch.setattr(routes.importlib, 'import_module', missing_dependency)
-    with pytest.raises(ModuleNotFoundError, match='required_dependency'):
-        routes.owner(
-            'sdm_client.explanations.decoder.GradientDecoder', missing_ok=True
-        )

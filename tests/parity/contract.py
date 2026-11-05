@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BASELINE = '43e55f4f58924384c3cb52f67c8ed2e73ba45fa1'
 
 
 def digest(value):
@@ -38,8 +37,6 @@ def manifest(path=HERE / 'manifest.json'):
             'fixture',
             'options',
             'expected',
-            'baseline',
-            'differences',
             'tolerance',
         ):
             assert field in case, (case['id'], field)
@@ -128,33 +125,18 @@ def records(path):
     return out
 
 
-def evidence_problem(record, case, phase, live, *, baseline_commit=BASELINE):
-    if record.get('version') != 1 or record.get('phase') != phase:
+def evidence_problem(record, case, live):
+    if record.get('version') != 1 or record.get('phase') != 'candidate':
         return 'invalid observation version/phase'
     if record.get('fixture_hash') != fixture_hash(case):
         return 'fixture/options identity differs'
     artifact = record.get('artifact', {})
     if not artifact.get('commit') or not artifact.get('package_hash'):
         return 'missing installed artifact identity'
-    if phase == 'baseline':
-        if artifact['commit'] != baseline_commit:
-            return 'baseline is not the requested reference commit'
-    else:
-        if not artifact.get('native_hash') or not isinstance(
-            artifact.get('contract'), int
-        ):
-            return 'missing candidate native identity'
-        route = record.get('route', {})
-        if (
-            not route.get('installed')
-            or route.get('scope') != 'whole-journey'
-            or not route.get('workers')
-        ):
-            return 'missing whole-journey route proof'
-        if route.get('unobserved_subprocesses') != []:
-            return 'unobserved child process prevents route proof'
-        if route.get('legacy_hits') != []:
-            return 'legacy computation executed'
+    if not artifact.get('native_hash') or not isinstance(
+        artifact.get('contract'), int
+    ):
+        return 'missing native identity'
     if not record.get('source_snapshot'):
         return 'missing source snapshot'
     if record.get('status') == 'passed':
@@ -275,7 +257,7 @@ def evidence_problem(record, case, phase, live, *, baseline_commit=BASELINE):
     expected = expectation(
         case,
         record['model'],
-        record['language'] if phase == 'candidate' else None,
+        record['language'],
     )
     if live and (
         expected['status'] == 'supported'

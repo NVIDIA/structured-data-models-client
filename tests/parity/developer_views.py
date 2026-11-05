@@ -109,12 +109,10 @@ def execution_evidence(data, commit, observations=(), api_receipts=()):
                 )
         report = assess(
             data,
-            {},
             observed,
             live=live,
             selected=set(observed),
             candidate_commit=commit,
-            comparison='current-clients',
         )
         for row in report['cells']:
             key = tuple(row['cell'])

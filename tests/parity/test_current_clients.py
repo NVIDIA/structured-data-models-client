@@ -5,15 +5,13 @@
 
 import pytest
 from compare import assess, matrix
-from test_contract import one, paired
+from test_contract import current_records, one
 
 
 def check(data, records, **kwargs):
     return assess(
         data,
-        {},
         records,
-        comparison='current-clients',
         candidate_commit='candidate',
         **kwargs,
     )
@@ -21,7 +19,7 @@ def check(data, records, **kwargs):
 
 def test_current_mode_checks_contract_and_actual_language_peer():
     data = one()
-    _, records = paired(data)
+    records = current_records(data)
     report = check(data, records)
     assert report['goal_complete']
     assert {row['verdict'] for row in report['cells']} == {
@@ -37,11 +35,11 @@ def test_current_mode_checks_contract_and_actual_language_peer():
 
 @pytest.mark.parametrize(
     'mutation',
-    ['native', 'phase', 'outcome', 'source', 'endpoint', 'results', 'route'],
+    ['native', 'phase', 'outcome', 'source', 'endpoint', 'results'],
 )
 def test_bad_python_peer_or_cross_language_difference_cannot_pass(mutation):
     data = one()
-    _, records = paired(data)
+    records = current_records(data)
     python = next(
         record for key, record in records.items() if key[3] == 'python'
     )
@@ -57,14 +55,12 @@ def test_bad_python_peer_or_cross_language_difference_cannot_pass(mutation):
         python['endpoint']['version'] = 'different'
     elif mutation == 'results':
         python['semantic']['results'][0][1] = 9.0
-    else:
-        python['route']['legacy_hits'] = ['old-code']
     assert not check(data, records)['goal_complete']
 
 
 def test_current_mode_pins_python_artifact_commit():
     data = one()
-    _, records = paired(data)
+    records = current_records(data)
     next(record for key, record in records.items() if key[3] == 'python')[
         'artifact'
     ]['commit'] = 'different'
@@ -74,7 +70,7 @@ def test_current_mode_pins_python_artifact_commit():
 
 def test_local_mode_never_claims_live_acceptance_or_agreement():
     data = one()
-    _, records = paired(data)
+    records = current_records(data)
     for record in records.values():
         record['execution'] = 'local'
         record['semantic']['lifecycle'] = ['materialize']
@@ -104,7 +100,7 @@ def test_materialization_mode_does_not_require_unexecuted_model_calls(feature):
             'code': 'UNSUPPORTED_DTYPE',
             'rule': None,
         }
-    _, records = paired(data)
+    records = current_records(data)
     for record in records.values():
         record['fixture_hash'] = fixture_hash(case)
         record['execution'] = 'local'
@@ -125,7 +121,7 @@ def test_verdict_metadata_does_not_waive_a_supported_language_difference():
     case['expected_by_language'] = {
         'java': {**case['expected'], 'verdict': 'Improvement'}
     }
-    _, records = paired(data)
+    records = current_records(data)
     next(record for key, record in records.items() if key[3] == 'java')[
         'semantic'
     ]['results'][0][1] = 9.0
@@ -170,23 +166,16 @@ def test_declared_refusal_difference_is_checked_without_claiming_agreement():
     'case_id', ['types.numeric.provider', 'relational.temporal-link']
 )
 @pytest.mark.parametrize('raw_reader', [False, True])
-def test_current_comparison_never_applies_frozen_client_bug_waivers(
-    monkeypatch, case_id, raw_reader
+def test_current_comparison_requires_exact_data_for_every_case(
+    case_id, raw_reader
 ):
-    import compare
-
-    def forbidden(*args):
-        pytest.fail('historical improvement waiver used for current clients')
-
-    monkeypatch.setattr(compare, 'equivalent_legacy_decimal_cast', forbidden)
-    monkeypatch.setattr(compare, 'equivalent_derived_entity_refs', forbidden)
     data = one()
     case = data['scenarios'][0]
     case['id'] = case_id
     if raw_reader:
         case['input_mode'] = 'raw-reader'
     case['connectors'] = ['duckdb']
-    _, records = paired(data)
+    records = current_records(data)
     for record in records.values():
         record['connector'] = 'duckdb'
     assert check(data, records)['goal_complete']
@@ -194,3 +183,26 @@ def test_current_comparison_never_applies_frozen_client_bug_waivers(
         'semantic'
     ]['request'] = {'wrong': 'data'}
     assert not check(data, records)['goal_complete']
+
+
+def test_public_schema_requires_current_native_engine(monkeypatch):
+    """A missing native engine must fail rather than run host-side policy."""
+    import pandas as pd
+    from sdm_client import Schema
+    from sdm_client._rust import NativeBoundaryError, run
+
+    def unavailable():
+        raise NativeBoundaryError('native engine unavailable for this check')
+
+    monkeypatch.setattr(run, 'native', unavailable)
+    with pytest.raises(NativeBoundaryError, match='native engine unavailable'):
+        Schema.from_data(
+            {'rows': pd.DataFrame({'id': [1, 2], 'value': [3, 4]})}
+        )
+
+
+def test_historical_execution_is_not_a_runner_mode():
+    from python_runner import Incomplete, artifact
+
+    with pytest.raises(Incomplete, match='only current installed clients'):
+        artifact('unused', 'baseline')

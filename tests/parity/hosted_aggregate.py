@@ -61,12 +61,10 @@ def aggregate(root, commit, run_id, out, models):
     selected = {cell for cell in cells(data) if cell[1] in connectors}
     report = assess(
         data,
-        {},
         records(combined),
         live=False,
         selected=selected,
         candidate_commit=commit,
-        comparison='current-clients',
     )
     report['execution_profile'] = policy
     report['cpu_model_smoke'] = smoke

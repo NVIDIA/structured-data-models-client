@@ -14,11 +14,9 @@ from identity import (
     IdentityError,
     canonical,
     canonical_scoring_payload,
-    equivalent_legacy_decimal_cast,
 )
 
 from contract import (
-    BASELINE,
     cells,
     deferred,
     effective_case,
@@ -417,115 +415,14 @@ def equivalent_raw_observations(old, new, fixture):
     return sorted(notes)
 
 
-def equivalent_derived_entity_refs(old_payloads, new_payloads, fixture):
-    """Accept exact nullable integer storage only for declared temporal-link references."""
-    if (
-        not isinstance(old_payloads, list)
-        or not isinstance(new_payloads, list)
-        or len(old_payloads) != len(new_payloads)
-    ):
-        return False
-    improved = False
-    for old, new in zip(old_payloads, new_payloads, strict=True):
-        task = old.get('task', {})
-        if (
-            task != new.get('task')
-            or task.get('kind') != 'temporal_link_prediction'
-        ):
-            continue
-        entities = task.get('entity_table_names', [])
-        old_schema, new_schema = old.get('schema', {}), new.get('schema', {})
-        links = old_schema.get('relationships', [])
-        if links != new_schema.get('relationships', []):
-            continue
-        a = old_schema.get('instance_table', {}).get('columns', {})
-        b = new_schema.get('instance_table', {}).get('columns', {})
-        for index, target in enumerate(entities):
-            name = f'__kumo_entity_ref_{index}'
-            before, after = a.get(name, {}), b.get(name, {})
-            if (
-                before.get('dtype') != 'float64'
-                or after.get('dtype') != 'int64'
-            ):
-                continue
-            if (
-                before.get('stype') != 'ID'
-                or {**before, 'dtype': 'int64'} != after
-            ):
-                continue
-            matching = [
-                link
-                for link in links
-                if not link.get('source_table')
-                and link.get('source_columns') == [name]
-            ]
-            if (
-                len(matching) != 1
-                or matching[0].get('target_table') != target
-                or matching[0].get('target_columns')
-                != [fixture['primary_keys'].get(target)]
-            ):
-                continue
-            valid = True
-            observed = False
-            for half in ('context', 'predict'):
-                left = old.get(half, {}).get('instance_table', {})
-                right = new.get(half, {}).get('instance_table', {})
-                if (
-                    left.get('columns') != right.get('columns')
-                    or len(left.get('rows', [])) != len(right.get('rows', []))
-                    or name not in left.get('columns', [])
-                ):
-                    valid = False
-                    break
-                at = left['columns'].index(name)
-                for row, other in zip(left['rows'], right['rows'], strict=True):
-                    x, y = row[at], other[at]
-                    if x is None and y is None:
-                        continue
-                    observed = True
-                    if (
-                        type(x) is not float
-                        or type(y) is not int
-                        or not math.isfinite(x)
-                        or not x.is_integer()
-                        or int(x) != y
-                    ):
-                        valid = False
-                        break
-            if valid and observed:
-                before['dtype'] = 'int64'
-                improved = True
-    return improved
-
-
 def assess(
     data,
-    baseline,
     candidate,
     *,
     live=True,
     selected=None,
     candidate_commit,
-    comparison='historical',
-    baseline_commit=BASELINE,
 ):
-    if comparison not in {'historical', 'current-clients'}:
-        raise ValueError('unknown comparison mode')
-    current = comparison == 'current-clients'
-    if not current:
-        identities = {
-            (
-                record.get('artifact', {}).get('commit'),
-                record.get('artifact', {}).get('package_hash'),
-            )
-            for record in baseline.values()
-            if record.get('artifact', {}).get('package_hash')
-        }
-        if len(identities) > 1:
-            raise ValueError('baseline records mix artifacts')
-    if current:
-        baseline = candidate
     scenarios = {case['id']: case for case in data['scenarios']}
     required = set(cells(data))
     unknown = set(candidate) - required
@@ -572,12 +469,12 @@ def assess(
             )
             continue
         case = effective_case(scenarios[cell[0]], cell[1])
-        old = baseline.get((*cell[:3], 'python'))
+        old = candidate.get((*cell[:3], 'python'))
         new = candidate.get(cell)
-        if current and cell[3] == 'python':
+        if cell[3] == 'python':
             if new is None:
                 continue
-            problem = evidence_problem(new, case, 'candidate', live)
+            problem = evidence_problem(new, case, live)
             expected = expectation(case, cell[2], 'python', live=live)
             wanted = expected.get(
                 'outcome',
@@ -600,18 +497,14 @@ def assess(
                 row.update(
                     status='passed',
                     verdict='Current contract verified',
-                    reason='artifact, route, lifecycle and manifest checks passed; no historical comparison',
+                    reason='artifact, lifecycle and manifest checks passed',
                 )
             continue
         if old is None or new is None:
             continue
-        problem = evidence_problem(
-            old,
-            case,
-            'candidate' if current else 'baseline',
-            live,
-            baseline_commit=baseline_commit,
-        ) or evidence_problem(new, case, 'candidate', live)
+        problem = evidence_problem(old, case, live) or evidence_problem(
+            new, case, live
+        )
         if problem:
             row['reason'] = problem
             continue
@@ -622,46 +515,40 @@ def assess(
             row['reason'] = 'different model versions or transports'
             continue
         expected = expectation(case, cell[2], cell[3], live=live)
-        baseline_expected = expectation(
-            case, cell[2], 'python' if current else None, live=live
-        )
+        python_expected = expectation(case, cell[2], 'python', live=live)
         wanted = expected.get(
             'outcome',
             'refused' if expected['status'] == 'refused' else 'passed',
         )
-        old_wanted = baseline_expected.get(
+        old_wanted = python_expected.get(
             'outcome',
-            'refused' if baseline_expected['status'] == 'refused' else 'passed',
+            'refused' if python_expected['status'] == 'refused' else 'passed',
         )
         if new.get('status') != wanted or old.get('status') != old_wanted:
             row.update(
                 status='failed',
-                reason='unexpected outcome or missing baseline behavior',
+                reason='unexpected outcome or missing Python behavior',
             )
             continue
         if (
             expected['status'] == 'refused'
-            or baseline_expected['status'] == 'refused'
+            or python_expected['status'] == 'refused'
         ):
             if any(
                 record.get('error', {}).get(name) != spec[name]
-                for record, spec in ((old, baseline_expected), (new, expected))
+                for record, spec in ((old, python_expected), (new, expected))
                 if spec['status'] == 'refused'
                 for name in ('stage', 'code', 'rule')
             ):
                 row.update(
                     status='failed',
-                    reason='unexpected baseline/candidate refusal stage/code/rule',
+                    reason='unexpected language refusal stage/code/rule',
                 )
                 continue
 
-        if (
-            current
-            and expected['status'] == baseline_expected['status'] == 'refused'
-            and any(
-                expected[name] != baseline_expected[name]
-                for name in ('stage', 'code', 'rule')
-            )
+        if expected['status'] == python_expected['status'] == 'refused' and any(
+            expected[name] != python_expected[name]
+            for name in ('stage', 'code', 'rule')
         ):
             row.update(
                 status='passed',
@@ -690,31 +577,6 @@ def assess(
 
             for semantic in (old_semantic, new_semantic):
                 normalize_response_ids(semantic, case)
-        improved_entity_ref = False
-        improved_decimal = False
-        if (
-            not current
-            and cell[:3] == ('types.numeric.provider', 'duckdb', 'relational')
-            and wanted == 'passed'
-        ):
-            from contract import HERE
-
-            improved_decimal = equivalent_legacy_decimal_cast(
-                old_semantic['request'],
-                new_semantic['request'],
-                json.loads((HERE / case['fixture']).read_text()),
-            )
-        if (
-            not current
-            and cell[0] == 'relational.temporal-link'
-            and wanted == 'passed'
-        ):
-            from contract import HERE
-
-            fixture = json.loads((HERE / case['fixture']).read_text())
-            improved_entity_ref = equivalent_derived_entity_refs(
-                old_semantic['request'], new_semantic['request'], fixture
-            )
         if (
             cell[2] == 'relational'
             and case.get('comparison') == 'fixture-source-identity'
@@ -854,23 +716,6 @@ def assess(
                                 for c in (before, after)
                             ]
                         if op in {'predict', 'fit'}:
-                            if not current and cell[:3] == (
-                                'types.numeric.provider',
-                                'duckdb',
-                                'relational',
-                            ):
-                                # Decimal proof uses the declared exact decimal strings.
-                                declared = json.loads(
-                                    (HERE / case['fixture']).read_text()
-                                )
-                                improved_decimal = (
-                                    equivalent_legacy_decimal_cast(
-                                        [before['payload']],
-                                        [after['payload']],
-                                        declared,
-                                    )
-                                    or improved_decimal
-                                )
                             if (
                                 difference(
                                     before['payload'],
@@ -952,30 +797,15 @@ def assess(
 
         row.update(
             status='failed' if changed else 'passed',
-            verdict=(
-                'Improvement (private bridge)'
-                if (new.get('endpoint') or {}).get('transport')
-                == 'private-bridge'
-                else 'Improvement'
-            )
-            if (improved_entity_ref or improved_decimal) and not changed
-            else expected.get('verdict', 'Parity never supported')
-            if expected['status'] == 'refused'
-            else 'Parity (private bridge)'
-            if (new.get('endpoint') or {}).get('transport') == 'private-bridge'
-            else 'Parity',
+            verdict='Cross-language agreement'
+            if not changed
+            else 'Different language results',
             reason=f'difference at {changed}'
             if changed
-            else 'Correctly rounded source decimal replaces verified frozen Arrow cast error'
-            if improved_decimal
-            else 'Exact nullable integer storage for declared temporal entity reference'
-            if improved_entity_ref
             else 'Lossless Snowflake signed integer / scale-zero Decimal128 reader encoding'
             if integer_encoding
             else 'matching evidence',
         )
-        if current and not changed:
-            row['verdict'] = 'Cross-language agreement'
     scoped = [
         row
         for row in result
@@ -992,9 +822,8 @@ def assess(
         'scope_complete': complete(scoped),
         'goal_complete': live and complete(result),
         'coverage_mode': 'live' if live else 'local',
-        'comparison': comparison,
+        'comparison': 'current-clients',
         'candidate_commit': candidate_commit,
-        'baseline_commit': None if current else baseline_commit,
         'cells': result,
     }
 
@@ -1002,7 +831,7 @@ def assess(
 def label(row, mode):
     if row.get('status') == 'passed':
         return (
-            row.get('verdict', 'Parity')
+            row.get('verdict', 'Current contract verified')
             if mode == 'live'
             else 'Local check only'
         )
@@ -1012,17 +841,13 @@ def label(row, mode):
 def matrix(report):
     indexed = {tuple(row['cell']): row for row in report['cells']}
     lines = [
-        '# Prediction compatibility evidence'
-        if report.get('comparison') == 'current-clients'
-        else '# Prediction parity evidence',
+        '# Prediction compatibility evidence',
         '',
         '<!-- Generated by tests/parity/compare.py; do not edit. -->',
         '',
         '| Case / connector | Python Relational | Python Tabular | Java Relational | Java Tabular |',
         '|---|---|---|---|---|',
     ]
-    if report.get('history_note'):
-        lines[4:4] = [report['history_note'], '']
     for case, connector in sorted({key[:2] for key in indexed}):
         values = [
             label(
@@ -1048,11 +873,9 @@ def main():
         type=Path,
         default=Path(__file__).with_name('manifest.json'),
     )
-    parser.add_argument('--baseline', type=Path)
-    parser.add_argument('--baseline-commit', default=BASELINE)
     parser.add_argument(
         '--comparison',
-        choices=('current-clients', 'historical'),
+        choices=('current-clients',),
         default='current-clients',
     )
     parser.add_argument('--candidate-commit', required=True)
@@ -1063,10 +886,6 @@ def main():
     for axis in ('case', 'connector', 'model', 'language'):
         parser.add_argument('--' + axis, action='append')
     args = parser.parse_args()
-    if args.comparison == 'historical' and args.baseline is None:
-        parser.error('historical comparison requires --baseline')
-    if args.comparison == 'current-clients' and args.baseline is not None:
-        parser.error('current-client comparison does not use --baseline')
     data = manifest(args.manifest)
     selected = {
         cell
@@ -1078,13 +897,10 @@ def main():
     }
     report = assess(
         data,
-        records(args.baseline) if args.baseline is not None else {},
         records(args.candidate),
         live=not args.local,
         selected=selected,
         candidate_commit=args.candidate_commit,
-        comparison=args.comparison,
-        baseline_commit=args.baseline_commit,
     )
     args.out.write_text(json.dumps(report, indent=2) + '\n')
     if args.matrix:
