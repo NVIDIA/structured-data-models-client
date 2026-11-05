@@ -4875,9 +4875,83 @@
           "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
         }
       }
+    },
+    {
+      "id": "column-explanations",
+      "gate": "local",
+      "apis": {
+        "python": [
+          "ColumnExplanations",
+          "ColumnExplanations.to_pandas",
+          "Explanations",
+          "PredictionResult.merge"
+        ],
+        "java": [
+          "ColumnExplanations",
+          "ColumnExplanations.rows",
+          "ColumnExplanations.toArrow",
+          "Explanations",
+          "PredictionResult.explanations",
+          "PredictionResult.merge"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_constructor_has_independent_cohort_oracle",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_empty_labels_and_exact_mixed_classes",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_unlabelled_related_rows_do_not_break_analysis",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_materialize_pickle_predict_restores_pretrim_context_without_sending_delta",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_delta_corruption_is_not_silently_an_omitted_analysis",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_unavailable_statistics_warn_without_losing_predictions",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#failedArrowAllocationReleasesPartialBuffers",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#ordinaryClassLabelsUseNativeArrowTypes",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mixedWideAndDecimalClassLabelsRoundTripWithEncodingMetadata",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#readyEmptyRetainsColumnsAndRegressionClassIsNull",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#metadataRejectsNonScalarClassLabels",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#malformedAnalysisMetadataDoesNotMasqueradeAsAbsence",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#directPredictionAndFitReuseContextAnalysisAndHonorHoldout",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#directRequestPersistenceRetainsExplanationInputs",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mergePreservesEqualAnalysesRejectsDifferentAndAcceptsExplicitOverride",
+          "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#materializedRequestPersistenceAndLateExplainUseRetainedFitAnalysis"
+        ]
+      },
+      "note": "Rust computes labelled-context cohort associations and owns holdout, forecast identity, ordering and merge policy; Python/Java expose containers and dataframe/Arrow views. These statistics are descriptive, not causal. Focused public tests cover Tabular and Relational regression/classification and session/persistence behavior; this declaration does not certify every connector or deployed model. The pre-2.0 explanation accessor now separates gradients and columns.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-request/src/columns.rs",
+          "rust/crates/sdm-core/src/columns.rs"
+        ],
+        "operations": [
+          "analyze_columns",
+          "plan_result_merge",
+          "merge_results"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused public API and bounded model tests define explanation coverage; no broad connector scenario certification is claimed."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "Analysis operates on existing normalized context; public constructor tests cover its raw payload entry without declaring a new connector route."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "Exact class-label identity and presentation are tested here; this does not expand general model dtype admission."
+        }
+      }
     }
   ],
-  "public_api_snapshot_sha256": "61665e4145f8ca8c68631faa4e0404b0796da081b60e0e3649a905be23c6f3e5",
+  "public_api_snapshot_sha256": "652bd2757ca1d8ed12360b795a5c7f80ce63978210306cee1319532503f9d031",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -5271,7 +5345,13 @@
         ]
       },
       "sdm_client.PredictionResult.merge": {
-        "capability": "results-merge"
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis",
+            "behavior": "Equal analyses survive merging; differing analyses require an explicit override."
+          }
+        ]
       },
       "sdm_client.PredictionResult.to_pandas": {
         "capability": "results-merge"
@@ -6187,6 +6267,96 @@
       },
       "sdm_client.GradientExplanations.to_pandas": {
         "capability": "gradient-explanations"
+      },
+      "sdm_client.ColumnExplanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_constructor_has_independent_cohort_oracle",
+            "behavior": "Raw-context construction uses Rust and yields independently calculated cohorts."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.to_pandas": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_empty_labels_and_exact_mixed_classes",
+            "behavior": "The dataframe preserves exact mixed class identity and the empty-result schema."
+          }
+        ]
+      },
+      "sdm_client.Explanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis",
+            "behavior": "The public container retains separate gradients and column analysis through result construction and merging."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.COUNT": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.MAX_CATEGORIES": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.MAX_CLASSES": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.NA": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.NUM_COHORTS": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.OTHER": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.TABULAR_TABLE": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
       }
     },
     "java": {
@@ -6945,9 +7115,6 @@
       },
       "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.ExplanationView explanationView();": {
         "capability": "metadata-explanation-reports"
-      },
-      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.GradientExplanations explanations();": {
-        "capability": "gradient-explanations"
       },
       "com.nvidia.sdm.PredictionResult#public java.lang.String model();": {
         "capability": "results-merge"
@@ -7800,6 +7967,294 @@
       },
       "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timestampsColumn(java.lang.String);": {
         "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.ColumnExplanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
+            "behavior": "The public constructor invokes engine analysis and matches independently calculated cohort means."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public com.nvidia.sdm.ColumnExplanations(java.util.Map<java.lang.String, ?>);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
+            "behavior": "The public constructor invokes engine analysis and matches independently calculated cohort means."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public java.util.List<com.nvidia.sdm.ColumnExplanations$Row> rows();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public org.apache.arrow.vector.VectorSchemaRoot toArrow(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mixedWideAndDecimalClassLabelsRoundTripWithEncodingMetadata",
+            "behavior": "Arrow preserves mixed, wide and decimal class identity with explicit lossless encoding metadata."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public com.nvidia.sdm.ColumnExplanations$Row(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.Object, double, double, double);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public double mean();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public double score();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public double share();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public final boolean equals(java.lang.Object);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public final int hashCode();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public final java.lang.String toString();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.Object classLabel();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String cohort();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String column();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String stype();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String table();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public long hop();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.ColumnExplanations columns();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.Explanations();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.Explanations(com.nvidia.sdm.GradientExplanations, com.nvidia.sdm.ColumnExplanations);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.GradientExplanations gradients();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.Explanations explanations();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#directPredictionAndFitReuseContextAnalysisAndHonorHoldout",
+            "behavior": "Predicted results expose model gradients and context analysis; fitted analysis honors holdout."
+          }
+        ]
+      },
+      "com.nvidia.sdm.PredictionResult#public static com.nvidia.sdm.PredictionResult merge(java.util.List<com.nvidia.sdm.PredictionResult>, com.nvidia.sdm.ColumnExplanations);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mergePreservesEqualAnalysesRejectsDifferentAndAcceptsExplicitOverride",
+            "behavior": "Explicit analysis overrides work for single and multiple parts while default conflicting analysis is rejected."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final int MAX_CATEGORIES = 500;": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final int MAX_CLASSES = 30;": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final int NUM_COHORTS = 10;": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String COUNT = \"COUNT(*)\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String NA = \"N/A\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String OTHER = \"OTHER(*)\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String TABULAR_TABLE = \"instance_table\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
       }
     }
   },
@@ -8421,6 +8876,32 @@
       "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
       "record": "api_contracts/readers",
       "reason": "Require the public per-read endpoint validation test; emulator E2E additionally executes the existing S3 reader test."
+    },
+    {
+      "base_commit": "0b3afe8fa228b8d48446f89717758e1b1a7df40b",
+      "record": "api_contracts/column-explanations",
+      "reason": "Add Rust-owned context association analysis with Python/Java public behavior tests for exact labels, persistence, holdout and merge semantics; no blanket connector inference certification."
+    },
+    {
+      "base_commit": "0b3afe8fa228b8d48446f89717758e1b1a7df40b",
+      "record": "api_inventory",
+      "reason": "Map new analysis containers and changed result APIs to concrete language tests; intentionally replace the pre-2.0 direct-gradient accessor with a gradients/columns container."
+    },
+    {
+      "base_commit": "0b3afe8fa228b8d48446f89717758e1b1a7df40b",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Regenerated public API snapshot includes column-analysis containers and explicit merge override."
+    },
+    {
+      "base_commit": "4edabbf9c877507e3935e488aeb7173bc025cbfb",
+      "record": "api_inventory/java",
+      "reason": "Main at this audited merge base has no Java API; Phase9 retains the reviewed Rust migration Java surface and adds column-analysis equivalents with explicit tests. This is an introduction relative to main, not a claim of binary compatibility with the pre-2.0 rust-core accessor."
+    },
+    {
+      "base_commit": "4edabbf9c877507e3935e488aeb7173bc025cbfb",
+      "record": "api_inventory/python/sdm_client.PredictionResult.explanations",
+      "reason": "The class property is represented by the public instance Explanations container initialized by PredictionResult. Gradients and columns remain available; this is snapshot representation, not removal of the instance API.",
+      "retained_test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis"
     }
   ],
   "capabilities": [
