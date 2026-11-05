@@ -518,6 +518,31 @@ def case_files(paths: Iterable[Path]) -> list[Path]:
     return found
 
 
+def expand_input_factory(case: dict[str, Any]) -> None:
+    """Build only the two named entity-limit inputs, identically for both hosts."""
+    if 'input_factory' not in case:
+        return
+    name = case['input_factory']
+    count = (
+        {'entity_limit_100000': 100_000, 'entity_limit_100001': 100_001}.get(
+            name
+        )
+        if isinstance(name, str)
+        else None
+    )
+    if count is None or case.get('id') != f'multicall.entities.{count}':
+        raise RunnerFailure('invalid entity-limit input factory or case id')
+    public = case.get('input', {}).get('materialize', {})
+    core = case.get('core', {}).get('materialize', {})
+    if public.get('indices') != [] or core.get('indices') != []:
+        raise RunnerFailure(
+            'entity-limit factory requires empty indices placeholders'
+        )
+    public['indices'] = list(range(count))
+    core['indices'] = [{'t': 'i64', 'v': str(i)} for i in range(count)]
+    del case['input_factory']
+
+
 def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
     r"""Each case with the SHA-256 of its file, validated, ids unique."""
     validate = validator('case')
@@ -537,11 +562,10 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
             raise RunnerFailure(
                 f'{path.name}: not a case: not JSON it reads'
             ) from None
-        problem = (
-            _invalid(validate, case)
-            or _indices(case['input'])
-            or warehouse_problem(case)
-        )
+        problem = _invalid(validate, case)
+        if problem is None:
+            expand_input_factory(case)
+            problem = _indices(case['input']) or warehouse_problem(case)
         if problem is not None:
             raise RunnerFailure(f'{path.name}: not a case: {problem}')
         if case['id'] in seen:

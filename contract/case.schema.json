@@ -21,6 +21,10 @@
   ],
   "properties": {
     "format": {"const": "sdm-case/1"},
+    "input_factory": {
+      "description": "Generate the two large entity-limit cases; both indices arrays must be empty placeholders and the case id must match.",
+      "enum": ["entity_limit_100000", "entity_limit_100001"]
+    },
     "id": {"$ref": "#/$defs/id"},
     "status": {
       "description": "acceptance: gating; diagnostic: run and reported, gating nothing (design, Merge rules).",

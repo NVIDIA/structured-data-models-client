@@ -505,3 +505,43 @@ def test_composite_names_never_collide() -> None:
     assert one != other
     assert len(one.encode()) <= 63
     assert one == databases.composite_name(['t', 'v', 'a'])
+
+
+@pytest.mark.parametrize('count', [100_000, 100_001])
+def test_entity_limit_factory_expands_exact_keys_and_preserves_source_digest(
+    count,
+):
+    import hashlib
+
+    path = ROOT / f'contract/cases/s1/multicall.entities.{count}.json'
+    raw = path.read_bytes()
+    [(case, digest)] = runner.load_cases([path])
+    assert digest == hashlib.sha256(raw).hexdigest()
+    assert 'input_factory' not in case
+    assert case['input']['materialize']['indices'] == list(range(count))
+    assert case['core']['materialize']['indices'] == [
+        {'t': 'i64', 'v': str(i)} for i in range(count)
+    ]
+    assert case['expect']['outcome'] == (
+        'success' if count == 100_000 else 'refusal'
+    )
+
+
+@pytest.mark.parametrize('change', ['name', 'id', 'public', 'core'])
+def test_entity_limit_factory_refuses_unknown_or_conflicting_inputs(
+    tmp_path, change
+):
+    original = ROOT / 'contract/cases/s1/multicall.entities.100000.json'
+    case = json.loads(original.read_text())
+    if change == 'name':
+        case['input_factory'] = 'unknown'
+    elif change == 'id':
+        case['id'] = 'other'
+    elif change == 'public':
+        case['input']['materialize']['indices'] = [0]
+    else:
+        case['core']['materialize']['indices'] = [{'t': 'i64', 'v': '0'}]
+    path = tmp_path / 'case.json'
+    path.write_text(json.dumps(case))
+    with pytest.raises(runner.RunnerFailure):
+        runner.load_cases([path])

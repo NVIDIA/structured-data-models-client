@@ -32,6 +32,8 @@ pub const FORMAT: &str = "sdm-case/1";
 pub struct Case {
     pub format: String,
     pub id: String,
+    #[serde(default, deserialize_with = "present")]
+    pub input_factory: Option<InputFactory>,
     pub status: Status,
     pub slice: String,
     /// The databases the case runs on when not all three (design choice
@@ -60,6 +62,44 @@ pub struct Case {
     pub why: String,
     #[serde(deserialize_with = "text")]
     pub source: String,
+}
+
+/// The two large boundary inputs use explicit factories rather than stored rows.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputFactory {
+    #[serde(rename = "entity_limit_100000")]
+    EntityLimit100000,
+    #[serde(rename = "entity_limit_100001")]
+    EntityLimit100001,
+}
+
+fn expand_input_factory(case: &mut Case) -> Result<()> {
+    let Some(factory) = case.input_factory.take() else {
+        return Ok(());
+    };
+    let count = match factory {
+        InputFactory::EntityLimit100000 => 100_000,
+        InputFactory::EntityLimit100001 => 100_001,
+    };
+    if case.id != format!("multicall.entities.{count}") {
+        bail!("entity-limit input factory has a different case id");
+    }
+    let Some(core) = case
+        .core
+        .as_mut()
+        .and_then(|core| core.materialize.as_mut())
+    else {
+        bail!("entity-limit input factory requires core materialize inputs");
+    };
+    if !case.input.materialize.indices.is_empty() || !core.indices.is_empty() {
+        bail!("entity-limit factory requires empty indices placeholders");
+    }
+    case.input.materialize.indices = (0..count).map(|i| Index::Integer(i.to_string())).collect();
+    core.indices = (0..count)
+        .map(|i| serde_json::json!({"t": "i64", "v": i.to_string()}))
+        .collect();
+    Ok(())
 }
 
 /// A database the corpus runs on, in the order every case runs on them.
@@ -1007,13 +1047,14 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
     for path in case_files(paths)? {
         let name = path.display().to_string();
         let bytes = std::fs::read(&path).with_context(|| format!("reading {name}"))?;
-        let case: Case = serde_json::from_slice(&bytes).map_err(|error| {
+        let mut case: Case = serde_json::from_slice(&bytes).map_err(|error| {
             anyhow::anyhow!(
                 "{name}: not a case (line {}, column {})",
                 error.line(),
                 error.column()
             )
         })?;
+        expand_input_factory(&mut case).with_context(|| format!("{name}: not a case"))?;
         if case.format != FORMAT {
             bail!("{name}: not {FORMAT}");
         }
@@ -1046,6 +1087,61 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
 #[cfg(test)]
 mod load_for_tests {
     use super::*;
+
+    #[test]
+    fn entity_limit_factories_expand_exact_public_and_core_keys() {
+        let contract = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract");
+        for count in [100_000, 100_001] {
+            let path = contract.join(format!("cases/s1/multicall.entities.{count}.json"));
+            let bytes = std::fs::read(&path).unwrap();
+            let loaded = load(&[path]).unwrap().remove(0);
+            assert_eq!(loaded.digest, sha256(&bytes));
+            assert!(loaded.case.input_factory.is_none());
+            let core = loaded.case.core.unwrap().materialize.unwrap();
+            assert_eq!(core.indices.len(), count);
+            assert_eq!(loaded.case.input.materialize.indices.len(), count);
+            for (i, (public, core)) in loaded
+                .case
+                .input
+                .materialize
+                .indices
+                .iter()
+                .zip(core.indices)
+                .enumerate()
+            {
+                assert_eq!(*public, Index::Integer(i.to_string()));
+                assert_eq!(core, serde_json::json!({"t": "i64", "v": i.to_string()}));
+            }
+        }
+    }
+
+    #[test]
+    fn entity_limit_factories_reject_unknown_names_ids_and_supplied_indices() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../contract/cases/s1/multicall.entities.100000.json");
+        let original = std::fs::read_to_string(path).unwrap();
+        let unknown = original.replace("entity_limit_100000", "unknown");
+        assert!(serde_json::from_str::<Case>(&unknown).is_err());
+        let mut case: Case = serde_json::from_str(&original).unwrap();
+        case.id = "other".into();
+        assert!(expand_input_factory(&mut case).is_err());
+        let mut case: Case = serde_json::from_str(&original).unwrap();
+        case.input
+            .materialize
+            .indices
+            .push(Index::Integer("0".into()));
+        assert!(expand_input_factory(&mut case).is_err());
+        let mut case: Case = serde_json::from_str(&original).unwrap();
+        case.core
+            .as_mut()
+            .unwrap()
+            .materialize
+            .as_mut()
+            .unwrap()
+            .indices
+            .push(serde_json::json!({"t": "i64", "v": "0"}));
+        assert!(expand_input_factory(&mut case).is_err());
+    }
 
     #[test]
     fn a_warehouse_only_case_is_no_duckdb_case_and_still_loads() {
