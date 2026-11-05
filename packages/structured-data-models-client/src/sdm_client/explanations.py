@@ -172,6 +172,15 @@ class ColumnExplanations:
     Construction explicitly performs analysis; formatting does not recompute it.
     """
 
+    # Informational engine-policy constants, not runtime configuration knobs.
+    NUM_COHORTS = 10
+    MAX_CATEGORIES = 500
+    MAX_CLASSES = 30
+    COUNT = 'COUNT(*)'
+    OTHER = 'OTHER(*)'
+    NA = 'N/A'
+    TABULAR_TABLE = 'instance_table'
+
     def __init__(self, payload: Mapping[str, Any]) -> None:
         from sdm_client._rust import results
         from sdm_client._rust.predict import _payload

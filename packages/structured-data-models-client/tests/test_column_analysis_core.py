@@ -266,3 +266,26 @@ def test_unavailable_statistics_warn_without_losing_predictions():
     assert len(result) == 2
     assert result.explanations.columns is None
     assert any('column analysis' in str(w.message).lower() for w in caught)
+
+
+def test_public_policy_constants_remain_available():
+    assert {
+        name: getattr(ColumnExplanations, name)
+        for name in (
+            'NUM_COHORTS',
+            'MAX_CATEGORIES',
+            'MAX_CLASSES',
+            'COUNT',
+            'OTHER',
+            'NA',
+            'TABULAR_TABLE',
+        )
+    } == {
+        'NUM_COHORTS': 10,
+        'MAX_CATEGORIES': 500,
+        'MAX_CLASSES': 30,
+        'COUNT': 'COUNT(*)',
+        'OTHER': 'OTHER(*)',
+        'NA': 'N/A',
+        'TABULAR_TABLE': 'instance_table',
+    }

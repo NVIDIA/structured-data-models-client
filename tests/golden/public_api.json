@@ -171,7 +171,15 @@
       "ColumnExplanations": {
         "bases": [],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "COUNT",
+          "MAX_CATEGORIES",
+          "MAX_CLASSES",
+          "NA",
+          "NUM_COHORTS",
+          "OTHER",
+          "TABULAR_TABLE"
+        ],
         "public_methods": {
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
