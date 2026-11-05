@@ -24,6 +24,8 @@ be loaded without the skill it belongs to:
 | [`tabular/references/pql.md`](tabular/references/pql.md) | The same language on one table, and what it refuses |
 | [`relational/references/warehouses.md`](relational/references/warehouses.md) | Tables that stay in a warehouse, and metric views |
 | [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | Rankings, forecasts and explanations |
+| [`tabular/references/in-process.md`](tabular/references/in-process.md) | Running kumo-tabular in this process, with no NIM |
+| [`relational/references/in-process.md`](relational/references/in-process.md) | Running kumo-relational in this process, with no NIM |
 
 ## What these models are
 
@@ -61,7 +63,10 @@ only check its imports get. Run with
 run and compares what it printed to the block pasted beneath it. An example
 that reads a name no example before it binds is a fragment -- a Databricks
 session, a Snowflake one -- and those are checked as code but executed
-nowhere, so none of them is allowed to show output.
+nowhere, so none of them is allowed to show output. The two in-process
+references open no connection and load the published weights instead, so they
+run under `SDM_IN_PROCESS=1` with `-m in_process`, and their output was pasted
+from a CPU.
 
 Where a skill says the client allows something the endpoint refuses, that gap
 is the point and is stated as such. If a claim here contradicts the code, the
@@ -73,4 +78,5 @@ code is right and the skill is stale: say so rather than working around it.
 - `predictive_query`, the parser package behind `PredictiveQuery`. It is
   internal, as [`docs/reference/stability.md`](../docs/reference/stability.md)
   says. Write the query as a string.
-- Deployment, authentication and endpoint operation. A skill assumes a URL.
+- Deployment, authentication and endpoint operation. A skill assumes a URL,
+  or that the model runs in this process.
