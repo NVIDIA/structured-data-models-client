@@ -50,13 +50,15 @@ these packages. All five distributions share one version and one entry.
   row, output and column, with each row's `hop` from the entity.
 - `result.explanations.columns` is a column analysis the client computes from
   the labelled context rows: each column split into cohorts, each cohort's
-  share and mean outcome, and a score per column, normalized to sum to 1.
+  share and mean outcome.
   `result.explanations.columns.to_pandas()` gives one line per table, hop,
   column, cohort and class. `predict()` computes it on each call that asks for
   explanations; a session computes it once at `fit()`, after `holdout` is
   taken out, and attaches it to every answer when `fit()` asked for
   `'explanation'`, otherwise only to a prediction whose query begins
-  `EXPLAIN`. It is `None` when explanations were not asked for.
+  `EXPLAIN`. It is `None` when explanations were not asked for. It describes
+  the labelled rows the request sends, not the rows gathered before the leak
+  check; the request no longer keeps a copy of the gathered context.
 - The `EXPLAIN` query prefix: `EXPLAIN PREDICT …` adds `'explanation'` to the
   call's outputs. A ranking refuses it; a forecast explains each step.
 

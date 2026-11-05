@@ -595,6 +595,9 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
+        if request.parts:
+            # Refused before the analysis below, not after it.
+            self._prepare(request.parts[0], model, wanted)
         # A forecast's analysis reads every step's labelled rows at once.
         columns = (
             _analysed_or_warned(
@@ -1051,23 +1054,26 @@ class _LabelledRows:
     r"""The labelled rows a request's column analysis reads."""
 
     _INSTANCE_ID = 'instance_id'
+    _ENTITY_REF = '__kumo_entity_ref'
 
     def __init__(self) -> None:
         # Each step's instance ids, renumbered so no two steps share one.
         self._ids: dict[tuple[int, Any], int] = {}
 
-    @staticmethod
-    def of(request: Request, planned: Mapping[str, Any]) -> dict[str, Any]:
-        r"""``planned``'s task and schema over the request's labelled context.
+    @classmethod
+    def of(cls, request: Request, planned: Mapping[str, Any]) -> dict[str, Any]:
+        r"""``planned``'s task over the labelled rows the request sends.
 
-        A gathered request carries its context as it was before the rows
-        answering the scored ones were dropped; any other request's planned
-        context is that context.
+        A request built from frames has no payloads; its planned context is
+        what it sends.
         """
-        labelled = request._labelled_context
+        payloads = request.payloads
+        if not payloads:
+            return {**planned}
         return {
             **planned,
-            'context': planned['context'] if labelled is None else labelled,
+            'schema': cls._schema([payload['schema'] for payload in payloads]),
+            'context': cls._sent(payloads),
         }
 
     def across(self, steps: Sequence[Request]) -> dict[str, Any]:
@@ -1105,25 +1111,84 @@ class _LabelledRows:
                 )
                 for name in names
             }
-        # A step's schema describes only the tables that step reached.
-        schemas = [payload['schema'] for payload in each]
+        return {
+            **each[0],
+            'schema': self._schema([payload['schema'] for payload in each]),
+            'context': context,
+        }
+
+    @classmethod
+    def _sent(cls, payloads: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        r"""The payloads' labelled contexts as one, each instance once.
+
+        Every payload carries the same labelled draw, less its own scored
+        entities, under the same instance ids. An instance is keyed by entity
+        and anchor; the first payload sending it gives its row and its
+        related rows.
+        """
+        seen: set[tuple[Any, Any]] = set()
+        instances: list[Any] = []
+        related: dict[str, dict[str, Any]] = {}
+        for payload in payloads:
+            context = payload['context']
+            table = context['instance_table']
+            columns = list(table['columns'])
+            at = columns.index(cls._INSTANCE_ID)
+            entity = next(
+                index
+                for index, name in enumerate(columns)
+                if str(name).startswith(cls._ENTITY_REF)
+            )
+            anchor_column = payload['task'].get('anchor_time_column')
+            anchor = (
+                columns.index(anchor_column)
+                if anchor_column in columns
+                else None
+            )
+            keys: set[tuple[Any, Any]] = set()
+            kept: set[Any] = set()
+            for row in table['rows']:
+                key = (row[entity], None if anchor is None else row[anchor])
+                keys.add(key)
+                if key not in seen:
+                    kept.add(row[at])
+                    instances.append(row)
+            seen |= keys
+            for name, rows in (context.get('related_tables') or {}).items():
+                held = related.setdefault(name, {**rows, 'rows': []})
+                where = list(rows['columns']).index(cls._INSTANCE_ID)
+                held['rows'].extend(
+                    row for row in rows['rows'] if row[where] in kept
+                )
+        first = payloads[0]['context']
+        sent: dict[str, Any] = {
+            'instance_table': {**first['instance_table'], 'rows': instances}
+        }
+        if any('related_tables' in payload['context'] for payload in payloads):
+            sent['related_tables'] = related
+        return sent
+
+    @staticmethod
+    def _schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        r"""One schema describing every table any of ``schemas`` reached.
+
+        A payload's schema describes only the tables that payload reached.
+        """
         schema = dict(schemas[0])
-        if any('related_tables' in step_schema for step_schema in schemas):
+        if any('related_tables' in each for each in schemas):
             described: dict[str, Any] = {}
-            for step_schema in schemas:
-                for name, table in (
-                    step_schema.get('related_tables') or {}
-                ).items():
+            for each in schemas:
+                for name, table in (each.get('related_tables') or {}).items():
                     described.setdefault(name, table)
             schema['related_tables'] = described
-        if any('relationships' in step_schema for step_schema in schemas):
+        if any('relationships' in each for each in schemas):
             links: list[Any] = []
-            for step_schema in schemas:
-                for link in step_schema.get('relationships') or []:
+            for each in schemas:
+                for link in each.get('relationships') or []:
                     if link not in links:
                         links.append(link)
             schema['relationships'] = links
-        return {**each[0], 'schema': schema, 'context': context}
+        return schema
 
     def _stacked(
         self, tables: Sequence[tuple[int, Mapping[str, Any]]]
@@ -1531,10 +1596,21 @@ def _by_step(
         ),
         columns,
     )
+    # Each step is its own call, and only the first step's id would otherwise
+    # survive. That is the one you do not have when a later step is the one
+    # that misbehaved. A step sent in several calls keeps every one of them.
+    metadata = {
+        'steps': [step for _, step in rewritten.parts],
+        'step_request_ids': [
+            list(answer.metadata.get('batch_request_ids', [answer.request_id]))
+            for answer in answers
+        ],
+    }
     built = PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
+        metadata=metadata,
         outputs=tuple(answers[0].outputs) if answers else (),
         explanations=explanations,
     )

@@ -320,9 +320,6 @@ class Request:
     # it is how the client puts the parts' answers together, not something a
     # caller reads: `parts` and `asked` say what a caller needs to see.
     _decomposition: Decomposition | None = None
-    # The gathered labelled context as it was before the rows answering the
-    # scored ones were dropped from each payload; what column analysis reads.
-    _labelled_context: dict[str, Any] | None = None
 
     def __init__(
         self,
