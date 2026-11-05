@@ -20,6 +20,7 @@ was used.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from sdm_api.generated.tfm_api import PredictionItem
@@ -39,14 +40,20 @@ _ALPHA = 1.0
 _NEIGHBOURS = 64
 _TEMPERATURE = 0.05
 
-_KNOBS = ('alpha', 'k', 'temperature')
+_KNOBS = (
+    'alpha',
+    'k',
+    'temperature',
+    'feature_axis',
+    'integrated_gradients',
+)
 
 
 class Forecast:
     r"""Reads a ``kumo-forecast`` request into the model."""
 
     model_id = 'kumo-forecast'
-    outputs = {'forecasting': ('prediction',)}
+    outputs = {'forecasting': ('prediction', 'explanation')}
 
     @staticmethod
     def installed() -> bool:
@@ -228,10 +235,90 @@ class Forecast:
                 'the model answered with a malformed output',
                 code='INTERNAL_ERROR',
             )
-        return [
+        items = [
             PredictionItem(row_index=0, forecast_step=step, prediction=value)
             for step, value in enumerate(forecast.tolist(), start=1)
         ]
+        if 'explanation' in fields:
+            self._refuse_where_retrieval_answered(
+                model,
+                alpha,
+                len(payload['context']['instance_table']['rows']),
+                horizon,
+            )
+        if 'explanation' in fields and items:
+            items[0] = replace(
+                items[0],
+                explanation=self._explained(
+                    model, payload, target, horizon, forecast, alongside
+                ),
+            )
+        return items
+
+    def _explained(
+        self,
+        model: Any,
+        payload: Mapping[str, Any],
+        target: str,
+        horizon: int,
+        forecast: Any,
+        alongside: Any,
+    ) -> dict[str, Any]:
+        r"""Why that forecast, attributed to the history it was made from.
+
+        The attribution reads the model's gradients and walks its latent
+        trajectory, so it reads the model itself rather than its answer, and
+        exists only where the model runs here.
+        """
+        from sdm_client.explain import explanation_of
+
+        table = payload['context']['instance_table']
+        spec = payload['schema']['instance_table']
+        keys = key_columns(spec) - {target}
+        channels = [name for name in table['columns'] if name not in keys]
+        history = Shape.of(spec, dict.fromkeys(channels, 'numerical')).tensor(
+            table, 'the history'
+        )
+        options = payload.get('inference') or {}
+        return explanation_of(
+            model,
+            history.numerical.detach().cpu().numpy().T,
+            channels=channels,
+            target=target,
+            horizon=horizon,
+            forecast=forecast.detach().cpu().numpy(),
+            feature_axis=bool(options.get('feature_axis', False)),
+            integrated_gradients=bool(
+                options.get('integrated_gradients', False)
+            ),
+        )
+
+    @staticmethod
+    def _refuse_where_retrieval_answered(
+        model: Any, alpha: float, history: int, horizon: int
+    ) -> None:
+        r"""Refuse to explain a forecast retrieval had a hand in.
+
+        The attribution describes the model's own forward pass. Where
+        retrieval contributes, the forecast returned is a blend of that pass
+        and windows pulled from history, and attributing the pass would
+        describe a number nobody was given.
+        """
+        if alpha >= 1.0:
+            return
+        needed = model.model.context_size + max(
+            model.model.prediction_size, horizon
+        )
+        if history < needed:
+            return
+        raise StructuredDataError(
+            f'alpha={alpha} blends retrieved history into this forecast, and '
+            f"an explanation describes the model's own forward pass only. "
+            f'Explaining it would describe a forecast that was not returned. '
+            f'Ask for the explanation with alpha=1, or ask for the forecast '
+            f'without one',
+            code='UNSUPPORTED_REQUEST',
+        )
 
     @staticmethod
     def _warn_where_retrieval_does_nothing(
