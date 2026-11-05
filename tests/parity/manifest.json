@@ -8084,7 +8084,7 @@
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
       "record": "api_contracts/schema-visualization",
-      "reason": "Restore reviewed Python/Java metadata diagrams and exports; host-only rendering with shared assets. See visualization/design.md under phase-5/api-removal-audit."
+      "reason": "Restore reviewed Python/Java metadata diagrams and exports; host-only rendering with shared assets. See docs/development/engine-boundaries.md and the maintained visualization tests."
     },
     {
       "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",

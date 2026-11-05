@@ -1514,7 +1514,7 @@ fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
 
 #[test]
 fn client_rules_read_approved_formats_and_normalize_mixed_zones() {
-    // docs/design/date-rules.md replaces pandas first-shape guessing
+    // docs/reference/date-rules.md replaces pandas first-shape guessing
     // with the approved core format list; ClientRules normalizes to UTC.
     for values in [
         vec!["2024-01-05", "2024-01-05"],

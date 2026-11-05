@@ -155,7 +155,7 @@ This bypasses fixture casts, sorting and Java Arrow reconstruction, and uses the
 Targeted provider cases additionally set `schema_input: source` to exercise warehouse materialization; their inspection reads remain unchanged.
 Snapshot verification may inspect sorted copies, but must never replace the model input.
 Existing scenarios retain their prepared-input behavior and historical evidence.
-Raw-reader coverage is tracked in the [verification tracker](../../docs/design/rust-core/phase-5/verification.md) and the compatibility ledger; the mode’s presence alone is not passing live evidence.
+Raw-reader coverage is tracked in the [validation evidence](../../docs/development/validation.md) and the compatibility ledger; the mode’s presence alone is not passing live evidence.
 
 `expected_by_model` records verified model-specific refusals, independently of candidate-only `expected_by_language` improvements.
 Supported predictions and endpoint-stage refusals both require live endpoint identity.
@@ -209,7 +209,8 @@ Giant-value acceptance moved to the manually dispatched `parity-stress.yml` work
 It retains sequential Python/Java execution, explicit model identity and the 24 GiB available-RAM preflight.
 Ordinary live parity no longer requires giant-value resources.
 Publication requires successful ordinary-live and stress workflows on the exact release commit.
-No live workflow runs on pull requests, and configuring dedicated CI credentials or environment branch policies remains a separate owner task.
+Live workflows do not run automatically on pull requests; manual dispatch requires a trusted branch allowed by the protected environment.
+Dedicated credentials and branch policies are deployment settings, not committed secrets; see [recorded acceptance](../../docs/development/validation.md) for the tested configuration.
 
 Private HTTP bridges retain `transport: private-bridge` rather than being relabeled as direct model endpoints.
 For each such endpoint, `live_api.bridge_routes` must declare the matching `url`, `entity` and `version`, plus upstream `transport: databricks` and serving `endpoint`.

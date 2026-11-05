@@ -173,7 +173,7 @@ The compatibility ledger in `tests/parity/manifest.json` records supported APIs 
   `tests/parity/` records supported capabilities and their coverage across languages, models and connectors.
 - `scripts/rust_core/`: native wheel/JAR builds, installed-wheel checks, Rust attribution generation and architecture checks.
 - `scripts/live/`: endpoint and warehouse validation tools, including resource write guards.
-- `docs/design/rust-core/phase-5/`: the current repository-completion plan and verification limits.
+- `docs/development/`: the [change guide](docs/development/change-guide.md), [engine boundaries](docs/development/engine-boundaries.md) and [validation evidence](docs/development/validation.md).
 
 Retained fixtures and product checks remain part of ordinary development; see [CONTRIBUTING.md](CONTRIBUTING.md) for the commands.
 

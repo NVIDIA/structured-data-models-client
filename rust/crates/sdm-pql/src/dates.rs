@@ -4,7 +4,7 @@
 
 //! Date literals: what `orders.ordered_at > 2024-01-31` compares with.
 //!
-//! The rules are D1 to D9 of `docs/design/date-rules.md`
+//! The rules are D1 to D9 of `docs/reference/date-rules.md`
 //! ("The PQL literal rules"), first written down as the first attempt's
 //! `DATES.md` (`archive/rust-core-attempt-1`, `rust/crates/pql/DATES.md`),
 //! here over `jiff`'s calendar. A literal is the grammar's `DATE` token,

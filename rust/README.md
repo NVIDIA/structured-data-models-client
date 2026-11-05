@@ -98,3 +98,5 @@ sdm-pql: depends on no crate of ours
 The workspace is this folder: `cargo test --workspace` runs the Rust tests.
 The `test-ops` feature adds operations that only tests reach; shipped builds leave it off.
 The Python wheel is built from `bindings/sdm-py` with maturin; [`CONTRIBUTING.md`](../CONTRIBUTING.md) has the commands.
+
+See [engine boundaries and diagrams](../docs/development/engine-boundaries.md) for an illustrated host/core flow and capability rules.

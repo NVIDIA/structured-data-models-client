@@ -92,3 +92,5 @@ Never hand-edit generated API code, golden snapshots, attribution notices, or sc
 Use their maintained generators and retain compact independent regressions, not migration archives or generated view artifacts.
 Before review, inspect the diff, test results, compatibility decisions, and applicability changes together.
 Final correctness and comparable cold/warm benchmarks run after integration; report timings and memory without performance tuning based on this campaign.
+
+See [engine boundaries and diagrams](engine-boundaries.md) for the prediction flow and enduring capability rules.
