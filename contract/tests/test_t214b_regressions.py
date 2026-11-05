@@ -2,34 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Regressions for T2.14b's fix rounds on ``python-core`` (the package's
-test author's, from review round 2's probes).
+"""Public regressions for temporal candidates, semantic types and JSON.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t214b_regressions.py -q
-
-Each scenario of ``contract/tools/t214b_regressions_record.py`` runs on
-python-core with the core routes forced, by the recorder's own
-``observe``, and is held to what the reference gave
-(``contract/t214b-regression-vectors.json``):
-
-- repeated and equal temporal ranking candidates (fix 1, Codex P2-1; fix
-  2's typed kinds): equal dates are one candidate, aware timestamps of one
-  instant at two offsets are one (as ``dict.fromkeys`` keeps them), a
-  naive timestamp beside an aware one stays two: the parts, each question
-  asked and the rankings are the reference's;
-- a column's meaning set to ``5`` (fix 1, Codex P3-1): refused with the
-  reference's class, code and words;
-- an aggregation's filter reading a double past float32's range (fix 1,
-  Claude P3-2, FX-1): pandas' ``RuntimeWarning`` in the reference's words;
-- Postgres ``json`` documents escaping lone surrogates (fix 1, Codex
-  P2-3), through ``from_source``, ``materialize`` and ``predict``: each
-  request the endpoint receives is the reference's.
-
-The Postgres provider's own regressions (a declared numeric's refusal,
-``json[]`` elements) are in ``tests_test_ops/test_t214b_postgres_regressions.py``,
-and the typed candidate as plain data in ``sdm-request``'s tests.
-
+Expected observations are checked into the repository; no old client runs.
+PostgreSQL scenarios require SDM_POSTGRES_TEST_DSN, and CI can require them
+with SDM_REQUIRE_POSTGRES.
 """
 
 from __future__ import annotations
@@ -46,28 +23,18 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-RECORDER = ROOT / 'contract/tools/t214b_regressions_record.py'
-
-PREFIX = 'regress:'
+SCENARIOS = ROOT / 'contract/support/temporal_candidate_scenarios.py'
 
 
-def recorder() -> ModuleType:
-    name = 't214b_regressions_record'
+def scenarios() -> ModuleType:
+    name = 'temporal_candidate_scenarios'
     if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(name, RECORDER)
+        spec = importlib.util.spec_from_file_location(name, SCENARIOS)
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
         spec.loader.exec_module(module)
     return sys.modules[name]
-
-
-NAMES = (
-    *(f'candidates:{name}' for name in recorder().CANDIDATES),
-    'stype',
-    'where',
-    'json',
-)
 
 
 def _dsn() -> str | None:
@@ -82,27 +49,18 @@ def _dsn() -> str | None:
 
 @functools.cache
 def vectors() -> dict[str, Any]:
-    return recorder().load()
+    return scenarios().load()
 
 
 @functools.cache
 def core() -> dict[str, Any]:
-    r"""python-core's observation of every scenario, on the core routes."""
-    return recorder().observe(dsn=_dsn())
+    """Observe each scenario through the current public client."""
+    return scenarios().observe(dsn=_dsn())
 
 
-def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
-    r"""Control: recorded from the reference commit the contract names, by
-    the committed recorder; the candidates repeat as named (two dates one,
-    two instants one, a naive and an aware two), the meaning's refusal names
-    the number, the filter warns, and a document's lone surrogate is sent
-    escaped."""
+def test_scenarios_cover_temporal_identity_and_invalid_values() -> None:
+    """The expected results exercise each named edge case."""
     document = vectors()
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {document["reference"]}' in env
-    assert document['recorded_by'] == (
-        'contract/tools/t214b_regressions_record.py'
-    )
     parts = {k: v['parts'] for k, v in document['candidates'].items()}
     assert parts == {
         'dates-repeated': 2,
@@ -127,73 +85,46 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
     assert '\\ud800' in sent and '\\udc00' in sent
 
 
-@pytest.mark.parametrize('name', list(recorder().CANDIDATES))
-def test_temporal_candidates_are_asked_as_the_reference_keeps_them(
+@pytest.mark.parametrize('name', list(scenarios().CANDIDATES))
+def test_temporal_candidates_preserve_identity_and_order(
     name: str,
 ) -> None:
-    r"""Fix 1 (Codex P2-1) and fix 2: a date, time or timestamp candidate
-    given twice, or as one instant at two offsets, is one question, as the
-    reference's ``dict.fromkeys`` keeps it; a naive and an aware timestamp
-    are two. The parts, each question and the rankings are the
-    reference's."""
+    """Equivalent temporal candidates collapse; distinct instants remain distinct."""
 
-    def check() -> None:
-        want = vectors()['candidates'][name]
-        got = core()['candidates'][name]
-        assert got == want, (
-            f'{name}: {json.dumps(got)[:400]} where python-ref has '
-            f'{json.dumps(want)[:400]}'
-        )
-
-    check()
+    want = vectors()['candidates'][name]
+    got = core()['candidates'][name]
+    assert got == want, (
+        f'{name}: {json.dumps(got)[:400]} where expected is '
+        f'{json.dumps(want)[:400]}'
+    )
 
 
-def test_a_number_as_a_meaning_is_refused_in_the_reference_s_words() -> None:
-    r"""Fix 1 (Codex P3-1): ``stype = 5`` is refused as the reference
-    refuses it, naming the value and the meanings there are."""
+def test_a_numeric_semantic_type_has_a_useful_refusal() -> None:
+    """The refusal names the invalid value and accepted semantic types."""
 
-    def check() -> None:
-        assert core()['stype'] == vectors()['stype']
-
-    check()
+    assert core()['stype'] == vectors()['stype']
 
 
-def test_a_filter_reading_a_double_past_float32_warns_as_the_reference() -> (
-    None
-):
-    r"""Fix 1 (Claude P3-2, FX-1): an aggregation's WHERE reading a double
-    past float32's range gives pandas' ``RuntimeWarning`` in the
-    reference's words, and materialize answers as there."""
+def test_a_filter_reading_a_double_past_float32_warns() -> None:
+    """The filter reports overflow and preserves the materialization outcome."""
 
-    def check() -> None:
-        assert core()['where'] == vectors()['where']
-
-    check()
+    assert core()['where'] == vectors()['where']
 
 
-def test_json_documents_escaping_lone_surrogates_are_sent_as_the_reference() -> (
-    None
-):
-    r"""Fix 1 (Codex P2-3): a Postgres ``json`` column whose documents
-    escape a lone surrogate (in a value, in a key, in a list beside a
-    surrogate pair) goes through ``from_source``, ``materialize`` and
-    ``predict``, and each request the endpoint receives is the
-    reference's, every document as the reference writes it."""
+def test_json_documents_preserve_escaped_lone_surrogates() -> None:
+    """PostgreSQL JSON values retain surrogate escapes through prediction."""
     if _dsn() is None:
-        return
+        pytest.skip('SDM_POSTGRES_TEST_DSN is not configured')
 
-    def check() -> None:
-        want = vectors()['json']
-        got = core()['json']
-        assert got['refusal'] == want['refusal'], got['refusal']
-        assert got['bodies'] == want['bodies'], (
-            'the requests differ from the reference'
-        )
-
-    check()
+    want = vectors()['json']
+    got = core()['json']
+    assert got['refusal'] == want['refusal'], got['refusal']
+    assert got['bodies'] == want['bodies'], (
+        'the model requests differ from the expected JSON'
+    )
 
 
-# --- FLOAT32_OVERFLOW by the runtime's NumPy (fix 5) --------------------------
+# --- FLOAT32_OVERFLOW and the host NumPy version ---------------------------
 
 
 def _codes_reported(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -246,11 +177,11 @@ def _codes_reported(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 def test_float32_overflow_is_shown_where_the_runtime_s_numpy_warns(
     numpy: str, shown: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""Fix 5 (KO2-88, CI's floor cell): the core reports a double past
+    r"""The core reports a double past
     float32's range (``FLOAT32_OVERFLOW``) on every runtime, and the Python
     host shows it as ``RuntimeWarning`` ("overflow encountered in cast")
     only where the installed NumPy is 1.24 or later, which first warns on
-    such a cast, as the reference's own warning is NumPy's; NumPy 1.23 casts
+    such a cast; NumPy 1.23 casts
     silently. The version the host's function reads is set either side of
     1.24; the core's fact is there either way."""
     import numpy as np
@@ -259,7 +190,7 @@ def test_float32_overflow_is_shown_where_the_runtime_s_numpy_warns(
     monkeypatch.setattr(np, '__version__', numpy)
     assert errors.numpy_warns_on_cast_overflow() is shown
     codes = _codes_reported(monkeypatch)
-    observed = recorder().where()
+    observed = scenarios().where()
     assert observed['refusal'] is None, observed
     assert 'FLOAT32_OVERFLOW' in codes, codes
     assert observed['runtime_warnings'] == (

@@ -1,39 +1,8 @@
-#!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's answers to T2.18's round 1 regressions into
-``contract/column-name-regression-vectors.json``.
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root, ``SDM_POSTGRES_TEST_DSN`` naming a Postgres 17 server
-the recorder may create databases on::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/column_name_regressions_record.py
-
-Written by T2.18's test author from the round 1 review (Claude's P2-2 and
-P3-3) and the round 2 review (Codex's P2). Each scenario is the ``aggregation`` role of
-``column_names_record.py`` (orders holding a DOUBLE column named
-``a<character>b``, or its twin ``a_b``), on DuckDB, SQLite and Postgres:
-
-- ``task``: the role's own query, ``materialize`` called with
-  ``task='regression'``, which every relational query refuses (P2-2);
-- ``typo``: ``PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH
-  users.user_id``, a misspelt ordinary column over the same schema, whose
-  diagnostic names the misspelt column (P3-3);
-- ``parts``: the role's query forecast two steps (``FORECAST 2
-  TIMEFRAMES``) with ``sdm_client.decompose.MOST_PARTS`` set to 1 for
-  the call, which the reference refuses for two steps past the caller's
-  limit (Codex's round 2 P2).
-
-The answer is the refusal's class, ``StructuredDataError.code``, the call
-it ended and its message: the message is the diagnostic these vectors
-hold, so it is recorded here, as no case observation records one (H17).
-:func:`run` is imported by ``contract/tests/test_t218_r1_regressions.py``,
-so ``python-core`` is run by the same code.
-"""
+"""Public query scenarios for unusual column names and refusal diagnostics."""
 
 from __future__ import annotations
 
@@ -44,8 +13,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/column-name-regression-vectors.json'
-FORMAT = 'sdm-column-name-regression-vectors/1'
 KINDS = ('task', 'typo', 'parts')
 TYPO = 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id'
 

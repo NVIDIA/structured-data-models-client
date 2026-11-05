@@ -1,39 +1,8 @@
-#!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what the reference gives for T2.14b's fix-round regressions into
-``contract/t214b-regression-vectors.json``.
-
-Written by T2.14b's test author after review round 2, from the reviewers'
-probes. Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root, with a Postgres server for the Postgres scenario::
-
-    SDM_POSTGRES_TEST_DSN=... <reference venv>/bin/python -I \
-        contract/tools/t214b_regressions_record.py --reference <checkout>
-
-Each scenario's public calls, on the routes the interpreter's client takes
-(:func:`observe`, which ``contract/tests/test_t214b_regressions.py`` runs on
-python-core with the core routes forced):
-
-- ``candidates``: a ranking over date-like keys given repeated or equal
-  temporal candidates (:data:`CANDIDATES`): equal dates, aware timestamps
-  of one instant at two offsets (one key of ``dict.fromkeys``), and a naive
-  timestamp beside an aware one (two keys): how many questions the request
-  is asked as, each question asked, in order, and the rankings, or the
-  refusal;
-- ``stype``: a column's meaning set to ``5``: the refusal's class, code
-  and message;
-- ``where``: a filter inside an aggregation reading a double past
-  float32's range: the outcome and each warning's class and text (pandas'
-  ``RuntimeWarning`` among them, FX-1);
-- ``json``: a Postgres ``json`` column whose documents escape a lone
-  surrogate, through ``from_source``, ``materialize`` and ``predict``: the
-  outcome, and each request the endpoint received (its request id left
-  out), so a document is sent as the reference sends it.
-"""
+"""Public scenarios for temporal candidates, semantic types and JSON values."""
 
 from __future__ import annotations
 
@@ -49,7 +18,6 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'contract/t214b-regression-vectors.json'
-FORMAT = 'sdm-t214b-regression-vectors/1'
 UTC = dt.timezone.utc
 PLUS_ONE = dt.timezone(dt.timedelta(hours=1))
 
@@ -85,7 +53,7 @@ CANDIDATES: dict[str, tuple[str, Any]] = {
             dt.datetime(2023, 1, 2, tzinfo=UTC),
         ],
     ),
-    # Codex r3: a zone's repeated hour (fold 0 and fold 1 of New York's
+    # A zone's repeated hour (fold 0 and fold 1 of New York's
     # 2023-11-05 01:30, which Python holds equal), the same wall time
     # against the UTC instant of its fold 0 (which Python holds unequal),
     # and aware times of day at two offsets (equal). Their keys are the
@@ -106,7 +74,7 @@ CANDIDATES: dict[str, tuple[str, Any]] = {
             dt.datetime(2023, 11, 6, 1, 30, tzinfo=_zone()),
         ],
     ),
-    # Codex r6: the same wall time in New York and in Toronto, whose texts
+    # The same wall time in New York and in Toronto, whose texts
     # are the same and which Python holds unequal (two zones), and a third
     # day: three candidates.
     'same-text-two-zones': (
@@ -191,7 +159,7 @@ def runner() -> ModuleType:
 
 
 def host() -> ModuleType:
-    r"""T2.14b's host-facts recorder, whose shop, ranking and endpoint
+    r"""Shared shop, ranking and endpoint helpers, whose
     these scenarios reuse."""
     return _module(
         't214b_host_record', ROOT / 'contract/tools/t214b_host_record.py'
