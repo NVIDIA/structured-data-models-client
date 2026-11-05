@@ -5,6 +5,9 @@
 # Phase 9 verification
 
 **Complete on `rust-core-phase-9`; not merged into `rust-core` or `main`, and nothing published.**
+**Audit qualification:** the subsequent [PR review audit](pr63-review-audit.md) reproduced inherited defects and found specific missing coverage.
+The implementation campaign is complete, but its passing suites do not establish that every PR review concern is resolved.
+
 Both implementation branches were reviewed and integrated, including main commits `506e37024` and `4edabbf9c`.
 
 ## What changed
