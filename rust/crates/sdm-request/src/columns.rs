@@ -243,11 +243,9 @@ fn ranges(values: &[Option<f64>], count: bool, outcome: &[Vec<f64>]) -> Option<C
         result.means.push(sum.into_iter().map(|s| s / n).collect());
         start = end;
     }
-    if count {
-        if let Some(label) = result.labels.last_mut() {
-            label.pop();
-            label.push_str("+]");
-        }
+    if count && let Some(label) = result.labels.last_mut() {
+        label.pop();
+        label.push_str("+]");
     }
     result.score = score(&result.means, &result.counts);
     Some(result)
@@ -310,6 +308,11 @@ fn categories(
     }
     Some(result)
 }
+enum TableRole<'a> {
+    Instance,
+    Related { anchor: Option<&'a [Option<f64>]> },
+}
+
 struct Analysis {
     outcome: Vec<Vec<f64>>,
     classes: Vec<Value>,
@@ -380,8 +383,7 @@ impl Analysis {
         described: &Value,
         selected: &[(usize, usize, usize)],
         excluded: &BTreeSet<String>,
-        anchor: Option<&[Option<f64>]>,
-        count: bool,
+        role: TableRole<'_>,
     ) -> Result<(), CoreError> {
         let n = self.outcome.len();
         let hops = selected
@@ -395,7 +397,7 @@ impl Analysis {
                 .filter(|(_, _, h)| *h == hop)
                 .map(|(r, e, _)| (*r, *e))
                 .collect::<Vec<_>>();
-            if count {
+            if matches!(role, TableRole::Related { .. }) {
                 let mut counts = vec![Some(0.0); n];
                 for (_, e) in &rows {
                     *counts[*e].as_mut().unwrap() += 1.0;
@@ -450,7 +452,10 @@ impl Analysis {
                         ranges(&means, false, &self.outcome),
                     );
                 } else if stype == "timestamp" {
-                    if let Some(anchor) = anchor {
+                    if let TableRole::Related {
+                        anchor: Some(anchor),
+                    } = role
+                    {
                         self.times(name, hop, column, table, at, &rows, anchor)?;
                     }
                 } else {
@@ -798,8 +803,9 @@ pub fn analyze(payload: &Value) -> Result<ColumnAnalysis, CoreError> {
                 described,
                 &selected,
                 &exclusions,
-                anchor.as_deref(),
-                true,
+                TableRole::Related {
+                    anchor: anchor.as_deref(),
+                },
             )?;
         }
     } else {
@@ -819,8 +825,7 @@ pub fn analyze(payload: &Value) -> Result<ColumnAnalysis, CoreError> {
             described,
             &selected,
             &excluded,
-            None,
-            false,
+            TableRole::Instance,
         )?;
     }
     Ok(analysis.finish())
