@@ -36,6 +36,7 @@ use crate::types::ColumnType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    AnalyzeColumns(crate::columns::AnalyzeColumns),
     LabelsFrames(crate::labels::LabelsFrames),
     LabelsSource(crate::labels::LabelsSource),
     AddSqlColumn(crate::sql_column::SqlColumn),
@@ -127,6 +128,7 @@ impl Operation {
     /// The operation's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
+            Operation::AnalyzeColumns(_) => "analyze_columns",
             Operation::PrepareTimeSeries(_) => "prepare_time_series",
             Operation::LabelsFrames(_) => "labels_frames",
             Operation::LabelsSource(_) => "labels_source",
@@ -206,6 +208,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::AnalyzeColumns(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
             Operation::PrepareTimeSeries(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadResultItems(v) => vec![(v.input, Bytes), (v.table, Arrow)],
             Operation::ReadRequestSplit(v) => v.payloads.iter().map(|id| (*id, Bytes)).collect(),
@@ -1928,6 +1931,7 @@ pub struct Attachments {
     pub plan_result_merge_input: crate::result::PlanResultMerge,
     #[schemars(rename = "DirectValue.plan_result_merge")]
     pub plan_result_merge_output: crate::result::ResultMergePlan,
+    pub column_analysis: crate::columns::ColumnAnalysis,
     #[schemars(rename = "MergeResults.input")]
     pub merge_results_input: crate::result::MergeInput,
     #[schemars(rename = "ReadResultItems.input")]
