@@ -304,7 +304,7 @@ class RelationalMaterializer:
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
         _drop_context_that_answers_the_question(payloads, windowed=windowed)
-        request = Request.materialized(
+        return Request.materialized(
             payloads=payloads,
             windowed=windowed,
             schema=self.schema.snapshot(),
@@ -320,7 +320,6 @@ class RelationalMaterializer:
                 )
             },
         )
-        return request
 
     def _gather(
         self,
