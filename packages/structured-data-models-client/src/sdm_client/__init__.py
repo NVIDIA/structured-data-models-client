@@ -52,6 +52,7 @@ from sdm_client.schema import (
     SourceTable,
     Table,
 )
+from sdm_client.thresholds import percentile_thresholds
 
 __all__ = [
     'SDMWarning',
@@ -83,4 +84,5 @@ __all__ = [
     'UnknownModelError',
     'UnsupportedRequestError',
     '__version__',
+    'percentile_thresholds',
 ]

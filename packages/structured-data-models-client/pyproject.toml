@@ -88,6 +88,12 @@ databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
 # the extra installs nothing, and `SDMClient.in_process()` says why. The marker
 # is also what lets the workspace lock resolve.
 in-process = ["structured-data-models>=0.2.1,<0.3; python_version >= '3.11'"]
+# Drawing an answer. matplotlib is the only thing this client plots with, and
+# nothing else here plots at all, so a caller who wants no plotting stack is
+# not given one. `all` does not carry it for the same reason it does not carry
+# `databricks-serving`: it is a thing to do with an answer rather than a
+# backend to read.
+report = ["matplotlib>=3.8,<4"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
