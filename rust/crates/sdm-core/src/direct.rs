@@ -817,10 +817,25 @@ pub(crate) async fn predict(
             "direct call selection differs from its bound outputs",
         ));
     }
+    let analysis = if crate::columns::requested(&bound.outputs) {
+        Some(crate::columns::compute(std::slice::from_ref(&payload))?)
+    } else {
+        None
+    };
+    let analysis = crate::columns::expose(&asker, analysis.as_deref(), &bound.outputs)?;
+    if predict::nothing_to_score(&payload) {
+        let mut part = tabular::response::empty(&bound.model, &payload)?;
+        part.columns = analysis;
+        return crate::predict::finish(&asker, part, bound.outputs);
+    }
     if deferred_options {
         use sdm_contract::direct::native_response::{NativeDirectCall, PreparedDirectCall};
         let payload = asker.attach(Attachment::Bytes(payload.to_bytes()))?;
-        let call = NativeDirectCall { bound, payload };
+        let call = NativeDirectCall {
+            bound,
+            payload,
+            column_analysis: analysis,
+        };
         let value = asker.attach(Attachment::Bytes(
             serde_json::to_vec(&call).map_err(|_| internal("prepared call does not serialize"))?,
         ))?;
@@ -831,6 +846,10 @@ pub(crate) async fn predict(
     let answer =
         crate::predict::call_answer(&asker, payload.to_bytes(), request.model_endpoint.as_ref())
             .await?;
+    let mut payload = payload;
+    if let Some(analysis) = analysis {
+        payload.set("client_column_analysis", Value::Text(analysis));
+    }
     decoded_result(&asker, bound, payload, answer)
 }
 
@@ -924,7 +943,7 @@ pub(crate) fn layout(
             "attribution does not belong to this response",
         ));
     }
-    let part = tabular::response::layout(
+    let mut part = tabular::response::layout(
         &payload,
         &response,
         &scope,
@@ -932,6 +951,13 @@ pub(crate) fn layout(
         0,
         crate::pql::float_text,
     )?;
+    part.columns = payload
+        .get("client_column_analysis")
+        .and_then(Value::as_text)
+        .map(str::to_owned);
+    if let Some(raw) = &part.columns {
+        sdm_request::columns::validate(raw)?;
+    }
     if input.data.named {
         let missing = predict::absent(&part, &input.data.outputs);
         if !missing.is_empty() {

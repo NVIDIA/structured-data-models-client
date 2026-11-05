@@ -180,9 +180,12 @@ pub(crate) async fn run(
                 pinned.set("client_generated_keys", keys.clone());
             }
             let state_keys = row_keys(&body, "context", windowed)?;
+            let column_analysis = Some(crate::columns::compute(std::slice::from_ref(&body))?);
+            crate::columns::expose(&asker, column_analysis.as_deref(), &fields)?;
             let answer = call(&asker, Endpoint::CreateSession, body).await?;
             let id = session_id(&answer)?;
             let state = FrameSessionState {
+                column_analysis,
                 version: 1,
                 session_id: id.into(),
                 closed: false,
@@ -288,6 +291,8 @@ pub(crate) async fn run(
                     .with_field("target", Detail::text("the pinned target")),
                 );
             }
+            let analysis =
+                crate::columns::expose(&asker, state.column_analysis.as_deref(), &state.outputs)?;
             let mut parts = Vec::new();
             let mut start = 0;
             for (body, layout) in plans {
@@ -311,7 +316,10 @@ pub(crate) async fn run(
                 }
                 .await;
                 match answered {
-                    Ok(part) => parts.push(part),
+                    Ok(mut part) => {
+                        part.columns = analysis.clone();
+                        parts.push(part)
+                    }
                     Err(error) => {
                         return Err(crate::predict::carry_calls(
                             &asker,
@@ -346,6 +354,7 @@ pub(crate) async fn run(
                 )
                 .await?;
                 state.closed = true;
+                state.column_analysis = None;
                 state.keys.rows.clear();
             }
             crate::direct::value(&asker, &state)

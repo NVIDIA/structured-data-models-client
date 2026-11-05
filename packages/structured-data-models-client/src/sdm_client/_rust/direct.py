@@ -503,7 +503,7 @@ def predict(
     model_id = bound['model']
     attached: dict[int, Any] = {}
     request_id = None
-    if request.nothing_to_score:
+    if request.nothing_to_score and 'explanation' not in bound['outputs']:
         data = {
             'kind': 'empty',
             'bound': bound,

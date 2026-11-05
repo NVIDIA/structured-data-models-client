@@ -883,6 +883,7 @@ mod tests {
 
     fn answered(scores: &[(i64, f64)]) -> Part {
         Part {
+            columns: None,
             model: "m".into(),
             request_id: "r".into(),
             metadata: sdm_wire::json::Value::Object(vec![]),

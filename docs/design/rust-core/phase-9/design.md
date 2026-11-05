@@ -27,7 +27,7 @@ Git even suggests moving new explanation files into `in_process/`; that inferred
 Resolving text conflicts alone would risk restoring the old Python engine or losing the new behavior.
 Review automatically merged runtime files as well as conflicted files, and regenerate snapshots rather than merging their contents by hand.
 
-## Column explanations: proposed boundary
+## Column explanations: implemented boundary
 
 These are descriptive statistics about labelled context, not causal explanations or model gradients.
 Current Rust-backed results expose gradients directly as `result.explanations`.
@@ -79,14 +79,19 @@ Validate engine-produced explanation data within its existing operation; do not 
 | Result merging | Internal batches share one request-level analysis. Rust validates selection; never sum scores or silently take the first analysis from unrelated requests. Specify explicit supplied-analysis behavior for public `PredictionResult.merge`, including main's `columns` argument. |
 | Failures | Distinguish not requested, ready-but-empty, unsupported, and analysis failure internally. Hosts format Rust diagnostics as language-native warnings; public absence behavior follows main. Invalid protocol data remains an error, not a swallowed analysis warning. |
 
-Keep Python `ColumnExplanations(payload)` construction, structural validation and dataframe formatting at the host boundary; any engine operation consuming supplied analysis validates its semantic invariants there.
+Python `ColumnExplanations(payload)` and Java construction accept raw analysis input and invoke the Rust analysis operation once.
+Wrapping an already computed result performs no native call; host views only format rows.
 Java exposes equivalent typed data and its existing Arrow presentation conventions, without copying Python-specific dictionary APIs.
 Presentation must not regroup, rank or recalculate scores.
 Do not promise zero-copy: numerical analysis needs working memory, but avoid repeated host/native conversion and retain only the resulting analysis for reuse.
 
-Before implementation, pin these changes to the existing `session.rs`, `frame_session.rs`, `result.rs` and operation schemas.
-One unresolved integration detail must be settled in that review: how the pre-trim relational context remains available until analysis without copying it into a second host dataframe.
-Carry native attachment references or compute before that view is discarded; do not reconstruct it with another database query.
+Existing `session.rs`, `frame_session.rs`, `result.rs` and contract version 71 carry this lifecycle.
+Materialized request bytes retain a versioned `client_analysis_delta`: only leakage-removed rows, their original positions and schema binding.
+Rust validates and restores exact context order for analysis, including after request save/load.
+The delta is excluded from model payloads and byte limits; no second host dataframe or warehouse query is required.
+Fit deliberately uses its actual post-holdout context and never restores removed labels.
+Ordinary batches share one analysis; forecasts combine step contexts with distinct instance identities before computing cohorts.
+Failed statistics warn without breaking inference; corrupt state and conflicting public merge inputs remain errors.
 
 ## Behaviors that must survive the port
 

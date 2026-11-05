@@ -37,6 +37,7 @@ fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
 
 fn part(request_id: &str, rows: Vec<Row>) -> Part {
     Part {
+        columns: None,
         model: "kumo-relational".into(),
         request_id: request_id.into(),
         metadata: Value::Object(vec![("served_by".into(), Value::text("a"))]),

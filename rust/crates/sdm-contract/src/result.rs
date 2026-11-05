@@ -17,6 +17,8 @@ pub struct MergeResults {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MergeInput {
+    #[serde(default)]
+    pub columns: Option<String>,
     pub parts: Vec<ResultPart>,
 }
 
@@ -42,6 +44,8 @@ pub struct PlanResultMerge {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MergeDescriptor {
+    #[serde(default)]
+    pub columns: Option<String>,
     pub model: String,
     pub request_id: String,
     pub outputs: Vec<String>,
@@ -112,6 +116,7 @@ pub enum MergeTimeUnit {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResultMergePlan {
+    pub columns: Option<String>,
     pub single: bool,
     pub batches: usize,
     pub batch_request_ids: Vec<String>,

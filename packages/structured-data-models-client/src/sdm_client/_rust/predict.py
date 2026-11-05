@@ -504,8 +504,14 @@ def _result(
     from sdm_client.explanations import GradientExplanations
 
     raw_gradients = (table.schema.metadata or {}).get(b'sdm.gradients')
-    result.explanations = GradientExplanations._from_core(
+    result.explanations.gradients = GradientExplanations._from_core(
         json.loads(raw_gradients) if raw_gradients is not None else None
+    )
+    from sdm_client.explanations import ColumnExplanations
+
+    raw_columns = (table.schema.metadata or {}).get(b'sdm.columns')
+    result.explanations.columns = ColumnExplanations._from_core(
+        json.loads(raw_columns) if raw_columns is not None else None
     )
     return result
 

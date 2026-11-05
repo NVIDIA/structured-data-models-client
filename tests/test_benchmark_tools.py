@@ -187,7 +187,9 @@ def test_current_gradient_export_is_detected_with_instance_only_attribute():
     result = sdm_client.PredictionResult(
         model='kumo-tabular', request_id='fixture', items=[]
     )
-    assert isinstance(result.explanations, sdm_client.GradientExplanations)
+    assert isinstance(
+        result.explanations.gradients, sdm_client.GradientExplanations
+    )
     assert child.gradient_capable(sdm_client)
 
 
@@ -256,8 +258,8 @@ def test_fixed_fixture_nonempty_gradients_through_public_client(relational):
             result = client.predict(
                 request, model=model, outputs=['prediction', 'explanation']
             )
-        frame = result.explanations.to_pandas()
-        assert len(result.explanations) == 2
+        frame = result.explanations.gradients.to_pandas()
+        assert len(result.explanations.gradients) == 2
         assert len(frame) == 2
         assert (frame.gradient == 0.25).all()
         assert set(frame.column) == {'x0'}

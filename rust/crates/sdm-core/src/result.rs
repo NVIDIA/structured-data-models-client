@@ -308,6 +308,7 @@ fn decode(
     let (rows, candidates) = rows.into_iter().unzip();
     Ok((
         Part {
+            columns: schema.metadata().get("sdm.columns").cloned(),
             model: description.model.clone(),
             request_id: description.request_id.clone(),
             metadata: json(&description.metadata)?,
@@ -414,6 +415,7 @@ pub(crate) fn merge(
         };
         let (part, held) = decode(description, &data.schema, &data.batches)?;
         descriptors.push(sdm_contract::result::MergeDescriptor {
+            columns: input.columns.clone().or_else(|| part.columns.clone()),
             manual_gradients: vec![],
             model: description.model.clone(),
             request_id: description.request_id.clone(),
@@ -499,6 +501,7 @@ mod tests {
     use super::*;
     fn part(prediction: Answer) -> Part {
         Part {
+            columns: None,
             model: "kumo-tabular".into(),
             request_id: "one".into(),
             metadata: Value::Object(vec![]),

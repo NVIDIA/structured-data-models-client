@@ -71,6 +71,7 @@ def close(fitted: Any) -> None:
     fitted._tabular_session = replacement
     fitted._closed = replacement['closed']
     if fitted._closed:
+        fitted._column_explanations = None
         fitted._client._pinned.discard(fitted)
 
 
@@ -252,6 +253,7 @@ def fit(
         'bound': prepared['bound'],
         'pinned_model': prepared['bound']['model'],
         'pinned_kind': prepared['bound']['kind'],
+        'column_analysis': prepared['column_analysis'],
         'columns': prepared['columns'],
         'primary_key': prepared['primary_key'],
         'question': question(request),
@@ -330,8 +332,6 @@ def predict(fitted: Any, request: Any) -> Any:
             f'would be answered. Fit again to ask something else',
             code='INVALID_REQUEST',
         )
-    if request.nothing_to_score:
-        return _empty_answer(fitted.model, fitted._outputs, request)
     _report_overlap(fitted, request)
     try:
         _require_frames(request)
@@ -363,6 +363,17 @@ def predict(fitted: Any, request: Any) -> Any:
     )
     prepared = _value(finished)
     layout = json.loads(finished.take(prepared['layout']))
+    if prepared['empty']:
+        result = _empty_answer(
+            fitted.model, tuple(prepared['bound']['outputs']), request
+        )
+        from sdm_client.explanations import ColumnExplanations
+
+        raw = layout.get('client_column_analysis')
+        result.explanations.columns = ColumnExplanations._from_core(
+            json.loads(raw) if raw is not None else None
+        )
+        return cached_columns(fitted, result)
     reply, sent = send(
         fitted._client,
         {'session_predict': {'session_id': state['session_id']}},
@@ -374,12 +385,15 @@ def predict(fitted: Any, request: Any) -> Any:
     layout.update(sent)
     result = direct_response.decoded_reply(reply, layout, prepared['bound'])
     if result is not None:
-        return result
+        return cached_columns(fitted, result)
     response = direct_response.Reader(direct._call).response(
         reply, fitted.model
     )
-    return direct_response.present(
-        response, layout, prepared['bound'], direct._call
+    return cached_columns(
+        fitted,
+        direct_response.present(
+            response, layout, prepared['bound'], direct._call
+        ),
     )
 
 
@@ -415,3 +429,12 @@ def _require_frames(request: Any) -> None:
             'the sampled payloads that model reads. Gather it with '
             "materialize(..., model='kumo-tabular') to ask this one"
         )
+
+
+def cached_columns(fitted: Any, result: Any) -> Any:
+    """Retain the same immutable host view for one fitted context."""
+    if result.explanations.columns is not None:
+        if fitted._column_explanations is None:
+            fitted._column_explanations = result.explanations.columns
+        result.explanations.columns = fitted._column_explanations
+    return result

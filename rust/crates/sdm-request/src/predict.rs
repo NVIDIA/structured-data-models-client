@@ -726,6 +726,7 @@ pub fn body(
     let kind = called(payload)?;
     let mut envelope = payload.clone();
     envelope.remove("client_generated_keys");
+    envelope.remove("client_analysis_delta");
     envelope.set("model", Value::text(model));
 
     // The outputs, and a regression's statistic: the one the payload
@@ -961,6 +962,7 @@ pub struct Row {
 /// The answer to one call, or the parts of one request put together.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Part {
+    pub columns: Option<String>,
     pub model: String,
     pub request_id: String,
     /// The endpoint's `metadata` object.
@@ -995,6 +997,7 @@ fn holds(mapping: &Value) -> bool {
 /// (`_empty_answer`): no rows, no request id, empty metadata.
 pub fn empty(model: &str, payload: &Value) -> Part {
     Part {
+        columns: None,
         model: model.to_owned(),
         request_id: String::new(),
         metadata: Value::Object(vec![]),
@@ -1280,6 +1283,7 @@ pub(crate) fn layout_with_answers(
         .find(|e| holds(e))
         .cloned();
     Ok(Part {
+        columns: None,
         model: response.model.clone(),
         request_id: response.id.clone(),
         metadata: response.metadata.clone(),
@@ -1442,6 +1446,7 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
         .iter()
         .map(|part| sdm_contract::result::MergeDescriptor {
             manual_gradients: vec![],
+            columns: part.columns.clone(),
             model: part.model.clone(),
             request_id: part.request_id.clone(),
             outputs: vec![],
@@ -1465,6 +1470,7 @@ pub fn merge_planned(
     let Some(mut first) = parts.next() else {
         return Err(CoreError::new(Sentence::Internal, "no parts to merge"));
     };
+    first.columns = plan.columns.clone();
     if plan.single {
         return Ok(first);
     }
@@ -1518,6 +1524,7 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
             "a forecast with no step to put together",
         ));
     };
+    let columns = first.columns.clone();
     let mut rows = Vec::new();
     let mut explained = Vec::new();
     let (model, request_id, answers, text_ids) =
@@ -1537,6 +1544,7 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
     }
     Ok(Part {
+        columns,
         model,
         request_id,
         metadata: Value::Object(vec![]),
@@ -1933,6 +1941,9 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
             "sdm.gradients".into(),
             serde_json::to_string(&collection).map_err(|_| internal_layout())?,
         );
+    }
+    if let Some(columns) = &part.columns {
+        metadata.insert("sdm.columns".into(), columns.clone());
     }
     let schema = schema.with_metadata(metadata);
     RecordBatch::try_new(Arc::new(schema), columns).map_err(|_| internal_layout())

@@ -134,7 +134,7 @@ def test_generated_keys_are_internal_but_source_names_are_preserved(
             else ['predict']
         ),
     )
-    for entry in result.explanations.values():
+    for entry in result.explanations.gradients.values():
         block = entry['related']['events']
         assert block['rows']
         assert ('keys' in block) == genuine

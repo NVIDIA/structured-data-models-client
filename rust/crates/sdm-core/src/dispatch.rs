@@ -61,6 +61,9 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::AnalyzeColumns(request) => {
+            Run::new(move |asker| async move { crate::columns::run(&asker, request, attachments) })
+        }
         Operation::LabelsFrames(request) => Run::new(move |asker| async move {
             crate::materialize::frames::labels(asker, request, attachments, facts, zones).await
         }),

@@ -268,6 +268,7 @@ mod tests {
     }
     fn part(rows: Vec<Row>) -> Part {
         Part {
+            columns: None,
             model: "kumo-relational".into(),
             request_id: "r".into(),
             metadata: Value::Object(vec![]),

@@ -35,7 +35,11 @@ from typing import Any
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
-from sdm_client.explanations import GradientExplanations
+from sdm_client.explanations import (
+    ColumnExplanations,
+    Explanations,
+    GradientExplanations,
+)
 from sdm_client.reports import ExplanationView
 
 # Emitted as columns when present on an item, in this order. ``row_index``
@@ -82,7 +86,7 @@ class PredictionResult:
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
         explanation: dict[str, Any] | None = None,
-        explanations: Mapping[Any, dict[str, Any]] | None = None,
+        explanations: Explanations | Mapping[Any, dict[str, Any]] | None = None,
         outputs: Sequence[str] = (),
         unscored_candidates: Sequence[Any] = (),
     ) -> None:
@@ -101,8 +105,12 @@ class PredictionResult:
         self._explanation = explanation
         self.explanations = (
             explanations
-            if isinstance(explanations, GradientExplanations)
-            else GradientExplanations(explanations)
+            if isinstance(explanations, Explanations)
+            else Explanations(
+                explanations
+                if isinstance(explanations, GradientExplanations)
+                else GradientExplanations(explanations)
+            )
         )
         self._unscored_candidates = tuple(unscored_candidates)
 
@@ -135,7 +143,10 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return bool(self.explanations) or self._explanation is not None
+            return (
+                bool(self.explanations.gradients)
+                or self._explanation is not None
+            )
         if name not in _ITEM_FIELDS:
             return True
         return any(
@@ -255,7 +266,12 @@ class PredictionResult:
         return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 
     @classmethod
-    def merge(cls, parts: Sequence[PredictionResult]) -> PredictionResult:
+    def merge(
+        cls,
+        parts: Sequence[PredictionResult],
+        *,
+        columns: ColumnExplanations | None = None,
+    ) -> PredictionResult:
         r"""Join the results of one request that was sent in several calls.
 
         A request larger than the endpoint's per-call cap is split by the
@@ -276,7 +292,7 @@ class PredictionResult:
         """
         from sdm_client._rust.result_merge import merge
 
-        return merge(cls, parts)
+        return merge(cls, parts, columns=columns)
 
     def __len__(self) -> int:
         return len(self.items)

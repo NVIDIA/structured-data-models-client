@@ -108,6 +108,7 @@ class FittedModel:
     _tabular_session_keys: bytes
     _relational_session: dict[str, Any] | None
     _relational_session_pinned: bytes
+    _column_explanations: Any
 
     def __init__(self) -> None:
         raise TypeError(
@@ -149,6 +150,7 @@ class FittedModel:
         fitted._tabular_session_keys = b''
         fitted._relational_session = None
         fitted._relational_session_pinned = b''
+        fitted._column_explanations = None
         return fitted
 
     @property

@@ -710,6 +710,7 @@ impl From<WarningCode> for Code {
 }
 
 warning_codes! {
+    ColumnAnalysisUnavailable = "COLUMN_ANALYSIS_UNAVAILABLE",
     FrameSchema = "FRAME_SCHEMA",
     BinaryTargetAsQuantity = "BINARY_TARGET_AS_QUANTITY",
     KeyNoValue = "KEY_NO_VALUE",
@@ -829,6 +830,7 @@ sentences! {
     TimeSeriesInput = "time_series_input", E::InvalidRequest;
     LabelsInvalid = "labels_invalid", E::InvalidRequest;
     FeatureImportanceScore = "feature_importance_score", E::InvalidRequest;
+    ResultMergeColumns = "result_merge_columns", E::InvalidRequest;
     ResultMergeManualIdentity = "result_merge_manual_identity", E::InvalidRequest;
     ResultMergeEmpty = "result_merge_empty", E::InternalError;
     ResultMergeModels = "result_merge_models", E::InternalError;
@@ -1005,6 +1007,7 @@ sentences! {
     ContextConstantPredicted = "context_constant_predicted", W::ContextConstant;
     ContextConstantQuestion = "context_constant_question", W::ContextConstant;
     ContextConstantAnswer = "context_constant_answer", W::ContextConstant;
+    ColumnAnalysisUnavailable = "column_analysis_unavailable", W::ColumnAnalysisUnavailable;
     OutputsAbsent = "outputs_absent", W::OutputsAbsent;
     DirectOutputsAbsent = "direct_outputs_absent", W::OutputsAbsent;
     StepsUnexplained = "steps_unexplained", W::StepsUnexplained;

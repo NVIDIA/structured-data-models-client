@@ -452,6 +452,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::ResultMergeManualIdentity => said(
             "manual explanation keys must identify result rows by id or row_index and forecast step; use predict() for decoded results",
         ),
+        S::ResultMergeColumns => {
+            said("cannot merge different column analyses; supply request-level columns explicitly")
+        }
         S::ResultMergeEmpty => said("no parts to merge"),
         S::ResultMergeModels => said("cannot merge results from different models: {models!r}"),
         S::ResultMergeOutputs => said(
@@ -913,6 +916,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::ContextConstantAnswer => said(
             r#"every context row has the same answer, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."#,
         ),
+        S::ColumnAnalysisUnavailable => {
+            said("column analysis is unavailable; prediction is unaffected")
+        }
         S::OutputsAbsent | S::DirectOutputsAbsent => said(
             r#"{model} answered without {absent!r}, which this request asked for, so no column of {advice:result_frame()} will carry it. The answer to the rest of the request is unaffected."#,
         ),
