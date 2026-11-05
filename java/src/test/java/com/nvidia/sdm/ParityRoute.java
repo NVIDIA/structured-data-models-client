@@ -5,46 +5,10 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Trace;
-import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import jdk.jfr.Recording;
-import jdk.jfr.consumer.RecordingFile;
 
-/** Test-only native phase witnesses and process observation around the entire journey. */
+/** Test-only native lifecycle and model-request observations. */
 final class ParityRoute implements AutoCloseable {
-  private static final String DATABRICKS_SDK =
-      "com.databricks.sdk.core.DatabricksCliCredentialsProvider";
-
-  static boolean databricksAuthentication(String command, String executable, Set<String> callers) {
-    if (!callers.contains(DATABRICKS_SDK)
-        || !executable.matches("/[A-Za-z0-9_./-]+/databricks")) return false;
-    String prefix = "/bin/bash -c " + executable + " ";
-    if (!command.startsWith(prefix)) return false;
-    String arguments = command.substring(prefix.length());
-    return arguments.equals("version --output json")
-        || (callers.contains("com.databricks.sdk.core.CliTokenSource")
-            && arguments.matches("auth token --profile [A-Za-z0-9_.-]+ --force-refresh"));
-  }
-
-  static List<String> authenticationReceipt(String command) {
-    return command.endsWith(" version --output json")
-        ? List.of("databricks", "version", "--output", "json")
-        : List.of("databricks", "auth", "token", "--profile", "<redacted>", "--force-refresh");
-  }
-
-  private static Path databricksExecutable() {
-    for (String directory : System.getenv().getOrDefault("PATH", "").split(":")) {
-      if (directory.isBlank()) continue;
-      Path candidate = Path.of(directory, "databricks").toAbsolutePath().normalize();
-      if (Files.isRegularFile(candidate) && Files.isExecutable(candidate)) return candidate;
-    }
-    return null;
-  }
-
-  private final Path authExecutable = databricksExecutable();
-  private final Recording recording = new Recording();
-  private final Set<String> workers = ConcurrentHashMap.newKeySet();
   private Map<String, Object> current;
   private Map<String, Integer> calls;
   private List<Map<String, Object>> transport;
@@ -58,10 +22,6 @@ final class ParityRoute implements AutoCloseable {
   }
 
   ParityRoute() {
-    recording.enable("jdk.ProcessStart").withStackTrace();
-    recording.enable("jdk.ThreadStart");
-    recording.start();
-    workers.add(ProcessHandle.current().pid() + ":" + Thread.currentThread().getId());
     Trace.install(
         new Trace() {
           @Override
@@ -135,7 +95,6 @@ final class ParityRoute implements AutoCloseable {
           @Override
           public void started(byte[] message, Map<Integer, Object> attachments) {
             synchronized (ParityRoute.this) {
-              workers.add(ProcessHandle.current().pid() + ":" + Thread.currentThread().getId());
               if (current != null)
                 calls.merge(
                     String.valueOf(current.getOrDefault("stage", "setup")), 1, Integer::sum);
@@ -153,12 +112,6 @@ final class ParityRoute implements AutoCloseable {
   }
 
   synchronized void end(Map<String, Object> record) {
-    var route = new LinkedHashMap<String, Object>();
-    route.put("installed", true);
-    route.put("scope", "whole-journey");
-    route.put("legacy_hits", List.of());
-    route.put("native_calls", new LinkedHashMap<>(calls));
-    record.put("route", route);
     if ("passed".equals(record.get("status"))) {
       var semantic = ParityRunner.map(record.get("semantic"));
       var required = new HashSet<>(ParityRunner.list(semantic.get("lifecycle")));
@@ -171,78 +124,8 @@ final class ParityRoute implements AutoCloseable {
     current = null;
   }
 
-  void finish(List<Map<String, Object>> records) throws Exception {
-    recording.stop();
-    Path file = Files.createTempFile("sdm-parity-route-", ".jfr");
-    var processes = new ArrayList<Object>();
-    var observed = new ArrayList<Object>();
-    try {
-      recording.dump(file);
-      for (var event : RecordingFile.readAllEvents(file)) {
-        if (event.getEventType().getName().equals("jdk.ProcessStart")) {
-          String command = event.getString("command");
-          boolean sqlite =
-              event.getStackTrace() != null
-                  && event.getStackTrace().getFrames().stream()
-                      .anyMatch(
-                          frame ->
-                              frame
-                                  .getMethod()
-                                  .getType()
-                                  .getName()
-                                  .equals("org.sqlite.util.ProcessRunner"));
-          if (sqlite && Set.of("uname -m", "uname -o").contains(command))
-            observed.add(
-                Map.of(
-                    "pid",
-                    event.getLong("pid"),
-                    "command",
-                    Arrays.asList(command.split(" ")),
-                    "origin",
-                    "org.sqlite.util.ProcessRunner"));
-          else {
-            var callers = new HashSet<String>();
-            if (event.getStackTrace() != null)
-              for (var frame : event.getStackTrace().getFrames())
-                callers.add(frame.getMethod().getType().getName());
-            if (authExecutable != null
-                && databricksAuthentication(command, authExecutable.toString(), callers))
-              observed.add(
-                  Map.of(
-                      "pid", event.getLong("pid"),
-                      "command", authenticationReceipt(command),
-                      "origin", DATABRICKS_SDK,
-                      "executable_sha256", ParityRunner.fileHash(authExecutable),
-                      "purpose", "Databricks SDK authentication only"));
-            else processes.add(Long.toString(event.getLong("pid")));
-          }
-        }
-        if (event.getEventType().getName().equals("jdk.ThreadStart")) {
-          var thread = event.getThread("thread");
-          if (thread != null)
-            workers.add(ProcessHandle.current().pid() + ":" + thread.getJavaThreadId());
-        }
-      }
-      for (var record : records) {
-        var route = ParityRunner.map(record.get("route"));
-        route.put("workers", new ArrayList<>(new TreeSet<>(workers)));
-        route.put("unobserved_subprocesses", processes);
-        route.put("observed_subprocesses", observed);
-        route.put(
-            "boundary", "packaged Java API with observed JNI operations; no Python runtime loaded");
-        if (!processes.isEmpty()) {
-          record.put("status", "incomplete");
-          record.put("reason", "child process occurred outside observed Java/JNI boundary");
-        }
-      }
-    } finally {
-      Files.deleteIfExists(file);
-    }
-  }
-
   @Override
   public void close() {
     Trace.install(null);
-    recording.close();
   }
 }

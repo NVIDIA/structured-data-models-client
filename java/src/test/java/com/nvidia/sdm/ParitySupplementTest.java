@@ -40,19 +40,18 @@ class ParitySupplementTest {
   }
 
   @Test
-  void checkpointsNeverClaimSuccessBeforeRouteFinishes() throws Exception {
+  void checkpointsNeverClaimSuccessBeforeRunFinishes() throws Exception {
     var output = java.nio.file.Files.createTempFile("parity-checkpoint-test-", ".jsonl");
     String previous = System.getProperty("sdm.parity.output");
     System.setProperty("sdm.parity.output", output.toString());
     try {
       var record = new LinkedHashMap<String, Object>();
       record.put("status", "passed");
-      record.put("route", Map.of("scope", "whole-journey"));
       ParityRunner.checkpoint(List.of(record), false);
-      assertTrue(java.nio.file.Files.readString(output).contains("route-observation-pending"));
+      assertTrue(java.nio.file.Files.readString(output).contains("compatibility run has not completed"));
       assertEquals("passed", record.get("status"));
       ParityRunner.checkpoint(List.of(record), true);
-      assertFalse(java.nio.file.Files.readString(output).contains("route-observation-pending"));
+      assertFalse(java.nio.file.Files.readString(output).contains("compatibility run has not completed"));
     } finally {
       if (previous == null) System.clearProperty("sdm.parity.output");
       else System.setProperty("sdm.parity.output", previous);

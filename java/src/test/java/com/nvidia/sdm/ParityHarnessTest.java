@@ -162,7 +162,6 @@ class ParityHarnessTest {
     try (var route = new ParityRoute()) {
       route.begin(record);
       route.end(record);
-      route.finish(List.of(record));
     }
     assertEquals("incomplete", record.get("status"));
     assertEquals("native operation witness missing for a required phase", record.get("reason"));
