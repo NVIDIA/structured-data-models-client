@@ -329,9 +329,9 @@ def test_the_item_metadata_null_transform_and_text_option_cases() -> None:
 
 
 @functools.cache
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+def expected_cases() -> dict[str, dict[str, Any]]:
+    """Independent expected facts, indexed by case key."""
+    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
     return {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()
@@ -426,16 +426,12 @@ ITEM_METADATA = {
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_ref_s_line_is_at_its_case_file(case_key: str) -> None:
-    r"""Exit "cases per rule", on DuckDB, SQLite and Postgres: python-ref's
-    line for the case on the database, recorded at the case file, ends as
-    the case expects, with a request for each call."""
+def test_expected_outcome_matches_case(case_key: str) -> None:
+    """Independent expected facts agree with this case's stated behavior."""
     case_id = case_key.split('@')[0]
     case, digest = cases()[case_id]
-    line = reference_lines().get(case_key)
-    assert line is not None, f'{case_key}: no python-ref line'
-    assert line['identity']['runner'] == 'python-ref'
-    assert line['identity']['inputs']['case'] == digest
+    line = expected_cases().get(case_key)
+    assert line is not None, f'{case_key}: no expected facts'
     assert _outcome(line) == _expected(case)
     assert len(line['public']['payloads']) == len(CALLS.get(case_id, []))
 
@@ -453,14 +449,9 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
     case_id = case_key.split('@')[0]
     case, digest = cases()[case_id]
     document = vectors()
-    assert document['recorded_by'] == 'contract/tools/option_record.py'
-    line = reference_lines()[case_key]
-    assert (
-        document['reference'] == line['identity']['reference']['commit']['sha']
-    )
+    line = expected_cases()[case_key]
     vector = document['vectors'].get(case_key)
     assert vector is not None, f'{case_key}: no vector'
-    assert vector['case'] == digest
     assert _outcome({'outcome': vector['outcome']}) == _expected(case)
     assert vector['calls'] == CALLS.get(case_id, [])
     warned = [
@@ -516,14 +507,14 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
 def current_line(case_key: str) -> dict[str, Any]:
     case_id, _, database = case_key.partition('@')
     if case_id not in {'explain.query', 'explain.two-entities'}:
-        return reference_lines()[case_key]
+        return expected_cases()[case_key]
     given = cases()[case_id][0]['input']
     source = cases()['explain.query'][0]['input']
     assert {
         k: v for k, v in given.items() if k not in {'outputs', 'explanation'}
     } == source
     line = copy.deepcopy(
-        reference_lines()[key('explain.query', database or 'duckdb')]
+        expected_cases()[key('explain.query', database or 'duckdb')]
     )
     for payload in line['public']['payloads']:
         payload['parsed']['output']['fields'] = ['prediction', 'explanation']

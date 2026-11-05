@@ -4,13 +4,16 @@
 
 # Maintained observations
 
-These fixtures retain facts consumed by current tests from the migration recordings at commit `4e3f4a86f`.
-The full recordings are an external archive, not a dependency of tests or CI.
-`PROVENANCE.json` records the archive, source-file and extraction-tool SHA-256 digests.
+These fixtures hold independent expected facts for current correctness tests.
+Tests need only this checkout; historical clients, archives and recording tools are not dependencies.
 
-- `reference-observations.jsonl` contains the 345 observation cases named by the Python and Rust consumers in the provenance file.
-  Driver recordings are omitted except for the three complete observations used by SQL-result and observation-schema tests.
-  Public payloads, result/schema expectations, outcomes and identity hashes are unchanged.
+- `request-expectations.jsonl` holds exact small request payloads, schemas, results, warnings and success/refusal outcomes.
+  It omits historical checkout hashes, recorder identities and unused protocol envelopes.
+- `batch-expectations.json` holds literal sampled entity order and request options for the two large, single-table batching cases.
+  The test reconstructs every expected request from that independent order and the input table's literal `score = entity % 7` rule.
+  Each call excludes its scored entities from context while retaining sample positions, so full request comparisons still check ordering, labels and every row.
+- `label-expectations.json` contains only the four label cases' expected context rows and counts.
+- `duckdb-statements.json` contains the expected SQL statements and their results for the provider regression case.
 - `postgres-statements.json` retains every distinct PostgreSQL statement with its original case and multiplicity, plus all observed key-lookup column/type layouts.
   Write-guard and provider-layout tests exercise these facts without loading full driver result logs.
 - `snowflake.json` contains the statements and result references for the 27 Snowflake cases named by `t36_snowflake.rs` and the public Python Snowflake tests.
@@ -38,5 +41,5 @@ Ordinary tests need only this checkout.
 The retired `column-name-vectors.json`, `key-cast-vectors.json` and `nested-type-vectors.json` had no current fixture readers.
 Current column-name tests generate their inputs from the maintained case builder and retain their independent behavior assertions.
 The decimal observation archive was replaced by the consumed inputs described above.
-The large batching cases remain unchanged because their byte-level input identities are used across host-language contracts.
-The repository gate bounds their growth explicitly.
+Large repetitive batching inputs use documented deterministic case generators.
+Current-run input identity checks remain in the runners; stale historical input-file hashes are not expected behavior.

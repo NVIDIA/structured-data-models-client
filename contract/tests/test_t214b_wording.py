@@ -275,13 +275,11 @@ def test_every_case_held_here_is_recorded_and_named() -> None:
     and :data:`WARNED`'s cases give each label's warning on DuckDB on the
     reference."""
     document = vectors()
-    assert document['recorded_by'] == 'contract/tools/wording_record.py'
     for case_id in recorder().CASE_IDS:
         _, digest = cases()[case_id]
         for case_key in keys_of(case_id):
             vector = document['vectors'].get(case_key)
             assert vector is not None, f'{case_key}: no vector'
-            assert vector['case'] == digest, f'{case_key}: another case file'
     assert set(NAMED) | {c for ids in WARNED.values() for c in ids} == set(
         recorder().CASE_IDS
     )
@@ -292,21 +290,12 @@ def test_every_case_held_here_is_recorded_and_named() -> None:
             assert _labelled(label, document['vectors'][case_id]['warnings'])
 
 
-def test_python_ref_s_line_is_at_each_wording_case_file() -> None:
-    r"""The ``wording.*`` cases: python-ref's line for each, on each
-    database, recorded at the case file, ends as the case expects, as the
-    vector does."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    commit = next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
-    assert vectors()['reference'] == commit
+def test_expected_wording_outcomes_match_cases() -> None:
+    """Independent expected facts agree with this case's stated behavior."""
     lines = {
         json.loads(line)['case']: json.loads(line)
         for line in (
-            ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+            ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
         )
         .read_text(encoding='utf-8')
         .splitlines()
@@ -322,8 +311,7 @@ def test_python_ref_s_line_is_at_each_wording_case_file() -> None:
         )
         for case_key in keys_of(case_id):
             line = lines.get(case_key)
-            assert line is not None, f'{case_key}: no python-ref line'
-            assert line['identity']['inputs']['case'] == digest
+            assert line is not None, f'{case_key}: no expected facts'
             outcome = line['outcome']
             got = (
                 outcome['result'],

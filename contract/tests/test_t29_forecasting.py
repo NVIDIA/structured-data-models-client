@@ -206,9 +206,9 @@ def _cases() -> dict[str, dict[str, Any]]:
     }
 
 
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+def expected_cases() -> dict[str, dict[str, Any]]:
+    """Independent expected facts, indexed by case key."""
+    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
     return {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()
@@ -267,7 +267,7 @@ def test_the_cases_are_the_design_row_s() -> None:
     }
     # T2.8's forecast cases (top_k and MOST_PARTS) are ranking's.
     assert family - {'forecast.top-k', 'forecast.most-parts'} == set(FAMILY)
-    reference = reference_lines()
+    reference = expected_cases()
     for case_id, case in cases.items():
         given = case['input']
         assert case['status'] == 'acceptance', case_id
@@ -305,7 +305,7 @@ def test_the_cases_are_the_design_row_s() -> None:
             }, (case_id, database)
 
 
-def test_the_reference_lines_are_not_vacuous() -> None:
+def test_the_expected_cases_are_not_vacuous() -> None:
     r"""Control: on each database, python-ref's lines show each case doing
     what it names. A forecast of N steps sends N requests, no two alike,
     and answers N rows per entity with a ``forecast_step``; a refusal sends
@@ -321,7 +321,7 @@ def test_the_reference_lines_are_not_vacuous() -> None:
     is what ``t29_forecasting.rs`` holds rust-host's result to."""
     runner = _runner()
     cases = _cases()
-    reference = reference_lines()
+    reference = expected_cases()
     for database in DATABASES:
 
         def line(case_id: str) -> dict[str, Any]:
@@ -452,7 +452,7 @@ def as_the_reference(
     runner = _runner()
     cases = _cases()
     observed = _cases_on(database)
-    reference = reference_lines()
+    reference = expected_cases()
     problems = []
     for case_id in case_ids:
         key = runner.case_key(case_id, database)
@@ -629,7 +629,7 @@ def test_the_reference_s_lagged_average_is_packed() -> None:
     the two rows scored get no first lag where their windows hold 34.0 and
     35.5."""
     runner = _runner()
-    reference = reference_lines()
+    reference = expected_cases()
     for database in DATABASES:
         sent = requests(reference[runner.case_key(LAG_ALIGNED, database)])
         assert len(sent) == 1, database
@@ -725,7 +725,7 @@ def test_lagged_average_on_its_own_rows(database: str) -> None:
         runner = _runner()
         key = runner.case_key(LAG_ALIGNED, database)
         mine = _cases_on(database)[key]
-        theirs = reference_lines()[key]
+        theirs = expected_cases()[key]
         assert _outcome(mine) == _outcome(theirs), _outcome(mine)
         assert mine['identity']['native_loaded']
         assert {'describe_source', 'materialize', 'predict'} <= set(
@@ -763,7 +763,7 @@ def test_the_reference_declares_each_call_s_lags_bool() -> None:
     own row (P2F-1), so a call's dtype read off its values alone is not
     bool there."""
     runner = _runner()
-    reference = reference_lines()
+    reference = expected_cases()
     both = {'__kumo_arl0__': 'bool', '__kumo_arl1__': 'bool'}
     for database in DATABASES:
         sent = requests(reference[runner.case_key(LAG_DTYPE, database)])
@@ -792,7 +792,7 @@ def test_lag_dtype_per_call_as_the_reference(database: str) -> None:
         runner = _runner()
         key = runner.case_key(LAG_DTYPE, database)
         mine = _cases_on(database)[key]
-        theirs = reference_lines()[key]
+        theirs = expected_cases()[key]
         assert _outcome(mine) == _outcome(theirs), _outcome(mine)
         assert mine['identity']['native_loaded']
         assert {'describe_source', 'materialize', 'predict'} <= set(

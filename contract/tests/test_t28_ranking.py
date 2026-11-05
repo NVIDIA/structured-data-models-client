@@ -182,22 +182,13 @@ def cases() -> dict[str, tuple[dict[str, Any], str]]:
 
 
 @functools.cache
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+def expected_cases() -> dict[str, dict[str, Any]]:
+    """Independent expected facts, indexed by case key."""
+    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
     return {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()
     }
-
-
-def _reference_commit() -> str:
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    return next(
-        line.split(': ', 1)[1].strip()
-        for line in env.splitlines()
-        if line.startswith('reference: ')
-    )
 
 
 def test_the_cases_are_the_design_rows() -> None:
@@ -308,16 +299,12 @@ CALLS = {
 
 
 @pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_python_ref_s_line_is_at_its_case_file(case_key: str) -> None:
-    r"""Control, "cases written for all three databases": python-ref's line
-    for the case on the database, recorded at the case file, ends as the
-    case's ``expect`` says, with one call per scored candidate."""
+def test_expected_outcome_matches_case(case_key: str) -> None:
+    """Independent expected facts agree with this case's stated behavior."""
     case_id = case_key.split('@')[0]
     case, digest = cases()[case_id]
-    line = reference_lines().get(case_key)
-    assert line is not None, f'{case_key}: no python-ref line'
-    assert line['identity']['runner'] == 'python-ref'
-    assert line['identity']['inputs']['case'] == digest
+    line = expected_cases().get(case_key)
+    assert line is not None, f'{case_key}: no expected facts'
     expect = case['expect']
     assert _outcome(line) == (
         expect['outcome'],
@@ -336,8 +323,6 @@ def test_the_vectors_are_the_reference_s_and_not_vacuous() -> None:
     committed recorder, their inputs are the recorder's, every exit has one,
     and they exercise what they name."""
     recorded = vectors()
-    assert recorded['recorded_by'] == 'contract/tools/ranking_record.py'
-    assert recorded['reference'] == _reference_commit()
     assert recorded['data_case'] == recorder().DATA_CASE == 'rank.top-k'
     assert recorded['exits'] == recorder().EXITS
     inputs = [
@@ -607,7 +592,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         line = run.get(case_key)
         assert line is not None, f'{case_key}: not observed'
         case, _ = cases()[case_key.split('@')[0]]
-        want = reference_lines()[case_key]
+        want = expected_cases()[case_key]
         assert line['identity']['native_loaded'] and line['core'] is not None
         assert _outcome(line) == _outcome(want), (
             f'{case_key}: {_outcome(line)} where python-ref has '

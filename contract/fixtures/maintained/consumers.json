@@ -7,22 +7,6 @@
     "max_bytes": 290000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "contract/cases/s1/multicall.entities.100000.json": {
-    "consumers": [
-      "contract/runners/run_python.py",
-      "contract/tests/test_t28c_multicall.py"
-    ],
-    "max_bytes": 3090000,
-    "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
-  },
-  "contract/cases/s1/multicall.entities.100001.json": {
-    "consumers": [
-      "contract/runners/run_python.py",
-      "contract/tests/test_t28c_multicall.py"
-    ],
-    "max_bytes": 3090000,
-    "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
-  },
   "contract/cases/s1/rank.batched.json": {
     "consumers": [
       "contract/runners/run_python.py",
@@ -38,12 +22,34 @@
     "max_bytes": 380000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
+  "contract/fixtures/maintained/batch-expectations.json": {
+    "consumers": [
+      "contract/tests/test_t28c_multicall.py"
+    ],
+    "max_bytes": 53000,
+    "reason": "Independent expected request, label or SQL facts used by these current correctness tests."
+  },
   "contract/fixtures/maintained/decimal-key-inputs.json": {
     "consumers": [
       "contract/tests/test_t132b_decimal_vectors.py"
     ],
     "max_bytes": 10000,
     "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
+  },
+  "contract/fixtures/maintained/duckdb-statements.json": {
+    "consumers": [
+      "rust/crates/sdm-testkit/tests/duckdb_provider.rs"
+    ],
+    "max_bytes": 18000,
+    "reason": "Independent expected request, label or SQL facts used by these current correctness tests."
+  },
+  "contract/fixtures/maintained/label-expectations.json": {
+    "consumers": [
+      "packages/structured-data-models-client/tests_test_ops/test_the_labels.py",
+      "rust/crates/sdm-testkit/tests/labels.rs"
+    ],
+    "max_bytes": 113000,
+    "reason": "Independent expected request, label or SQL facts used by these current correctness tests."
   },
   "contract/fixtures/maintained/postgres-statements.json": {
     "consumers": [
@@ -53,7 +59,7 @@
     "max_bytes": 500000,
     "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
   },
-  "contract/fixtures/maintained/reference-observations.jsonl": {
+  "contract/fixtures/maintained/request-expectations.jsonl": {
     "consumers": [
       "contract/tests/test_t213_options.py",
       "contract/tests/test_t214b_decimal_stype.py",
@@ -61,14 +67,10 @@
       "contract/tests/test_t214b_wording.py",
       "contract/tests/test_t28_ranking.py",
       "contract/tests/test_t28c_multicall.py",
-      "contract/tests/test_t29_forecasting.py",
-      "packages/structured-data-models-client/tests_test_ops/test_the_labels.py",
-      "rust/crates/sdm-testkit/tests/duckdb_provider.rs",
-      "rust/crates/sdm-testkit/tests/labels.rs",
-      "tests/test_t21a_runner_rule.py"
+      "contract/tests/test_t29_forecasting.py"
     ],
-    "max_bytes": 12610000,
-    "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
+    "max_bytes": 4824000,
+    "reason": "Independent expected request, label or SQL facts used by these current correctness tests."
   },
   "contract/fixtures/maintained/snowflake-public.json": {
     "consumers": [

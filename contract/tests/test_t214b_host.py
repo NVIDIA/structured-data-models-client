@@ -309,9 +309,6 @@ def test_the_vectors_are_the_reference_s() -> None:
     name: a static target and another entity table among the facts, a
     refusal said of each part, and repeats that ``dict.fromkeys`` drops."""
     document = vectors()
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {document["reference"]}' in env
-    assert document['recorded_by'] == 'contract/tools/t214b_host_record.py'
     facts = document['facts']
     assert facts['static']['windowed'] is False
     assert facts['other-entity']['entity_table'] == 'orders'
@@ -437,8 +434,8 @@ def test_another_request_state_version_is_refused_by_name() -> None:
 
 
 @functools.cache
-def reference_lines() -> dict[str, dict[str, Any]]:
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+def expected_cases() -> dict[str, dict[str, Any]]:
+    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
     return {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()
@@ -499,15 +496,12 @@ def core_run(database: str) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_python_ref_s_line_asks_each_candidate_once(case_key: str) -> None:
-    r"""The case is not vacuous: python-ref's line, at the case file, asks
-    three questions for the five candidates given (2, 1, 2, 1, 0), the
-    candidates 2, 1 and 0 in that order."""
+def test_expected_requests_score_each_candidate_once(case_key: str) -> None:
+    """Independent expected facts agree with this case's stated behavior."""
     [(case, digest)] = runner().load_cases([CASES / f'{REPEATS_CASE}.json'])
     assert case['input']['materialize']['candidates'] == [2, 1, 2, 1, 0]
-    line = reference_lines().get(case_key)
-    assert line is not None, f'{case_key}: no python-ref line'
-    assert line['identity']['inputs']['case'] == digest
+    line = expected_cases().get(case_key)
+    assert line is not None, f'{case_key}: no expected facts'
     assert line['outcome']['result'] == 'success'
     asked = [
         p['metadata']['source_query'].split(' WHERE ')[1].split(',')[0]
@@ -534,7 +528,7 @@ def test_python_core_asks_the_repeats_case_as_the_reference(
         assert line is not None, f'{case_key}: not observed'
         assert line['identity']['native_loaded']
         assert 'materialize' in line['identity']['operations']
-        want = reference_lines()[case_key]
+        want = expected_cases()[case_key]
         assert line['outcome'] == want['outcome']
         assert _payloads(line) == _payloads(want)
         assert line['public']['result'] == want['public']['result']

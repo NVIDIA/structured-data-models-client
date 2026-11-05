@@ -47,20 +47,12 @@ fn contract() -> PathBuf {
 
 /// The committed reference observation of `case`.
 fn reference(case: &str) -> Value {
-    let directory = contract().join("fixtures/maintained");
-    for entry in std::fs::read_dir(&directory).unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
-        for line in std::fs::read_to_string(&path).unwrap().lines() {
-            let observed: Value = serde_json::from_str(line).unwrap();
-            if observed["case"] == case {
-                return observed;
-            }
-        }
-    }
-    Value::Null
+    let expected: Value = serde_json::from_str(
+        &std::fs::read_to_string(contract().join("fixtures/maintained/label-expectations.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    expected[case].clone()
 }
 
 /// One context example as the core gave it: the entity's key as the

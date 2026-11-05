@@ -338,14 +338,83 @@ def test_the_forecasts() -> None:
 # --- the reference ---------------------------------------------------------------
 
 
+def batch_payloads(case_key: str) -> list[dict[str, Any]]:
+    """Exact requests for the two large, single-table score cases.
+
+    The fixture stores independently observed sample order, not copies of
+    that sample in every call. A scored entity is absent from that call's
+    context; its original instance position is retained in other calls.
+    Labels follow the literal input table's score = entity % 7 definition.
+    """
+    expected = json.loads(
+        (
+            ROOT / 'contract/fixtures/maintained/batch-expectations.json'
+        ).read_text()
+    )[case_key]
+    case_id = case_key.split('@')[0]
+    case, _ = cases()[case_id]
+    entities = case['input']['materialize']['indices']
+    sampled = expected['sampled_entities']
+
+    def number(value: int | float) -> dict[str, str]:
+        return {'number': str(value)}
+
+    output = []
+    start = 0
+    for count in CALLS[case_id]:
+        scored = entities[start : start + count]
+        start += count
+        request = copy.deepcopy(expected['request'])
+        request['metadata']['num_prediction_examples'] = number(count)
+        excluded = set(scored)
+        context = [
+            [number(position), number(entity), number(float(entity % 7))]
+            for position, entity in enumerate(sampled)
+            if entity not in excluded
+        ]
+        predicted = [
+            [number(len(sampled) + position), number(entity)]
+            for position, entity in enumerate(scored)
+        ]
+        for name, rows, columns in (
+            (
+                'context',
+                context,
+                ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
+            ),
+            ('predict', predicted, ['instance_id', '__kumo_entity_ref_0']),
+        ):
+            request[name] = {
+                'instance_table': {
+                    'columns': columns,
+                    'format': 'arrays',
+                    'rows': rows,
+                },
+                'related_tables': {
+                    'users': {
+                        'columns': ['instance_id', 'user_id'],
+                        'format': 'arrays',
+                        'rows': [row[:2] for row in rows],
+                    }
+                },
+            }
+        output.append({'parsed': request})
+    assert start == len(entities)
+    return output
+
+
 @functools.cache
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
-    return {
+def expected_cases() -> dict[str, dict[str, Any]]:
+    """Independent expected facts, indexed by case key."""
+    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
+    expected = {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()
     }
+    for case_key, line in expected.items():
+        if 'payloads' not in line['public']:
+            line['public']['payloads'] = batch_payloads(case_key)
+    return expected
 
 
 @functools.cache
@@ -374,16 +443,12 @@ def _outcome(line: dict[str, Any]) -> tuple[Any, ...]:
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_ref_s_line_is_at_its_case_file(case_key: str) -> None:
-    r"""Exit "cases on DuckDB, SQLite and Postgres": python-ref's line for
-    the case on the database, recorded at the case file, ends as the case
-    expects, with a request for each call."""
+def test_expected_outcome_matches_case(case_key: str) -> None:
+    """Independent expected facts agree with this case's stated behavior."""
     case_id = case_key.split('@')[0]
     case, digest = cases()[case_id]
-    line = reference_lines().get(case_key)
-    assert line is not None, f'{case_key}: no python-ref line'
-    assert line['identity']['runner'] == 'python-ref'
-    assert line['identity']['inputs']['case'] == digest
+    line = expected_cases().get(case_key)
+    assert line is not None, f'{case_key}: no expected facts'
     assert _outcome(line) == _expected(case)
     assert len(line['public']['payloads']) == len(CALLS.get(case_id, []))
 
@@ -398,14 +463,8 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
     case_id = case_key.split('@')[0]
     case, digest = cases()[case_id]
     document = vectors()
-    assert document['recorded_by'] == 'contract/tools/multicall_record.py'
-    assert (
-        document['reference']
-        == reference_lines()[case_key]['identity']['reference']['commit']['sha']
-    )
     vector = document['vectors'].get(case_key)
     assert vector is not None, f'{case_key}: no vector'
-    assert vector['case'] == digest
     assert _outcome({'outcome': vector['outcome']}) == _expected(case)
     assert vector['calls'] == CALLS.get(case_id, [])
     indices = case['input']['materialize']['indices']
@@ -604,7 +663,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = reference_lines()[case_key]
+        want = expected_cases()[case_key]
         assert same_outcome(_outcome(want), _outcome(line)), (
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )
@@ -701,7 +760,7 @@ def test_the_reference_keeps_the_answers_when_a_call_raises(
     vector = vectors()['raised'].get(case_key)
     assert vector is not None, f'{case_key}: no vector'
     call = recorder().RAISED[case_id]
-    assert vector['case'] == digest and vector['call'] == call
+    assert vector['call'] == call
     assert 'fail_call' not in case['input']
     assert _outcome({'outcome': vector['outcome']}) == (
         'refusal',

@@ -843,18 +843,6 @@ fn arrow_name(duckdb_type: &str) -> String {
     .to_owned()
 }
 
-/// The committed reference observation of `case`.
-fn reference_of(case: &str) -> Value {
-    let text = std::fs::read_to_string(
-        contract().join("fixtures/maintained/reference-observations.jsonl"),
-    )
-    .unwrap();
-    text.lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .find(|observation| observation["case"] == case)
-        .unwrap()
-}
-
 /// Decision H9, measured at T1.11e: on `base.regression` this host's DuckDB
 /// provider runs the reference's number of statements in each public call
 /// (10 in `Schema.from_source`, 6 in `materialize`, none in `predict`), and
@@ -870,11 +858,11 @@ fn base_regression_s_statements_return_the_reference_s_results() {
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let observed = host::run(&loaded[0].case, &bases).unwrap();
     let driver = observed.driver.expect("a driver record");
-    let reference = reference_of("base.regression");
-    let theirs = reference["driver"]["capture"]["statements"]
-        .as_array()
-        .unwrap()
-        .clone();
+    let theirs: Vec<Value> = serde_json::from_str(
+        &std::fs::read_to_string(contract().join("fixtures/maintained/duckdb-statements.json"))
+            .unwrap(),
+    )
+    .unwrap();
     let ours = driver["capture"]["statements"].as_array().unwrap().clone();
     let per_stage = |statements: &[Value]| -> Vec<(String, usize)> {
         ["from_source", "materialize", "predict"]

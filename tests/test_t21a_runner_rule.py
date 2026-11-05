@@ -28,9 +28,7 @@ definition. Unmarked tests are controls that pass today.
 
 from __future__ import annotations
 
-import copy
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -81,23 +79,35 @@ SQLITE_BOTH = {
 }
 
 
-def _reference_line(case: str) -> dict[str, Any]:
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
-    for line in path.read_text().splitlines():
-        found: dict[str, Any] = json.loads(line)
-        if found['case'] == case:
-            return found
-    raise AssertionError(f'no reference line of {case}')
-
-
 def _observed(
     runner: str, database: str, cases: tuple[str, ...] = CASES
 ) -> list[dict[str, Any]]:
     lines = []
     for case in cases:
-        line = copy.deepcopy(_reference_line(case))
-        line['identity']['runner'] = runner
-        line['identity']['reference'] = None
+        line = {
+            'format': 'sdm-observation/1',
+            'identity': {
+                'runner': runner,
+                'cell': None,
+                'platform': 'test',
+                'commit': {'sha': '0' * 40, 'clean': True},
+                'reference': None,
+                'native': None,
+                'native_loaded': False,
+                'operations': [],
+                'contract': None,
+                'versions': {'duckdb': '2.0.0'},
+                'inputs': {'case': '0' * 64, 'bases': None},
+            },
+            'outcome': {
+                'result': 'success',
+                'stage': 'predict',
+                'error': None,
+                'code': None,
+            },
+            'host': {'warnings': []},
+            'core': None,
+        }
         line['case'] = case if database == 'duckdb' else f'{case}@{database}'
         lines.append(line)
     return lines

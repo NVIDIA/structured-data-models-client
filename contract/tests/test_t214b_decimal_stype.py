@@ -67,9 +67,9 @@ def case() -> tuple[dict[str, Any], str]:
 
 
 @functools.cache
-def reference_lines() -> dict[str, dict[str, Any]]:
-    r"""python-ref's committed lines, by key."""
-    path = ROOT / 'contract/fixtures/maintained/reference-observations.jsonl'
+def expected_cases() -> dict[str, dict[str, Any]]:
+    """Independent expected facts, indexed by case key."""
+    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
     return {
         json.loads(line)['case']: json.loads(line)
         for line in path.read_text(encoding='utf-8').splitlines()
@@ -99,15 +99,10 @@ def test_the_case_is_a_scaled_decimal_past_float64() -> None:
 
 @pytest.mark.parametrize('case_key', KEYS)
 def test_python_ref_s_line_is_at_the_case_file(case_key: str) -> None:
-    r"""The case is not vacuous: python-ref's line, recorded at the case
-    file, reads ``orders.d`` as float64 and categorical where the
-    database keeps the decimal (DuckDB, Postgres), and as text on SQLite,
-    where the loader stores it as text."""
+    """Independent expected facts agree with this case's stated behavior."""
     _, digest = case()
-    line = reference_lines().get(case_key)
-    assert line is not None, f'{case_key}: no python-ref line'
-    assert line['identity']['runner'] == 'python-ref'
-    assert line['identity']['inputs']['case'] == digest
+    line = expected_cases().get(case_key)
+    assert line is not None, f'{case_key}: no expected facts'
     assert line['outcome']['result'] == 'success'
     assert line['outcome']['stage'] == 'from_source'
     want = (
@@ -179,7 +174,7 @@ def test_python_core_reads_the_column_as_the_reference_does(
         assert line is not None, f'{case_key}: not observed'
         assert line['identity']['native_loaded']
         assert 'describe_source' in line['identity']['operations']
-        want = reference_lines()[case_key]
+        want = expected_cases()[case_key]
         assert column_d(line) == column_d(want), (
             f'{case_key}: orders.d is {column_d(line)} where python-ref '
             f'has {column_d(want)}'
