@@ -4,7 +4,7 @@
 
 # Migration documentation cleanup
 
-**Audit and proposal only; no files deleted.**
+**Implemented on `rust-core-phase-9-docs`; integration review pending.**
 Inventory checked on `rust-core-phase-9`, based on `0b3afe8fa`.
 Reviewed file inventory, references outside the migration folder, diagram source/text, current developer guidance, date specification and verification reports.
 This is a documentation cleanup, not permission to remove runtime contracts or tests.
@@ -68,3 +68,17 @@ CI parallelization remains a post-main follow-up.
 First extract and verify current contracts against code/tests; then delete historical documents and fix incoming links.
 Check Markdown links, diagram rendering, repository hygiene and contract references; no full model/warehouse rerun is needed for documentation-only changes.
 Do not remove test cases, manifests, fixtures, generated contracts or benchmark machinery as a side effect of this cleanup.
+
+## Implementation result
+
+Removed 67 historical paths (including the relocated benchmark report) after extracting current contracts and evidence.
+Maintained replacements are [engine boundaries](../../../development/engine-boundaries.md), [date rules](../../../reference/date-rules.md), [validation evidence](../../../development/validation.md) and [full benchmark results](../../../development/performance.md).
+Two corrected SVG diagrams and their generator live beside developer documentation; obsolete PNG duplicates and speculative/delivery diagrams were removed.
+The old plans remain recoverable at `0b3afe8fa`; runtime tests, fixtures, generated contracts and historical raw receipts were not deleted.
+Documentation checks cover incoming links, source citations, unchanged benchmark tables, diagram generation/rendering and repository hygiene.
+No product/model rerun is claimed or required for these documentation-only changes.
+
+Verification passed: `git diff --check`, `python scripts/check_repo_hygiene.py all`, `python scripts/rust_core/repository_size.py --base 6262051d3`, and Ruff check/format for the diagram generator.
+Targeted checks verified all local link targets in the 10 retained changed Markdown files, exact preservation of every benchmark table row, reproducible valid SVG output, and deletion scope restricted to the 67 historical documentation paths.
+Both SVGs were rendered with CairoSVG and visually reviewed for clipping and readability by the coordinator.
+The final diff removes roughly 8,000 net text lines and obsolete image duplicates; no model inference or native rebuild was run for this documentation change.
