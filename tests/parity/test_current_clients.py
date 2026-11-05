@@ -206,3 +206,73 @@ def test_historical_execution_is_not_a_runner_mode():
 
     with pytest.raises(Incomplete, match='only current installed clients'):
         artifact('unused', 'baseline')
+
+
+def _public_query_and_model(model_name):
+    import pandas as pd
+    from sdm_client import KumoRelational, KumoTabular, PredictiveQuery, Schema
+
+    schema = Schema.from_data(
+        {
+            'rows': pd.DataFrame(
+                {'id': range(20), 'value': [float(i) for i in range(20)]}
+            )
+        },
+        primary_keys={'rows': 'id'},
+    )
+    schema['rows']['value'].stype = 'numerical'
+    query = PredictiveQuery('PREDICT rows.value FOR EACH rows.id', schema)
+    model = KumoRelational() if model_name == 'relational' else KumoTabular()
+    return query, model
+
+
+@pytest.mark.parametrize('model_name', ['relational', 'tabular'])
+def test_public_materialize_requires_native_after_schema_and_query_exist(
+    monkeypatch, model_name
+):
+    from sdm_client._rust import NativeBoundaryError, run
+
+    query, model = _public_query_and_model(model_name)
+
+    def unavailable():
+        raise NativeBoundaryError('native engine unavailable for materialize')
+
+    monkeypatch.setattr(run, 'native', unavailable)
+    with pytest.raises(
+        NativeBoundaryError, match='unavailable for materialize'
+    ):
+        query.materialize(
+            indices=[0, 1],
+            model=model,
+            **({'random_seed': 7} if model_name == 'relational' else {}),
+        )
+
+
+@pytest.mark.parametrize('model_name', ['relational', 'tabular'])
+def test_public_predict_requires_native_before_transport(
+    monkeypatch, model_name
+):
+    import requests
+    from sdm_client import SDMClient
+    from sdm_client._rust import NativeBoundaryError, run
+
+    query, model = _public_query_and_model(model_name)
+    request = query.materialize(
+        indices=[0, 1],
+        model=model,
+        **({'random_seed': 7} if model_name == 'relational' else {}),
+    )
+
+    def unavailable():
+        raise NativeBoundaryError('native engine unavailable for predict')
+
+    def forbidden_send(*args, **kwargs):
+        pytest.fail('prediction reached HTTP without the native engine')
+
+    with SDMClient(url='http://localhost:1') as client:
+        monkeypatch.setattr(requests.Session, 'send', forbidden_send)
+        monkeypatch.setattr(run, 'native', unavailable)
+        with pytest.raises(
+            NativeBoundaryError, match='unavailable for predict'
+        ):
+            client.predict(request, model=model)
