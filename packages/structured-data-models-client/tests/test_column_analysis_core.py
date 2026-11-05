@@ -289,3 +289,50 @@ def test_public_policy_constants_remain_available():
         'NA': 'N/A',
         'TABULAR_TABLE': 'instance_table',
     }
+
+
+def test_sqlite_materialize_explain_uses_sampled_context_without_new_queries():
+    from adbc_driver_sqlite import dbapi as sqlite
+    from sdm_connectors import SQLiteSource
+
+    connection = sqlite.connect()
+    cursor = connection.cursor()
+    cursor.execute(
+        'CREATE TABLE users (id INTEGER PRIMARY KEY, value DOUBLE, cohort TEXT)'
+    )
+    cursor.executemany(
+        'INSERT INTO users VALUES (?, ?, ?)',
+        [(i, float(i), 'a' if i < 12 else 'b') for i in range(24)],
+    )
+    connection.commit()
+    cursor.close()
+    try:
+        schema = Schema.from_source(SQLiteSource(connection))
+        schema['users']['value'].stype = 'numerical'
+        schema['users']['cohort'].stype = 'categorical'
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = PredictiveQuery(
+                'PREDICT users.value FOR EACH users.id', schema
+            ).materialize(
+                indices=[1, 2],
+                num_context_samples=24,
+                random_seed=7,
+                model=KumoRelational(),
+            )
+    finally:
+        connection.close()
+    # A closed in-memory database makes any new SQL fail: analysis must use
+    # the materialized evidence, including the pre-trim row delta.
+    endpoint = Endpoint()
+    client = SDMClient.__new__(SDMClient)
+    client._start(endpoint)
+    result = client.predict(
+        request, model=KumoRelational(), outputs=['prediction', 'explanation']
+    )
+    frame = result.explanations.columns.to_pandas()
+    groups = frame[frame['column'] == 'cohort'].set_index('cohort')
+    assert groups.loc['a', 'mean'] == 5.5
+    assert groups.loc['b', 'mean'] == 17.5
+    assert groups.loc['a', 'share'] == groups.loc['b', 'share'] == 0.5
+    assert len(endpoint.sent) == 1
