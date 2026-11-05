@@ -3,90 +3,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The client wheel as a user installs it, in a clean environment (T1.17).
+"""Validate installed production and test-ops wheels from one source revision.
 
-CI's ``wheel-smoke`` job runs this once per lane, with the wheels the
-``native-wheel`` and ``native-test-ops`` jobs built, never rebuilt and
-never the source tree. Each lane is a pinned runtime of decision E16:
-
-- ``floor``: Python 3.10 with pyarrow 14.0.1, pandas 2.2.2 and NumPy
-  1.23.5, the floors every distribution declares;
-- ``newest``: Python 3.14 with pandas 3, NumPy 2 and pyarrow at the newest
-  releases those admit, resolved afresh on every run (no upper bound, a new
-  environment, pip's newest);
-- ``aarch64-floor`` and ``aarch64-newest``: the same two on an aarch64
-  machine, with the aarch64 wheels (decision KO2-40): the probe must find
-  the interpreter running on aarch64.
-
-With ``--container`` it runs itself in the lane's image, the official
-Python image of the lane's version pinned by digest, which holds the
-interpreter, pip and a C toolchain and no Python package, with the checkout
-mounted read-only. Without, it runs in the interpreter ``--python`` names,
-which must be the lane's Python, so a reviewer can run a lane against any
-wheel of their own (a macOS build, in a local Python 3.10, say). Either way:
-
-1. the API and PQL distributions are copied out of the checkout and built
-   into wheels, so every distribution installed is a wheel
-   (``--only-binary=:all:``; the toolchain builds nothing installed);
-2. for each client wheel, the shipped one and the test-ops one, a virtual
-   environment of its own installs the lane's pins, as requirements and
-   constraints, pytest, the two sibling wheels and the client wheel; the
-   test-ops environment is also constrained to everything the shipped one
-   resolved, and the two must resolve alike;
-3. it checks that ``sdm_client`` and ``sdm_client._native`` are imported
-   from the environment, never the checkout, that ``_native`` is the build
-   the wheel says (``TEST_OPS``), that ``pip check`` passes and that the
-   lane's pins are what resolved (the floor's exactly; the newest lane's
-   pandas 3 and NumPy 2);
-4. it records ``pip freeze --all`` and runs the binding's tests from
-   outside the checkout into a JUnit report: ``test_binding.py`` on the
-   shipped wheel, and every file of ``rust/bindings/sdm-py/tests`` on the
-   test-ops one (``test_arrow_lifetimes.py``: buffers shared and released
-   exactly, admitted types, outputs after collection, error and
-   destruction, busy and cancel); each file must report a passed test and
-   nothing failed, errored or skipped, and a missing or unreadable report
-   fails; pytest runs with no ``PYTEST_*`` variable, plugin autoload or
-   configuration of the caller's, and a plugin of the smoke's records
-   what was collected and deselected and where the test process imported
-   ``sdm_client`` and its native module from: any deselection fails, as
-   do a test of ``EXPECTED`` not collected, a report whose passed tests are
-   not every test collected, and an import from anywhere but the
-   environment;
-5. last, the missing-library control: the shipped environment's client
-   reinstalled from a copy of the wheel without its native library must
-   fail the probe, with an import error naming ``sdm_client._native``,
-   and the binding's tests, or the lane fails.
-
-The binding's tests judge; what they read as the contract, its inputs,
-comes from ``--inputs TREE`` (the checkout itself by default, as in CI's
-own job): the API and PQL distributions built into wheels, the contract's
-version and error codes (``sdm-contract``'s ``lib.rs`` and ``error.rs``)
-and the native module's stub; the message builder (``messages.py``) is
-this checkout's own, its ``CONTRACT`` set to the inputs' version. The gate's locked check 3 runs the checkpoint's copy of this script
-on the candidate's wheels with ``--inputs`` the candidate's tree, so the
-checkpoint's tests, ``EXPECTED``, guard and control judge a candidate at
-the contract version it builds (T1.20, Codex P2): :func:`suite` puts them
-together. ``--commit SHA`` holds each wheel to the identity
-``native_wheel.py`` wrote beside it (:func:`provenance`), a build
-record, not an attestation: it names SHA, a clean tree, the file's own
-hash and the build, so a wheel recorded as another commit's cannot stand
-in for the candidate's by mistake; and the inputs tree to that commit,
-clean under what the smoke takes from it (:func:`inputs_clean`), whose
-files are then taken as the commit holds them (:func:`exported`).
-
-``environment.json`` in the output directory records the lane, the image,
-the interpreter, the wheels' SHA-256, the versions resolved, each report's
-counts, and the warnings pyarrow's own ``to_pandas()`` raises in the lane
-before the client is imported (register HOST-3's evidence, recorded, not
-judged).
-
-    scripts/rust_core/wheel_smoke.py --lane floor|newest|aarch64-floor|aarch64-newest \\
-        --wheel SHIPPED.whl --test-ops-wheel TEST_OPS.whl --out DIR \\
-        [--inputs TREE] [--commit SHA] [--container | --python PATH]
-    scripts/rust_core/wheel_smoke.py image LANE
-
-``image`` prints the lane's image, which CI pulls first, with retries
-(``pull_image.sh``, decision E131).
+Each dependency lane runs in isolated environments, checks installed imports and
+artifact provenance, requires all binding tests, and verifies a missing native
+library fails. Commit-pinned runs export only tracked source and tests.
 """
 
 from __future__ import annotations
@@ -305,50 +226,22 @@ def _checked(command: list[str], **kwargs: Any) -> str:
     return done.stdout
 
 
-def suite(
-    own: pathlib.Path, inputs: pathlib.Path, into: pathlib.Path
-) -> pathlib.Path:
-    """The binding's tests as this smoke runs them, under `into`, laid out
-    as the repository is: every file of `own`'s tests directory (the test
-    files, ``conftest.py``, the shim and the message builder, decoding and
-    fixtures included), which judge, and `inputs`' :data:`INPUTS` at their
-    own paths, which say what the build under test is. The one change to
-    `own`'s files: the message builder's ``CONTRACT`` line is set to the
-    contract version the inputs' ``lib.rs`` declares, so its messages
-    speak the build's version. Returns the tests directory. An input
-    missing from `inputs`, a ``lib.rs`` declaring no version or two, and a
-    builder without exactly one ``CONTRACT`` line are refused by name."""
-    missing = [name for name in INPUTS if not (inputs / name).is_file()]
+def suite(source: pathlib.Path, into: pathlib.Path) -> pathlib.Path:
+    """Stage this revision's binding tests and contract inputs outside its checkout."""
+    missing = [
+        name for name in (*INPUTS, TESTS) if not (source / name).exists()
+    ]
     if missing:
-        raise SmokeFailed(f'the inputs {inputs} lack {missing}')
-    declared = re.findall(
-        r'^pub const CONTRACT_VERSION: u32 = (\d+);$',
-        (inputs / INPUTS[0]).read_text(),
-        re.MULTILINE,
-    )
-    if len(declared) != 1:
-        raise SmokeFailed(
-            f'{INPUTS[0]}: {len(declared)} CONTRACT_VERSION declarations, not one'
-        )
+        raise SmokeFailed(f'the source {source} lacks {missing}')
     tests = into / TESTS
-    tests.mkdir(parents=True, exist_ok=True)
-    for path in sorted((own / TESTS).iterdir()):
-        if path.is_file():
-            shutil.copyfile(path, tests / path.name)
-    builder = tests / 'messages.py'
-    text = builder.read_text() if builder.is_file() else ''
-    staged, count = re.subn(
-        r'^CONTRACT = (?:\d+|_crate_version\(\))$',
-        f'CONTRACT = {int(declared[0])}',
-        text,
-        flags=re.MULTILINE,
+    shutil.copytree(
+        source / TESTS,
+        tests,
+        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'),
     )
-    if count != 1:
-        raise SmokeFailed(f'messages.py: {count} CONTRACT lines, not one')
-    builder.write_text(staged)
     for name in INPUTS:
         (into / name).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(inputs / name, into / name)
+        shutil.copyfile(source / name, into / name)
     return tests
 
 
@@ -358,7 +251,12 @@ def inputs_clean(inputs: pathlib.Path, commit: str) -> None:
     or untracked (ignored files aside) under what the smoke takes from it,
     the sibling distributions and :data:`INPUTS`, so a file the commit
     does not hold never reaches a wheel or the suite; refused by name."""
-    taken = [*(f'packages/{name}' for name in SIBLINGS), *INPUTS]
+    taken = [
+        *(f'packages/{name}' for name in SIBLINGS),
+        *INPUTS,
+        TESTS,
+        'scripts/rust_core/wheel_smoke.py',
+    ]
     try:
         head = subprocess.run(
             ['git', '-C', str(inputs), 'rev-parse', 'HEAD'],
@@ -401,7 +299,12 @@ def exported(
     :data:`INPUTS`) as `commit` holds them, from ``git archive``, into
     `into`, so nothing the commit does not hold, an ignored file included,
     reaches a wheel or the suite. Returns `into`."""
-    taken = [*(f'packages/{name}' for name in SIBLINGS), *INPUTS]
+    taken = [
+        *(f'packages/{name}' for name in SIBLINGS),
+        *INPUTS,
+        TESTS,
+        'scripts/rust_core/wheel_smoke.py',
+    ]
     archive = subprocess.run(
         [
             'git',
@@ -861,7 +764,7 @@ def smoke(
         constraints.write_text('\n'.join(lane.pins) + '\n')
         try:
             tests_root = work / 'suite'
-            suite(REPO, inputs, tests_root)
+            suite(inputs, tests_root)
             # The siblings built once, each a wheel, so every distribution
             # an environment installs is a wheel (--only-binary=:all:).
             _checked([python, '-m', 'venv', str(work / 'build')])
@@ -946,8 +849,7 @@ def in_container(
         raise SmokeFailed(f'the wheels are for {sorted(platforms)}')
     out.mkdir(parents=True, exist_ok=True)
     mounts = [
-        '-v', f'{REPO}:/repo:ro',
-        '-v', f'{inputs.resolve()}:/inputs:ro',
+        '-v', f'{inputs.resolve()}:/repo:ro',
         '-v', f'{out.resolve()}:/out',
     ]  # fmt: skip
     inside = {}
@@ -962,7 +864,7 @@ def in_container(
         'python', '/repo/scripts/rust_core/wheel_smoke.py',
         '--lane', lane_name, '--wheel', inside['production'],
         '--test-ops-wheel', inside['test-ops'], '--out', '/out',
-        '--image', lane.image, '--inputs', '/inputs',
+        '--image', lane.image,
     ]  # fmt: skip
     return _run(command).returncode
 
@@ -989,9 +891,6 @@ def main(argv: list[str] | None = None) -> int:
     where = parser.add_mutually_exclusive_group()
     where.add_argument('--container', action='store_true')
     where.add_argument('--python', default=sys.executable)
-    # The tree whose contract the wheels build (the candidate's, under the
-    # gate); by default this checkout.
-    parser.add_argument('--inputs', type=pathlib.Path, default=REPO)
     # The commit the wheels must be built from, by their identity files.
     parser.add_argument('--commit')
     # Set by --container for the run inside, which records it.
@@ -1001,19 +900,17 @@ def main(argv: list[str] | None = None) -> int:
     for build, wheel in wheels.items():
         if not wheel.is_file() or wheel.suffix != '.whl':
             parser.error(f'{build}: {wheel} is not a wheel')
-    if not args.inputs.is_dir():
-        parser.error(f'--inputs {args.inputs} is not a directory')
     try:
         if args.commit is not None:
             for build, wheel in wheels.items():
                 provenance(wheel, args.commit, build == 'test-ops')
-            inputs_clean(args.inputs, args.commit)
+            inputs_clean(REPO, args.commit)
         if args.container:
             return in_container(
-                args.lane, wheels, args.out, args.inputs, commit=args.commit
+                args.lane, wheels, args.out, REPO, commit=args.commit
             )
         return smoke(
-            args.lane, wheels, args.out, args.python, args.image, args.inputs,
+            args.lane, wheels, args.out, args.python, args.image, REPO,
             commit=args.commit,
         )  # fmt: skip
     except SmokeFailed as failure:

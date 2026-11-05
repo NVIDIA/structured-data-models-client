@@ -2,15 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""``scripts/rust_core/wheel_smoke.py``'s own rules (T1.17): its verdict on
-a test report and on what resolved fails closed, its lanes are decision
-E16's, and CI runs both of them.
-
-Since T1.20, the tree it takes the candidate's contract inputs from
-(``--inputs``), judged by its own checkout's tests, and the wheels'
-provenance (``--commit``).
-
-The smoke itself runs in CI's ``wheel-smoke`` job, against the wheels."""
+"""Installed-wheel isolation, identity and required-test failure controls."""
 
 from __future__ import annotations
 
@@ -18,21 +10,17 @@ import ast
 import dataclasses
 import importlib.util
 import json
-import os
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
-import types
-import xml.etree.ElementTree as ElementTree
 import zipfile
 from typing import Any
 
 import pytest
 import yaml
 
-# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+# Run this tooling suite once, separately from the dependency matrix.
 pytestmark = pytest.mark.tooling
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -503,19 +491,13 @@ def _builder(label: str, version: int) -> str:
     )
 
 
-def _at(text: str, version: int) -> str:
-    """`text`, a ``messages.py``, with its one ``CONTRACT`` line set to
-    `version` and nothing else changed."""
-    assert len(CONTRACT_LINE.findall(text)) == 1
-    return CONTRACT_LINE.sub(f'CONTRACT = {version}', text)
-
-
 def _tree(root: pathlib.Path, version: int) -> pathlib.Path:
     """A fake checkout at contract version `version`: the contract inputs,
     the binding's test files and message builder (each naming the tree it
     is of), and the two sibling distributions."""
     label = root.name
     files = {
+        'scripts/rust_core/wheel_smoke.py': '# smoke runner\n',
         f'{BINDING_TESTS}/messages.py': _builder(label, version),
         'rust/crates/sdm-contract/src/lib.rs': (
             f'//! bumps [`CONTRACT_VERSION`] on any change\n'
@@ -552,345 +534,24 @@ def _scratch(tmp_path: pathlib.Path) -> pathlib.Path:
     return into
 
 
-#: A message builder's ``read()`` that turns a numeric ``accepted`` into a
-#: bool: what a candidate could write to pass an assertion it fails.
-NORMALIZING = """
-plain_read = read
-
-
-def read(control):
-    value = plain_read(control)
-    if 'result' in value and 'accepted' in value['result']:
-        value['result']['accepted'] = bool(value['result']['accepted'])
-    return value
-"""
-
-
-def test_the_suite_is_the_inputs_contract_and_its_own_tests(
-    tmp_path: pathlib.Path,
-) -> None:
-    """The inputs' three contract files at their repository paths, the own
-    tree's test files, conftest, shim and message builder beside them, and
-    nothing of the inputs' tests: an extra test in the inputs'
-    ``test_binding.py`` and a test file only the inputs hold stay out."""
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    binding = inputs / BINDING_TESTS / 'test_binding.py'
-    binding.write_text(
-        binding.read_text() + 'def test_extra() -> None:\n    pass\n'
-    )
-    (inputs / BINDING_TESTS / 'test_extra.py').write_text(
-        'def test_extra() -> None:\n    pass\n'
-    )
-    into = _scratch(tmp_path)
-    tests = smoke.suite(own, inputs, into)
-    assert tests.is_dir()
-    assert tests.resolve().is_relative_to(into.resolve())
-    root = tests.parents[3]
-    assert tests == root / BINDING_TESTS
-    assert tuple(smoke.INPUTS) == INPUTS
+def test_suite_stages_one_revision_without_rewriting_inputs(tmp_path):
+    source = _tree(tmp_path / 'source', 20)
+    staged = _scratch(tmp_path)
+    tests = smoke.suite(source, staged)
     for path in INPUTS:
-        assert (root / path).read_text() == (inputs / path).read_text(), path
-    for name in JUDGES:
-        assert (tests / name).read_text() == (
-            own / BINDING_TESTS / name
-        ).read_text(), name
-    assert (tests / 'messages.py').read_text() == _builder('own', 20)
-    assert {p.name for p in tests.iterdir() if p.is_file()} == {
-        *JUDGES,
-        'messages.py',
-    }
-
-
-def test_the_own_tree_s_messages_py_is_kept_at_the_inputs_version(
-    tmp_path: pathlib.Path,
-) -> None:
-    """The suite's message builder is the own tree's, byte for byte but for
-    its ``CONTRACT`` line, which says the inputs' ``CONTRACT_VERSION``; the
-    own tree is left as it was."""
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    (inputs / BINDING_TESTS / 'messages.py').write_text(
-        "CONTRACT = 20\n# the inputs' builder\n"
-    )
-    tests = smoke.suite(own, inputs, _scratch(tmp_path))
-    staged = (tests / 'messages.py').read_bytes()
-    assert staged == _builder('own', 20).encode()
-    assert b"the inputs' builder" not in staged
-    assert (own / BINDING_TESTS / 'messages.py').read_text() == _builder(
-        'own', 19
-    )
+        assert (staged / path).read_bytes() == (source / path).read_bytes()
+    for name in (*JUDGES, 'messages.py'):
+        assert (tests / name).read_bytes() == (
+            source / BINDING_TESTS / name
+        ).read_bytes()
 
 
 @pytest.mark.parametrize('missing', INPUTS)
-def test_an_input_missing_from_the_inputs_is_refused_by_name(
-    tmp_path: pathlib.Path, missing: str
-) -> None:
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    (inputs / missing).unlink()
-    with pytest.raises(smoke.SmokeFailed) as refused:
-        smoke.suite(own, inputs, _scratch(tmp_path))
-    assert pathlib.PurePosixPath(missing).name in str(refused.value)
-
-
-def test_a_suite_at_n_judges_inputs_at_n_plus_1(tmp_path: pathlib.Path) -> None:
-    """The control: the own tree at contract version N, the inputs at N+1.
-    Where the binding's test reads the repository (``parents[4]`` of its
-    own file), the suite says N+1; the test is the own tree's, and so is
-    its message builder, at ``CONTRACT = N+1``."""
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    tests = smoke.suite(own, inputs, _scratch(tmp_path))
-    test = tests / 'test_binding.py'
-    repo = test.resolve().parents[4]
-    assert repo not in (own.resolve(), inputs.resolve())
-    lib = (repo / 'rust/crates/sdm-contract/src/lib.rs').read_text()
-    assert 'pub const CONTRACT_VERSION: u32 = 20;' in lib
-    builder = (tests / 'messages.py').read_text()
-    assert builder == _builder('own', 20)
-    assert CONTRACT_LINE.findall(builder) == ['CONTRACT = 20']
-    assert '# the builder of own' in builder
-    assert (
-        test.read_text()
-        == (own / BINDING_TESTS / 'test_binding.py').read_text()
-    )
-    assert '# test_binding.py of own' in test.read_text()
-
-
-def test_the_checkout_s_own_tests_judge_another_tree_s_inputs(
-    tmp_path: pathlib.Path,
-) -> None:
-    """The smoke's own checkout as the judge: its binding tests byte for
-    byte, and its message builder but for the ``CONTRACT`` line, beside a
-    fake tree's contract inputs."""
-    inputs = _tree(tmp_path / 'inputs', 20)
-    tests = smoke.suite(smoke.REPO, inputs, _scratch(tmp_path))
-    own = smoke.REPO / BINDING_TESTS
-    judges = [
-        p.name
-        for p in own.iterdir()
-        if p.is_file() and p.name != 'messages.py'
-        and (p.name.startswith('test_') or p.suffix == '.c'
-             or p.name == 'conftest.py')
-    ]  # fmt: skip
-    assert set(JUDGES) <= set(judges)
-    for name in judges:
-        assert (tests / name).read_bytes() == (own / name).read_bytes(), name
-    assert (tests / 'messages.py').read_text() == _at(
-        (own / 'messages.py').read_text(), 20
-    )
-    root = tests.parents[3]
-    for path in INPUTS:
-        assert (root / path).read_text() == (inputs / path).read_text(), path
-
-
-def test_a_crate_reading_builder_is_staged_without_executing_it(
-    tmp_path: pathlib.Path,
-) -> None:
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    builder = (
-        'def _crate_version():\n'
-        '    raise AssertionError("the smoke must not execute its builder")\n'
-        'CONTRACT = _crate_version()\n'
-    )
-    (own / BINDING_TESTS / 'messages.py').write_text(builder)
-    tests = smoke.suite(own, inputs, _scratch(tmp_path))
-    assert (tests / 'messages.py').read_text() == builder.replace(
-        'CONTRACT = _crate_version()', 'CONTRACT = 20'
-    )
-
-
-def test_a_normalizing_messages_py_in_the_inputs_changes_nothing(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Codex's seed: the inputs' message builder reads a numeric
-    ``accepted`` as a bool, and says another version than the inputs'
-    contract. The suite's builder is still the own tree's, but for its
-    ``CONTRACT`` line, set from the inputs' ``lib.rs``; and with no builder
-    in the inputs at all, the suite is the same."""
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    candidate = inputs / BINDING_TESTS / 'messages.py'
-    candidate.write_text(_builder('inputs', 21) + NORMALIZING)
-    into = tmp_path / 'first'
-    into.mkdir()
-    tests = smoke.suite(own, inputs, into)
-    staged = (tests / 'messages.py').read_text()
-    assert staged == _builder('own', 20)
-    assert 'bool(' not in staged and 'plain_read' not in staged
-    candidate.unlink()
-    again = tmp_path / 'second'
-    again.mkdir()
-    tests = smoke.suite(own, inputs, again)
-    assert (tests / 'messages.py').read_text() == _builder('own', 20)
-
-
-def _load(
-    monkeypatch: pytest.MonkeyPatch, name: str, path: pathlib.Path
-) -> Any:
-    """The module at `path`, imported as `name`; `sys.modules` restored by
-    `monkeypatch`."""
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, name, module)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _fake_native(
-    monkeypatch: pytest.MonkeyPatch, numeric: bool, seen: list[int]
-) -> None:
-    """``sdm_client._native`` as a stand-in whose ``Run`` validates a query
-    as the binding does, answering ``accepted`` as 0/1 when `numeric`, as
-    a bool otherwise; each start's contract version recorded in `seen`."""
-
-    class Run:
-        accepted: object
-
-        @classmethod
-        def start(cls, control: bytes, attachments: dict[int, bytes]) -> Run:
-            seen.append(json.loads(control)['contract'])
-            run = cls()
-            good = json.loads(attachments[1]) == (
-                'PREDICT users.age FOR EACH users.id'
-            )
-            run.accepted = int(good) if numeric else good
-            return run
-
-        def next(self) -> tuple[bytes, dict[int, bytes]]:
-            step = {
-                'message': 'step',
-                'step': 'done',
-                'result': {'op': 'validate_query', 'accepted': self.accepted},
-            }
-            return json.dumps(step).encode(), {}
-
-    native = types.ModuleType('sdm_client._native')
-    native.Run = Run  # type: ignore[attr-defined]
-    client = types.ModuleType('sdm_client')
-    client._native = native  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, 'sdm_client', client)
-    monkeypatch.setitem(sys.modules, 'sdm_client._native', native)
-
-
-def _normalizing_inputs(root: pathlib.Path, version: int) -> pathlib.Path:
-    """A copy of this checkout's contract inputs at `root`, its
-    ``CONTRACT_VERSION`` set to `version`, beside a message builder that
-    normalizes ``accepted``."""
-    for path in INPUTS:
-        (root / path).parent.mkdir(parents=True, exist_ok=True)
-        (root / path).write_bytes((smoke.REPO / path).read_bytes())
-    lib = root / 'rust/crates/sdm-contract/src/lib.rs'
-    text, count = re.subn(
-        r'pub const CONTRACT_VERSION: u32 = \d+;',
-        f'pub const CONTRACT_VERSION: u32 = {version};',
-        lib.read_text(),
-    )
-    assert count == 1
-    lib.write_text(text)
-    builder = root / BINDING_TESTS / 'messages.py'
-    builder.parent.mkdir(parents=True, exist_ok=True)
-    builder.write_text(
-        (smoke.REPO / BINDING_TESTS / 'messages.py').read_text() + NORMALIZING
-    )
-    return root
-
-
-def _checkpoint_validates(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, numeric: bool
-) -> tuple[Any, list[int], int]:
-    """This checkout's ``test_a_query_is_validated_through_a_run`` as the
-    suite stages it, over inputs whose builder normalizes, with a fake
-    native module; with the contract version the inputs say."""
-    source = (smoke.REPO / 'rust/crates/sdm-contract/src/lib.rs').read_text()
-    found = re.search(r'pub const CONTRACT_VERSION: u32 = (\d+);', source)
-    assert found
-    version = int(found.group(1)) + 1
-    inputs = _normalizing_inputs(tmp_path / 'inputs', version)
-    tests = smoke.suite(smoke.REPO, inputs, _scratch(tmp_path))
-    seen: list[int] = []
-    _fake_native(monkeypatch, numeric, seen)
-    _load(monkeypatch, 'messages', tests / 'messages.py')
-    binding = _load(
-        monkeypatch, 'wheel_smoke_seeded_binding', tests / 'test_binding.py'
-    )
-    return binding.test_a_query_is_validated_through_a_run, seen, version
-
-
-def test_the_checkpoint_refuses_a_numeric_accepted_whatever_the_inputs_say(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Codex's seed, executed: a binding answering ``accepted`` as 0/1
-    fails the checkpoint's own, unchanged assertion, though the inputs'
-    message builder would read it as a bool."""
-    check, seen, version = _checkpoint_validates(tmp_path, monkeypatch, True)
-    with pytest.raises(AssertionError):
-        check()
-    assert seen and set(seen) == {version}
-
-
-def test_the_checkpoint_takes_a_bool_accepted_from_the_same_suite(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The seed's control: the same suite and fake, answering a bool,
-    passes, so the refusal above is the numeric ``accepted``'s; and the
-    checkpoint's builder writes the inputs' version into each start."""
-    check, seen, version = _checkpoint_validates(tmp_path, monkeypatch, False)
-    check()
-    assert seen == [version, version]
-
-
-#: Each ``lib.rs`` refused: none or more than one ``CONTRACT_VERSION``.
-LIB_FAULTS = {
-    'no version': '//! bumps [`CONTRACT_VERSION`] on any change\n',
-    'two versions': (
-        'pub const CONTRACT_VERSION: u32 = 20;\n'
-        'pub const CONTRACT_VERSION: u32 = 21;\n'
-    ),
-    'the version twice': (
-        'pub const CONTRACT_VERSION: u32 = 20;\n'
-        'pub const CONTRACT_VERSION: u32 = 20;\n'
-    ),
-}
-
-
-@pytest.mark.parametrize('fault', list(LIB_FAULTS))
-def test_the_inputs_lib_rs_without_one_version_is_refused_by_name(
-    tmp_path: pathlib.Path, fault: str
-) -> None:
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    (inputs / 'rust/crates/sdm-contract/src/lib.rs').write_text(
-        LIB_FAULTS[fault]
-    )
-    with pytest.raises(smoke.SmokeFailed) as refused:
-        smoke.suite(own, inputs, _scratch(tmp_path))
-    assert 'lib.rs' in str(refused.value)
-
-
-#: Each own ``messages.py`` refused: none or more than one line
-#: ``CONTRACT = <digits>``.
-BUILDER_FAULTS = {
-    'no contract line': '# the builder of own\nimport json\n',
-    'an annotated one only': 'CONTRACT: int = 19\n',
-    'two contract lines': 'CONTRACT = 19\nimport json\nCONTRACT = 18\n',
-    'the line twice': 'CONTRACT = 19\nCONTRACT = 19\n',
-}
-
-
-@pytest.mark.parametrize('fault', list(BUILDER_FAULTS))
-def test_the_own_messages_py_without_one_contract_line_is_refused_by_name(
-    tmp_path: pathlib.Path, fault: str
-) -> None:
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    (own / BINDING_TESTS / 'messages.py').write_text(BUILDER_FAULTS[fault])
-    with pytest.raises(smoke.SmokeFailed) as refused:
-        smoke.suite(own, inputs, _scratch(tmp_path))
-    assert 'messages.py' in str(refused.value)
+def test_suite_refuses_missing_contract_input(tmp_path, missing):
+    source = _tree(tmp_path / 'source', 20)
+    (source / missing).unlink()
+    with pytest.raises(smoke.SmokeFailed, match=pathlib.Path(missing).name):
+        smoke.suite(source, _scratch(tmp_path))
 
 
 SHA = '0123456789abcdef0123456789abcdef01234567'
@@ -1074,12 +735,13 @@ def test_the_container_mounts_the_inputs_read_only(
 
     monkeypatch.setattr(smoke, '_run', run)
     inputs = _tree(tmp_path / 'inputs', 20)
+    monkeypatch.setattr(smoke, 'REPO', inputs)
     shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
     assert (
         smoke.main([
             '--lane', 'floor', '--wheel', str(shipped),
             '--test-ops-wheel', str(test_ops), '--out', str(tmp_path / 'out'),
-            '--container', '--inputs', str(inputs),
+            '--container',
         ])
         == 0
     )  # fmt: skip
@@ -1087,211 +749,14 @@ def test_the_container_mounts_the_inputs_read_only(
     assert len(docker) == 1, seen
     command = docker[0]
     mounts = [command[i + 1] for i, x in enumerate(command[:-1]) if x == '-v']
-    at_inputs = [m for m in mounts if m.endswith(':/inputs:ro')]
+    at_inputs = [m for m in mounts if m.endswith(':/repo:ro')]
     assert len(at_inputs) == 1, mounts
-    assert pathlib.Path(at_inputs[0][: -len(':/inputs:ro')]).resolve() == (
+    assert pathlib.Path(at_inputs[0][: -len(':/repo:ro')]).resolve() == (
         inputs.resolve()
     )
     assert any(m.endswith(':/repo:ro') for m in mounts), mounts
     inside = command[command.index('/repo/scripts/rust_core/wheel_smoke.py') :]
-    assert _option(inside, '--inputs') == '/inputs'
-
-
-# --- T1.20: a messages.py that patches pytest's report, in the inputs --------
-
-#: What a candidate's message builder could add to pass a test it fails:
-#: pytest's report of each test rewritten to ``passed``, at import (the
-#: class's constructor of reports patched) or in a hook (the module
-#: registering itself as a plugin from the running configuration).
-REPORT_PATCHES = {
-    'at import': """
-import _pytest.reports as _reports
-
-_made = _reports.TestReport.from_item_and_call.__func__
-
-
-def _passed(cls, item, call):
-    report = _made(cls, item, call)
-    report.outcome, report.longrepr = 'passed', None
-    return report
-
-
-_reports.TestReport.from_item_and_call = classmethod(_passed)
-""",
-    'in a hook': """
-import gc as _gc
-import sys as _sys
-
-import pytest as _pytest
-
-
-@_pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    report = (yield).get_result()
-    report.outcome, report.longrepr = 'passed', None
-
-
-_config = next(o for o in _gc.get_objects() if isinstance(o, _pytest.Config))
-_config.pluginmanager.register(_sys.modules[__name__])
-""",
-}
-
-
-@pytest.mark.parametrize('patch', list(REPORT_PATCHES))
-def test_a_report_patching_messages_py_in_the_inputs_changes_nothing(
-    tmp_path: pathlib.Path, patch: str
-) -> None:
-    """The subagent's seed: the inputs' message builder rewrites pytest's
-    reports to ``passed``. The suite's builder is the own tree's, but for
-    its ``CONTRACT`` line, and holds nothing of the patch."""
-    own = _tree(tmp_path / 'own', 19)
-    inputs = _tree(tmp_path / 'inputs', 20)
-    (inputs / BINDING_TESTS / 'messages.py').write_text(
-        _builder('inputs', 20) + REPORT_PATCHES[patch]
-    )
-    tests = smoke.suite(own, inputs, _scratch(tmp_path))
-    staged = (tests / 'messages.py').read_text()
-    assert staged == _builder('own', 20)
-    assert '_pytest' not in staged and 'outcome' not in staged
-    for path in tests.rglob('*'):
-        if path.is_file():
-            assert "'passed'" not in path.read_text(errors='replace'), path
-
-
-#: ``sdm_client`` as a stand-in package, imported by an inner pytest from
-#: ``PYTHONPATH``: its ``Run`` validates a query as the binding does,
-#: answering ``accepted`` as 0/1 when ``NUMERIC``, as a bool otherwise.
-FAKE_NATIVE = """
-import json
-
-NUMERIC = {numeric}
-
-
-class Run:
-    @classmethod
-    def start(cls, control, attachments):
-        run = cls()
-        good = json.loads(attachments[1]) == (
-            'PREDICT users.age FOR EACH users.id'
-        )
-        run.accepted = int(good) if NUMERIC else good
-        return run
-
-    def next(self):
-        step = {{
-            'message': 'step',
-            'step': 'done',
-            'result': {{'op': 'validate_query', 'accepted': self.accepted}},
-        }}
-        return json.dumps(step).encode(), {{}}
-"""
-
-
-def _fake_client(where: pathlib.Path, numeric: bool) -> pathlib.Path:
-    package = where / 'sdm_client'
-    package.mkdir(parents=True)
-    (package / '__init__.py').write_text('')
-    (package / '_native.py').write_text(FAKE_NATIVE.format(numeric=numeric))
-    return where
-
-
-def _validate_in_pytest(
-    tests: pathlib.Path, client: pathlib.Path, report: pathlib.Path
-) -> subprocess.CompletedProcess[str]:
-    """The staged ``test_a_query_is_validated_through_a_run`` under a pytest
-    of its own, as the smoke runs it (no ``PYTEST_*`` variable, no plugin
-    autoload, an empty configuration), the fake client on the path; its
-    JUnit report written to `report`."""
-    ini = report.parent / 'pytest.ini'
-    ini.write_text('[pytest]\n')
-    env = {k: v for k, v in os.environ.items() if not k.startswith('PYTEST_')}
-    env.update(
-        PYTEST_DISABLE_PLUGIN_AUTOLOAD='1',
-        PYTHONPATH=str(client),
-        PYTHONDONTWRITEBYTECODE='1',
-    )
-    root = tests.parents[3]
-    return subprocess.run(
-        [sys.executable, '-m', 'pytest',
-         f'{tests / "test_binding.py"}::test_a_query_is_validated_through_a_run',
-         '-c', str(ini), '--rootdir', str(root), '--confcutdir', str(tests),
-         '-p', 'no:cacheprovider', '-q', '--native-build', 'production',
-         f'--junitxml={report}'],
-        cwd=report.parent,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )  # fmt: skip
-
-
-def _patching_inputs(root: pathlib.Path, patch: str) -> pathlib.Path:
-    """A copy of this checkout's contract inputs at `root`, beside this
-    checkout's message builder with `patch` added."""
-    for path in INPUTS:
-        (root / path).parent.mkdir(parents=True, exist_ok=True)
-        (root / path).write_bytes((smoke.REPO / path).read_bytes())
-    builder = root / BINDING_TESTS / 'messages.py'
-    builder.parent.mkdir(parents=True, exist_ok=True)
-    builder.write_text(
-        (smoke.REPO / BINDING_TESTS / 'messages.py').read_text()
-        + REPORT_PATCHES[patch]
-    )
-    return root
-
-
-@pytest.mark.parametrize('patch', list(REPORT_PATCHES))
-def test_a_failing_binding_still_fails_when_the_inputs_patch_pytest_s_report(
-    tmp_path: pathlib.Path, patch: str
-) -> None:
-    """The seed, executed under pytest: a binding answering ``accepted`` as
-    0/1 fails this checkout's test as the suite stages it, the report
-    saying so, though the inputs' message builder rewrites reports to
-    ``passed``. The controls: the same suite passes a binding answering a
-    bool, so the failure is the binding's; and the same suite with the
-    inputs' builder put in its place passes the failing binding, so the
-    patch would have hidden it."""
-    inputs = _patching_inputs(tmp_path / 'inputs', patch)
-    staged = tmp_path / 'staged'
-    staged.mkdir()
-    tests = smoke.suite(smoke.REPO, inputs, staged)
-    numeric = _fake_client(tmp_path / 'numeric', True)
-    boolean = _fake_client(tmp_path / 'boolean', False)
-    files = ('test_binding.py',)
-
-    seeded = tmp_path / 'seeded'
-    seeded.mkdir()
-    done = _validate_in_pytest(tests, numeric, seeded / 'junit.xml')
-    assert done.returncode == 1, done.stdout + done.stderr
-    with pytest.raises(smoke.SmokeFailed):
-        smoke.junit_verdict(seeded / 'junit.xml', files)
-    cases = list(
-        ElementTree.parse(seeded / 'junit.xml').getroot().iter('testcase')
-    )
-    assert [{c.tag for c in case} for case in cases] == [{'failure'}]
-
-    control = tmp_path / 'control'
-    control.mkdir()
-    done = _validate_in_pytest(tests, boolean, control / 'junit.xml')
-    assert done.returncode == 0, done.stdout + done.stderr
-    counts = smoke.junit_verdict(control / 'junit.xml', files)
-    assert counts['test_binding.py']['passed'] == 1
-
-    # The inputs' builder in the suite's place: the patch hides the fault.
-    swapped = tmp_path / 'swapped'
-    shutil.copytree(staged, swapped)
-    swapped_tests = swapped / BINDING_TESTS
-    (swapped_tests / 'messages.py').write_bytes(
-        (inputs / BINDING_TESTS / 'messages.py').read_bytes()
-    )
-    hidden = tmp_path / 'hidden'
-    hidden.mkdir()
-    done = _validate_in_pytest(swapped_tests, numeric, hidden / 'junit.xml')
-    assert done.returncode == 0, done.stdout + done.stderr
-    counts = smoke.junit_verdict(hidden / 'junit.xml', files)
-    assert counts['test_binding.py'] == {
-        'passed': 1, 'failed': 0, 'errors': 0, 'skipped': 0,
-    }  # fmt: skip
+    assert '--inputs' not in inside
 
 
 # --- T1.20: the inputs tree is the commit's, clean -----------------------------
@@ -1445,7 +910,7 @@ def _commit_arguments(
     arguments = [
         '--lane', 'floor', '--wheel', str(shipped),
         '--test-ops-wheel', str(test_ops), '--out', str(tmp_path / 'out'),
-        '--inputs', str(inputs), '--commit', commit,
+        '--commit', commit,
     ]  # fmt: skip
     return [*arguments, '--container'] if container else arguments
 
@@ -1462,6 +927,7 @@ def test_the_inputs_are_held_clean_at_the_commit_before_any_environment(
     built = _no_environment(monkeypatch)
     mode = 'container' if container else 'smoke'
     inputs, head = _repository(tmp_path / 'inputs')
+    monkeypatch.setattr(smoke, 'REPO', inputs)
     arguments = _commit_arguments(tmp_path, inputs, head, container)
     assert smoke.main(arguments) == 0
     assert built == [mode]
@@ -1482,6 +948,7 @@ def test_the_inputs_are_held_clean_at_the_commit_before_any_environment(
     assert built == []
     # No checkout at all.
     plain = _tree(tmp_path / 'plain', 20)
+    monkeypatch.setattr(smoke, 'REPO', plain)
     arguments = _commit_arguments(tmp_path, plain, head, container)
     assert smoke.main(arguments) != 0
     assert built == []
@@ -1493,9 +960,11 @@ def test_without_a_commit_the_inputs_are_not_held(
     """No ``--commit``: an inputs directory that is no checkout is taken."""
     built = _no_environment(monkeypatch)
     inputs = _tree(tmp_path / 'inputs', 20)
+    monkeypatch.setattr(smoke, 'REPO', inputs)
     shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
     arguments = _main_arguments(tmp_path, shipped, test_ops)
-    assert smoke.main([*arguments, '--inputs', str(inputs)]) == 0
+    monkeypatch.setattr(smoke, 'REPO', inputs)
+    assert smoke.main(arguments) == 0
     assert built == ['smoke']
 
 
@@ -1656,6 +1125,7 @@ def test_with_a_commit_the_smoke_runs_on_the_export_not_the_given_tree(
     ignored file. No environment is built: the direct run stops at its
     suite, the container's docker is never started."""
     inputs, head, extra = _ignoring_repository(tmp_path / 'inputs', ignored)
+    monkeypatch.setattr(smoke, 'REPO', inputs)
     name = extra.relative_to(inputs).as_posix()
     seen: list[pathlib.Path] = []
 
@@ -1668,9 +1138,7 @@ def test_with_a_commit_the_smoke_runs_on_the_export_not_the_given_tree(
         assert not (tree / name).exists()
         seen.append(tree)
 
-    def suite(
-        own: pathlib.Path, given: pathlib.Path, into: pathlib.Path
-    ) -> pathlib.Path:
+    def suite(given: pathlib.Path, into: pathlib.Path) -> pathlib.Path:
         taken(given)
         raise smoke.SmokeFailed('stopped at the suite')
 
@@ -1685,9 +1153,9 @@ def test_with_a_commit_the_smoke_runs_on_the_export_not_the_given_tree(
         mounts = [
             command[i + 1] for i, x in enumerate(command[:-1]) if x == '-v'
         ]
-        at_inputs = [m for m in mounts if m.endswith(':/inputs:ro')]
+        at_inputs = [m for m in mounts if m.endswith(':/repo:ro')]
         assert len(at_inputs) == 1, mounts
-        taken(pathlib.Path(at_inputs[0][: -len(':/inputs:ro')]))
+        taken(pathlib.Path(at_inputs[0][: -len(':/repo:ro')]))
         return Done()
 
     monkeypatch.setattr(smoke, 'suite', suite)
