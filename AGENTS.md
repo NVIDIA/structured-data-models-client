@@ -40,8 +40,10 @@ The standalone Python PQL and relational-engine distributions are archived and a
 [`tests/test_skills.py`](tests/test_skills.py) reads the tables out of
 `skills/` and puts them to the client, and with `-m live_nim` it runs every
 complete example and compares what it printed to the block pasted beneath it.
-A `**Verified**` block is a claim that an endpoint produced exactly that. Do
-not write one by hand, and do not edit the numbers in one.
+The two in-process references run the same way under `SDM_IN_PROCESS=1` with
+`-m in_process`, loading the published weights here. A `**Verified**` block is
+a claim that an endpoint, or this process, produced exactly that. Do not write
+one by hand, and do not edit the numbers in one.
 
 An example is complete when every name it reads was bound by itself or by an
 earlier complete example. One that is not is a fragment: it is checked as code,

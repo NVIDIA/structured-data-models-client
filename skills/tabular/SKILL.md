@@ -1,6 +1,6 @@
 ---
 name: sdm-tabular
-description: "Ask kumo-tabular a question about rows of one table: classification or regression over labelled rows and rows to score, with no relationships and no time windows. Triggers: kumo-tabular, KumoTabular, single table prediction, tabular classification, tabular regression, score these rows, Request(context=, predict=), PredictiveQuery on one table."
+description: "Ask kumo-tabular a question about rows of one table: classification or regression over labelled rows and rows to score, with no relationships and no time windows. Triggers: kumo-tabular, KumoTabular, single table prediction, tabular classification, tabular regression, score these rows, Request(context=, predict=), PredictiveQuery on one table, SDMClient.in_process, run the model in this process, no NIM."
 ---
 
 # Asking kumo-tabular
@@ -121,6 +121,14 @@ A probability column is named for the class it belongs to, not numbered by
 position, so a target of `'a'`, `'b'` and `'c'` gives `probability_a`,
 `probability_b` and `probability_c`. Read the class out of the column name
 rather than assuming an order.
+
+## Without a NIM
+
+Every example here points at a NIM. With none to point at, the same client
+runs the model in this process: `SDMClient.in_process()` in place of the URL,
+and the rest unchanged. It is an extra, it loads the published weights, and on
+a CPU its numbers differ from a GPU's. All of that is in
+[`references/in-process.md`](references/in-process.md).
 
 ## Choosing the task
 
@@ -249,4 +257,5 @@ Catch `StructuredDataError` to catch all of them.
 ## Then
 
 - [`references/pql.md`](references/pql.md) — the query language on one table
+- [`references/in-process.md`](references/in-process.md) — the model in this process, with no NIM
 - [`../relational/SKILL.md`](../relational/SKILL.md) — when the question is about an entity and what it links to
