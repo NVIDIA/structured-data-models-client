@@ -7,7 +7,8 @@
 **Phase 10 cleanup is incomplete.**
 I removed large historical datasets and renamed one test directory, but did not finish a repository-wide audit of names, comments, helper machinery and provenance checks.
 The earlier test results remain valid; they do not establish that migration baggage was removed.
-This is an audit and proposed cleanup, not an instruction to delete useful correctness tests.
+**Implementation approved; in progress on `rust-core-phase-10`.**
+Preserve useful correctness tests and product behavior.
 
 ## Scope
 
@@ -58,12 +59,22 @@ Current CI calls `check_observations.py` with explicit case expectations instead
 - Real runtime checkpoints, model terminology, SQL words and general API migration guidance.
 - Generated API/wire snapshots and exact-format fixtures: update their source/generator when appropriate, never rewrite expected answers merely to remove historical words.
 
-## Finish the cleanup in three passes
+## Implementation plan
 
-1. Remove the proven dead artifacts and unreachable paths; extract the still-used helper functions before deleting their old containers.
-2. Simplify the wheel and architecture tooling around current CI requirements, with focused failure controls and the same required coverage.
-3. Rename remaining milestone files/identifiers and rewrite historical prose across the whole tree, including CI/docs and fixture metadata.
+| Pass | Work | Completion check |
+|---|---|---|
+| 1. Remove obsolete machinery | Delete the task ledger, unused comparison artifacts and interim-name test. Remove old runner branches/CLI and provenance assertions. Move still-used recorder helpers to behavior-named support modules. | Current runner rejects incomplete/failed evidence; fixture values and driver/type checks remain; no helper imports point at deleted files. |
+| 2. Simplify current tooling | Make wheel smoke test the checkout's own revision; keep installed-artifact identity, native failure and required-test controls. Remove checkpoint parser-renaming support and the planned-Java exemption from architecture guards. | Focused positive/negative wheel and architecture tests pass; CI still invokes all required checks. |
+| 3. Finish the whole-tree cleanup | Rename milestone files/classes/tests/vectors and update their CI, dynamic-import and capability references together. Rewrite source/docs comments as current behavior. Remove administrative fixture metadata, preserving independent expected values. | Full inventory has an explicit disposition for every remaining match; no stale executable reference; API/capability coverage unchanged. |
 
-Repeat this full-tree inventory at the end and account for every remaining match as an intentional current term or supported historical-format fixture.
-Run affected tests after each structural change, then the maintained suites once after integration.
-Do not add another permanent migration scanner, framework or ledger; use the existing checks and this temporary review inventory.
+Keep these passes sequential so fixture/helper changes do not race global renames.
+Before changing generated files, find and use their owning generator; do not edit them by hand.
+Keep useful third-party/version/serialized-format provenance and real runtime checkpoint terminology.
+Do not change public APIs, sampling, explanation behavior or supported saved-data formats.
+
+Run focused tests after each structural pass; run maintained Python/contract/Rust/Java checks once after integration, using existing warm production/test-ops builds and resource guards.
+Validate CI wiring, schema/API/capability checks, lint/type checks and hygiene.
+Rerun affected model/connector journeys only if execution or input semantics change; unchanged tests need no new hosted warehouse campaign.
+Report retained coverage, deliberate removals, remaining exceptions and size reductions.
+Commit reviewable changes on Phase 10; do not merge, push or publish without a further request.
+No new permanent scanner, framework or ledger: keep the existing enforcement and external audit inventory.
