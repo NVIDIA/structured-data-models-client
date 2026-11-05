@@ -188,6 +188,7 @@ exclude_also = [
 markers = [
     "live_nim: needs a running NIM",
     "live_warehouse: needs a real Snowflake or Databricks warehouse",
+    "in_process: loads the published weights and runs them in this process",
     "socket: binds a local socket; deselect where that is not permitted",
     "gpu: needs a CUDA GPU",
 ]
