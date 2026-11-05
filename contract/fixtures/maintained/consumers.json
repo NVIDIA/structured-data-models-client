@@ -53,13 +53,6 @@
     "max_bytes": 500000,
     "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
   },
-  "contract/fixtures/maintained/reference-inventory.json": {
-    "consumers": [
-      "tests/test_t21a_reference_lines.py"
-    ],
-    "max_bytes": 70000,
-    "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
-  },
   "contract/fixtures/maintained/reference-observations.jsonl": {
     "consumers": [
       "contract/tests/test_t213_options.py",

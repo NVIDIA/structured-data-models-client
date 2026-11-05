@@ -1,4 +1,4 @@
-# Public client parity
+# Current client correctness and compatibility
 
 This harness validates installed Python and Java clients against the maintained contract and compares their behavior on the same data, options and model version.
 Local checks never certify live prediction parity.
@@ -9,7 +9,6 @@ Local checks never certify live prediction parity.
 | `fixtures/shop.json` | Ordered rows, primary keys and relationships shared by both runners |
 | `observation.schema.json` | JSONL record contract; one record per case/connector/model/language |
 | `python_runner.py` | Public Python calls, including source verification and cleanup |
-| `routes.py` | Legacy-policy traps around setup, calls, cleanup and worker threads |
 | `compare.py` | Current-contract validation, cross-language comparison and generated evidence matrix |
 
 ## Credential-free contract checks
@@ -77,18 +76,16 @@ CANDIDATE_PYTHON tests/parity/python_runner.py --phase candidate --commit CANDID
 ```
 
 The Java runner emits the same schema with `language=java`; concatenate its records with `python.jsonl` before comparison.
-Python records must pass artifact, route, lifecycle and outcome checks; Java records must also agree with their actual Python peers.
+Python records must pass artifact, native identity, lifecycle and outcome checks; Java records must also agree with their actual Python peers.
 Explicit manifest differences in refusal behavior are reported as language differences, never agreement.
 
 ```sh
 python tests/parity/compare.py --comparison current-clients --candidate candidates.jsonl --candidate-commit CANDIDATE_COMMIT --out report.json --matrix matrix.md
 ```
 
-Historical old-client comparison is an effort 3 investigation, using the preserved reference and recipes.
-The optional `--comparison historical --baseline baseline.jsonl --baseline-commit BASELINE_COMMIT` mode keeps that distinction explicit; routine CI installs only current clients.
-Generate new baseline observations with `python_runner.py --phase baseline --commit BASELINE_COMMIT` in an isolated environment importing the clean baseline checkout.
-The explicit commit must match the imported source and every compared baseline observation; mixed source hashes fail comparison.
-Omitting `--baseline-commit` retains the historical frozen baseline identity for archived receipts.
+Only current clients are executed and compared.
+No frozen old-client checkout, historical equivalence waiver or baseline execution mode is required.
+Independent expected outcomes remain necessary: agreement between Python and Java alone does not prove correctness.
 
 `--local` compares local materialization evidence only.
 Comparison filters also accept repeated `--case`, `--connector`, `--model` and `--language`.

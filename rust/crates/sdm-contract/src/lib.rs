@@ -12,11 +12,9 @@
 //! `examples`), so a doc comment needs no bump while a change of shape does
 //! (decision H7). A change of shape, or of behavior (validation, units,
 //! ownership, defaults or error meaning), bumps [`CONTRACT_VERSION`]
-//! (decision H25). Entries not yet merged into `rust-core` are working
-//! versions: the lock holds at most one, rewritten at each bump within a
-//! phase, and the entries present at the merge base with `rust-core` are
-//! never rewritten (decision H4). The contract version is independent of
-//! the package version.
+//! independently of the package version.
+//! Only the current schema is retained in the checkout; Git preserves prior versions.
+//! The lock check rejects a shape change without a version bump against the target revision.
 
 #![forbid(unsafe_code)]
 

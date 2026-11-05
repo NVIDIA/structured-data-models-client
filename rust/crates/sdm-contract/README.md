@@ -3,6 +3,8 @@
 The versioned messages and types that cross between the core and a host, and nothing else.
 Main types: `ControlMessage` and `Step` (`run.rs`), the operations and their results, including the described schema `SourceDescription` and the schema as a host holds it, `HeldSchema`, each column with its `SourceFacts` (`ops.rs`), `DataRequest`, `FetchPlan` and the `DataLayer` trait (`data.rs`), `CoreError` and `ErrorCode` (`error.rs`), `HostFacts`, `ColumnType` and `Scalar`.
 `schema_json()` writes the JSON Schema of every message; the files under `schema/` and `schema/contract.lock` hold it, and a change of shape or meaning bumps `CONTRACT_VERSION`.
+Only the current generated schema is retained; Git preserves earlier versions.
+Regenerate with `SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated`, then run `python scripts/rust_core/contract_lock.py --base <target-ref>` from the repository root.
 It depends on no crate of ours, only on third-party crates (`arrow-array`, `arrow-buffer`, `arrow-schema`, `base64`, `schemars`, `serde`, `serde_json`, `serde_stacker`), so every other crate and every host can share it.
 Feature `test-ops` adds operations only tests reach; `schema-check` checks JSON against the schema in tests.
 Must not hold: logic, I/O, SQL, or anything that decides an answer; those belong in the crates that use these types.

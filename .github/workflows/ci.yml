@@ -224,13 +224,13 @@ jobs:
       - name: L0 self-tests
         run: python3 scripts/rust_core/selftest.py
         working-directory: .
-      # The contract schema: regenerated from the types and compared with the
-      # committed file, locked to the current version; no entry merged into
-      # rust-core rewritten, and at most one working entry, which is why this
-      # job checks out every branch (for the merge base with rust-core).
+      # Keep the current generated schema and reject unversioned shape changes.
+      # Git preserves prior schemas; this checkout needs only the current one.
       - run: cargo test -p sdm-contract --locked --test schema_lock
-      - run: python3 scripts/rust_core/contract_lock.py
+      - run: python3 scripts/rust_core/contract_lock.py --base "$SDM_SCHEMA_BASE"
         working-directory: .
+        env:
+          SDM_SCHEMA_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
       # The client wheel's notices for the Rust crates it links, regenerated
       # from Cargo.lock and compared with the committed file.
       - run: python3 scripts/rust_core/rust_notices.py --check

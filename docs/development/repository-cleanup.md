@@ -4,7 +4,7 @@
 
 # Phase 10: simplify tests and remove migration baggage
 
-**Status: plan for review; implementation has not started.**
+**Status: in progress; historical machinery removal is underway.**
 Branch: `rust-core-phase-10`, based on `rust-core` at `ebc574639`.
 The requested deletion of `docs/design/rust-core` is already included in that base.
 Keep this plan only while cleanup is active; put lasting guidance in CONTRIBUTING and the developer change guide.
