@@ -65,7 +65,7 @@ fn marked(mark: &[u8], mut rest: Vec<u8>) -> Vec<u8> {
 type Write = fn(&str) -> Vec<u8>;
 
 /// Each form the reference's reader takes, by the name
-/// `contract/tools/t216_encoding_record.py` gives it, and how it writes a
+/// `contract/support/response_encoding_scenarios.py` gives it, and how it writes a
 /// text.
 const FORMS: [(&str, Write); 10] = [
     ("utf-8", |t| t.as_bytes().to_vec()),
@@ -108,7 +108,7 @@ fn lone_answer() -> String {
 }
 
 /// The lone-surrogate forms, by the names
-/// `contract/tools/t216_encoding_record.py` gives them, each the bytes of
+/// `contract/support/response_encoding_scenarios.py` gives them, each the bytes of
 /// [`lone_answer`] with its surrogates written so.
 const LONE_FORMS: [&str; 4] = [
     "lone-surrogate-escaped",

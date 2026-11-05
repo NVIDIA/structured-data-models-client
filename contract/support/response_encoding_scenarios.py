@@ -1,44 +1,8 @@
-#!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records what the reference gives for a model answer written in each
-encoding its reader takes into ``contract/t216-encoding-vectors.json``.
-
-Written by T2.16's test author, from the whole-phase review's round-two
-finding (an answer sent as UTF-16, UTF-32 or with UTF-8's byte order mark is
-refused by the core, and taken by the reference). Run with the reference
-checkout's interpreter (the environment of ``contract/reference-env.txt``,
-the ``ref-pandas3`` cell), from this repository's root::
-
-    <reference venv>/bin/python -I contract/tools/t216_encoding_record.py \
-        --reference <reference checkout>
-
-The reference's transport reads an answer with ``json.loads`` on its bytes,
-which takes the encoding ``json.detect_encoding`` finds: UTF-32 or UTF-16 by
-their byte order marks, UTF-8 with its mark, or, with no mark, UTF-16 or
-UTF-32 of either byte order by where the first four bytes are zero, and
-UTF-8 otherwise, decoding with ``surrogatepass``. Each form of
-:data:`FORMS` is one of these; two are bytes no such encoding decodes
-(``malformed-*``); and four put a lone surrogate in the answer's id and in
-its metadata, as a JSON escape and written as itself in UTF-8, UTF-16 and
-UTF-32 (``lone-surrogate-*``), which the reference keeps.
-
-For each query of :data:`QUERY_NAMES` (T2.14b's shop, a regression and a
-classification) and each form, the public calls ``Schema.from_source``,
-``PredictiveQuery.materialize`` and ``SDMClient.predict`` against the
-scripted endpoint, which answers by its rule with the answer's JSON text
-written in that form: the result's columns and values, its ``request_id``
-and ``metadata``, or the refusal. And each answer of :data:`SERVING`
-through a Databricks serving client (``serving-*``), whose served model
-writes it in ``response_json``: plain, and with the lone surrogates written
-as themselves and as escapes.
-
-:func:`observe` is imported by
-``contract/tests/test_t216_response_encoding.py``, so ``python-core`` is
-observed by the same code, with the core routes forced.
-"""
+"""HTTP and serving-response scenarios for supported encodings and malformed bytes."""
 
 from __future__ import annotations
 
@@ -55,7 +19,6 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'contract/t216-encoding-vectors.json'
-FORMAT = 'sdm-t216-encoding-vectors/1'
 
 
 def _marked(mark: bytes, codec: str) -> Callable[[str], bytes]:

@@ -19,7 +19,7 @@ class DuckDbLargeValueTest {
       statement.execute("SET threads=2");
       statement.execute("SET memory_limit='10GB'");
       statement.execute("SET arrow_large_buffer_size=true");
-      // Same shop, query and indices as contract/tools/host2_values_record.py.
+      // Same shop, query and indices as contract/support/duckdb_value_scenarios.py.
       // The previous three-row numeric toy target inferred classification and the live
       // model rejected that task independently of the provider's large-value support.
       statement.execute("CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20+i)::INTEGER AS age, "

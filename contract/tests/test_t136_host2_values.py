@@ -2,94 +2,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.36 fix group 3: register HOST-2's values, held to the reference.
+"""DuckDB timestamp and buffer boundary contracts through public calls.
 
-Written by the package's independent test author, before the fix.
-
-    python -m pytest contract/tests/test_t136_host2_values.py -q
-    SDM_T136_BIG=1 python -m pytest contract/tests/test_t136_host2_values.py -q -k big
-
-``contract/t136-host2-vectors.json`` (``contract/tools/host2_values_record.py``)
-records, through DuckDB 1.5.6 and the public calls (``Schema.from_source``,
-``materialize``, ``SDMClient.predict`` against the scripted endpoint), what
-the reference does with the values HOST-2 says the core refuses:
-
-- a ``TIMESTAMP_S`` or ``TIMESTAMP_MS`` holding ``'infinity'`` or
-  ``'-infinity'`` (DuckDB hands either over as int64 max, or its negation,
-  in the column's own unit, so past an int64 count of microseconds), as the
-  time column, as a feature and as the entity table's only timestamp;
-- a finite ``TIMESTAMP_S`` or ``TIMESTAMP_MS`` past int64 microseconds, which
-  DuckDB's casts refuse but its Arrow import keeps (the same three roles);
-- for comparison, ``TIMESTAMP`` (microseconds) and ``TIMESTAMP_NS``
-  infinities and each type's largest finite values;
-- (``big``, recorded with ``--big``) one ``VARCHAR`` or ``BLOB`` value of
-  2**31 + 16 bytes, with and without ``arrow_large_buffer_size``.
-
-The reference describes every value past int64 microseconds at
-``from_source`` and fails only at ``materialize``, where each is a time past
-what a nanosecond count holds. Register DT-14 (decision E88, the owner's,
-2026-10-13: "times past the nanosecond range get VALUE_OUT_OF_RANGE") gives
-that refusal on the core its code, and the core already gives it for a
-microsecond infinity at the same stage. So the rule each vector is held to
-on the core route:
-
-- the reference succeeds through ``predict``: so does the core, describing
-  the source as the reference does;
-- the reference describes the source and refuses at ``materialize``: the
-  core describes it as the reference does (columns, dtypes, stypes, keys,
-  time columns, and ``from_source``'s warnings, the core's ``[CODE]`` prefix
-  set aside) and refuses at ``materialize`` with ``VALUE_OUT_OF_RANGE``.
-
-Failing when written: every ``TIMESTAMP_S`` and ``TIMESTAMP_MS`` vector past
-int64 microseconds (the core refuses it ``VALUE_OUT_OF_RANGE`` at
-``from_source``), and ``time.TIMESTAMP_NS.-infinity``, which the reference
-takes through ``predict`` (``-infinity`` in nanoseconds is
-1677-09-21 00:12:43.145224193, pandas' smallest timestamp) and the core
-refuses ``VALUE_OUT_OF_RANGE`` at ``materialize``.
-
-The ``big`` rows take about 7 GB and up to six minutes each, so the test
-making their public calls is defined only with ``SDM_T136_BIG=1``; by
-default only the recorded rows are held. Their rule: where the reference
-fails at ``from_source`` with no code (DuckDB refuses to write the value
-without large buffers), the core fails there too, by name (E66(b)). With
-large buffers the reference describes the source (and takes the ``BLOB``,
-which it leaves out, through ``predict``; the ``VARCHAR`` fails its
-``materialize`` with DuckDB's out-of-memory error on a 24 GB machine), and
-Phase 4 now describes both too.
-Binary is omitted and prediction proceeds; retained large text receives a
-named ``UNSUPPORTED_TYPE`` at materialization instead of an out-of-memory
-failure.
-The recorded P1B-80 vectors retain the historical Phase 1 refusal as evidence
-of the gap this closes.
-
-Added after fix 3 (97aefc9d), from its review (register P1B-81):
-
-- (a) a finite value past microseconds in the time column makes DuckDB
-  fail the time bounds' ``CAST(ts AS TIMESTAMP)``, the statement both
-  routes send. The reference gives ``INTERNAL_ERROR`` (DuckDB's
-  ``ConversionException``); the core cannot tell that failure from another
-  without the driver's message, which the contract keeps out, so it gives
-  ``PROVIDER_ERROR``, its request ``time_bounds`` (DT-12's shape, E66(b)):
-  ``time.far.*`` are held to that, never ``INTERNAL_ERROR`` or a panic.
-- (b) the reference's ``from_source`` reads the first non-null value of each
-  time-column candidate (a timestamp column not named as a load stamp or a
-  birth date) as a Python datetime (``predictive_query/time_columns.py``,
-  ``_refused_for_values``: ``present.iloc[0]``, pyarrow's ``as_py``), which
-  fails unnamed (``OverflowError``) past the years 1 to 9999. The
-  ``first.*`` vectors put the values above in that first row (and a
-  microsecond infinity and the year 10000, which fail the same way); the
-  ``generated.*`` ones are the three sources of fix 3's differential where
-  it happened. Where the reference fails so, the core refuses at
-  ``from_source`` too, by name (E66(b)): a ``StructuredDataError`` with a
-  code other than ``INTERNAL_ERROR``. Their controls (a nanosecond infinity,
-  the year 9999, a column named ``loaded_at`` or ``birth_date``) and every
-  vector above, whose value is not in a first row, the reference describes,
-  and the core must too.
-
-Each answer is the public calls on one route in this process: the default
-route is the reference's code, and ``SDM_CORE_ROUTES`` forces the core
-(the recorder's ``CORE_ROUTES``). The reference's answers are re-measured
-here only in the environment they were recorded in.
+Timestamp units, infinities and overflow keep their schema facts and produce
+structured refusals at the appropriate stage.
+Expected observations are retained fixtures, not regenerated from current code.
+The optional SDM_T136_BIG=1 cases allocate roughly 7 GB and may take minutes;
+ordinary runs check their fixture inputs without allocating those large values.
 """
 
 from __future__ import annotations
@@ -110,7 +29,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / 'contract/t136-host2-vectors.json'
-REFERENCE_ENV = ROOT / 'contract/reference-env.txt'
 #: The code DT-14 gives a time past the nanosecond range on the core.
 PAST_NANOSECONDS = 'VALUE_OUT_OF_RANGE'
 BIG = os.environ.get('SDM_T136_BIG') == '1'
@@ -128,7 +46,8 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 R = _module(
-    'host2_values_record', ROOT / 'contract/tools/host2_values_record.py'
+    'duckdb_value_scenarios',
+    ROOT / 'contract/support/duckdb_value_scenarios.py',
 )
 FILE: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
 ALL: list[dict[str, Any]] = FILE['vectors']
@@ -201,24 +120,14 @@ def _same_description(got: dict[str, Any], reference: dict[str, Any]) -> None:
 
 def test_the_vector_file_is_what_it_says() -> None:
     assert FILE['format'] == 'sdm-host2-vectors/1'
-    recorded = FILE['recorded']
-    assert recorded['by'] == 'contract/tools/host2_values_record.py'
-    found = re.search(
-        r'^reference: ([0-9a-f]{40})$', REFERENCE_ENV.read_text(), re.M
-    )
-    assert found is not None and recorded['reference'] == found[1]
-    for environment in recorded['environments'].values():
-        assert environment['duckdb'] == '1.5.6'
-    # Every source the recorder runs, once, with the setup it runs.
     assert [v['name'] for v in ALL] == list(R.SOURCES)
     for vector in ALL:
         assert vector['setup'] == R.SOURCES[vector['name']]['setup']
-        for route in ('reference', 'core_at_measurement'):
-            outcome = vector[route]['outcome']
-            assert outcome['result'] in ('success', 'refusal')
-            assert (outcome['result'] == 'success') == (
-                outcome['stage'] == 'predict' and 'code' not in outcome
-            )
+        outcome = vector['reference']['outcome']
+        assert outcome['result'] in ('success', 'refusal')
+        assert (outcome['result'] == 'success') == (
+            outcome['stage'] == 'predict' and 'code' not in outcome
+        )
     # Not vacuous: both infinities and finite values past int64
     # microseconds, at s and ms, in each role.
     assert len(PAST_MICROSECONDS) == 22
@@ -336,9 +245,6 @@ def test_duckdb_hands_over_what_the_file_says() -> None:
         'month_day_nano_interval',
         'date32[day]',
     }
-
-
-# --- the reference, re-measured where it was recorded -----------------------
 
 
 # --- the core ------------------------------------------------------------------

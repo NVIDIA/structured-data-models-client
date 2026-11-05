@@ -1,56 +1,8 @@
-#!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's answers to T2.2's round 1 SQLite regressions
-into ``contract/sqlite-regression-vectors.json``.
-
-Run with the reference checkout's interpreter (the environment of
-``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
-repository's root::
-
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/sqlite_regressions_record.py
-
-Written by T2.2's test author from the round 1 and round 2 reviews'
-repros. Each scenario is a SQLite database made on an in-memory ADBC
-connection by its ``setup``, read by ``Schema.from_source`` (over the
-tables its ``tables`` names, or every table) and asked its ``query``
-(default ``PREDICT users.age FOR EACH users.id``) by ``materialize`` with
-its ``materialize`` keywords:
-
-- ``seeds-table``, ``seeds-table-numbered``, ``seeds-table-upper``: the
-  caller's own temporary table holding ``'keep me'`` beside the source,
-  named as the provider's scratch relations are or were (``__sdm_seeds__``,
-  ``__sdm_seeds_1__``, and ``__SDM_SEEDS_1__``, which SQLite takes for the
-  same name); ``temp_after`` is that table after the call, columns and
-  rows;
-- ``float-keys``: an ``INT PRIMARY KEY`` holding 101.5 to 107.5 (SQLite
-  stores each as a REAL), so the seeded context sample is the reference's
-  for a key whose storage class differs from its declared type;
-- ``null-key``: an ``INT PRIMARY KEY`` holding a NULL beside 101 to 106
-  (SQLite lets a primary key that is not a rowid alias hold one);
-- ``integer-fractions``: a column declared ``INTEGER`` holding fractions
-  (``i.5``), described as its declaration types it;
-- ``composite-key``: a composite primary key of an ``INTEGER`` column
-  holding repeated ids and a ``TEXT`` one, described as the reference
-  reads it (the ``INTEGER`` column as SQLite's rowid alias), and refused
-  at ``materialize`` as there;
-- ``materialize-twice``: ``materialize`` called twice on one query over
-  round 2's shop, whose time column SQLite holds as text: each call's
-  statements and request (``repeated`` holds the second's), the second
-  reading the stored time's spelling no more than the reference does;
-- ``partial-unique``: a partial unique index on the key column, read as
-  unique, with the reference's statements.
-
-The reference's answer is kept as the calls gave it: the outcome (success,
-or the refusal's class, ``StructuredDataError.code`` and the call it ended,
-no message text, H17), the public schema as ``run_python.py`` projects it,
-the request's payloads as JSON, and the statements the driver ran per
-public call (``run_python.py``'s ``StatementLog``, the setup outside it).
-:func:`run` is imported by ``contract/tests/test_t22_r1_regressions.py``,
-so ``python-core`` is run by the same code.
-"""
+"""SQLite source scenarios for scratch-table isolation, keys and repeated calls."""
 
 from __future__ import annotations
 
@@ -61,8 +13,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/sqlite-regression-vectors.json'
-FORMAT = 'sdm-sqlite-regression-vectors/1'
 QUERY = 'PREDICT users.age FOR EACH users.id'
 
 

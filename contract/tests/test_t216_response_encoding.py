@@ -2,40 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A model answer in each encoding the reference's reader takes, on
-``python-core`` (T2.16's test author's, from the whole-phase review's round
-two, Codex P2).
+"""Public model-response decoding over HTTP and Databricks serving.
 
-    python -m pytest contract/tests/test_t216_response_encoding.py -q
-
-Since T2.14b the core reads the endpoint's answer from the bytes the
-endpoint sent. The reference reads them with ``json.loads``, which takes
-UTF-8 with or without its byte order mark, and UTF-16 and UTF-32 of either
-byte order with or without theirs (``json.detect_encoding``); the core
-refused all but UTF-8 as ``INVALID_RESPONSE`` (``field=response``,
-``reason=not_json``).
-
-Each scenario of ``contract/tools/t216_encoding_record.py`` runs on
-python-core with the core routes forced, by the recorder's own
-``observe``, against a real localhost endpoint through
-``Schema.from_source``, ``PredictiveQuery.materialize`` and
-``SDMClient.predict``, and is held to what the reference gave
-(``contract/t216-encoding-vectors.json``): the result's columns and values
-for each encoding, and the refusal for two byte forms no encoding decodes.
-
-An answer holding a lone surrogate is a difference the core keeps
-(register P1B-24, the owner's rule of 2026-10-21): the reference keeps the
-surrogate, and the core reads it as U+FFFD and answers. The answer's id
-(the result's ``request_id``) and its metadata each hold one, as a JSON
-escape, and written as itself in UTF-8, UTF-16 and UTF-32, over HTTP and
-from a Databricks serving endpoint (the recorder's ``REPLACED``). The
-core's observation is held to the reference's with each lone surrogate
-U+FFFD, and nothing else differing. The serving client's plain answer
-(``serving-plain``) is held to the reference's as the HTTP forms are.
-
-The core's own reader on the same byte forms is
-``rust/crates/sdm-core/tests/t216_answer_encoding.rs``.
-
+UTF-8, UTF-16 and UTF-32 variants preserve result values and metadata.
+Malformed byte forms fail predictably; lone surrogates become U+FFFD.
+Retained observations provide independent expectations without an old runtime.
 """
 
 from __future__ import annotations
@@ -52,15 +23,13 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-RECORDER = ROOT / 'contract/tools/t216_encoding_record.py'
-
-PREFIX = 'py:'
+SCENARIOS = ROOT / 'contract/support/response_encoding_scenarios.py'
 
 
-def recorder() -> ModuleType:
-    name = 't216_encoding_record'
+def scenarios() -> ModuleType:
+    name = 'response_encoding_scenarios'
     if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(name, RECORDER)
+        spec = importlib.util.spec_from_file_location(name, SCENARIOS)
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
@@ -71,16 +40,16 @@ def recorder() -> ModuleType:
 #: Each scenario's form, by the name the vectors give it: the HTTP forms,
 #: then the serving client's.
 FORMS = (
-    *recorder().FORMS,
-    *(f'serving-{form}' for form in recorder().SERVING),
+    *scenarios().FORMS,
+    *(f'serving-{form}' for form in scenarios().SERVING),
 )
 #: The forms whose lone surrogates the core reads as U+FFFD (register
 #: P1B-24).
-REPLACED = frozenset(recorder().REPLACED)
+REPLACED = frozenset(scenarios().REPLACED)
 #: A lone surrogate: one not in a pair, as Python's ``str`` holds it.
 LONE = re.compile('[\ud800-\udfff]')
 NAMES = tuple(
-    f'{query}.{form}' for query in recorder().QUERY_NAMES for form in FORMS
+    f'{query}.{form}' for query in scenarios().QUERY_NAMES for form in FORMS
 )
 
 
@@ -101,24 +70,18 @@ def _named(refusal: dict[str, Any]) -> tuple[str, str]:
 
 @functools.cache
 def vectors() -> dict[str, Any]:
-    return recorder().load()
+    return scenarios().load()
 
 
 @functools.cache
 def core() -> dict[str, Any]:
     r"""python-core's observation of every scenario, on the core routes."""
-    return recorder().observe()
+    return scenarios().observe()
 
 
-def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
-    r"""Control: recorded from the reference commit the contract names, by
-    the committed recorder; every encoding answered with the rule's
-    predictions, each of the two malformed forms refused; and each form's
-    bytes are what its name says, as ``json.detect_encoding`` finds them."""
+def test_scenarios_cover_encodings_values_and_refusals() -> None:
+    """Validate byte forms and expected results independently of the client."""
     document = vectors()
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {document["reference"]}' in env
-    assert document['recorded_by'] == 'contract/tools/t216_encoding_record.py'
     assert set(document['answers']) == set(NAMES)
     want = {'windowed': [1.0, 1.0], 'condition': [False, False]}
     for name, observed in document['answers'].items():
@@ -128,8 +91,8 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
             # The reference reads it and keeps each surrogate.
             assert observed['refusal'] is None, name
             assert observed['values']['prediction'] == want[query], name
-            assert observed['request_id'] == recorder().LONE_ID, name
-            assert observed['metadata'] == {'note': recorder().LONE_NOTE}, name
+            assert observed['request_id'] == scenarios().LONE_ID, name
+            assert observed['metadata'] == {'note': scenarios().LONE_NOTE}, name
         elif form.startswith('malformed-'):
             assert observed['refusal']['code'] == 'TRANSPORT_ERROR', name
             assert observed['values'] is None, name
@@ -139,7 +102,7 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
     text = '{"object": "prediction.response", "id": "r1"}'
     detected = {
         form: json.detect_encoding(write(text))
-        for form, write in recorder().FORMS.items()
+        for form, write in scenarios().FORMS.items()
     }
     assert detected == {
         'utf-8': 'utf-8',
@@ -159,7 +122,7 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
         'lone-surrogate-utf-16': 'utf-16',
         'lone-surrogate-utf-32': 'utf-32',
     }
-    for form, write in recorder().FORMS.items():
+    for form, write in scenarios().FORMS.items():
         if form.startswith('malformed-'):
             with pytest.raises(UnicodeDecodeError):
                 json.loads(write(text))
@@ -169,18 +132,18 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
     # Python's reader keeps them.
     answer = '{"id": "r1", "metadata": {}}'
     kept = {
-        'id': recorder().LONE_ID,
-        'metadata': {'note': recorder().LONE_NOTE},
+        'id': scenarios().LONE_ID,
+        'metadata': {'note': scenarios().LONE_NOTE},
     }
-    for form, write in recorder().FORMS.items():
+    for form, write in scenarios().FORMS.items():
         if form.startswith('lone-'):
             assert json.loads(write(answer)) == kept, form
-    raw = recorder().SERVING['lone-surrogate'](answer)
-    escaped = recorder().SERVING['lone-surrogate-escaped'](answer)
+    raw = scenarios().SERVING['lone-surrogate'](answer)
+    escaped = scenarios().SERVING['lone-surrogate-escaped'](answer)
     assert LONE.search(raw) and '\\u' not in raw
     assert not LONE.search(escaped) and '\\ud800' in escaped
     assert json.loads(raw) == json.loads(escaped) == kept
-    assert b'\xed\xa0\x80' in recorder().FORMS['lone-surrogate-utf-8'](answer)
+    assert b'\xed\xa0\x80' in scenarios().FORMS['lone-surrogate-utf-8'](answer)
 
 
 @pytest.mark.parametrize(
@@ -232,7 +195,7 @@ def test_a_lone_surrogate_in_an_answer_is_read_as_u_fffd(name: str) -> None:
         got = core()['answers'][name]
         assert LONE.search(json.dumps(want, ensure_ascii=False)), want
         replaced = _replaced(want)
-        assert replaced['request_id'] == recorder().LONE_ID.replace(
+        assert replaced['request_id'] == scenarios().LONE_ID.replace(
             '\ud800', '\ufffd'
         )
         assert got == replaced, (

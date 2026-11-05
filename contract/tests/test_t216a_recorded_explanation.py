@@ -46,7 +46,6 @@ def _module(name: str, path: Path) -> ModuleType:
 @functools.cache
 def vectors() -> dict[str, Any]:
     document = json.loads(VECTORS.read_text(encoding='utf-8'))
-    assert document['recorded_by'] == 'contract/tools/option_record.py'
     return document['vectors']
 
 

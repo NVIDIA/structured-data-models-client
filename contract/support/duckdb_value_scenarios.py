@@ -1,46 +1,8 @@
-#!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records ``contract/t136-host2-vectors.json``: register HOST-2's values
-the core refuses (T1.36), measured through DuckDB 1.5.6 and the public
-calls on both routes.
-
-Written by T1.36's independent test author. Run from this repository's
-root::
-
-    python -I contract/tools/host2_values_record.py \
-        [--reference-python REF] [--candidate-python CAND] [--big]
-
-``REF`` (default: the reference checkout's ``.venv``) runs each source on
-the reference; ``CAND`` (default: this interpreter) runs it on the core
-route, ``SDM_CORE_ROUTES`` set to every DuckDB path of ``from_source``,
-``materialize`` and ``predict``. Each source is ``contract/bases.yaml``'s
-``shop`` and the vector's ``setup``; the calls are ``Schema.from_source``,
-then ``materialize`` of the vector's query (indices 0 to 7, anchor
-2024-03-01), then ``SDMClient.predict`` against the scripted endpoint, as
-far as each gets. What is recorded per route: the outcome (``success``, or
-the stage it failed at, the exception's class, ``StructuredDataError.code``
-and the first line of its message), the description (each table's columns
-with dtype and stype, key and time column) and each stage's warnings (the
-first line of each, DuckDB's missing-index advice left out).
-
-``duckdb`` records what DuckDB itself does: the Arrow type and raw value it
-hands over for each infinity, and whether it holds a finite ``TIMESTAMP_S``
-or ``TIMESTAMP_MS`` past an int64 count of microseconds (it does not: its
-casts and its Arrow import refuse one), and what a ``duration`` or
-``date64`` becomes through it.
-
-``--big`` also runs the sources holding one value just over 2 GiB (a
-``VARCHAR`` and a ``BLOB`` of 2**31 + 16 bytes, with and without
-``SET arrow_large_buffer_size = true``), each route in its own process,
-one after the other: about 7 GB of memory at the peak and up to six
-minutes each. Without it the ``big`` section is kept as recorded. The core's
-answers are recorded beside the reference's as evidence of what the
-candidate did when measured; no expectation of the core is derived from
-them.
-"""
+"""DuckDB scenarios for timestamp bounds and optional values larger than 2 GiB."""
 
 from __future__ import annotations
 
@@ -52,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t136-host2-vectors.json'
 REFERENCE = Path.home() / 'code/sdmc-reference'
 PQL = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 INDICES = list(range(8))
@@ -586,6 +547,3 @@ def duckdb_facts() -> dict[str, Any]:
         'finite_past_int64_microseconds': past,
         'duration_and_date64': through,
     }
-
-
-# --- the recorder ------------------------------------------------------------------

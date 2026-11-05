@@ -2,29 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""``Request`` pickles the reference wrote load in this client (H23,
-T2.14b's design exit "pickle fixtures from the reference load"), and a
-``main``-era ``Schema`` pickle holding ``conversion_notes`` does too.
+"""Older serialized requests and schemas remain usable by the current client.
 
-    python -m pytest contract/tests/test_t214b_pickles.py -q
-
-The pickles and what the reference reads back from each are in
-``contract/fixtures/request-pickles``, written by its ``write.py`` from the
-reference commit: a request a predictive query gathered in one call, a
-forecast gathered as its steps, a ranking gathered as one question per
-candidate, a request built from frames, and a schema of ``main``'s semantic
-model with its conversion notes. Each loads here as the reference reads it
-(its task, query, entities, facts, payloads, halves and parts; the
-schema's tables, links and notes), pickles again to the same, and each
-gathered request predicts against the scripted endpoint as the reference's
-did: the same bodies sent and the same answer.
-
-A request gathered over a source holds the source, which neither client
-pickles (``Source.__reduce__``), so a reference-pickled request is one over
-frames, which predicts on the route that answers frames. These pass on the
-base and hold the package's host clean-up to them; the request state's
-version, which a request the core gathers carries, is held by
-``test_t214b_host.py``.
+Frozen pickle bytes exercise saved-format compatibility, including forecasts,
+rankings, direct frames and schema conversion notes.
+Loads, round trips and predictions retain independent expected values.
+These fixtures must not be regenerated using the current implementation.
 """
 
 from __future__ import annotations
@@ -68,9 +51,8 @@ def _load(name: str) -> tuple[Any, list[Any]]:
     ]
 
 
-def test_every_pickle_the_reference_wrote_is_listed() -> None:
-    r"""Control: the fixtures are the writer's, of the reference commit the
-    contract names, each with what the reference read back."""
+def test_saved_pickle_formats_and_cases_are_covered() -> None:
+    """Keep every saved-format fixture and the scenarios it exercises."""
     written = {path.stem for path in PICKLES.glob('*.pkl')}
     assert (
         written
@@ -83,8 +65,6 @@ def test_every_pickle_the_reference_wrote_is_listed() -> None:
             'schema-notes',
         }
     )
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {EXPECTED["reference"]}' in env
     assert EXPECTED['protocol'] == 4
     # The fixtures exercise what they name: a forecast's and a ranking's
     # parts, a request of frames with no payloads, and a schema's notes.

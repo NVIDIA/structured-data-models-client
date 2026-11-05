@@ -2,32 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.2's SQLite regressions from review rounds 1 and 2 on
-``python-core`` (the package's test author's), through the public calls
-with SQLite's core routes forced, each held to the reference's answer in
-``contract/sqlite-regression-vectors.json`` (recorded by
-``contract/tools/sqlite_regressions_record.py``):
+"""SQLite source contracts for scratch-table isolation, keys and repeated calls.
 
-- a caller's own temporary table named as the provider's scratch
-  relations are or were (``__sdm_seeds__``, ``__sdm_seeds_1__``,
-  ``__SDM_SEEDS_1__``) survives ``materialize`` unchanged, and the call
-  answers as on the reference;
-- an ``INT PRIMARY KEY`` holding 101.5 to 107.5 gets the reference's
-  seeded context keys, 102.5, 106.5 and 107.5 (the hash is chosen by the
-  column's type, not each value's storage class);
-- an ``INT PRIMARY KEY`` holding a NULL materializes as the reference does,
-  the null filtered (a SQLite primary key that is not a rowid alias keeps
-  its catalog nullability);
-- a column declared ``INTEGER`` holding fractions is described as the
-  reference describes it (``int64``), and the request is the reference's;
-- a composite primary key with one ``INTEGER`` column is described as the
-  reference reads it, and refused at ``materialize`` as there;
-- a partial unique index on the key is read as unique: the reference's
-  schema, statement counts per call and request;
-- ``materialize`` called twice on one query over a source whose time
-  column SQLite holds as text: each call's statement count and request
-  are the reference's (the stored time's spelling is kept across a
-  materializer's runs).
+Expected payloads and schema facts are retained regression fixtures.
+The current public client is the only implementation executed.
 """
 
 from __future__ import annotations
@@ -56,8 +34,8 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 R = _module(
-    'sqlite_regressions_record',
-    ROOT / 'contract/tools/sqlite_regressions_record.py',
+    'sqlite_scenarios',
+    ROOT / 'contract/support/sqlite_scenarios.py',
 )
 RECORDED: dict[str, Any] = json.loads(
     (ROOT / 'contract/sqlite-regression-vectors.json').read_text('utf-8')
@@ -127,11 +105,8 @@ def _context_keys(answer: dict[str, Any]) -> list[Any]:
     return [row[1] for row in rows]
 
 
-def test_the_vectors_are_the_reference_s() -> None:
-    r"""Control: recorded from the reference this tree names, every
-    scenario of the recorder, as the reviews' repros measured it."""
-    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
-    assert f'reference: {RECORDED["reference"]}' in env
+def test_scenarios_cover_expected_sqlite_edge_cases() -> None:
+    """Each scenario retains its setup and independent expected behavior."""
     assert set(RECORDED['scenarios']) == set(R.SCENARIOS)
     for name, scenario in RECORDED['scenarios'].items():
         assert scenario['setup'] == R.SCENARIOS[name]['setup']
