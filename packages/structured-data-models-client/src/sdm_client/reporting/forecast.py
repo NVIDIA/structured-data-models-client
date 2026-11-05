@@ -84,7 +84,9 @@ def forecast_report(
     ... )
     >>> forecast_report(result, 'forecast.pdf')
     """
-    carried = result.explanation
+    carried = next(
+        (item.explanation for item in result.items if item.explanation), None
+    )
     if not carried:
         raise StructuredDataError(
             'this answer carries no explanation. Ask for one with '

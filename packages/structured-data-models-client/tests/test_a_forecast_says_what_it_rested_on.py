@@ -11,11 +11,20 @@ here and read by every test that needs one.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
+from sdm_api.generated.tfm_api import PredictionItem
 
-from sdm_client import KumoForecast, Request, SDMClient, StructuredDataError
+from sdm_client import (
+    KumoForecast,
+    Request,
+    SDMClient,
+    SDMWarning,
+    StructuredDataError,
+)
 
 pytest.importorskip('matplotlib', reason='needs the report extra')
 pytest.importorskip('torch', reason='the attribution runs on torch')
@@ -31,13 +40,34 @@ def history(rows: int = 600) -> pd.DataFrame:
 
 
 @pytest.fixture(scope='module')
-def explained(forecast):
-    with SDMClient.in_process(forecast) as client:
-        return client.predict(
-            Request.forecast(history(), target='flow', horizon=4),
-            model=KumoForecast(),
-            outputs=['prediction', 'explanation'],
-        )
+def answered(forecast):
+    """An explained forecast, and what the client warned of answering it."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        with SDMClient.in_process(forecast) as client:
+            result = client.predict(
+                Request.forecast(history(), target='flow', horizon=4),
+                model=KumoForecast(),
+                outputs=['prediction', 'explanation'],
+            )
+    return result, [
+        str(warning.message)
+        for warning in caught
+        if issubclass(warning.category, SDMWarning)
+        or 'explanation' in str(warning.message)
+    ]
+
+
+@pytest.fixture(scope='module')
+def explained(answered):
+    return answered[0]
+
+
+def carried_by(result):
+    """The explanation an answer carries, on the step it came back on."""
+    return next(
+        (item.explanation for item in result.items if item.explanation), None
+    )
 
 
 class Carrying:
@@ -48,12 +78,16 @@ class Carrying:
     """
 
     def __init__(self, explanation):
-        self.explanation = explanation
+        self.items = (
+            PredictionItem(
+                row_index=0, forecast_step=1, explanation=explanation
+            ),
+        )
 
 
 def without(result, *names, under=None):
     """What `result` carries, less the block(s) `names` asks for."""
-    carried = dict(result.explanation)
+    carried = dict(carried_by(result))
     block = dict(carried['explanation'])
     if under is None:
         for name in names:
@@ -76,14 +110,35 @@ def pages(path) -> int:
 def test_an_explanation_comes_back_when_it_is_asked_for(explained):
     """It reads the model's gradients and its latent trajectory, so it is
     produced where the model runs and nowhere else."""
-    carried = explained.explanation
+    carried = carried_by(explained)
 
     assert isinstance(carried, dict)
     assert set(carried) >= {'forecast', 'explanation', 'metadata'}
 
 
+def test_an_explained_forecast_is_answered_as_it_was_asked(answered):
+    """The explanation rides on the forecast's first step. The answer is
+    not said to be missing it, is not built through a deprecated argument,
+    and carries no column analysis, which reads labelled rows and a
+    history is not that."""
+    result, warned = answered
+
+    assert warned == []
+    assert result.explanations.columns is None
+
+
+def test_the_report_reads_no_deprecated_part_of_the_answer(explained, tmp_path):
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'error',
+            message=r'result\.explanation is deprecated',
+            category=DeprecationWarning,
+        )
+        forecast_report(explained, tmp_path / 'f.pdf')
+
+
 def test_the_attribution_covers_every_lag_and_every_step(explained):
-    block = explained.explanation['explanation']
+    block = carried_by(explained)['explanation']
     attributions = np.asarray(block['lag_horizon_attributions'])
 
     assert attributions.shape == (block['shapes']['K_lags'], 4)
@@ -95,7 +150,7 @@ def test_an_explanation_is_data_rather_than_an_object(explained):
     what that field carries."""
     import json
 
-    assert json.loads(json.dumps(explained.explanation))
+    assert json.loads(json.dumps(carried_by(explained)))
 
 
 def test_a_forecast_asked_without_one_does_not_pay_for_it(forecast):
@@ -108,7 +163,7 @@ def test_a_forecast_asked_without_one_does_not_pay_for_it(forecast):
             outputs=['prediction'],
         )
 
-    assert result.explanation is None
+    assert carried_by(result) is None
 
 
 def test_a_flat_series_has_almost_nowhere_to_move(forecast):
@@ -123,7 +178,7 @@ def test_a_flat_series_has_almost_nowhere_to_move(forecast):
             outputs=['prediction', 'explanation'],
         )
 
-    flow = np.asarray(result.explanation['explanation']['flow_magnitudes'])
+    flow = np.asarray(carried_by(result)['explanation']['flow_magnitudes'])
     assert float(flow.sum()) < 0.5
 
 
@@ -165,7 +220,7 @@ def test_the_attribution_reads_the_model_s_own_scale(forecast):
 def test_what_is_drawn_is_in_the_readings_own_scale(explained):
     """The attribution works standardised; a reader does not."""
     baseline = np.asarray(
-        explained.explanation['explanation']['baseline_forecast']
+        carried_by(explained)['explanation']['baseline_forecast']
     )
 
     assert np.abs(baseline).max() < 5.0
@@ -194,7 +249,7 @@ def test_the_diagnostics_survive_being_written_and_read(explained):
     them, which printed n/a for every one of them."""
     from sdm_client.reporting.forecast import _explanation
 
-    restored = _explanation(explained.explanation)
+    restored = _explanation(carried_by(explained))
 
     assert restored.flow_ratio_forecast_vs_history is not None
     assert restored.curvature_ratio_forecast_vs_history is not None
@@ -224,7 +279,7 @@ def test_the_top_lags_are_ranked_from_the_scores(explained, tmp_path):
     finally:
         pages._topk_lag_steps_per_horizon = original
 
-    block = explained.explanation['explanation']
+    block = carried_by(explained)['explanation']
     assert len(seen) == 1
     assert np.allclose(seen[0], np.asarray(block['lag_horizon_scores']))
 
@@ -234,10 +289,10 @@ def test_the_history_the_page_is_told_about_excludes_the_forecast(explained):
     length as the context said every transition was history."""
     from sdm_client.reporting.forecast import _context_len
 
-    block = explained.explanation['explanation']
+    block = carried_by(explained)['explanation']
     steps = block['diagnostics']['latent_trajectory_shape'][0]
 
-    assert _context_len(explained.explanation, 4) == steps - 4
+    assert _context_len(carried_by(explained), 4) == steps - 4
 
 
 def test_a_gap_outside_the_window_is_not_a_gap_in_it(forecast):
@@ -259,7 +314,7 @@ def test_a_gap_outside_the_window_is_not_a_gap_in_it(forecast):
             outputs=['prediction', 'explanation'],
         )
 
-    assert result.explanation is not None
+    assert carried_by(result) is not None
 
 
 def test_the_files_the_pages_name_are_written(explained, tmp_path):
@@ -282,7 +337,7 @@ def test_a_value_json_cannot_spell_does_not_cost_the_report(
     import json
 
     artifacts = tmp_path / 'artifacts'
-    carried = dict(explained.explanation)
+    carried = dict(carried_by(explained))
     carried['diagnostics'] = {'top': [{'share': float('nan'), 'n': 2**1024}]}
 
     forecast_report(
@@ -318,7 +373,7 @@ def test_the_series_own_channel_is_not_ranked_among_the_measured(
             outputs=['prediction', 'explanation'],
         )
 
-    carried = result.explanation
+    carried = carried_by(result)
     assert carried['metadata']['feature_axis_excludes'] == 'flow'
     _, channels = _without_the_unmeasured(
         _explanation(carried), _channels(carried), carried
@@ -368,7 +423,7 @@ def test_the_heatmap_shows_what_its_caption_says(explained, tmp_path):
     finally:
         pages._save_lag_horizon_artifacts = original
 
-    block = explained.explanation['explanation']
+    block = carried_by(explained)['explanation']
     marginal, _ = pages._topk_lag_steps_per_horizon(
         np.asarray(block['lag_horizon_scores']), top_k=5
     )
@@ -468,7 +523,7 @@ def test_the_report_names_the_series_and_the_lag_window(explained, tmp_path):
     """Read off the data the page is drawn from. The text in this PDF is
     compressed, so sniffing its bytes for a word tests the encoder rather
     than the report."""
-    metadata = explained.explanation['metadata']
+    metadata = carried_by(explained)['metadata']
 
     assert metadata['target_column'] == 'flow'
     assert metadata['channel_labels'] == ['flow', 'temp']
@@ -525,7 +580,7 @@ def test_only_this_model_is_asked_to_explain_a_forecast(anomaly):
 def test_the_smoothness_of_the_latent_state_is_measured(explained):
     """Reported as null for every run before it was computed, so its page
     was never drawn."""
-    block = explained.explanation['explanation']['trajectory_stability']
+    block = carried_by(explained)['explanation']['trajectory_stability']
 
     assert block is not None
     assert block['n_time_steps'] == 512
@@ -543,7 +598,7 @@ def test_the_smoothness_is_the_history_walked_once(explained, forecast):
     from sdm_client.explain._explain import _standardised
     from sdm_client.explain._model import Forecaster
 
-    carried = explained.explanation
+    carried = carried_by(explained)
     window = _standardised(
         forecast, history().to_numpy().T[:, -512:].astype('float32')
     )
@@ -592,7 +647,7 @@ def test_the_embedding_is_measured_for_every_channel(over_channels):
     """Asked for alongside the feature axis, because it answers the question
     the feature axis raises: an influence attributed through a derivative
     that is not there is not an influence."""
-    block = over_channels.explanation['explanation']['feature_axis']
+    block = carried_by(over_channels)['explanation']['feature_axis']
     measured = block['embedding_stability']
 
     assert measured['channel_labels'] == ['flow', 'temp']
@@ -603,7 +658,7 @@ def test_the_embedding_is_measured_for_every_channel(over_channels):
 def test_the_embedding_is_not_measured_without_the_feature_axis(explained):
     """It costs a window per channel per trial, which is the feature axis's
     own order of cost and not the lag attribution's."""
-    block = explained.explanation['explanation'].get('feature_axis') or {}
+    block = carried_by(explained)['explanation'].get('feature_axis') or {}
 
     assert 'embedding_stability' not in block
 
@@ -695,7 +750,7 @@ def test_too_many_channels_leave_the_page_out_rather_than_the_rest(forecast):
             finally:
                 _explain._STABILITY_BYTES = kept
 
-    block = result.explanation['explanation']['feature_axis']
+    block = carried_by(result)['explanation']['feature_axis']
     assert 'embedding_stability' not in block
     assert block['channel_horizon_attributions'] is not None
     assert any(
@@ -721,7 +776,7 @@ def by_gradient(forecast):
 
 
 def test_the_gradient_attribution_covers_the_window_it_read(by_gradient):
-    block = by_gradient.explanation['explanation']['integrated_gradients']
+    block = carried_by(by_gradient)['explanation']['integrated_gradients']
 
     assert np.asarray(block['attribution']).shape == (2, 512)
     assert block['channel_labels'] == ['flow', 'temp']
@@ -849,7 +904,7 @@ def test_the_length_of_the_embedding_is_not_what_is_explained(forecast):
 
 def test_a_forecast_asked_without_gradients_does_not_pay_for_them(explained):
     """They walk a path of sixty-four windows and take a gradient at each."""
-    assert 'integrated_gradients' not in explained.explanation['explanation']
+    assert 'integrated_gradients' not in carried_by(explained)['explanation']
 
 
 def test_the_gradient_page_is_drawn(by_gradient, tmp_path):

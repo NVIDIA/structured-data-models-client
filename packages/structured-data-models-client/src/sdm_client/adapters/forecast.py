@@ -124,16 +124,12 @@ class ForecastAdapter:
                 f'it cannot be put in order',
                 code='INVALID_RESPONSE',
             )
-        explanation = next(
-            (item.explanation for item in items if item.explanation), None
-        )
         result = PredictionResult(
             model=model,
             request_id=request_id,
             items=items,
             metadata=dict(metadata or {}),
             outputs=outputs,
-            explanation=explanation,
         )
         result._names_its_rows = False
         result._names_its_step = True
