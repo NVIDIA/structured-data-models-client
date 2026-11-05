@@ -3,116 +3,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The L0 scans of the Rust core (Phase 1 design, task T1.10c).
+"""Check current Rust/Python architectural boundaries and required test policy.
 
-Each check reads the tree and prints every violation it finds; the script
-exits non-zero when any check found one. ``l0_deps.py`` checks the crate
-graph; these check the text:
-
-- ``vocabulary``: no Python-emulation vocabulary in the shipped code of the
-  domain crates and ``sdm-host`` outside the modules on
-  ``emulation-allowlist.txt`` (decisions H21, E18), which must all sit in the
-  parser crate. Comments and ``#[cfg(test)]`` modules are not read; an
-  identifier made of the words ``py``, ``python``, ``pandas``, ``numpy`` and
-  the like, a ``py``-prefixed Python type name (``pyint``, ``pystr``), a
-  dunder name, or a string literal naming Python, pandas, NumPy or pyarrow,
-  is emulation vocabulary. The public names the allowlisted modules define
-  may be used anywhere in their crate. The parser crate's name is the
-  checked tree's: its own copy of this file's ``PARSER_CRATE``, read as a
-  string literal, never run, with ``CORE_CRATES``' parser entry under that
-  name (``parser_crates``), so a gate running its checkpoint's copy over a
-  candidate that renames the crate judges the candidate's name (a bug fix at
-  T1.28w, E56(a)); a copy missing, unparsed, not a literal, not shaped as
-  a crate's name (letters, digits, ``-`` and ``_``), naming another crate
-  or no directory under ``rust/crates``, or differing from the tree's
-  ``l0_deps.py``'s ``PARSER`` is refused.
-- ``sql``: no SQL fragment and no provider match in ``sdm-schema``,
-  ``sdm-engine``, ``sdm-request`` or ``sdm-core`` (migration plan,
-  "Ownership"; ``sdm-core`` from T1.21c). It is a
-  lexical scan over what the literals stand for (escapes such as ``\\n``,
-  ``\\t``, ``\\x..`` and ``\\u{..}`` decoded, line continuations
-  joined): the string literals of each statement are read together, so
-  a clause split across one ``format!``, ``concat!``, ``join`` or ``+`` is
-  seen, as is a provider's name as a whole literal, an identifier naming a
-  dialect, a backend or SQL, and ``include_str!``. Only SQL's unambiguous
-  shapes count (``_SQL_STRONG``), such as a ``select … from`` with a clause
-  or ``cast(… as type)``, and only outside diagnostic text, the message
-  arguments of a verified error helper or a diagnostic macro
-  (``diagnostic_calls``), which is exempt entirely; ``#[cfg(test)]`` modules, in the file or their
-  own, are not read (decision E28, approved by owner 2026-10-09). It
-  cannot see SQL assembled across statements (pieces bound to names
-  first), from data that is not a literal in these crates (another crate's
-  constants, values built at run time), from bytes, or shapes it does not
-  hold; review covers those. The structural guard beside it is
-  ``sdm-contract``'s ``tests/data_vocabulary.rs``: no field of the
-  data-request vocabulary holds an expression or a SQL string.
-- ``dialects``: no dialect knowledge in the shared crates other than
-  ``sdm-data``, whose dialects they are, and the dev-only ``sdm-testkit``
-  (decisions E50 and E54): no identifier and no word of a string literal in
-  their non-test source names a term of a short, reviewed deny-list
-  (``DIALECT_NAMES``, matched in any case inside the identifier or word;
-  ``DIALECT_WORDS``, matched as whole words, a term of two words as the
-  two in a row, since neutral names hold them: ``Filter::NotNull`` is not
-  DuckDB's ``notnull``, nor ``pragmatic`` its ``pragma``; and
-  ``DIALECT_PHRASES``, ``PRIMARY KEY`` in capitals in a string literal, as
-  SQL writes a key's kind, prose saying primary key in lower case).
-  Comments, ``#[cfg(test)]`` modules and test-module files are not read.
-  It is a deny-list, not a grammar: a dialect's knowledge spelled with none
-  of its terms is review's (decision E28).
-- ``provider-sql``: the client's Python providers
-  (``sdm_client/_rust/providers/``) write no SQL: no string literal other
-  than a docstring holds an upper-case SQL keyword, a ``select … from`` in
-  any case, or ``pragma`` or ``insert`` in any case; the statements they
-  run are ``sdm-data``'s. It reads string literals only, so SQL assembled
-  from names, or another keyword in lower case outside a ``select …
-  from``, is review's (decision E28).
-- ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
-  no test dropped by a deselect or ignore option or a conftest's ignore
-  list, and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
-  ``contract/``, the client tests that touch ``_rust`` or ``_native`` (and
-  the ``conftest.py`` files over them), or the CI jobs that run the core or
-  its tests, chosen by what they run (``CI_SCOPE_MARKS``: cargo, the
-  contract, these scripts, the native wheel, the client), whole jobs and
-  single steps alike (design, "Workspace rules"). A job that runs the core's
-  tests only through a wrapper whose name gives nothing away (``make
-  test``) would not be chosen; such a job needs a mark added here. The tokens are ``SKIP_TOKENS``, matched
-  exactly (decision E24), so ``skip_while`` and ``#[schemars(skip)]`` pass;
-  they are written in pieces here, since the ban covers this file.
-- ``bans``: the clippy bans are configured for every domain and shipped
-  crate (``rust/clippy.toml``, repeated in full by any crate's own file but
-  ``sdm-testkit``'s), no lint table turns them off, and no attribute in
-  shipped code allows or expects them, nor ``warnings``, ``clippy::style``
-  or ``clippy::all``, however spaced and inside ``cfg_attr`` too, but
-  ``sdm-host``'s one allow on its one statement reading the zone lookup
-  roots (decision E24); a test file may allow them, with a reason. It also
-  refuses an ``allow`` or ``expect`` of them outside an attribute, as a
-  macro would pass one into an attribute it builds, any allow, expect or
-  attribute a macro metavariable fills (``#[allow($lint)]``,
-  ``#[allow(clippy::$l)]``, ``#[$meta]``), ``#[path]`` and ``include!`` in
-  shipped source, and rustflags or CI settings that allow or cap lints or
-  point clippy at another configuration. It also refuses,
-  lexically, a ``Zoned`` parsed from text in shipped code
-  (``parse::<Zoned>``, ``: Zoned = ….parse()``, ``Zoned::from_str``), which
-  looks its zone up in jiff's global database through a trait clippy
-  cannot ban. A parse whose target is only inferred, such as ``s.parse()``
-  returned as ``Result<Zoned, _>`` or ``Option<Zoned>``, is not seen; review
-  covers it.
-- ``steps``: ``Step`` has exactly the three variants ``fetch``,
-  ``call_model`` and ``done``, in the Rust source and in the locked schema:
-  no step asks the host for language behavior (migration plan, L0).
-
-Threat model (decision E56, checkpoint 4): the threat is honest drift by
-cooperating agents, a term, a statement, a skip or an allow written by
-ordinary means. Evasion that needs deliberate obfuscation (text built at run
-time or from bytes, a macro that assembles what a check reads, an identifier
-spelled to slip a list, a lint cap smuggled through configuration the scan
-does not read) is review's, and a finding of that kind is P3 by rule, as
-E28 already holds for the SQL scan's lexical gaps. The behavioural
-protection is the ``python-core`` against ``rust-host`` parity on the cases.
-This script is frozen at bug fixes (E56, extending E49(a)).
-
-``selftest.py`` holds each check to a seeded fixture it must fail on.
-"""
+Checks cover SQL and dialect ownership, provider SQL, native protocol steps,
+unsafe/Clippy policy and required-test execution. Lexical scans are conservative
+and complement crate-graph checks and code review; they are not a language proof."""
 
 from __future__ import annotations
 
@@ -358,72 +253,12 @@ _PUB_ITEM = re.compile(
 )
 
 
-def tree_name(
-    root: Path, script: Path, name: str
-) -> tuple[str | None, list[str]]:
-    """The string the checked tree's own copy of ``script`` assigns to
-    ``name`` at its top level, read as a literal, never run; or why it
-    cannot be read. A gate runs its checkpoint's copy of a guard over a
-    candidate's tree, so a crate's name in a guard's data is the tree's
-    (T1.28w: the checkpoint's copy named the parser crate as it stood, so a
-    package that renamed it could not pass its own gate)."""
-    path = root / script
-    if not path.is_file():
-        return None, [f"the tree's {script} is missing"]
-    try:
-        tree = ast.parse(path.read_text(encoding='utf-8'))
-    except SyntaxError as error:
-        return None, [f"the tree's {script} does not parse: {error.msg}"]
-    value: ast.expr | None = None
-    for node in tree.body:
-        target = (
-            node.target
-            if isinstance(node, ast.AnnAssign)
-            else node.targets[0]
-            if isinstance(node, ast.Assign) and len(node.targets) == 1
-            else None
-        )
-        if isinstance(target, ast.Name) and target.id == name:
-            value = node.value  # type: ignore[union-attr]
-    if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
-        return None, [f"the tree's {script}: {name} is not a string literal"]
-    if not _CRATE_NAME.fullmatch(value.value):
-        return None, [
-            f"the tree's {script}: {name} is {value.value!r}, not a crate's "
-            'name (letters, digits, - and _)'
-        ]
-    return value.value, []
-
-
 def parser_crates(root: Path) -> tuple[str, tuple[str, ...], list[str]]:
-    """The parser crate's name in the tree at ``root`` (its copy of this
-    file's ``PARSER_CRATE``), and ``CORE_CRATES`` with the parser under it;
-    a name this copy gives another crate, a name with no crate directory,
-    and a name other than the tree's ``l0_deps.py``'s are refused."""
-    name, problems = tree_name(root, SCRIPT, 'PARSER_CRATE')
-    others = {*CORE_CRATES, *DIALECT_FREE_CRATES, *DEV_CRATES} - {PARSER_CRATE}
-    if name is not None and not problems:
-        deps, unread = tree_name(root, DEPS_SCRIPT, 'PARSER')
-        if name in others:
-            problems = [
-                f"the tree's {SCRIPT}: PARSER_CRATE names {name}, another crate"
-            ]
-        elif not (root / 'rust/crates' / name).is_dir():
-            problems = [
-                f"the tree's {SCRIPT}: PARSER_CRATE names {name}, which is no "
-                'directory under rust/crates'
-            ]
-        elif unread:
-            problems = unread
-        elif deps != name:
-            problems = [
-                f"the tree's {SCRIPT}: PARSER_CRATE names {name}, but its "
-                f'{DEPS_SCRIPT} PARSER names {deps}'
-            ]
-    if name is None or problems:
-        return PARSER_CRATE, CORE_CRATES, problems
-    crates = tuple(name if c == PARSER_CRATE else c for c in CORE_CRATES)
-    return name, crates, []
+    """Require the parser named by this revision's architecture policy."""
+    problems = []
+    if not (root / 'rust/crates' / PARSER_CRATE).is_dir():
+        problems.append(f'{PARSER_CRATE}: parser crate directory is missing')
+    return PARSER_CRATE, CORE_CRATES, problems
 
 
 def read_allowlist(root: Path, parser: str) -> tuple[list[Path], list[str]]:

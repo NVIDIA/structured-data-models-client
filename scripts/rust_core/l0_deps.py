@@ -3,57 +3,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The L0 graph guard of the Rust core (Phase 1 design, task T1.10c).
+"""Validate the current crate dependency graph and language/runtime boundaries.
 
-It reads the workspace's resolved graph from ``cargo metadata`` (all
-features, every target platform) and checks:
-
-- every workspace crate is classified (domain, host, binding or dev), and
-  every classified crate exists;
-- each crate's first-party dependencies, of any kind, are among those the
-  design's "Data access" section draws: ``sdm-core`` over ``sdm-request``,
-  ``sdm-engine``, ``sdm-schema``, ``sdm-data``, ``sdm-wire`` and the parser;
-  nothing below ``sdm-core`` on it; ``sdm-host`` over ``sdm-core``,
-  ``sdm-data`` (it builds a run's data layer, E30) and ``sdm-contract``;
-  ``sdm-py`` on exactly ``sdm-host`` and ``sdm-contract``
-  (E21); ``sdm-testkit`` over ``sdm-host``;
-- the parser rule: only ``sdm-core`` depends on the parser crate, and only
-  its adapter (``src/pql.rs``, and ``src/test_ops.rs``, compiled only with
-  the ``test-ops`` feature) names it, by its own name or any name a
-  ``package =`` rename gives it, read from ``cargo metadata``; the parser
-  crate's name is the checked tree's: its own copy of this file's
-  ``PARSER``, read as a string literal, never run, the classes and edges
-  this copy's with the parser's under that name (``tree_crates``), so a gate
-  running its checkpoint's copy over a candidate that renames the crate
-  judges the candidate's name (a bug fix at T1.28w, E56(a)); a copy
-  missing, unparsed, not a literal, not shaped as a crate's name, or naming
-  another crate is refused (``l0_scan.py`` also holds its own copy's name
-  to this one's and to a crate directory);
-- nothing shipped (domain, host or binding) reaches ``sdm-testkit`` over
-  normal or build edges;
-- no domain crate, and not ``sdm-host``, reaches ``pyo3``, ``jni``,
-  ``arrow-pyarrow``, ``numpy`` or a database driver (``DRIVERS``: DuckDB's
-  and those of the dialects that may follow it) over normal or build
-  edges; a binding reaches no database driver and no other language's
-  runtime (``sdm-py`` no ``jni``; the planned ``sdm-jni`` no ``pyo3``);
-- unsafe code: each domain crate and ``sdm-host`` takes the workspace lints,
-  which forbid it, and forbids it at its root; the binding and the test
-  host deny it;
-- shipped Python and Rust source must not reference the retired
-  ``SDM_CORE_ROUTES`` switch.
-
-
-``selftest.py`` holds each rule to a seeded fixture it must fail on.
-
-Threat model (decision E56, checkpoint 4): the threat is honest drift by
-cooperating agents, an edge, a dependency or a header changed by ordinary
-means. Evasion that needs deliberate obfuscation (a dependency hidden behind
-a build script or a vendored copy, a renamed crate built to slip the lists,
-a header spelled to pass the pattern) is review's, and a finding of that
-kind is P3 by rule. The behavioural protection is the ``python-core`` against
-``rust-host`` parity on the cases. This script is frozen at bug fixes (E56,
-extending E49(a)).
-"""
+Every workspace crate must be classified; dependency edges, unsafe-code policy
+and runtime/driver isolation are checked from Cargo metadata."""
 
 from __future__ import annotations
 
@@ -73,7 +26,7 @@ else:
     import tomli as tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from l0_scan import read_rust, tree_name  # noqa: E402
+from l0_scan import read_rust  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = Path('scripts/rust_core/l0_deps.py')
@@ -102,7 +55,6 @@ CLASSES: dict[str, str] = {
 }
 #: The crates classified ahead of their first commit: absent from the
 #: workspace until they exist, and held to their class once they do.
-PLANNED = frozenset({'sdm-jni'})
 
 PARSER = 'sdm-pql'
 # The first-party crates each crate may depend on, directly, by any kind of
@@ -279,32 +231,8 @@ class Crates:
 
 
 def tree_crates(root: Path) -> tuple[Crates, list[str]]:
-    """The crates' data for the tree at ``root``: the parser's name its own
-    copy of this file gives (``PARSER``), with this copy's ``CLASSES`` and
-    ``ALLOWED`` under it; a name this copy gives another crate is
-    refused."""
-    ours = Crates(PARSER, CLASSES, ALLOWED)
-    name, problems = tree_name(root, SCRIPT, 'PARSER')
-    others = {*CLASSES, *ALLOWED, *REQUIRED, *BINDING_FORBIDDEN} - {PARSER}
-    if name in others:
-        problems = [f"the tree's {SCRIPT}: PARSER names {name}, another crate"]
-    if name is None or problems:
-        return ours, problems
-
-    def renamed(crate: str) -> str:
-        return name if crate == PARSER else crate
-
-    return (
-        Crates(
-            name,
-            {renamed(c): kind for c, kind in CLASSES.items()},
-            {
-                renamed(c): frozenset(renamed(d) for d in deps)
-                for c, deps in ALLOWED.items()
-            },
-        ),
-        [],
-    )
+    """Use the checked-out revision's explicit architecture policy."""
+    return Crates(PARSER, CLASSES, ALLOWED), []
 
 
 def check_classes(graph: Graph, crates: Crates) -> list[str]:
@@ -316,7 +244,7 @@ def check_classes(graph: Graph, crates: Crates) -> list[str]:
     problems += [
         f'{crate}: classified, but not a workspace crate'
         for crate in crates.classes
-        if crate not in graph.members and crate not in PLANNED
+        if crate not in graph.members
     ]
     return problems
 

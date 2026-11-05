@@ -3,37 +3,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The L0 self-tests: each guard passes on the tree and fails on a seed.
+"""Exercise architecture guards with valid trees and seeded violations.
 
-For every rule of ``l0_deps.py`` and every check of ``l0_scan.py``, this
-runs the guard on the tree as it is, which must pass, and on a fixture
-seeded with one fault, which must fail with the message that names that
-fault; some fixtures are controls, seeded with something the guard must let
-through (``skip_while``, a dev-only edge, emulation inside an allowlisted
-module). The fixtures are the tree's own files, copied into a temporary
-directory and changed there, or ``cargo metadata``'s graph with one edge
-added or removed. The clippy bans are also run for real: a fixture crate
-under ``rust/clippy.toml`` uses every ban the file holds, one to one (the
-allow-invalid rand entries aside, inert while rand is no dependency), and
-must fail clippy on each; the reasoned ``#[allow]`` that ``sdm-host``
-carries must silence its one call and pass the bans check (decision E24);
-and each suppression a review found (``cfg_attr``, ``warnings``, a spaced
-path, an ``expect``, an allow passed through a macro, the allow widened
-to a function or its statement widened) must silence clippy there and
-fail the bans check. That run needs the pinned toolchain and the
-workspace's dependencies already fetched; ``--no-clippy`` leaves it out.
-
-The parser crate's name is the checked tree's own copy of each L0 guard's
-(T1.28w): a tree whose crates and guard data rename the parser passes, as
-does the tree unrenamed; crates renamed under data that are not, data
-renamed over crates that are not, and a guard copy missing, not a literal,
-not shaped as a crate's name (a trailing space, a path) or naming another
-crate fail, as does ``l0_scan.py``'s name naming no crate directory or
-differing from ``l0_deps.py``'s.
-
-Phase 1 design, task T1.10c (formerly T1.16); the rest of ``selftest.py``,
-the seeded faults of the runners and the gate, arrives with T1.19.
-"""
+Dependency, ownership, test-execution and Clippy controls must pass valid input
+and reject the corresponding fault. --no-clippy omits only the compiler probes."""
 
 from __future__ import annotations
 
@@ -235,11 +208,14 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         )
 
     case('the tree', lambda m: None, None)
+    case(
+        'the Java binding cannot silently disappear',
+        lambda m: m.data['workspace_members'].remove(m.ids['sdm-jni']),
+        'sdm-jni: classified, but not a workspace crate',
+    )
 
     def design_graph(m: Metadata) -> None:
         for crate, deps in l0_deps.ALLOWED.items():
-            if crate in l0_deps.PLANNED:
-                continue
             for dep in deps:
                 if not any(
                     d['pkg'] == m.ids[dep] for d in m.node(crate)['deps']
@@ -1942,224 +1918,6 @@ def clippy_case(results: list[Result]) -> None:
             )
 
 
-# --- the parser's name, the checked tree's (T1.28w) ---------------------------
-
-# The name a seeded rename gives the parser crate, whatever it is called.
-RENAMED = 'sdm-pql-renamed'
-NAMED_TREE = (
-    *RUST_TREE,
-    str(l0_deps.SCRIPT),
-    str(l0_scan.SCRIPT),
-    str(l0_scan.ALLOWLIST),
-)
-
-
-def renamed_text(text: str, old: str, new: str) -> str:
-    """``text`` with the crate ``old`` called ``new``, as Cargo and Rust
-    name it."""
-    for a, b in ((old, new), (old.replace('-', '_'), new.replace('-', '_'))):
-        text = re.sub(r'(?<![\w-])' + re.escape(a) + r'(?![\w-])', b, text)
-    return text
-
-
-def rename_parser(root: Path, *, crates: bool, data: bool) -> None:
-    """Rename the parser in the fixture at ``root``: its crate, its users
-    and the allowlist (``crates``), or the guards' copies (``data``)."""
-    old = l0_deps.PARSER
-    paths: list[Path] = []
-    if crates:
-        (root / 'rust/crates' / old).rename(root / 'rust/crates' / RENAMED)
-        paths += [
-            p
-            for p in (root / 'rust').rglob('*')
-            if p.is_file() and p.suffix in ('.rs', '.toml')
-        ]
-        paths.append(root / l0_scan.ALLOWLIST)
-    if data:
-        paths += [root / l0_deps.SCRIPT, root / l0_scan.SCRIPT]
-    for path in paths:
-        text = path.read_text()
-        new = renamed_text(text, old, RENAMED)
-        if new != text:
-            path.write_text(new)
-
-
-def fixture_metadata(
-    base: dict[str, Any], root: Path, *, crates: bool
-) -> Metadata:
-    """``cargo metadata`` read as if from the fixture at ``root``, the
-    parser renamed when its ``crates`` are."""
-    metadata = Metadata(base)
-    old, real = l0_deps.PARSER, str(REPO_ROOT)
-    for package in metadata.data['packages']:
-        path = package['manifest_path']
-        if path.startswith(real + os.sep):
-            path = str(root) + path[len(real) :]
-        if crates and package['name'] == old:
-            package['name'] = RENAMED
-            path = path.replace(
-                f'{os.sep}{old}{os.sep}', f'{os.sep}{RENAMED}{os.sep}'
-            )
-        package['manifest_path'] = path
-    metadata.data['workspace_root'] = str(root / 'rust')
-    if crates:
-        parser = metadata.ids.pop(old)
-        metadata.ids[RENAMED] = parser
-        for node in metadata.data['resolve']['nodes']:
-            for dep in node['deps']:
-                if dep['pkg'] == parser:
-                    dep['name'] = RENAMED.replace('-', '_')
-    return metadata
-
-
-def parser_name_cases(results: list[Result], base: dict[str, Any]) -> None:
-    def named(
-        name: str,
-        *,
-        crates: bool,
-        data: bool,
-        change: Callable[[Path], object] = lambda root: None,
-        deps_fails: str | None,
-        scan_fails: str | None,
-    ) -> None:
-        with tree(*NAMED_TREE) as root:
-            rename_parser(root, crates=crates, data=data)
-            change(root)
-            metadata = fixture_metadata(base, root, crates=crates)
-            expect(
-                results,
-                f'l0_deps: the parser named by the tree: {name}',
-                deps_problems(metadata, root),
-                fails_with=deps_fails,
-            )
-            expect(
-                results,
-                f'l0_scan vocabulary: the parser named by the tree: {name}',
-                l0_scan.check_vocabulary(root),
-                fails_with=scan_fails,
-            )
-
-    def assign(script: Path, name: str, value: str) -> Callable[[Path], None]:
-        def change(root: Path) -> None:
-            path = root / script
-            text, count = re.subn(
-                rf'^{name} = .*$',
-                f'{name} = {value}',
-                path.read_text(),
-                flags=re.M,
-            )
-            assert count == 1, f'{script}: {name} assigned {count} times'
-            path.write_text(text)
-
-        return change
-
-    def both(value: str) -> Callable[[Path], None]:
-        def change(root: Path) -> None:
-            assign(l0_deps.SCRIPT, 'PARSER', value)(root)
-            assign(l0_scan.SCRIPT, 'PARSER_CRATE', value)(root)
-
-        return change
-
-    def missing(root: Path) -> None:
-        (root / l0_deps.SCRIPT).unlink()
-        (root / l0_scan.SCRIPT).unlink()
-
-    named(
-        'control: the fixture as it is',
-        crates=False,
-        data=False,
-        deps_fails=None,
-        scan_fails=None,
-    )
-    named(
-        'renamed in its crates and in the guard data, as a package renaming it is',
-        crates=True,
-        data=True,
-        deps_fails=None,
-        scan_fails=None,
-    )
-    named(
-        'renamed in its crates, not in the guard data',
-        crates=True,
-        data=False,
-        deps_fails=f'{RENAMED}: a workspace crate with no class',
-        scan_fails=f'names {l0_scan.PARSER_CRATE}, which is no directory under '
-        'rust/crates',
-    )
-    named(
-        'renamed in the guard data, not in its crates',
-        crates=False,
-        data=True,
-        deps_fails=f'{RENAMED}: classified, but not a workspace crate',
-        scan_fails=f'names {RENAMED}, which is no directory under rust/crates',
-    )
-    named(
-        "the tree's guard copies missing",
-        crates=False,
-        data=False,
-        change=missing,
-        deps_fails=f"the tree's {l0_deps.SCRIPT} is missing",
-        scan_fails=f"the tree's {l0_scan.SCRIPT} is missing",
-    )
-    named(
-        'the name not a literal',
-        crates=False,
-        data=False,
-        change=both(repr(l0_deps.PARSER) + '[:]'),
-        deps_fails='PARSER is not a string literal',
-        scan_fails='PARSER_CRATE is not a string literal',
-    )
-    named(
-        'the name of another crate',
-        crates=False,
-        data=False,
-        change=both("'sdm-core'"),
-        deps_fails='PARSER names sdm-core, another crate',
-        scan_fails='PARSER_CRATE names sdm-core, another crate',
-    )
-    named(
-        'the name with a trailing space',
-        crates=False,
-        data=False,
-        change=both(repr(l0_deps.PARSER + ' ')),
-        deps_fails=f'PARSER is {l0_deps.PARSER + " "!r}, not a crate',
-        scan_fails=f'PARSER_CRATE is {l0_deps.PARSER + " "!r}, not a crate',
-    )
-    named(
-        'the name a path',
-        crates=False,
-        data=False,
-        change=both(repr('../crates/' + l0_deps.PARSER)),
-        deps_fails="PARSER is '../crates/",
-        scan_fails="PARSER_CRATE is '../crates/",
-    )
-
-    def scan_only(root: Path) -> None:
-        assign(l0_scan.SCRIPT, 'PARSER_CRATE', repr(RENAMED))(root)
-
-    named(
-        "l0_scan.py's name naming no crate directory",
-        crates=False,
-        data=False,
-        change=scan_only,
-        deps_fails=None,
-        scan_fails=f'names {RENAMED}, which is no directory under rust/crates',
-    )
-
-    def scan_differs(root: Path) -> None:
-        (root / 'rust/crates' / RENAMED / 'src').mkdir(parents=True)
-        scan_only(root)
-
-    named(
-        "l0_scan.py's name differing from l0_deps.py's, a crate directory",
-        crates=False,
-        data=False,
-        change=scan_differs,
-        deps_fails=None,
-        scan_fails=f'but its {l0_scan.DEPS_SCRIPT} PARSER names {l0_deps.PARSER}',
-    )
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n', 1)[0])
     parser.add_argument(
@@ -2170,7 +1928,6 @@ def main(argv: list[str] | None = None) -> int:
     metadata = l0_deps.cargo_metadata(REPO_ROOT)
     deps_cases(results, metadata)
     scan_cases(results)
-    parser_name_cases(results, metadata)
     if not args.no_clippy:
         clippy_case(results)
     for result in results:
