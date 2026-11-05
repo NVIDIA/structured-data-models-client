@@ -514,7 +514,7 @@ class PredictiveQuery:
         version = whole._core.version
         gathered = []
         for position, named, payload, query in [
-            (parts.position, parts.name, whole.payloads[0], parts.query),
+            (parts.position, parts.name, whole._envelopes[0], parts.query),
             *(
                 (part.position, part.name, part.payload, part.query)
                 for part in parts.later
@@ -572,7 +572,7 @@ class PredictiveQuery:
         version = whole._core.version
         gathered = []
         for step, payload, query in [
-            (parts.position, whole.payloads[0], parts.query),
+            (parts.position, whole._envelopes[0], parts.query),
             *(
                 (part.position, part.payload, part.query)
                 for part in parts.later

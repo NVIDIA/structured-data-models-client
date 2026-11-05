@@ -48,12 +48,11 @@ python probe_cloud.py         # S3   (needs AWS credentials and /tmp/qa_bucket)
 python probe_warehouse.py     # Snowflake and Databricks (needs SNOWFLAKE_*, DATABRICKS_*)
 ```
 
-The relational live-NIM contract tests have a runner that creates its own
-environment and defaults to the smoke suite:
+The live-NIM tests of the client run from its own suite:
 
 ```bash
-qa/run_rfm_nim_live_tests.sh --url http://localhost:8001
-qa/run_rfm_nim_live_tests.sh --url http://localhost:8001 --full
+SDM_TABULAR_URL=http://localhost:8000 SDM_RELATIONAL_URL=http://localhost:8001 \
+  python -m pytest packages/structured-data-models-client/tests -m live_nim -q
 ```
 
 Each writes a JSON record to `~/sdm-qa/findings/` and prints a summary. A probe

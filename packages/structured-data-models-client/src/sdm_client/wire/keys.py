@@ -263,10 +263,10 @@ def scored_rows(
     pinned schema. Settled here instead, the same entity has
     one name on each side and neither meets the other.
     """
-    if request.payloads:
+    if request._envelopes:
         return [
             named
-            for payload in request.payloads
+            for payload in request._envelopes
             for named in rows_in(payload, 'predict', with_anchor=with_anchor)
         ]
     frame = getattr(request.predict, 'instance_table', None)

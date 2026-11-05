@@ -3086,6 +3086,24 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         ),
     };
     options_taken(&inputs)?;
+    // A seed the caller named that the provider cannot draw by is said once.
+    if matches!(asked_values.seed, AskedSeed::Given(_))
+        && asker
+            .capabilities()
+            .is_ok_and(|c| c.sampling == sdm_contract::data::Determinism::Unseeded)
+    {
+        asker.warn(CoreWarning {
+            fields: [(
+                "database".to_owned(),
+                Detail::text(asker.source_database().unwrap_or_default()),
+            )]
+            .into(),
+            ..CoreWarning::new(
+                Sentence::SeedIgnored,
+                "the provider cannot draw a seeded sample, so the seed is ignored",
+            )
+        });
+    }
     if seed.as_ref().is_some_and(Seed::is_negative) {
         return Err(
             CoreError::new(Sentence::SeedNegative, "a sampling seed cannot be negative")
@@ -3201,10 +3219,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // (iii)).
     let statistic = options::statistic(prediction_statistic.as_deref())?;
     reserved(&description)?;
-    // Every input check of the request made, the tables are read, as the
-    // reference's engine reads its tables (`relational.py:520-522`,
-    // `materializers/sources.py:61-71`): a source's tables as they stand at
-    // this run, a host provider's columns that held no facts. On every
+    // Every input check of the request made, the tables are read: a
+    // source's tables as they stand at this run, a host provider's columns
+    // that held no facts. The reference's engine read a source's tables once
+    // and kept them on the schema (`materializers/sources.py:56-71`); this
+    // reads them again each run, so a column dropped or retyped since is
+    // found, at the cost of the catalog and preview reads. On every
     // path, every check over what the source holds comes after: the
     // engine's meanings, time columns and edges ([`kept_checks`]), the
     // graph and what the sampler needs.
@@ -3528,8 +3548,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             column: time.clone(),
         });
     }
-    // Seeds are optional. An unseeded provider documents its limitation
-    // without issuing a routine warning for the default seed (P3D-13).
+    // Seeds are optional. An unseeded provider warns only of a seed the
+    // caller named, above, not of the default one.
     let sampled = if let Some(frames) = &frames {
         frames.entities(entity, &entity.ordered(&entity_columns), trials, &seed)?
     } else {

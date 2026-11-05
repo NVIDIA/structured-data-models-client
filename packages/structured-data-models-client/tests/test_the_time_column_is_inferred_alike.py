@@ -450,3 +450,31 @@ def test_a_customer_can_be_counted_once_its_edit_stamp_is_refused(
             schema,
         ).materialize(indices=[1, 2, 3])
     assert request is not None
+
+
+@pytest.mark.parametrize(
+    ('time_columns', 'declared'),
+    [
+        (None, {'ts'}),
+        ({'t': 'sdate'}, {'ts', 'sdate'}),
+        ({'t': None}, {'ts'}),
+    ],
+    ids=['inferred', 'named', 'none'],
+)
+def test_a_frames_time_column_is_a_declared_meaning(
+    time_columns: Any, declared: set[str]
+) -> None:
+    frame = pd.DataFrame(
+        {
+            'id': [1, 2, 3],
+            'ts': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03']),
+            'sdate': ['2024-01-01', '2024-01-02', '2024-01-03'],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        table = Schema.from_data({'t': frame}, time_columns=time_columns)['t']
+
+    assert {
+        name for name, column in table.columns.items() if column.stype_declared
+    } == declared

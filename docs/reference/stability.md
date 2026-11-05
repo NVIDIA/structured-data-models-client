@@ -47,6 +47,11 @@ What *is* promised beyond the names: the exception hierarchy under
 and the columns `PredictionResult.to_pandas()` produces for a given set of
 requested output fields.
 
+`PROVIDER_ERROR` is the code of a failure in the data source a schema reads,
+such as a warehouse query that errors; where the client saw the driver's
+exception, `details['driver_class']` names its class. 1.0.0 reported these as
+`INTERNAL_ERROR`.
+
 ## Java and the shared Rust implementation
 
 Java's public surface is the public classes in `com.nvidia.sdm`, including public nested builders and their public/protected members.

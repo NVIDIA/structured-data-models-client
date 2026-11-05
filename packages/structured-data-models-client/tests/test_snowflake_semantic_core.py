@@ -301,3 +301,100 @@ def test_missing_semantic_view_has_a_named_error_without_driver_text(
     assert 'row-canary' not in str(raised.value)
     assert 'driver-sql-canary' not in str(raised.value)
     assert len(connection.requests) == 1
+
+
+def test_a_definition_read_that_fails_otherwise_is_a_provider_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection, model = _source(monkeypatch)
+    connection.failure = RuntimeError('row-canary connection reset by peer')
+    with pytest.raises(StructuredDataError) as raised:
+        Schema.from_source(model)
+    assert raised.value.code == 'PROVIDER_ERROR'
+    assert 'row-canary' not in str(raised.value)
+    assert len(connection.requests) == 1
+
+
+@pytest.mark.parametrize(
+    ('options', 'warned'),
+    [({}, False), ({'random_seed': 7}, True)],
+    ids=['default seed', 'seed given'],
+)
+def test_a_seed_snowflake_cannot_draw_by_is_said_to_be_ignored(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any], warned: bool
+) -> None:
+    import warnings
+
+    _, model = _source(monkeypatch)
+    schema = Schema.from_source(
+        model, tables={'people': 'USERS'}, relationships=[]
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT people.AGE FOR EACH people.USER_ID', schema
+        ).materialize(
+            indices=[0, 1],
+            num_context_samples=4,
+            model='kumo-relational',
+            **options,
+        )
+    ignored = [
+        str(w.message) for w in caught if 'random_seed' in str(w.message)
+    ]
+    assert bool(ignored) is warned
+    if warned:
+        assert "'snowflake' backend" in ignored[0]
+
+
+class _ProgrammingError(Exception):
+    r"""Stands in for the Snowflake driver's error on an unknown column."""
+
+
+@pytest.mark.parametrize(
+    ('missing', 'code'),
+    [('table', 'INVALID_REQUEST'), ('column', 'PROVIDER_ERROR')],
+)
+def test_a_view_naming_what_is_not_there_is_refused(
+    monkeypatch: pytest.MonkeyPatch, missing: str, code: str
+) -> None:
+    recorded = _RecordedSemanticProvider.__init__
+    answer = _RecordedSemanticProvider.__call__
+
+    def without(self: _RecordedSemanticProvider, connection: Any) -> None:
+        recorded(self, connection)
+        users = self.catalogs['USERS']
+        if missing == 'table':
+            self.catalogs['ORDERS'] = self.catalogs['ORDERS'].slice(0, 0)
+        else:
+            names = users.column('name').to_pylist()
+            self.catalogs['USERS'] = users.filter([n != 'AGE' for n in names])
+
+    def unknown_column(
+        self: _RecordedSemanticProvider, step: dict[str, Any], keys: Any = None
+    ) -> pa.Table:
+        request = step['request']
+        if (
+            missing == 'column'
+            and request['request'] == 'preview'
+            and request['table']['source'][-1] == 'USERS'
+        ):
+            raise _ProgrammingError("invalid identifier 'AGE'")
+        return answer(self, step, keys)
+
+    monkeypatch.setattr(_RecordedSemanticProvider, '__init__', without)
+    monkeypatch.setattr(_RecordedSemanticProvider, '__call__', unknown_column)
+    _, model = _source(monkeypatch)
+
+    with pytest.raises(StructuredDataError) as raised:
+        Schema.from_source(model)
+
+    assert raised.value.code == code
+    if missing == 'table':
+        assert "ORDERS' does not exist" in raised.value.message
+        assert (
+            raised.value.details['semantic_model']
+            == 'view_semantic_from_source'
+        )
+    else:
+        assert 'AGE' not in str(raised.value)

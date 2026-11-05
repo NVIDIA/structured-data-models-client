@@ -17,7 +17,7 @@
 
   <groupId>com.nvidia</groupId>
   <artifactId>structured-data-models-client</artifactId>
-  <!-- Released with the client at its version (rust/Cargo.toml's). -->
+  <!-- Kept at the client's version (rust/Cargo.toml's). -->
   <version>2.0.0rc1</version>
   <packaging>jar</packaging>
 

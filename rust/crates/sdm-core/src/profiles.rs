@@ -229,7 +229,8 @@ pub fn check_capabilities(query: &QueryFeatures, profile: &Profile) -> Vec<PqlDi
         refuse(
             codes::MODEL_SINGLE_TABLE_ONLY,
             format!(
-                "This query reads {} as well as '{entity}', and {model} predicts from one table.",
+                "This query reads {} as well as '{entity}', and {model} predicts from one table. \
+                 Move the columns into '{entity}', or use a model that reads relationships.",
                 and_list(&others)
             ),
         );
@@ -248,7 +249,10 @@ pub fn check_capabilities(query: &QueryFeatures, profile: &Profile) -> Vec<PqlDi
     if !query.temporal_target && !can.static_ {
         refuse(
             codes::MODEL_NO_STATIC_TARGET,
-            format!("{model} predicts over a time range, and this target carries none."),
+            format!(
+                "{model} predicts over a time range, and this target carries none. Add one, for \
+                 example (0, 30, days)."
+            ),
         );
     }
     if !can.derived_targets && query.derived_target {
@@ -256,7 +260,8 @@ pub fn check_capabilities(query: &QueryFeatures, profile: &Profile) -> Vec<PqlDi
             codes::MODEL_NO_DERIVED_TARGET,
             format!(
                 "The target is computed from the table rather than stored in it, and {model} \
-                 predicts a column as it stands."
+                 predicts a column as it stands. Add the derived value as a column of \
+                 '{entity}' and predict that column."
             ),
         );
     }
@@ -265,7 +270,7 @@ pub fn check_capabilities(query: &QueryFeatures, profile: &Profile) -> Vec<PqlDi
             codes::MODEL_NO_ENTITY_FILTER,
             format!(
                 "This query filters the entities it predicts for, and {model} scores the rows \
-                 it is given."
+                 it is given. Filter the rows before constructing the query."
             ),
         );
     }
@@ -274,7 +279,7 @@ pub fn check_capabilities(query: &QueryFeatures, profile: &Profile) -> Vec<PqlDi
             codes::MODEL_NO_COUNTERFACTUAL,
             format!(
                 "This query asks what would happen under an ASSUMING clause, and {model} scores \
-                 the rows it is given as they stand."
+                 the rows it is given as they stand. Change the values in those rows instead."
             ),
         );
     }

@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 The Java library uses the same Rust engine as Python, loaded from the JAR through JNI; see the [engine boundary diagrams](../docs/development/engine-boundaries.md).
 It describes the tables of a DuckDB, SQLite, Postgres or Databricks database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does.
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
-Publication requires separate release approval and the maintained release gates.
+The library is built and tested in CI, but it is not released: there is no Maven publication and no release JAR. Build it from source as below.
 
 ## Read semantic predictions
 
@@ -148,7 +148,7 @@ If a later model call fails, `exception.answered(allocator)` returns any complet
 |---|---|
 | Group | `com.nvidia` |
 | Artifact | `structured-data-models-client` |
-| Version | the client's (`2.0.0rc1`, unpublished release candidate) |
+| Version | the client's (`2.0.0rc1`); not released |
 | Java package | `com.nvidia.sdm` |
 | Bytecode | Java 17, tested on JDK 17 and 21 |
 | Natives in the JAR | Linux x86_64 and aarch64 (glibc 2.17 or later), macOS arm64 and x86_64, Windows x86_64 |
@@ -279,7 +279,7 @@ Warehouse-backed schemas retain their existing Relational workflow.
 
 The opt-in `ParityRunnerTest` reads the shared [parity manifest](../tests/compatibility/README.md) and launches a JVM using the built client JAR and its recorded native artifact.
 It records raw reader output, materialized requests, model results and Rust operation witnesses; local mode cannot certify live model parity.
-The test-only `parity-connect-pom.xml` resolves Databricks Connect for `sdm.parity.connect.classpath`, without adding it to the published client.
+The test-only `parity-connect-pom.xml` resolves Databricks Connect for `sdm.parity.connect.classpath`, without adding it to the client's dependencies.
 The caller supplies private connection/endpoint configuration and a build provenance sidecar; missing configuration stays incomplete.
 
 ### Snowflake

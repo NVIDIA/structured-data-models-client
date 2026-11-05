@@ -216,7 +216,7 @@ class ColumnExplanations:
         return result
 
     def to_pandas(self) -> pd.DataFrame:
-        """One row per column, cohort and class, in the engine's score order."""
+        """One row per column, cohort and class, columns in context order."""
         rows = [
             {
                 **{
@@ -240,14 +240,12 @@ class ColumnExplanations:
                 'class',
                 'share',
                 'mean',
-                'score',
             ],
         ).astype(
             {
                 'hop': 'int64',
                 'share': 'float64',
                 'mean': 'float64',
-                'score': 'float64',
             }
         )
 

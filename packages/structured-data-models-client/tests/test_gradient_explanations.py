@@ -257,11 +257,10 @@ def test_pretrained_local_model_gradients(model_name, task):
 
         assert all(
             math.isfinite(float(value))
-            for name in ('share', 'mean', 'score')
+            for name in ('share', 'mean')
             for value in associations[name]
         )
         assert associations['share'].between(0, 1).all()
-        assert associations['score'].between(0, 1).all()
         assert len(result) == len(result.explanations.gradients) == 2
         frame = result.explanations.gradients.to_pandas()
         assert not frame.empty
@@ -380,6 +379,29 @@ def test_explain_forecast_keeps_step_identity(endpoint):
         for call in calls
         if 'predict' in call
     )
+
+
+def test_a_forecast_not_explained_is_not_analysed(endpoint):
+    from test_frame_materialize_core import link_schema
+
+    from sdm_client import KumoRelational, PredictiveQuery
+
+    url, calls = endpoint
+    req = PredictiveQuery(
+        'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.user_id',
+        link_schema(),
+    ).materialize(
+        indices=[1, 2],
+        num_context_samples=12,
+        random_seed=7,
+        model=KumoRelational(),
+    )
+    with SDMClient(url=url) as client:
+        result = client.predict(
+            req, model=KumoRelational(), outputs=['prediction']
+        )
+    assert len([call for call in calls if 'predict' in call]) == 2
+    assert result.explanations.columns is None
 
 
 def test_native_reply_nonfinite_gradient_uses_shared_refusal():

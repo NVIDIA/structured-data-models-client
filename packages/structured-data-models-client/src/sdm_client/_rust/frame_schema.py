@@ -124,8 +124,17 @@ def assemble(
         rebound[name] = single[name]
         # These are frame observations, not warehouse catalog facts.
         # Catalog provenance would incorrectly route edits through source-only checks.
+        # A time column, the one inference took and the one the schema holds,
+        # is a meaning assigned, as on the source route.
+        inferred = (
+            (description.get('inference') or {}).get('times', {}).get(name)
+            or {}
+        ).get('column')
+        timed = {inferred, definition['time_column']} - {None}
         for column in rebound[name].columns.values():
             object.__setattr__(column, '_source', None)
+            if column.name in timed:
+                object.__setattr__(column, 'stype_declared', True)
         object.__setattr__(rebound[name], '_core_origin', 'frames')
         object.__setattr__(rebound[name], '_schema', result)
     for name, value in (

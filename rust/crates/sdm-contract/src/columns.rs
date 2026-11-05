@@ -26,7 +26,6 @@ pub struct ColumnRow {
     pub class_json: String,
     pub share: f64,
     pub mean: f64,
-    pub score: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

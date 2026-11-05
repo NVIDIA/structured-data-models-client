@@ -421,7 +421,7 @@ def _report_overlap(fitted: Any, request: Any) -> None:
 
 
 def _require_frames(request: Any) -> None:
-    if request.payloads is not None:
+    if request._envelopes is not None:
         from sdm_client.errors import UnsupportedRequestError
 
         raise UnsupportedRequestError(

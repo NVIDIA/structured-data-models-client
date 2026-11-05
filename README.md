@@ -20,7 +20,7 @@
 get an answer without training a model for each dataset.**
 
 ```bash
-pip install 'structured-data-models-client[relational]'
+pip install structured-data-models-client
 ```
 
 ## Overview

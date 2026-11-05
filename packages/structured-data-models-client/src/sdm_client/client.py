@@ -631,7 +631,7 @@ class SDMClient:
 
 def _prediction_handler(request: Request) -> Any:
     """Choose the native adapter for direct arrays or materialized payloads."""
-    if not request.payloads:
+    if not request._envelopes:
         from sdm_client._rust import direct
 
         return direct
@@ -734,7 +734,7 @@ def _names_its_rows(request: Request) -> bool:
     key. Asking the same question there answered no about requests whose
     every answer names its entity.
     """
-    if request.payloads:
+    if request._envelopes:
         # A gathered request is about entities by construction: the envelope
         # carries an entity reference for every row it scores, and the adapter
         # names each answer with the entity it asked about.

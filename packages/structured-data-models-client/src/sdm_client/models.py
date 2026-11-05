@@ -190,8 +190,7 @@ class KumoRelational(Model):
     Takes every task kind the contract carries except ``ranking``, and produces
     all seven output fields including ``explanation``.
 
-    Needs ``pip install structured-data-models-client[relational]``: building the graph and
-    sampling it is heavy client-side work that lives in a native package.
+    Building the graph and sampling it run in the client's Rust core.
     """
 
     _spec = KUMO_RELATIONAL

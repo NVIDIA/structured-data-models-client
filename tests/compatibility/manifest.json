@@ -2978,7 +2978,7 @@
       "tests": {
         "python": [
           "packages/structured-data-models-client/tests/test_result_merge_core.py::test_merge_preserves_owners_without_row_or_metadata_serialization",
-          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_stable_union_deduplicates_within_parts_and_keeps_exact_numbers",
+          "packages/structured-data-models-client/tests/test_result_merge_core.py::test_union_keeps_repeats_within_a_part_and_drops_earlier_values",
           "packages/structured-data-models-client/tests/test_result_merge_core.py::test_nan_values_remain_distinct_under_ieee_equality",
           "packages/structured-data-models-client/tests/test_result_merge_core.py::test_temporal_resolution_and_original_objects_survive",
           "packages/structured-data-models-client/tests/test_result_merge_core.py::test_container_candidates_keep_list_tuple_and_bytes_domains",
@@ -4694,8 +4694,7 @@
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_empty_labels_and_exact_mixed_classes",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_unlabelled_related_rows_do_not_break_analysis",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis",
-          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_materialize_pickle_predict_restores_pretrim_context_without_sending_delta",
-          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_delta_corruption_is_not_silently_an_omitted_analysis",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_materialize_pickle_predict_analyses_the_rows_it_sends",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_unavailable_statistics_warn_without_losing_predictions",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_sqlite_materialize_explain_uses_sampled_context_without_new_queries",
@@ -7819,6 +7818,15 @@
           }
         ]
       },
+      "com.nvidia.sdm.ColumnExplanations$Row#public com.nvidia.sdm.ColumnExplanations$Row(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.Object, double, double);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
       "com.nvidia.sdm.ColumnExplanations$Row#public double mean();": {
         "capability": "column-explanations",
         "assertions": [
@@ -8233,6 +8241,21 @@
       "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
       "record": "type_contracts/arrow-admission-and-inference",
       "reason": "Rename test files and remove historical fixture prose; all type vectors and their expected outcomes remain identical. Update the whole-file digest for metadata changes."
+    },
+    {
+      "base_commit": "9488cfeb3fa8b78c35ebaf0ae12f969c6695af9f",
+      "record": "api_contracts/results-merge",
+      "reason": "PredictionResult.merge keeps a candidate repeated within one part and compares Decimal candidates by value, as 1.0.0 did; the merge test is renamed for the restored behaviour."
+    },
+    {
+      "base_commit": "9488cfeb3fa8b78c35ebaf0ae12f969c6695af9f",
+      "record": "api_inventory",
+      "reason": "ColumnExplanations.Row gains a constructor without a score, as the column analysis on main no longer computes one; the scored constructor and score() remain, deprecated."
+    },
+    {
+      "base_commit": "9488cfeb3fa8b78c35ebaf0ae12f969c6695af9f",
+      "record": "api_contracts/column-explanations",
+      "reason": "Column analysis reads the labelled rows a request sends, as on main, so the request keeps no pre-trim delta and its tests are replaced by one over the sent rows."
     }
   ],
   "capabilities": [

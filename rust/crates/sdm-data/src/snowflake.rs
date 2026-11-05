@@ -111,7 +111,7 @@ impl SqlDialect for Snowflake {
             optional: sql::rendered(),
             max_keys_per_request: None,
             // `SAMPLE ROW (n ROWS)` takes no seed (owner option C).
-            // P3D-13 documents this without a routine optional-seed warning.
+            // A seed the caller names is said to be ignored.
             sampling: Determinism::Unseeded,
             // Any seed is taken, and none is written.
             max_seed: u64::MAX,

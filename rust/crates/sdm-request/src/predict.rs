@@ -399,11 +399,14 @@ pub fn prepare(
         RELATIONAL => &KUMO_RELATIONAL,
         TABULAR => &KUMO_TABULAR,
         _ => {
+            let mut known: Vec<_> = MODELS.iter().map(|spec| spec.id).collect();
+            known.sort_unstable();
             return Err(CoreError::new(
-                Sentence::UnknownModel,
+                Sentence::DirectUnknownModel,
                 "the model named is not one the contract carries",
             )
-            .with_field("field", Detail::text("model")));
+            .with_field("model", Detail::text(model))
+            .with_field("known_models", texts(known)));
         }
     };
     let kind = kind_of(payload)?;

@@ -130,6 +130,12 @@ pub(crate) async fn convert(asker: &Asker, reader: &Reader) -> Result<Converted,
             }
             .with_field("view", Detail::text(&view.name));
         }
+        if matches!(
+            error.sentence,
+            Sentence::NoSuchTable | Sentence::NoSuchTableInSource
+        ) {
+            return error.with_field("semantic_model", Detail::text(&view.name));
+        }
         error
     })
 }
@@ -203,7 +209,12 @@ async fn read_definition(reading: &Reading<'_>, view: &ViewChoice) -> Result<Des
     let answer = match attempt(reading.asker, request.clone()).await? {
         Ok(data) => reading.asker.read(&request, &data)?,
         Err(failed) => {
-            if reading.data.view_kind() == Some(ViewKind::Semantic) {
+            let facts = reading.data.failure(&failed);
+            let missing =
+                facts.unusable == Some(sdm_contract::data::Unusable::Missing) || facts.not_found;
+            let denied = facts.unusable == Some(sdm_contract::data::Unusable::Forbidden)
+                || failed.sqlstate.as_deref() == Some("42501");
+            if (missing || denied) && reading.data.view_kind() == Some(ViewKind::Semantic) {
                 let name = relation.dotted();
                 return Err(CoreError::new(
                     Sentence::ViewSemanticNotFound,
@@ -211,8 +222,7 @@ async fn read_definition(reading: &Reading<'_>, view: &ViewChoice) -> Result<Des
                 )
                 .with_field("view", Detail::text(name)));
             }
-            let facts = reading.data.failure(&failed);
-            if facts.unusable == Some(sdm_contract::data::Unusable::Missing) || facts.not_found {
+            if missing {
                 return Err(view_not_found(&relation));
             }
             return Err(
