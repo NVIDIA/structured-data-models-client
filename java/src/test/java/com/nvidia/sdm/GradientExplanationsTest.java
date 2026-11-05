@@ -22,17 +22,17 @@ class GradientExplanationsTest {
       endpoint.gradients=true;
       Request request=new Request(context,predict,"y","regression");
       PredictionResult result=client.predict(request,SdmClient.KUMO_TABULAR,List.of("prediction","explanation"));
-      assertEquals(2,result.explanations().entries().size());
+      assertEquals(2,result.explanations().gradients().entries().size());
       assertNotNull(result.explanation());
       PredictionResult merged=PredictionResult.merge(List.of(PredictionResult.merge(List.of(result,result)),result));
-      assertEquals(6,merged.explanations().entries().size());
-      for(long index=0;index<6;index++) assertNotNull(merged.explanations().get(new GradientExplanations.Key(GradientExplanations.Kind.ROW_INDEX,index,null)));
-      try(VectorSchemaRoot root=merged.explanations().toArrow(allocator)) {
+      assertEquals(6,merged.explanations().gradients().entries().size());
+      for(long index=0;index<6;index++) assertNotNull(merged.explanations().gradients().get(new GradientExplanations.Key(GradientExplanations.Kind.ROW_INDEX,index,null)));
+      try(VectorSchemaRoot root=merged.explanations().gradients().toArrow(allocator)) {
         assertEquals(6,root.getRowCount());
         assertInstanceOf(BigIntVector.class,root.getVector("identity"));
       }
       try(FittedModel fitted=client.fit(request,SdmClient.KUMO_TABULAR,List.of(),List.of("prediction","explanation"))) {
-        assertEquals(2,fitted.predict(request).explanations().entries().size());
+        assertEquals(2,fitted.predict(request).explanations().gradients().entries().size());
       }
     }
   }
@@ -58,8 +58,25 @@ class GradientExplanationsTest {
         Request request=PredictiveQuery.parse("EXPLAIN PREDICT users."+target+" FOR EACH users.user_id").materialize(schema,options.build());
         try(SdmClient client=SdmClient.connect(url)) {
           PredictionResult result=client.predict(request,model,List.of("prediction","explanation",target.equals("value")?"quantiles":"probabilities"));
-          assertEquals(2,result.explanations().entries().size());
-          try(RootAllocator allocator=new RootAllocator();VectorSchemaRoot root=result.explanations().toArrow(allocator)) {
+          assertEquals(2,result.explanations().gradients().entries().size());
+          ColumnExplanations columns=result.explanations().columns();
+          assertNotNull(columns); assertFalse(columns.rows().isEmpty());
+          for(ColumnExplanations.Row row:columns.rows()) {
+            assertTrue(Double.isFinite(row.mean()));
+            assertTrue(row.share()>=0 && row.share()<=1);
+            assertTrue(row.score()>=0 && row.score()<=1);
+            if(target.equals("value")) {
+              assertNull(row.classLabel());
+              assertTrue(row.mean()>=0 && row.mean()<=23.75);
+            } else {
+              assertTrue(List.of("a","b").contains(row.classLabel()));
+              assertTrue(row.mean()>=0 && row.mean()<=1);
+            }
+          }
+          try(RootAllocator allocator=new RootAllocator();VectorSchemaRoot root=columns.toArrow(allocator)) {
+            assertEquals(columns.rows().size(),root.getRowCount());
+          }
+          try(RootAllocator allocator=new RootAllocator();VectorSchemaRoot root=result.explanations().gradients().toArrow(allocator)) {
             assertTrue(root.getRowCount()>0);
           }
         }

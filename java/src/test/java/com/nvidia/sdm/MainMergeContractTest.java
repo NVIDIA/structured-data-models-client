@@ -74,7 +74,7 @@ class MainMergeContractTest {
       PredictionResult direct = client.predict(request, SdmClient.KUMO_TABULAR, List.of("prediction", "explanation"));
       try (FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR, List.of(), List.of("prediction", "explanation"))) {
         PredictionResult scored = fitted.predict(request);
-        assertEquals(4, PredictionResult.merge(List.of(direct, scored)).explanations().entries().size());
+        assertEquals(4, PredictionResult.merge(List.of(direct, scored)).explanations().gradients().entries().size());
       }
       operations.require("tabular_arrow:predict", "tabular_arrow:fit", "tabular_arrow:score", "tabular_arrow:close", "merge_results");
       assertEquals(1, endpoint.deletes);
@@ -150,8 +150,8 @@ class MainMergeContractTest {
       try (FittedModel fitted = client.fit(restored, SdmClient.KUMO_RELATIONAL)) {
         PredictionResult scored = fitted.predict(restored);
         for (PredictionResult result : List.of(direct, scored)) {
-          assertEquals(2, result.explanations().entries().size());
-          for (Map<String, Object> entry : result.explanations().entries().values()) {
+          assertEquals(2, result.explanations().gradients().entries().size());
+          for (Map<String, Object> entry : result.explanations().gradients().entries().values()) {
             Map<String, Object> orders = RelationalTest.map(RelationalTest.map(entry.get("related")).get("orders"));
             assertNotNull(orders);
             assertFalse(orders.containsKey("keys"));
@@ -189,7 +189,7 @@ class MainMergeContractTest {
     try (RelationalTest.Endpoint endpoint = new RelationalTest.Endpoint(); SdmClient client = endpoint.client()) {
       endpoint.gradients = true;
       PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
-      for (Map<String, Object> entry : result.explanations().entries().values()) {
+      for (Map<String, Object> entry : result.explanations().gradients().entries().values()) {
         Map<String, Object> orders = RelationalTest.map(RelationalTest.map(entry.get("related")).get("orders"));
         assertFalse(((List<?>) orders.get("keys")).isEmpty());
         for (Object row : (List<?>) orders.get("rows")) assertTrue(RelationalTest.map(row).containsKey("__node_id"));
@@ -204,7 +204,7 @@ class MainMergeContractTest {
       PredictionResult result = client.predict(new Request(context, predict, "y", "regression"), SdmClient.KUMO_TABULAR);
       PredictionResult merged = PredictionResult.merge(List.of(PredictionResult.merge(List.of(result, result)), result));
       assertEquals(6, merged.rows());
-      assertTrue(merged.explanations().entries().isEmpty());
+      assertTrue(merged.explanations().gradients().entries().isEmpty());
     }
   }
 

@@ -66,8 +66,13 @@ public final class PredictionResult {
 
   /** Combine already computed slices using the same native merge rules as prediction batching. */
   public static PredictionResult merge(List<PredictionResult> parts) {
+    return merge(parts, null);
+  }
+
+  /** Merge results with an explicit context analysis; null keeps the engine's default selection. */
+  public static PredictionResult merge(List<PredictionResult> parts, ColumnExplanations columns) {
     java.util.Objects.requireNonNull(parts, "parts");
-    if (parts.size() == 1) return java.util.Objects.requireNonNull(parts.get(0));
+    if (parts.size() == 1 && columns == null) return java.util.Objects.requireNonNull(parts.get(0));
     List<CandidateOwner> owners = new ArrayList<>();
     long ownerOffset = 0;
     List<Object> descriptions = new ArrayList<>();
@@ -96,8 +101,11 @@ public final class PredictionResult {
       throw new StructuredDataException("result metadata cannot be encoded", "INTERNAL_ERROR", Map.of(), error);
     }
     Map<String, Object> operation = Map.of("op", "merge_results", "input", 1, "tables", new ArrayList<>(tables.keySet()));
+    Map<String, Object> input = new java.util.LinkedHashMap<>();
+    input.put("parts", descriptions);
+    if (columns != null) input.put("columns", columns.encoded());
     try (com.nvidia.sdm.internal.Host.Finished finished = com.nvidia.sdm.internal.ArrowFrames.run(operation,
-        Map.of(1, com.nvidia.sdm.internal.Host.attachment(Map.of("parts", descriptions))), tables,
+        Map.of(1, com.nvidia.sdm.internal.Host.attachment(input)), tables,
         com.nvidia.sdm.internal.Host.Call.none())) {
       com.nvidia.sdm.internal.Results.Predicted result = (com.nvidia.sdm.internal.Results.Predicted)
           com.nvidia.sdm.internal.Results.expect(finished.result(), "predict");
@@ -223,14 +231,20 @@ public final class PredictionResult {
     return count;
   }
 
-  /** Validated per-row gradients; empty when the endpoint supplied none. */
+  /** Model gradients and labelled-context associations, decoded without recomputing analysis. */
   @SuppressWarnings("unchecked")
-  public GradientExplanations explanations() {
+  public Explanations explanations() {
     try (ArrowReader reader = read(ArrowData.allocator())) {
-      String raw = reader.getVectorSchemaRoot().getSchema().getCustomMetadata().get("sdm.gradients");
-      return new GradientExplanations(raw == null ? null : (Map<String,Object>) Json.read(raw.getBytes(StandardCharsets.UTF_8)));
-    } catch (IOException | Json.JsonException e) {
-      throw new StructuredDataException("gradient records cannot be read", "INTERNAL_ERROR", Map.of(), null);
+      Map<String, String> metadata = reader.getVectorSchemaRoot().getSchema().getCustomMetadata();
+      String gradients = metadata == null ? null : metadata.get("sdm.gradients");
+      String columns = metadata == null ? null : metadata.get("sdm.columns");
+      return new Explanations(
+          new GradientExplanations(gradients == null ? null :
+              (Map<String, Object>) Json.read(gradients.getBytes(StandardCharsets.UTF_8))),
+          ColumnExplanations.fromCore(columns == null ? null :
+              (Map<String, Object>) Json.read(columns.getBytes(StandardCharsets.UTF_8))));
+    } catch (IOException | Json.JsonException | ClassCastException error) {
+      throw new StructuredDataException("explanation records cannot be read", "INTERNAL_ERROR", Map.of(), null);
     }
   }
 

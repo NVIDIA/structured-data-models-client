@@ -6,10 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Structured Data Models client for Java
 
-The Java library on the client's Rust core: the same core the Python client runs, loaded from the JAR through JNI (design choice 10 of `docs/design/rust-core/phase-3/design.md`).
+The Java library uses the same Rust engine as Python, loaded from the JAR through JNI; see the [engine boundary diagrams](../docs/development/engine-boundaries.md).
 It describes the tables of a DuckDB, SQLite, Postgres or Databricks database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does.
 Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
-Nothing is published to a repository before Phase 5.
+Publication requires separate release approval and the maintained release gates.
 
 ## Read semantic predictions
 
@@ -18,6 +18,23 @@ Ranking `prediction()` contains candidate values; `rankings()` contains candidat
 Probability and quantile mappings, item metadata and explanations retain their keys and values.
 `result.read(allocator)` remains the raw native Arrow layout for efficient column access, including its bookkeeping and encoded carriers.
 The semantic view is decoded only when requested and is not cached alongside a second copy of the rows.
+
+## Read explanations
+
+`result.explanations()` returns an `Explanations` container:
+
+- `gradients()` returns per-answer model gradients, empty when absent.
+- `columns()` returns labelled-context associations, or null when not requested or unavailable.
+  These describe correlations in the context, not causal effects.
+
+`ColumnExplanations.rows()` provides immutable typed rows in engine order.
+`toArrow(allocator)` exposes `table, hop, column, stype, cohort, class, share, mean, score`; close the returned root before the caller-owned allocator.
+Mixed, decimal and wide class labels are lossless JSON strings identified by schema metadata `sdm.class_encoding=json`; ordinary strings, integers and booleans use their native Arrow types.
+Rust computes the statistics once; these Java views do not regroup or recompute them.
+The explicit `ColumnExplanations(payload)` constructor also runs that Rust analysis on a model request's labelled context.
+`PredictionResult.merge(parts, columns)` supplies an explicit analysis; the default merge retains equal/sole analyses and rejects conflicting ones rather than choosing silently.
+
+This pre-2.0 API change replaces the earlier direct gradient accessor: use `result.explanations().gradients()` where previous snapshots used `result.explanations()`.
 
 ## Inspect request data
 
