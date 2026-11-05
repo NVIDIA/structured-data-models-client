@@ -31,7 +31,7 @@ from sdm_client import (
     Schema,
 )
 from sdm_client.adapters.relational import RelationalAdapter
-from sdm_client.adapters.tabular import _key_named_by
+from sdm_client.adapters.single_table import key_named_by
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 RNG = np.random.default_rng(11)
@@ -287,19 +287,19 @@ def test_an_unrelated_error_is_returned_untouched():
 def test_a_key_survives_the_json_the_endpoint_sends(key):
     """JSON writes a character above U+FFFF as a surrogate pair, and reading it
     as a Python literal takes the halves apart so they never recombine."""
-    assert _key_named_by(json.dumps([key])) == key
+    assert key_named_by(json.dumps([key])) == key
 
 
 def test_a_key_survives_the_python_rendering_too():
     """The other wording an endpoint may answer with."""
-    assert _key_named_by(repr(['\U0001f600key'])) == '\U0001f600key'
+    assert key_named_by(repr(['\U0001f600key'])) == '\U0001f600key'
 
 
 @pytest.mark.parametrize(
     'rendered', ['hello', '[1, 2]', '[]', '{"a": 1}', 'x' * 2000]
 )
 def test_something_that_is_not_one_key_is_left_alone(rendered):
-    assert _key_named_by(rendered) is None
+    assert key_named_by(rendered) is None
 
 
 # --- a label with more classes than the threshold --------------------------

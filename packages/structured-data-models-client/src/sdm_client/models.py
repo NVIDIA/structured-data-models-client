@@ -32,7 +32,7 @@ deployment can answer would be worse than letting the other say no.
 
 from __future__ import annotations
 
-from predictive_query import RELATIONAL, TABULAR
+from predictive_query import ANOMALY, RELATIONAL, TABULAR
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
@@ -158,6 +158,33 @@ KUMO_RELATIONAL = ModelSpec(
 )
 
 
+# Named here rather than imported from the generated bindings, which carry
+# only the ids the pinned spec's model enum declares. The spec does not
+# describe a model that scores a row without being shown a labelled one, so
+# there is no constant to import and hand-editing a generated file would be
+# undone by the next regeneration.
+TFM_MODEL_KUMO_ANOMALY = 'kumo-anomaly'
+
+#: The model that scores a row for how anomalous it is.
+#:
+#: `probabilities` carries the two thresholders' labels. That field is named
+#: for what every other model puts in it, and this one puts something else
+#: there because the contract has no third field for a row's answer; see
+#: :mod:`sdm_client.in_process.anomaly`. It holds no session, because a
+#: session pins a fitted context and this model fits none: every call
+#: reconstructs the rows it was given and nothing carries over.
+KUMO_ANOMALY = ModelSpec(
+    model_id=TFM_MODEL_KUMO_ANOMALY,
+    profile=ANOMALY,
+    runtime=RuntimeContract(
+        tasks=frozenset({'anomaly_detection'}),
+        outputs=frozenset({'prediction', 'probabilities'}),
+        sessions=False,
+        inference_options=frozenset({'num_samples', 'num_steps'}),
+    ),
+)
+
+
 class Model:
     r"""Base for the model handles. Not useful on its own."""
 
@@ -205,10 +232,33 @@ class KumoRelational(Model):
     _spec = KUMO_RELATIONAL
 
 
+class KumoAnomaly(Model):
+    r"""One table of readings in, a score per row out.
+
+    Takes ``anomaly_detection`` only, and produces ``prediction``, the
+    reconstruction error for the row, and ``probabilities``, the two
+    thresholders' labels for it. It is unsupervised, so a request is built
+    with :meth:`Request.anomaly <sdm_client.Request.anomaly>` and names no
+    target. It holds no session, because there is no context to pin.
+
+    Served in this process only, through
+    :meth:`SDMClient.in_process <sdm_client.SDMClient.in_process>`: no
+    deployment answers for this id yet.
+
+    Needs a structured-data-models that carries ``KumoAnomaly``, which no
+    release does yet. The ``in-process`` extra installs the latest release, so
+    until one ships this model is reached by installing that package from its
+    own main.
+    """
+
+    _spec = KUMO_ANOMALY
+
+
 #: Every model this client can send to, by id.
 MODELS = {
     KUMO_TABULAR.model_id: KUMO_TABULAR,
     KUMO_RELATIONAL.model_id: KUMO_RELATIONAL,
+    KUMO_ANOMALY.model_id: KUMO_ANOMALY,
 }
 
 

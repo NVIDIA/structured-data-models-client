@@ -266,7 +266,11 @@ def test_a_model_is_loaded_the_first_time_it_is_asked_for(
     )
     with SDMClient.in_process() as client:
         assert client.url == 'in-process'
-        assert client.models() == ['kumo-tabular', 'kumo-relational']
+        assert client.models() == [
+            'kumo-tabular',
+            'kumo-relational',
+            'kumo-anomaly',
+        ]
         assert loads == []
         client.predict(request, model=KumoTabular())
         client.predict(request, model=KumoTabular())

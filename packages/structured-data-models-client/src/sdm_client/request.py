@@ -49,6 +49,12 @@ from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
 
 # Task kinds the contract carries. A model narrows this further: a tabular
 # model takes only the coarse 'classification', and its adapter says so.
+#
+# 'anomaly_detection' is the exception: the contract's enum does not carry it,
+# because the spec these bindings are generated from does not describe a model
+# that answers it. It is named here so a request can be built and refused by
+# every model that does not serve it, which is what the rest of this tuple is
+# for. Nothing is sent to a deployment that has not declared it.
 TASK_KINDS = (
     'classification',
     'binary_classification',
@@ -57,7 +63,14 @@ TASK_KINDS = (
     'forecasting',
     'temporal_link_prediction',
     'ranking',
+    'anomaly_detection',
 )
+
+#: The target of a question asked about the whole row rather than one column.
+#: An anomaly score is joint across the channels it reconstructs, so naming
+#: one column would promise a score specific to it that the model never
+#: computes.
+WHOLE_ROW = '*'
 
 _CLASSIFICATION_KINDS = frozenset(
     {'classification', 'binary_classification', 'multiclass_classification'}
@@ -377,6 +390,15 @@ class Request:
                 f'task must be one of {list(TASK_KINDS)}, got {task!r}',
                 code='INVALID_REQUEST',
             )
+        if task == 'anomaly_detection':
+            raise StructuredDataError(
+                f'anomaly_detection names no target and learns from no '
+                f'labelled rows, and this builds a request that has both. '
+                f'Asking it here would hand over a context and a target '
+                f'{target!r} that nothing reads, and get back a score for the '
+                f'whole row. Build it with Request.anomaly(readings) instead',
+                code='INVALID_REQUEST',
+            )
         if target in context.columns and _has_container_cells(context[target]):
             # Said here because this is the only place that knows which column
             # is the target. SDM's own `Task.classification` covers "binary,
@@ -540,6 +562,69 @@ class Request:
         # in. An adapter may drop the engine's defaults silently; it must not
         # drop something that was asked for.
         request.requested_inference = dict(requested_inference or {})
+        return request
+
+    @classmethod
+    def anomaly(
+        cls,
+        readings: pd.DataFrame,
+        *,
+        schema: Schema | None = None,
+        entity_table: str = 'instance',
+        inference: Mapping[str, Any] | None = None,
+    ) -> Request:
+        r"""Ask how anomalous each row is, with no labelled rows to learn from.
+
+        Every other request here names a target and shows the model rows where
+        the answer is known. An anomaly model is unsupervised: it reconstructs
+        the readings it is given and scores each row by how badly the
+        reconstruction missed, so there is no column to name and nothing to
+        learn from. Those two arguments are absent rather than empty, because
+        a caller who passed them would be describing a question nobody asks.
+
+        What travels instead is a target standing for the score, typed as
+        the score is because that is the one thing about it the answer
+        carries a type for, and a context table of the schema's columns and
+        no rows. The contract has no shape for a request with nothing to
+        learn from, and an empty table is what that looks like on the wire,
+        rather than a section left out of an envelope that requires one.
+
+        Args:
+            readings: The rows to score. Every numerical column is read as a
+                channel of one multivariate series; a primary key names the
+                row and is not read as a channel.
+            schema: Override the inferred schema. Rarely needed.
+            entity_table: The name the instance table is known by.
+            inference: Gathering knobs passed to the adapter.
+
+        Raises:
+            StructuredDataError: If ``readings`` is not a DataFrame.
+
+        >>> request = Request.anomaly(readings)
+        >>> client.predict(request, model=KumoAnomaly())
+        """
+        readings = _require_frame(readings, 'readings')
+        if schema is None:
+            schema = Schema.from_data({entity_table: readings})
+        _check_scored_values_mean_what_the_schema_says(
+            readings, schema, entity_table
+        )
+
+        request = cls.__new__(cls)
+        request.schema = schema
+        request.task = Task(
+            kind='anomaly_detection',
+            target=Target(
+                column_name=WHOLE_ROW,
+                dtype='float64',
+                table_name=entity_table,
+            ),
+        )
+        request._context = Split(instance_table=readings.iloc[:0])
+        request._predict = Split(instance_table=readings)
+        request.inference = dict(inference or {})
+        request.requested_inference = dict(inference or {})
+        request.entity_table = entity_table
         return request
 
     @property
