@@ -143,7 +143,7 @@ public final class ClientCost {
         int gradientCells = 0;
         if (gradients) {
           gradientCells = timed(times, "gradient_view", () -> {
-            try (VectorSchemaRoot table = result.explanations().toArrow(allocator)) {
+            try (VectorSchemaRoot table = result.explanations().gradients().toArrow(allocator)) {
               if (table.getRowCount() == 0) throw new AssertionError("empty gradient view");
               if (fixed) for (int row = 0; row < table.getRowCount(); row++) {
                 if (((Number)table.getVector("gradient").getObject(row)).doubleValue() != 0.25) throw new AssertionError("gradient differs");
@@ -151,7 +151,7 @@ public final class ClientCost {
               return table.getRowCount();
             }
           });
-          if (result.explanations().entries().size() != scores) throw new AssertionError("explanation count differs");
+          if (result.explanations().gradients().entries().size() != scores) throw new AssertionError("explanation count differs");
         }
         if (gradients) times.put("result_merge", null);
         else {
