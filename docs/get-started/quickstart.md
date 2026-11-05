@@ -152,6 +152,18 @@ This needs `pip install 'structured-data-models-client[databricks-serving]'`. A 
 answers one request at a time, so `fit()` is refused there; `predict()` sends
 the context with every call.
 
+A `kumo-tabular` endpoint is reached the same way, with `model=KumoTabular()`.
+The Databricks notebooks
+[`kumo_relational_quickstart`](https://github.com/NVIDIA/structured-data-models-client/blob/main/examples/databricks/kumo_relational_quickstart.ipynb) and
+[`kumo_tabular_quickstart`](https://github.com/NVIDIA/structured-data-models-client/blob/main/examples/databricks/kumo_tabular_quickstart.ipynb)
+deploy each model to a serving endpoint and ask it questions about the
+AdventureWorks sample data.
+
+The relational notebook installs
+`structured-data-models-client[relational,databricks,databricks-serving]`;
+the tabular notebook installs
+`structured-data-models-client[databricks,databricks-serving]`.
+
 ## A model in this process
 
 The model can also run in your own Python process, with no NIM at all. The

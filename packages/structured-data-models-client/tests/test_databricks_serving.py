@@ -439,6 +439,10 @@ def test_an_oversized_request_is_refused_before_it_is_sent():
     assert error.value.details['limit'] == 200
     assert error.value.details['bytes'] > 200
     assert workspace.serving_endpoints.calls == []
+    # The advice also covers directly supplied context and prediction rows,
+    # without assuming a predictive-query sampling parameter.
+    assert 'context rows' in str(error.value)
+    assert 'rows to score' in str(error.value)
 
 
 def test_the_size_counted_is_the_wrapped_envelope_not_the_payload():
