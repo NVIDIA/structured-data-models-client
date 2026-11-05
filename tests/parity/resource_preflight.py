@@ -11,6 +11,7 @@ from pathlib import Path
 
 from live_api import environment, model_identities, preflight
 from python_runner import HERE, source_tables
+from shop_fixtures import load_fixture
 
 from contract import effective_case, manifest
 
@@ -115,7 +116,7 @@ def check(config_path, *, giant_endpoint=None):
         for connector in case['connectors']
     )
     for connector, fixture_name in pairs:
-        fixture = json.loads((HERE / fixture_name).read_text())
+        fixture = load_fixture(HERE / fixture_name)
         scoped = {
             **config,
             'sources': {

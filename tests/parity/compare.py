@@ -15,6 +15,7 @@ from identity import (
     canonical,
     canonical_scoring_payload,
 )
+from shop_fixtures import load_fixture
 
 from contract import (
     cells,
@@ -566,7 +567,7 @@ def assess(
 
             old, new = copy.deepcopy(old), copy.deepcopy(new)
             row['reader_representation'] = equivalent_raw_observations(
-                old, new, json.loads((HERE / case['fixture']).read_text())
+                old, new, load_fixture(HERE / case['fixture'])
             )
         old_semantic, new_semantic = (
             copy.deepcopy(old.get('semantic')),
@@ -593,7 +594,7 @@ def assess(
         ):
             from contract import HERE
 
-            fixture = json.loads((HERE / case['fixture']).read_text())
+            fixture = load_fixture(HERE / case['fixture'])
             if case.get('input_mode') == 'raw-reader':
                 # The untouched reader rows, not prepared fixture types, are
                 # the source of sampled identities in these journeys.
@@ -634,7 +635,7 @@ def assess(
         ):
             from contract import HERE
 
-            fixture = json.loads((HERE / case['fixture']).read_text())
+            fixture = load_fixture(HERE / case['fixture'])
             try:
                 for before, after in zip(
                     old_semantic['transport'],
@@ -698,7 +699,7 @@ def assess(
             new_semantic = new_semantic or {}
             old_semantic.pop('wire_calls', None)
             new_semantic.pop('wire_calls', None)
-            fixture = json.loads((HERE / case['fixture']).read_text())
+            fixture = load_fixture(HERE / case['fixture'])
             if cell[2] == 'relational' and old_calls:
                 # Reader representations were proven equivalent above; identity
                 # conversion still checks all wire features and foreign-key edges.
@@ -767,7 +768,7 @@ def assess(
         )
         from contract import HERE
 
-        fixture = json.loads((HERE / case['fixture']).read_text())
+        fixture = load_fixture(HERE / case['fixture'])
 
         def readers(record, fixture=fixture):
             values = {}

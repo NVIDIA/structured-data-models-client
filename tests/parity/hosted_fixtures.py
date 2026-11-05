@@ -5,13 +5,13 @@
 
 import contextlib
 import io
-import json
 import os
 import tempfile
 import uuid
 from pathlib import Path
 
 from python_runner import tables_of
+from shop_fixtures import load_fixture
 
 from contract import HERE, digest, effective_case, manifest
 
@@ -22,7 +22,7 @@ def fixtures(connector):
         for case in manifest()['scenarios']
         if connector in case['connectors']
     )
-    return {name: json.loads((HERE / name).read_text()) for name in names}
+    return {name: load_fixture(HERE / name) for name in names}
 
 
 def config_for(connector, settings):

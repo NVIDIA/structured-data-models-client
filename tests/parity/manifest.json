@@ -8094,602 +8094,6 @@
   ],
   "contract_changes": [
     {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/direct-dtypes-options",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/errors",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/persistence",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 2 retains historical request fixtures and requires their installed-runtime prediction and cache-reconstruction tests, without an old-client installation."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/public-serving-refusals",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/readers",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/readiness-discovery",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/relational-materialization",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 2 replaces the duplicate route comparison with explicit ranking contents, shuffled response attribution and public DataFrame ordering assertions."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/release-metadata",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/request-inspection",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/result-items",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/results-merge",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/schema-edits",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/sessions",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Remove the retired route-switch test; warehouse session lifecycle, holdout, changed-question, close and refusal tests remain required on the sole Rust path."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/sql-helpers",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/wire-vocabulary",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_exceptions",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_inventory",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.aggregate",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.condition",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.forecast",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.foreign-key",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.ranking",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.regression",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/lifecycle.temporal-link",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/outputs.binary",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/outputs.regression",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.aggregate",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.binary",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.condition",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.forecast",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.foreign-key",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.multiclass",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.ranking",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.regression",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/prediction.temporal-link",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "capabilities/types.regression",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "live_api_tests",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "type_contracts/arrow-admission-and-inference",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests. Effort 2 removes retired Python approval-registry checks and the empty pending-list check; exhaustive Arrow admission, parameter coverage, inference and refusal expectations remain enforced by the five shared Rust tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "type_contracts/reader-model-type-journeys",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "type_contracts/semantic-types",
-      "reason": "Phase 5 effort 1 inventories existing behavior and required tests; native API tests are separate from historical oracle comparisons and credentialed live tests."
-    },
-    {
-      "base_commit": "a8726c3e5771c2397ab88599af9aa273de7545b6",
-      "record": "api_contracts/sessions",
-      "reason": "Remove the retired route-switch test; warehouse session lifecycle, holdout, changed-question, close and refusal tests remain required on the sole Rust path."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "api_contracts/in-process-models",
-      "reason": "Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
-    },
-    {
-      "base_commit": "2b9e6ea88c0d4b407e6d354d8f9445f3c033a390",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Effort 3 preserves main SDMClient.in_process through the shared Rust request/result path, with explicit Python-runtime applicability and CPU model tests."
-    },
-    {
-      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
-      "record": "api_contracts/schema-visualization",
-      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
-    },
-    {
-      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
-    },
-    {
-      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
-      "record": "api_contracts/schema-notebook-display",
-      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
-    },
-    {
-      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
-      "record": "api_exceptions",
-      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
-    },
-    {
-      "base_commit": "9e7e814bcb6793733afe1fd193aae382c9b1e94c",
-      "record": "api_inventory",
-      "reason": "Restore metadata-only schema diagrams in both host languages with offline assets and explicit image export."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/schema-visualization",
-      "reason": "Restore reviewed Python/Java metadata diagrams and exports; host-only rendering with shared assets. See docs/development/engine-boundaries.md and the maintained visualization tests."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/schema-notebook-display",
-      "reason": "Python notebook display is an intentional host-specific convenience; Java exposes HTML/file export instead. See visualization/design.md."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/sanitization-reports",
-      "reason": "Expose immutable preparation accounting, including fitted and decomposed requests, without changing filtering or warehouse queries. See sanitization/design.md."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/relbench",
-      "reason": "Restore Python/Java loaders with one pinned catalog and existing core admission. See relbench/design.md."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/metadata-explanation-reports",
-      "reason": "Add reviewed immutable metadata/explanation views and lazy shared numerical attribution policy. See reports/design.md."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_exceptions",
-      "reason": "Record Python-only notebook display; equivalent diagram content and file export remain covered in Java."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_inventory",
-      "reason": "Map every restored public Python/Java symbol to maintained behavior tests for the four reviewed Phase 6 features. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks. Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Regenerate public API snapshot for the four approved additions; existing API names remain retained. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks. Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/timeseries-preparation",
-      "reason": "Restore reviewed Python/Java history-to-forecast builder using shared Rust Arrow preparation."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/schema-refinement",
-      "reason": "Restore reviewed inference reruns and atomic schema edits in Python/Java; Rust owns inference and provenance."
-    },
-    {
-      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
-      "record": "api_contracts/labels-only",
-      "reason": "Restore reviewed model-free labels extraction with shared Rust target semantics and owned Python/Java outputs."
-    },
-    {
-      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
-      "record": "api_inventory",
-      "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
-    },
-    {
-      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
-      "record": "live_api_tests",
-      "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
-    },
-    {
-      "base_commit": "4ed52995c539c0a0a8cf81b5b0d02408bee715c5",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Record approved labels-only Python/Java API and maintained local/live validation."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/labels-only",
-      "reason": "Restore reviewed model-free labels extraction through the shared Rust engine in Python and Java."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "live_api_tests",
-      "reason": "Maintain read-only Databricks and Snowflake labels checks with independent expected values and no model endpoint. Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks. Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths. Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks. Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/end-time",
-      "reason": "Restore reviewed end-time roles in Python/Java with Rust eligibility and model-copy masking; shared local fixtures and read-only warehouse/model checks."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/sql-columns",
-      "reason": "Restore source-backed SQL calculated columns with provider-owned SQL and Rust schema admission in Python and Java; verify local and live warehouse/model paths."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/custom-examples",
-      "reason": "Restore explicit caller-supplied relational tasks in both languages, with Rust admission and existing graph sampling; shared fixtures, persistence, invalid inputs and live model/warehouse checks."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/explanation-summaries",
-      "reason": "Add reviewed immutable inference settings using Rust validation and explicit opt-in host explanation summaries; both public language APIs have local behavioral tests."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/typed-inference-settings",
-      "reason": "Add reviewed immutable inference settings using Rust validation and explicit opt-in host explanation summaries; both public language APIs have local behavioral tests."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/connection-rebinding",
-      "reason": "Restore database rebinding as immutable Python/Java source replacement, with Rust-owned compatibility validation and public local/live workflow tests."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/automatic-batch-sessions",
-      "reason": "Add reviewed automatic exact-context batch sessions and supplied batch controls in Python/Java, preserving partial results and safe lifecycle behavior with controlled HTTP and real endpoint tests."
-    },
-    {
-      "base_commit": "4b5df2e2e8937d642a1a241a53ba2d79c9d625dc",
-      "record": "api_contracts/gradient-explanations",
-      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
-      "record": "api_contracts/gradient-explanations",
-      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
-      "record": "api_inventory",
-      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
-      "record": "live_api_tests",
-      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "19f669e239f61c1d22bc7089d6f975efa4c5b5d4",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Add reviewed Rust-owned per-row gradient explanations, Python/Java presentation APIs, mandatory local regressions and scoped real-model checks."
-    },
-    {
-      "base_commit": "ff08b03d760f657bdff98005629f068c8f0be6b7",
-      "record": "api_contracts",
-      "reason": "Merge main explanation contracts into Rust routes, restore Python manual construction and test engine routing, early refusals, internal key provenance and joinable result identities."
-    },
-    {
-      "base_commit": "ff08b03d760f657bdff98005629f068c8f0be6b7",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Merge main explanation contracts into Rust routes, restore Python manual construction and test engine routing, early refusals, internal key provenance and joinable result identities."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/schema-edits",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/direct-dtypes-options",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/readiness-discovery",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/results-merge",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/persistence",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/readers",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/provider-contract",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/large-values",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/public-serving-refusals",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/request-inspection",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/result-items",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/sessions",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/errors",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/wire-vocabulary",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/sql-helpers",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/release-metadata",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/relational-materialization",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/in-process-models",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/schema-visualization",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/schema-notebook-display",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/relbench",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/sanitization-reports",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/metadata-explanation-reports",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/timeseries-preparation",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/schema-refinement",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/labels-only",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/end-time",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/sql-columns",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/custom-examples",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/typed-inference-settings",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/explanation-summaries",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/connection-rebinding",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/automatic-batch-sessions",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "4e3f4a86fb37adcbcf093e39f7cabaf68a7bdd9f",
-      "record": "api_contracts/gradient-explanations",
-      "reason": "Record existing ownership and bounded applicability without expanding supported combinations or claiming direct assertion coverage for unchanged symbols."
-    },
-    {
-      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
-      "record": "api_inventory/java",
-      "reason": "Pinned main has no java/pom.xml or Java public artifact. This first Java introduction has validated public inventory mappings and required group behavior tests; it does not claim historical per-symbol assertions for all Java declarations."
-    },
-    {
-      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
-      "record": "api_inventory/python/sdm_client.PredictionResult.explanations",
-      "reason": "The snapshot declaration moved from a class-visible property to the retained instance-owned GradientExplanations field. This is a representation change, not removal of the public instance API; test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge verifies nonempty per-row explanations and nested merging.",
-      "retained_test": "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_public_multiple_rows_class_labels_and_nested_merge"
-    },
-    {
-      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
-      "record": "api_inventory/java/com.nvidia.sdm.ReadOptions$Builder#public com.nvidia.sdm.ReadOptions$Builder endpoint(java.net.URI);",
-      "reason": "Expose explicit per-read S3 endpoint configuration, matching Python storage_options, so ordinary tests and external maintainers require no AWS account. Host I/O only; no Rust engine change."
-    },
-    {
-      "base_commit": "847a1e9e37735978bc6270d1b4425d0652302cea",
-      "record": "api_contracts/readers",
-      "reason": "Require the public per-read endpoint validation test; emulator E2E additionally executes the existing S3 reader test."
-    },
-    {
-      "base_commit": "0b3afe8fa228b8d48446f89717758e1b1a7df40b",
-      "record": "api_contracts/column-explanations",
-      "reason": "Add Rust-owned context association analysis with Python/Java public behavior tests for exact labels, persistence, holdout and merge semantics; no blanket connector inference certification."
-    },
-    {
-      "base_commit": "0b3afe8fa228b8d48446f89717758e1b1a7df40b",
-      "record": "api_inventory",
-      "reason": "Map new analysis containers and changed result APIs to concrete language tests; intentionally replace the pre-2.0 direct-gradient accessor with a gradients/columns container."
-    },
-    {
-      "base_commit": "0b3afe8fa228b8d48446f89717758e1b1a7df40b",
-      "record": "public_api_snapshot_sha256",
-      "reason": "Regenerated public API snapshot includes column-analysis containers and explicit merge override."
-    },
-    {
       "base_commit": "4edabbf9c877507e3935e488aeb7173bc025cbfb",
       "record": "api_inventory/java",
       "reason": "Main at this audited merge base has no Java API; Phase9 retains the reviewed Rust migration Java surface and adds column-analysis equivalents with explicit tests. This is an introduction relative to main, not a claim of binary compatibility with the pre-2.0 rust-core accessor."
@@ -8699,6 +8103,101 @@
       "record": "api_inventory/python/sdm_client.PredictionResult.explanations",
       "reason": "The class property is represented by the public instance Explanations container initialized by PredictionResult. Gradients and columns remain available; this is snapshot representation, not removal of the instance API.",
       "retained_test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis"
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.aggregate",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.condition",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.forecast",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.foreign-key",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.ranking",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.regression",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/lifecycle.temporal-link",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/outputs.binary",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/outputs.regression",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.aggregate",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.binary",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.condition",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.forecast",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.foreign-key",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.multiclass",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.ranking",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.regression",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/prediction.temporal-link",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "capabilities/types.regression",
+      "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
     }
   ],
   "capabilities": [
@@ -8736,8 +8235,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -8780,8 +8279,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -8824,8 +8323,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -8868,8 +8367,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -8912,8 +8411,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -8959,8 +8458,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -8987,8 +8486,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -9017,8 +8516,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -9059,8 +8558,8 @@
             }
           },
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -9082,7 +8581,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9125,8 +8624,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9158,7 +8657,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9189,7 +8688,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -9210,7 +8709,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9250,8 +8749,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9297,8 +8796,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9338,8 +8837,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9379,8 +8878,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9423,8 +8922,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9470,8 +8969,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9511,8 +9010,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9558,8 +9057,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -9594,8 +9093,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         },
         {
@@ -9631,8 +9130,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9672,8 +9171,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-snowflake-semantic.json": "6e94cfe08990d3ea8863df373d001d19ceae4bfa155dee1ab2c86bab963ba492",
-            "fixtures/shop.json": "01d00fb41d8578b53543c51a1d392b2f18a49734d1374858f6f52a1b45181a33"
+            "fixtures/shop-snowflake-semantic.json": "a0ef5cfd6e907032a46c58d4e053c5d2b481370eb5ac580b97575c4fbe113ae2",
+            "fixtures/shop.json": "70d0e2220ff2007efb6d611e905a2cc874c98b15643623675d3ac260c52b02da"
           }
         }
       ],
@@ -9710,7 +9209,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-text-null.json": "6896c57b757e53d6997b9974658591def6358499e586dd345cea672be24a9ab7"
+            "fixtures/shop-text-null.json": "f7e35db6e30e2dec8047484858eeff4e7980acce6c48f83e2914637ed485c271"
           }
         },
         {
@@ -9744,7 +9243,7 @@
           },
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-text-null.json": "6896c57b757e53d6997b9974658591def6358499e586dd345cea672be24a9ab7"
+            "fixtures/shop-text-null.json": "f7e35db6e30e2dec8047484858eeff4e7980acce6c48f83e2914637ed485c271"
           }
         },
         {
@@ -9771,7 +9270,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-text.json": "e4d571995618f215fde9b397f512f216cd648b971cca7a145040ba4b8931dfdf"
+            "fixtures/shop-text.json": "b8aa1f4c82678224ca5e08794ba55ac564d0a9452b3c574b5ce14a1b5a6f04e7"
           }
         },
         {
@@ -9795,7 +9294,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-null.json": "1a0e94c7af3cdaf8af0bc29a97878df5b28b0d8fef9d18d0fe4f932afff09793"
+            "fixtures/shop-null.json": "b9d6f2c0200cc60f1b8767c7cfae6823f5a8556818690c96c30762e489db24bd"
           }
         },
         {
@@ -9819,7 +9318,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-text-short.json": "58c70aec052b3f3fa3e095c3c79fe2730dffbe1357b84b51461b0b564fd4bca9"
+            "fixtures/shop-text-short.json": "b40c3f10829a561ff6cefda10fc6d6fb92d74cf31837c72e3a5b1a6cbe6e1e0a"
           }
         },
         {
@@ -9850,7 +9349,7 @@
           },
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-text-short.json": "58c70aec052b3f3fa3e095c3c79fe2730dffbe1357b84b51461b0b564fd4bca9"
+            "fixtures/shop-text-short.json": "b40c3f10829a561ff6cefda10fc6d6fb92d74cf31837c72e3a5b1a6cbe6e1e0a"
           }
         },
         {
@@ -9877,7 +9376,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-tags.json": "22e567958321d02181a9479a7962435843dcfdc3c03573f442f6337d67f4437a"
+            "fixtures/shop-tags.json": "373f72fc0aae628c025d3b40509d5a4418ac25fbba8bbe7f0b1fd34ad6be64c7"
           }
         },
         {
@@ -9904,7 +9403,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-sequence.json": "9e77a469f9d5d4ebb8a71ab44f21200d7be8d9731de9f96c31429a9b5909830d"
+            "fixtures/shop-sequence.json": "7cd3cfda73b4553712ab20efdfceeca70c05227d60f105cfdd1555869ce7518d"
           }
         },
         {
@@ -9928,7 +9427,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-numeric.json": "03b86abeaafcee601ce9846e0ac16426be6c2c971a15ba24077c08056e7d03d4"
+            "fixtures/shop-numeric.json": "4d4f0d54413760dabcb0fe1bf28ad636763f3f653e61eb2694b5e2c5ef76d83e"
           }
         },
         {
@@ -9959,8 +9458,8 @@
           },
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-temporal-micro.json": "c3bd0190ed63e67b7ae65b2a74b7826346db5cf67c0a64fc5a4529251ec5b707",
-            "fixtures/shop-temporal.json": "9ae9333f2b055186cc8ae32dd92e3dada298a81626216cb9d1b903ef827a46e8"
+            "fixtures/shop-temporal-micro.json": "d63496f1600058d905ac72e5e45ec25251c5e5ae5b623593775959e6f26bad07",
+            "fixtures/shop-temporal.json": "cb610c4adf7c3d402f0584e2ee7a3b2544a02b2595857e198cb45f8f3dd1271d"
           }
         },
         {
@@ -9983,7 +9482,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-null.json": "1a0e94c7af3cdaf8af0bc29a97878df5b28b0d8fef9d18d0fe4f932afff09793"
+            "fixtures/shop-null.json": "b9d6f2c0200cc60f1b8767c7cfae6823f5a8556818690c96c30762e489db24bd"
           }
         },
         {
@@ -10006,7 +9505,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-text-short.json": "58c70aec052b3f3fa3e095c3c79fe2730dffbe1357b84b51461b0b564fd4bca9"
+            "fixtures/shop-text-short.json": "b40c3f10829a561ff6cefda10fc6d6fb92d74cf31837c72e3a5b1a6cbe6e1e0a"
           }
         },
         {
@@ -10027,7 +9526,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-null.json": "1a0e94c7af3cdaf8af0bc29a97878df5b28b0d8fef9d18d0fe4f932afff09793"
+            "fixtures/shop-null.json": "b9d6f2c0200cc60f1b8767c7cfae6823f5a8556818690c96c30762e489db24bd"
           }
         },
         {
@@ -10048,7 +9547,7 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-numeric.json": "03b86abeaafcee601ce9846e0ac16426be6c2c971a15ba24077c08056e7d03d4"
+            "fixtures/shop-numeric.json": "4d4f0d54413760dabcb0fe1bf28ad636763f3f653e61eb2694b5e2c5ef76d83e"
           }
         },
         {
@@ -10069,8 +9568,8 @@
           "expected_by_model": {},
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-temporal-micro.json": "c3bd0190ed63e67b7ae65b2a74b7826346db5cf67c0a64fc5a4529251ec5b707",
-            "fixtures/shop-temporal.json": "9ae9333f2b055186cc8ae32dd92e3dada298a81626216cb9d1b903ef827a46e8"
+            "fixtures/shop-temporal-micro.json": "d63496f1600058d905ac72e5e45ec25251c5e5ae5b623593775959e6f26bad07",
+            "fixtures/shop-temporal.json": "cb610c4adf7c3d402f0584e2ee7a3b2544a02b2595857e198cb45f8f3dd1271d"
           }
         },
         {
@@ -10100,7 +9599,7 @@
           },
           "expected_by_language": {},
           "fixture_hashes": {
-            "fixtures/shop-date.json": "2173057dd8413e2e02fce1e29b624b760398ed645e9af4f4036d1c599f2d1ca6"
+            "fixtures/shop-date.json": "735c94a8fd2aa08cb10f0674ea87e2f84424fdde5262b45f7350b6590eaeb30d"
           }
         }
       ],

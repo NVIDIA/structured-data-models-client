@@ -9,6 +9,7 @@ import json
 import pytest
 from compare import assess as compare_assess
 from compare import difference, matrix
+from shop_fixtures import load_fixture
 
 from contract import (
     HERE,
@@ -36,7 +37,7 @@ def one():
 
 
 def observation(case, phase='candidate', language='python'):
-    fixture = json.loads((HERE / case['fixture']).read_text())
+    fixture = load_fixture(HERE / case['fixture'])
     record = {
         'version': 1,
         'case': case['id'],
@@ -73,13 +74,6 @@ def observation(case, phase='candidate', language='python'):
             'request': {},
             'results': [[1, 2.0]],
             'lifecycle': ['materialize', 'predict'],
-        },
-        'route': {
-            'installed': True,
-            'scope': 'whole-journey',
-            'workers': ['pid:thread'],
-            'legacy_hits': [],
-            'unobserved_subprocesses': [],
         },
     }
 
@@ -191,7 +185,7 @@ def test_fixture_hash_covers_options_schema_rows_and_order():
     initial = fixture_hash(case)
     case['options']['random_seed'] += 1
     assert fixture_hash(case) != initial
-    fixture = json.loads((HERE / case['fixture']).read_text())
+    fixture = load_fixture(HERE / case['fixture'])
     changed = copy.deepcopy(fixture)
     changed['tables']['users']['rows'].reverse()
     assert digest(fixture) != digest(changed)
@@ -326,7 +320,7 @@ def test_connector_variant_is_explicit_and_does_not_change_other_cells():
 def test_identity_mapping_is_bijective_and_does_not_hide_feature_edge_or_order_changes():
     from identity import IdentityError, canonical
 
-    fixture = json.loads((HERE / 'fixtures/shop.json').read_text())
+    fixture = load_fixture(HERE / 'fixtures/shop.json')
 
     def envelope(synthetic):
         definitions, tables = {}, {}

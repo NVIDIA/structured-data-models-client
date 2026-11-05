@@ -186,7 +186,6 @@ public final class ParityRunner {
             }
           }
       }
-      route.finish(records);
     }
     checkpoint(records, true);
     if (records.isEmpty()) System.exit(1);
@@ -203,11 +202,7 @@ public final class ParityRunner {
           var record = new LinkedHashMap<>(source);
           if (!finished) {
             record.put("status", "incomplete");
-            record.put("reason", "journey complete; whole-run route observation pending");
-            var pendingRoute = new LinkedHashMap<>(map(record.get("route")));
-            pendingRoute.put("workers", List.of());
-            pendingRoute.put("unobserved_subprocesses", List.of("route-observation-pending"));
-            record.put("route", pendingRoute);
+            record.put("reason", "compatibility run has not completed");
           }
           out.write(new String(Json.write(record), StandardCharsets.UTF_8));
           out.newLine();
@@ -244,7 +239,7 @@ public final class ParityRunner {
       Map<String, Object> artifact,
       ParityRoute route)
       throws Exception {
-    Map<String, Object> fixture = read(base.resolve(text(scenario.get("fixture"))));
+    Map<String, Object> fixture = ShopFixtures.load(base.resolve(text(scenario.get("fixture"))));
     var record = new LinkedHashMap<String, Object>();
     record.put("version", 1);
     record.put("case", scenario.get("id"));

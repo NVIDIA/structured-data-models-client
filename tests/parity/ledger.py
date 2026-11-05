@@ -10,6 +10,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from shop_fixtures import load_fixture
+
 
 def python_symbols(snapshot):
     """Include exported objects and their public members, not only __all__."""
@@ -299,7 +301,12 @@ def validate_coverage(data, root):
             }
             hashes = {
                 path: hashlib.sha256(
-                    (root / 'tests/parity' / path).read_bytes()
+                    json.dumps(
+                        load_fixture(root / 'tests/parity' / path),
+                        sort_keys=True,
+                        separators=(',', ':'),
+                        allow_nan=False,
+                    ).encode()
                 ).hexdigest()
                 for path in fixtures
             }

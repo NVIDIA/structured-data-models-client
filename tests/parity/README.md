@@ -11,6 +11,11 @@ Local checks never certify live prediction parity.
 | `python_runner.py` | Public Python calls, including source verification and cleanup |
 | `compare.py` | Current-contract validation, cross-language comparison and generated evidence matrix |
 
+The shop rows are stored once in `fixtures/shop.json`.
+Variants contain ordered additional user columns with literal values and optional types, or uppercase identifiers for Snowflake semantic views.
+Python and Java expand the same data before provisioning, reading, verification and hashing.
+Fixture hashes describe the expanded logical data, including nulls, numeric types, row order and column order; changes to the base also change each affected variant's hash.
+
 ## Credential-free contract checks
 
 `manifest.json` is also the maintained API/capability ledger.

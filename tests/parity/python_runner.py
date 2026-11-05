@@ -18,6 +18,8 @@ import zipfile
 from decimal import Decimal
 from pathlib import Path
 
+from shop_fixtures import load_fixture
+
 from contract import (
     HERE,
     digest,
@@ -444,7 +446,7 @@ def journey(case, connector, model, config, mode, record):
     )
     from sdm_connectors import quote_ident, read_table
 
-    fixture = json.loads((HERE / case['fixture']).read_text())
+    fixture = load_fixture(HERE / case['fixture'])
     config = {
         **config,
         'sources': {
@@ -735,7 +737,6 @@ def run(case, connector, model, config, phase, mode, commit, provenance=None):
         'endpoint': None,
         'semantic': None,
         'error': None,
-        'route': None,
     }
     try:
         journey(case, connector, model, config, mode, record)

@@ -8,6 +8,8 @@ import itertools
 import json
 from pathlib import Path
 
+from shop_fixtures import load_fixture
+
 HERE = Path(__file__).resolve().parent
 
 
@@ -100,7 +102,7 @@ def expectation(case, model, language=None, *, live=True):
 def fixture_hash(case, root=HERE):
     return digest(
         {
-            'fixture': json.loads((root / case['fixture']).read_text()),
+            'fixture': load_fixture(root / case['fixture']),
             'case': {
                 key: value for key, value in case.items() if key != 'variants'
             },
@@ -143,7 +145,7 @@ def evidence_problem(record, case, live):
         semantic = record.get('semantic') or {}
         if not semantic.get('schema') or semantic.get('request') is None:
             return 'missing schema or request evidence'
-        fixture = json.loads((HERE / case['fixture']).read_text())
+        fixture = load_fixture(HERE / case['fixture'])
         reader = record.get('reader', {})
         if set(reader) != set(fixture['tables']):
             return 'missing raw reader evidence'
