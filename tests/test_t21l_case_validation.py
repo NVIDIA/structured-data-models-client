@@ -120,7 +120,16 @@ def loaded(path: Path) -> str | None:
         [(case, _)] = run.load_cases([path])
     except run.RunnerFailure as refused:
         return str(refused)
-    assert case == json.loads(path.read_bytes())
+    source = json.loads(path.read_bytes())
+    if 'input_factory' in source:
+        # Factory expansion is checked independently, key by key, in
+        # test_contract_loader.test_entity_limit_factory_expands_exact_keys_and_preserves_source_digest.
+        # Here keep the identity check for every non-generated field.
+        case = copy.deepcopy(case)
+        case['input_factory'] = source['input_factory']
+        case['input']['materialize']['indices'] = []
+        case['core']['materialize']['indices'] = []
+    assert case == source
     return None
 
 
