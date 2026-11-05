@@ -336,3 +336,105 @@ def test_sqlite_materialize_explain_uses_sampled_context_without_new_queries():
     assert groups.loc['b', 'mean'] == 17.5
     assert groups.loc['a', 'share'] == groups.loc['b', 'share'] == 0.5
     assert len(endpoint.sent) == 1
+
+
+def test_category_and_class_caps_keep_independent_population_means():
+    frame = ColumnExplanations(
+        payload([[f'c{i:03}', i] for i in range(501)])
+    ).to_pandas()
+    assert len(frame) == 10
+    other = frame.set_index('cohort').loc['OTHER(*)']
+    assert other['share'] == pytest.approx(492 / 501)
+    assert other['mean'] == 254.5  # Arithmetic mean of labels 9 through 500.
+    for size in (500, 501):
+        p = payload([[f'c{i:03}', i] for i in range(size)])
+        p['schema']['instance_table']['columns']['x']['stype'] = (
+            'multicategorical'
+        )
+        result = ColumnExplanations(p).to_pandas()
+        assert result.empty == (size == 501)
+    classes = ColumnExplanations(
+        payload([['a', i] for i in range(31)], 'classification')
+    ).to_pandas()
+    assert list(classes['class']) == list(range(30))
+    assert list(classes['mean']) == pytest.approx([1 / 31] * 30)
+    assert set(classes['share']) == {1.0}
+
+
+def test_missing_categories_are_explicit_but_missing_numbers_are_not_bins():
+    rows = [[None, 8], ['a', 2], ['a', 4]]
+    category = ColumnExplanations(payload(rows)).to_pandas().set_index('cohort')
+    assert category.loc['N/A', 'mean'] == 8
+    assert category.loc['N/A', 'share'] == pytest.approx(1 / 3)
+    assert category.loc['a', 'mean'] == 3
+    numerical = payload([[None, 100], [0, 2], [10, 4]])
+    numerical['schema']['instance_table']['columns']['x']['stype'] = 'numerical'
+    numeric = ColumnExplanations(numerical).to_pandas()
+    assert set(numeric['mean']) == {2.0, 4.0}
+    # Numeric shares are conditional on the two observed numeric values,
+    # matching the documented quantile population rather than inventing a bin.
+    assert set(numeric['share']) == {0.5}
+    assert 'N/A' not in set(numeric['cohort'])
+
+
+def test_relational_timestamp_cohorts_measure_time_before_each_anchor():
+    p = {
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'y'},
+            'anchor_time_column': 'anchor',
+        },
+        'schema': {
+            'instance_table': {
+                'columns': {
+                    'instance_id': {'stype': 'ID'},
+                    'ref': {'stype': 'ID'},
+                    'y': {'stype': 'numerical'},
+                    'anchor': {'stype': 'timestamp'},
+                }
+            },
+            'related_tables': {
+                'events': {
+                    'primary_key': ['instance_id', 'id'],
+                    'columns': {
+                        'instance_id': {'stype': 'ID'},
+                        'id': {'stype': 'ID'},
+                        'when': {'stype': 'timestamp'},
+                    },
+                }
+            },
+            'relationships': [
+                {
+                    'source_columns': ['ref'],
+                    'target_table': 'events',
+                    'target_columns': ['id'],
+                }
+            ],
+        },
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id', 'ref', 'y', 'anchor'],
+                'rows': [
+                    [0, 10, 2, '2026-01-02T00:00:00'],
+                    [1, 20, 10, '2026-01-02T00:00:00'],
+                ],
+            },
+            'related_tables': {
+                'events': {
+                    'columns': ['instance_id', 'id', 'when'],
+                    'rows': [
+                        [0, 10, '2026-01-01T23:30:00'],
+                        [0, 10, '2026-01-02T01:00:00'],
+                        [0, 10, None],
+                        [1, 20, '2026-01-01T22:30:00'],
+                    ],
+                }
+            },
+        },
+    }
+    frame = ColumnExplanations(p).to_pandas()
+    times = frame[frame['column'] == 'when'].set_index('cohort')
+    assert set(times.index) == {'[0 hours, 1 hours)', '[1 hours, 2 hours)'}
+    assert times.loc['[0 hours, 1 hours)', 'mean'] == 2
+    assert times.loc['[1 hours, 2 hours)', 'mean'] == 10
+    assert set(times['share']) == {0.5}
