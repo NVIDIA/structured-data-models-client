@@ -16,9 +16,10 @@ or later. Without it, `SDMClient.in_process()` raises `MissingExtraError`
 naming that command; on Python 3.10 the error names the Python it needs
 instead. The first prediction fetches the published weights,
 `nvidia/Kumo-Relational` on Hugging Face, into the Hugging Face cache, and
-later ones read them from there. No Hugging Face account or token is needed;
-a warning about unauthenticated requests is about rate limits, not access. The
-model runs on a GPU when there is one, else on the CPU.
+later ones read them from there. That is both task checkpoints, about 240 MB,
+once. No Hugging Face account or token is needed; a warning about
+unauthenticated requests is about rate limits, not access. The model runs on
+a GPU when there is one, else on the CPU.
 
 Open the client with `SDMClient.in_process()` in place of a URL. Everything
 else is [the whole interface](../SKILL.md): the schema, the query and
@@ -106,8 +107,10 @@ explanations.
 - **Where it ran decides the numbers.** On a GPU, with the published weights,
   the answers are a NIM's exactly. On a CPU the model computes at full
   precision and draws its random numbers there, so a prediction can differ
-  from a GPU-hosted NIM's by more than rounding. Compare against a NIM on the
-  same device, or compare shapes rather than numbers, as above.
+  from a GPU-hosted NIM's by more than rounding. The draw is seeded, so two
+  runs on one machine print the same numbers; it is the device that moves
+  them, not the run. Compare against a NIM on the same device, or compare
+  shapes rather than numbers, as above.
 - **A deployment's limits are not applied.** This client's own still are:
   every limit `materialize()` checks is checked as it would be for a NIM. A
   deployment also protects a shared server with limits of its own, such as
