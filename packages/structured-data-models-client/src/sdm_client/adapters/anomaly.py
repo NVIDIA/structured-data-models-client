@@ -26,8 +26,7 @@ from sdm_api.generated.tfm_api import (
 )
 
 from sdm_client.adapters.single_table import (
-    MEANING_OF,
-    coherent_stype,
+    meaning_a_single_meaning_model_reads,
     named_entities,
 )
 from sdm_client.base import ModelSpec
@@ -170,7 +169,9 @@ class AnomalyAdapter:
             'columns': {
                 name: {
                     'dtype': dtypes[name],
-                    'stype': _meaning(table[name], dtypes[name]),
+                    'stype': meaning_a_single_meaning_model_reads(
+                        table[name], dtypes[name]
+                    ),
                 }
                 for name in readings.columns
             }
@@ -203,22 +204,3 @@ class AnomalyAdapter:
                 json_ready(request.inference)
             )
         return envelope
-
-
-def _meaning(column: Any, dtype: str) -> str:
-    r"""What to declare a column as, for a model that reads one meaning.
-
-    `coherent_stype` holds a placeholder meaning only where the dtype cannot
-    carry it, and a float can be categorical, so a column with nothing in it
-    to read stays categorical and this model then refuses it. The readings are
-    numbers and the model reconstructs numbers, so there the meaning follows
-    the dtype instead.
-
-    Only that column, and only where nothing was said about it either. A
-    column that holds values carries a claim, and so does one a caller typed
-    by hand though it held none; both are left alone to be refused on their
-    own terms.
-    """
-    if not column.untyped or column.stype_declared:
-        return coherent_stype(column.stype, dtype, column)
-    return MEANING_OF.get(dtype) or coherent_stype(column.stype, dtype, column)

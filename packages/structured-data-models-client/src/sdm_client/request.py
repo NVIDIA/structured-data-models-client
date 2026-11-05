@@ -43,7 +43,12 @@ import pandas as pd
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
-from sdm_client.schema import Schema, supports_dtype
+from sdm_client.schema import (
+    Schema,
+    _adopt_inferred_key,
+    _inferred_key_of,
+    supports_dtype,
+)
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
 
@@ -65,6 +70,11 @@ TASK_KINDS = (
     'ranking',
     'anomaly_detection',
 )
+
+#: The most forecast steps the contract carries. `task.num_forecasts`,
+#: `forecast_step` and the number of predictions are each capped there, so a
+#: horizon past it is a request no deployment may answer.
+MAX_FORECAST_STEPS = 10_000
 
 #: The target of a question asked about the whole row rather than one column.
 #: An anomaly score is joint across the channels it reconstructs, so naming
@@ -622,6 +632,117 @@ class Request:
         )
         request._context = Split(instance_table=readings.iloc[:0])
         request._predict = Split(instance_table=readings)
+        request.inference = dict(inference or {})
+        request.requested_inference = dict(inference or {})
+        request.entity_table = entity_table
+        return request
+
+    @classmethod
+    def forecast(
+        cls,
+        history: pd.DataFrame,
+        *,
+        target: str,
+        horizon: int,
+        schema: Schema | None = None,
+        entity_table: str = 'instance',
+        inference: Mapping[str, Any] | None = None,
+    ) -> Request:
+        r"""Continue a series for ``horizon`` steps beyond its history.
+
+        The rows of ``history`` are time steps in the order they happened.
+        There are no rows to score: the question is about steps that have not
+        been measured, so the horizon is a count rather than a frame, and
+        nothing known about the future travels, because the model reads
+        nothing about it. The history is what the model is shown, so it is
+        the context; one row is scored, carrying the series being asked
+        about and nothing in it, and the horizon travels as
+        ``task.num_forecasts``, because the contract's own shape is one
+        answer per scored row per horizon.
+
+        A series whose values happen to be unique is inferred as the table's
+        key, and a key names a step rather than measuring anything. Naming
+        the column as the series to forecast settles what it is, and the key
+        falls to whatever inference would have chosen without it: cleared
+        outright, a real identifier beside it was left to be read as
+        history.
+
+        Args:
+            history: The series so far, one row per step. Must carry
+                ``target``; every other numerical column is read as something
+                measured alongside it.
+            target: The column being forecast.
+            horizon: How many steps to continue it for.
+            schema: Override the inferred schema. Rarely needed.
+            entity_table: The name the instance table is known by.
+            inference: Gathering knobs passed to the adapter.
+
+        Raises:
+            StructuredDataError: If ``history`` is not a DataFrame, carries no
+                ``target``, or has no rows, or ``horizon`` is not a positive
+                whole number.
+
+        >>> request = Request.forecast(readings, target='flow', horizon=24)
+        >>> client.predict(request, model=KumoForecast())
+        """
+        history = _require_frame(history, 'history')
+        if isinstance(horizon, bool) or not isinstance(horizon, int):
+            raise StructuredDataError(
+                f'horizon is {horizon!r}; it is a whole number of steps',
+                code='INVALID_REQUEST',
+            )
+        if horizon < 1:
+            raise StructuredDataError(
+                f'horizon is {horizon}; a forecast of no steps is not a '
+                f'question with an answer',
+                code='INVALID_REQUEST',
+            )
+        if horizon > MAX_FORECAST_STEPS:
+            raise StructuredDataError(
+                f'horizon is {horizon}, and the contract carries at most '
+                f'{MAX_FORECAST_STEPS} forecast steps, so no deployment may '
+                f'answer this',
+                code='INVALID_REQUEST',
+            )
+        if len(history) == 0:
+            raise StructuredDataError(
+                'history has no rows, so there is no series to continue',
+                code='INVALID_REQUEST',
+            )
+        if target not in history.columns:
+            raise StructuredDataError(
+                f'history has no column {target!r}, which is the series '
+                f'being forecast; it has '
+                f'{sorted(map(str, history.columns))}',
+                code='INVALID_REQUEST',
+            )
+        if schema is None:
+            schema = Schema.from_data({entity_table: history})
+            table = schema[entity_table]
+            if target in _as_key_tuple(table.primary_key):
+                beside = history.drop(columns=[target])
+                _adopt_inferred_key(table, _inferred_key_of(beside), beside)
+                table[target].stype = 'numerical'
+        _check_scored_values_mean_what_the_schema_says(
+            history, schema, entity_table
+        )
+
+        request = cls.__new__(cls)
+        request.schema = schema
+        request.task = Task(
+            kind='forecasting',
+            target=Target(
+                column_name=target,
+                dtype=schema[entity_table][target].dtype,
+                table_name=entity_table,
+            ),
+            options={'num_forecasts': horizon},
+        )
+        request.horizon = horizon
+        request._context = Split(instance_table=history)
+        request._predict = Split(
+            instance_table=pd.DataFrame({target: [None]}, dtype='object')
+        )
         request.inference = dict(inference or {})
         request.requested_inference = dict(inference or {})
         request.entity_table = entity_table

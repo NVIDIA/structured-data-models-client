@@ -270,6 +270,7 @@ def test_a_model_is_loaded_the_first_time_it_is_asked_for(
             'kumo-tabular',
             'kumo-relational',
             'kumo-anomaly',
+            'kumo-forecast',
         ]
         assert loads == []
         client.predict(request, model=KumoTabular())

@@ -1949,25 +1949,52 @@ def _infer_table_and_time_column(
         column: _column(frame[column], column) for column in frame.columns
     }
     table = Table(name=name, data=frame, columns=columns)
-    inferred = _infer_primary_key(frame, columns)
+    _adopt_inferred_key(table, _infer_primary_key(frame, columns), frame)
+    return table, _infer_time_column(table, frame)
+
+
+def _inferred_key_of(frame: pd.DataFrame) -> str | None:
+    r"""The key inference would nominate for ``frame``, and nothing else.
+
+    For a caller that has a frame and wants only the guess, without building a
+    schema around it and reading back what that schema decided. Building one
+    would also say everything that building a schema says, including a warning
+    about a key this caller is only asking after.
+    """
+    return _infer_primary_key(
+        frame, {column: _column(frame[column], column) for column in frame}
+    )
+
+
+def _adopt_inferred_key(
+    table: Table, inferred: str | None, frame: pd.DataFrame
+) -> None:
+    r"""Give ``table`` a key that inference nominated, not one a caller stated.
+
+    A key with a null in it is tolerated here and refused on assignment, the
+    same way a nearly unique column is: inference is a guess and a caller's key
+    is an assertion. Refusing would break `Schema.from_data` on frames that
+    worked before, including any relationship pointing at this table, but the
+    engine drops those rows without a word, so the guess is said out loud.
+
+    Every route from a guess to a key comes through here, so that a frame
+    inference accepts is not refused further on for having been inferred a
+    second time, with a column order the only thing deciding which it was.
+
+    Otherwise the key is assigned. Assigning it is what marks its column,
+    counts what the uniqueness threshold tolerated and says so; doing any of it
+    a second time here would report the same duplicate twice, from inside this
+    module.
+    """
     if inferred is not None and frame[inferred].isna().any():
-        # Tolerated here and refused on assignment, the same way a nearly
-        # unique column is: inference is a guess and a caller's key is an
-        # assertion. Refusing would break `Schema.from_data` on frames that
-        # worked before, including any relationship pointing at this table,
-        # but the engine drops these rows without a word, so the guess is
-        # said out loud.
         _warn_a_key_has_no_value(
-            name, inferred, int(frame[inferred].isna().sum())
+            table.name, inferred, int(frame[inferred].isna().sum())
         )
         object.__setattr__(table, 'primary_key', inferred)
         table._adopt_key(inferred)
-        return table, _infer_time_column(table, frame)
-    # Assigning the key is what marks its column, counts what the uniqueness
-    # threshold tolerated and says so; doing any of it a second time here would
-    # report the same duplicate twice, from inside this module.
+        table._re_derive_key_columns()
+        return
     table.primary_key = inferred
-    return table, _infer_time_column(table, frame)
 
 
 def _copy_table(table: _T) -> _T:

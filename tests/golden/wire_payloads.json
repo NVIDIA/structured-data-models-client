@@ -248,6 +248,133 @@
       }
     }
   ],
+  "forecast/direct-history": [
+    {
+      "context": {
+        "instance_table": {
+          "columns": [
+            "user_id",
+            "age",
+            "churn"
+          ],
+          "format": "arrays",
+          "rows": [
+            [
+              0,
+              20.0,
+              0
+            ],
+            [
+              1,
+              21.0,
+              1
+            ],
+            [
+              2,
+              22.0,
+              0
+            ],
+            [
+              3,
+              23.0,
+              1
+            ],
+            [
+              4,
+              24.0,
+              0
+            ],
+            [
+              5,
+              25.0,
+              1
+            ],
+            [
+              6,
+              26.0,
+              0
+            ],
+            [
+              7,
+              27.0,
+              1
+            ],
+            [
+              8,
+              28.0,
+              0
+            ],
+            [
+              9,
+              29.0,
+              1
+            ],
+            [
+              10,
+              30.0,
+              0
+            ],
+            [
+              11,
+              31.0,
+              1
+            ]
+          ]
+        }
+      },
+      "metadata": {
+        "request_id": "<request-id>"
+      },
+      "model": "kumo-forecast",
+      "output": {
+        "fields": [
+          "prediction"
+        ]
+      },
+      "predict": {
+        "instance_table": {
+          "columns": [
+            "age"
+          ],
+          "format": "arrays",
+          "rows": [
+            [
+              null
+            ]
+          ]
+        }
+      },
+      "schema": {
+        "instance_table": {
+          "columns": {
+            "age": {
+              "dtype": "float64",
+              "stype": "numerical"
+            },
+            "churn": {
+              "dtype": "int64",
+              "stype": "numerical"
+            },
+            "user_id": {
+              "dtype": "int64",
+              "stype": "ID"
+            }
+          },
+          "primary_key": [
+            "user_id"
+          ]
+        }
+      },
+      "task": {
+        "kind": "forecasting",
+        "num_forecasts": 3,
+        "target": {
+          "column_name": "age",
+          "dtype": "float64"
+        }
+      }
+    }
+  ],
   "relational/pql-count-aggregation": [
     {
       "context": {
