@@ -4904,7 +4904,8 @@
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_materialize_pickle_predict_restores_pretrim_context_without_sending_delta",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_delta_corruption_is_not_silently_an_omitted_analysis",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_unavailable_statistics_warn_without_losing_predictions",
-          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available"
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_sqlite_materialize_explain_uses_sampled_context_without_new_queries"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
