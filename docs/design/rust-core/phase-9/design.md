@@ -4,10 +4,11 @@
 
 # Phase 9: bring the two new main commits into Rust
 
-**Status: proposed, implementation not started.**
+**Status: complete and integrated into `rust-core-phase-9`.**
+See [verification](verification.md) for results and limits.
 Audited `rust-core` at `0b3afe8fa` against `main` at `4edabbf9c`.
 Phase 8 is already integrated into `rust-core`.
-Their common ancestor is `847a1e9e3`; exactly two main commits remain to integrate.
+At that audit baseline, their common ancestor was `847a1e9e3`; the two main commits below are now integrated.
 
 ## What changed
 
@@ -19,7 +20,7 @@ Their common ancestor is `847a1e9e3`; exactly two main commits remain to integra
 The notebook uses existing APIs, including a single-table `Schema.from_data()`.
 It does not introduce a new sampling algorithm or require Tabular `Schema.from_source()` support.
 
-## Why Git still reports conflicts
+## Why the integration required review
 
 A non-mutating trial merge reported **23 conflicts**, across runtime code, documentation, tests and the public API snapshot.
 Main changed Python explanation code that the migration replaced with Rust and a different Python wrapper.

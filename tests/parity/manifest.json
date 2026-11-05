@@ -4905,7 +4905,10 @@
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_delta_corruption_is_not_silently_an_omitted_analysis",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_unavailable_statistics_warn_without_losing_predictions",
           "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_sqlite_materialize_explain_uses_sampled_context_without_new_queries"
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_sqlite_materialize_explain_uses_sampled_context_without_new_queries",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_category_and_class_caps_keep_independent_population_means",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_missing_categories_are_explicit_but_missing_numbers_are_not_bins",
+          "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_relational_timestamp_cohorts_measure_time_before_each_anchor"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
