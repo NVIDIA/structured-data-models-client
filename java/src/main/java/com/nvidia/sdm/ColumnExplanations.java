@@ -26,6 +26,21 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * Formatting preserves engine order and never recomputes cohorts or scores.
  */
 public final class ColumnExplanations {
+  /** Informational engine cohort count; not a tuning parameter. */
+  public static final int NUM_COHORTS = 10;
+  /** Informational categorical admission limit; not a tuning parameter. */
+  public static final int MAX_CATEGORIES = 500;
+  /** Informational classification admission limit; not a tuning parameter. */
+  public static final int MAX_CLASSES = 30;
+  /** Display label for a related-table row-count feature. */
+  public static final String COUNT = "COUNT(*)";
+  /** Display label for categories grouped outside the retained cohorts. */
+  public static final String OTHER = "OTHER(*)";
+  /** Display label for missing feature values. */
+  public static final String NA = "N/A";
+  /** Table name for direct tabular context features. */
+  public static final String TABULAR_TABLE = "instance_table";
+
   /** One column/cohort/class row; classLabel is null for regression and otherwise an exact scalar. */
   public record Row(String table, long hop, String column, String stype, String cohort,
       Object classLabel, double share, double mean, double score) {}

@@ -23,6 +23,16 @@ import org.apache.arrow.vector.table.Table;
 import org.junit.jupiter.api.Test;
 
 class ColumnExplanationsTest {
+  @Test void informationalConstantsMatchPublicAnalysisContract() {
+    assertEquals(10, ColumnExplanations.NUM_COHORTS);
+    assertEquals(500, ColumnExplanations.MAX_CATEGORIES);
+    assertEquals(30, ColumnExplanations.MAX_CLASSES);
+    assertEquals("COUNT(*)", ColumnExplanations.COUNT);
+    assertEquals("OTHER(*)", ColumnExplanations.OTHER);
+    assertEquals("N/A", ColumnExplanations.NA);
+    assertEquals("instance_table", ColumnExplanations.TABULAR_TABLE);
+  }
+
   private static Map<String, Object> row(Object label) throws Exception {
     Map<String, Object> row = new LinkedHashMap<>();
     row.put("table", "instance_table"); row.put("hop", 0L); row.put("column", "x");
