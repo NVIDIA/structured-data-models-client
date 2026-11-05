@@ -4,7 +4,7 @@
 
 # CI coverage without a warehouse on every PR
 
-**Status: implemented; hosted acceptance is pending successful execution.**
+**Status: complete; [hosted acceptance passed](verification.md) with 742 required cells and separate pretrained CPU smoke.**
 Earlier Phase 8 full-matrix and benchmark evidence remains in the [verification report](../validation-performance/verification.md) and [performance report](../validation-performance/performance.md).
 This smaller recurring CI profile does not replace or relabel those historical results.
 
@@ -25,7 +25,7 @@ The supplied Snowflake and Databricks API credentials are validated and stored a
 | Every PR | Existing engine/host contracts, local PostgreSQL and generated CSV/Parquet checks | None |
 | Required hosted local shards | Full declared materialization matrix for local connectors and S3 emulation | No external service credentials |
 | Push to main or approved manual branch run | Real Snowflake and Databricks reader/SQL journeys in both languages, using disposable generated fixtures | Snowflake and Databricks API credentials |
-| Small model smoke | Pretrained CPU classification/regression and gradients for both models; Python and Java public paths, plus necessary session checks | Model-weight download access, to verify on a clean runner |
+| Small model smoke | Pretrained CPU classification/regression and gradients for both models; Python and Java public paths, plus necessary session checks | Public model-weight downloads, verified on a clean hosted runner |
 | Optional only | Real S3, Lakebase and giant-value stress | Explicitly configured resources |
 
 Do not multiply pretrained inference across every connector/type combination.
@@ -55,7 +55,7 @@ Both must identify the same production CI artifacts; cleanup failures and skippe
 Disposable fixture setup/read/cleanup passed locally for PostgreSQL, emulated S3, Databricks SQL/Spark/metric views and Snowflake tables/semantic views.
 The combined CPU smoke passed locally: four Python cases and three Java methods, including session coverage, in 27.8 seconds.
 The dedicated-credential Java Spark probe also passed all 25 expected outcomes, with whole-journey route checks and disposable-schema cleanup.
-Hosted execution is still pending; these local checks do not claim hosted acceptance.
+Hosted results and exact tested commit are recorded in the [acceptance report](verification.md).
 
 Full CI exposed a pandas 3.1.1 compatibility omission for mixed Decimal/float row labels.
 The relevant upstream `pandas/_libs/algos.pyx` is byte-identical to 3.1.0; extending the existing version entry fixed eight reproduced failures, with all 26 ordinary-index checks passing locally.
@@ -79,12 +79,15 @@ Manual branch runs were forbidden from saving Rust caches, and their sibling `ru
 Cache state is not test evidence: every required assertion still runs, and published artifact receipts remain tied to the candidate commit.
 If test execution itself exceeds the target after caching, report that separately; do not claim the target from cache configuration alone.
 
-## Hosted execution findings
+## Execution outcome
 
-The hosted CPU smoke passed four Python cases and three Java methods in 60 seconds on run `41915433899`.
-Connector acceptance is still pending: that run exposed a non-Spark Java launcher argument error and incomplete generated semantic-view definitions.
-Fix the test setup while retaining every matrix assertion; fixture reads alone do not prove schema construction or materialization.
+[Full CI and hosted acceptance passed](verification.md).
+Fixes addressed Java launcher arguments, complete semantic-view fixtures, and shared Parquet files that preserve nanosecond timestamps.
+No matrix assertions were relaxed.
 
-For readiness dispatch, use `gh workflow run ci.yml --ref rust-core-phase-8 -f fresh=false`.
+Use `gh workflow run ci.yml --ref rust-core-phase-8 -f fresh=false` for the committed dependency set.
 The optional `fresh=true` mode upgrades dependencies and is a separate compatibility experiment.
-Run `41916333063` accidentally used that mode and failed the exact Arrow fixture-version check after upgrading 58.4.0 to 58.4.1; it is not passing readiness evidence.
+An accidental fresh dispatch exposed an Arrow fixture-version mismatch after a dependency upgrade; it was not counted as readiness evidence.
+
+The 10-minute target remains unmet.
+Further runner and parallelization improvements are deferred until after merging into main, per the owner's decision.
