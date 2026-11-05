@@ -159,8 +159,10 @@ The Databricks notebooks
 deploy each model to a serving endpoint and ask it questions about the
 AdventureWorks sample data.
 
-The notebooks install `structured-data-models-client[databricks,databricks-serving]`
-to include the warehouse connectors as well as the serving SDK.
+The relational notebook installs
+`structured-data-models-client[relational,databricks,databricks-serving]`;
+the tabular notebook installs
+`structured-data-models-client[databricks,databricks-serving]`.
 
 ## A model in this process
 
