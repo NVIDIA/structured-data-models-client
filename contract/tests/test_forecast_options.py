@@ -365,7 +365,7 @@ def _cases_on(database: str) -> dict[str, dict[str, Any]]:
     r"""python-core over the cases on ``database``, as that database's
     job runs it: each observation by its key."""
     paths = [CASES / f'{case_id}.json' for case_id in FAMILY]
-    with tempfile.TemporaryDirectory(prefix='t29-cases-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='forecast_options-') as tmp:
         out = Path(tmp) / 'python-core.jsonl'
         done = subprocess.run(
             [

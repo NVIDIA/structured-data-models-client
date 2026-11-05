@@ -1147,7 +1147,8 @@ mod load_for_tests {
             &std::fs::read(contract.join("tests/case-format-vectors.json")).unwrap(),
         )
         .unwrap();
-        let directory = std::env::temp_dir().join(format!("t32-load-for-{}", std::process::id()));
+        let directory =
+            std::env::temp_dir().join(format!("warehouse-case-load-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let s2 = directory.join("s2.json");
         std::fs::write(&s2, serde_json::to_vec(&vectors["case"]).unwrap()).unwrap();

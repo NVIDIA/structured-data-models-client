@@ -266,7 +266,7 @@ def core_run(database: str) -> dict[str, Any]:
     r"""python-core over the cases on ``database``, as that database's
     job runs them: each observation by its key, or under ``''`` why the run
     failed whole."""
-    with tempfile.TemporaryDirectory(prefix='t219-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='graph_sampling_shapes-') as tmp:
         given = Path(tmp) / 'cases'
         given.mkdir()
         for case_id in CASE_IDS:

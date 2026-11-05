@@ -2,7 +2,7 @@
   "contract/cases/s1/multicall.entities-per-call.10001.json": {
     "consumers": [
       "contract/runners/run_python.py",
-      "contract/tests/test_t28c_multicall.py"
+      "contract/tests/test_prediction_batching.py"
     ],
     "max_bytes": 290000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
@@ -10,7 +10,7 @@
   "contract/cases/s1/rank.batched.json": {
     "consumers": [
       "contract/runners/run_python.py",
-      "contract/tests/test_t28_ranking.py"
+      "contract/tests/test_ranking.py"
     ],
     "max_bytes": 340000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
@@ -24,14 +24,14 @@
   },
   "contract/fixtures/maintained/batch-expectations.json": {
     "consumers": [
-      "contract/tests/test_t28c_multicall.py"
+      "contract/tests/test_prediction_batching.py"
     ],
     "max_bytes": 53000,
     "reason": "Independent expected request, label or SQL facts used by these current correctness tests."
   },
   "contract/fixtures/maintained/decimal-key-inputs.json": {
     "consumers": [
-      "contract/tests/test_t132b_decimal_vectors.py"
+      "contract/tests/test_decimal_key_joins.py"
     ],
     "max_bytes": 10000,
     "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
@@ -54,20 +54,20 @@
   "contract/fixtures/maintained/postgres-statements.json": {
     "consumers": [
       "packages/structured-data-models-client/tests_test_ops/test_the_postgres_provider.py",
-      "tests/test_t33_write_guard.py"
+      "tests/test_write_guard.py"
     ],
     "max_bytes": 500000,
     "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
   },
   "contract/fixtures/maintained/request-expectations.jsonl": {
     "consumers": [
-      "contract/tests/test_t213_options.py",
-      "contract/tests/test_t214b_decimal_stype.py",
-      "contract/tests/test_t214b_host.py",
-      "contract/tests/test_t214b_wording.py",
-      "contract/tests/test_t28_ranking.py",
-      "contract/tests/test_t28c_multicall.py",
-      "contract/tests/test_t29_forecasting.py"
+      "contract/tests/test_query_options.py",
+      "contract/tests/test_decimal_semantic_types.py",
+      "contract/tests/test_request_state_endpoint_bytes.py",
+      "contract/tests/test_public_error_messages.py",
+      "contract/tests/test_ranking.py",
+      "contract/tests/test_prediction_batching.py",
+      "contract/tests/test_forecast_options.py"
     ],
     "max_bytes": 4824000,
     "reason": "Independent expected request, label or SQL facts used by these current correctness tests."
@@ -81,22 +81,22 @@
   },
   "contract/fixtures/maintained/snowflake.json": {
     "consumers": [
-      "rust/crates/sdm-testkit/tests/t36_snowflake.rs",
+      "rust/crates/sdm-testkit/tests/snowflake.rs",
       "packages/structured-data-models-client/tests/test_snowflake_from_source.py"
     ],
     "max_bytes": 560000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "contract/t311-java-vectors.json": {
+  "contract/native-binding-vectors.json": {
     "consumers": [
-      "contract/tests/test_t311_java.py"
+      "contract/tests/test_java_packaging.py"
     ],
     "max_bytes": 260000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
   "contract/view-captures.json": {
     "consumers": [
-      "packages/structured-data-models-client/tests/test_t310_fresh_sampler_facts.py",
+      "packages/structured-data-models-client/tests/test_fresh_sampler_facts.py",
       "rust/crates/sdm-core/tests/view_captures.rs"
     ],
     "max_bytes": 750000,
@@ -139,23 +139,23 @@
     "max_bytes": 340000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "packages/structured-data-models-client/tests/t128a-payload-rules.json": {
+  "packages/structured-data-models-client/tests/payload-rules.json": {
     "consumers": [
-      "packages/structured-data-models-client/tests/test_t128a_payload_rules.py"
+      "packages/structured-data-models-client/tests/test_payload_rules.py"
     ],
     "max_bytes": 490000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "packages/structured-data-models-client/tests/t128b-predict-result.json": {
+  "packages/structured-data-models-client/tests/predict-result.json": {
     "consumers": [
-      "packages/structured-data-models-client/tests/test_t128b_predict_result.py"
+      "packages/structured-data-models-client/tests/test_predict_result.py"
     ],
     "max_bytes": 530000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "packages/structured-data-models-client/tests/t38-forced-routes.json": {
+  "packages/structured-data-models-client/tests/forced-routes.json": {
     "consumers": [
-      "packages/structured-data-models-client/tests/test_t38_forced_routes.py"
+      "packages/structured-data-models-client/tests/test_forced_routes.py"
     ],
     "max_bytes": 410000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
@@ -189,14 +189,14 @@
     "max_bytes": 1800000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "rust/crates/sdm-engine/tests/data/t46_scalar_kernel_controls.json": {
+  "rust/crates/sdm-engine/tests/data/scalar_kernel_controls.json": {
     "consumers": [
       "rust/crates/sdm-engine/tests/index_sort_controls.rs"
     ],
     "max_bytes": 450000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "rust/crates/sdm-engine/tests/data/t46_simd_kernel_controls.json": {
+  "rust/crates/sdm-engine/tests/data/simd_kernel_controls.json": {
     "consumers": [
       "rust/crates/sdm-engine/tests/index_sort_controls.rs"
     ],
@@ -224,9 +224,9 @@
     "max_bytes": 860000,
     "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
   },
-  "rust/testdata/t06-vectors.json": {
+  "rust/testdata/native-admission-vectors.json": {
     "consumers": [
-      "rust/crates/sdm-host/tests/t06_vectors.rs",
+      "rust/crates/sdm-host/tests/native_admission_vectors.rs",
       "rust/crates/sdm-pql/tests/dates.rs"
     ],
     "max_bytes": 920000,
@@ -234,7 +234,7 @@
   },
   "tests/fixtures/response-vectors.json": {
     "consumers": [
-      "packages/structured-data-models-client/tests/test_t128b_predict_result.py",
+      "packages/structured-data-models-client/tests/test_predict_result.py",
       "tests/test_response_vectors.py"
     ],
     "max_bytes": 980000,

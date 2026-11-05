@@ -174,7 +174,7 @@ def _cases_on(database: str) -> dict[str, dict[str, Any]]:
     paths = sorted(
         path for path in (ROOT / 'contract/cases/s1').glob('name.*.json')
     )
-    with tempfile.TemporaryDirectory(prefix='t218-cases-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='column_names-') as tmp:
         out = Path(tmp) / 'python-core.jsonl'
         done = subprocess.run(
             [

@@ -295,7 +295,7 @@ def test_the_join_check_fails_on_a_wrong_join() -> None:
 
 @functools.cache
 def _core_runs() -> dict[str, dict[str, Any]]:
-    with tempfile.TemporaryDirectory(prefix='t22-pairs-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='sqlite_sql_key_joins-') as tmp:
         result: dict[str, dict[str, Any]] = M.run(
             'python-core', M.VECTORS, Path(tmp)
         )

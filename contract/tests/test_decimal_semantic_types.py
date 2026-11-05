@@ -112,7 +112,7 @@ def _server() -> bool:
 def core_run(database: str) -> dict[str, Any]:
     r"""python-core over the case on ``database``: its observation by key,
     or under ``''`` why the run failed whole."""
-    with tempfile.TemporaryDirectory(prefix='t214b-stype-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='decimal_semantic_types-') as tmp:
         out = Path(tmp) / 'python-core.jsonl'
         done = subprocess.run(
             [

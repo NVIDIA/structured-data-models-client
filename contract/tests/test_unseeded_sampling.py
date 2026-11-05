@@ -193,7 +193,7 @@ def _server() -> bool:
 def core_run(database: str, run: int = 0) -> dict[str, Any]:
     r"""python-core over the unseeded cases on ``database``: each
     observation by its key, or under ``''`` why the run failed whole."""
-    with tempfile.TemporaryDirectory(prefix='t211u-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='unseeded_sampling-') as tmp:
         out = Path(tmp) / 'python-core.jsonl'
         done = subprocess.run(
             [

@@ -811,7 +811,7 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
     if database == 'sqlite':
         import adbc_driver_sqlite.dbapi
 
-        with tempfile.TemporaryDirectory(prefix='t28-vector-') as folder:
+        with tempfile.TemporaryDirectory(prefix='ranking_scenarios-') as folder:
             path = Path(folder) / 'data.sqlite'
             loader.load(duck, 'sqlite', path)
             duck.close()
