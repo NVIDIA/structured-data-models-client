@@ -4,7 +4,8 @@
 
 # Phase 10: simplify tests and remove migration baggage
 
-**Status: complete on `rust-core-phase-10`; ready for review, not merged or pushed.**
+**Status: initial cleanup implemented and pushed; repository-wide cleanup is incomplete.**
+The [follow-up audit](migration-residue-audit.md) identifies remaining migration machinery, filenames and prose that the first pass missed.
 Branch: `rust-core-phase-10`, based on `rust-core` at `ebc574639`.
 The requested deletion of `docs/design/rust-core` is already included in that base.
 Keep this plan only while cleanup is active; put lasting guidance in CONTRIBUTING and the developer change guide.
