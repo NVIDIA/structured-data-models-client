@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `edit_schema`'s run (decision E67, T1.24b): one edit to a schema,
+//! `edit_schema`'s run: one edit to a schema,
 //! checked and made by `sdm-schema` as the reference's setters check and
-//! make it, over the schema as the host holds it, as plain data (T3.16);
+//! make it, over the schema as the host holds it, as plain data;
 //! the schema with the edit made, as the host then holds it, is the run's
 //! result, with the warnings the reference gives as it makes it, or the
 //! refusal it gives at the assignment. Every host's edit reaches this one function: the Python
@@ -25,7 +25,7 @@ pub(crate) fn supports(stype: Stype, dtype: Dtype) -> bool {
 
 /// Every data type name a host may give a column, and the contract's name
 /// of the data type it names (`sdm_schema::held::DTYPE_NAMES`): the one
-/// table of them, which the Python client reads for its own checks (T3.16).
+/// table of them, which the Python client reads for its own checks.
 pub fn dtype_names() -> Vec<(&'static str, String)> {
     sdm_schema::held::DTYPE_NAMES
         .iter()
@@ -60,7 +60,7 @@ const DTYPES: [Dtype; 18] = [
 
 /// Every data type's name on the client's wire ([`Dtype::wire_name`]), by
 /// the contract's name of it: the one table of them, which a host reads to
-/// name a described column's type as the schema holds it (T3.12).
+/// name a described column's type as the schema holds it.
 pub fn wire_names() -> Vec<(String, &'static str)> {
     DTYPES
         .iter()
@@ -77,7 +77,7 @@ pub fn wire_names() -> Vec<(String, &'static str)> {
 /// Every meaning a column of each data type can carry, as the language
 /// answers it ([`supports`]), each pair by the contract's names (`Stype`'s
 /// and `Dtype`'s): plain data a host reads in place of the old PQL
-/// package's `Stype.supports_dtype` (T3.16, the structure design's rule
+/// package's `Stype.supports_dtype` (the structure design's rule
 /// 11).
 pub fn meanings() -> Vec<(String, String)> {
     const STYPES: [Stype; 9] = [

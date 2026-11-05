@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: answered through predict on DuckDB and Postgres; on DuckDB the two NaNs are two values, order_id and orderid tie and orders has no key (with the tie's warning); on Postgres orderid is the key"
+    "stage": "predict"
   },
-  "why": "orders' DOUBLE key candidates order_id and orderid, order 3's order_id NaN and order 4's -NaN: whether a NaN of each sign is its own value decides whether they tie (rules float_nan and key_tie; T2.12 round 2)",
-  "source": "T2.12 round 2 (Codex P2): a NaN of each sign as DuckDB previews it, and a static query over a NaN key"
+  "why": "Orders' DOUBLE key candidates order_id and orderid, order 3's order_id NaN and order 4's -NaN: whether a NaN of each sign is its own value decides whether they tie (rules float_nan and key_tie)",
+  "source": "Correctness case rule.float-signed-nan-key-tie-double using the shop fixture."
 }

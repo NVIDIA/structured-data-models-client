@@ -82,5 +82,5 @@
     "message": "Anchor time 'entity' requires the entity table 'users' to have a time column"
   },
   "why": "anchor_time='entity' where users has no time column: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.anchor-entity.no-time-column using the shop fixture."
 }

@@ -90,9 +90,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"top_k is 0, and this model ranks between 1 and 20 candidates\""
+    "code": "INVALID_REQUEST"
   },
   "why": "top_k outside the 1 to 20 a ranking takes, refused before anything is gathered",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.top-k-zero using the shop fixture."
 }

@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB and Postgres: answered through predict"
+    "stage": "predict"
   },
   "why": "A float feature holding both -0.0 (user 1) and 0.0 (user 2) in the preview: rule float_signed_zero. Not on SQLite, whose REAL column stores -0.0 as 0.0 (a value the contract loader loads changed, not refused), so the case could not hold the rule there; the owner's exclusion is asked for under the row named",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.float-signed-zero-feature using the shop fixture."
 }

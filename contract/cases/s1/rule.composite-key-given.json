@@ -95,9 +95,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: Schema.from_source keeps orders' composite key, materialize warns that a query cannot name it and refuses the request, the reference's SQL sampler naming the key's derived column with a reserved prefix"
+    "code": "INVALID_REQUEST"
   },
   "why": "A primary key of two columns given to Schema.from_source for a fact table (orders keyed by order_id and line): rule composite_key",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.composite-key-given using the shop fixture."
 }

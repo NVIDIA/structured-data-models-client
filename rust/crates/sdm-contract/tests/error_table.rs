@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The table of the kinds each code may carry (decision E22): every code
+//! The table of the kinds each code may carry: every code
 //! and every kind against it, through each public constructor.
 
 use std::panic::catch_unwind;
@@ -73,7 +73,7 @@ fn the_lists_of_codes_and_kinds_are_whole_and_spelled_as_serde_spells_them() {
     assert_eq!(kinds.len(), ErrorKind::ALL.len());
 }
 
-/// Every sentence through `new` and `protocol` (T3.17): an error's
+/// Every sentence through `new` and `protocol`: an error's
 /// sentence builds with its code and the code's kind; a warning's, and
 /// through `protocol` a sentence of another kind, fail the assertion in a
 /// debug build.

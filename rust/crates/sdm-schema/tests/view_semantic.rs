@@ -2,14 +2,14 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The semantic view's [`ViewSpec`] (T3.5, design part 5's V2, V3 and V6)
+//! The semantic view's [`ViewSpec`] (design part 5's V2, V3 and V6)
 //! against the semantic-view definitions of `contract/view-yaml-vectors.json`,
 //! as PyYAML read them: each logical table's name, base table and primary
 //! key, its columns from `dimensions`, `time_dimensions` and `facts` in that
 //! order, and each relationship, read by the paths the old client reads them
 //! by (`RE/graph.py:2069-2222`).
 //!
-//! From T3.5 fix 1 (Codex review 1, P1-9), an entry the old client reads
+//! fix 1, an entry the old client reads
 //! only on the branch that uses it is read there: a composite relationship's
 //! tables, a physical column's type, a composite key's members. One it never
 //! reads cannot refuse the view.
@@ -206,7 +206,7 @@ fn a_definition_missing_its_tables_is_refused_by_name() {
     }
 }
 
-/// Codex review 1, P1-9: each of these is converted by the old client,
+/// each of these is converted by the old client,
 /// which never reads the entry that is no text.
 #[test]
 fn an_entry_the_old_client_never_reads_cannot_refuse_the_view() {
@@ -242,7 +242,7 @@ fn an_entry_the_old_client_never_reads_cannot_refuse_the_view() {
     assert_eq!(table.primary_key, PrimaryKey::Composite);
 }
 
-/// Codex review 2, P1-8: the old client reads every table's name first,
+/// the old client reads every table's name first,
 /// then finishes each table, reading its catalog, before it reads the
 /// next; a later table's missing entry refuses the view only when the
 /// conversion comes to it.
@@ -272,7 +272,7 @@ fn each_table_is_read_when_the_conversion_comes_to_it() {
     assert_eq!(refusal.reason, RefusalReason::NotText("name".into()));
 }
 
-/// Codex review 2, P1-6: `len(...)` and `[0]` as Python takes them, on a
+/// `len(...)` and `[0]` as Python takes them, on a
 /// mapping (its entry keyed 0) and on a text (its first character).
 #[test]
 fn a_key_and_a_pair_are_indexed_as_python_indexes_them() {

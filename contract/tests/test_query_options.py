@@ -198,11 +198,11 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t213_run_python', RUNNER)
+    return _module('test_query_options_run_python', RUNNER)
 
 
 def recorder() -> ModuleType:
-    return _module('option_record', RECORDER)
+    return _module('query_option_scenarios', RECORDER)
 
 
 def endpoint() -> ModuleType:
@@ -220,7 +220,7 @@ NAMED_KEYS = tuple(
 
 
 def test_every_option_case_is_named_here() -> None:
-    r"""Control: the cases here are every T2.13 case, once, and each
+    r"""Control: the cases here are every case, once, and each
     refusal named in ``NAMED`` is a case."""
     assert len(set(CASE_IDS)) == len(CASE_IDS)
     assert set(CASE_IDS) == set(recorder().case_ids())
@@ -233,7 +233,7 @@ def test_every_option_case_is_named_here() -> None:
 
 @functools.cache
 def cases() -> dict[str, tuple[dict[str, Any], str]]:
-    r"""The T2.13 cases by id, each with its digest, as the runner loads
+    r"""The cases by id, each with its digest, as the runner loads
     them."""
     loaded = runner().load_cases([CASES / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}
@@ -267,7 +267,7 @@ def test_each_entity_filter_case_filters_the_entity(case_id: str) -> None:
 @pytest.mark.parametrize('case_id', list(NAMED_ENTITIES))
 def test_each_named_entity_case_names_entities(case_id: str) -> None:
     r"""Exit "``entity_ids``": the query names its entities (``FOR
-    users.user_id = ...`` or ``IN (...)``) in place of ``FOR EACH``."""
+    users.user_id =...`` or ``IN (...)``) in place of ``FOR EACH``."""
     pql = _case(case_id)['input']['pql']
     assert 'FOR EACH' not in pql
     assert pql.endswith(f' FOR users.user_id {NAMED_ENTITIES[case_id]}')
@@ -495,7 +495,7 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
             assert word in vector['message'], (word, vector['message'])
 
 
-# Current EXPLAIN admission follows the approved Phase 6 gradient design:
+# Current EXPLAIN admission follows the gradient explanation contract:
 # the prefix requests explanations and multiple entities are supported.
 # Keep archived cases/vectors immutable; every other field still compares exactly.
 def current_line(case_key: str) -> dict[str, Any]:
@@ -565,7 +565,7 @@ def test_each_explained_entity_retains_its_own_raw_response(
 
 def _server() -> bool:
     r"""Whether a Postgres server is named; where none is, one must not be
-    required (H26)."""
+    required."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -576,7 +576,7 @@ def _server() -> bool:
 
 @functools.cache
 def core_run(database: str) -> dict[str, Any]:
-    r"""python-core over the T2.13 cases on ``database``, as that
+    r"""python-core over the cases on ``database``, as that
     database's job runs them: each observation by its key, or under ``''``
     why the run failed whole."""
     with tempfile.TemporaryDirectory(prefix='t213-') as tmp:
@@ -641,7 +641,7 @@ def differences(want: Any, got: Any, at: str = '') -> list[str]:
 def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
     r"""Two outcomes the same, but that the core route raises a refusal
     coded ``UNSUPPORTED_REQUEST`` as ``UnsupportedRequestError``, a
-    subclass of the reference's ``StructuredDataError`` (register P1B-20,
+    subclass of the reference's ``StructuredDataError`` (B-20,
     approved by the owner, E78)."""
     if want == got:
         return True
@@ -665,7 +665,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
     each of the case's core operations run), and its outcome, each request
     the scripted endpoint received (the context the filter or the
     assumption gathered, the query as sent, the options as read) and its
-    result through ``to_pandas()`` (columns, row count and the rows'
+    result through ``to_pandas`` (columns, row count and the rows'
     digest) are python-ref's."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
@@ -752,7 +752,7 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
 
 @pytest.mark.parametrize('case_key', NAMED_KEYS)
 def test_python_core_names_what_the_reference_names(case_key: str) -> None:
-    r"""The brief's carried item, for the refusals T2.13's options reach:
+    r"""The brief's carried item, for the refusals options reach:
     python-core refuses as the reference does and its message names what
     the reference's names (the filter, the column, the option), never only
     that the request is not one the core accepts."""

@@ -56,9 +56,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "items.item_id and buys.item_id are NUMBER(38,0), read as integers (SNOW/table.py:335-340); the ranking is asked as one binary question per candidate, as rank.decimal-key is on DuckDB, SQLite and Postgres"
+    "stage": "predict"
   },
-  "why": "The ranking kind on Snowflake over NUMBER(38,0) item keys, candidates [0, 1, 2]; not the shared shop ranking every leg runs (T3.4's). Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
-  "source": "written by T3.6's test author from the reference at 43e55f4f"
+  "why": "Snowflake ranking over NUMBER(38,0) item keys and candidates [0, 1, 2], without sampling the entity table.",
+  "source": "Correctness case snowflake.rank.number-38-0-items using the shop fixture."
 }

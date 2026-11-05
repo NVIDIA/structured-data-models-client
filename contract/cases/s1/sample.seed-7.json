@@ -88,5 +88,5 @@
     "stage": "predict"
   },
   "why": "random_seed=7: a seeded sample, the same rows on every run",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.seed-7 using the shop fixture."
 }

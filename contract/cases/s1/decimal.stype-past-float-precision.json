@@ -44,9 +44,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "from_source",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: orders.d, 80 values distinct as decimals and all 1.25 as float64, is float64 and categorical"
+    "stage": "from_source"
   },
-  "why": "A scaled DECIMAL column whose values differ only past float64's precision: the reference casts a decimal of scale > 0 to float64 before counting distinct values (one value, so categorical); the core counts the exact decimals (80 of 80, so numerical). The decimal stype fix riding along in T2.14b",
-  "source": "T2.14b's test author, the reference at 6298913c (the stype probe of T2.13b's differential run)"
+  "why": "A scaled DECIMAL column whose values differ only past float64's precision: the reference casts a decimal of scale > 0 to float64 before counting distinct values (one value, so categorical); the core counts the exact decimals (80 of 80, so numerical).",
+  "source": "Correctness case decimal.stype-past-float-precision using the shop fixture."
 }

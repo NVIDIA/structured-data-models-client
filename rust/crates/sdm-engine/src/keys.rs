@@ -4,11 +4,11 @@
 
 //! Key values, compared exactly: an integer of any width as its value, text
 //! as its text, a decimal as its value. Nothing passes through a float, so
-//! two keys are the same only when their values are (decision H22). The
-//! types a sampled key may have are the integers, text and, from T1.32a,
+//! two keys are the same only when their values are. The
+//! types a sampled key may have are the integers, text and,
 //! the decimals; any other is refused by name (`key_type`).
 //!
-//! From T1.32a this module also holds the entities' cast to the key's type
+//! this module also holds the entities' cast to the key's type
 //! ([`cast`]): a host hands the entities to predict for as one Arrow column
 //! of whatever type its own values have, and the core casts them under one
 //! rule table, so every host gives the same answers and the same errors
@@ -78,7 +78,7 @@ impl Key {
 }
 
 /// Whether a key of `data_type` is sampled: the integers, text and, from
-/// T1.32a, the floats and a `decimal128` of no negative scale.
+///, the floats and a `decimal128` of no negative scale.
 pub fn supported(data_type: &DataType) -> bool {
     matches!(
         data_type,
@@ -150,7 +150,7 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
 /// value may differ (`1.0` and `1.00`, `1E-7` and `1.0E-7`). Each text is
 /// the key of the number it writes ([`Key::number_text`]), so two keys are
 /// the same exactly when their values are, as the source compares them,
-/// with nothing passed through a float (decision H22, register P2G-2 and
+/// with nothing passed through a float (G-2 and
 /// P2C-3); an array of any other type is read as [`read`] reads it.
 pub fn read_numbers(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
     if array.data_type() != &DataType::Utf8 {
@@ -194,7 +194,7 @@ impl Key {
     }
 }
 
-// --- The entities' cast to the key's type (T1.32a) ---------------------------
+// --- The entities' cast to the key's type ---------------------------
 
 /// Why an entity does not cast to the key's type: the `reason` field of the
 /// refusal, one of the rule table's outcomes.
@@ -517,7 +517,7 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
 /// bits, 2**53 for 64, ends included. Past it, where a float holds only
 /// some integers, it is `Inexact` even where one is held exactly, as the
 /// reference refuses it (Arrow's checked cast of an integer to a float),
-/// so whether an entity is taken never depends on its bits (T1.32a fix
+/// so whether an entity is taken never depends on its bits ( fix
 /// round 1, the recorded reference).
 fn whole_float(value: i128, single: bool) -> Result<Cast, Uncast> {
     let limit: i128 = if single { 1 << 24 } else { 1 << 53 };
@@ -590,7 +590,7 @@ fn decimal_text(digits: &str, scale: i8) -> String {
 /// pyarrow's cast of a float to text, which is Arrow C++'s
 /// `FloatToStringFormatter`, double-conversion's `ToShortest` with the
 /// flag `EMIT_POSITIVE_EXPONENT_SIGN`, `inf` and `nan`, the exponent
-/// character `e` and the plain range `-6` to `10` (T1.36 fix 4, the final
+/// character `e` and the plain range `-6` to `10` ( fix 4, the final
 /// review's P2-2). So: the shortest digits that read back as the float at
 /// its own width (`single`: a 32-bit float's as a 32-bit float), the
 /// nearer of two such and the even one of two as near; written plainly
@@ -729,8 +729,8 @@ fn uncast(position: usize, key: &DataType, why: Uncast) -> CoreError {
 /// under the rule table of [`cast_one`]: a column of `key`'s type, a null
 /// kept null. The first entity that does not cast is refused,
 /// `INVALID_REQUEST`, naming its position and why, never its value
-/// (decision H17); every such failure is the caller's, never the core's
-/// (E41(l)). A key of a type no rule casts to is not sampled
+///; every such failure is the caller's, never the core's
+///. A key of a type no rule casts to is not sampled
 /// (`key_type`).
 pub fn cast(entities: &ArrayRef, key: &DataType) -> Result<ArrayRef, CoreError> {
     let target = Target::of(key).ok_or_else(|| not_yet("key_type"))?;
@@ -1082,7 +1082,7 @@ mod tests {
     #[test]
     fn a_32_bit_float_key_rounds_once_at_its_width() {
         // Just past the midpoint between 1 and the next float32: a double
-        // first would round it to 1 (T1.32a fix round 1).
+        // first would round it to 1 ( fix round 1).
         let text = "1.000000059604644775390625000001";
         let cast = cast_to(texts(&[text, &format!("-{text}")]), &DataType::Float32).unwrap();
         let cast = cast.as_primitive::<Float32Type>();

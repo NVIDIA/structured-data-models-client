@@ -7,7 +7,7 @@
 //! Each is written as Python writes its value.
 
 // Only documentation passes through: an attribute taken whole (`$doc:meta`)
-// could be an `allow` of a clippy ban, which l0_scan.py refuses.
+// could be an `allow` of a clippy ban, which architecture_policy.py refuses.
 macro_rules! str_enum {
     ($(#[doc = $doc:literal])* $name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
         $(#[doc = $doc])*

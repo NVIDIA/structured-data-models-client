@@ -36,7 +36,9 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 RUNNER = _module('run_python', ROOT / 'contract/runners/run_python.py')
-EN = _module('empty_null_record', ROOT / 'contract/support/empty_null_vectors.py')
+EN = _module(
+    'empty_null_vectors', ROOT / 'contract/support/empty_null_vectors.py'
+)
 SERVE = _module(
     'scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
 ).serve
@@ -44,7 +46,7 @@ SERVE = _module(
 
 def _vector() -> dict[str, Any]:
     vectors = json.loads(
-        (ROOT / 'contract/t136-forecast-vectors.json').read_text('utf-8')
+        (ROOT / 'contract/forecast-vectors.json').read_text('utf-8')
     )['vectors']
     return next(v for v in vectors if v['id'] == 'sum-days-3')
 
@@ -246,10 +248,10 @@ def _step_3_s_id_on_step_1(ids: list[str]) -> None:
 @pytest.mark.parametrize(
     ('empty', 'rewrite'),
     [
-        # Codex round 3 (a): calls [step 1, step 3's id] while step 3 has
+        # calls [step 1, step 3's id] while step 3 has
         # no rows, so the steps with rows are 1 and 2.
         ((3,), _step_3_s_id_on_step_2),
-        # Codex round 3 (b): the one call, step 2's, carries the id of
+        # the one call, step 2's, carries the id of
         # step 3, which has no rows.
         ((1, 3), _step_3_s_id_on_step_2),
         # A step with rows given another such step's id, out of order.
@@ -275,8 +277,7 @@ def test_the_capture_refuses_an_id_that_is_not_the_next_step_with_rows(
     steps whose instance table has rows, as ``sdm-core``'s ``predict.rs``
     decides which steps it calls for), in step order. An id of an empty
     step, or of a step with rows out of its turn, is refused by name; the
-    same tampered start without the capture is answered (Codex round 3,
-    P2: at b02af721 the capture accepts any later step's id)."""
+    same tampered start without the capture is answered."""
     got = _ask(monkeypatch, empty, capture=True, rewrite=rewrite)
     assert isinstance(got['error'], RUNNER.RunnerFailure), (
         f'accepted: calls carried {got["received"]}, the steps were '

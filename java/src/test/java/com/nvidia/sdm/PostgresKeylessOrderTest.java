@@ -73,7 +73,7 @@ class PostgresKeylessOrderTest {
   @Test
   void jsonXmlDomainsKeepNumericAndNullOrdering() throws Exception {
     for (String kind : List.of("json", "xml", "domain")) {
-      try (Connection c = T312Shop.open("postgres")) {
+      try (Connection c = Shop.open("postgres")) {
         Schema schema = prepare(c, kind);
         var expected =
             kind.equals("xml")
@@ -125,7 +125,7 @@ class PostgresKeylessOrderTest {
       named = "SDM_RELATIONAL_URL",
       matches = ".+")
   void livePostgresReadToPrediction() throws Exception {
-    try (Connection c = T312Shop.open("postgres");
+    try (Connection c = Shop.open("postgres");
         SdmClient client =
             SdmClient.connect(
                 System.getenv("SDM_RELATIONAL_URL"),

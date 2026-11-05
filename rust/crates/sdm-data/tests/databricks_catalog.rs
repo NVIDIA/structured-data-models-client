@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The Databricks catalog reader over the warehouse's recorded catalog rows
-//! (T3.4, the brief's exit 4): each catalog answer the old client read in
+//! (the brief's exit 4): each catalog answer the old client read in
 //! the capture, read by the `databricks` dialect into the contract's
 //! `CatalogAnswer`, equal to how the old client read the same rows.
 //!

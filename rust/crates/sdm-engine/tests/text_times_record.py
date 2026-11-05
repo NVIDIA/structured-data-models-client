@@ -3,15 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Records ``text-times.json``, the core's own vectors for text times
-(T1.25b), which ``text_times.rs`` holds ``sdm_engine::time::text`` to.
+, which ``text_times.rs`` holds ``sdm_engine::time::text`` to.
 
-The expected values are this file's reading of ``date-rules.md``'s "The
-core's text formats", written from that spec with Python's ``re`` and
+The expected values implement the supported text formats with Python's ``re`` and
 ``datetime`` only, apart from the Rust reader, and not with pandas or
 dateutil: every year-first value with dashes is cross-checked against
 ``datetime.fromisoformat`` to the microsecond. Run once, by hand; CI never
-runs it, and the vectors are not recorded again to pass a dependency bump
-(F4):
+runs it, and the vectors are not recorded again to pass a dependency bump:
 
     python rust/crates/sdm-engine/tests/text_times_record.py OUT.json
 

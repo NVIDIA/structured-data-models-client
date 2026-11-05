@@ -90,5 +90,5 @@
     "message": "exclude_cols_dict['users'] must be a sequence of column names, got str"
   },
   "why": "exclude_cols_dict={'users': 'age'}: a table's columns as text, refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.exclude-cols.text-columns using the shop fixture."
 }

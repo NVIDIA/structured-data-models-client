@@ -2,20 +2,13 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A request the core did not materialize, rebuilt for `predict` from what
-//! the host holds of it (T3.26, owner decision 2026-10-23).
+//! Rebuilds prediction input from a saved or manually constructed request
+//! that has no core request state.
 //!
-//! An older client's request, or one this client gathered on its old route,
-//! holds no request state a core wrote; what the old client predicts from
-//! is the request's own contents, which such a request holds: each call's
-//! payload as gathered, each question's text, and, for a ranking, the
-//! candidates it asks after, as the caller gave them, once each. So
-//! `predict` asks what the old client asks: the request's calls in order;
-//! a forecast's steps numbered from 1, in order (`_per_step`); a ranking's
-//! questions, each named by its candidate's place among those held and by
-//! the JSON text of its value, written as `materialize` writes a candidate
-//! it was given (`sdm_request::ranking::json_text`), so the result names
-//! each as the core's own state would.
+//! Calls retain payload order, question text and caller-provided ranking candidates.
+//! Forecast steps are numbered from one.
+//! Ranking questions use each candidate's position and JSON value, written with
+//! [`sdm_request::ranking::json_text`], matching materialized requests.
 
 use sdm_contract::data::AttachmentId;
 use sdm_contract::ops::{GivenCandidate, HeldPart, HeldRequest};

@@ -139,8 +139,8 @@ class CustomExamplesTest {
 
   @Test void localSqlSourcesPreserveSuppliedLabelsAndRepeatedEntities() throws Exception {
     for(String backend:List.of("sqlite","duckdb")) {
-      try(var connection=T312Shop.open(backend);RootAllocator allocator=new RootAllocator()) {
-        Schema schema=Schema.fromSource(T312Shop.source(backend,connection))
+      try(var connection=Shop.open(backend);RootAllocator allocator=new RootAllocator()) {
+        Schema schema=Schema.fromSource(Shop.source(backend,connection))
             .withPrimaryKey("users","user_id").withPrimaryKey("orders","order_id")
             .withRelationships(List.of(new Relationship("orders","user_id","users","user_id")));
         Map<String,Object> contextData=Map.of("columns",List.of("ENTITY","TARGET"),
@@ -184,7 +184,7 @@ class CustomExamplesTest {
     Map<String,Object> test=cases(fixture).stream().filter(c->c.get("id").equals("forecasting")).findFirst().orElseThrow();
     Request request=prepare(memory(fixture,false),test,object(test.get("additional_prediction_examples")));
     assertEquals(2,request.payloadBytes().size());
-    try(T312Shop.Endpoint endpoint=new T312Shop.Endpoint(body->Map.entry(200,forecastAnswer(body)));
+    try(Shop.Endpoint endpoint=new Shop.Endpoint(body->Map.entry(200,forecastAnswer(body)));
         SdmClient client=SdmClient.connect(endpoint.url())) {
       PredictionResult result=client.predict(request,SdmClient.KUMO_RELATIONAL);
       assertEquals(6,result.rows()); assertEquals(2,endpoint.received.size());

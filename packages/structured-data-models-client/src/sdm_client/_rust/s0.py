@@ -26,7 +26,7 @@ PROFILES = ('FINE_TUNING', 'RELATIONAL', 'TABULAR', 'TIMESERIES', 'ANOMALY')
 
 def _profile(profile: str) -> dict[str, Any]:
     r"""A profile, named, as the contract's ``ProfileSpec``: one of the
-    named five, with no object of the old PQL package (T3.16, rule 11)."""
+    named five, with no object of the old PQL package (rule 11)."""
     if profile in PROFILES:
         return {'name': profile, 'model': None}
     raise StructuredDataError(

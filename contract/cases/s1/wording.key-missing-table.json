@@ -55,5 +55,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "G15: a primary key given for a table the schema does not have is refused naming the table and the tables it has",
-  "source": "T2.14b's test author, the reference at 6298913c"
+  "source": "Correctness case wording.key-missing-table using the shop fixture."
 }

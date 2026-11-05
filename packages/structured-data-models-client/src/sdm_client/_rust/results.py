@@ -2,16 +2,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The core's results, as this host reads them (T3.16, the structure
+r"""The core's results, as this host reads them (the structure
 design's fix D and rule 10).
 
 Every result a core run finishes with (the contract's ``OperationResult``)
-is decoded once, by :func:`decode`, into the frozen dataclasses here; the
+is decoded once, by:func:`decode`, into the frozen dataclasses here; the
 public objects are built from these, never from objects shaped like the
 old engine's, and a result of a shape the contract does not hold is
-refused by name (:class:`~sdm_client._rust.codec.CodecError`), never read as
+refused by name (class:`~sdm_client._rust.codec.CodecError`), never read as
 it is. What the host keeps for the core between calls is one typed value it
-hands back whole: a column's :class:`SourceFacts`, and a request's
+hands back whole: a column's:class:`SourceFacts`, and a request's
 :class:`CoreRequest`.
 
 Java has records with the same fields; both read the samples in
@@ -294,7 +294,7 @@ def _validated(read: dict[str, Any]) -> Validated:
 class Described:
     r"""``describe_source``'s result: the attachment of the
     ``SourceDescription``, and a semantic model's conversion notes
-    (contract v28, T3.27), each a :class:`ViewNote`, in order; none for any
+    (contract v28), each a:class:`ViewNote`, in order; none for any
     other source."""
 
     description: int
@@ -796,7 +796,7 @@ _T = TypeVar(
 
 
 def expect(result: Any, kind: type[_T]) -> _T:
-    r"""``result`` decoded (:func:`decode`), the result of the operation
+    r"""``result`` decoded (func:`decode`), the result of the operation
     ``kind`` is of; the core's answering another, or of another shape than
     the contract's, is its defect, ``INTERNAL_ERROR``."""
     try:
@@ -845,7 +845,7 @@ class CorePart:
 class CoreParts:
     r"""A request the core gathered in parts, as one materialize answered
     it, which ``PredictiveQuery.materialize`` keeps as one request per part
-    (T1.36 fix 21, T2.8): ``ranking`` or ``forecast``; the first part's
+    ( fix 21): ``ranking`` or ``forecast``; the first part's
     query, position and name; how many candidates a ranking's row keeps;
     and the later parts."""
 
@@ -864,7 +864,7 @@ class CoreRequest:
     request state's version; how many rows each later call of a request
     asked in several calls scores; a ranking's candidates; and, on the
     request one materialize answered before it is kept in parts, its parts
-    (:class:`CoreParts`)."""
+    (class:`CoreParts`)."""
 
     version: int
     batches: tuple[int, ...] | None = None
@@ -875,16 +875,15 @@ class CoreRequest:
 @dataclasses.dataclass(frozen=True)
 class CoreQuery:
     r"""What the core route reads of a query it gathers, and nothing of the
-    old validator's object (T3.8): a query the core validated (S0 on the
+    old validator's object: a query the core validated (S0 on the
     core, P2-MID2-1), from the core's own validation (``validate_query``'s
     ``query``, contract v28); or, on the old validator's route, one naming a
     column whose name holds a dot, a backtick or a line break, which the old
-    validator refuses and the core holds apart from its table (KO2-36,
-    T2.18).
+    validator refuses and the core holds apart from its table.
 
     ``text`` is what materialize sends and the request keeps as its query:
     the query as the core writes it back where the core validated it, as the
-    reference's ``ValidatedPredictiveQuery.to_string()`` writes it, else as
+    reference's ``ValidatedPredictiveQuery.to_string`` writes it, else as
     the caller wrote it. ``num_forecasts`` is how many steps a forecast asks
     (1 for any other query), which a refusal of one step names; ``None``
     where the core did not validate it. ``refusal`` is the old validator's,

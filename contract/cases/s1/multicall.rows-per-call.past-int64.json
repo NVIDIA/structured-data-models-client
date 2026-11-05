@@ -118,5 +118,5 @@
     "stage": "predict"
   },
   "why": "rows_per_call of 2**64, a whole number past int64, taken as any size and lowered to the 10,000 one call scores: the 8 entities go in one call",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.rows-per-call.past-int64 using the shop fixture."
 }

@@ -233,7 +233,7 @@ fn every_operation_dispatches_to_a_run() {
         },
     };
     // A table named is read by its source name, with no listing of the
-    // source's tables first (T1.23): its columns and keys in one step.
+    // source's tables first: its columns and keys in one step.
     let Step::Fetch { requests } = run_of(&root, describe(host)).unwrap().next().unwrap() else {
         panic!("describe_source did not ask for the table named");
     };
@@ -343,7 +343,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     };
     let access = root.data_access(&duckdb).unwrap();
     // The dialect declares what sdm-data renders for it: every request
-    // kind from T1.23, a count of rows and a scan among them (an
+    // kind a count of rows and a scan among them (an
     // undeclared optional request is refused by name before it is
     // planned: a_host_provider_is_asked_only_for_what_it_declared).
     let FetchPlan::Sql { statements, .. } = access.plan(&count()).unwrap() else {
@@ -353,7 +353,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let err = access.plan(&scan()).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(named(&err, "field"), "columns");
-    // It renders the catalog (T1.11b), each plan expecting the answer's
+    // It renders the catalog, each plan expecting the answer's
     // fixed shape.
     assert_eq!(
         access.capabilities().optional,
@@ -381,12 +381,12 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     };
     assert_eq!(statements.len(), 1);
     // A catalog answer is in the dialect's own catalog's shape, which the
-    // data layer reads, not the contract's (decision E54).
+    // data layer reads, not the contract's.
     assert!(matches!(expect, ExpectedSchema::Schema { .. }));
     assert_ne!(expect, tables.expected());
 
     // Every dialect this build knows by name it renders (Snowflake's from
-    // T3.6).
+    // ).
     let snowflake = ProviderChoice::Sql {
         timestamp_encoding: None,
         dialect: Dialect::new("snowflake"),
@@ -425,7 +425,7 @@ fn a_host_provider_is_asked_only_for_what_it_declared() {
     };
     let access = root().data_access(&host).unwrap();
     // A host provider is held to the shape the contract fixes for a
-    // request's answer, as a rendering is (decision E36); a request whose
+    // request's answer, as a rendering is; a request whose
     // columns are the source's own discovers them.
     let pass = |request: DataRequest| {
         assert_eq!(
@@ -740,7 +740,7 @@ fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
 
 #[test]
 fn tables_named_wrongly_are_refused_before_anything_is_fetched() {
-    // T1.23: as the reference refuses a mapping of tables (its
+    //: as the reference refuses a mapping of tables (its
     // `_require_table_names`) and a name the schema may not give a table
     // (`_check_name`): each `INVALID_REQUEST` naming the field, never the
     // source's name held to the schema's rules.
@@ -826,7 +826,7 @@ fn a_day_first_date_literal_warns_on_the_run_s_warnings_channel() {
     );
 }
 
-/// T1.6c: a packed date (D8) is refused by name, not read, so it never
+///: a packed date (D8) is refused by name, not read, so it never
 /// needs the current year: with a zone the run cannot resolve, a six-digit
 /// packed date (which D5 would have placed) and an eight-digit one are
 /// refused as packed, never for the zone; a two-digit year still is, and
@@ -882,7 +882,7 @@ fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
         );
         assert_eq!(named(&err, "rule"), "date_literal_packed", "{query}");
         // The query's own refusal (field query, naming the query given and
-        // its first packed literal, KO2-86), not the local zone's.
+        // its first packed literal), not the local zone's.
         assert_eq!(named(&err, "field"), "query", "{query}");
         assert_eq!(named(&err, "query"), query, "{query}");
         assert_eq!(
@@ -899,7 +899,7 @@ fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
     }
 }
 
-/// T1.6c brief, Tests: "a D8 literal is refused by name" on the
+/// brief, Tests: "a D8 literal is refused by name" on the
 /// `validate_query` operation, as a host runs it: the run ends with the
 /// core's error, `INVALID_REQUEST`, naming `operation` `validate_query` and
 /// `rule` `date_literal_packed`, with the literal's place and never its
@@ -937,7 +937,7 @@ fn a_packed_date_literal_ends_validate_query_with_the_core_s_error() {
             sdm_contract::Detail::Scalar(Scalar::UInt64(39)),
             "{literal}"
         );
-        // KO2-86: the literal and the query given are named, exactly, and
+        //: the literal and the query given are named, exactly, and
         // the literal is in no other field.
         assert_eq!(named(&err, "literal"), literal, "{literal}");
         assert_eq!(named(&err, "query"), query, "{literal}");

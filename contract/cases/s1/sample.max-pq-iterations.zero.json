@@ -88,5 +88,5 @@
     "message": "'max_pq_iterations' must be greater than zero (got 0)"
   },
   "why": "max_pq_iterations=0: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.max-pq-iterations.zero using the shop fixture."
 }

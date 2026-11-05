@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """The binding over the test-only operations, which only a ``test-ops``
-build has: logging and the GIL (decision H8), an abort, a contained panic,
-busy runs, the schema-match checks of T1.7c (decision H16) and Arrow back
+build has: logging and the GIL, an abort, a contained panic,
+busy runs, the schema-match checks of and Arrow back
 out through the PyCapsule interface."""
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def _child(
     )
 
 
-#: The deadlock regression of decision H8, in a fresh interpreter so the
+#: The deadlock regression of, in a fresh interpreter so the
 #: logging bridge installs at this run's first call. While the core holds
 #: one call for a second with the GIL released, another thread logs, each
 #: time holding the handler's lock that every record takes. A binding that

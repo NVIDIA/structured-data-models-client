@@ -58,7 +58,7 @@ NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
         )
         for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
     },
-    # T3.4's odd column names hold a backtick among others.
+    # odd column names hold a backtick among others.
     'databricks.name.odd-columns': (
         ('databricks-sql', 'databricks-spark'),
         _BACKTICK,
@@ -123,7 +123,7 @@ ENVIRONMENT_ERRORS = frozenset(
 def environment_failure(lines: list[Any]) -> str | None:
     r"""Why the observed ``lines`` hold an environment's failure rather
     than a product outcome, or ``None``: an outcome of
-    :data:`ENVIRONMENT_CODES` or :data:`ENVIRONMENT_ERRORS`."""
+    :data:`ENVIRONMENT_CODES` or:data:`ENVIRONMENT_ERRORS`."""
     for line in lines:
         outcome = (line or {}).get('outcome') or {}
         if (

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A probability written as text is read as Python's `float` reads it, as
-//! the bindings' `_finite` does (T1.28b fix round 1): each text of
+//! the bindings' `_finite` does ( fix round 1): each text of
 //! `numeric-text.json`, recorded from the reference's interpreter, read to
 //! the same double or refused alike.
 
@@ -46,7 +46,7 @@ fn text_is_read_as_the_reference_s_float_reads_it() {
     );
 }
 
-/// The digits every supported Python takes, and no more (T1.28b fix round
+/// The digits every supported Python takes, and no more ( fix round
 /// 2): Kawi's, which Unicode 15.0 added and the reference's Python 3.12
 /// takes, are refused, as Python 3.10, the floor, refuses them (register
 /// P1B-25); Arabic-Indic and fullwidth digits, in Unicode 13.0, are read.

@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Snowflake semantic view's conversion (T3.5, V1 to V7) over a fake data
-//! layer, the Snowflake dialect being T3.6's: the layer answers the view's
+//! A Snowflake semantic view's conversion (V1 to V7) over a fake data
+//! layer, the Snowflake dialect being: the layer answers the view's
 //! text in Snowflake's rules (`sdm-data`'s), every read as a host provider
 //! would, and the test answers each read from tables it holds. S5's third
 //! sequence: each table is finished, its columns read, its expressions

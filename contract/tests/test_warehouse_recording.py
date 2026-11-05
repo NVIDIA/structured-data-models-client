@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 RUNNER = ROOT / 'contract/runners/run_python.py'
 
-VECTORS = ROOT / 'contract/tests/t32-case-format-vectors.json'
+VECTORS = ROOT / 'contract/tests/case-format-vectors.json'
 
 WAREHOUSES = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
 
@@ -41,7 +41,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t32_recording_run_python', RUNNER)
+    return _module('test_warehouse_recording_recording_run_python', RUNNER)
 
 
 def _s2_case(leg: str = 'databricks-sql') -> dict[str, Any]:
@@ -241,7 +241,7 @@ def _dispatched_as(value: Any, prefix: str) -> bool:
     )
 
 
-def test_t32_the_capture_records_each_warehouse_driver(
+def test_the_capture_records_each_warehouse_driver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""On each warehouse leg the capture hands the source a connection
@@ -273,7 +273,7 @@ def test_t32_the_capture_records_each_warehouse_driver(
     ]
 
 
-def test_t32_the_statement_log_logs_each_warehouse_driver(
+def test_the_statement_log_logs_each_warehouse_driver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""The statement log on each warehouse leg logs the statement each
@@ -300,10 +300,10 @@ class _PsycopgSelf:
 
 
 @pytest.mark.parametrize('database', ['postgres', 'lakebase'])
-def test_t32_the_statement_log_takes_psycopg_s_copy_and_stream(
+def test_the_statement_log_takes_psycopg_s_copy_and_stream(
     monkeypatch: pytest.MonkeyPatch, database: str
 ) -> None:
-    r"""P2-T2.1a-2: on Postgres, and on Lakebase, which psycopg reaches,
+    r"""P2--2: on Postgres, and on Lakebase, which psycopg reaches,
     the statement log logs ``Cursor.copy`` and ``Cursor.stream`` as it
     logs ``execute``: each a statement the driver runs."""
     import psycopg
@@ -330,10 +330,10 @@ def test_t32_the_statement_log_takes_psycopg_s_copy_and_stream(
     assert psycopg.Cursor.copy is copy_ and psycopg.Cursor.stream is stream
 
 
-def test_t32_the_statement_log_is_entered_only_as_a_context() -> None:
-    r"""P2-T2.1a-2: the runner enters the statement log only in a ``with``,
+def test_the_statement_log_is_entered_only_as_a_context() -> None:
+    r"""P2--2: the runner enters the statement log only in a ``with``,
     so a case that fails mid-call leaves the driver's classes as they were
-    (today ``_call`` calls ``StatementLog(database).__enter__()`` outside a
+    (today ``_call`` calls ``StatementLog(database).__enter__`` outside a
     ``try``/``finally``)."""
     tree = ast.parse(RUNNER.read_text(encoding='utf-8'))
     in_with: set[int] = set()
@@ -361,7 +361,7 @@ def test_t32_the_statement_log_is_entered_only_as_a_context() -> None:
     assert not entered, entered
 
 
-def test_t32_an_s2_case_runs_on_its_warehouses_only() -> None:
+def test_an_s2_case_runs_on_its_warehouses_only() -> None:
     r"""Choice 1: an S2 case runs only on the legs its ``warehouses``
     names, keyed ``<case>@<leg>``; an S1 case without ``databases`` still
     runs on the three offline databases."""
@@ -381,7 +381,7 @@ def test_t32_an_s2_case_runs_on_its_warehouses_only() -> None:
     assert run.case_databases(s1)[:3] == ('duckdb', 'sqlite', 'postgres')
 
 
-def test_t32_placeholders_resolve_from_the_environment() -> None:
+def test_placeholders_resolve_from_the_environment() -> None:
     r"""The S2 test authors' gap: ``{catalog}``, ``{schema}`` and the
     existing views' placeholders in a case's input are resolved from the
     environment for a live run, and a placeholder with nothing set refuses
@@ -414,7 +414,7 @@ def test_t32_placeholders_resolve_from_the_environment() -> None:
     assert 'cat_t32' not in str(refused.value)
 
 
-def test_t32_the_input_hash_follows_the_input_and_base_only() -> None:
+def test_the_input_hash_follows_the_input_and_base_only() -> None:
     r"""A case's input hash changes with its ``input``, its ``until`` and
     its base's statements, which the old client's answer depends on, and
     with nothing else: a case given ``core``, a new ``why`` or new paths
@@ -444,7 +444,7 @@ def test_t32_the_input_hash_follows_the_input_and_base_only() -> None:
     moved = copy.deepcopy(bases)
     moved[case['input']['base']] = [
         *moved[case['input']['base']],
-        'CREATE TABLE t32_extra AS SELECT 1 AS x',
+        'CREATE TABLE warehouse_extra AS SELECT 1 AS x',
     ]
     assert run.input_hash(case, moved) != first
     kept = copy.deepcopy(case)
@@ -468,7 +468,7 @@ def test_t32_the_input_hash_follows_the_input_and_base_only() -> None:
     assert run.input_hash(kept) == first
 
 
-def test_t32_the_runner_refuses_a_client_of_another_contract_version() -> None:
+def test_the_runner_refuses_a_client_of_another_contract_version() -> None:
     r"""P2-MID2-7: a stale installed wheel is refused by the runner, which
     names the installed contract version and the checkout's."""
     run = runner()

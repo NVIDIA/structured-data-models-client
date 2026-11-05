@@ -56,9 +56,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "the old client names the schema in every statement, \"schema\".\"users\" (PG/table.py:146-177; RE/base/sql_sampler.py:80-83), so the session's temporary users table, which an unqualified users resolves to first, is never read"
+    "stage": "predict"
   },
-  "why": "A one-part name hidden by a temporary table of the same name in the case's own session (T3.7 table row 21, open question 3; the design's fix P2-MID2-6): the run's warehouse setup creates it on the Lakebase connection the old client then reads through, with other columns than the schema's users",
-  "source": "written for the second early capture (T3.20) from the reference at 43e55f4f"
+  "why": "A temporary table shadows a persistent table of the same one-part name within the connection session.",
+  "source": "Correctness case lakebase.name.shadowed-by-temporary using the shop fixture."
 }

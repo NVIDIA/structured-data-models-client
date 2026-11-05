@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The entity-time sort of `anchor_time='entity'` (T2.11 fix 1) held to
+//! The entity-time sort of `anchor_time='entity'` held to
 //! the reference's: NumPy 2.5.3's `datetime64[ns]`
 //! `argsort(kind='quicksort')` over arrays of 17, 40, 200 and 1,000 times
 //! with many ties, and pandas 3.0.6's `sort_values(ascending=False)` with

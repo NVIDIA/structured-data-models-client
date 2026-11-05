@@ -2,14 +2,14 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The provider conformance kit's runner on the pure-Rust host (T2.5,
-//! T2.6), `sdm-contract-run --kit DATABASE [--fault F] --out REPORT`.
+//! The provider conformance kit's runner on the pure-Rust host
+//! , `sdm-contract-run --kit DATABASE [--fault F] --out REPORT`.
 //!
 //! It builds `contract/fixtures/provider-kit/dataset.sql` on DATABASE
 //! (DuckDB from the file; SQLite loaded from it by the one contract loader,
 //! through `contract/runners/provider_kit.py --load sqlite`, as
 //! `--database sqlite` loads a case; `memory`, the minimal non-SQL test
-//! provider, T2.7, its tables copied whole from DuckDB's into Arrow), and
+//! provider, its tables copied whole from DuckDB's into Arrow), and
 //! runs each case of `expected.json` through the core on this host's
 //! provider for it ([`crate::duck`], [`crate::sqlite`], [`crate::memory`],
 //! the last a host provider, declaring what it declares), as the file's
@@ -29,7 +29,7 @@
 //! without them refuses the kit's start by name.
 //!
 //! Postgres is not a provider of this host (its Postgres is a replay of
-//! the Python provider's answers, KO2-20): the Python runner runs the kit
+//! the Python provider's answers): the Python runner runs the kit
 //! on the Python host's Postgres provider.
 
 use std::collections::BTreeMap;
@@ -57,7 +57,7 @@ use crate::sqlite::Sqlite;
 pub const FORMAT: &str = "sdm-provider-kit/1";
 /// The databases this host runs the kit on.
 /// `memory` is the minimal non-SQL test provider ([`crate::memory`],
-/// T2.7) over the dataset's tables copied from DuckDB, a host provider.
+/// ) over the dataset's tables copied from DuckDB, a host provider.
 pub const DATABASES: &[&str] = &["duckdb", "sqlite", "memory"];
 /// The faults a run may seed.
 pub const FAULTS: &[&str] = &["truncate", "silent_capability"];

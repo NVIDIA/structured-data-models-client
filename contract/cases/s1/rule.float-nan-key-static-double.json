@@ -82,9 +82,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: materialized and answered through predict on DuckDB and Postgres"
+    "stage": "predict"
   },
-  "why": "users alone, its DOUBLE key user_id holding user 3's NaN, asked a static question with no anchor time: the NaN key read with no target to seed (rule float_nan; T2.12 round 2)",
-  "source": "T2.12 round 2 (Codex P2): a NaN of each sign as DuckDB previews it, and a static query over a NaN key"
+  "why": "Users alone, its DOUBLE key user_id holding user 3's NaN, asked a static question with no anchor time: the NaN key read with no target to seed (rule float_nan)",
+  "source": "Correctness case rule.float-nan-key-static-double using the shop fixture."
 }

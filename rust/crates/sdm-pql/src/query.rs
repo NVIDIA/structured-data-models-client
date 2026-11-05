@@ -33,7 +33,7 @@ pub struct ParsedQuery {
 }
 
 impl ParsedQuery {
-    /// The entity column, its table and column apart (KO2-36).
+    /// The entity column, its table and column apart.
     pub fn entity_column(&self) -> ColumnKey {
         ast::column_name(&self.entity_column_obj()).unwrap_or_else(|| ColumnKey::new("", ""))
     }
@@ -278,7 +278,7 @@ impl ValidatedQuery {
         combined.ok_or_else(String::new)
     }
 
-    /// The entity IDs a `FOR t.c = ...` query names, as values.
+    /// The entity IDs a `FOR t.c =...` query names, as values.
     pub fn get_rfm_entity_id_list(&self) -> Result<Vec<Literal>, String> {
         let Some(ids) = &self.query.rfm_entity_ids else {
             return Ok(Vec::new());

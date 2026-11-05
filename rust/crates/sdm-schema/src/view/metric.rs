@@ -2,8 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A metric view's definition read into a [`ViewSpec`] (design S5, T3.5's
-//! M2): its source, parameters, joins with the joins nested in them, filter,
+//! A metric view's definition read into a [`ViewSpec`] : its source, parameters, joins with the joins nested in them, filter,
 //! dimensions and measures, every expression and name kept as written.
 //!
 //! This is the part of the old client's `parse_metric_view`

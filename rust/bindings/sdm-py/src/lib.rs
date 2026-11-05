@@ -9,15 +9,15 @@
 //! back as the `error` control message `HostRun` wrote, raised as the one
 //! [`CoreError`]. It makes no semantic call into Python.
 //!
-//! - Arrow crosses through the PyCapsule interface only (decision E16): an
-//!   Arrow attachment in is any object with `__arrow_c_stream__`, and one
-//!   out is an [`ArrowStream`] that has it. pyarrow's private
-//!   `_export_to_c` and `_import_from_c` are never reached.
+//! - Arrow crosses through the PyCapsule interface only: an
+//! Arrow attachment in is any object with `__arrow_c_stream__`, and one
+//! out is an [`ArrowStream`] that has it. pyarrow's private
+//! `_export_to_c` and `_import_from_c` are never reached.
 //! - The GIL is released for every core call and held only while touching
-//!   Python objects; the core's `tracing` events reach Python's `logging`
-//!   through `pyo3-log`, installed at the first core call (decision H8).
+//! Python objects; the core's `tracing` events reach Python's `logging`
+//! through `pyo3-log`, installed at the first core call.
 //! - Importing the module starts no thread and installs no logger, signal
-//!   handler or global pool; it reads no environment variable.
+//! handler or global pool; it reads no environment variable.
 
 use std::collections::BTreeMap;
 use std::ffi::CString;
@@ -70,13 +70,13 @@ fn logging(py: Python<'_>) -> Option<&pyo3_log::ResetHandle> {
 /// returning it, so after the call:
 ///
 /// - an `Exception` is reported as `logging` reports its own handler
-///   failures, through `sys.unraisablehook`, and the call's answer is
-///   delivered; the exception is the handler's and holds nothing the core
-///   wrote but the event;
+/// failures, through `sys.unraisablehook`, and the call's answer is
+/// delivered; the exception is the handler's and holds nothing the core
+/// wrote but the event;
 /// - anything else, such as `KeyboardInterrupt` or `SystemExit`, is raised
-///   in place of the answer, which is dropped: the run stays where the
-///   call left it, so a step `next` gave is gone and the next call meets
-///   the run's following state.
+/// in place of the answer, which is dropped: the run stays where the
+/// call left it, so a step `next` gave is gone and the next call meets
+/// the run's following state.
 fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> PyResult<T> {
     let answer = py.detach(call);
     match PyErr::take(py) {
@@ -90,7 +90,7 @@ fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> PyResu
 }
 
 /// The table of what every error's and warning's sentence says, as its JSON
-/// text (`sdm_contract::wording`, T3.17): the host reads it once and fills
+/// text (`sdm_contract::wording`): the host reads it once and fills
 /// each sentence from it.
 #[pyfunction]
 fn templates() -> String {
@@ -99,7 +99,7 @@ fn templates() -> String {
 
 /// Forgets the logger levels the bridge has cached, so a change to the
 /// `logging` configuration takes effect; the Python host calls it at each
-/// run start (decision H8). Before the first core call there is no cache.
+/// run start. Before the first core call there is no cache.
 #[pyfunction]
 fn reset_log_cache(py: Python<'_>) {
     if let Some(handle) = LOGGING.get(py).and_then(Option::as_ref) {
@@ -117,7 +117,7 @@ fn is_posix_zone(text: &str) -> bool {
 
 /// The machine's files as Python reads them, for the local zone's rule:
 /// `os.path.isfile` and `pathlib.Path.resolve(strict=True)`, the calls the
-/// Python host made before the rule moved into `sdm-host` (T3.12), so the
+/// Python host made before the rule moved into `sdm-host`, so the
 /// binding does no I/O of its own. The first exception Python raised that
 /// the rule cannot read as an answer is kept, and raised after.
 struct PyZoneFiles<'py> {
@@ -161,7 +161,7 @@ impl sdm_host::ZoneFiles for PyZoneFiles<'_> {
 }
 
 /// The local zone a host's facts name, by the one rule every host reads it
-/// with (`sdm_host::local_zone`, T3.12): `setting` is `TZ` when set, and
+/// with (`sdm_host::local_zone`): `setting` is `TZ` when set, and
 /// `roots` the zone lookup roots in the host's zone library's order;
 /// `('iana', name)`, `('posix', text)`, or `None`. The rule's questions of
 /// the machine's files are answered by Python (`os.path.isfile`,
@@ -190,7 +190,7 @@ fn local_zone(
 }
 
 /// What each model supports, as the client describes it to a caller, as
-/// the core's JSON (`sdm_host::capabilities`, T3.12).
+/// the core's JSON (`sdm_host::capabilities`).
 #[pyfunction]
 fn capabilities() -> String {
     sdm_host::capabilities()
@@ -284,7 +284,7 @@ fn outgoing<'py>(py: Python<'py>, out: Outgoing) -> PyResult<(Py<PyBytes>, Py<Py
 
 /// The [`CoreError`] raising the `error` control message `out`. Its kind
 /// and code are read from the message; its text is theirs alone, so a
-/// traceback carries no message the core wrote (decision H17).
+/// traceback carries no message the core wrote.
 fn core_error(py: Python<'_>, out: Outgoing) -> PyErr {
     let (kind, code, retryable) = match read(&out) {
         Ok(ControlMessage::Error { error }) => (error.kind, error.code, error.retryable),
@@ -313,7 +313,7 @@ fn core_error(py: Python<'_>, out: Outgoing) -> PyErr {
 /// its stream reports, is the provider's; a batch Arrow cannot build in
 /// the stream's own schema, such as one with nulls in a column declared
 /// without them, fails check (a). Nothing of either error's text is kept,
-/// since it may quote values (decision H17).
+/// since it may quote values.
 fn read_arrow(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Result<ArrowData, Unreadable>> {
     let stream = match take_arrow_stream(value) {
         Ok(stream) => stream,
@@ -577,7 +577,7 @@ impl Run {
     ) -> PyResult<()> {
         logging(py);
         // An Arrow attachment that could not be read still answers the
-        // fetch it was sent for, as sdm-host decides (decision H16).
+        // fetch it was sent for, as sdm-host decides.
         let (attachments, unreadable) = attachments_from_python(attachments)?;
         let message = message.to_vec();
         core_call(py, || {
@@ -633,14 +633,14 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("CONTRACT_VERSION", CONTRACT_VERSION)?;
     module.add("TEST_OPS", cfg!(feature = "test-ops"))?;
     // The databases the core provides for, the staging rule's private
-    // marker (T2.1a); never public API.
+    // marker; never public API.
     module.add("PROVIDERS", PyTuple::new(py, sdm_host::providers())?)?;
     module.add(
         "ERROR_CODES",
         PyTuple::new(py, ErrorCode::ALL.map(ErrorCode::as_str))?,
     )?;
     // Each meaning a column of each data type can carry, as the language
-    // answers it, the client's check of a column's meaning (T3.16, rule 11).
+    // answers it, the client's check of a column's meaning (rule 11).
     module.add(
         "MEANINGS",
         PyTuple::new(
@@ -652,7 +652,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?,
     )?;
     // Each data type name a host may give a column, and the contract's name
-    // of the type it names: the one table of them (T3.16).
+    // of the type it names: the one table of them.
     module.add(
         "DTYPE_NAMES",
         PyTuple::new(

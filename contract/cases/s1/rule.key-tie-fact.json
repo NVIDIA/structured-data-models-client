@@ -82,9 +82,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: answered through predict; Schema.from_source warns that orders has several potential primary keys and gives it none"
+    "stage": "predict"
   },
   "why": "Two key candidates of a fact table, order_id and orderid, tie on the score (each names the table by its singular, every value distinct): rule key_tie. The table is left without a key, and the query, which reaches it through its foreign key, is answered",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.key-tie-fact using the shop fixture."
 }

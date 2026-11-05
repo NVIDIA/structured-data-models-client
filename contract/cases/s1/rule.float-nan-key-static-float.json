@@ -82,9 +82,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "as rule.float-nan-key-static-double: answered through predict on DuckDB and Postgres"
+    "stage": "predict"
   },
-  "why": "As rule.float-nan-key-static-double, a FLOAT key (rule float_nan; T2.12 round 2)",
-  "source": "T2.12 round 2 (Codex P2): a NaN of each sign as DuckDB previews it, and a static query over a NaN key"
+  "why": "As rule.float-nan-key-static-double, a FLOAT key (rule float_nan)",
+  "source": "Correctness case rule.float-nan-key-static-float using the shop fixture."
 }

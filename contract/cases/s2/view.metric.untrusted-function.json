@@ -52,6 +52,6 @@
     "outcome": "success",
     "stage": "from_source"
   },
-  "why": "An expression column calling a function off the Databricks allow-list (bitmap_bucket_number, not in _DATABRICKS_FUNCTIONS, RE/view_expr.py:322) with trust_expressions false, the default: the reference drops the column with its reason (_view_expr_message, RE/graph.py:159-191) and says so in one SDMWarning. The view is created in the test schema from the yaml, its sources named with the {catalog} and {schema} placeholders the capture writes (no private name), each part backtick-quoted since Databricks reads a catalog's hyphen only quoted; its joins' on keys are bare, as people write them, so PyYAML reads each as the key true (KO3-40), which the reference reads too (DB/metric_view.py:825-909, join_cfg.get(True))",
-  "source": "written by T3.5's test author from the reference at 43e55f4f"
+  "why": "An expression column calling a function off the Databricks allow-list (bitmap_bucket_number, not in _DATABRICKS_FUNCTIONS, RE/view_expr.py:322) with trust_expressions false, the default: the reference drops the column with its reason (_view_expr_message, RE/graph.py:159-191) and says so in one SDMWarning. The view is created in the test schema from the yaml, its sources named with the {catalog} and {schema} placeholders the capture writes (no private name), each part backtick-quoted since Databricks reads a catalog's hyphen only quoted; its joins' on keys are bare, as people write them, so PyYAML reads each as the key true, which the reference reads too (DB/metric_view.py:825-909, join_cfg.get(True))",
+  "source": "Correctness case view.metric.untrusted-function using the shop fixture."
 }

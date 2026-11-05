@@ -99,5 +99,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "A ranking over an integer key given a text candidate is refused naming the question asked for the candidate, as the reference names it",
-  "source": "T2.14b's test author, the reference at 6298913c"
+  "source": "Correctness case wording.rank-text-candidate using the shop fixture."
 }

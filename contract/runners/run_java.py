@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Java runner of the contract cases (design choice 10, "Tests").
+r"""The Java runner of the contract cases.
 
     python3 -I contract/runners/run_java.py --out FILE [--jar JAR]
         [--classpath DIR] [--drivers DIR] [--native LIBRARY] [--java JAVA]
@@ -20,7 +20,7 @@ file turns each answer into an observation in
 the checkpoint's comparator as rust-host's are.
 
 A Java leg runs exactly where the Java host has a provider for it (design
-choice 10): S0, S1's local databases and, from T3.13, the manifest-covered
+choice 10): S0, S1's local databases and, the manifest-covered
 Databricks SQL warehouse and metric-view cases. Spark, ranking and forecast
 have no Java leg. A case on no Java leg is named on stderr; a warehouse
 selection admitting no cases fails rather than passing an empty campaign.
@@ -63,11 +63,11 @@ its runtime dependencies (Maven's ``target/lib``, default: the JAR's
 sibling ``lib``); ``--native`` names a native library to load in place of
 the JAR's own (``sdm.native.library``); ``--java`` the ``java`` to run
 (default: ``$JAVA_HOME/bin/java``, else ``java`` on the path). Every Java
-run takes the two runtime flags choice 10 names (:data:`FLAGS`).
+run takes the two runtime flags choice 10 names (data:`FLAGS`).
 
 A runner failure (the Java program failing, an answer missing or not
 holding to the observation schema) exits non-zero and writes no output, an
-earlier run's included. No message text is recorded (decision H17).
+earlier run's included. No message text is recorded.
 """
 
 from __future__ import annotations
@@ -91,13 +91,13 @@ PROGRAM = HERE / 'java' / 'ContractRunner.java'
 sys.path.insert(0, str(HERE))
 import run_python  # noqa: E402
 
-#: The runtime flags of design choice 10: JNI's native access, and the
+#: The required runtime flags: JNI's native access, and the
 #: access Arrow Java's memory module needs.
 FLAGS = (
     '--enable-native-access=ALL-UNNAMED',
     '--add-opens=java.base/java.nio=ALL-UNNAMED',
 )
-#: The databases the Java host has a provider for (T3.12, T3.13).
+#: The databases the Java host has a provider for.
 PROVIDERS: tuple[str, ...] = ('duckdb', 'sqlite', 'postgres', 'databricks-sql')
 #: Each S1 case Java's types cannot say, and why: the call is refused at
 #: compile time in Java, so the case has no Java leg (register JV-1).

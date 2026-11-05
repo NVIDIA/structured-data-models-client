@@ -87,8 +87,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "schema dtype string / ID; result id str ('u0', 'u1')"
+    "stage": "predict"
   },
   "why": "Text keys; the first attempt failed an Arrow string key with INTERNAL_ERROR",
   "source": "probe#4; dtypes:key:arrow_string"

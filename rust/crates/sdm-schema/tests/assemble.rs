@@ -2,11 +2,11 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The schema's assembly (T1.21d, decision E55), rule by rule, each held to
+//! The schema's assembly, rule by rule, each held to
 //! what the reference client's `Schema.from_source` makes of the same
 //! tables, its warnings by code and fields (their words are the host's,
-//! decision E59, held word for word by the client's tests); the keys, time
-//! columns and relationships a caller names (T1.23); and the consistency
+//! held word for word by the client's tests); the keys, time
+//! columns and relationships a caller names; and the consistency
 //! check that holds the schema `materialize` is handed, each refusal
 //! seeded.
 
@@ -596,7 +596,7 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
     assert!(assemble::check_links(&widened, &assemble::HostTypes::default()).is_ok());
     // A link whose foreign key is its own table's primary key, which the
     // reference's engine refuses (`Graph._edge_error`), is refused naming
-    // the link (T1.24b) once the tables are read (`check_edges`, T3.4 fix
+    // the link once the tables are read (`check_edges`, fix
     // 11); the same key on another column of it is not.
     assert!(assemble::check_edges(&description()).is_ok());
     let mut keyed = description();
@@ -649,7 +649,7 @@ fn names_are_quoted_and_listed_as_the_reference_s_messages_do() {
 }
 
 /// A warning's message names nothing: every name it speaks of is a field,
-/// for the host to word (decision E59).
+/// for the host to word.
 #[test]
 fn a_warning_s_message_names_nothing_and_its_fields_name_everything() {
     let made = made_of(
@@ -672,7 +672,7 @@ fn a_warning_s_message_names_nothing_and_its_fields_name_everything() {
     }
 }
 
-/// The keys and time columns a caller names (T1.23), applied between the
+/// The keys and time columns a caller names, applied between the
 /// reading and the count as the reference applies them, each refusal
 /// seeded: a table or column the schema does not hold, a key that cannot
 /// identify a row or is the time column, a time column that is the key or
@@ -714,7 +714,7 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
     assert_eq!(tables[0].time_column.as_deref(), Some("note"));
     assert_eq!(tables[0].columns[4].stype, Stype::Timestamp);
     // A time column cleared leaves the table none, its column still
-    // meaning a timestamp, as the reference's setter takes None (T1.24).
+    // meaning a timestamp, as the reference's setter takes None.
     let tables = named(&[], &[("orders", None)]).unwrap();
     assert_eq!(tables[0].time_column, None);
     assert_eq!(tables[0].columns[3].stype, Stype::Timestamp);
@@ -781,7 +781,7 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
     assert!(named(&[("orders", &["order_id", "price"])], &[]).is_ok());
 }
 
-/// The relationships a caller gives (T1.23) are the schema's, in place of
+/// The relationships a caller gives are the schema's, in place of
 /// the declared and inferred ones, each checked as the reference checks
 /// them, each refusal seeded; an empty list says there are none. A table
 /// whose time column the caller named is neither settled by the links nor
@@ -857,7 +857,7 @@ fn relationships_given_are_the_schema_s_and_checked() {
         Some("modified_at")
     );
     assert!(made.warnings.is_empty(), "{:?}", made.warnings);
-    // A time column cleared (T1.24) is given too: the table keeps none,
+    // A time column cleared is given too: the table keeps none,
     // inference's column is recorded as the one it took, and nothing is
     // settled or warned of, though no link refers to the table.
     let mut cleared_plans = plans();
@@ -885,7 +885,7 @@ fn relationships_given_are_the_schema_s_and_checked() {
 /// The warnings the assembly gives are the ones `assemble::WARNINGS` lists,
 /// each code with its variants, and every listed pair is given by some
 /// schema here: what a host words is the list the binding exports
-/// (decision E59(d)), checked by what the assembly does, not by its text.
+///, checked by what the assembly does, not by its text.
 #[test]
 fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     use sdm_schema::infer::{LeftOut, UnreadTimes};
@@ -1113,7 +1113,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     assert!(assemble::key_tied(&refused).is_empty());
     given.extend(said);
     // Every sentence of the schema's warnings is given, each of its code
-    // (T3.17: the sentences take the place of the codes' variants).
+    // (the sentences take the place of the codes' variants).
     let codes = [
         WarningCode::TimeColumnsGuessed,
         WarningCode::LinkCannotJoin,
@@ -1142,7 +1142,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
 /// reference infers every table's key after it types every table's columns
 /// (whose unread times and day-first dates `describe_source` says as it
 /// reads each table), and leaves columns out as it describes the tables
-/// (T2.12 fix 1; probed on DuckDB: `zzz`'s day-first dates, then `aaa`'s
+/// ( fix 1; probed on DuckDB: `zzz`'s day-first dates, then `aaa`'s
 /// tie, then `aaa`'s list left out).
 #[test]
 fn tied_keys_are_said_after_every_table_is_read_and_before_left_out_columns() {

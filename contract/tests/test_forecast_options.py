@@ -47,7 +47,7 @@ NUM_FORECASTS = (
 #: ``lag_timesteps``: on a two-step forecast, the values the reference
 #: takes (0, 1, 2) and refuses (-1, 1.5, 2.0, true, "2"), and beside a
 #: forecast (a regression, a binary classification, a static target, and
-#: T2.13b's negated condition over a filtered count).
+#: negated condition over a filtered count).
 LAG_TIMESTEPS = (
     'forecast.lag-0',
     'forecast.lag-1',
@@ -77,10 +77,10 @@ RESPONSE_FIELD = (
     'quantiles.regression',
 )
 #: A lagged average whose windows are sometimes empty: the reference's lags
-#: misaligned, the core's each on its own row (KO2-70).
+#: misaligned, the core's each on its own row.
 LAG_ALIGNED = 'lag.average-empty-windows'
 #: A lagged condition asked one entity a call: each call's lag columns
-#: declared bool, as the reference declares them (Codex, round 2).
+#: declared bool, as the reference declares them.
 LAG_DTYPE = 'lag.condition-per-call'
 FAMILY = (*NUM_FORECASTS, *LAG_TIMESTEPS, *QUANTILES, LAG_ALIGNED, LAG_DTYPE)
 #: The queries the reference refuses before anything is read.
@@ -133,7 +133,7 @@ def _module(name: str, path: Path) -> ModuleType:
 def reachable(database: str) -> bool:
     r"""Whether ``database`` can be run here: DuckDB and SQLite always;
     Postgres where ``SDM_POSTGRES_TEST_DSN`` names a server, and a failure
-    where ``SDM_REQUIRE_POSTGRES`` asks for one that is not named (H26)."""
+    where ``SDM_REQUIRE_POSTGRES`` asks for one that is not named."""
     if database != 'postgres' or os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -146,7 +146,7 @@ def reachable(database: str) -> bool:
 
 
 def _runner() -> ModuleType:
-    return _module('t29_run_python', RUNNER)
+    return _module('test_forecast_options_run_python', RUNNER)
 
 
 def _cases() -> dict[str, dict[str, Any]]:
@@ -204,7 +204,7 @@ def _lagged(body: dict[str, Any]) -> tuple[list[str], list[str]]:
 
 
 def test_the_cases_are_the_design_row_s() -> None:
-    r"""Control: the T2.9 cases are each of the row's options over the shop
+    r"""Control: the cases are each of the row's options over the shop
     base, through the public calls, each on all three databases, with
     python-ref's committed line on each, whose outcome is the case's
     ``expect``; a case names its option as written (``lag_timesteps`` in
@@ -217,7 +217,7 @@ def test_the_cases_are_the_design_row_s() -> None:
         for prefix in ('forecast.', 'lag.', 'quantiles.')
         for path in CASES.glob(f'{prefix}*.json')
     }
-    # T2.8's forecast cases (top_k and MOST_PARTS) are ranking's.
+    # forecast cases (top_k and MOST_PARTS) are ranking's.
     assert family - {'forecast.top-k', 'forecast.most-parts'} == set(FAMILY)
     reference = expected_cases()
     for case_id, case in cases.items():
@@ -270,7 +270,7 @@ def test_the_expected_cases_are_not_vacuous() -> None:
     the one the scripted endpoint's rule gave the row's step's call
     (step k answered by call k - 1, row i by the rule's row i): the rows
     built from the rule have the digest of the reference's result, which
-    is what ``t29_forecasting.rs`` holds rust-host's result to."""
+    is what ``forecast_scenarios.rs`` holds rust-host's result to."""
     runner = _runner()
     cases = _cases()
     reference = expected_cases()
@@ -332,12 +332,13 @@ def test_the_expected_cases_are_not_vacuous() -> None:
 
 def _the_rule_s_rows(case_id: str) -> str:
     r"""The digest, as the runner takes a result's, of the rows
-    ``to_pandas()`` gives for ``case_id`` where each row holds the
+    ``to_pandas`` gives for ``case_id`` where each row holds the
     prediction and quantiles the scripted endpoint's rule gives it: the
     entities 0 and 1 in order, each step after the last, step k answered by
     call k - 1."""
     endpoint = _module(
-        't29_scripted_endpoint', ROOT / 'tests/support/scripted_endpoint.py'
+        'forecast_scripted_endpoint',
+        ROOT / 'tests/support/scripted_endpoint.py',
     )
     steps = STEPS.get(case_id)
     rows = []
@@ -361,7 +362,7 @@ def _the_rule_s_rows(case_id: str) -> str:
 
 @functools.cache
 def _cases_on(database: str) -> dict[str, dict[str, Any]]:
-    r"""python-core over the T2.9 cases on ``database``, as that database's
+    r"""python-core over the cases on ``database``, as that database's
     job runs it: each observation by its key."""
     paths = [CASES / f'{case_id}.json' for case_id in FAMILY]
     with tempfile.TemporaryDirectory(prefix='t29-cases-') as tmp:
@@ -398,7 +399,7 @@ def as_the_reference(
     r"""Each case of ``case_ids`` on ``database``: python-core's outcome
     (result, stage, class and code), every request it sent (the
     ``payload`` rule: each but its request id, in order), its warnings'
-    classes and, where ``result``, its result through ``to_pandas()``
+    classes and, where ``result``, its result through ``to_pandas``
     (columns, dtypes and rows) are python-ref's; and it ran on the core,
     every core operation its case names started by the core."""
     runner = _runner()
@@ -478,7 +479,7 @@ def test_quantiles_asked_as_the_reference(database: str) -> None:
 def test_response_field_for_quantiles_as_the_reference(database: str) -> None:
     r""" "``response_field`` for quantiles": each case whose answer carries
     quantiles answers through ``predict`` on ``database`` with them laid
-    out as the reference lays them out: ``to_pandas()``'s columns (one
+    out as the reference lays them out: ``to_pandas``'s columns (one
     ``quantile_<q>`` each), dtypes and rows, each step's quantiles on its
     own rows, never refused ``response_field``."""
     if not reachable(database):
@@ -486,7 +487,7 @@ def test_response_field_for_quantiles_as_the_reference(database: str) -> None:
     (lambda: as_the_reference(database, RESPONSE_FIELD))()
 
 
-# --- a lagged average with empty windows (KO2-70) ---------------------------------
+# --- a lagged average with empty windows ---------------------------------
 
 #: The window of LAG_ALIGNED's query, in days, and its lags.
 WINDOW_DAYS = 28
@@ -664,7 +665,7 @@ def on_their_own_rows(theirs: list[Any], mine: list[Any]) -> list[str]:
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_lagged_average_on_its_own_rows(database: str) -> None:
-    r""" "``lag_timesteps``", as the orchestrator decided under KO2-70:
+    r""" "``lag_timesteps``", as the orchestrator decided under:
     python-core answers the lagged average with empty windows through
     ``predict`` on ``database``, through the core, sending python-ref's
     requests but for the lags, each lag cell the average of that row's own
@@ -689,7 +690,7 @@ def test_lagged_average_on_its_own_rows(database: str) -> None:
     check()
 
 
-# --- a lagged condition asked one entity a call (Codex, round 2) ------------------
+# --- a lagged condition asked one entity a call ------------------
 
 
 def lag_dtypes(sent: list[Any]) -> list[dict[str, str]]:

@@ -5,17 +5,15 @@
 
 """Builds the client wheel, which carries `sdm_client._native`, with maturin.
 
-CI's `native-wheel` job runs this inside a manylinux2014 container with
-`--manylinux`, for the wheel that ships; the reference machine runs it
-without, for the local build the reference comparisons use, which is never
-shipped (design, "Packaging"). Either way it:
+Release builds use `--manylinux` inside a manylinux2014 container.
+Omit that flag for local development wheels.
+The builder:
 
 - uses the pinned maturin, and the production features unless `--test-ops`
   asks for the test-only operations;
 - records the build's effective Rust target flags, from the environment, any
   Cargo configuration and every rustc invocation, and fails if one sets
-  `target-cpu`, which would tie the wheel to the build machine's processor
-  (decision F7);
+  `target-cpu`, which would tie the wheel to the build machine's processor;
 - with `--manylinux`, reads the wheel with `auditwheel show` and fails unless
   it is manylinux2014 (`manylinux_2_17`) or older, for one of
   :data:`ARCHES`;
@@ -28,7 +26,7 @@ shipped (design, "Packaging"). Either way it:
     scripts/rust_core/native_wheel.py --check-set DIR...
 
 `--check-set` holds the shipped wheels, gathered from the directories
-named, to the set CI builds (decision KO2-40): one wheel for each of
+named, to the set CI builds: one wheel for each of
 :data:`ARCHES`, each tagged as that architecture's manylinux2014 wheel, all
 of one distribution, version and interpreter tag; a set missing an
 architecture, or holding one twice, fails by name.
@@ -70,7 +68,7 @@ FLAG_VARIABLES = (
 #: The newest glibc a manylinux2014 wheel may need.
 MANYLINUX2014_GLIBC = (2, 17)
 #: The architectures the client's Linux wheel ships for, each built on a
-#: runner of its own (KO2-40), with the platform tag maturin gives a
+#: runner of its own, with the platform tag maturin gives a
 #: manylinux2014 build there.
 ARCHES = {
     'x86_64': 'manylinux_2_17_x86_64.manylinux2014_x86_64',
@@ -149,14 +147,14 @@ def target_cpu_refusal(
 ) -> str | None:
     """Why the build's target flags are refused, or `None`: a build log
     with no rustc invocation read from it, or `target-cpu` set anywhere,
-    which ties the wheel to the build machine's processor (decision F7)."""
+    which ties the wheel to the build machine's processor."""
     if not any(flag.startswith('-C opt-level') for flag in flags):
         return 'no rustc invocation was read from the build log'
     sources = [*environment.values(), *configs.values(), *flags]
     if any('target-cpu' in text for text in sources):
         return (
             'a target-cpu flag is set, which ties the wheel to the build '
-            f"machine's processor (decision F7): {environment} {flags}"
+            f"machine's processor: {environment} {flags}"
         )
     return None
 
@@ -220,7 +218,7 @@ def _manylinux(wheel: pathlib.Path) -> str:
 
 def wheel_set_refusal(wheels: list[pathlib.Path]) -> str | None:
     """Why the shipped wheel set is refused, or `None`: it must hold one
-    wheel for each of :data:`ARCHES`, tagged as that architecture's
+    wheel for each of:data:`ARCHES`, tagged as that architecture's
     manylinux2014 wheel, all of one distribution, version and interpreter
     and ABI tags."""
     by_arch: dict[str, list[str]] = {}

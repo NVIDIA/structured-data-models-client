@@ -206,9 +206,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "regression; the request's context rows per table, the same on all three databases: customers 10, details 12, headers 2"
+    "stage": "predict"
   },
-  "why": "T2.19 (main eb6c68eb): the events reached from a customer directly and through its orders, so a table is reached by two paths in one hop, the events keyless; a hop's reads stop at the slices each table held when it began",
+  "why": "The events reached from a customer directly and through its orders, so a table is reached by two paths in one hop, the events keyless; a hop's reads stop at the slices each table held when it began",
   "source": "main's test_two_paths.py (eb6c68eb, the reference at 6298913c)"
 }

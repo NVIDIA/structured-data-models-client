@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""What every provider of the client's core routes shares (design fix F):
-the :class:`Provider` protocol the run loop calls, and the rules of a SQL
+the:class:`Provider` protocol the run loop calls, and the rules of a SQL
 plan each driver's provider applies before it runs anything, written once.
 
 A provider answers one fetch step: it runs the statements the core's plan
@@ -88,7 +88,7 @@ def text(
 ) -> tuple[int, str]:
     r"""The text ``param`` binds, one of ``keys``: its attachment id and
     the one text cell of the one-row, one-column Arrow attachment handed
-    over under it, a key set the core wrote as its dialect's JSON (T3.28),
+    over under it, a key set the core wrote as its dialect's JSON,
     which a provider binds as it is.
 
     Raises:
@@ -124,7 +124,7 @@ def bound_relations(
     r"""The key set each relation name of ``statements`` binds, by name, for
     a provider that binds each key set as a relation of the name its
     parameter gives (DuckDB registers it, SQLite ingests it): every
-    parameter a key set handed over (:func:`key_set`), one name binding one
+    parameter a key set handed over (func:`key_set`), one name binding one
     key set however often it is named.
 
     Raises:
@@ -144,7 +144,7 @@ def bound_relations(
 def arrow_table(stream: Any) -> Any:
     r"""A key set the core sent, an object exporting an Arrow stream, read
     whole as a pyarrow table, through the PyCapsule interface pyarrow 14.0.1
-    reads (decision E16)."""
+    reads."""
     import pyarrow as pa
 
     # The private importer, because pyarrow 14.0.1, the floor, has no public

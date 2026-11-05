@@ -33,7 +33,7 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 
 
 def runner() -> ModuleType:
-    name = 't214b_run_python'
+    name = 'test_decimal_semantic_types_run_python'
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(name, RUNNER)
         assert spec is not None and spec.loader is not None

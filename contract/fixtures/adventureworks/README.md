@@ -1,6 +1,6 @@
 # The AdventureWorks fixture
 
-The `adventureworks` base of [`contract/bases.yaml`](../../bases.yaml) is a small subset of Microsoft's AdventureWorks sample database, for E27's AdventureWorks baseline case (`contract/cases/s1/base.adventureworks.json`, T1.21b).
+The `adventureworks` base of [`contract/bases.yaml`](../../bases.yaml) is a small subset of Microsoft's AdventureWorks sample database, used by the AdventureWorks correctness case (`contract/cases/s1/base.adventureworks.json`).
 It is test data in this repository and ships in no distribution.
 
 ## Source
@@ -54,4 +54,4 @@ The shared AdventureWorks cases use these committed rows for source-description,
 
 [`notebook-fa0637d4.ipynb`](notebook-fa0637d4.ipynb) is `examples/databricks/adventureworks_relational.ipynb` exactly as it was at `fa0637d4` (`git show fa0637d4:examples/databricks/adventureworks_relational.ipynb`).
 `main` deleted the notebook in `18e26f1c`, in favour of `kumo_relational_quickstart.ipynb`.
-`contract/tests/test_adventureworks_classification.py` reads its `QUESTIONS` to hold the AdventureWorks cases to the questions they were written from, so T2.0c keeps it here, frozen, rather than in `examples/`.
+`contract/tests/test_adventureworks_classification.py` reads its `QUESTIONS` to hold the AdventureWorks cases to the questions they were written from, so it is retained here as an independent test input.

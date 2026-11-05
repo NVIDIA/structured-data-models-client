@@ -88,9 +88,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 2 calls; result columns row_index, id, forecast_step, prediction, quantile_0.1, quantile_0.5, quantile_0.9"
+    "stage": "predict"
   },
   "why": "A forecast asking for its prediction and quantiles, each step's answer carrying both",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "source": "Correctness case forecast.quantiles-and-prediction using the shop fixture."
 }

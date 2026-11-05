@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The host facts' date literal range (T1.20 fix round 1) on the wire:
-//! `"date_literal_range": {"min_ns": ..., "max_ns": ...}` when declared, no
+//! The host facts' date literal range ( fix round 1) on the wire:
+//! `"date_literal_range": {"min_ns":..., "max_ns":...}` when declared, no
 //! key when not, and an absent key reads as none, alone and in a run's
 //! start.
 

@@ -108,7 +108,7 @@ fn the_adapter_grows_one_stack_per_call_and_the_parser_none() {
         }
     }
     // One: `on_adapter_stack`, which `validate`, `resolve` and `normalized`
-    // (the query as the PQL library writes it back, T2.2) each enter once,
+    // (the query as the PQL library writes it back) each enter once,
     // and nothing below them enters again.
     assert_eq!(sites.len(), 1, "{sites:#?}");
     assert!(sites[0].starts_with("sdm-core/pql.rs:"), "{sites:#?}");

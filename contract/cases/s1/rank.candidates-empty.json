@@ -86,9 +86,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"candidates is empty, so there is nothing to rank\""
+    "code": "INVALID_REQUEST"
   },
   "why": "A ranking over no candidates, refused",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.candidates-empty using the shop fixture."
 }

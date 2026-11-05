@@ -88,5 +88,5 @@
     "message": "num_neighbors must be a sequence of hop sizes"
   },
   "why": "num_neighbors=5 is no list of hop sizes: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-neighbors.number using the shop fixture."
 }

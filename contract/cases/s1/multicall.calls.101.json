@@ -580,5 +580,5 @@
     "message": "101 entities are gathered as 101 calls of 1, and every one is built, with its own context, before any is sent. That is past the 100 calls this will hold at once; ask about fewer entities at a time"
   },
   "why": "rows_per_call=1 over 101 entities: 101 calls, one past the 100 one request is asked in; refused UNSUPPORTED_REQUEST at materialize",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.calls.101 using the shop fixture."
 }

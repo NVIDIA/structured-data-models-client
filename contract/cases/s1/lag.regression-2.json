@@ -84,9 +84,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 1 call; result columns row_index, id, prediction"
+    "stage": "predict"
   },
   "why": "lag_timesteps of 2 on a temporal regression, no forecast: the request carries the lagged targets",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "source": "Correctness case lag.regression-2 using the shop fixture."
 }

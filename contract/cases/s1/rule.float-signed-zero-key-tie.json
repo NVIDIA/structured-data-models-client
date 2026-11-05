@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: answered through predict on DuckDB and Postgres; on DuckDB the two zeros are distinct and order_id and orderid tie (no key, a warning), on Postgres they are one value and orderid is the key"
+    "stage": "predict"
   },
-  "why": "orders' two key candidates, order_id and orderid, both DOUBLE, order 3's order_id -0.0 beside order 0's 0.0: whether the two zeros are distinct decides whether they tie (rules float_signed_zero and key_tie; T2.12 round 1)",
-  "source": "T2.12 round 1 (Codex P2): float inference as each database previews it, and a NaN key at materialize"
+  "why": "Orders' two key candidates, order_id and orderid, both DOUBLE, order 3's order_id -0.0 beside order 0's 0.0: whether the two zeros are distinct decides whether they tie (rules float_signed_zero and key_tie)",
+  "source": "Correctness case rule.float-signed-zero-key-tie using the shop fixture."
 }

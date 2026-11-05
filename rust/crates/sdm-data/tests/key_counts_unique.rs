@@ -5,7 +5,7 @@
 //! A key the source keeps unique (`TableKey::unique`, contract v28) is
 //! counted on every dialect as the reference's `_key_count_sql` counts one,
 //! the rows less those missing part of it, and any other key by its
-//! distinct values, as before (carried row P2-T2.2-3).
+//! distinct values, as before (carried row P2--3).
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice, TableKey};
 use sdm_data::Data;
@@ -19,7 +19,7 @@ fn statement(dialect: &str, unique: bool) -> String {
             unique,
         }],
     };
-    // Postgres reads every table under a schema (T3.7).
+    // Postgres reads every table under a schema.
     let namespace = if dialect == "postgres" {
         vec![Some("public".to_owned())]
     } else {

@@ -102,10 +102,9 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "RecursionError",
-    "code": null,
-    "today": "The core accepts it, the deepest query it takes (MAX_DEPTH, decision H27; 1,000 levels are PQL_PARSE_SYNTAX), so rust-host succeeds; python-core raises RecursionError as the reference does, from the shadow check's old validator, until that leaves in Phase 5 (register PQL-2, proposed)"
+    "code": null
   },
   "register": "PQL-2",
   "why": "A target filter in 999 nested parentheses, the core's deepest: the reference has no depth limit of its own, and its parser raises RecursionError at the interpreter's recursion limit, past about 455 levels in the runner",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.boundary.depth-999 using the shop fixture."
 }

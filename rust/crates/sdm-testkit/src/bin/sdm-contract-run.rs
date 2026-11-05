@@ -15,29 +15,29 @@
 //! ```
 //!
 //! `--kit` runs the provider conformance kit on this host's provider for
-//! DATABASE, `duckdb`, `sqlite` or `memory` ([`sdm_testkit::kit`], T2.5;
-//! `memory` the minimal non-SQL test provider, T2.7): it writes
+//! DATABASE, `duckdb`, `sqlite` or `memory` ([`sdm_testkit::kit`];
+//! `memory` the minimal non-SQL test provider): it writes
 //! REPORT and exits 0 when every case passes, 1 when any fails, and 2
 //! when it cannot run.
 //!
-//! `--database sqlite` (T2.2) runs each case that runs on SQLite over its
+//! `--database sqlite` runs each case that runs on SQLite over its
 //! tables loaded into a new SQLite file by the contract loader, read
 //! through the dev-only `rusqlite` provider ([`sdm_testkit::sqlite`]),
-//! every call the case makes through its `until` (T2.1d), each observation
+//! every call the case makes through its `until`, each observation
 //! keyed `<case>@sqlite`.
 //!
-//! `--database memory` (T2.7) runs each case that reads data over its
+//! `--database memory` runs each case that reads data over its
 //! DuckDB base copied into the minimal non-SQL test provider
 //! ([`sdm_testkit::memory`]), through the second data layer swapped in at
 //! the composition root ([`sdm_testkit::layer`]), each observation keyed
 //! `<case>@memory`; a case that reads no data is not run there. With
 //! `--layer default` the same provider runs through
-//! `sdm_host::default_root()`'s layer (`sdm-data`'s) instead, keyed the
+//! `sdm_host::default_root`'s layer (`sdm-data`'s) instead, keyed the
 //! same, so the two runs differ in their data layer alone.
 //!
 //! `--replay` runs each case that runs on Postgres there, its fetches
 //! answered from a recording of a Postgres server's answers
-//! (`run_python.py --record-fetches`; [`sdm_testkit::replay`], KO2-20),
+//! (`run_python.py --record-fetches`; [`sdm_testkit::replay`]),
 //! each observation keyed `<case>@postgres`.
 //! With `--replay-leg databricks-sql|databricks-spark|snowflake|lakebase`,
 //! it replays that leg's actual fetch recording and its recorded starting
@@ -46,7 +46,7 @@
 //!
 //! `--providers` prints the databases this host has a provider for
 //! ([`sdm_testkit::PROVIDERS`]) as a JSON list, the staging rule's marker
-//! for rust-host (T2.1a).
+//! for rust-host.
 //!
 //! Runs every case through `HostRun`, building a case's data from
 //! `contract/bases.yaml` when its operation reads data, and writes one
@@ -87,7 +87,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     };
     let sqlite = database == Some("sqlite");
     // The data layer a `--database memory` run composes: the second one
-    // (T2.7), or, with `--layer default`, the default root's.
+    //, or, with `--layer default`, the default root's.
     let (root, arguments) = match arguments {
         [flag, layer, rest @ ..] if flag == "--layer" && layer == "default" => {
             if database != Some("memory") {
@@ -149,7 +149,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     }
     // The cases that run on the database this run answers from: a
     // warehouse-only case (S2's `warehouses`) runs on none of them, and is
-    // selected out, never run on DuckDB (`case::load_for`, T3.2).
+    // selected out, never run on DuckDB (`case::load_for`).
     let on = if sqlite {
         case::Database::Sqlite
     } else if recording.is_some() {
@@ -201,7 +201,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
                 keyed.case.id = format!("{}@{}", each.case.id, replay_leg.0);
                 // A diagnostic case whose core asks past what python-core
                 // recorded is observed refused (`replay::PAST_THE_RECORDING`);
-                // an acceptance case's fails the run (T2.8 fixes 3 and 4).
+                // an acceptance case's fails the run ( fixes 3 and 4).
                 (
                     host::run_replayed_on(&each.case, recording, replay_leg.0)?,
                     keyed,
@@ -211,7 +211,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         let each = &keyed;
         count += 1;
         // On SQLite every case reads data, its calls made through its
-        // until (T2.1d).
+        // until.
         let read_bases = sqlite || replay_leg.1.is_some() || reads_data(&each.case);
         let digest = read_bases.then_some(bases_digest.as_str());
         lines.push_str(&observation::write(&identity, each, &observed, digest).to_string());

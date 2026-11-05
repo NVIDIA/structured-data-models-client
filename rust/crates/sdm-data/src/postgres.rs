@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The Postgres dialect (T2.3). Its capabilities are the optional requests
+//! The Postgres dialect. Its capabilities are the optional requests
 //! it has a rendering for, every one the core asks, so none falls back.
 //!
 //! Each rendering is the statement the reference's Postgres engine runs for
 //! the same step (`rfm/backend/postgres`), so each statement's result is
-//! that statement's (decision H9 gates on results, not text): the table
+//! that statement's ( gates on results, not text): the table
 //! list, a table's columns, keys and foreign keys (`information_schema`, as
 //! `PostgresTable` reads them), the preview, the key counts, the column
 //! ranges, the repeated key, the time bounds (`MIN` and `MAX` in the
@@ -22,12 +22,12 @@
 //! The catalog answers are the reference's, read by [`read`] into the
 //! contract's catalog answer. Every relation is read in two parts, a schema
 //! and a table, as the reference names every table it reads
-//! (`"schema"."table"`, T3.7): a source given its schema (the provider's
+//! (`"schema"."table"`): a source given its schema (the provider's
 //! namespace, contract v28) has each one-part name read under it; a source
 //! given none has the session's current schema read once per run
 //! (`describe` of its namespace, [`SqlDialect::settles_namespace`]) and
 //! every relation named under that, as the reference reads
-//! `current_schema()` once and names it in every statement. A relation of
+//! `current_schema` once and names it in every statement. A relation of
 //! one part reaching a plan was read under no schema, since the session
 //! has none, and is refused as the reference refuses it ([`unqualified`]).
 //! A name the source does not hold under its schema answers no columns,
@@ -37,7 +37,7 @@
 //! text in the statement's one parameter, `$1`, unpacked by a common table
 //! expression named as the plan's relation ([`SEEDS`]; `P1 d:131`). The
 //! dialect writes it as the reference writes it (`pg_values::key_rows`,
-//! T3.28): each seed its key alone, or an object of `id` and the window's
+//! ): each seed its key alone, or an object of `id` and the window's
 //! bounds `e` and `s`, its batch its position (`WITH ORDINALITY`), split
 //! past the reference's budget as it splits one ([`crate::key_text`]),
 //! each later chunk's statement counting its batches from the seeds before
@@ -46,7 +46,7 @@
 //! `bigint` or `numeric`, so the join compares the two keys by value,
 //! exactly (an integer and a `numeric` meet when their values are equal,
 //! whatever their scales, and two `numeric` values float64 would merge
-//! stay apart; design choice 5, lesson 19, KO2-35).
+//! stay apart; design choice 5, lesson 19).
 //! Floating seeds use `numeric` only when the destination catalog declaration
 //! names an integer or numeric column; any other key (a float destined for
 //! REAL/DOUBLE PRECISION, a text) uses the joined column's declared type, put in place
@@ -59,7 +59,7 @@
 //! writes it).
 //!
 //! The statements are built once, by the shared builder ([`crate::sql`]),
-//! through [`Postgres`]'s hooks (T3.18): only what is Postgres's own is
+//! through [`Postgres`]'s hooks: only what is Postgres's own is
 //! here.
 
 use std::collections::BTreeMap;
@@ -112,7 +112,7 @@ fn seeds_for(table: &Relation) -> String {
 }
 
 /// The most name parts a Postgres relation takes: a schema and a table
-/// (design choice 12).
+///.
 const MOST_PARTS: usize = 2;
 
 /// The Postgres dialect.
@@ -153,8 +153,8 @@ impl SqlDialect for Postgres {
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
-            // `setseed` before `ORDER BY random()` repeats the draw on one
-            // server (register entry RS-6, KO2-24).
+            // `setseed` before `ORDER BY random` repeats the draw on one
+            // server (register entry RS-6).
             sampling: Determinism::SeededStable,
             // The reference hashes the seed's text into `setseed`'s range, so
             // it takes any integer seed (`_postgres_seed`).
@@ -194,7 +194,7 @@ impl SqlDialect for Postgres {
 
     /// A source given no schema has the session's current one read once
     /// per run, and every relation named under it, as the reference reads
-    /// `current_schema()` once and names it in every statement (T3.7).
+    /// `current_schema` once and names it in every statement.
     fn settles_namespace(&self) -> bool {
         true
     }
@@ -235,8 +235,8 @@ impl SqlDialect for Postgres {
     /// The reference's sample of an entity table on Postgres
     /// (`_sample_entity_table`): `setseed` with the seed's place in its
     /// range ([`seed_value`]), then the columns asked for, from the rows that
-    /// meet each not-null filter, in `random()` order, the first `n`, in its
-    /// text (register entry RS-6, KO2-24).
+    /// meet each not-null filter, in `random` order, the first `n`, in its
+    /// text (register entry RS-6).
     fn sample(&self, sample: &Sample<'_>) -> Vec<String> {
         vec![
             format!("SELECT setseed({})", float_text(seed_value(sample.seed))),
@@ -423,7 +423,7 @@ fn unqualified(relation: &Relation) -> Option<CoreError> {
 }
 
 /// The reference's refusal of a source given no schema whose session has
-/// none (`current_schema()` null): `No current 'schema' set. Please
+/// none (`current_schema` null): `No current 'schema' set. Please
 /// specify the PostgreSQL schema manually`.
 fn no_current_schema() -> CoreError {
     CoreError::new(
@@ -497,7 +497,7 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
         _ => return request.expected(),
     };
     let fields = match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
             return ExpectedSchema::Discover {};
         }
@@ -547,7 +547,7 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
 fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     use catalog as k;
     match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
         DescribePart::Columns => {
@@ -609,7 +609,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
             // A key of several columns is read as it is declared; the
             // core makes no table's key of one, as DuckDB's and SQLite's
             // references do not (the reference's Postgres graph discovery
-            // fails on one, `_get_source_columns`; register P2E-4).
+            // fails on one, `_get_source_columns`; E-4).
             Ok(CatalogAnswer::Keys(keys))
         }
         DescribePart::ForeignKeys => {
@@ -637,7 +637,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
             // A foreign key of several columns is read as it is declared;
             // the core links by none, as DuckDB's and SQLite's references
             // do not (the reference's Postgres graph discovery fails on
-            // one, `_get_source_foreign_keys`; register P2E-4).
+            // one, `_get_source_foreign_keys`; E-4).
             Ok(CatalogAnswer::ForeignKeys(
                 keys.into_values()
                     .zip(0_i64..)
@@ -699,7 +699,7 @@ fn describe(
 ) -> Result<String, CoreError> {
     let one = || schema_and_name(sql::one_table(request, tables)?);
     Ok(match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         // The reference's listing (`Graph.from_postgres`'s,
         // `information_schema` the base tables of the schema, by name), as
@@ -1017,7 +1017,7 @@ fn exact_numeric_type(declared: &str) -> bool {
 }
 
 /// The table's columns asked for, each read from its alias and renamed to a
-/// position of its own (`c0`, `c1`, ...), so no source column's name meets
+/// position of its own (`c0`, `c1`,...), so no source column's name meets
 /// a helper's inside the statement; the outer select names them back.
 fn positioned(columns: &[String]) -> Vec<(String, String)> {
     columns

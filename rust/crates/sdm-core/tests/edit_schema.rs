@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `edit_schema` through dispatch (T1.24b, decision E67): an edit to a
+//! `edit_schema` through dispatch: an edit to a
 //! schema the core described is checked and made by `sdm-schema` over the
 //! schema the host holds, answered as the schema with the edit made and
 //! the column whose meaning it chose, or refused at the start of nothing
 //! but the run; the schema is the host's alone, as plain data, each
-//! column with its facts (T3.16); and the edit's attachments, which a caller's
+//! column with its facts; and the edit's attachments, which a caller's
 //! values fill, are refused by name, never a crash, however deep or wide
 //! (E49's probe).
 
@@ -212,7 +212,7 @@ fn a_refused_edit_ends_the_run_with_the_reference_s_refusal() {
 
 #[test]
 fn a_column_the_host_retyped_is_edited_by_what_its_source_holds() {
-    // T3.16: no description to be changed past; a data type written by
+    //: no description to be changed past; a data type written by
     // hand is no edit, as the reference reads a table in place.
     let mut retyped = held(&described());
     retyped.tables[0].columns[1].dtype = Some("float64".into());

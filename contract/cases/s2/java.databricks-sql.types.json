@@ -86,9 +86,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "read from the old client's code (the Databricks engine table's _to_dtype, wire_dtype and _describe_source_table): TINYINT, SMALLINT, INT and BIGINT read as int64, FLOAT, DOUBLE and DECIMAL(38,6) as float64, BOOLEAN as bool, DATE, TIMESTAMP and TIMESTAMP_NTZ as timestamp[us]; token (BINARY) and tags (ARRAY<INT>) left out with an SDMWarning, since a request carries one scalar per cell; task binary_classification; every other column in the payload with its nulls, the NaN read as a missing score, 9007199254740993 kept whole; the same inputs on DuckDB answer through predict at 43e55f4f"
+    "stage": "predict"
   },
-  "why": "T3.13's input axes (the JDBC types the Databricks JDBC driver returns): one table holding every scalar Databricks type of C-1's recorded tables as a feature (TINYINT, SMALLINT, INT, BIGINT past 2**53, FLOAT, DOUBLE with a NaN, DECIMAL(38,6) past a double's precision, STRING, BOOLEAN, DATE, TIMESTAMP in the session zone, TIMESTAMP_NTZ), each with a null where a JDBC getter of a primitive would read 0 or false, and a BINARY and an ARRAY<INT> column the old client leaves out. C-1 records the tables as the warehouse returns them, so T3.12's conversion table and T3.13's type tests have every type to read; the Java host's leg is judged on the stand-in against C-1's reference line, and live in E-7, which alone sees the JDBC driver's own types (B7). STRUCT and MAP read as unsupported types on Databricks (_to_dtype), which the engine refuses for the whole table, so they are left to T3.4's struct case and S1's nested cases",
-  "source": "written by T3.13's test author from the reference at 43e55f4f"
+  "why": "Databricks JDBC scalar types admitted through Java, including numeric, text, date, timestamp and binary values; nested types have separate cases.",
+  "source": "Correctness case java.databricks-sql.types using the shop fixture."
 }

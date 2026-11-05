@@ -93,5 +93,5 @@
     "stage": "predict"
   },
   "why": "a two-step forecast over 3 entities with rows_per_call=3: each step one call of all 3, so it is not batched; two calls, each step numbered from zero",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.forecast.one-call using the shop fixture."
 }

@@ -32,7 +32,7 @@ arrow-schema = { workspace = true, features = ["ffi"] }
 jni.workspace = true
 log.workspace = true
 # Among first-party crates, sdm-host and, for types only, sdm-contract;
-# never sdm-core (decision E21).
+# never sdm-core.
 sdm-contract = { path = "../../crates/sdm-contract" }
 sdm-host = { path = "../../crates/sdm-host" }
 serde_json.workspace = true

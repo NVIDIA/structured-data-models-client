@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The join family: an event table's column in the entity filter (PQL_JOIN_EVENT_COLUMN_IN_ENTITY_FILTER)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.join-event-filter using the shop fixture."
 }

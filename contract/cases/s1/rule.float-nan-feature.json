@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB and Postgres: answered through predict, the NaN read as a missing score"
+    "stage": "predict"
   },
-  "why": "A float feature holding a NaN (users.score, user 3's) among other values, which Schema.from_source's preview reads: rule float_nan, first of T2.12's (FR2 P3-1). Not on SQLite, which stores a NaN as NULL, so the contract loader refuses it by name (databases.py); the owner's exclusion is asked for under the row named",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "why": "A float feature holding a NaN (users.score, user 3's) among other values, which Schema.from_source's preview reads: rule float_nan. Not on SQLite, which stores a NaN as NULL, so the contract loader refuses it by name (databases.py); the owner's exclusion is asked for under the row named",
+  "source": "Correctness case rule.float-nan-feature using the shop fixture."
 }

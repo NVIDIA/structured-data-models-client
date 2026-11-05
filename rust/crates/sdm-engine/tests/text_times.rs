@@ -6,7 +6,7 @@
 //! recorded by `text_times_record.py` (a protected path: never recorded
 //! again to pass a dependency bump, F4), which reads `date-rules.md`'s "The
 //! core's text formats" apart from the Rust reader, with Python's `re` and
-//! `datetime` and no pandas (T1.25b): columns over every format of the
+//! `datetime` and no pandas: columns over every format of the
 //! list, values outside it, the orders of day and month, two-digit years at
 //! the pivot and offsets mixed, each read as the core reads text: the
 //! values (`column`), to UTC (`utc`), the share inference scores
@@ -336,7 +336,7 @@ fn made_outside(reader: &Reader, outcome: &str, example: &Value, core: &Value) -
 }
 
 /// An order of day and month two values in the list leave open is never
-/// counted as made outside the list (T1.25b fix 1, the review's
+/// counted as made outside the list ( fix 1, the review's
 /// reproduction): its refusal is DT-16's, not DT-15's.
 #[test]
 fn an_open_order_in_the_list_is_not_a_refusal_outside_it() {

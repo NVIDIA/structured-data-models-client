@@ -17,7 +17,7 @@ from sdm_client import Schema, StructuredDataError
 
 def _assert_text(schema: Any, table: str, column: str) -> None:
     r"""``column`` described as text: no refusal, not the time column, no
-    timestamp (T1.33 part 3, the owner's item 24)."""
+    timestamp ( part 3, the owner's item 24)."""
     assert schema[table].time_column != column
     described = schema[table].columns[column]
     assert str(described.dtype) == 'string'

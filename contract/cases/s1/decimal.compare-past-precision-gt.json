@@ -81,9 +81,8 @@
     "outcome": "refusal",
     "stage": "predict",
     "error": "UnsupportedRequestError",
-    "code": "UNSUPPORTED_REQUEST",
-    "today": "recorded at the reference 6298913c: refused UNSUPPORTED_REQUEST at predict; materialize gathers a binary_classification whose 6 context labels are all false (measured), one class, which predict refuses"
+    "code": "UNSUPPORTED_REQUEST"
   },
   "why": "A constant past DECIMAL(38, 0): no value is past it",
-  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+  "source": "Correctness case decimal.compare-past-precision-gt using the shop fixture."
 }

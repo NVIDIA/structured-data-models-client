@@ -40,10 +40,10 @@ FEATURES = {
     'numeric': ('numeric', 'n + 0.25'),
     'numeric-array': ('numeric[]', 'ARRAY[n::numeric]'),
     'uuid-array': ('uuid[]', f'ARRAY[{_UUID}]'),
-    # Codex round 2: integral values past 2**53, within int64, in a numeric
+    # integral values past 2**53, within int64, in a numeric
     # wider than Arrow's decimals; the reference keeps them exact.
     'numeric-100-0-past-2-53': ('numeric(100,0)', '9007199254740992 + n'),
-    # Codex round 3: json and jsonb features, which must read on PyArrow's
+    # json and jsonb features, which must read on PyArrow's
     # floor (14.0.1) as on its newest; and a NaN in a numeric(100,0),
     # which the reference sends as null.
     'json': ('json', "json_build_object('a', n)"),
@@ -218,7 +218,7 @@ VECTORS: list[dict[str, Any]] = [
         ]
     ],
 ]
-# Codex round 2: the domain vector's orders also holding a column named x,
+# the domain vector's orders also holding a column named x,
 # which a seed key's row must not be read as.
 VECTORS.append(
     {
@@ -232,7 +232,7 @@ VECTORS.append(
 )
 VECTORS[-1]['setup'].append('ALTER TABLE orders ADD COLUMN x integer DEFAULT 7')
 VECTORS[-1]['columns'].append(['orders', 'x'])
-# Claude's second round: unconstrained numeric keys at both ends, which the
+# unconstrained numeric keys at both ends, which the
 # reference sends as their exact text; small, and past 2**53, where a
 # double would merge the eight keys into one.
 for _name, _base in (('small', 0), ('past-2-53', 10**17)):
@@ -259,7 +259,7 @@ for _name, _base in (('small', 0), ('past-2-53', 10**17)):
             'columns': [['users', 'user_id'], ['orders', 'user_id']],
         }
     )
-# Claude's third round: a composite primary key, and a composite foreign
+# a composite primary key, and a composite foreign
 # key, which the reference refuses at Schema.from_source (an unnamed
 # ValueError: its graph discovery takes single-column keys only).
 for _name, _setup, _columns in (

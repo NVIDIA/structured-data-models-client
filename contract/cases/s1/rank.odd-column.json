@@ -94,9 +94,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: Schema.from_source leaves the column \"i.d\" out of items and buys with one SDMWarning per table, and the query naming it is refused; its twin, the column named i_d, answers through predict as rank.decimal-key does over an integer key (contract/t210-target-vectors.json's rank.odd-column.twin); the core naming any column (KO2-36) answers as the twin"
+    "code": "INVALID_REQUEST"
   },
-  "why": "A ranking over a key column named with a dot (\"i.d\", items' declared primary key, which buys.\"i.d\" references), candidates=[0, 1, 2]: each candidate's question filters buys by that column (T2.18's review, P3-1); KO2-36, any column name works, so the core answers it as the reference answers its twin, the column named i_d",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "why": "Ranking over a key column with an unusual name; candidate filtering must preserve the column name.",
+  "source": "Correctness case rank.odd-column using the shop fixture."
 }

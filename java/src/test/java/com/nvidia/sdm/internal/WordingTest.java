@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /**
- * The Java host says the core's sentences from the shared templates (T3.17), choosing none: every
+ * The Java host says the core's sentences from the shared templates, choosing none: every
  * sentence validation (S0) can reach is filled, with no advice to spell, and one this host cannot
  * fill yet is the defect, named.
  */
@@ -87,7 +87,7 @@ class WordingTest {
 
   @Test
   void aSentenceThisHostCannotFillIsTheDefectNamed() {
-    // Advice is spelled by the Java host from T3.12: a sentence naming it is filled.
+    // Advice is spelled by the Java host: a sentence naming it is filled.
     assertEquals(
         "t.c is the table's primary key; set that to something else, or null, before leaving"
             + " the column out",

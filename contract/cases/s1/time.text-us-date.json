@@ -78,8 +78,7 @@
     "stage": "materialize",
     "error": "StructuredDataError",
     "code": "INTERNAL_ERROR",
-    "message": "invalid timestamp field format: \"01/01/2023\"",
-    "today": "Schema.from_source infers orders.ts as the time column; the DuckDB CAST in the sampling SQL then fails"
+    "message": "invalid timestamp field format: \"01/01/2023\""
   },
   "register": "Inference accepts a format the backend's cast cannot read",
   "why": "A text format the Python inference reads but DuckDB's CAST does not; the inference rule and the SQL must agree",

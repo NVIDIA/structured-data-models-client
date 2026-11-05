@@ -25,7 +25,7 @@ use sdm_core::{
 
 /// A request every provider answers whose answer's columns are the
 /// source's own, so data of any shape answers it (a `describe`'s shape is
-/// fixed, decision E36).
+/// fixed).
 fn describe(table: &str) -> DataRequest {
     DataRequest::Scan {
         table: table.into(),
@@ -608,7 +608,7 @@ fn one_scan() -> Run {
 
 #[test]
 fn a_paged_answer_is_asked_for_page_by_page_and_read_as_one() {
-    // Contract v26 (design choice 1, paging): a page with a continuation
+    // Contract v26: a page with a continuation
     // is asked after, the same request with that continuation, until a
     // page without one; the body reads the pages as one answer.
     let mut run = one_scan();

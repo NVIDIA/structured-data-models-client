@@ -10,6 +10,18 @@ The earlier test results remain valid; they do not establish that migration bagg
 **Implementation approved; in progress on `rust-core-phase-10`.**
 Preserve useful correctness tests and product behavior.
 
+## Implementation progress
+
+- Removed obsolete artifacts, old-runner entry points and the retired-branch capture importer.
+- Moved retained scenario helpers; simplified same-revision wheel checks and required the existing Java binding in architecture checks.
+- Renamed milestone files and CI jobs, preserving serialized format identifiers and saved-request fixtures.
+- Rewrote case provenance and fixture metadata; external receipts verify unchanged behavioral inputs and expected values.
+- Collection, lint, hygiene, schema generation and the API/capability ledger have passed intermediate checks.
+- Maintained Python, Rust, contract and Java suites have completed, with targeted reruns resolving initial failures.
+- Architecture controls passed 337/337; production native checks passed 13 with one skip, and the test-enabled checks passed 225 with five skips plus a 29-test PostgreSQL rerun.
+- Generated schemas, notices, hygiene and Python/Java API ledgers passed.
+- Final helper-rename checks, residual classification and commits remain.
+
 ## Scope
 
 Scanned all **2,086 tracked files** at `230878c9a`, including hidden CI configuration, Python, Rust, Java, schemas, fixtures and filenames.
@@ -42,9 +54,9 @@ Remove obsolete `T1.17`, `T1.20`, `E16` and checkpoint prose.
 | Old comparison artifacts | Eighteen files under `tests/golden/t132g*`, including `python-old.jsonl` and `python-ref.jsonl`, total **1.87 MB**; no behavioral consumer found. | Delete these obsolete artifacts through an explicit removal; preserve current API/wire goldens and never hand-edit their expected values. |
 | One-off rename check | [`t128w_rename.rs`](../../rust/crates/sdm-testkit/tests/t128w_rename.rs) recursively scans the repo for the parser's discarded interim name. | Delete this historical rename gate; current crate/dependency checks remain. |
 | Runner leftovers | [`run_python.py`](../../contract/runners/run_python.py) rejects old modes, yet retains unreachable `python-ref` branches, `_held_observations`, legacy arguments and a `legs` CLI whose comparison set comes from old runners. | Remove those obsolete paths and dedicated tests; retain native execution, provider applicability and the current completeness checker. |
-| Provenance-only assertions | `tests_test_ops/test_l5_conversion.py` and `test_t214d_postgres_values.py` still assert old runner identities and a commit in `contract/reference-env.txt`; the binding-vector test also preserves unrelated historical metadata. | Remove historical identity assertions and then the environment dump; retain actual type/value/driver expectations and fixture completeness checks. |
+| Provenance-only assertions | `tests_test_ops/test_result_conversion.py` and `test_postgres_values.py` still assert old runner identities and a commit in `contract/reference-env.txt`; the binding-vector test also preserves unrelated historical metadata. | Remove historical identity assertions and then the environment dump; retain actual type/value/driver expectations and fixture completeness checks. |
 | Recorder names and stale instructions | Fifteen of seventeen `contract/tools/*.py` files have no CLI entry point; most are used helpers despite claiming they record the old client. | Move used scenario/value helpers into `contract/support`, name them by behavior, remove unused leftovers and false CLI instructions. Keep the two actual current tools: SQLite case loading and native binding-vector generation. |
-| Architecture guards | `l0_deps.py`, `l0_scan.py` and `selftest.py` total **4,675 lines**; current CI runs them. They mix useful dependency/SQL/boundary enforcement with checkpoint rename machinery and a `PLANNED = {'sdm-jni'}` exemption, although Java exists. | Keep current architecture enforcement and focused negative tests; remove obsolete cross-checkout machinery and the planned-Java exemption. Do not delete all three files blindly. |
+| Architecture guards | `dependency_policy.py`, `architecture_policy.py` and `policy_selftest.py` total **4,675 lines**; current CI runs them. They mix useful dependency/SQL/boundary enforcement with checkpoint rename machinery and a `PLANNED = {'sdm-jni'}` exemption, although Java exists. | Keep current architecture enforcement and focused negative tests; remove obsolete cross-checkout machinery and the planned-Java exemption. Do not delete all three files blindly. |
 | Remaining milestone names | Root Python tests, package `tests_test_ops`, Rust integration tests, Java classes and vectors still use `T…`/`Phase…` names. | Rename by behavior, updating dynamic imports, Cargo/Maven/CI selections and capability-ledger references atomically. |
 | Comments and fixture metadata | Hundreds of case files and production-source comments cite deleted plans, numbered decisions and old agents. | Explain the current rule directly; remove administrative metadata, preserving case IDs/behavior and regenerating generated files through their owner. |
 | CI and developer docs | CI still names current jobs `python-ref`, exports unused `SDM_PUSH_BASE`, and describes removed checkpoint worktrees. `validation.md` still links to `tests/parity` and private phase evidence. The testkit README says it will go away with the migration. | Correct job labels and current-role documentation; remove unused environment settings and obsolete phase guidance. Preserve real validation limitations and useful benchmark results. |

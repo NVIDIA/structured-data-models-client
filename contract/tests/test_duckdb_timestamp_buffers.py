@@ -7,7 +7,7 @@
 Timestamp units, infinities and overflow keep their schema facts and produce
 structured refusals at the appropriate stage.
 Expected observations are retained fixtures, not regenerated from current code.
-The optional SDM_T136_BIG=1 cases allocate roughly 7 GB and may take minutes;
+The optional SDM_GIANT_TESTS=1 cases allocate roughly 7 GB and may take minutes;
 ordinary runs check their fixture inputs without allocating those large values.
 """
 
@@ -28,10 +28,10 @@ import duckdb
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-VECTORS = ROOT / 'contract/t136-host2-vectors.json'
+VECTORS = ROOT / 'contract/host2-vectors.json'
 #: The code DT-14 gives a time past the nanosecond range on the core.
 PAST_NANOSECONDS = 'VALUE_OUT_OF_RANGE'
-BIG = os.environ.get('SDM_T136_BIG') == '1'
+BIG = os.environ.get('SDM_GIANT_TESTS') == '1'
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -395,13 +395,13 @@ def test_the_big_rows_are_recorded() -> None:
     assert ['f', 'string', 'categorical'] in users['columns']
 
 
-# About 7 GB and minutes each: defined only with SDM_T136_BIG=1, so the
+# About 7 GB and minutes each: defined only with SDM_GIANT_TESTS=1, so the
 # suite holds the recorded rows alone by default.
 if BIG:
 
     @pytest.mark.parametrize('name', [row['name'] for row in BIG_ROWS])
     def test_big_a_value_past_int32_offsets_on_the_core(name: str) -> None:
-        r"""Phase 4 lifts P1B-80's description refusal.
+        r"""Large values can be described before materialization checks their representation.
 
         Binary is omitted and prediction proceeds; retained large text is
         described but materialization refuses its physical representation.
@@ -415,10 +415,10 @@ if BIG:
             assert got['outcome']['code'] is not None
             return
         assert name.endswith('.large'), name
-        endpoint = os.environ.get('SDM_T136_LIVE_ENDPOINT')
+        endpoint = os.environ.get('SDM_GIANT_ENDPOINT')
         if endpoint is not None and '.blob.' in name:
             assert endpoint.strip(), (
-                'SDM_T136_LIVE_ENDPOINT must name a serving endpoint'
+                'SDM_GIANT_ENDPOINT must name a serving endpoint'
             )
             import math
 

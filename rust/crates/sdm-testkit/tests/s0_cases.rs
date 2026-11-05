@@ -7,7 +7,7 @@
 //! `rust-test` job also runs `sdm-contract-run` over them and compares its
 //! observations with the reference's (`scripts/rust_core/compare.py`).
 //!
-//! From T1.6c a query with a date literal with a run of five digits or more
+//! a query with a date literal with a run of five digits or more
 //! (D8) ends `validate_query` with the core's refusal by name,
 //! `INVALID_REQUEST` naming `operation` `validate_query` and `rule`
 //! `date_literal_packed`, where the reference reads the literal.
@@ -41,7 +41,7 @@ fn holds_packed_date(query: &str) -> bool {
     })
 }
 
-/// Whether `answer` is the core's refusal by name of a D8 literal (T1.6c).
+/// Whether `answer` is the core's refusal by name of a D8 literal.
 fn is_packed_refusal(answer: &Answer) -> bool {
     matches!(
         answer,
@@ -76,7 +76,7 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
         assert_eq!(case.until, Until::Materialize);
         let observed = host::run(case, &bases()).unwrap();
         assert_eq!(observed.operations, ["validate_query"]);
-        // T1.6c: a case whose query holds a D8 literal is refused by name,
+        //: a case whose query holds a D8 literal is refused by name,
         // whatever its status or register entry; an acceptance case's own
         // expectation must then be that refusal too.
         if holds_packed_date(&case.input.pql) {
@@ -110,7 +110,7 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
     }
     assert!(answers.contains(&Answer::Validated(true)));
     assert!(answers.contains(&Answer::Validated(false)));
-    // The D8 cases of T1.12's corpus (`s0.boundary.date-packed` and
+    // The D8 cases of corpus (`s0.boundary.date-packed` and
     // `s0.boundary.date-long-field`) are still there to be refused.
     assert!(packed >= 2, "{packed} S0 cases with a packed date");
 }
@@ -128,7 +128,7 @@ fn with_query(pql: &str) -> case::Case {
     case
 }
 
-/// T1.6c brief, Tests: "a D8 literal is refused by name on ... rust-host,
+/// brief, Tests: "a D8 literal is refused by name on... rust-host,
 /// while D1 to D7 and D9 literals still read as before". `validate_query`
 /// through `HostRun` ends with the core's error for each D8 shape (packed
 /// first fields of six, eight, twelve and fourteen digits, a long field in
@@ -244,7 +244,7 @@ fn an_unknown_key_inside_the_call_arguments_is_refused() {
 
 /// `contract/tests/malformed-cases.json`'s changes to the AdventureWorks
 /// case: the ones `tests/test_contract_cases.py` shows the Python loader
-/// refusing are refused here too, and the ones it takes are taken (T1.21b).
+/// refusing are refused here too, and the ones it takes are taken.
 #[test]
 fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused() {
     let listed: serde_json::Value = serde_json::from_slice(
@@ -264,7 +264,7 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
     assert_eq!(load_error("adventureworks", &case), None);
     // Each change's value is set as the file writes it: a placeholder goes
     // in, and the value's own text replaces it, since a JSON value read
-    // into `serde_json::Value` loses an integer past 2**64 (T2.1a's
+    // into `serde_json::Value` loses an integer past 2**64 (
     // candidates).
     #[derive(serde::Deserialize)]
     struct Value<'a> {
@@ -348,7 +348,7 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
 
 /// `databases` and `exclusion` come together (`dependentRequired`), which a
 /// one-path change of `malformed-cases.json` cannot set; the Python
-/// loader's twin is `tests/test_t21a_case_format.py` (T2.1a).
+/// loader's twin is `tests/test_connector_case_format.py`.
 #[test]
 fn databases_come_only_with_their_exclusion() {
     let with = |pairs: &[(&str, serde_json::Value)]| {
@@ -399,7 +399,7 @@ fn databases_come_only_with_their_exclusion() {
     }
 }
 
-/// rust-host's marker for the staging rule (T2.1a): `--providers` prints
+/// rust-host's marker for the staging rule: `--providers` prints
 /// the test kit's provider list as JSON, DuckDB among them.
 #[test]
 fn the_host_reports_its_providers_as_plain_data() {
@@ -501,7 +501,7 @@ fn an_index_is_an_integer_literal_of_any_size_or_text() {
     }
 }
 
-/// T2.1t: the sampling options are kept as the text the case wrote, any
+///: the sampling options are kept as the text the case wrote, any
 /// JSON value: an integer past 2**64, a 401-digit number, nested in a list
 /// or an object too, `null`, a boolean and text, so no value the reference
 /// takes or refuses passes through a double or fails to load.

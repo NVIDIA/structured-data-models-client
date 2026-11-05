@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Codex T3.12 r2 P1-2 and r3 P1-3: a Postgres JSON value nested deep, described through the
+ * Codex r2 P1-2 and r3 P1-3: a Postgres JSON value nested deep, described through the
  * public {@code Schema.fromSource} and materialized through {@code PredictiveQuery.materialize}
  * on a thread whose stack is small (256 KiB), as a JVM's may be: a value the core reads (920 and
  * 1,900 levels) is described and materialized, one past its depth (2,100) refused by name, and

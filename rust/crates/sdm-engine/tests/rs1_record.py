@@ -2,16 +2,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Records ``rs1-draws.json``, RS-1's draws as numpy makes them (T1.22).
+"""Records ``rs1-draws.json``, RS-1's draws as numpy makes them.
 
 Run once, by hand, under the reference's numpy (2.5.3); CI never runs it,
-and the vectors are not recorded again to pass a dependency bump (F4):
+and the vectors are not recorded again to pass a dependency bump:
 
     python rust/crates/sdm-engine/tests/rs1_record.py OUT.json
 
 It writes two sections, each from a fresh ``default_rng(seed)``:
 
-- ``model``: T0.6's model of the example shuffle, for its four seeds (0,
+- ``model``: model of the example shuffle, for its four seeds (0,
   42, 123456789 and 2**70): the seed sequence's state, five raw 64-bit
   draws, then ``shuffle(arange(50))`` on a second fresh generator, as
   ``sample_target`` shuffles.
@@ -148,7 +148,7 @@ def record() -> dict[str, object]:
     return {
         'format': 'sdm-rs1-draws/1',
         'source': (
-            f'numpy {np.__version__}: T0.6 model seeds; per seed a fresh '
+            f'numpy {np.__version__}: model seed vectors; per seed a fresh '
             'default_rng(seed): SeedSequence(seed).generate_state(4, '
             'uint64), bit_generator.random_raw(5), and on another fresh '
             f'generator shuffle(arange({SHUFFLED})); intervals: '

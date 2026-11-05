@@ -237,7 +237,7 @@ def _dotted(node: ast.expr) -> str | None:
     return '.'.join(reversed(parts))
 
 
-#: What `type X = ...` builds, which stands for its value rather than being a
+#: What `type X =...` builds, which stands for its value rather than being a
 #: type of its own. Absent before Python 3.12.
 _ALIAS = getattr(typing, 'TypeAliasType', None)
 
@@ -1145,7 +1145,7 @@ class TestDistributionCoherence:
         """pandas, NumPy and pyarrow carry one floor wherever they are named.
 
         The core takes Arrow through the PyCapsule interface, which pyarrow
-        has from 14.0.1, and the supported versions are decision E16's, with
+        has from 14.0.1, and the supported versions are 's, with
         main's pandas 2.2.2 and the NumPy 1.23.5 the Databricks runtimes ship
         (the owner's, 2026-10-16); a distribution that named a lower floor
         would let an install resolve to a set nothing tests. The one name
@@ -1287,7 +1287,7 @@ class TestDistributionCoherence:
         assert 'pyyaml' in names
 
     def test_the_lakebase_extra_brings_plain_psycopg_and_a_postgres_sdk(self):
-        """`lakebase()` calls `WorkspaceClient.postgres`, added in 0.89.
+        """`lakebase` calls `WorkspaceClient.postgres`, added in 0.89.
 
         Plain psycopg, because the binary wheel's OpenSSL fails its FIPS
         self-test on Databricks' aarch64 hosts and aborts the process.

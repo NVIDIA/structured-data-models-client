@@ -55,7 +55,7 @@ SCHEMAS = {
 MODES = ('python-core',)
 
 #: A cell's earlier pins, still that cell of ``CELLS``: the floor's before
-#: T2.0c moved it to pandas 2.2.2 and NumPy 1.23.5 (KO2-37). The phase
+#: moved it to pandas 2.2.2 and NumPy 1.23.5. The phase
 #: branch's ci.yml installs these until that landing, so the floor job
 #: records its cell on either side of it.
 EARLIER_PINS = {
@@ -63,17 +63,17 @@ EARLIER_PINS = {
 }
 
 #: The databases every case runs on unless its file says otherwise (design
-#: choice 2, KO2-19), in this order. DuckDB's observations keep the bare
+#: choice 2), in this order. DuckDB's observations keep the bare
 #: case ID; the others are keyed ``<case>@<database>``.
 DATABASES = ('duckdb', 'sqlite', 'postgres')
-#: The warehouse legs (Phase 3 design choice 1), in this order, keyed
+#: The warehouse legs, in this order, keyed
 #: ``<case>@<leg>`` as the databases are: an S2 case runs on the ones its
 #: ``warehouses`` names and only there; an S1 case without ``databases`` on
-#: every one as well (:func:`case_legs`).
+#: every one as well (func:`case_legs`).
 WAREHOUSES = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
 #: Every leg a case may run on.
 LEGS = DATABASES + WAREHOUSES
-#: Each ``input.connect`` path and the one leg it opens (design choice 1).
+#: Each ``input.connect`` path and the one leg it opens.
 CONNECT_LEGS = {
     'warehouse': 'databricks-sql',
     'spark': 'databricks-spark',
@@ -87,7 +87,7 @@ VIEW_LEGS = {
     'semantic_view': ('snowflake',),
 }
 #: The S1 cases left off the warehouse legs: the two 100,001-row batching
-#: cases, which add nothing there to what they test (KO3-45).
+#: cases, which add nothing there to what they test.
 OFF_WAREHOUSES = ('multicall.entities.100000', 'multicall.entities.100001')
 
 #: The runtime cells (design, "Runtime cells"): Python, pandas, pyarrow and
@@ -134,10 +134,10 @@ def _invalid(validate: Any, document: Any) -> str | None:
     jsonschema walks every item of a list: a case or an observation of
     100,000 entities takes about a second, and every tool that loads them
     pays it on each load. So a long list's items past its leading ones are
-    checked in plain Python by their list's rule (:data:`_LONG_LISTS`), and
+    checked in plain Python by their list's rule (data:`_LONG_LISTS`), and
     jsonschema sees the document with the list cut. A document taken that
     way is one the whole-document validation takes; any other is
-    validated whole, so a refusal names what it names (T2.1l).
+    validated whole, so a refusal names what it names.
     """
     lists = _LONG_LISTS.get(_schema_id(validate.schema), ())
     cut = _cut(document, lists) if lists else None
@@ -167,7 +167,7 @@ _EACH = '*'
 #: Where a long list may be, by the schema's ``$id``: its path in the
 #: document, its path in the schema, the schema it has there (beside its
 #: description), and its items' rule as Python reads them, the rule
-#: :func:`_indices` holds an entity key to (a JSON integer or a string) or
+#::func:`_indices` holds an entity key to (a JSON integer or a string) or
 #: an object. A case's call lists the entities it asks about, and its core
 #: and its observation's core the Arrow column the host passed.
 _LONG_LISTS: dict[
@@ -252,7 +252,7 @@ def _at(document: Any, where: tuple[str | int, ...]) -> Any:
 def _long_lists_held(schema: Any) -> None:
     r"""Refuse a schema whose long lists hold more than their items' one
     rule, or whose list a ``oneOf`` beside it could read too: the items
-    past a list's leading ones are checked by that rule alone (T2.1l)."""
+    past a list's leading ones are checked by that rule alone."""
     for _, where, wanted, _ in _LONG_LISTS.get(_schema_id(schema), ()):
         node = _at(schema, where)
         held = isinstance(node, dict) and wanted == {
@@ -277,7 +277,7 @@ def _long_lists_held(schema: Any) -> None:
         if not held:
             raise RunnerFailure(
                 f'{_schema_id(schema)}: {"/".join(map(str, where))} is not '
-                'the list the validator checks item by item (T2.1l)'
+                'the list the validator checks item by item '
             )
 
 
@@ -313,7 +313,7 @@ def _replaced(document: Any, where: tuple[str | int, ...], value: Any) -> Any:
 
 
 def _cut(document: Any, lists: Any) -> Any:
-    r"""``document`` with each long list cut to its :data:`_KEPT` leading
+    r"""``document`` with each long list cut to its:data:`_KEPT` leading
     items, or None where an item past them breaks its list's rule."""
     cut = document
     for path, _, _, holds in lists:
@@ -344,7 +344,7 @@ def _indices(given: dict[str, Any]) -> str | None:
     if 'top_k' in spec and type(spec['top_k']) not in (int, NegativeZero):
         return 'input/materialize/top_k is not an integer'
     # A whole number as written: -0 is refused, as the Rust loader refuses
-    # it (P2-T2.1i-1).
+    # it (P2--1).
     if 'fail_call' in given and type(given['fail_call']) is not int:
         return 'input/fail_call is not a whole number written as one'
     return None
@@ -379,10 +379,10 @@ def provider_for_leg(database: str) -> str:
 
 
 def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
-    r"""The databases a loaded case runs on, in :data:`DATABASES` order:
+    r"""The databases a loaded case runs on, in:data:`DATABASES` order:
     all three unless its ``databases`` (with its exclusion) narrows them;
-    for a case naming ``warehouses``, those legs, in :data:`WAREHOUSES`
-    order, and only those (design choice 1)."""
+    for a case naming ``warehouses``, those legs, in:data:`WAREHOUSES`
+    order, and only those."""
     if 'warehouses' in case:
         return tuple(leg for leg in WAREHOUSES if leg in case['warehouses'])
     named = case.get('databases', DATABASES)
@@ -390,10 +390,10 @@ def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
 
 
 def case_warehouses(case: dict[str, Any]) -> tuple[str, ...]:
-    r"""The warehouse legs a loaded case runs on, in :data:`WAREHOUSES`
-    order (design choice 1): an S2 case's ``warehouses``; an S1 case with
+    r"""The warehouse legs a loaded case runs on, in:data:`WAREHOUSES`
+    order: an S2 case's ``warehouses``; an S1 case with
     no ``databases`` every leg, but the batching cases of
-    :data:`OFF_WAREHOUSES` (KO3-45); any other none. A leg whose engine
+    :data:`OFF_WAREHOUSES`; any other none. A leg whose engine
     cannot store the case's data is the loader's to refuse by name
     (``databases.Unloadable``), never left out here."""
     if 'warehouses' in case:
@@ -410,7 +410,7 @@ def case_warehouses(case: dict[str, Any]) -> tuple[str, ...]:
 
 
 def case_legs(case: dict[str, Any]) -> tuple[str, ...]:
-    r"""Every leg a loaded case runs on, in :data:`LEGS` order."""
+    r"""Every leg a loaded case runs on, in:data:`LEGS` order."""
     if 'warehouses' in case:
         return case_warehouses(case)
     return case_databases(case) + case_warehouses(case)
@@ -418,10 +418,10 @@ def case_legs(case: dict[str, Any]) -> tuple[str, ...]:
 
 def warehouse_problem(case: dict[str, Any]) -> str | None:
     r"""What the case schema cannot say of a case's warehouse fields, or
-    None (design choice 1): ``input.view`` and ``input.connect`` only on a
+    None: ``input.view`` and ``input.connect`` only on a
     case naming ``warehouses``; a view's kind kept by every leg named
-    (:data:`VIEW_LEGS`); a connect path's case naming exactly its leg
-    (:data:`CONNECT_LEGS`); ``input.named_part`` only on a case naming
+    (data:`VIEW_LEGS`); a connect path's case naming exactly its leg
+    (data:`CONNECT_LEGS`); ``input.named_part`` only on a case naming
     warehouses, none of them Lakebase, and no connect path. sdm-testkit's
     loader holds the same rules."""
     given = case['input']
@@ -497,13 +497,13 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
         data = path.read_bytes()
         try:
             # NaN and Infinity are not JSON: refused, as the Rust loader
-            # refuses them (P2-T2.1i-1).
+            # refuses them (P2--1).
             case = json.loads(
                 data, parse_constant=_not_json, parse_int=_json_int
             )
         except (ValueError, RecursionError):
             # Not JSON, or nested past the parser's depth: refused by name,
-            # as the Rust loader refuses it (T1.21c).
+            # as the Rust loader refuses it.
             raise RunnerFailure(
                 f'{path.name}: not a case: not JSON it reads'
             ) from None
@@ -524,7 +524,7 @@ class NegativeZero(int):
     r"""A JSON integer written ``-0``: zero, which the case format takes
     where it takes an integer of any form (an index, ``top_k``), and
     refuses where it takes a whole number as written (``fail_call``), as
-    sdm-testkit's loader does (P2-T2.1i-1)."""
+    sdm-testkit's loader does (P2--1)."""
 
 
 def _json_int(text: str) -> int:
@@ -666,24 +666,24 @@ class _Capture:
     ``predict`` with is recorded where it reaches the endpoint, in the
     call's ``metadata.request_id``, and a call that does not carry it is a
     runner failure; a forecast's later calls each carry the id the host gave
-    its step (T1.36 fix 24), and a request asked in several calls
+    its step, and a request asked in several calls
     (``RequestState.batches``) each the id the host gave that call. Where
     predict makes more than one call, every call's body is kept in order,
-    ``core.predicted.calls``, beside ``body``, the last's (T2.1g); a request
+    ``core.predicted.calls``, beside ``body``, the last's; a request
     of one call records ``body`` alone, as before."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
         #: What the host passed ``edit_schema`` and ``materialize``'s held
-        #: schema, in order (T1.24b).
+        #: schema, in order.
         self.edits: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
         #: The driver's log of the case, where the capture records one, whose
-        #: statements this marks with each fetch's purpose (T3.4).
+        #: statements this marks with each fetch's purpose.
         self.driver_log: Any = None
         #: Each fetch with the answer the host replied with, in the order
-        #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
+        #: replied, for ``--record-fetches`` (the replay's recording).
         self.answered: list[dict[str, Any]] = []
         self.recording = False
         self._asked: dict[int, dict[str, Any]] = {}
@@ -694,7 +694,7 @@ class _Capture:
         self.error: dict[str, str] | None = None
         #: The core's warnings, each its code and fields as the
         #: ``warnings`` control message carries them, in the order given
-        #: (T1.23).
+        #:.
         self.warnings: list[dict[str, Any]] = []
         self._description: int | None = None
         self._state: dict[str, Any] | None = None
@@ -724,7 +724,7 @@ class _Capture:
             state = operation['state']
             self._request_id = operation['request_id']
             # The id each call carries: one call per step with rows to
-            # score, in step order, each with its own step's id (T1.36 fixes
+            # score, in step order, each with its own step's id ( fixes
             # 24 and 27); a step with none makes no call, as in the core.
             steps = (
                 [(operation['request_id'], state['payload'])]
@@ -736,7 +736,7 @@ class _Capture:
                     (batch['request_id'], batch['payload'])
                     for batch in state.get('batches') or ()
                 ]
-                # A ranking's later questions (T2.8), each the id the host
+                # A ranking's later questions, each the id the host
                 # gave it, in order.
                 + [
                     (part['request_id'], part['payload'])
@@ -749,7 +749,7 @@ class _Capture:
                 if not _nothing_to_score(json.loads(attachments[payload]))
             ]
             # A ranking's question whose context holds one answer is asked
-            # no call (T2.8): its id may be passed over, in order.
+            # no call: its id may be passed over, in order.
             self._skippable = (
                 {request_id for request_id, _ in steps}
                 if state.get('ranking') is not None
@@ -789,8 +789,8 @@ class _Capture:
                 }
             )
         elif operation['op'] == 'edit_schema':
-            # The schema and the edit a setter passed (T1.24b): the schema
-            # as the host holds it, from T3.16 as plain data alone, before
+            # The schema and the edit a setter passed: the schema
+            # as the host holds it, as plain data alone, before
             # it beside the description the core last answered (`held`);
             # and the edit; kept apart from ``inputs``, whose shape a gate's
             # checkpoint fixes.
@@ -811,7 +811,7 @@ class _Capture:
             indices = operation['indices']
             if operation.get('held') is not None:
                 # The schema as the host holds it beside the description
-                # (T1.24b), apart from ``inputs`` as an edit is.
+                # , apart from ``inputs`` as an edit is.
                 self.edits.append(
                     {
                         'op': 'materialize',
@@ -849,7 +849,7 @@ class _Capture:
                 for asked in step['requests']
             )
             # The statements answering this step are marked with its
-            # purpose, where every fetch of it says one (T3.4).
+            # purpose, where every fetch of it says one.
             if self.driver_log is not None:
                 purposes = {asked.get('purpose') for asked in step['requests']}
                 self.driver_log.purpose = (
@@ -987,13 +987,13 @@ class _Capture:
 def _result_rows(stream: Any) -> dict[str, Any]:
     r"""An Arrow result the core gave, as the pure-Rust host records one:
     the result's explanation where the core gave one (its schema's
-    ``explanation``, T2.16a), its columns' names and types, and its rows in
+    ``explanation``), its columns' names and types, and its rows in
     order, each cell an
     integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
     hex digits, so no text form of a float is compared) or text
-    (``utf8``); from T1.28b a boolean (``bool``) and a class's
+    (``utf8``); a boolean (``bool``) and a class's
     probabilities (``map``: each class and its probability's bits, in
-    order); from T2.8 a list (``list``: a ranking's scores and rankings, an
+    order); a list (``list``: a ranking's scores and rankings, an
     item's own, each member a cell as above, a null ``None``), as the
     pure-Rust host records one."""
     import pyarrow as pa
@@ -1058,9 +1058,9 @@ def _result_rows(stream: Any) -> dict[str, Any]:
         )
     ]
     recorded: dict[str, Any] = {'columns': columns, 'rows': rows}
-    # The result's explanation (T2.13), on the schema's metadata as the JSON
+    # The result's explanation, on the schema's metadata as the JSON
     # text the core wrote, recorded as text so the hosts are held to the
-    # same bytes (T2.16a); an item's explanation and metadata are the
+    # same bytes; an item's explanation and metadata are the
     # result's own columns, among the rows.
     explanation = (table.schema.metadata or {}).get(b'explanation')
     if explanation is not None:
@@ -1100,7 +1100,7 @@ def _nothing_to_score(payload: Any) -> bool:
 
 def _scalars(table: Any) -> list[dict[str, Any]]:
     r"""The one column of an Arrow table the host sent, each value as the
-    contract's tagged scalar, of the column's own type (from T1.32a the
+    contract's tagged scalar, of the column's own type (the
     host sends the entities as pyarrow infers them, and the core casts
     them): an integer by its width, text as ``utf8``, a boolean, a float
     as the shortest text that reads back as it, a decimal as its unscaled
@@ -1169,7 +1169,7 @@ def _scalars(table: Any) -> list[dict[str, Any]]:
 def _unscaled(value: Any, scale: int) -> int:
     r"""A decimal's unscaled integer at ``scale``, from its own digits and
     exponent: no decimal context, whose precision would round a value of
-    more digits than it holds (T1.32a fix round 1)."""
+    more digits than it holds ( fix round 1)."""
     sign, digits, exponent = value.as_tuple()
     number = int(''.join(map(str, digits)) or '0')
     shift = exponent + scale
@@ -1327,7 +1327,7 @@ _ARROW = ('to_arrow_table', 'fetch_arrow_table')
 #: what the caller gets; reading one makes the capture incomplete, which
 #: fails the case rather than drop a result.
 _UNRECORDED = (
-    # A connection's arrow() gives a RecordBatchReader, which the capture
+    # A connection's arrow gives a RecordBatchReader, which the capture
     # cannot read without consuming what the caller reads.
     'arrow',
     'fetch_record_batch',
@@ -1394,7 +1394,7 @@ def _rows_digest(rows: list[Any]) -> str:
 
 def _arrow_digest(table: Any) -> str:
     r"""The SHA-256 of an Arrow table's contents, its batch boundaries left
-    out (decision H9): the IPC stream of one combined copy."""
+    out: the IPC stream of one combined copy."""
     import pyarrow as pa
 
     sink = pa.BufferOutputStream()
@@ -1404,7 +1404,7 @@ def _arrow_digest(table: Any) -> str:
     return digest(sink.getvalue().to_pybytes())
 
 
-_EPOCH_DAYS = 719163  # date(1970, 1, 1).toordinal()
+_EPOCH_DAYS = 719163  # date(1970, 1, 1).toordinal
 
 
 def _nanos(days: int, seconds: int, micros: int, nanos: int = 0) -> str:
@@ -1421,7 +1421,7 @@ def _month_day_nano(value: Any) -> bool:
 
 
 def canonical_cell(value: Any, odd: list[str]) -> Any:
-    r"""One value of a result in its canonical form (decision H9; design,
+    r"""One value of a result in its canonical form (design,
     "Observations and comparator"): the value itself, never its Python
     spelling, so a row read with ``fetchall`` and the same row read as
     Arrow give the same cell, and the pure-Rust host writes the same cell
@@ -1434,8 +1434,8 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     1970-01-01 on the wall clock]``, ``["tstz", nanoseconds since the UTC
     epoch]``, ``["time", nanoseconds since midnight]``, ``["dur",
     nanoseconds]``, ``["list", cells]`` and ``["struct", [[name, cell],
-    ...]]``; read from Arrow (:func:`_arrow_cells`), a map is ``["map",
-    [[key, value], ...]]`` in Arrow's entry order, a union ``["union",
+    ...]]``; read from Arrow (func:`_arrow_cells`), a map is ``["map",
+    [[key, value],...]]`` in Arrow's entry order, a union ``["union",
     type code, member name, cell]`` and a month-day-nano interval
     ``["interval", months, days, nanoseconds as digits]``, as is pyarrow's
     ``MonthDayNano`` read as a row's value. A value of any
@@ -1443,9 +1443,9 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     its type's name]`` and is listed as unencodable, which the comparator
     never takes as equal. This
     reads Python values, which hold a time only to the microsecond: an
-    Arrow result is read from Arrow instead (:func:`arrow_values`), and a
+    Arrow result is read from Arrow instead (func:`arrow_values`), and a
     row read of a column a driver reads with less than its precision is
-    unencodable (:func:`result_values`)."""
+    unencodable (func:`result_values`)."""
     import datetime as dt
     from decimal import Decimal
 
@@ -1499,7 +1499,7 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
         ]
     elif _month_day_nano(value):
         # pyarrow's month-day-nano interval, a named tuple, which a driver
-        # hands over for an interval read whole (T2.1d): the cell Arrow
+        # hands over for an interval read whole: the cell Arrow
         # gives the same interval, never a list.
         return ['interval', value.months, value.days, str(value.nanoseconds)]
     elif isinstance(value, (list, tuple)):
@@ -1682,14 +1682,14 @@ def result_values(
     duckdb_types: bool = True,
 ) -> dict[str, Any]:
     r"""A result read as Python rows (``fetchall``), its columns and rows in
-    canonical form (:func:`canonical_cell`): the SHA-256 of the rows in the
+    canonical form (func:`canonical_cell`): the SHA-256 of the rows in the
     order read (``ordered``) and of the same rows sorted by their canonical
     text (``unordered``, so two results holding the same rows in another
     order agree, duplicates counted); ``types`` are DuckDB's own names of
     the columns' types where the driver gives them (``description``), and
     ``unencodable`` names every value of a kind the canonical form does not
     hold, and every value of a column whose type the driver reads with less
-    than its precision (:data:`_LOSSY_AS_ROWS`; DuckDB's types alone,
+    than its precision (data:`_LOSSY_AS_ROWS`; DuckDB's types alone,
     ``duckdb_types``: another driver's types are its own)."""
     odd: list[str] = []
     lossy = (
@@ -1740,11 +1740,11 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     integer storage at their unit (so a ``time64[ns]`` keeps its
     nanoseconds), lists, structs and maps element by element (a map's
     entries in Arrow's order, duplicate keys kept), a union as its chosen
-    member's cell under its type code and name (:func:`_union_cells`), a
+    member's cell under its type code and name (func:`_union_cells`), a
     month-day-nano interval as ``["interval", months, days, nanoseconds
     as digits]``, a dictionary as its values, text Arrow marks as JSON
     (``arrow.json``) as the value it holds, as a driver reads JSON
-    (``json.loads``, then :func:`canonical_cell`); a type outside that set (a
+    (``json.loads``, then:func:`canonical_cell`); a type outside that set (a
     ``date64``, Arrow's year-month and day-time intervals) is unencodable,
     its non-null values ``["?", "arrow:<type>"]``."""
     import pyarrow as pa
@@ -1791,13 +1791,13 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
         ]
     if is_.is_struct(kind):
         names = [kind.field(j).name for j in range(kind.num_fields)]
-        # Each child as stored, at the struct's offset: flatten() would merge
+        # Each child as stored, at the struct's offset: flatten would merge
         # the struct's nulls into each child, which aborts the process for a
         # union child (a union has no validity bitmap). A child's slot under
         # a null struct row holds whatever the producer left there, so the
         # children are read with their names set aside, and only the cells
         # of the rows the struct shows count as unencodable, as with a
-        # union's members (:func:`_union_cells`). A null struct row is null.
+        # union's members (func:`_union_cells`). A null struct row is null.
         scratch: list[str] = []
         children = [
             _arrow_cells(array.field(j), scratch)
@@ -1947,8 +1947,8 @@ def _is_json_field(field: Any) -> bool:
 
 
 def _json_texts(array: Any, odd: list[str]) -> list[Any]:
-    r"""The cells of a JSON column (:func:`_is_json_field`), each the value
-    its text holds (:func:`_json_cell`)."""
+    r"""The cells of a JSON column (func:`_is_json_field`), each the value
+    its text holds (func:`_json_cell`)."""
     import pyarrow as pa
 
     if isinstance(array.type, pa.BaseExtensionType):
@@ -1958,7 +1958,7 @@ def _json_texts(array: Any, odd: list[str]) -> list[Any]:
 
 def _is_folded_interval(field: Any) -> bool:
     r"""Whether ``field`` is a month-day-nano interval column built from
-    ``timedelta``s (:data:`_INTERVAL_TAG`)."""
+    ``timedelta``s (data:`_INTERVAL_TAG`)."""
     import pyarrow as pa
 
     key, value = _INTERVAL_TAG
@@ -1989,8 +1989,8 @@ def _folded_intervals(array: Any, odd: list[str]) -> list[Any]:
 
 def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
     r"""An Arrow table's columns and rows in canonical form, read from
-    Arrow (:func:`_arrow_cells`) column by column, so two columns of one
-    name stay two; digests as :func:`result_values`'."""
+    Arrow (func:`_arrow_cells`) column by column, so two columns of one
+    name stay two; digests as:func:`result_values`'."""
     import pyarrow as pa
 
     odd: list[str] = []
@@ -2080,13 +2080,12 @@ class DriverLog:
         self.stage: str | None = None
         #: Why the core asked the fetch the statements now answer, where it
         #: said (``FetchStep.purpose``: ``locate``, plan B's read of a table
-        #: as it stands, T3.4); set by the core's capture at each step.
+        #: as it stands); set by the core's capture at each step.
         self.purpose: str | None = None
         #: The names of the types the server numbers per run (Postgres's
         #: composite types), by number, for the results' type names.
         self.type_names: dict[int, str] = {}
-        #: The recording mode's keeper of every result whole (Phase 3,
-        #: choice 2), or None outside it.
+        #: The recording mode's keeper of every result whole, or None outside it.
         self.recorder: Recorder | None = None
 
     def handle(self) -> int:
@@ -2123,7 +2122,7 @@ class _Captured:
 
     __slots__ = ('_driver', '_log', '_handle', '_statement')
     #: Whether the driver's ``description`` names DuckDB's types, whose
-    #: reads as rows may lose precision (:data:`_LOSSY_AS_ROWS`).
+    #: reads as rows may lose precision (data:`_LOSSY_AS_ROWS`).
     _DUCKDB_TYPES = True
 
     def __init__(self, driver: Any, log: DriverLog) -> None:
@@ -2423,7 +2422,7 @@ _Captured.__module__ = 'duckdb.sdm_capture'
 
 
 class _CapturedSQLite(_Captured):
-    r"""The capture of an ADBC SQLite connection (T2.1a), under that
+    r"""The capture of an ADBC SQLite connection, under that
     driver's package, which the reference's dispatch reads."""
 
     __slots__ = ()
@@ -2431,7 +2430,7 @@ class _CapturedSQLite(_Captured):
 
 
 class _CapturedPostgres(_Captured):
-    r"""The capture of a psycopg connection (T2.1a), under that driver's
+    r"""The capture of a psycopg connection, under that driver's
     package, which the reference's dispatch reads."""
 
     __slots__ = ()
@@ -2510,7 +2509,7 @@ def enable_query_log(connection: Any) -> None:
 
 
 def query_log(connection: Any) -> list[str]:
-    r"""Each query DuckDB logged since :func:`enable_query_log`, in order:
+    r"""Each query DuckDB logged since:func:`enable_query_log`, in order:
     a statement's text, or ``''`` for a relation bound through the API
     (``register``)."""
     rows = connection.execute(
@@ -2521,19 +2520,19 @@ def query_log(connection: Any) -> list[str]:
 
 
 class StatementLog:
-    r"""The query log of a run off DuckDB (T2.1a fix 4), DuckDB's own log's
+    r"""The query log of a run off DuckDB, DuckDB's own log's
     twin: every statement the driver itself runs, in order, with ``''``
     for a relation bound by name (ADBC's ``adbc_ingest``), whatever object
     called it, the capture's proxy or not. It wraps the driver's own
     classes for one case, restored after, and is entered only as a
     context (``with``), so a case that fails leaves the driver as it was
-    (P2-T2.1a-2); test-only, as the capture is. :func:`_logged_texts`
+    (P2--2); test-only, as the capture is.:func:`_logged_texts`
     holds the capture's statements to it, as to DuckDB's.
 
     What it wraps, per leg: ADBC SQLite's cursor; psycopg's cursor on
     Postgres and Lakebase, ``copy`` and ``stream`` with ``execute`` and
-    ``executemany`` (P2-T2.1a-2); the Databricks SQL connector's and
-    Snowflake connector's cursors (Phase 3); and a Spark session's ``sql``,
+    ``executemany`` (P2--2); the Databricks SQL connector's and
+    Snowflake connector's cursors; and a Spark session's ``sql``,
     the classic session's and Spark Connect's, each that is importable."""
 
     #: Each leg's driver classes (module, class) and the methods logged,
@@ -2674,14 +2673,14 @@ class StatementLog:
                 delattr(cls, method)
 
 
-# --- warehouse legs and the recording mode (Phase 3, choice 2) -----------------------
+# --- warehouse legs and the recording mode -----------------------
 
 #: A placeholder a case writes for a private name: ``{catalog}`` and
 #: ``{schema}`` (``{catalog}`` standing for Snowflake's database), or an
 #: existing view's (``{shop_metric_view}``). On a warehouse leg the run
-#: resolves each from the live configuration's ``names`` (:func:`resolved`),
+#: resolves each from the live configuration's ``names`` (func:`resolved`),
 #: and the recording mode writes each back before anything is written
-#: (:func:`placeheld`).
+#: (func:`placeheld`).
 PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)\}')
 #: The parts of a case's ``input`` the placeholders are resolved in: what
 #: names the warehouse's objects. ``base`` and ``setup`` build the data in a
@@ -2689,7 +2688,7 @@ PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)\}')
 _RESOLVED_IN = ('from_source', 'edits', 'view', 'warehouse_setup')
 #: The environment variable naming the live configuration file, a JSON file
 #: outside the repository that only the orchestrator writes (C-1, E-0, E-1;
-#: :func:`live_configuration`).
+#::func:`live_configuration`).
 LIVE_CONFIGURATION = 'SDM_LIVE_CONFIG'
 #: The live configuration's format.
 LIVE_FORMAT = 'sdm-live/1'
@@ -2710,8 +2709,8 @@ PRIVATE_ENVIRONMENT = (
 #: The shortest value counted as a private name: a shorter one ("db",
 #: "1") would match ordinary words and refuse every capture.
 _PRIVATE_MIN = 4
-#: The recording mode's own format (design choice 2): one line per case
-#: and leg, the input T3.3's ``captures.py import`` turns into the capture
+#: The recording mode's own format: one line per case
+#: and leg, the input ``captures.py import`` turns into the capture
 #: (``sdm-capture/1``), which ``capture_check.py
 #: recording`` holds complete.
 RECORD_FORMAT = 'sdm-record/1'
@@ -2778,13 +2777,13 @@ def input_hash(
     case: dict[str, Any], bases: dict[str, list[str]] | None = None
 ) -> str:
     r"""The hash of what the old client's answer to a case depends on
-    (design choice 2): its ``input``, its ``until`` and its base's
-    statements (``bases`` as :func:`load_bases` gives them, this
-    checkout's by default), as canonical JSON. A capture records it, so
-    ``capture_check.py`` finds a case changed after the capture
-    mechanically; its ``why``, paths, routes, status, expectation and
-    ``core`` change nothing the old client is asked, so a case given
-    ``core`` later keeps its capture (T3.4's brief)."""
+    : its ``input``, its ``until`` and its base's
+     statements (``bases`` as:func:`load_bases` gives them, this
+     checkout's by default), as canonical JSON. A capture records it, so
+     ``capture_check.py`` finds a case changed after the capture
+     mechanically; its ``why``, paths, routes, status, expectation and
+     ``core`` change nothing the old client is asked, so a case given
+     ``core`` later keeps its capture (brief)."""
     bases = load_bases() if bases is None else bases
     asked = {
         'input': case['input'],
@@ -2804,7 +2803,7 @@ CAPTURE_NAME = 'SDM_CAPTURE_'
 
 def placeholder_names(environ: Mapping[str, str]) -> dict[str, str]:
     r"""Each placeholder's private name the environment sets
-    (:data:`CAPTURE_NAME`), by placeholder."""
+    (data:`CAPTURE_NAME`), by placeholder."""
     return {
         key[len(CAPTURE_NAME) :].lower(): value
         for key, value in environ.items()
@@ -2828,7 +2827,7 @@ def resolved(
     case: dict[str, Any], names: Mapping[str, str], everywhere: bool = False
 ) -> dict[str, Any]:
     r"""``case`` with every placeholder in the parts of its ``input`` that
-    name warehouse objects (:data:`_RESOLVED_IN`) replaced by its private
+    name warehouse objects (data:`_RESOLVED_IN`) replaced by its private
     name from ``names``; a placeholder ``names`` lacks fails the run, named
     by its placeholder, never by a value."""
 
@@ -2893,13 +2892,13 @@ def live_configuration(
     It is the JSON file ``SDM_LIVE_CONFIG`` names, outside the repository::
 
         {"format": "sdm-live/1",
-         "private": ["<a host>", ...],
+         "private": ["<a host>",...],
          "legs": {"<leg>": {"driver": {...}, "warehouse": {...},
                             "lakebase": {...}}}}
 
     The placeholders' private names come from the environment
     (``SDM_CAPTURE_CATALOG``, ``SDM_CAPTURE_SCHEMA``, an existing view's
-    ``SDM_CAPTURE_SHOP_METRIC_VIEW``; :func:`resolve_placeholders`).
+    ``SDM_CAPTURE_SHOP_METRIC_VIEW``;:func:`resolve_placeholders`).
 
     ``driver`` holds the keyword arguments of the leg's own driver connect
     (``databricks.sql.connect``, ``snowflake.connector.connect``);
@@ -2909,9 +2908,9 @@ def live_configuration(
     ``lakebase`` those of ``sdm_connectors.databricks.lakebase`` (with
     ``profile``), which every lakebase case opens through. Any value may be
     ``{"env": "NAME"}``, read from the environment (Snowflake's
-    credentials, KO3-24). Every text the file holds, every placeholder's name, connect
+    credentials). Every text the file holds, every placeholder's name, connect
     arguments alike, every private value read from the environment, and
-    the values of :data:`PRIVATE_ENVIRONMENT` set at least
+    the values of:data:`PRIVATE_ENVIRONMENT` set at least
     :data:`_PRIVATE_MIN` long are private."""
     environ = os.environ if environ is None else environ
     where = environ.get(LIVE_CONFIGURATION)
@@ -2957,10 +2956,9 @@ def _name_pattern(value: str) -> re.Pattern[str]:
 
 class Placeheld:
     r"""Writes each private name of a leg back as its placeholder, and finds
-    any private value left (design choice 2: "Names of catalogs, schemas,
-    hosts and users are replaced by placeholders before anything is
-    written, and the write fails on any private name from the
-    environment")."""
+    any private value left.
+    Catalog, schema, host and user names must be replaced before writing.
+    Any remaining private name from the environment prevents the write."""
 
     def __init__(
         self, names: Mapping[str, str], private: Iterable[str]
@@ -3042,7 +3040,7 @@ def arrow_ipc(table: Any) -> str:
 
 
 def read_arrow_ipc(text: str) -> Any:
-    r"""The Arrow table :func:`arrow_ipc` wrote."""
+    r"""The Arrow table:func:`arrow_ipc` wrote."""
     import base64
 
     import pyarrow as pa
@@ -3085,7 +3083,7 @@ def _postgres_arrow() -> Any:
 
 def _psycopg_cursor(driver: Any) -> bool:
     r"""Whether ``driver`` is a psycopg cursor holding a result: its rows
-    are kept as the Postgres provider types them (:func:`_keep`)."""
+    are kept as the Postgres provider types them (func:`_keep`)."""
     return (
         type(driver).__module__.split('.', 1)[0] == 'psycopg'
         and getattr(driver, 'description', None) is not None
@@ -3109,7 +3107,7 @@ def _keep(
     if recorder is None:
         return
     # By identity, not equality: two identical executions on one cursor are
-    # two statements, each with its own results (Codex r1, T3.2 fix 5).
+    # two statements, each with its own results.
     position = next(
         n
         for n in range(len(log.statements) - 1, -1, -1)
@@ -3140,8 +3138,8 @@ def rows_table(names: list[str], rows: list[tuple[Any, ...]]) -> Any:
 
 
 class _CapturedWarehouse(_Captured):
-    r"""The capture of a warehouse driver's connection or cursor (Phase 3):
-    the DB-API calls of :class:`_Captured`, ``executemany``, and each
+    r"""The capture of a warehouse driver's connection or cursor:
+    the DB-API calls of:class:`_Captured`, ``executemany``, and each
     Arrow read the driver has (``fetchall_arrow``, ``fetchmany_arrow``,
     Databricks'; ``fetch_arrow_all``, ``fetch_pandas_all``, Snowflake's),
     each kept whole in the recording mode."""
@@ -3337,8 +3335,8 @@ class _CapturedSnowflake(_CapturedWarehouse):
 
 class _CapturedPsycopg(_CapturedPostgres):
     r"""The capture of a psycopg connection (Postgres and Lakebase): the
-    calls of :class:`_CapturedPostgres`, and ``executemany``, ``copy`` and
-    ``stream`` (P2-T2.1a-2), each recorded as a statement whose result is
+    calls of:class:`_CapturedPostgres`, and ``executemany``, ``copy`` and
+    ``stream`` (P2--2), each recorded as a statement whose result is
     every row or block the caller read."""
 
     __slots__ = ()
@@ -3595,7 +3593,7 @@ class _CapturedFrame:
 class _CapturedSpark:
     r"""A Spark session as the capture hands it to a source (the reference's
     ``SparkCursor`` runs SQL through ``spark.sql`` and reads
-    ``DataFrame.toArrow()``, CN/backends/spark.py:40,84-91): each ``sql``
+    ``DataFrame.toArrow``, CN/backends/spark.py:40,84-91): each ``sql``
     call is a statement, its positional ``args`` its parameters, and the
     frame it gives is captured. Named ``SparkSession`` under a ``pyspark``
     package, which the reference's dispatch reads over the type's MRO."""
@@ -3703,10 +3701,10 @@ _WAREHOUSE_CAPTURES: dict[str, Any] = {
 
 class WarehouseTarget:
     r"""What the contract loader (``databases.load(duck, leg, target)``,
-    T3.3's warehouse part) loads a case's tables into on a warehouse leg:
+    warehouse part) loads a case's tables into on a warehouse leg:
     the leg's open connection (a Spark session on ``databricks-spark``),
     the private names of the case's placeholders (``catalog`` and
-    ``schema``: the one dedicated test schema, KO3-51), and the case's
+    ``schema``: the one dedicated test schema), and the case's
     resolved ``input.view``, created from its YAML when it has one."""
 
     def __init__(
@@ -3743,7 +3741,7 @@ def _quoted(
 def raw_arrow(leg: str, connection: Any, sql: str) -> Any:
     r"""What ``sql`` answers on ``leg``, read through the leg's driver
     outside the capture, as Arrow with the warehouse's own column types
-    (psycopg's rows as the Arrow :func:`rows_table` infers)."""
+    (psycopg's rows as the Arrow:func:`rows_table` infers)."""
     if leg == 'databricks-spark':
         return connection.sql(sql).toArrow()
     if leg == 'lakebase':
@@ -3769,7 +3767,7 @@ _ZONE = {
     'databricks-spark': 'SELECT current_timezone() AS zone',
     # Snowflake's session parameter is read with SHOW PARAMETERS, whose
     # answer is a row of (key, value, default, level, description, type);
-    # it has no CURRENT_SETTING (Codex r1, T3.2 fix 5).
+    # it has no CURRENT_SETTING.
     'snowflake': "SHOW PARAMETERS LIKE 'TIMEZONE' IN SESSION",
     'lakebase': "SELECT current_setting('TimeZone') AS zone",
 }
@@ -3777,7 +3775,7 @@ _ZONE = {
 
 def session_zone(leg: str, connection: Any) -> str | None:
     r"""The session time zone of ``leg``'s ``connection``, read outside
-    the capture: the one column of :data:`_ZONE`'s answer, or on Snowflake
+    the capture: the one column of:data:`_ZONE`'s answer, or on Snowflake
     the ``value`` column of ``SHOW PARAMETERS``, read through the cursor's
     rows and description (a SHOW answer is no Arrow result)."""
     if leg != 'snowflake':
@@ -3844,7 +3842,7 @@ def connect_leg(
     in_schema: bool = False,
 ) -> tuple[Any, Any]:
     r"""The leg's connection, opened as the live configuration says
-    (:func:`live_configuration`), and what closes it: through the case's
+    (func:`live_configuration`), and what closes it: through the case's
     connect ``path`` when it has one, its namespace the test schema so a
     connection handed over as it is resolves the case's tables there, as
     with ``in_schema`` (a source naming one part reads the other from the
@@ -4127,7 +4125,7 @@ def capture_line(
     observation: dict[str, Any],
     relations: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    r"""One case's capture on its leg (design choice 2), before placeholders:
+    r"""One case's capture on its leg, before placeholders:
     the reference line, every statement with its parameters and each
     result whole, every table of the case as the warehouse returns it, each
     view-derived relation as the warehouse evaluates it, every random draw
@@ -4197,9 +4195,8 @@ def capture_line(
 def saved_digest(result: dict[str, Any], table: Any) -> str:
     r"""The digest, in order, of a kept result's rows in the canonical form
     its read recorded: an Arrow read's (it has a ``schema``) through
-    :func:`arrow_values`, a row read's through :func:`result_values` over
-    the table's rows, so a saved table is held to the read it stands for
-    (Codex r2 P1-1)."""
+    :func:`arrow_values`, a row read's through:func:`result_values` over
+    the table's rows, so a saved table is held to the read it stands for."""
     if 'schema' in result:
         return arrow_values(table)['ordered']
     names = list(table.schema.names)
@@ -4210,9 +4207,9 @@ def saved_digest(result: dict[str, Any], table: Any) -> str:
 
 def same_rows(table: Any, rows: list[tuple[Any, ...]]) -> bool:
     r"""Whether ``table`` holds ``rows``, value for value: a row read's
-    table types its columns as Arrow infers them, so a decimal's scale may
-    change (``Decimal('1.0')`` kept as ``1.00``) while its value does not
-    (Codex r3 P1-1); NaN equals NaN."""
+     table types its columns as Arrow infers them, so a decimal's scale may
+     change (``Decimal('1.0')`` kept as ``1.00``) while its value does not
+    ; NaN equals NaN."""
     columns = [column.to_pylist() for column in table.columns]
     kept = list(zip(*columns, strict=True)) if columns else []
     if len(kept) != len(rows):
@@ -4256,7 +4253,7 @@ def _hold_reads(line: dict[str, Any], held: Placeheld) -> None:
 def written(line: dict[str, Any], held: Placeheld) -> str:
     r"""A capture line as the text the recording mode writes: every private
     name placeheld, every Arrow table as IPC text, and the write refused
-    (:class:`RunnerFailure`, naming the case, never the value) when any
+    (class:`RunnerFailure`, naming the case, never the value) when any
     private value is left anywhere in it, a table's values and names
     included (each checked before it is encoded, so an encoding's bytes
     never pass for a name)."""
@@ -4315,9 +4312,9 @@ def written(line: dict[str, Any], held: Placeheld) -> str:
 
 
 # The Postgres leg's capture is psycopg's whole: copy, stream and
-# executemany recorded, never passed through unseen (P2-T2.1a-2).
+# executemany recorded, never passed through unseen (P2--2).
 _CAPTURES['postgres'] = _CapturedPsycopg
-# Each warehouse leg's capture (Phase 3, choice 2), as capture() hands it.
+# Each warehouse leg's capture, as capture hands it.
 _CAPTURES.update(
     {
         'databricks-sql': _CapturedDatabricks,
@@ -4397,7 +4394,7 @@ def _open(
                 )
             # A database of its own, so the tables are in its public schema
             # as a user's are, and what a source reads of its catalog
-            # (current_schema()) is the same on every run.
+            # (current_schema) is the same on every run.
             name = f'sdm_case_{uuid.uuid4().hex[:16]}'
             with psycopg.connect(dsn, autocommit=True) as admin:
                 admin.execute(f'CREATE DATABASE {name}')
@@ -4450,7 +4447,7 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         indices = [Decimal(value) for value in indices]
     arguments: dict[str, Any] = {'indices': list(indices)}
     # An anchor time is a timestamp, or the literal 'entity' (each entity
-    # at its own time; T2.11's cases), as the public call takes it.
+    # at its own time; cases), as the public call takes it.
     for key in ('anchor_time', 'context_anchor_time'):
         if key in spec:
             arguments[key] = (
@@ -4465,12 +4462,12 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
     for key in (
         'rows_per_call',
         'lag_timesteps',
-        # The quickstart's context size (Phase 3's S2 cases).
+        # The quickstart's context size.
         'num_context_samples',
         *SAMPLING_OPTIONS,
     ):
         if key in spec:
-            # As written (T2.8c's, T2.9's and T2.11's cases): a value the
+            # As written (and cases): a value the
             # reference refuses is the case's input, and a null is None
             # (random_seed=None, an unseeded sample).
             arguments[key] = copy.deepcopy(spec[key])
@@ -4478,7 +4475,7 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 #: The sampling options a case passes to materialize as written, any JSON
-#: value, null as None (T2.11).
+#: value, null as None.
 SAMPLING_OPTIONS = (
     'random_seed',
     'num_hops',
@@ -4504,7 +4501,7 @@ def _from_source_arguments(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
-    r"""The case's edits to the schema, in order (T1.21b; from T1.24b a
+    r"""The case's edits to the schema, in order (a
     key, a time column, a meaning and the relationships set)."""
     from sdm_client import Relationship
 
@@ -4528,8 +4525,8 @@ def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
 
 def presented(schema: Any, described: Any = None) -> list[str]:
     r"""Each way a schema the core described departs from the description
-    it was built from (T1.21d), ``described``, the description the run's
-    ``describe_source`` answered (from T3.16 the schema keeps none; before,
+    it was built from, ``described``, the description the run's
+    ``describe_source`` answered (the schema keeps none; before,
     the one it kept): a table's key or time column, a column's meaning or
     what it meant before the schema joined on it, or the links, as the
     Python object holds them once built. Building it re-runs the object's
@@ -4652,7 +4649,7 @@ def _schema_projection(schema: Any) -> dict[str, Any]:
 
 
 def _result_projection(result: Any) -> dict[str, Any]:
-    r"""The public result, through ``to_pandas()``: its columns with their
+    r"""The public result, through ``to_pandas``: its columns with their
     dtypes, and its rows as typed values with their digest."""
     frame = result.to_pandas()
     rows = [list(row) for row in frame.itertuples(index=False, name=None)]
@@ -4668,7 +4665,7 @@ def _result_projection(result: Any) -> dict[str, Any]:
 
 def _result_text(result: Any) -> str:
     r"""The SHA-256 of the public result's rows with each value as its text
-    (P2-T2.21-1): a result whose digest an entry excuses for a value's
+    (P2--1): a result whose digest an entry excuses for a value's
     type is still held to its values. Beside the result, never in it, so
     every projection of ``public.result`` is the one recorded before."""
     frame = result.to_pandas()
@@ -4691,7 +4688,7 @@ def _call(
     warehouse leg), with the driver capture on or off: its outcome, warning
     classes, driver record and public projection. On a warehouse leg the
     case's placeholders are resolved from the live configuration
-    (:class:`Live`); with ``keep``, the recording mode's, every result is
+    (class:`Live`); with ``keep``, the recording mode's, every result is
     kept whole and ``keep`` gets the leg, the capture's log and the
     view-derived relations, read before the leg closes."""
     live: Live | None = None
@@ -4715,7 +4712,7 @@ def _call(
         connection, cleanup, types = _open(case, bases, database)
     # Setup is everything run before the connection reaches the source; the
     # query log (DuckDB's own, or off DuckDB the driver's statement log,
-    # entered only in a with, so it is always left, P2-T2.1a-2) and the
+    # entered only in a with, so it is always left, P2--2) and the
     # capture start after it.
     logs = database != 'duckdb'
     try:
@@ -4724,7 +4721,7 @@ def _call(
         log = DriverLog() if driver_capture else None
         if log is not None and core_runs is not None:
             # The core's capture marks each statement of a fetch the core
-            # asked for plan B's read of a table as it stands (T3.4).
+            # asked for plan B's read of a table as it stands.
             core_runs.driver_log = log
         if log is not None:
             log.type_names = types
@@ -4813,22 +4810,22 @@ def _calls(
     statements: StatementLog | None,
     core_runs: Any = None,
 ) -> tuple[Any, ...]:
-    r"""The case's public calls (:func:`_call`'s), under the statement log
+    r"""The case's public calls (func:`_call`'s), under the statement log
     when there is one: the outcome, the statements logged and the
     warnings shown; ``core_runs``, the record of the case's core runs
     (``_Capture``), holds the description the schema is held to
-    (:func:`presented`)."""
+    (func:`presented`)."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 
     serve = _sibling('scripted_endpoint').serve
     stage = 'from_source'
     with (
         # The scripted endpoint, failing the case's chosen call and
-        # answering a classification with its probabilities (T2.8's ranking
-        # cases), a regression with its quantiles (T2.9's forecast cases),
+        # answering a classification with its probabilities (ranking
+        # cases), a regression with its quantiles (forecast cases),
         # a call asking for an explanation with one and each item with its
-        # metadata (T2.13's cases), and a call asking for embeddings with
-        # one on each item (T2.11's cases) where the case says so.
+        # metadata (cases), and a call asking for embeddings with
+        # one on each item (cases) where the case says so.
         serve(
             fail_call=given.get('fail_call'),
             probabilities=given.get('probabilities', False),
@@ -4863,7 +4860,7 @@ def _calls(
                 stage = 'predict'
                 if log is not None:
                     log.stage = stage
-                # The output fields the case names, as written (T2.9's
+                # The output fields the case names, as written (
                 # quantile cases); none named, the model's defaults.
                 outputs = (
                     {'outputs': list(given['outputs'])}
@@ -4886,7 +4883,7 @@ def _calls(
         except Exception as error:  # noqa: BLE001 - the call's outcome
             if _route_error(error):
                 # Its text names routes, the client's own words, never an
-                # input: which route was refused, and why (T3.2).
+                # input: which route was refused, and why.
                 raise RunnerFailure(
                     f'{case["id"]}: the route was refused '
                     f'({type(error).__name__}: {error})'
@@ -4919,7 +4916,7 @@ def _origin(filename: str) -> str | None:
     directory (or file) is the longest prefix of it, or None when none is.
     Read from the modules loaded, never from the warning's text, so a
     comparison can tell the runtime's own warnings (pandas', pyarrow's)
-    from the client's (decision E81, register HOST-5)."""
+    from the client's (register )."""
     try:
         target = os.path.realpath(filename)
     except (TypeError, ValueError):
@@ -5096,7 +5093,7 @@ def run(
                 )
             observations.append(observation)
         if record_fetches is not None:
-            # The replay's recording (T2.3, KO2-20): each case's fetches, with
+            # The replay's recording: each case's fetches, with
             # the answers the Postgres provider replied with, in order, and the
             # statements the driver ran for each, so the replay's record of what
             # ran is python-core's.
@@ -5138,7 +5135,7 @@ def _replay_line(
 def _replay_core(capture: _Capture) -> dict[str, Any]:
     r"""The starts a warehouse replay needs, projected to the existing
     pure-Rust host's inputs. Its own description and materialized state
-    must be rebuilt, never copied from this host's answers (E50).
+    must be rebuilt, never copied from this host's answers.
 
     This is private replay data: namespace and view names remain exactly
     those of the fetch recording, with no publication-time substitution.
@@ -5285,7 +5282,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar='FILE',
         help="python-core only: write each case's fetches with the answers "
         "the provider gave, the recording rust-host's Postgres replay reads "
-        '(T2.3, KO2-20)',
+        '',
     )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)

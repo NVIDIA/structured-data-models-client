@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! No text panics the view definitions' readers (T3.5 fix 2, the owner's
+//! No text panics the view definitions' readers ( fix 2, the owner's
 //! stop rule): a few seconds of texts made of YAML's pieces and the view
 //! sections' names, and of the recorded texts cut and spliced, each read
 //! as YAML, as a metric view with its joins walked, and as a semantic view

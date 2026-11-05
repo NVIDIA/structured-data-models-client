@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The predict-side rules no public call reaches on the core route, held
-//! here (T1.28b): the parts of one request merged into one result
+//! here: the parts of one request merged into one result
 //! (`PredictionResult.merge`), which a request state of one payload never
 //! needs, and the outputs an answer leaves out (`PredictionResult.absent`),
 //! with the result's layout of merged parts ordered by `row_index` as the

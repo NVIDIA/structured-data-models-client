@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A semantic view's definition, as the warehouse writes it out in YAML,
-//! read into a [`ViewSpec`] (design S5, T3.5's V2, V3 and V6), in the old
+//! read into a [`ViewSpec`] , in the old
 //! client's order (`RE/graph.py:2069-2222`).
 //!
 //! [`parse`] reads only what the old client read before anything else:

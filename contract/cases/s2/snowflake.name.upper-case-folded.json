@@ -57,9 +57,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "DESCRIBE TABLE on the name as given fails with errno 2003, an object that does not exist (SNOW/table.py:34-45), so the old client tries database, schema and table upper-cased and keeps that form for every later statement (:128-153); the test schema's database and schema are stored in upper case, so the folded form resolves"
+    "stage": "predict"
   },
   "why": "Tables stored in upper case and named in lower case, as an unquoted name resolves in Snowflake: the old client finds each only upper-cased. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
-  "source": "written by T3.6's test author from the reference at 43e55f4f"
+  "source": "Correctness case snowflake.name.upper-case-folded using the shop fixture."
 }

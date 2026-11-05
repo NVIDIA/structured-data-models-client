@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 _SPEC = importlib.util.spec_from_file_location(
-    't310_warehouse_run_python',
+    'test_warehouse_replay_inputs_warehouse_run_python',
     Path(__file__).resolve().parents[1] / 'runners/run_python.py',
 )
 assert _SPEC is not None and _SPEC.loader is not None

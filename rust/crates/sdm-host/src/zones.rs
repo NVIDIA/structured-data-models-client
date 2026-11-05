@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Zone resolution (decision A7): each zone resolves through the host's
+//! Zone resolution: each zone resolves through the host's
 //! lookup roots in order, then the bundled copy, and the source and version
 //! used for each zone are recorded.
 //!
@@ -15,7 +15,7 @@
 //! `america/new_york` through pytz), and a zone found under any spelling is
 //! known by its canonical one, the IANA name [`TimeZone::iana_name`] gives:
 //! its source is recorded under that name, so two spellings of one zone are
-//! one entry (Phase 1 decisions, E3; register DT-8).
+//! one entry.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -55,7 +55,7 @@ pub enum ZoneError {
 
 /// Resolves zone names for one host's facts, and records the source of
 /// every zone it resolved. It is the zones a run's core resolves with
-/// ([`Zones`], decision H14).
+/// ([`Zones`]).
 pub struct ZoneResolver {
     databases: Arc<Databases>,
     used: Mutex<BTreeMap<String, ZoneSource>>,
@@ -91,10 +91,10 @@ fn databases(roots: Vec<ZoneRoot>) -> Arc<Databases> {
             .map(|root| {
                 // The one file-system read in the domain and shipped crates:
                 // the host names its lookup roots in HostFacts, and the
-                // resolver reads the zone database each one holds (E24).
+                // resolver reads the zone database each one holds.
                 #[allow(
                     clippy::disallowed_methods,
-                    reason = "reads the zone lookup roots the host names (E24)"
+                    reason = "reads the zone lookup roots the host names"
                 )]
                 let db = TimeZoneDatabase::from_dir(&root.path).ok();
                 (root, db)
@@ -187,7 +187,7 @@ impl ZoneResolver {
 
 /// The core resolves through the host's resolver, which records each
 /// zone's source; the core is told only that a name is unknown, never the
-/// name, which can come from the data (decision H17).
+/// name, which can come from the data.
 impl Zones for ZoneResolver {
     fn zone(&self, name: &str) -> Result<TimeZone, UnknownZone> {
         self.resolve(name).map_err(|_| UnknownZone)
@@ -201,7 +201,7 @@ impl Zones for ZoneResolver {
 /// same lookup roots (the host's `zone_roots`, then the bundled database,
 /// as Python falls back to its `tzdata` package); `None` where it finds
 /// none, where psycopg reads the instant in UTC. For a host whose driver
-/// writes such a value as text (T3.12 fix 3), so the zone data is the one
+/// writes such a value as text, so the zone data is the one
 /// Python reads, never the host's own.
 pub fn session_zone_offset(name: &str, roots: &[PathBuf], micros: i64) -> Option<i32> {
     if name == "UTC" {

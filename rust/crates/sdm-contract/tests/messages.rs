@@ -141,7 +141,7 @@ fn a_named_table_lists_the_columns_it_keeps_or_none() {
     }
 }
 
-/// The sampling policies a host provider declares (T1.26a), by their wire
+/// The sampling policies a host provider declares, by their wire
 /// spelling; a provider leaving them out declares none, which the core
 /// reads as no null order (an ordered read refused, `null_order`) and no
 /// index advice (no index read, no warning), never as DuckDB's.

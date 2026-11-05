@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""The schema as the core reads it: plain data, written from the schema as
-it stands (T3.16, the structure design's fix A).
+it stands (the structure design's fix A).
 
 :func:`held_schema` writes the contract's ``HeldSchema`` that
 ``edit_schema`` and ``materialize`` take: each table by the name the schema
@@ -82,7 +82,7 @@ def _links(schema: Schema) -> list[list[dict[str, str]]]:
 
 def query_schema(schema: Schema) -> dict[str, Any]:
     r"""``schema`` as the contract's ``QuerySchema``
-    (:func:`sdm_client.schema.query_schema`, the one translation of a schema
+    (func:`sdm_client.schema.query_schema`, the one translation of a schema
     into the query language's, which the old route's definition is built
     from too)."""
     from sdm_client.schema import query_schema as written

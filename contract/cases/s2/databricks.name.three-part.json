@@ -66,9 +66,8 @@
     "outcome": "refusal",
     "stage": "from_source",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "read from the reference: a source name is one identifier (DatabricksTable quotes source_name whole, DB/table.py:170-195, with the catalog and schema the source names), so the information_schema look-up (DB/table.py:212-246) finds no table and TableNotFoundError becomes StructuredDataError INVALID_REQUEST (CL/materializers/sources.py:165)"
+    "code": "INVALID_REQUEST"
   },
-  "why": "Tables named with catalog, schema and table in one dotted name, the catalog and schema as the {catalog} and {schema} placeholders the capture writes for the test schema (no private name, choice 2). The reference reads the dotted text as one table name and refuses it by name; the core may accept the three parts (choice 4) only as a registered improvement (KO3-41, KO3-47)",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "why": "Tables named with catalog, schema and table in one dotted name, the catalog and schema as the {catalog} and {schema} placeholders the capture writes for the test schema (no private name, choice 2). The reference reads the dotted text as one table name and refuses it by name; the core may accept the three parts (choice 4) only as a registered improvement (, )",
+  "source": "Correctness case databricks.name.three-part using the shop fixture."
 }

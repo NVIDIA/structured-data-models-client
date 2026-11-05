@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """The Python scripted endpoint against its shared vector file
-(``tests/fixtures/scripted-endpoint.json``), which T1.11d's Rust endpoint answers
+(``tests/fixtures/scripted-endpoint.json``), which Rust endpoint answers
 too, and through the client's real transport over localhost.
 """
 
@@ -104,7 +104,7 @@ probability_vectors = document['probabilities']
 def test_an_endpoint_told_to_answer_probabilities_answers_each_vector(
     vector: dict[str, Any],
 ) -> None:
-    # T2.8: the rule as call number ``call``, and served, after as many
+    #: the rule as call number ``call``, and served, after as many
     # calls before it, each answered in turn.
     status, answer = endpoint.answer(
         vector['method'],
@@ -159,7 +159,7 @@ quantile_vectors = document['quantiles']
 def test_an_endpoint_told_to_answer_quantiles_answers_each_vector(
     vector: dict[str, Any],
 ) -> None:
-    # T2.9: the rule as call number ``call``, and served, after as many
+    #: the rule as call number ``call``, and served, after as many
     # calls before it, each answered in turn.
     status, answer = endpoint.answer(
         vector['method'],
@@ -236,7 +236,7 @@ explanation_vectors = document['explanation']
 def test_an_endpoint_told_to_answer_explanations_answers_each_vector(
     vector: dict[str, Any],
 ) -> None:
-    # T2.13: the rule as call number ``call``, and served.
+    #: the rule as call number ``call``, and served.
     status, answer = endpoint.answer(
         vector['method'],
         vector['path'],
@@ -297,7 +297,7 @@ item_metadata_vectors = document['item_metadata']
 def test_an_endpoint_told_to_answer_item_metadata_answers_each_vector(
     vector: dict[str, Any],
 ) -> None:
-    # T2.13: the rule as call number ``call``, and served.
+    #: the rule as call number ``call``, and served.
     status, answer = endpoint.answer(
         vector['method'],
         vector['path'],
@@ -378,7 +378,7 @@ embeddings_vectors = document['embeddings']
 def test_an_endpoint_told_to_answer_embeddings_answers_each_vector(
     vector: dict[str, Any],
 ) -> None:
-    # T2.11: the rule as call number ``call``, and served.
+    #: the rule as call number ``call``, and served.
     status, answer = endpoint.answer(
         vector['method'],
         vector['path'],

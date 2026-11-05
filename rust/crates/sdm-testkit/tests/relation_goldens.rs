@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Contract v26's table source on DuckDB (T2.1b, design choice 12): the
+//! Contract v26's table source on DuckDB: the
 //! relation forms DuckDB takes, one to three parts, each rendered through
 //! `sdm-data`'s one `FROM` function with every part quoted alone, the
 //! statement's text pinned and the statement executed on DuckDB, so each

@@ -14,8 +14,8 @@ this repository's. For each, the file reproduces the licence, copyright and
 notice files the crate ships, which is what its licence asks of a binary
 distribution, and the Rust standard library is named after them.
 
-    scripts/rust_core/rust_notices.py --write   regenerate the file
-    scripts/rust_core/rust_notices.py --check   fail if it is out of date
+    scripts/rust_core/rust_notices.py --write regenerate the file
+    scripts/rust_core/rust_notices.py --check fail if it is out of date
 
 `--check` runs in CI's `rust-lint`, where the crates' sources are present;
 it needs `cargo` and reads `rust/Cargo.lock` without changing it.
@@ -45,7 +45,7 @@ TARGETS = (
     'x86_64-pc-windows-msvc',
 )
 #: The files a crate ships its terms in, at its root; `MIT-LICENSE` and
-#: `Apache-LICENSE` are yaml-rust2's names for its two licences (T3.5).
+#: `Apache-LICENSE` are yaml-rust2's names for its two licences.
 TERMS = re.compile(
     r'^(?:(?:mit|apache)[-_])?'
     r'(?:licen[cs]e|copying|copyright|notice|unlicense)(?:[-_.].*)?$',

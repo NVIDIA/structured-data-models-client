@@ -80,7 +80,7 @@ class ResultInspectionTest {
   @Test void rankingPartsRemainUsableAndUnscoredCandidatesSurviveMerge() throws Exception {
     Request request, otherRequest;
     try (Connection connection=WarehouseSessionTest.open("duckdb")) {
-      Schema schema=Phase4CoverageAuditTest.linkSchema("duckdb",connection);
+      Schema schema=ModelConnectorCoverageTest.linkSchema("duckdb",connection);
       request=PredictiveQuery.parse(RelationalTest.RANK).materialize(schema,
           WarehouseSessionTest.asked(1L,2L).candidates(List.of(1L,2L,999L)).build());
       otherRequest=PredictiveQuery.parse(RelationalTest.RANK).materialize(schema,

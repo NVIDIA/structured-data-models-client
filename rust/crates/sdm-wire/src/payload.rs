@@ -11,7 +11,7 @@
 //! (`$defs/StatePayload`) is the schema they derive ([`schema_json`]),
 //! committed as `sdm-contract`'s `schema/state-payload.json`, which
 //! `sdm-contract` embeds and `tests/state_payload_schema.rs` holds equal to
-//! what these types generate (T1.28w, decision E74). A field added to,
+//! what these types generate. A field added to,
 //! dropped from or retyped in them therefore changes the contract's schema,
 //! which fails the contract lock until the version moves with it.
 //!
@@ -21,8 +21,8 @@
 //! order written, and the cells of each row, any JSON value, each number
 //! the token written ([`Value`]).
 //!
-//! The task and the inference options take one shape per kind of task
-//! (T1.28a): a regression's ([`Task`] of a [`Target`], [`InferenceConfig`],
+//! The task and the inference options take one shape per kind of task:
+//! a regression's ([`Task`] of a [`Target`], [`InferenceConfig`],
 //! the defaults of [`StatePayload`]'s parameters) and a classification's
 //! ([`Task`] of a [`ClassTarget`], with its classes and a binary task's
 //! positive class, and [`ClassificationConfig`]). The schema is derived
@@ -126,7 +126,7 @@ pub struct Task<T = Target> {
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
     /// How many candidates the call asked be kept (`top_k`), which the
-    /// engine writes into the task where the caller gave it (T2.8).
+    /// engine writes into the task where the caller gave it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "u32")]
     pub top_k: Option<u32>,
@@ -282,7 +282,7 @@ pub enum Format {
 #[schemars(deny_unknown_fields)]
 pub struct Output {
     pub fields: Vec<String>,
-    /// A regression's statistic, where the caller chose one (T1.28a).
+    /// A regression's statistic, where the caller chose one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub prediction_statistic: Option<String>,
@@ -314,7 +314,7 @@ pub struct InferenceConfig {
     #[schemars(with = "bool")]
     pub class_shuffle: Option<bool>,
     /// Each a transform's name, or null, which the engine's type takes and
-    /// writes as null (T2.13).
+    /// writes as null.
     pub target_transforms: Vec<Option<String>>,
     pub output_type: String,
 }
@@ -440,7 +440,7 @@ pub struct RegressionTask {
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
     /// How many candidates the call asked be kept (`top_k`), which the
-    /// engine writes into the task where the caller gave it (T2.8).
+    /// engine writes into the task where the caller gave it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "u32")]
     pub top_k: Option<u32>,
@@ -493,7 +493,7 @@ pub struct BinaryTask {
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
     /// How many candidates the call asked be kept (`top_k`), which the
-    /// engine writes into the task where the caller gave it (T2.8).
+    /// engine writes into the task where the caller gave it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "u32")]
     pub top_k: Option<u32>,
@@ -511,7 +511,7 @@ pub struct MulticlassTask {
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
     /// How many candidates the call asked be kept (`top_k`), which the
-    /// engine writes into the task where the caller gave it (T2.8).
+    /// engine writes into the task where the caller gave it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "u32")]
     pub top_k: Option<u32>,

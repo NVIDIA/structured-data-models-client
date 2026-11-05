@@ -30,26 +30,24 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 #: Each family's carried row and what it covers, as the brief words them.
 FAMILIES = {
     'time': (
-        'P2-T2.16-9: the "Some time columns..." warning the old route gives, '
+        'the "Some time columns..." warning the old route gives, '
         'and the time columns it explains'
     ),
     'keys': (
-        'P2-T2.16-10: a key counted where its rows are, its 1% and 99% '
+        'a key counted where its rows are, its 1% and 99% '
         'thresholds, its warnings and its refusals'
     ),
     'refusals': (
-        'P2-T2.16-10 and -11: a source call refused INVALID_REQUEST in the '
-        "reference's words"
+        "a source call refused INVALID_REQUEST in the reference's words"
     ),
-    'postgres': 'P2-T2.16-11: a Postgres source read in the schema it names',
+    'postgres': 'a Postgres source read in the schema it names',
     'described': (
-        'P2-T2.16-11: materialize of a schema not described on the core '
-        '(RouteError)'
+        'materialize of a schema not described on the core (RouteError)'
     ),
 }
 
 #: The notices each family compares, by their words (the core's ``[CODE] ``
-#: prefix aside, decisions E41(i) and E59(d)).
+#: prefix aside).
 NOTICES = {
     'time': r'^Some time columns were inferred',
     'keys': r'identifies a row|named like a key|no value|not unique enough',
@@ -343,7 +341,7 @@ def placed(database: str, scratch: Path) -> Iterator[Place]:
 
 def bare(message: str) -> str:
     r"""A notice's words without the core's ``[CODE] `` prefix, which every
-    warning the core gives carries (decisions E41(i), E59(d))."""
+    warning the core gives carries."""
     return re.sub(r'^\[[A-Z][A-Z0-9_]*\] ', '', message)
 
 
@@ -556,7 +554,7 @@ def from_source(
     return act
 
 
-# The time column (P2-T2.16-9). ``test_the_time_column_is_inferred_alike.py``'s
+# The time column (P2--9). ``test_the_time_column_is_inferred_alike.py``'s
 # cases, and the types and modes its frames do not reach.
 
 _TIME_CASES: dict[str, dict[str, pd.Series]] = {
@@ -770,7 +768,7 @@ scenario(
     frames=_accounts,
 )
 
-# Keys (P2-T2.16-10).
+# Keys (P2--10).
 
 TABLES = {'users': 'app_users', 'orders': 'app_orders'}
 EVERY_TENTH = [f'u{i:03d}' for i in range(0, 200, 10)]
@@ -1007,7 +1005,7 @@ for _query_name, _query in (('temporal', TEMPORAL), ('static', STATIC)):
             frames=lambda: _users_and_orders_with(_repeating('u007')),
         )
 
-# Refusals in the reference's words (P2-T2.16-10 and -11).
+# Refusals in the reference's words (P2--10 and -11).
 
 scenario(
     'refusals.a-missing-table',
@@ -1044,7 +1042,7 @@ scenario(
     frames=lambda: _users_and_orders_with(USERS),
 )
 
-# Postgres: the schema a source names (P2-T2.16-11).
+# Postgres: the schema a source names (P2--11).
 
 
 def _shadowed(tables: dict[str, str] | None) -> Act:
@@ -1116,7 +1114,7 @@ scenario(
 
 def _search_path(place: Place) -> Any:
     r"""A source naming no schema reads the connection's own
-    (``current_schema()``), here the place's, set as its search path."""
+    (``current_schema``), here the place's, set as its search path."""
     from sdm_connectors import PostgresSource
 
     place.connection.execute(f'SET search_path TO {place.namespace}')
@@ -1274,7 +1272,7 @@ scenario(
     frames=lambda: _users_and_orders_with(USERS),
 )
 
-# A schema the core did not describe (P2-T2.16-11's RouteError).
+# A schema the core did not describe (P2--11's RouteError).
 
 
 def _by_hand(described: Any, source: Any, **source_names: str) -> Any:

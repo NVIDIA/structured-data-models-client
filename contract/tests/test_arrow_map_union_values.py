@@ -23,7 +23,7 @@ import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-VECTORS = ROOT / 'contract/t132g-p2c-vectors.json'
+VECTORS = ROOT / 'contract/arrow-map-union-vectors.json'
 OLD_VECTORS = ROOT / 'contract/result-vectors.json'
 
 

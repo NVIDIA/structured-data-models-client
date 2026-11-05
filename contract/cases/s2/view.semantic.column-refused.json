@@ -46,9 +46,8 @@
     "outcome": "refusal",
     "stage": "from_source",
     "error": "ProgrammingError",
-    "code": null,
-    "today": "the fact broken passes the expression check (arithmetic on the table's own column), so it is sampled with the other expression columns of orders in one SELECT ... LIMIT 1000 (RE/graph.py:2176-2189, RE/base/table.py:225-318); Snowflake refuses the division by zero when it reads rows, and the old client neither catches the driver's error nor retries one column at a time, so the connector's ProgrammingError reaches the caller unwrapped"
+    "code": null
   },
-  "why": "A semantic view fact the warehouse refuses only when it reads rows (division by zero): the old client fails the whole read with the connector's raw error, where on Databricks it drops the one column with a note (view.metric.column-refused); this records the exact exception and text (T3.5 old behaviour, open question 1). The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name",
-  "source": "written for the second early capture (T3.20) from the reference at 43e55f4f"
+  "why": "A semantic-view expression fails when warehouse rows are read; verify the surfaced error and source-description outcome.",
+  "source": "Correctness case view.semantic.column-refused using the shop fixture."
 }

@@ -42,7 +42,7 @@ class ResultItemsTest {
   void rankingOwnersSurviveDifferentCandidateListsAndRepeatedMixedTaskMerges() throws Exception {
     Request first, second, scalar;
     try (Connection connection = WarehouseSessionTest.open("duckdb")) {
-      Schema schema = Phase4CoverageAuditTest.linkSchema("duckdb", connection);
+      Schema schema = ModelConnectorCoverageTest.linkSchema("duckdb", connection);
       first =
           PredictiveQuery.parse(RelationalTest.RANK)
               .materialize(

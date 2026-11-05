@@ -151,21 +151,7 @@ def record() -> dict[str, Any]:
     }
     return {
         'format': 'sdm-type-map-vectors/1',
-        'about': (
-            "T2.1a's type map (design, choice 2), written by the package's "
-            'independent test author before the implementation, recorded by '
-            'contract/support/type_map_scenarios.py: the one definition of a '
-            "decimal's canonical text (plain positional notation, no "
-            'exponent, no trailing fractional zeros, no trailing point, -0 '
-            'written 0), which the Python loader and the Rust key binders '
-            'each implement and both run; a SQLite decimal stored in a column '
-            'declared TEXT as that text, since a column declared DECIMAL '
-            'takes numeric affinity and rounds what it stores '
-            '(sqlite_distinct_keys, KO2-35); and equal keys of different '
-            'scales that must still join on every engine (join_across_scales, '
-            'lesson 19). `map` is the stored type per engine; the rest of the '
-            "type set's entries are the implementer's, added here under review."
-        ),
+        'about': 'Exact decimal text and cross-scale key equality, including SQLite TEXT storage to avoid numeric-affinity rounding.',
         'map': {
             'decimal': {
                 'duckdb': 'DECIMAL(p,s)',

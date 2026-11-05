@@ -186,9 +186,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "regression; the request's context rows per table, the same on all three databases: buyers 2, customers 10, details 6"
+    "stage": "predict"
   },
-  "why": "T2.19 (main eb6c68eb): one column linking two tables, a keyless event table's customer column referring to customers and to a copy of them, as a role-playing join makes it; the column is read once",
+  "why": "One column linking two tables, a keyless event table's customer column referring to customers and to a copy of them, as a role-playing join makes it; the column is read once",
   "source": "main's test_two_paths.py (eb6c68eb, the reference at 6298913c)"
 }

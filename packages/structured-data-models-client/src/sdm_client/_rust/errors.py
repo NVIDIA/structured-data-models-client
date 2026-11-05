@@ -2,33 +2,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The core's errors and warnings as this client's exceptions and warnings.
+r"""Translate structured core diagnostics into Python exceptions and warnings.
 
-The core says what each error and warning says: one sentence of a closed
-list (``sentence``), whose one template every host fills, which the binding
-exports as data (``_native.templates()``, T3.17; invariant 8 of the Phase 3
-structure design). This module chooses no sentence: it fills the core's
-with the values the error or warning names, as Python writes them (the one
-value formatter, :class:`_Words`), with the advice the template names as
-Python is written (:data:`ADVICE`), and, for a sentence that relays a
-library of this host's own, in that library's words (:data:`HOST_OWNED`).
-A sentence with no template, or one its fields cannot fill, is the core's
-defect, said as one.
+Rust selects each diagnostic's sentence and fields.
+This module formats values, Python-specific advice and host-library details,
+then maps the diagnostic code to its public exception or warning class.
+Missing templates or fields are internal errors.
 
-One reviewed table, keyed on the error's code alone (decisions H6, E22),
-maps each code to one :class:`~sdm_client.errors.StructuredDataError`
-class (:data:`ERRORS`), and a test iterates every code the core has. One
-narrow exception (:data:`AS_THE_BASE_CLASS`, T2.8c fix 2): the refusals the
-reference raises as ``StructuredDataError`` under their code, by the rule
-the core names, keep the reference's class. A warning's class is chosen by
-its code alone (:data:`WARNINGS`); warnings given one after another that
-the table groups are shown as one.
-
-``details`` holds the error's ``fields``, decoded, with its ``kind`` and
-``retryable``; a provider error also names the driver's exception class
-the host saw (``driver_class``) beside the SQLSTATE and vendor code the
-core keeps. The exception is raised ``from None``: no driver exception is
-chained, and nothing the driver wrote reaches a traceback (decision H17).
+Exception details retain the core fields, error kind and retryability.
+Provider failures also retain the driver class, SQLSTATE and vendor code;
+raw driver exceptions are not chained into tracebacks.
 """
 
 from __future__ import annotations
@@ -80,7 +63,7 @@ ERRORS: dict[str, type[StructuredDataError]] = {
     'RUN_BUSY': StructuredDataError,
     'INVALID_MESSAGE': StructuredDataError,
     # A serving endpoint's refusal, raised as the old client raises it:
-    # under the endpoint's status and its own code (T3.27).
+    # under the endpoint's status and its own code.
     'ENDPOINT_REFUSED': NimRequestError,
 }
 
@@ -88,8 +71,8 @@ ERRORS: dict[str, type[StructuredDataError]] = {
 #: by code and rule: ``main``'s 1fc5a686 ceilings on what one
 #: ``materialize`` gathers and its refusal of a batched forecast, each a
 #: ``StructuredDataError(code='UNSUPPORTED_REQUEST')`` in the reference's
-#: client, so a caller's ``except`` sees the class it would there (T2.8c fix
-#: 2). Every other refusal takes its code's class (:data:`ERRORS`).
+#: client, so a caller's ``except`` sees the class it would there ( fix
+#: 2). Every other refusal takes its code's class (data:`ERRORS`).
 AS_THE_BASE_CLASS: frozenset[tuple[str, str]] = frozenset(
     {
         ('UNSUPPORTED_REQUEST', 'most_entities'),
@@ -110,23 +93,23 @@ class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
     ``UserWarning`` (a subclass of it, named so, so a filter, a
     ``pytest.warns`` and an observation's class name see the reference's),
     owned by this client, so where a warning came from can be told by its
-    category (T1.11d review round 4)."""
+    category ( review round 4)."""
 
 
 #: Warning codes the core gives, with the class each is shown as; any other
-#: code is shown as :class:`~sdm_client.core.warnings.SDMWarning`. From
-#: T1.11c ``materialize`` gives the reference's sampler warnings, which the
+#: code is shown as:class:`~sdm_client.core.warnings.SDMWarning`. From
+#: ``materialize`` gives the reference's sampler warnings, which the
 #: reference shows as ``UserWarning``: indices missing for its reads, a
 #: context reaching back before the data, an anchor after it, and from
-#: T1.26b a context collected short, once in a process; this client's own
-#: :class:`UserWarning`, so their provenance shows.
+#: a context collected short, once in a process; this client's own
+#::class:`UserWarning`, so their provenance shows.
 WARNINGS: dict[str, type[Warning]] = {
     'MISSING_INDICES': UserWarning,
     'CONTEXT_BEFORE_DATA': UserWarning,
     'ANCHOR_AFTER_DATA': UserWarning,
     'CONTEXT_COVERAGE': UserWarning,
     'FLOAT32_OVERFLOW': RuntimeWarning,
-    # From T2.11, the engine's warnings of the sampling options: a context
+    # the engine's warnings of the sampling options: a context
     # anchored after the predictions, or whose window reaches past them,
     # and num_hops ignored for num_neighbors.
     'CONTEXT_AFTER_ANCHOR': UserWarning,
@@ -210,7 +193,7 @@ HOST_OWNED: dict[str, str] = {
 
 @dataclass(frozen=True)
 class _Table:
-    r"""The core's table of sentences (``_native.templates()``)."""
+    r"""The core's table of sentences (``_native.templates``)."""
 
     #: Each sentence's entry, by name: its ``kind``, ``code``, ``rule``,
     #: ``template``, ``owner`` and ``group``.
@@ -375,7 +358,7 @@ class _Held:
 #: How the call in progress reads each value only this host holds that a
 #: sentence names (``{host.<name>}``), from the error's or warning's
 #: decoded fields: a candidate as the caller gave it, by its position, the
-#: query as written, the source described (:func:`holding`).
+#: query as written, the source described (func:`holding`).
 _HELD: ContextVar[Mapping[str, Callable[[dict[str, Any]], Any]] | None] = (
     ContextVar('sdm_client_held_values', default=None)
 )
@@ -390,7 +373,7 @@ def holding(**values: Callable[[dict[str, Any]], Any]) -> Iterator[None]:
     r"""Within the block, each error and warning the core gives fills a
     sentence's ``{host.<name>}`` with ``values[name]`` of its decoded fields:
     what only the caller holds, which the core names by position or not at
-    all (T3.17). Blocks nest; an inner one adds to and overrides the outer."""
+    all. Blocks nest; an inner one adds to and overrides the outer."""
     token = _HELD.set({**_held(), **values})
     try:
         yield
@@ -450,7 +433,7 @@ DEFECT = (
 
 def _said(sentence: str, fields: dict[str, Any]) -> str:
     r""":func:`render` with the values the call in progress holds
-    (:func:`holding`), or, where the core gave a sentence its fields cannot
+    (func:`holding`), or, where the core gave a sentence its fields cannot
     fill, the defect named: never a sentence the core did not choose."""
     try:
         return render(sentence, fields, _HostValues(_held(), fields))
@@ -510,11 +493,11 @@ def _shown_timestamp(value: codec.Temporal) -> str:
     ``Timestamp`` of the column's unit where that unit is not ``ns``. pandas'
     own ``tz_convert`` labels such a value with the zone's offset at that
     instant but moves it by another, and refuses some near year 1
-    (T1.36 fix 11). One ``as_py`` cannot hold, past the years 1 to 9999
+    . One ``as_py`` cannot hold, past the years 1 to 9999
     in UTC or in the zone, reaches a warning only as a whole table's
     smallest value, which the reference reads through DuckDB's
-    ``fetchall`` as DuckDB's own text (:func:`_duckdb_text`) and shows as it
-    is (T1.36 fix 13); every other value as pandas holds it."""
+    ``fetchall`` as DuckDB's own text (func:`_duckdb_text`) and shows as it
+    is; every other value as pandas holds it."""
     if value.tag != 'date32' and value.zone is not None:
         import pandas as pd
         import pyarrow as pa
@@ -590,7 +573,7 @@ def _time_of_day(value: codec.Temporal) -> datetime.time:
 
 def said(warning: Mapping[str, Any]) -> str:
     r"""The words of one warning: its sentence, filled with its fields and
-    the values the call in progress holds (:func:`holding`)."""
+    the values the call in progress holds (func:`holding`)."""
     return _said(warning['sentence'], _fields(warning.get('fields', {})))
 
 
@@ -632,7 +615,7 @@ def error_from_core(
     r"""The exception an ``error`` control message raises as, saying the
     core's sentence; the sentence's name is kept on it (``_sentence``), so
     a caller holding values the core does not can say it again with them
-    (:func:`render`).
+    (func:`render`).
 
     ``driver_class`` names the class of the driver exception behind a
     ``PROVIDER_ERROR``, which the run loop saw and the core never does.
@@ -712,7 +695,7 @@ def numpy_warns_on_cast_overflow() -> bool:
     NumPy 1.24 on, which first warns on a cast that overflows (its 1.24.0
     release notes); before it the cast is silent. The reference's warning
     (FX-1) is NumPy's, so this client shows the core's ``FLOAT32_OVERFLOW``
-    only where the reference's NumPy would show it (T2.14b fix 5)."""
+    only where the reference's NumPy would show it."""
     import re
 
     import numpy as np
@@ -732,10 +715,10 @@ def warn_from_core(
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
-    may show itself, kept in ``held`` when it is given (:func:`warn_held`).
+    may show itself, kept in ``held`` when it is given (func:`warn_held`).
     Each code given is added to ``given``, shown or not. A sentence naming
     a value only this host holds takes it from the call in progress
-    (:func:`holding`). Warnings of one group of the core's table,
+    (func:`holding`). Warnings of one group of the core's table,
     given one after another with the same values of the fields it names,
     are shown as one."""
     message = codec.read(control, attachments)
@@ -802,7 +785,7 @@ def warn_from_core(
 
 def _opening(template: str, fields: dict[str, Any]) -> str:
     r"""A group's opening, over its first warning's fields and the values
-    the call in progress holds (``{host.semantic_model!r}``, T3.5); the
+    the call in progress holds (``{host.semantic_model!r}``); the
     defect named where they cannot fill it."""
     try:
         return _Words(fields, _HostValues(_held(), fields)).format(template)
@@ -811,7 +794,7 @@ def _opening(template: str, fields: dict[str, Any]) -> str:
 
 
 def warn_held(held: list[dict[str, Any]]) -> None:
-    r"""Shows warnings :func:`warn_from_core` held back, in order, each as it
+    r"""Shows warnings:func:`warn_from_core` held back, in order, each as it
     would have been shown (none of them of a group)."""
     for warning in held:
         assert table().sentences[warning['sentence']]['group'] is None

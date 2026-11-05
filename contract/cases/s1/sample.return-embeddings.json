@@ -88,5 +88,5 @@
     "stage": "predict"
   },
   "why": "return_embeddings=True: materialize takes it; what the call asks for is set at predict, so the request is the default one",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.return-embeddings using the shop fixture."
 }

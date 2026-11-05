@@ -4,7 +4,7 @@
 
 r"""Each model's capabilities on the core route: the core's table
 (``sdm_host::capabilities``), the one table both hosts describe a model
-from, which the Java host's ``SdmClient.capabilities`` reads too (T3.12)."""
+from, which the Java host's ``SdmClient.capabilities`` reads too."""
 
 from __future__ import annotations
 

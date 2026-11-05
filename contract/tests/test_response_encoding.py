@@ -152,7 +152,7 @@ def test_scenarios_cover_encodings_values_and_refusals() -> None:
 def test_an_answer_in_each_encoding_is_read_as_the_reference_reads_it(
     name: str,
 ) -> None:
-    r"""Codex P2 (whole-phase round two): an answer the endpoint writes in
+    r"""An answer the endpoint writes in
     an encoding the reference's ``json.loads`` takes gives the reference's
     predictions on the core route, and one no such encoding decodes is
     refused as the reference refuses it."""
@@ -162,8 +162,8 @@ def test_an_answer_in_each_encoding_is_read_as_the_reference_reads_it(
         got = core()['answers'][name]
         if want['refusal'] is not None:
             # A refusal by its class and code: the core route's transport
-            # failure is said in a fixed sentence that names no URL (H17),
-            # as tests/test_t128b_predict_result.py holds the reference's
+            # failure is said in a fixed sentence that names no URL,
+            # as tests/test_predict_result.py holds the reference's
             # own not-JSON answers.
             want = {**want, 'refusal': _named(want['refusal'])}
             got = {

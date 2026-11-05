@@ -22,8 +22,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-CASES = ROOT / 'contract/tests/t211-unseeded'
-VECTORS = ROOT / 'contract/t211-unseeded-vectors.json'
+CASES = ROOT / 'contract/tests/unseeded'
+VECTORS = ROOT / 'contract/unseeded-vectors.json'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 CASE_IDS = tuple(sorted(path.stem for path in CASES.glob('*.json')))
 
@@ -39,7 +39,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t211u_run_python', RUNNER)
+    return _module('test_unseeded_sampling_run_python', RUNNER)
 
 
 KEYS_ALL = tuple(runner().case_key(c, d) for d in DATABASES for c in CASE_IDS)
@@ -268,7 +268,7 @@ def problems(
 def test_native_unseeded_draws_preserve_source_rows_and_labels(
     case_key: str,
 ) -> None:
-    r"""Exit "``unseeded``", judged by properties (KO2-76): python-core
+    r"""Exit "``unseeded``", judged by properties: python-core
     executes on the native route, drawing the expected number of rows,
     each from the source."""
     database = case_key.partition('@')[2] or 'duckdb'

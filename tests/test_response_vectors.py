@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """The prediction responses of ``tests/fixtures/response-vectors.json`` against
-the client's bindings (T1.11d): each body the vectors read is read by
+the client's bindings: each body the vectors read is read by
 ``PredictionResponse.from_dict``, and each they refuse is refused, as the
 relational adapter catches a refusal (``ResponseContractError``,
 ``TypeError`` or ``ValueError``, then ``INVALID_RESPONSE``). ``sdm-wire``'s

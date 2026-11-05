@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `lag_timesteps` (T2.9): the target's own past as features of each
+//! `lag_timesteps`: the target's own past as features of each
 //! example, as the reference's engine adds them to a temporal task
 //! (`KumoRelational.add_lagged_target`, `Sampler.sample_lagged_target`),
 //! once the context is labelled and before it is narrowed.
@@ -17,7 +17,7 @@
 //! context's examples and the entities predicted for, in that order. The
 //! target is the query's as `to_autoregressive_query` leaves it: a `NOT`
 //! around the whole target dropped, any other target (a condition, a
-//! logical operation, a filtered aggregation) labelled whole (T2.10). Column `__kumo_arl<k>__` is
+//! logical operation, a filtered aggregation) labelled whole. Column `__kumo_arl<k>__` is
 //! the target over step `n - 1 - k`'s window, whose anchor is the moved one
 //! plus that many windows' ends: `__kumo_arl0__` the window just before
 //! each example's own.
@@ -31,8 +31,8 @@
 //! without one. The reference's engine lines the values up by position
 //! instead (`pd.DataFrame`, then `pd.concat` with the examples), so an
 //! average's, a minimum's or a maximum's move to the first examples rather
-//! than their own; the core puts each on its own row (T2.9 fix 1, a
-//! registered difference decided under KO2-70).
+//! than their own; the core puts each on its own row ( fix 1, a
+//! registered difference decided under ).
 
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::{self, Labels, Target};
@@ -176,8 +176,8 @@ impl Lag {
     /// `__kumo_arl0__` first. A condition's column is [`LagValues::Empty`]
     /// only where no example the lags were read for has a value, kept or
     /// not, as the reference types the complete lagged column before it
-    /// narrows the context (T2.9 fix 4). A call takes its slice with
-    /// [`LagColumn::rows`], so each column's type is the request's (fix 3).
+    /// narrows the context. A call takes its slice with
+    /// [`LagColumn::rows`], so each column's type is the request's.
     pub fn columns(&self, kept: &[usize]) -> Result<Vec<LagColumn>, CoreError> {
         let examples = self.shifted.len();
         (0..self.steps)
@@ -211,7 +211,7 @@ impl Lag {
                             .map(|&at| own(at).and_then(|i| v.get(i).copied()))
                             .collect();
                         // Typed by the complete column, before `kept`
-                        // narrows it (fix 4).
+                        // narrows it.
                         let complete =
                             (0..examples).any(|e| own(e).and_then(|i| v.get(i).copied()).is_some());
                         if complete {
@@ -345,7 +345,7 @@ mod tests {
 
     /// An average has a value only where its window holds one, each on
     /// its own example, the first example's none (the reference's frame
-    /// would move the second's value to it; T2.9 fix 1); a comparison of
+    /// would move the second's value to it; fix 1); a comparison of
     /// it likewise.
     #[test]
     fn an_average_s_value_is_on_its_own_example() {
@@ -384,7 +384,7 @@ mod tests {
     }
 
     /// Examples whose windows hold a value, none, then a value, over two
-    /// steps (T2.9 fix 1): a maximum's each on its own row, a gap where a
+    /// steps: a maximum's each on its own row, a gap where a
     /// window is empty, for the context and the entities predicted for
     /// alike; a sum's every row.
     #[test]
@@ -427,7 +427,7 @@ mod tests {
     }
 
     /// A condition's lag column takes its type from the whole request
-    /// (T2.9 fix 3): `bool` where any example has a value, kept so in a
+    ///: `bool` where any example has a value, kept so in a
     /// call whose own rows hold none; `float64` nulls only where no example
     /// of the request has one.
     #[test]

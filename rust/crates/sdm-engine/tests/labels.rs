@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The label vectors (T1.27, decision E19; register PK-2 and PK-3):
+//! The label vectors (; register PK-2 and PK-3):
 //! `sdm_engine::time::offset` and `sdm_engine::labels` against the
 //! frozen answers in `labels.json`, compared
 //! exactly: a window's offsets added to anchors at month ends, on leap days
@@ -10,7 +10,7 @@
 //! fixed step a window of months walks back by; the executor's
 //! aggregations, in float32 bits; its comparisons, each through
 //! `labels::label` as a condition target's labels (the function the product
-//! calls; T2.14c); and a decimal read at float32.
+//! calls); and a decimal read at float32.
 //!
 //! [`problems`] fails closed: a perturbed answer, and evidence missing,
 //! empty or retyped, each fail (seeded below).

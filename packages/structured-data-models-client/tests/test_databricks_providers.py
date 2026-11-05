@@ -1,14 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The Databricks providers' own code, over a fake cursor (T3.4).
+"""The Databricks providers' own code, over a fake cursor.
 
 Both connections a Databricks source takes are faked here: a SQL warehouse
 connection, whose cursor records ``execute(sql, parameters)`` and answers
-``fetchall_arrow()``, and a Spark session (``.sql()``, ``.version``, a frame
-with ``toArrow()``) wrapped in ``sdm_connectors``' ``SparkConnection``. What
+``fetchall_arrow``, and a Spark session (``.sql``, ``.version``, a frame
+with ``toArrow``) wrapped in ``sdm_connectors``' ``SparkConnection``. What
 is checked is what the provider binds, as the reference's sampler binds it
-(the key set's text the core wrote, T3.28, and the scalars), what it
+(the key set's text the core wrote,, and the scalars), what it
 answers, how the client tells the connections apart and routes them, and
 how a Databricks failure reaches the core.
 """
@@ -237,7 +237,7 @@ def test_scalars_are_bound_as_python_values_in_order(which: int) -> None:
 
 @pytest.mark.parametrize('which', [0, 1], ids=CONNECTIONS)
 def test_a_key_set_s_text_is_bound_as_the_core_wrote_it(which: int) -> None:
-    # The core writes the key set's JSON (T3.28): the provider binds the
+    # The core writes the key set's JSON: the provider binds the
     # one cell it is handed where the text parameter is, as it is.
     connection, executed = _both(lambda sql, _: pa.table({'a': [1]}))[which]
     text = '[{"key":1,"end":"2024-03-01 00:00:00"},{"key":2,"end":null}]'
@@ -468,7 +468,7 @@ def test_a_databricks_failure_reaches_the_core_with_its_state_and_class(
 ) -> None:
     # Read by the provider whose driver failed (its ``error_fields``, the
     # provider protocol's hook), never by the run loop naming a backend;
-    # what the failure means is the core's to say (T3.27: the data layer's
+    # what the failure means is the core's to say (the data layer's
     # ``failure``), so the provider hands over facts, never a judgement.
     provided, driver = _driver(error, DatabricksSqlProvider(None))
     assert provided['sqlstate'] == sqlstate

@@ -87,8 +87,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "schema dtype int64; result id int64"
+    "stage": "predict"
   },
   "why": "Narrow unsigned keys; the plan keeps every integer width distinct on the wire",
   "source": "dtypes:key:uint8; plan (type set)"

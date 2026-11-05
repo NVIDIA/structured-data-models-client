@@ -4,7 +4,7 @@
 
 r"""The exceptions this client raises.
 
-Every call on :class:`~sdm_client.SDMClient` raises
+Every call on:class:`~sdm_client.SDMClient` raises
 :class:`StructuredDataError` or one of its subclasses, so ``except
 StructuredDataError`` is enough to catch anything the client reports.
 
@@ -73,11 +73,11 @@ class StructuredDataError(Exception):
     #: nested deeper than this interpreter's reader reads (Python before
     #: 3.12 raises ``RecursionError`` past about 1,000 levels): the core
     #: route reports such an answer as too deep, as it reports one it reads
-    #: itself (T1.28b, register P1B-22). Read by nothing else; the error's
+    #: itself (B-22). Read by nothing else; the error's
     #: class, code and message are as on any other answer that is not JSON.
     _response_too_deep: bool = False
     #: The name of the core's sentence an error of the core route says
-    #: (T3.17), set by ``sdm_client._rust.errors``; ``None`` on an error
+    #:, set by ``sdm_client._rust.errors``; ``None`` on an error
     #: this client raises itself. Read by the census's tests, never branched
     #: on: what a caller branches on is ``code`` and ``details``.
     _sentence: str | None = None
@@ -157,17 +157,17 @@ class MissingExtraError(StructuredDataError):
 class NimRequestError(StructuredDataError):
     r"""The NIM answered, and the answer was an error.
 
-    Distinguished from :class:`StructuredDataError` by carrying the HTTP
+    Distinguished from:class:`StructuredDataError` by carrying the HTTP
     :attr:`status_code`, which is the endpoint's own answer, kept as it was.
 
-    Branch on :attr:`code`, not on the status. ``INVALID_REQUEST`` means the
+    Branch on:attr:`code`, not on the status. ``INVALID_REQUEST`` means the
     request has to change and sending it again cannot help; ``408``, ``429``, ``502``,
     ``503`` and ``504`` are worth retrying, and this client retries them. The
     two can disagree: the
     endpoint reports some caller mistakes with a ``500`` and an internal code,
     in a sentence that names exactly what the caller got wrong, and this client
     reports those as the caller's. Where it does, the endpoint's own
-    classification is kept in :attr:`details` under ``endpoint_code``.
+    classification is kept in:attr:`details` under ``endpoint_code``.
 
     Attributes:
         status_code: The HTTP status the NIM returned.

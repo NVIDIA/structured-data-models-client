@@ -76,7 +76,7 @@ def _identities(observation: dict[str, Any], offset: int) -> list[Decimal]:
 def test_a_decimal_key_pair_joins_exactly_on_the_core(
     vector_id: str, core_runs: dict[str, Any]
 ) -> None:
-    r"""Exact decimals (T2.0c): every pair, the merging ones included,
+    r"""Exact decimals: every pair, the merging ones included,
     matches the current ordinary-key twin, every row and cell of every
     table, with keys read exactly and shifted by the pair's base: the same
     entities joined to the same foreign rows. Each result row's id is the
@@ -96,7 +96,7 @@ def test_a_decimal_key_pair_joins_exactly_on_the_core(
 def test_the_exact_join_check_fails_on_a_merged_key(
     core_runs: dict[str, Any],
 ) -> None:
-    r"""Codex's round 2 repro: every non-null ``orders.user_id`` of the
+    r"""Every non-null ``orders.user_id`` of the
     merging pair replaced by the valid but wrong key 10**17 keeps every row
     and null count, and fails the exact comparison; so does one entity's
     result id merged into the other's."""

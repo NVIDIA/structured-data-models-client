@@ -72,5 +72,5 @@
     "stage": "predict"
   },
   "why": "Feature columns whose names hold a dot, a single quote, a backtick and non-ASCII letters, each read and sampled through Databricks' backtick quoting (DB/table.py:37, :62; CN/sql.py:247 doubles the backtick) on both Databricks legs; Delta allows each of these characters in a column name",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "source": "Correctness case databricks.name.odd-columns using the shop fixture."
 }

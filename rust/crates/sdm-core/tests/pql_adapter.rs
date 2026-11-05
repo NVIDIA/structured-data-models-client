@@ -5,8 +5,8 @@
 //! The adapter's own rules: a model that cannot answer a time range refuses
 //! before resolution; the two filter capabilities reach resolution; date
 //! literals are read by D1 to D7 and D9, and a day-first one warns (D4),
-//! while one with a run of five digits or more (D8) is refused by name
-//! (T1.6c); and an accepted query is handed on in the validated-query
+//! while one with a run of five digits or more (D8) is refused by name;
+//! and an accepted query is handed on in the validated-query
 //! format.
 
 #![allow(
@@ -171,7 +171,7 @@ fn the_filter_capabilities_reach_resolution() {
 }
 
 /// The time constant of a query `PREDICT COUNT(orders.* WHERE orders.ts >
-/// <literal>, ...)`: its reading and offset, and the warnings the reading
+/// <literal>,...)`: its reading and offset, and the warnings the reading
 /// gave.
 fn read_literal(literal: &str) -> (Option<(String, Option<i32>)>, Vec<CoreWarning>) {
     let query = format!(
@@ -232,10 +232,10 @@ fn text_field(error: &CoreError, name: &str) -> Option<String> {
     }
 }
 
-/// T1.6c's refusal by name of a D8 literal: `INVALID_REQUEST`, kind
+/// refusal by name of a D8 literal: `INVALID_REQUEST`, kind
 /// invalid request, naming `operation` `validate_query` and `rule`
 /// `date_literal_packed`, with the literal's place as D4's warning gives
-/// it (`start_row`, `start_col`, `end_row`, `end_col`). From KO2-86 (an
+/// it (`start_row`, `start_col`, `end_row`, `end_col`). From (an
 /// error may name a value of the caller's own call) it names the literal
 /// (`literal`) and the query given (`query`), exactly, and the literal's
 /// text is in no other field and not in its message.
@@ -287,7 +287,7 @@ fn assert_refused_as_packed(error: &CoreError, literal: &str, query: &str) {
     }
 }
 
-/// The D8 literals the T1.6c tests refuse: a packed first field of six,
+/// The D8 literals the tests refuse: a packed first field of six,
 /// eight, twelve and fourteen digits, a long field in the time of day, a
 /// long zero-padded field, and ones the reference refuses (a year past
 /// 9999, an offset of a day, a long last field). Register DT-9's two
@@ -306,8 +306,8 @@ const PACKED: &[&str] = &[
     "1-1-20240101",
 ];
 
-/// T1.6c brief, Scope: "a D8 literal is refused with a named code and rule
-/// ... naming `date_literal_packed`", through `resolve` and `validate`, the
+/// brief, Scope: "a D8 literal is refused with a named code and rule
+///... naming `date_literal_packed`", through `resolve` and `validate`, the
 /// adapter behind `validate_query` and `materialize`: each shape is
 /// refused by name, those the reference reads and those it refuses alike,
 /// never read and never `PQL_VALUE_INVALID_LITERAL`.
@@ -327,7 +327,7 @@ fn a_packed_date_or_long_field_is_refused_by_name() {
     }
 }
 
-/// T1.6c: the refusal names the literal's place as D4's warning names a
+///: the refusal names the literal's place as D4's warning names a
 /// literal written at the same place with as many characters, the first
 /// row's 41st column after the filter's `orders.ts > `.
 #[test]
@@ -348,7 +348,7 @@ fn the_packed_refusal_names_the_literal_s_place_as_d4_s_warning_does() {
     assert_eq!(error.fields["start_col"], at(41));
 }
 
-/// T1.6c: a D8 literal in an array (`IN (...)`) is refused by name too.
+///: a D8 literal in an array (`IN (...)`) is refused by name too.
 #[test]
 fn a_packed_date_in_an_array_is_refused_by_name() {
     let plain = filtered("orders.ts IN (2024-01-01, 2024-02-01)");
@@ -369,7 +369,7 @@ fn a_packed_date_in_an_array_is_refused_by_name() {
     }
 }
 
-/// T1.6c brief: "keep everything else in D1 to D9 unchanged". Literals
+/// brief: "keep everything else in D1 to D9 unchanged". Literals
 /// whose every run has four digits or fewer read as before (a date, a time
 /// of day, a two-digit year, the year 0, four-digit runs where five would
 /// be D8), a day-first one still warns (D4), and D9's still give the
@@ -403,7 +403,7 @@ fn a_literal_with_no_run_of_five_digits_reads_as_before() {
     }
 }
 
-/// T1.6c: node order decides, as for any refusal of a node. A syntax
+///: node order decides, as for any refusal of a node. A syntax
 /// error, which the grammar finds before any node is built, and a D9
 /// literal built before the D8 one still give their diagnostic; a D8
 /// literal built first ends the parse, so a D9 literal after it gives none.
@@ -490,7 +490,7 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
     assert!(validation.diagnostics.is_empty());
     let result = validation.to_result(&shop());
     assert!(result.accepted);
-    // The facts and the text the core writes back travel with it (T3.8).
+    // The facts and the text the core writes back travel with it.
     let facts = result.query.expect("an accepted query's facts");
     assert_eq!(
         facts.text.as_deref(),
@@ -524,7 +524,7 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
 
 /// The `shop` tables with `name` as a column of each: the users' key,
 /// and an orders' number, which the query names as entity, filter, target
-/// and aggregated column (KO2-36).
+/// and aggregated column.
 fn shop_naming(name: &str) -> QuerySchema {
     serde_json::from_value(json!({
         "tables": [
@@ -579,7 +579,7 @@ fn columns_named(node: &sdm_contract::pql::PqlNode, out: &mut Vec<(String, Strin
 #[test]
 fn a_column_named_with_a_dot_a_backtick_or_a_line_break_is_held_apart_from_its_table() {
     // Each name, and how a query spells it: in backticks, a backtick
-    // doubled, a line break as it stands (KO2-36).
+    // doubled, a line break as it stands.
     for (name, spelled) in [
         ("a.b", "`a.b`"),
         ("a`b", "`a``b`"),
@@ -746,7 +746,7 @@ fn a_long_and_or_or_chain_is_refused_at_the_depth_limit_in_bounded_time() {
 }
 
 /// A filter whose tree is tall although the parser never nests deeply:
-/// `(NOT ... NOT c) AND c AND ...`, the first operand below every link.
+/// `(NOT... NOT c) AND c AND...`, the first operand below every link.
 fn negated_chain(nots: usize, links: usize) -> String {
     format!(
         "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE ({}users.age > 3){}",
@@ -908,7 +908,7 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
             "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH \
              users.user_id"
         );
-        // From T1.6c a packed date (`760101-01-01`) is refused by name in
+        // a packed date (`760101-01-01`) is refused by name in
         // either year; the reference's reading stays in the row.
         if literal.split(['/', '-', '.']).any(|run| run.len() >= 5) {
             packed += 1;

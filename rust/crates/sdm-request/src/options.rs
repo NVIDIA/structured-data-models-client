@@ -2,15 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The call's options that shape the payload, read by the reference's rules
-//! (T1.28a): the run mode a context size selects, the regression's
-//! statistic, and the inference options (`inference_config`), which the
-//! engine reads into its config classes (`InferenceConfig`,
-//! `ClassificationInferenceConfig`, `RegressionInferenceConfig`) and writes
-//! into the payload (`_inference_config_to_json`).
-//!
-//! Each refusal is a code and fields naming the option and why, never the
-//! value given; the host words it.
+//! Inference-option validation and payload configuration.
+//! Context size, run mode, prediction statistic and task-specific options determine
+//! the model configuration.
+//! Errors identify the option and reason without exposing the supplied value.
 
 use sdm_contract::data::NegativeNeighborBound;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
@@ -37,7 +32,7 @@ pub enum AskedSeed {
     Given(String),
 }
 
-/// The `lag_timesteps` the call names (T2.9), as the reference's engine
+/// The `lag_timesteps` the call names, as the reference's engine
 /// meets it: it compares the value with zero once the context is labelled
 /// (`_get_task_table`), and for a temporal query multiplies the target's
 /// window by a positive one (`sample_lagged_target`), so each value is read
@@ -130,7 +125,7 @@ impl AskedLag {
     }
 }
 
-/// The context's anchor the call names (`context_anchor_time`, T2.11),
+/// The context's anchor the call names (`context_anchor_time`),
 /// which the host writes as a `ts` scalar, the literal `entity`, or none,
 /// having refused any other value as it refuses one for `anchor_time`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,10 +154,10 @@ pub struct Asked {
     /// How many hops `num_neighbors` asks for: its length.
     pub num_neighbors: Option<Integer>,
     /// Each hop's neighbors `num_neighbors` asks for, in order, as given
-    /// (T2.11), read by [`neighbors`] once the hops are bounded.
+    ///, read by [`neighbors`] once the hops are bounded.
     pub neighbors: Option<Vec<Value>>,
     /// The sampling options the engine reads after the client's checks
-    /// (T2.11), as given, each read where the reference reads it, so a
+    ///, as given, each read where the reference reads it, so a
     /// refusal of one comes where the reference's does: `max_pq_iterations`
     /// and `context_anchor_time` with the task ([`task_table`]),
     /// `exclude_cols_dict` as the subgraph is sampled ([`excluded`]),
@@ -177,14 +172,14 @@ pub struct Asked {
     pub inference_config: Option<Value>,
     pub seed: AskedSeed,
     /// How many candidates a ranking keeps (`top_k`), as given: read by
-    /// [`top_k`] where the client reads it (T2.8).
+    /// [`top_k`] where the client reads it.
     pub top_k: Option<Value>,
     /// The most rows one model call scores, as the caller lowered it
     /// (`rows_per_call`, `main`'s multi-call `predict`): a whole number of
     /// at least one, `u64::MAX` standing for any larger one, which lowers
     /// nothing ([`rows_per_call`]).
     pub rows_per_call: Option<u64>,
-    /// The `lag_timesteps` given (T2.9), none where the call names none.
+    /// The `lag_timesteps` given, none where the call names none.
     pub lag_timesteps: Option<AskedLag>,
 }
 
@@ -309,7 +304,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         ));
     };
     // Hosts preserve nonfinite numeric values in this one attachment.
-    // KO3-44 admits the reference's NaN lag. Inference config objects
+    // admits the reference's NaN lag. Inference config objects
     // go to their task-aware validator, which consumes every member and
     // refuses nonfinite values before an ordinary request is built.
     // Other fields and malformed config shapes retain this JSON guard.
@@ -389,7 +384,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             }
             ("top_k", v) => asked.top_k = Some(v.clone()),
             // Any value, refused only where the engine refuses it, after the
-            // context is labelled (T2.9).
+            // context is labelled.
             ("lag_timesteps", v) => asked.lag_timesteps = Some(AskedLag::of(v)),
             _ => return Err(mistyped(Sentence::OptionUnknown, name, "not_an_option")),
         }
@@ -420,7 +415,7 @@ pub fn top_k(given: &Value) -> Result<u32, CoreError> {
 }
 
 /// A sampling option the engine's request model holds to a boolean
-/// (`RFMPredictRequest`, pydantic's lax mode, T2.11): a JSON boolean, a
+/// (`RFMPredictRequest`, pydantic's lax mode): a JSON boolean, a
 /// number equal to 0 or 1, or text `0`, `off`, `f`, `false`, `n`, `no`,
 /// `1`, `on`, `t`, `true`, `y` or `yes` in any case of letters; anything
 /// else, none included, `INVALID_REQUEST` naming the option
@@ -534,7 +529,7 @@ impl Iterations {
     }
 }
 
-/// `max_pq_iterations` (T2.11): a number of at least one, as the engine
+/// `max_pq_iterations`: a number of at least one, as the engine
 /// compares it (`_get_task_table`), a boolean as 0 or 1 as Python counts
 /// one; below one is `INVALID_REQUEST` (`below_one`), as the engine
 /// refuses it; text or none, which the engine cannot compare, mistyped
@@ -583,11 +578,11 @@ fn iterations(given: &Value) -> Result<Iterations, CoreError> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hop {
     /// At most this many of each row's referring rows, latest first; none
-    /// for a size between zero and one, as `ROW_NUMBER() <= 0.5` keeps none
+    /// for a size between zero and one, as `ROW_NUMBER <= 0.5` keeps none
     /// while the hop's lookups still run.
     Keep(u64),
     /// A negative bound reaches the provider; its native predicate or
-    /// limit semantics decide the result (KO3-44).
+    /// limit semantics decide the result.
     Negative(NegativeNeighborBound),
     /// Caller-authored provider expression, kept opaque in the original
     /// neighbor-bound position, not a parsed or normalized row count.
@@ -633,7 +628,7 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
 }
 
 /// One hop's size, as the reference's DuckDB sampler reads the value it
-/// writes into `ROW_NUMBER() <= {size}`: a whole number, a float, a
+/// writes into `ROW_NUMBER <= {size}`: a whole number, a float, a
 /// boolean (`True` is one) or text spelling a number (digits, a sign, a
 /// point and an exponent, white space around them, which the SQL reads as
 /// that number); equal to zero
@@ -642,7 +637,7 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
 /// as `u64::MAX`. Other text is caller-authored SQL expression code and
 /// reaches the provider unchanged, where the reference writes it. A
 /// negative numeric bound keeps its sign and value for native provider
-/// semantics (KO3-44); a list or none remains mistyped.
+/// semantics; a list or none remains mistyped.
 fn hop(given: &Value) -> Result<Hop, CoreError> {
     let refused = || mistyped(Sentence::HopNotWhole, "num_neighbors", "not_a_whole_number");
     let size = match given {
@@ -1085,7 +1080,7 @@ fn boolean_text(text: &str) -> Option<bool> {
 
 /// A whole number given as text, read as the engine's validation reads it:
 /// pydantic-core 2.46.5's `str_as_int` (`src/input/shared.rs`), the one
-/// path its lax `int` takes from text, ported step for step (T2.13 fix 4).
+/// path its lax `int` takes from text, ported step for step.
 /// The text is first read as a JSON integer as it is; failing that, it is
 /// cleaned ([`clean_int_text`]) and read so again. `None` for text it
 /// refuses, and `Err` with the sign for a value past `i128`, which no
@@ -1467,7 +1462,7 @@ mod tests {
             assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
             assert_eq!(rule(&e), None, "{text}");
         }
-        // A null transform is taken, and written as null (T2.13).
+        // A null transform is taken, and written as null.
         let o = options(
             Kind::Regression,
             Some(&read(r#"{"target_transforms": ["quantile", null]}"#)),
@@ -1477,7 +1472,7 @@ mod tests {
     }
 
     /// A whole number's underscores as pydantic 2.13.5's lax `int` reads
-    /// them, each answer probed on the reference (T2.13 fix 2): one between
+    /// them, each answer probed on the reference: one between
     /// two digits of the whole part, none leading, trailing, doubled, after
     /// the sign or in the fraction; a grouped number past 4 is out of range,
     /// a misplaced underscore no number.
@@ -1553,7 +1548,7 @@ mod tests {
     }
 
     /// Text read as pydantic 2.13's lax mode reads it into the engine's
-    /// config classes, each answer probed on the reference (T2.13).
+    /// config classes, each answer probed on the reference.
     #[test]
     fn an_option_given_as_text_is_read_as_the_engine_reads_it() {
         let shuffle = |text: &str| {
@@ -1651,7 +1646,7 @@ mod tests {
             ("3.0\n", 3),
             ("\n3.0", 3),
             (leading.as_str(), 1),
-            // An underscore between two digits (T2.13 fix 2).
+            // An underscore between two digits.
             ("0_3", 3),
             ("0_1.0", 1),
             ("+0_3", 3),
@@ -1661,7 +1656,7 @@ mod tests {
             ("0_3.00", 3),
             ("+0_0_0_3", 3),
             // Underscores among the leading zeros, doubled too, which
-            // pydantic-core's `strip_leading_zeros` drops with them (T2.13
+            // pydantic-core's `strip_leading_zeros` drops with them (
             // fix 4).
             ("0__3", 3),
             ("00__3", 3),
@@ -1828,7 +1823,7 @@ mod tests {
         }
     }
 
-    /// `lag_timesteps` read as the engine meets each value (T2.9): refused
+    /// `lag_timesteps` read as the engine meets each value: refused
     /// for any query where it is negative or not ordered against zero, for
     /// a temporal one where it is not whole or past `u64`, and otherwise
     /// the steps a temporal query adds, none for a static one.

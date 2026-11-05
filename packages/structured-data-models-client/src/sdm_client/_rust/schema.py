@@ -41,12 +41,12 @@ def from_source(
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
-    ``unreadable``, which the core refuses (decision E101); an iterable key
+    ``unreadable``, which the core refuses; an iterable key
     is read once, here, before the run starts. A table named by anything
     but a ``str`` is refused here, before the run (P1B-74).
 
     Raises:
-        StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
+        StructuredDataError: The core's refusal, as:mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for an input it does not
             describe yet; ``INVALID_REQUEST`` for a relationship that is not
             a ``Relationship``, which the contract cannot carry; a source
@@ -117,8 +117,8 @@ def from_source(
         'check_keys': bool(check_keys),
     }
     # The source, which only this host holds, as the core's sentence of a
-    # source with no table names it (`engine_graph`'s refusal, T3.17), and
-    # a semantic model's as its sentences name it (T3.5).
+    # source with no table names it (`engine_graph`'s refusal), and
+    # a semantic model's as its sentences name it.
     with errors.holding(**errors.source_values(source)):
         finished = run(
             operation,
@@ -140,8 +140,7 @@ def conversion_notes(
     describe, in words: each rendered from its sentence and fields, the
     core naming each table as the schema does. A note of a table the
     schema does not hold, or of a time column its table no longer has,
-    says nothing the schema holds, so it is left out, as the old client
-    leaves it out (``CL/schema.py:1401-1433``)."""
+    no longer describes the schema and is left out."""
     said = []
     for note in notes:
         if note.table is not None:
@@ -162,7 +161,7 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     it: each column's meaning as the description gives it, with what it
     meant before the schema joined on it (``Column._stype_before_key``,
     which the schema gives back if it stops joining on it) and what the
-    source said of it (``Column._source``, T3.16), each table's key and
+    source said of it (``Column._source``), each table's key and
     time column, and the links."""
     from sdm_client._rust.results import SourceFacts
     from sdm_client.core.warnings import SDMWarning
@@ -186,9 +185,9 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                     code='INTERNAL_ERROR',
                 )
             # Written as the core answered it, field by field: the core
-            # checked and marked it (decision E55), and the old route's
+            # checked and marked it, and the old route's
             # checks, which ask the old PQL package, are not run again
-            # (T3.16, the structure design's rule 11). What the source said
+            # (the structure design's rule 11). What the source said
             # of it is kept with it and handed back whole to the core.
             made = Column.__new__(Column)
             for field, value in (

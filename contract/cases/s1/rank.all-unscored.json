@@ -93,9 +93,8 @@
     "outcome": "refusal",
     "stage": "predict",
     "error": "UnsupportedRequestError",
-    "code": "UNSUPPORTED_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: every candidate's context holds one class: \"nothing to rank and nothing was sent\", no call"
+    "code": "UNSUPPORTED_REQUEST"
   },
   "why": "A ranking whose every candidate is unscored, refused before any call",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.all-unscored using the shop fixture."
 }

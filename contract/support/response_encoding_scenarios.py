@@ -18,7 +18,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t216-encoding-vectors.json'
+OUT = ROOT / 'contract/encoding-vectors.json'
 
 
 def _marked(mark: bytes, codec: str) -> Callable[[str], bytes]:
@@ -92,7 +92,7 @@ SERVING = {
     'lone-surrogate-escaped': _lone_escaped,
 }
 #: The forms whose lone surrogates the core reads as U+FFFD where the
-#: reference keeps them (register P1B-24, the owner's rule of 2026-10-21),
+#: reference keeps them (B-24, the owner's rule of 2026-10-21),
 #: by the name the vectors give them.
 REPLACED = (
     'lone-surrogate-escaped',
@@ -102,7 +102,7 @@ REPLACED = (
     'serving-lone-surrogate',
     'serving-lone-surrogate-escaped',
 )
-#: The queries, by name: T2.14b's shop's regression (its predictions
+#: The queries, by name: shop's regression (its predictions
 #: numbers) and classification (its predictions classes).
 QUERY_NAMES = ('windowed', 'condition')
 
@@ -118,14 +118,17 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t216_run_python', ROOT / 'contract/runners/run_python.py')
+    return _module(
+        'response_encoding_scenarios_run_python',
+        ROOT / 'contract/runners/run_python.py',
+    )
 
 
 def host() -> ModuleType:
-    r"""T2.14b's host-facts recorder, whose shop, queries and endpoint
+    r"""host-facts recorder, whose shop, queries and endpoint
     these scenarios reuse."""
     return _module(
-        't214b_host_record',
+        'request_state_scenarios',
         ROOT / 'contract/support/request_state_scenarios.py',
     )
 
@@ -195,7 +198,7 @@ class _Endpoints:
 
 class _ApiClient:
     r"""The part of the Databricks SDK's ``api_client`` the core route's
-    serving transport calls (T3.13): the envelope the core wrote, answered
+    serving transport calls: the envelope the core wrote, answered
     as ``endpoints`` answers a query, its reply's bytes as the SDK's raw
     answer gives them."""
 

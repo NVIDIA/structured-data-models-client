@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T3.17: the core picks every refusal's and warning's sentence from one
+//! The core picks every refusal's and warning's sentence from one
 //! closed list, and each sentence has one shared template (invariant 8).
 //! `wording::template` matches every `Sentence` with no wildcard, so a
 //! sentence with no template does not compile; these tests render each
@@ -95,7 +95,7 @@ fn placeholders(text: &str) -> Result<Vec<Placeholder>, String> {
     Ok(found)
 }
 
-/// An advice placeholder's spec, `id(argument, ...)`, as its id and its
+/// An advice placeholder's spec, `id(argument,...)`, as its id and its
 /// arguments.
 fn advice_call(spec: &str) -> Option<(&str, Vec<&str>)> {
     let (id, rest) = spec.split_once('(')?;
@@ -155,7 +155,7 @@ fn every_sentence_has_a_template_that_renders() {
         for placeholder in &found {
             let at = sentence.as_str();
             if placeholder.name == "advice" {
-                // `{advice:<id>(<field>, ...)}`: an advice the closed list
+                // `{advice:<id>(<field>,...)}`: an advice the closed list
                 // holds, given as many fields as it takes.
                 assert!(placeholder.conversion.is_none(), "{at}");
                 let spec = placeholder.spec.as_deref().unwrap_or("");
@@ -266,7 +266,7 @@ fn a_refusal_carries_its_sentence_and_the_sentence_s_rule() {
 
 #[test]
 fn the_primary_key_named_as_a_foreign_key_is_said_as_the_old_client_says_it() {
-    // `Graph._edge_error` in the old client's engine (T3.16 review r4,
+    // `Graph._edge_error` in the old client's engine ( review r4,
     // P2-2): the table named, as the core's refusal names it.
     assert_eq!(
         wording::template(Sentence::PrimaryKeyAsForeignKey).text,
@@ -324,7 +324,7 @@ fn groups_are_data_over_one_code_each() {
         for text in [grouping.opening, grouping.between, grouping.closing] {
             for placeholder in placeholders(text).unwrap() {
                 // Or a value only the host holds, the same for every
-                // warning of the call (T3.27: the semantic model read in
+                // warning of the call (the semantic model read in
                 // part, as the host names it).
                 assert!(
                     grouping.agree.contains(&placeholder.name.as_str())
@@ -407,7 +407,7 @@ fn the_sentences_the_hosts_choose_between_today_are_the_core_s() {
 fn the_part_a_refusal_happened_in_is_a_sentence_of_the_core_s() {
     // A forecast's step, with the remedy where the step's window outran
     // the data, and a ranking's candidate: sentences said after an error's
-    // own, of any code (T3.17 review r2).
+    // own, of any code ( review r2).
     let parts: BTreeSet<&str> = Sentence::ALL
         .iter()
         .filter(|s| s.code() == Code::Part)

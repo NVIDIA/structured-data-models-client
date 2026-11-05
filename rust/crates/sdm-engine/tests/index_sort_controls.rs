@@ -9,7 +9,7 @@ use sdm_engine::index_sort::{SimdArgsortProfile, simd_argsort};
 #[test]
 fn all_recorded_native_avx2_threshold_sentinel_and_partition_controls_match() {
     let data: serde_json::Value =
-        serde_json::from_str(include_str!("data/t46_simd_kernel_controls.json")).unwrap();
+        serde_json::from_str(include_str!("data/simd_kernel_controls.json")).unwrap();
     assert_eq!(data["source_numpy"], "2.5.3");
     let records = data["records"].as_array().unwrap();
     assert_eq!(records.len(), 129);
@@ -93,7 +93,7 @@ use sdm_engine::index_sort::scalar_argsort;
 #[test]
 fn all_native_scalar_threshold_sentinel_and_width_controls_match_exactly() {
     let data: serde_json::Value =
-        serde_json::from_str(include_str!("data/t46_scalar_kernel_controls.json")).unwrap();
+        serde_json::from_str(include_str!("data/scalar_kernel_controls.json")).unwrap();
     let records = data["records"].as_array().unwrap();
     assert_eq!(records.len(), 184);
     for record in records {

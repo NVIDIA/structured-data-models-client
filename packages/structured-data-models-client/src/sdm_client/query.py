@@ -9,15 +9,15 @@ predict for. That is always an explicit argument because a query can only
 enumerate rows that are already in the tables:
 
 >>> query = PredictiveQuery(
-...     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
-...     {'users': users_df, 'orders': orders_df},
+... 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+... {'users': users_df, 'orders': orders_df},
 ... )
 >>> request = query.materialize(indices=[1, 2, 3])
 
 :meth:`~PredictiveQuery.materialize` is the gathering step, and it is explicit
 because it is the expensive one: it parses the query, finds labelled examples
 in history, samples the neighbourhood of each entity, and encodes the result.
-Nothing is sent. What comes back is a :class:`~sdm_client.Request` gathered
+Nothing is sent. What comes back is a:class:`~sdm_client.Request` gathered
 for one model. Which one follows the schema's shape unless ``model`` says
 otherwise, and the model asked to answer it has to be that same one.
 """
@@ -68,7 +68,7 @@ def _refuse_the_task(task: str, why: str) -> NoReturn:
 
 
 def _alone(asked: Any) -> bool:
-    r"""Whether ``asked`` is a query only the core resolves (KO2-36), read
+    r"""Whether ``asked`` is a query only the core resolves, read
     on the core route only, where the bridge is imported."""
     from sdm_client._rust.results import CoreQuery
 
@@ -78,7 +78,7 @@ def _alone(asked: Any) -> bool:
 class PredictiveQuery:
     r"""A question expressed in PQL and answered from the tables in its schema.
 
-    The query is resolved and validated when :meth:`materialize` builds a
+    The query is resolved and validated when:meth:`materialize` builds a
     request.
 
     Args:
@@ -170,7 +170,7 @@ class PredictiveQuery:
             indices: Keys of rows already present in the tables. Mutually
                 exclusive with ``predict``. On the relational route, more than
                 the endpoint scores in one call are gathered as several calls,
-                and :meth:`~sdm_client.SDMClient.predict` answers them as one.
+                and:meth:`~sdm_client.SDMClient.predict` answers them as one.
                 A question asked in parts, a ranking or a forecast, is one
                 call per part and is refused rather than batched.
             predict: Rows supplied directly for scoring. Supported for
@@ -181,7 +181,7 @@ class PredictiveQuery:
                 eligible row up to that cap, and a relational one uses up to
                 1,000.
             model: The model this request is being gathered for, as a handle
-                such as ``KumoRelational()`` or a model id. Defaults to the
+                such as ``KumoRelational`` or a model id. Defaults to the
                 schema's shape.
             candidates: The rows a ranking is over. A ranking is answered as
                 one question per candidate, so the set has to be named rather
@@ -201,7 +201,7 @@ class PredictiveQuery:
                 knows of.
 
         Returns:
-            A :class:`~sdm_client.Request` carrying the data.
+            A:class:`~sdm_client.Request` carrying the data.
 
         Raises:
             UnknownModelError: If ``model`` is an id the contract does not
@@ -429,12 +429,12 @@ class PredictiveQuery:
         options: dict[str, Any],
     ) -> Request:
         r"""A query gathered on the core, which asks a forecast as one
-        regression per step (T1.36 fix 21) and a ranking as one binary
-        question per candidate (T2.8), kept together as :meth:`_in_parts`
+        regression per step and a ranking as one binary
+        question per candidate, kept together as:meth:`_in_parts`
         keeps the parts it gathers. The core's refusals are said as this
-        client says them of any query (:func:`decompose.said_as_parts_are`):
+        client says them of any query (func:`decompose.said_as_parts_are`):
         of the step or the candidate they happened in, which the core names,
-        and, for a query only the core resolves (KO2-36) that the core does
+        and, for a query only the core resolves that the core does
         not resolve either, with the old validator's diagnostics."""
         given = None if candidates is None else list(candidates)
 
@@ -448,7 +448,7 @@ class PredictiveQuery:
         try:
             # What only this client holds, which the core's sentences name:
             # the question as written, and a candidate as given, its type's
-            # name and its value written as the column's type (T3.17).
+            # name and its value written as the column's type.
             with errors.holding(
                 query=lambda fields: self.text,
                 candidate=candidate,
@@ -504,7 +504,7 @@ class PredictiveQuery:
         indices: Sequence[Any],
     ) -> Request:
         r"""A ranking the core gathered as one question per candidate, kept
-        together as :meth:`_in_parts` keeps the parts it gathers: one
+        together as:meth:`_in_parts` keeps the parts it gathers: one
         request per candidate, with its question's payload and query, each
         about the candidate as the caller gave it."""
         import copy

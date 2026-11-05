@@ -49,9 +49,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "each one-part name is looked up under current_schema() (PG/table.py:122-127) in information_schema.columns joined to pg_class by schema and name (:159-184), and read qualified by that schema"
+    "stage": "predict"
   },
   "why": "The tables mode on Lakebase with one-part names, and the multiclass kind on the leg.",
-  "source": "written by T3.7's test author from the reference at 43e55f4f"
+  "source": "Correctness case lakebase.multiclass.tables using the shop fixture."
 }

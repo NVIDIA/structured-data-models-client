@@ -27,7 +27,7 @@ CHARACTERS = {
 }
 #: The roles recorded. ``filter`` (a column of orders filtering the
 #: target's aggregation) needs the core's ``target_filter`` rule lifted,
-#: so ``contract/tests/test_t210_targets.py`` holds it, not T2.18's tests.
+#: so ``contract/tests/test_t210_targets.py`` holds it, not tests.
 ROLES = ('feature', 'target', 'entity', 'filter', 'aggregation')
 TWIN = 'a_b'
 

@@ -2,23 +2,23 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4's two checks, shared by each database's goldens (T2.4; design,
+//! L4's two checks, shared by each database's goldens (design,
 //! locked check 3): `duckdb_goldens.rs`, `sqlite_goldens.rs` and
 //! `postgres_goldens.rs` each pin, verbatim, every statement its dialect
 //! renders for the contract cases, beside the request it answers.
 //!
 //! - [`render`]: each golden request, planned here, renders exactly its
-//!   statements, so a change of the SQL without a golden update fails.
+//! statements, so a change of the SQL without a golden update fails.
 //! - [`run_is_pinned`]: every fetch a case run made on the database (the
-//!   observations `SDM_L4_OBSERVATIONS` names, python-core's run in
-//!   `contract-python (ref-pandas3, <database>)`, which executed each
-//!   statement on that database and whose results the comparator held to
-//!   the reference's) is a golden, its statements the golden's, so the
-//!   goldens are the SQL the run executed and a request the dialect newly
-//!   answers is never left unreviewed. CI's `l4-goldens (<database>)` names
-//!   the run; with no run named, as in `cargo test --workspace`, there is
-//!   nothing to hold and the check says so. A run named but missing,
-//!   unreadable, empty, or holding no fetch on the database fails.
+//! observations `SDM_L4_OBSERVATIONS` names, python-core's run in
+//! `contract-python (ref-pandas3, <database>)`, which executed each
+//! statement on that database and whose results the comparator held to
+//! the reference's) is a golden, its statements the golden's, so the
+//! goldens are the SQL the run executed and a request the dialect newly
+//! answers is never left unreviewed. CI's `l4-goldens (<database>)` names
+//! the run; with no run named, as in `cargo test --workspace`, there is
+//! nothing to hold and the check says so. A run named but missing,
+//! unreadable, empty, or holding no fetch on the database fails.
 //! - [`seeded_faults`]: both checks shown to fail on their seeded faults.
 //!
 //! Coverage ignores only resolved identity projections and non-rendering type
@@ -107,7 +107,7 @@ fn literal(request: &str, statements: &[String]) -> String {
 /// The namespace the contract cases' runs on `dialect` plan `request`
 /// under: on Postgres the schema each case's database settles, `public`,
 /// its session's current one, which the core reads once per run (the read
-/// itself planned before, under none) and names in every statement (T3.7);
+/// itself planned before, under none) and names in every statement;
 /// none for the others.
 fn settled(dialect: &str, request: &DataRequest) -> Vec<Option<String>> {
     let session = matches!(

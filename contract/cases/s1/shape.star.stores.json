@@ -224,9 +224,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "regression; the request's context rows per table, the same on all three databases: customers 2, orders 2, products 2, stores 3"
+    "stage": "predict"
   },
-  "why": "T2.19 (main eb6c68eb): the star shape sampled from stores, a table holding no foreign key (the core refuses the others by parent_table until T2.11), compared at the payload; one path to each table, a control",
-  "source": "main's test_sql_sampler_parity.py _SHAPES and _shape_frames (eb6c68eb, the reference at 6298913c), as T2.19 names them"
+  "why": "The star shape sampled from stores, a table holding no foreign key, compared at the payload; one path to each table, a control",
+  "source": "Correctness case shape.star.stores using the shop fixture."
 }

@@ -2,11 +2,11 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The dialect trait's tests (T3.18, design fix E): each dialect this
+//! The dialect trait's tests (design fix E): each dialect this
 //! build renders is found by its name and declares its own depth,
 //! quoting, namespace, seed names, casts and quirks; and a dialect that
 //! implements only the trait's required hooks gets every shared statement
-//! shape from the one builder, as a warehouse dialect will (T3.4 onward).
+//! shape from the one builder, as a warehouse dialect will ( onward).
 //! The statements themselves are held by the goldens and by
 //! `tests/dialect_matrix.rs`.
 
@@ -261,7 +261,7 @@ impl SqlDialect for Plain {
         _namespace: &[String],
     ) -> Result<(String, Vec<SqlParam>), CoreError> {
         // A catalog read binding the name it looks for, as a warehouse's
-        // does (Databricks's `lower(?)`, T3.4).
+        // does (Databricks's `lower(?)`).
         Ok(match (part, tables) {
             (DescribePart::Columns, [table]) => (
                 "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = lower(?)"

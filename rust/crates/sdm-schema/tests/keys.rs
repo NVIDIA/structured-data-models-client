@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The key rules (T1.32e), the implementer's own checks of `keys::hold`
+//! The key rules, the implementer's own checks of `keys::hold`
 //! against the reference's `_check_source_keys`; the test author's
-//! vectors are `sdm-testkit`'s `t132e_key_inference.rs`.
+//! vectors are `sdm-testkit`'s `key_inference.rs`.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;

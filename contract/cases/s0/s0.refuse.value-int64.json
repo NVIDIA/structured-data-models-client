@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The value family: an integer one past int64 (PQL_VALUE_INT_OUT_OF_RANGE)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.value-int64 using the shop fixture."
 }

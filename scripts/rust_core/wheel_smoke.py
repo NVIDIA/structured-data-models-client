@@ -124,7 +124,7 @@ SIBLINGS = ('structured-data-models-api', 'structured-data-models-connectors')
 #: the native module's surface (its stub). The message builder,
 #: ``messages.py``, is this checkout's own, decoding and fixtures included,
 #: so it judges with the tests; only its ``CONTRACT`` takes the inputs'
-#: version (:func:`suite`).
+#: version (func:`suite`).
 INPUTS = (
     'rust/crates/sdm-contract/src/lib.rs',
     'rust/crates/sdm-contract/src/error.rs',
@@ -136,7 +136,7 @@ INPUTS = (
 class Lane:
     python: str
     #: Docker's official Python image, pinned by its index digest: a private
-    #: copy on this repository's GitHub Packages by the same digest (E131),
+    #: copy on this repository's GitHub Packages by the same digest,
     #: since anonymous pulls from public registries failed for their limits.
     image: str
     #: What the lane installs as requirements and constraints.
@@ -144,7 +144,7 @@ class Lane:
     #: Each pinned distribution's version as it must resolve: exact, or
     #: its major version (`3.`), compared as a prefix.
     resolved: dict[str, str]
-    #: The machine the lane must run on, as `platform.machine()` names it,
+    #: The machine the lane must run on, as `platform.machine` names it,
     #: or any (a reviewer's own machine, for the lanes above).
     machine: str | None = None
 
@@ -165,7 +165,7 @@ LANES = {
         resolved={'pandas': '3.', 'numpy': '2.'},
     ),
 }
-# The same lanes on aarch64 (KO2-40): the images are multi-architecture
+# The same lanes on aarch64: the images are multi-architecture
 # indexes, so one digest serves both machines.
 LANES['aarch64-floor'] = dataclasses.replace(LANES['floor'], machine='aarch64')
 LANES['aarch64-newest'] = dataclasses.replace(
@@ -174,8 +174,8 @@ LANES['aarch64-newest'] = dataclasses.replace(
 
 #: Run in each environment with -I: where the client was imported from,
 #: which build it is, and what resolved. First, before anything of the
-#: client is imported, the warnings pyarrow's own `to_pandas()` raises in
-#: the lane, recorded and not judged: register HOST-3's evidence.
+#: client is imported, the warnings pyarrow's own `to_pandas` raises in
+#: the lane, recorded and not judged: register 's evidence.
 _PROBE = """
 import importlib.metadata, json, pathlib, platform, sys, sysconfig, warnings
 import pyarrow
@@ -249,7 +249,7 @@ def inputs_clean(inputs: pathlib.Path, commit: str) -> None:
     """Holds the inputs tree to the commit the wheels were built from: a
     git checkout whose ``HEAD`` is `commit`, with nothing modified, staged
     or untracked (ignored files aside) under what the smoke takes from it,
-    the sibling distributions and :data:`INPUTS`, so a file the commit
+    the sibling distributions and:data:`INPUTS`, so a file the commit
     does not hold never reaches a wheel or the suite; refused by name."""
     taken = [
         *(f'packages/{name}' for name in SIBLINGS),
@@ -569,7 +569,7 @@ def _pytest(
     by name, an empty configuration file of the smoke's own, and conftest
     files read only from the tests' own directory; the guard plugin
     records what was collected and deselected in `collection`. `root` is
-    the tree the tests run from (:func:`suite`'s)."""
+    the tree the tests run from (func:`suite`'s)."""
     guard = work / 'guard'
     guard.mkdir(exist_ok=True)
     (guard / 'smoke_guard.py').write_text(_GUARD)
@@ -735,7 +735,7 @@ def smoke(
     commit: str | None = None,
 ) -> int:
     """The lane's run; given `commit`, on the inputs as that commit holds
-    them (:func:`exported`)."""
+    them (func:`exported`)."""
     if commit is not None:
         with tempfile.TemporaryDirectory(prefix='wheel-smoke-inputs-') as tree:
             held = exported(inputs, commit, pathlib.Path(tree))
@@ -766,7 +766,7 @@ def smoke(
             tests_root = work / 'suite'
             suite(inputs, tests_root)
             # The siblings built once, each a wheel, so every distribution
-            # an environment installs is a wheel (--only-binary=:all:).
+            # an environment installs is a wheel (--only-binary=:all).
             _checked([python, '-m', 'venv', str(work / 'build')])
             _checked(
                 [str(work / 'build' / 'bin' / 'python'), '-m', 'pip',
@@ -838,7 +838,7 @@ def in_container(
     """Runs this script in the lane's image, the checkout, the inputs and
     the wheels mounted read-only, as the caller's user, writing only to
     `out`; given `commit`, the inputs as that commit holds them
-    (:func:`exported`)."""
+    (func:`exported`)."""
     if commit is not None:
         with tempfile.TemporaryDirectory(prefix='wheel-smoke-inputs-') as tree:
             held = exported(inputs, commit, pathlib.Path(tree))

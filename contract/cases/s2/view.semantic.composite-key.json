@@ -50,6 +50,6 @@
     "outcome": "success",
     "stage": "from_source"
   },
-  "why": "A semantic view whose orders table declares a composite primary key: the reference drops the key with its reason (RE/graph.py:2080-2085) and says so in one SDMWarning, keeping the table and its link. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2)",
-  "source": "written by T3.5's test author from the reference at 43e55f4f"
+  "why": "A Snowflake semantic view declaring a composite primary key; verify the resulting schema and diagnostic.",
+  "source": "Correctness case view.semantic.composite-key using the shop fixture."
 }

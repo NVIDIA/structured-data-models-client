@@ -84,9 +84,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: task binary_classification; context labels by entity: {\"number\": \"3\"}: false, {\"number\": \"4\"}: true, {\"number\": \"5\"}: true, {\"number\": \"6\"}: false, {\"number\": \"7\"}: true"
+    "stage": "predict"
   },
   "why": "A constant at the column's own scale: 1.4 is not at or past 1.5, 1.5 and 1.6 are",
-  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+  "source": "Correctness case decimal.compare-same-scale using the shop fixture."
 }

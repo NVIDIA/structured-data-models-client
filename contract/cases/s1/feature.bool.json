@@ -85,8 +85,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "users.f is bool / categorical"
+    "stage": "predict"
   },
   "why": "The first attempt sent a different payload for a boolean feature",
   "source": "probe#5; dtypes:feature:arrow_bool"

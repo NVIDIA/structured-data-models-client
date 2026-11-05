@@ -131,7 +131,7 @@ def _token(value: Any) -> str:
 def _scores(number: int, call: dict[str, Any], script: dict[str, Any]) -> str:
     r"""Each row's probability of the positive class from the script's
     table (by call, then row); ``null`` leaves the probabilities out, and
-    ``carried`` adds item members as JSON text, as :func:`_rule` does."""
+    ``carried`` adds item members as JSON text, as:func:`_rule` does."""
     table = script['table']
     if number >= len(table):
         raise ValueError(f'no scores for call {number}')
@@ -388,7 +388,7 @@ vector(
 )
 vector('parts.failed-call-1', 'parts', RANK, scores(fail_call=1), **THREE)
 # Round 2: the transport raising an exception that is not the client's own
-# (ValueError, multicall_record._raising) on the second model call made,
+# (ValueError, batch_prediction_scenarios._raising) on the second model call made,
 # after one answered part, on each database; with candidate 9 left out
 # unscored first, the second call made is candidate 1's.
 for where in ('duckdb', 'sqlite', 'postgres'):
@@ -543,7 +543,7 @@ vector(
 )
 
 
-# Round 1's candidates (T2.8 fix round 1): each over item keys held as
+# Round 1's candidates ( fix round 1): each over item keys held as
 # text, key 0 replaced by the text a candidate spells, on each database.
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
@@ -576,7 +576,7 @@ for where in DATABASES:
         **on,
     )
     # A timestamp and its spelling (the reference writes a Timestamp as
-    # str() does, '2023-01-01 00:00:00'), the key holding that spelling.
+    # str does, '2023-01-01 00:00:00'), the key holding that spelling.
     vector(
         f'candidates.timestamp-and-text{at}',
         'candidates',
@@ -627,8 +627,8 @@ for where in DATABASES:
 
 def _candidate(value: Any) -> Any:
     r"""A candidate as the vector file writes it, as the Python value
-    the caller passes: ``{'date': ...}`` a ``datetime.date``,
-    ``{'timestamp': ...}`` a ``pandas.Timestamp``, ``{'decimal': ...}`` a
+    the caller passes: ``{'date':...}`` a ``datetime.date``,
+    ``{'timestamp':...}`` a ``pandas.Timestamp``, ``{'decimal':...}`` a
     ``Decimal``, anything else as it is."""
     if isinstance(value, dict):
         [(kind, text)] = value.items()
@@ -716,7 +716,7 @@ def _raising_from(client: Any, call: int) -> None:
     (``contract/support/batch_prediction_scenarios.py``'s ``_raising``)."""
     import importlib.util
 
-    name = 't28_multicall_record'
+    name = 'ranking_scenarios_multicall_record'
     if name not in sys.modules:
         found = importlib.util.spec_from_file_location(
             name, ROOT / 'contract/support/batch_prediction_scenarios.py'
@@ -763,7 +763,7 @@ def _items(result: Any) -> list[dict[str, Any]]:
 
 
 def _frame(result: Any) -> dict[str, Any]:
-    r"""The result through ``to_pandas()``: its columns, dtypes and rows."""
+    r"""The result through ``to_pandas``: its columns, dtypes and rows."""
     try:
         frame = result.to_pandas()
     except Exception as error:  # noqa: BLE001 - the outcome is compared
@@ -802,11 +802,11 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
     import tempfile
 
     found = importlib.util.spec_from_file_location(
-        't28_databases', ROOT / 'contract/runners/databases.py'
+        'ranking_databases', ROOT / 'contract/runners/databases.py'
     )
     assert found is not None and found.loader is not None
     loader = importlib.util.module_from_spec(found)
-    sys.modules['t28_databases'] = loader
+    sys.modules['ranking_databases'] = loader
     found.loader.exec_module(loader)
     if database == 'sqlite':
         import adbc_driver_sqlite.dbapi
@@ -828,7 +828,7 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
     from psycopg.conninfo import make_conninfo
 
     dsn = os.environ['SDM_POSTGRES_TEST_DSN']
-    name = f't28_vector_{uuid.uuid4().hex[:16]}'
+    name = f'ranking_vector_{uuid.uuid4().hex[:16]}'
     with psycopg.connect(dsn, autocommit=True) as admin:
         admin.execute(f'CREATE DATABASE {name}')
     try:
@@ -970,7 +970,7 @@ def gathered(query: str, materialize: dict[str, Any]) -> dict[str, Any]:
 
 
 def controls() -> list[dict[str, Any]]:
-    r"""Each case of :data:`CONTROLS`, its own call's outcome and its
+    r"""Each case of:data:`CONTROLS`, its own call's outcome and its
     control's."""
     out = []
     for case_id, change in CONTROLS.items():

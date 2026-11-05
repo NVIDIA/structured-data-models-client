@@ -4,11 +4,11 @@
 """The Python host's run loop, driven through the core's test-only operations.
 
 Every code reaches its class through a real run, and a kind outside the
-code's set never reaches the caller as that code (decisions H6, E22);
+code's set never reaches the caller as that code;
 warnings keep their order and class; a logging level change takes effect
-at the next run, whose event is delivered once (H8); and a provider's
+at the next run, whose event is delivered once; and a provider's
 failure is raised with no chained driver exception and nothing of the
-driver's text (H17).
+driver's text.
 """
 
 from __future__ import annotations

@@ -118,9 +118,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: answered through predict, each user_id read as int64 on DuckDB and as text on SQLite (the loader stores a DECIMAL as its canonical text); on Postgres, a numeric(38,0), as int64, the link set by an edit (the reference reads a Postgres numeric as text only where the catalog declares it a key)"
+    "stage": "predict"
   },
   "why": "The same key past 2**53, both keys given and no link, the link from orders.user_id then set on the schema: an edited relationship on an exact numeric id",
-  "source": "T2.21: exact numeric keys follow the effective keys (the mid-phase design check; learnings lesson 19, design choice 5, KO2-35)"
+  "source": "Correctness case key.past-2-53.edited-link using the shop fixture."
 }

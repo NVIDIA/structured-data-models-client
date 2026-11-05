@@ -87,5 +87,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "FX-1: a regression target holding a double past float32's range is refused, with pandas' RuntimeWarning from the cast beside the refusal, as the reference gives it",
-  "source": "T2.14b's test author, the reference at 6298913c"
+  "source": "Correctness case wording.float32-regression using the shop fixture."
 }

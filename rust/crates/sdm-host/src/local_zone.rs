@@ -4,14 +4,14 @@
 
 //! The local zone a host's facts name (contract `HostFacts.local_zone`),
 //! by one rule every binding asks, so two hosts on one machine send the
-//! same zone (T3.12; the rule the Python host's `_rust/facts.py` and the
+//! same zone (the rule the Python host's `_rust/facts.py` and the
 //! Java host's `HostFacts` each held before).
 //!
 //! The rule reads two things of the machine's files, which it asks the
 //! host for through [`ZoneFiles`]: whether a path names a regular file,
 //! and where a link resolves to. The host answers them in its own
 //! language, so this crate does no I/O of its own (the core's ban on it,
-//! `rust/clippy.toml`, and its one exemption, decision E24, stay as they
+//! `rust/clippy.toml`, and its one exemption, stay as they
 //! are); each host reads `TZ` and its zone lookup roots, in its own zone
 //! library's order, and passes them in.
 

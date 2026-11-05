@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Postgres replay asked a fetch past its recording (T2.8, from
+//! A Postgres replay asked a fetch past its recording (from
 //! `s0.boundary.depth-999@postgres` on `cross-host (postgres)`): for a
 //! diagnostic case, which gates nothing, the replay answers that fetch with
 //! a provider error naming it ("past the recording"), so the core refuses
@@ -15,7 +15,7 @@
 //! `sdm-contract-run --replay` runs three cases over
 //! `tests/replay-past-recording.jsonl`, a recording of two fetches:
 //! `t28.replay.answered`, whose fetches (the session's current schema,
-//! read once since the source names none, T3.7, then the describe's list
+//! read once since the source names none, then the describe's list
 //! of tables in it, answered with none) are recorded, so it runs to its end
 //! and writes its line; and two cases recorded with no fetch at all, which the core asks
 //! one past at once: `t28.replay.diagnostic-past-its-recording` and
@@ -23,9 +23,9 @@
 //! sum-window`'s, its id and status its own.
 //!
 //! - The diagnostic case before the answered one: the run succeeds and
-//!   writes both lines, the diagnostic case's a refusal, `PROVIDER_ERROR`.
+//! writes both lines, the diagnostic case's a refusal, `PROVIDER_ERROR`.
 //! - The acceptance case before the answered one: the run fails, naming
-//!   the case and the fetch past the recording, and writes no file.
+//! the case and the fetch past the recording, and writes no file.
 
 #![allow(
     clippy::disallowed_methods,

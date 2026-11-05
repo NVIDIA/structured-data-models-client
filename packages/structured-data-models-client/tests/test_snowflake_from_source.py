@@ -962,7 +962,7 @@ def test_a_missing_anchor_keeps_its_entity_and_other_entities_history() -> None:
 
 def _capture_runner() -> Any:
     """The real functional recorder around this module's optional driver."""
-    name = 't310_public_snowflake_capture'
+    name = 'test_snowflake_from_source_public_snowflake_capture'
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(
             name, ROOT / 'contract/runners/run_python.py'

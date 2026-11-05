@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! What `DESCRIBE TABLE EXTENDED` says of a metric view (T3.5, M1,
+//! What `DESCRIBE TABLE EXTENDED` says of a metric view (M1,
 //! old-behaviour rows 21 to 24), read from its rows as the old client reads
 //! them (`DB/metric_view.py:1389-1475`), against every description its own
 //! tests made: four cells from a SQL warehouse, three from Spark, an empty

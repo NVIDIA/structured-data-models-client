@@ -128,9 +128,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "refused by the validator before reading: the filter names an event column of orders, several rows per user"
+    "code": "INVALID_REQUEST"
   },
   "why": "an entity filter on a column of a fact table: a query the reference refuses",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case filter.event-column using the shop fixture."
 }

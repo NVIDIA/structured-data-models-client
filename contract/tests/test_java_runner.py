@@ -32,17 +32,17 @@ def _case(name: str) -> dict[str, Any]:
     raise AssertionError(name)
 
 
-def test_t312_an_s1_case_on_java_s_paths_has_a_leg_on_each_of_its_databases() -> (
+def test_an_s1_case_on_java_s_paths_has_a_leg_on_each_of_its_databases() -> (
     None
 ):
     case = _case('base.binary')
     for database in ('duckdb', 'sqlite', 'postgres'):
         assert run_java.on_java(case, database), database
-    # T3.13 extends this same warehouse-capable case to Java's SQL leg.
+    # extends this same warehouse-capable case to Java's SQL leg.
     assert run_java.on_java(case, 'databricks-sql')
 
 
-def test_t312_a_ranking_or_a_forecast_has_no_java_leg() -> None:
+def test_a_ranking_or_a_forecast_has_no_java_leg() -> None:
     for name in ('rank.top-k', 'forecast.lag-1'):
         case = _case(name)
         assert not any(
@@ -51,7 +51,7 @@ def test_t312_a_ranking_or_a_forecast_has_no_java_leg() -> None:
         ), name
 
 
-def test_t312_s0_runs_on_duckdb_s_leg_alone() -> None:
+def test_s0_runs_on_duckdb_s_leg_alone() -> None:
     case = json.loads(
         (CASES / 's0/s0.accept.sum-window.json').read_text(encoding='utf-8')
     )
@@ -59,7 +59,7 @@ def test_t312_s0_runs_on_duckdb_s_leg_alone() -> None:
     assert not run_java.on_java(case, 'sqlite')
 
 
-def test_t312_duckdb_s_log_counts_a_key_set_kept_as_a_table_once() -> None:
+def test_duckdb_s_log_counts_a_key_set_kept_as_a_table_once() -> None:
     import pyarrow as pa
 
     sink = pa.BufferOutputStream()
@@ -108,7 +108,7 @@ def test_t312_duckdb_s_log_counts_a_key_set_kept_as_a_table_once() -> None:
     ] == ['BIGINT']
 
 
-def test_t312_postgres_columns_are_described_as_psycopg_displays_them() -> None:
+def test_postgres_columns_are_described_as_psycopg_displays_them() -> None:
     import pyarrow as pa
 
     table = pa.table({'a': [1], 'b': ['x'], 'c': [1], 'd': [[1]]})
@@ -132,7 +132,7 @@ def test_t312_postgres_columns_are_described_as_psycopg_displays_them() -> None:
     ]
 
 
-def test_t312_a_call_the_endpoint_received_otherwise_fails_the_runner() -> None:
+def test_a_call_the_endpoint_received_otherwise_fails_the_runner() -> None:
     case = _case('base.binary')
     body = b'{"model": "kumo-relational"}'
     events = [

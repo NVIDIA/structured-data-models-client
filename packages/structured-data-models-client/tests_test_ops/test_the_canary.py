@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The canary test (T1.11d; decision H17, an owner-approved exit check).
+"""The canary test (, an owner-approved exit check).
 
 Sentinels are planted in data (two values of a DuckDB table the journey
 reads and sends), in a fake DSN credential (a connection string held as
 data, and the userinfo of the model endpoint's URL), and in a test-only
-panic's payload. Every error path the Python host reaches at T1.11d is
+panic's payload. Every error path the Python host reaches is
 driven through it:
 
 - codec: an operation the contract cannot read, an attachment that is not
@@ -19,8 +19,7 @@ driven through it:
 - refusal: the endpoint refusing the call (HTTP 422 in the endpoint's own
   words, a sentinel of its own in its code, detail, title and other fields;
   HTTP 500, echoing nothing), behind a URL carrying the credential, raised
-  as the old route raises it, the endpoint's own words shown (decision E47,
-  owner decision 2026-10-10), none of ours;
+  as the old route raises it, the endpoint's own words shown, none of ours;
 - panic: the test-only operation, panicking in the run's body with the
   sentinel as its payload.
 
@@ -36,7 +35,7 @@ codec refused, the panic's location written to stderr), and the same check
 catches each when a deliberately leaky formatter, installed only inside
 this test, writes it into the exception.
 
-One exception, the owner's (decision E47, 2026-10-10): text the model
+One exception, the owner's (2026-10-10): text the model
 endpoint itself writes in a refusal is shown on the core route, as the old
 route shows it. A sentinel only the endpoint writes is asserted to reach
 ``str`` and the details, so the exception works and cannot quietly regress
@@ -113,7 +112,7 @@ def _planted(*, vault: bool = False) -> Any:
     holding the fake credential's whole connection string and the data
     sentinel, which only the provider scenario reads (a described source
     with it would be refused by name, since text holding ``:`` reads as
-    several categories, register P1B-2)."""
+    several categories, B-2)."""
     connection = duckdb.connect()
     for statement in _shop():
         connection.execute(statement)
@@ -285,8 +284,7 @@ def _closed_port() -> int:
 #: A sentinel only the endpoint writes, in every field of its refusal it
 #: may write: its code, detail, title, ``endpoint_code``, ``diagnosis`` and
 #: another field. The owner chose to show the endpoint's own words on the
-#: core route, as the old route does (decision E47, owner decision
-#: 2026-10-10), so this one must reach ``str(exc)`` and the details.
+#: core route, as the old route does, so this one must reach ``str(exc)`` and the details.
 ENDPOINT = 'SENTINEL-endpoint-5d1e'
 _ENDPOINT_CODE = 'ENDPOINT_SENTINEL_5D1E'
 _ENDPOINT_S_OWN = {
@@ -441,7 +439,7 @@ def test_no_sentinel_reaches_anything_written(
     if path == 'refusal':
         # The endpoint's refusal, as the host raises it on the core route:
         # the old route's class, status, code, message and details, the
-        # endpoint's own words (decision E47), nothing of ours, and no
+        # endpoint's own words, nothing of ours, and no
         # cause and no context.
         assert isinstance(error, NimRequestError), name
         assert error.__cause__ is None and error.__context__ is None, name

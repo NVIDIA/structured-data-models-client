@@ -4,11 +4,11 @@
   All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 
-  The Java library on the Rust core (design choice 10): one JAR, Java 17
+  The Java library on the Rust core: one JAR, Java 17
   bytecode, holding the native library sdm-jni for each platform under
   com/nvidia/sdm/native/<os>-<arch>/. The natives are built by cargo and
   copied into ${sdm.natives} (<platform>/libsdm_jni.so or .dylib) before
-  `mvn package`; README.md says how. Nothing is published until Phase 5.
+  `mvn package`; README.md says how.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -125,7 +125,7 @@
       <version>${arrow.version}</version>
       <scope>runtime</scope>
     </dependency>
-    <!-- The logging API only (KO3-30): the application binds a logger. -->
+    <!-- The logging API only: the application binds a logger. -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>

@@ -4,42 +4,42 @@
 
 //! A materialized request sent to the model, and its answer laid out.
 //!
-//! The client's predict-side rules, in the reference's order (T1.28b, the
+//! The client's predict-side rules, in the reference's order (the
 //! design's "Host-held semantics" rows it moved):
 //!
 //! - [`prepare`] is `SDMClient._prepare`: the model the request is sent to
-//!   (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
-//!   asked for (the task's default ones when the caller named none, an
-//!   empty list refused `INVALID_REQUEST`) and `check_request_against_model`
-//!   (the request's shape, its task's kind, each output and the context's
-//!   size against what the model serves);
+//! (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
+//! asked for (the task's default ones when the caller named none, an
+//! empty list refused `INVALID_REQUEST`) and `check_request_against_model`
+//! (the request's shape, its task's kind, each output and the context's
+//! size against what the model serves);
 //! - [`nothing_to_score`] is `Request.nothing_to_score`: a request with no
-//!   row to score is answered without a call (`_empty_answer`, [`empty`]);
+//! row to score is answered without a call (`_empty_answer`, [`empty`]);
 //! - [`preflight`] is the relational adapter's `_preflight`: an empty
-//!   context, more classes than the model takes and a classification whose
-//!   context has one answer refused, a regression's constant context given
-//!   as a notice, and an explanation's row count and run mode;
+//! context, more classes than the model takes and a classification whose
+//! context has one answer refused, a regression's constant context given
+//! as a notice, and an explanation's row count and run mode;
 //! - [`body`] is `prediction_plan`'s call of one payload: the payload with
-//!   the model named, the outputs asked for (a regression's with its
-//!   statistic), the request's id in its metadata, and only the inference
-//!   options the model reads (`_inference`);
+//! the model named, the outputs asked for (a regression's with its
+//! statistic), the request's id in its metadata, and only the inference
+//! options the model reads (`_inference`);
 //! - [`layout`] is `normalize` and `_named_entities`, with the answer's
-//!   classes given back as the target's own type (`as_declared_target`):
-//!   each answer checked against the row it claims and given back under the
-//!   entity it is about, read back as the key's dtype (`as_declared`), or,
-//!   where the payload names no entity, given back as written, as a
-//!   [`Part`];
+//! classes given back as the target's own type (`as_declared_target`):
+//! each answer checked against the row it claims and given back under the
+//! entity it is about, read back as the key's dtype (`as_declared`), or,
+//! where the payload names no entity, given back as written, as a
+//! [`Part`];
 //! - [`merge`] is `PredictionResult.merge`, the parts of one request put
-//!   together, and [`absent`] is `_report_absent`'s finding, the outputs the
-//!   caller named that no answer carries;
+//! together, and [`absent`] is `_report_absent`'s finding, the outputs the
+//! caller named that no answer carries;
 //! - [`table`] lays a part out as the result: one row per answer, ordered
-//!   by `row_index` as `PredictionResult.to_pandas` orders them.
+//! by `row_index` as `PredictionResult.to_pandas` orders them.
 //!
 //! What the result does not carry yet is refused by name, never dropped
-//! (`UNSUPPORTED_REQUEST`, register P1B-4): the tabular model on this relational
-//! entrypoint. Scores, rankings and embeddings are carried by the shared layout. From T2.13 an item's `explanation` and
+//! (`UNSUPPORTED_REQUEST`, B-4): the tabular model on this relational
+//! entrypoint. Scores, rankings and embeddings are carried by the shared layout. an item's `explanation` and
 //! `metadata` are carried (each item's, and the result's explanation,
-//! [`Part::explanation`]), and from T2.9 a regression's `quantiles`.
+//! [`Part::explanation`]), and a regression's `quantiles`.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -137,7 +137,7 @@ struct Spec {
 const MODELS: [&Spec; 2] = [&KUMO_RELATIONAL, &KUMO_TABULAR];
 
 /// What one model supports, as the client describes it to a caller
-/// (`ModelCapabilities`, `capabilities()`): the client side, never the
+/// (`ModelCapabilities`, `capabilities`): the client side, never the
 /// endpoint's own answer, so its `source` is `sdk`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capabilities {
@@ -210,7 +210,7 @@ const KUMO_TABULAR: Spec = Spec {
 };
 
 /// The refusal of a `predict` input that takes a rule this build does not
-/// port yet, naming the rule, never a value (decision H17).
+/// port yet, naming the rule, never a value.
 pub fn not_yet(rule: &'static str) -> CoreError {
     CoreError::new(
         Sentence::NotYetPredict,
@@ -436,7 +436,7 @@ pub fn prepare(
     };
     // Temporal as the reference's `required_capabilities` reads it: the
     // task's options naming an anchor time column, or a forecast or a link
-    // prediction (T3.17, where the shapes a refusal names became visible).
+    // prediction (where the shapes a refusal names became visible).
     let anchored = payload
         .get("task")
         .and_then(|task| task.get("options"))
@@ -488,7 +488,7 @@ pub fn nothing_to_score(payload: &Value) -> bool {
 /// regression whose every context row has the same answer (the adapter's
 /// `_check_target_varies`), an output the caller named that the answer
 /// left out (`_report_absent`), a forecast whose steps were explained but
-/// not every one (`_warn_of_steps_that_carry_no_explanation`, T2.13).
+/// not every one (`_warn_of_steps_that_carry_no_explanation`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Notice {
     pub sentence: Sentence,
@@ -742,7 +742,7 @@ pub fn body(
         None | Some(Value::Null) => None,
         // As the adapter's `_output_for` reads it, `chosen or 'median'`:
         // a statistic the payload holds is sent as it is, whatever its
-        // type, where Python reads it as true (T2.8: from T1.28b refused
+        // type, where Python reads it as true (refused
         // by name when not text, `prediction_statistic`).
         Some(output @ Value::Object(_)) => output
             .get("prediction_statistic")
@@ -800,7 +800,7 @@ pub fn body(
                 refused.sort();
                 if !refused.is_empty() {
                     // The option field and what to change, for the host's
-                    // words (T2.13): drop the options, and choose a
+                    // words: drop the options, and choose a
                     // regression's statistic where `output_type` is one.
                     let mut forwarded = INFERENCE_OPTIONS;
                     forwarded.sort_unstable();
@@ -860,7 +860,7 @@ fn is_chosen(value: &Value) -> bool {
 /// The bytes of the call `body` writes, as the host sends them, unchanged:
 /// refused past the endpoint's limit (`PAYLOAD_BYTES`), counted on these
 /// bytes, the envelope included, which are the bytes sent (register PD-2,
-/// T1.28a's fix round 1), before the model is called.
+/// fix round 1), before the model is called.
 pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
     let bytes = call.to_bytes();
     if bytes.len() > crate::payload::PAYLOAD_BYTES {
@@ -909,7 +909,7 @@ pub enum Answer {
     /// type, the item's own the number.
     NonFinite(f64),
     /// A class's prediction that does not read as the target's type, which
-    /// `as_declared` leaves as it is (T2.8): the item's own value, as
+    /// `as_declared` leaves as it is: the item's own value, as
     /// written.
     Written(Value),
 }
@@ -942,20 +942,20 @@ pub struct Row {
     /// spells it, in the order the answer wrote them.
     pub probabilities: Option<Vec<(String, f64)>>,
     /// The item's scores and rankings, each a mapping as a JSON object, in
-    /// the order written (T2.8).
+    /// the order written.
     pub scores: Option<Vec<f64>>,
     pub rankings: Option<Vec<Value>>,
     /// The item's explanation, a mapping as `sdm_wire::response::mapping`
-    /// lays one out (T2.13).
+    /// lays one out.
     pub explanation: Option<Value>,
     pub gradient: Option<Value>,
     pub gradient_position: Option<i64>,
-    /// The item's own metadata, a mapping as the explanation (T2.13).
+    /// The item's own metadata, a mapping as the explanation.
     pub metadata: Option<Value>,
     /// Each quantile's value, keyed as the answer wrote it, in the order
-    /// written, a mapping as the explanation (T2.9).
+    /// written, a mapping as the explanation.
     pub quantiles: Option<Value>,
-    /// The answer's embedding, in the order written (T2.11).
+    /// The answer's embedding, in the order written.
     pub embeddings: Option<Vec<f64>>,
 }
 
@@ -973,11 +973,11 @@ pub struct Part {
     /// Whether an entity's key is text (else an integer), for the result's
     /// `id` column where no answer's entity gives its type.
     pub text_ids: bool,
-    /// The result's explanation (`PredictionResult.explanation`, T2.13):
+    /// The result's explanation (`PredictionResult.explanation`):
     /// the first answer's in the endpoint's order that holds a mapping not
     /// empty (`normalize`), the first part's that has one across a merge's
     /// parts, and for a forecast `{"by_forecast_step": {"<step>":
-    /// explanation, ...}}`, each step that has one in step order, keyed by
+    /// explanation,...}}`, each step that has one in step order, keyed by
     /// the step's number in decimal digits, as JSON keys a mapping
     /// (`_by_step`); none where no answer explains.
     pub explanation: Option<Value>,
@@ -1102,8 +1102,8 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
         return Ok(Answer::None);
     };
     match answers {
-        // A regression's prediction is a number (owner decision of
-        // 2026-10-12, relayed): a token past a double's range, a `NaN` and
+        // A regression's prediction is a number: a token past a double's
+        // range, a `NaN` and
         // an infinity read as the reference reads them; an integer past
         // int64, text, a boolean, an array or an object refused.
         AnswerType::Float => match value {
@@ -1123,7 +1123,7 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
         // too, which the target's type holds.
         AnswerType::FloatClass => Ok(as_float(value).map_or_else(|| written(value), Answer::Float)),
         // A class written as a non-finite number is passed through as the
-        // reference passes it (owner decision of 2026-10-12): no target's
+        // reference passes it: no target's
         // type holds it, so `as_declared` leaves it as it is.
         _ if non_finite(value).is_some() => {
             Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
@@ -1138,7 +1138,7 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
 }
 
 /// A class's prediction as written, where it does not read as the target's
-/// type (`as_declared` leaving it as it is, T2.8): a null, which an item's
+/// type (`as_declared` leaving it as it is): a null, which an item's
 /// reader takes as none, none.
 fn written(value: &Value) -> Answer {
     match value {
@@ -1205,7 +1205,7 @@ pub(crate) fn spelled(
 /// reference gives it: its id the instance id it was answered under, as
 /// text, and no row checked (a `row_index` or forecast step past int64,
 /// which the result's columns do not hold, refused as `INVALID_RESPONSE`,
-/// register P1B-86). On both paths its probabilities are keyed as
+/// B-86). On both paths its probabilities are keyed as
 /// [`spelled`] keys them, a float target's class by `float_text`.
 pub fn layout(
     payload: &Value,
@@ -1512,7 +1512,7 @@ pub fn merge_planned(
 }
 
 /// A forecast's answers put together, each step's answer to its own
-/// regression (`_by_step`, T1.36 fix 21): every step's answers in step
+/// regression (`_by_step`, fix 21): every step's answers in step
 /// order, each in the endpoint's order and carrying its step, the first
 /// step's model, request id and answer type, and no metadata (the
 /// client's merged result names none); no step refused (`INTERNAL_ERROR`).
@@ -1618,7 +1618,7 @@ pub const LOOKED_FOR: [&str; 7] = [
 
 /// Every output of [`LOOKED_FOR`] the answer does not carry, as [`absent`]
 /// reads each: what the result says it left out, for a host to read a
-/// caller's `absent(...)` off rather than keep a copy of the rule (T3.12
+/// caller's `absent(...)` off rather than keep a copy of the rule (
 /// fix 1).
 pub fn left_out(part: &Part) -> Vec<String> {
     absent(part, &LOOKED_FOR.map(String::from))
@@ -1687,7 +1687,7 @@ pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) 
 /// column spells it, to its probability, in the order written),
 /// `quantiles`, `explanation` and `metadata` when any answer carries one
 /// (utf8, the JSON text of each answer's mapping, null where it had none;
-/// T2.9 and T2.13), and last
+/// and ), and last
 /// `answer_index` (int64, the answer's place in the endpoint's order, which
 /// the result's items keep, as the reference's do). The result's own
 /// explanation ([`Part::explanation`]), where it has one, is the JSON text
@@ -1712,7 +1712,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     }
     if rows.iter().any(|r| r.prediction != Answer::None) {
         // Classes given back as written, not of the target's type, all of
-        // one kind with the rest (T2.8): the column as pandas infers it
+        // one kind with the rest: the column as pandas infers it
         // from the values, as the reference's frame holds them.
         let as_written = as_written_column(&rows);
         let (data_type, column): (DataType, ArrayRef) = match (&as_written, part.answers) {
@@ -1839,7 +1839,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         ));
         columns.push(Arc::new(column));
     }
-    // An item's scores and rankings (T2.8), each where an answer carries
+    // An item's scores and rankings, each where an answer carries
     // them: a list of doubles, and a list of each mapping's JSON text.
     if rows.iter().any(|r| r.scores.is_some()) {
         let mut builder = ListBuilder::new(Float64Builder::new());
@@ -1875,7 +1875,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         fields.push(Field::new("rankings", column.data_type().clone(), true));
         columns.push(Arc::new(column));
     }
-    // Each answer's quantiles (T2.9), explanation and own metadata (T2.13),
+    // Each answer's quantiles, explanation and own metadata,
     // where any answer carries one: the JSON text of the mapping, null where
     // it had none.
     for (name, of) in [
@@ -1894,7 +1894,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         }
     }
     // Each answer's embedding, a list of float64, null where it has none
-    // (`_SEQUENCE_FIELDS`, T2.11).
+    // (`_SEQUENCE_FIELDS`).
     if rows.iter().any(|r| r.embeddings.is_some()) {
         let mut builder = ListBuilder::new(Float64Builder::new());
         for row in &rows {
@@ -1914,7 +1914,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     columns.push(Arc::new(Int64Array::from_iter_values(
         rows.iter().map(|r| r.answer_index),
     )));
-    // The result's explanation (T2.13), as the JSON text of
+    // The result's explanation, as the JSON text of
     // [`Part::explanation`], on the schema's metadata under `explanation`.
     let schema = Schema::new(fields);
     let mut metadata = schema.metadata().clone();
@@ -1995,7 +1995,7 @@ pub(crate) fn id_columns(ids: &[&Entity], text_ids: bool) -> (Vec<Field>, Vec<Ar
 }
 
 /// The prediction column where an answer was given back as written, not
-/// of the target's type (T2.8), and every answer is of one kind with it, as
+/// of the target's type, and every answer is of one kind with it, as
 /// pandas infers the reference's frame's column from the items' values: a
 /// boolean column, an int64 column of integers, a float64 column of
 /// numbers (an integer as its double), or a text column; a missing one
@@ -2237,7 +2237,7 @@ fn integer(digits: &str) -> Entity {
 }
 
 /// A row's instance id as the reference compares it with the id an answer
-/// names (`str(instances[index])`, T2.8): an integer's digits (`-0` as
+/// names (`str(instances[index])`): an integer's digits (`-0` as
 /// `0`), the text, a float as the parser's `float_text` writes it, a
 /// boolean as `True` or `False` and a null as `None`; none for a list or an
 /// object, which no id an answer names matches.
@@ -2541,7 +2541,7 @@ mod tests {
             answer_of(Some(&text("3.0")), AnswerType::FloatClass),
             Ok(Answer::Float(3.0))
         );
-        // One that does not read is given back as written (T2.8).
+        // One that does not read is given back as written.
         assert_eq!(
             answer_of(Some(&text("three")), AnswerType::FloatClass),
             Ok(Answer::Written(text("three")))
@@ -2565,7 +2565,7 @@ mod tests {
     /// item ranks candidates under `rankings`, a list of objects, which the
     /// reference's bindings read (`_mapping_tuple`) and its result keeps as
     /// a list in one row (`PredictionResult.to_pandas`, `row['rankings']`).
-    /// Phase 4 carries the ranking mappings unchanged and restores only
+    /// Result conversion carries ranking mappings unchanged and restores only
     /// the scored entity identity through the shared result path.
     #[test]
     fn a_link_predictions_rankings_are_preserved() {
@@ -2605,7 +2605,7 @@ mod tests {
         assert_eq!(asked.rows[0].prediction, Answer::None);
     }
 
-    /// T3.12 fix 1 (Codex P0-3): every output the result looks for that
+    /// fix 1: every output the result looks for that
     /// the answer left out, in the order [`LOOKED_FOR`] names them, as
     /// [`absent`] reads each, for a host to read off the result rather
     /// than keep a copy of the rule: an empty quantiles mapping on every

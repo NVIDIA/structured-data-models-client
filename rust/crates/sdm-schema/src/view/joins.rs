@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Which of a metric view's joins the conversion keeps (T3.5's M2), in the
+//! Which of a metric view's joins the conversion keeps (M2), in the
 //! old client's order (`_add_joins`, `DB/metric_view.py:825-909`): parents
 //! before children, a kept join's nested joins visited after it, a skipped
 //! join's not. A join is skipped, with the joins nested in it, if its name

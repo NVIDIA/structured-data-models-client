@@ -16,7 +16,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t28c-multicall-vectors.json'
+OUT = ROOT / 'contract/prediction-batch-vectors.json'
 CASES = ROOT / 'contract/cases/s1'
 FORMAT = 'sdm-t28c-multicall-vectors/1'
 PREFIX = 'multicall.'
@@ -55,7 +55,10 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t28c_run_python', ROOT / 'contract/runners/run_python.py')
+    return _module(
+        'batch_prediction_scenarios_run_python',
+        ROOT / 'contract/runners/run_python.py',
+    )
 
 
 def endpoint() -> ModuleType:

@@ -34,7 +34,7 @@ public final class Run implements AutoCloseable {
   /**
    * The stack a call into the core runs on: the core's work, in a debug build above all, needs
    * more than a JVM thread may have (256 KiB to 1 MiB), so each call runs on a thread of the
-   * core's own with this much, reserved, not committed (T3.12 fix 3). A JVM thread, so the core's
+   * core's own with this much, reserved, not committed. A JVM thread, so the core's
    * calls back into the JVM (its log events, Arrow's releases) are made as any thread's are.
    */
   static final long CORE_STACK_BYTES = 64L << 20;
@@ -136,7 +136,7 @@ public final class Run implements AutoCloseable {
    * native library first.
    *
    * @throws com.nvidia.sdm.StructuredDataException {@code UNSUPPORTED_REQUEST} when this JAR
-   *     holds no native library for the platform
+   * holds no native library for the platform
    */
   public static Run start(byte[] message, Map<Integer, ?> attachments) throws NativeError {
     NativeCore.load();

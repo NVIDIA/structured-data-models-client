@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The date reader held to the reference's readings: T0.6's 45 PQL
-//! literals (`rust/testdata/t06-vectors.json`), the generated literals of
+//! The date reader held to the reference's readings: 45 PQL
+//! literals (`rust/testdata/native-admission-vectors.json`), the generated literals of
 //! `dates.json` (D8's packed dates and long fields, and a grid of D2 to D7
 //! with D4's warning), and the frozen
 //! `padded-years.tsv`, where Linux's `strftime` and macOS's differ only in
@@ -13,7 +13,7 @@
 //! format; every kind of answer must be held, and each file must hold the
 //! rows it promises, so a vector set read short or empty fails.
 //!
-//! From T1.6c a literal with a run of five digits or more (D8) is refused
+//! a literal with a run of five digits or more (D8) is refused
 //! by name ([`Reading::Packed`]) instead of read: its rows keep the
 //! reference's reading, as evidence of the old behaviour, and are held to
 //! `Packed` here instead; every other row is held to the reference's
@@ -51,7 +51,7 @@ fn answer(reader: Reader, literal: &str) -> Answer {
 }
 
 /// Whether `literal` has a run of five digits or more in its `DATE` or
-/// `TIME` token: D8's literals, refused by name from T1.6c.
+/// `TIME` token: D8's literals, refused by name.
 fn packed(literal: &str) -> bool {
     literal
         .split([' ', '/', '-', '.', ':'])
@@ -65,7 +65,7 @@ struct Held {
     refused: usize,
     offset: usize,
     warned: usize,
-    /// Rows the reader refused by name as packed (D8, from T1.6c).
+    /// Rows the reader refused by name as packed (D8).
     packed: usize,
 }
 
@@ -84,7 +84,7 @@ impl Held {
 
 /// Each `[literal, value, offset, format]` row against the reader: a D8
 /// literal must be refused by name as packed, whatever the reference read
-/// (T1.6c); every other must read as the reference reads it. `held` counts
+///; every other must read as the reference reads it. `held` counts
 /// the reference's answers, so the file's promise is checked as before, and
 /// the packed refusals beside them.
 fn check(reader: Reader, rows: &[Value], failures: &mut Vec<String>) -> Held {
@@ -112,14 +112,15 @@ fn check(reader: Reader, rows: &[Value], failures: &mut Vec<String>) -> Held {
     held
 }
 
-/// T0.6's literals: the four with a run of five digits or more
+/// literals: the four with a run of five digits or more
 /// (`230203-06-09`, `20240101/00/123456`, `00001/1/2`, which the reference
 /// reads, and `10000-01-01`, which it refuses) are refused by name as packed
-/// (T1.6c brief: "a D8 literal is refused with a named code and rule");
+/// ( brief: "a D8 literal is refused with a named code and rule");
 /// the other 41 read as the reference reads them (D1 to D7 and D9 unchanged).
 #[test]
-fn the_t06_literals_read_as_the_reference_reads_them() {
-    let vectors: Value = serde_json::from_str(&here("../../testdata/t06-vectors.json")).unwrap();
+fn date_literal_vectors_preserve_parsing_results() {
+    let vectors: Value =
+        serde_json::from_str(&here("../../testdata/native-admission-vectors.json")).unwrap();
     let year = vectors["meta"]["chrono"]["today_year"].as_i64().unwrap();
     let reader = Reader {
         year: Some(i16::try_from(year).unwrap()),
@@ -158,18 +159,15 @@ fn the_t06_literals_read_as_the_reference_reads_them() {
             }
         };
         let got = answer(reader, literal);
-        // T0.6 records whether a warning was given, not its format.
+        // records whether a warning was given, not its format.
         let got = (got.0, got.1, got.2.map(|_| String::new()));
         if got != want {
             failures.push(format!("{literal}: {got:?}, the reference {want:?}"));
         }
         held.count(&want);
     }
-    assert_eq!(rows, 45, "T0.6's 45 literals");
-    assert_eq!(
-        held.packed, 4,
-        "T0.6's four literals with a run of five digits"
-    );
+    assert_eq!(rows, 45, "45 literal cases");
+    assert_eq!(held.packed, 4, "four literals with a run of five digits");
     assert!(
         held.read > 0 && held.refused > 0 && held.warned > 0,
         "{held:?}"
@@ -178,7 +176,7 @@ fn the_t06_literals_read_as_the_reference_reads_them() {
 }
 
 /// `dates.json`: every one of D8's 7,749 `packed` rows is refused by name
-/// as packed, those the reference reads and those it refuses alike (T1.6c
+/// as packed, those the reference reads and those it refuses alike (
 /// brief: "remove the D8 reading path"); every `plain` row (every run four
 /// digits or fewer) still reads as the reference reads it, D4's warnings
 /// and D9's refusals included ("keep everything else in D1 to D9
@@ -340,7 +338,7 @@ fn a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named() {
     );
 }
 
-/// T1.6c brief, "a D8 literal is refused ... `date_literal_packed`", at the
+/// brief, "a D8 literal is refused... `date_literal_packed`", at the
 /// reader: a run of five digits or more anywhere, in any of the three date
 /// fields or the three time fields, is `Packed` before anything is read,
 /// so it needs no current year and is never `Unplaced` (its six-digit

@@ -94,5 +94,5 @@
     "stage": "predict"
   },
   "why": "num_neighbors=[2, 2] over users, orders and lines: at most 2 orders per user and 2 lines per order",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-neighbors-2-2 using the shop fixture."
 }

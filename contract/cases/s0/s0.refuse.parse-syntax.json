@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The parse family: an unclosed parenthesis (PQL_PARSE_SYNTAX)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.parse-syntax using the shop fixture."
 }

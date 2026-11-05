@@ -2,17 +2,17 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The implementer's own checks of T2.7, beside the test author's
-//! acceptance tests (`t27_non_sql_provider.rs`), on the minimal non-SQL
+//! The implementer's own checks of, beside the test author's
+//! acceptance tests (`non_sql_provider.rs`), on the minimal non-SQL
 //! test provider (`sdm_testkit::memory`) through the second data layer
 //! (`sdm_testkit::layer`):
 //!
 //! - a prediction whose two schema tables read one source is the one the
-//!   same provider gives over two equal sources, whole;
+//! same provider gives over two equal sources, whole;
 //! - against DuckDB's SQL, a prediction's description, its result and its
-//!   request but the in-context examples are DuckDB's; the examples are
-//!   drawn by each provider's own seeded sample (DuckDB's reservoir
-//!   shuffles even a table it keeps whole), so they are not compared;
+//! request but the in-context examples are DuckDB's; the examples are
+//! drawn by each provider's own seeded sample (DuckDB's reservoir
+//! shuffles even a table it keeps whole), so they are not compared;
 //! - the swapped layer refuses a SQL dialect by name.
 
 use std::path::PathBuf;
@@ -148,7 +148,7 @@ fn the_swapped_layer_renders_no_sql_dialect() {
 }
 
 /// The key counts the core asks are labelled as the dialects label them
-/// (T2.12): a source whose enforced key comes before a counted one, so a
+///: a source whose enforced key comes before a counted one, so a
 /// counted key's label is not its position, is described as on DuckDB.
 #[test]
 fn a_key_count_is_labelled_as_duckdbs() {

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! `predict` of a request asked in several model calls (`main`'s
-//! multi-call `predict`, 1fc5a686; T2.8c), through `sdm_core::start`: every
+//! multi-call `predict`, 1fc5a686), through `sdm_core::start`: every
 //! call is written before the first is sent, each carrying the id the host
 //! drew for it; each call's rows are numbered on from where the previous
 //! call's ended; the answers are given back as one; and a call that fails

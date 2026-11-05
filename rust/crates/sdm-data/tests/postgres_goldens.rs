@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4 on Postgres (T2.4): every statement the Postgres dialect rendered for
+//! L4 on Postgres: every statement the Postgres dialect rendered for
 //! the contract cases, pinned verbatim beside the request it answers. Each
 //! request is planned here and must render exactly its statements, so a
 //! change of the SQL without a golden update fails; and every fetch
@@ -18,7 +18,7 @@
 //! Each request is planned under the schema the cases' runs read every
 //! table in, `public`, each case database's current schema, which the core
 //! reads once per run (that read planned under none) and names in every
-//! statement (T3.7). Re-pinned at T3.7 from python-core's run of every case
+//! statement. Re-pinned from python-core's run of every case
 //! on Postgres 17: a schema's describe names each table in one part under
 //! the source's settled schema, a materialize in two parts, read where the
 //! run located it; each statement reviewed against the old client's on

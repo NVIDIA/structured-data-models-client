@@ -6,7 +6,7 @@
 //! its bounded draw and its `Generator.shuffle` of a one-dimensional array,
 //! which the reference's `sample_target` draws its example order from.
 //!
-//! These are ports of defined algorithms (decision A4's line; a row in
+//! These are ports of defined algorithms ('s line; a row in
 //! `dependencies.md`), written from numpy's own sources:
 //! `bit_generator.pyx` (`SeedSequence`: `mix_entropy`, `generate_state`),
 //! `pcg64.h` (the 128-bit XSL RR generator and its seeding), `pcg64.pyx`
@@ -15,7 +15,7 @@
 //! draw) and `_generator.pyx` (`_shuffle_raw`, Fisher and Yates from the
 //! last position down). Vectors recorded from numpy hold them to numpy's
 //! answers: `tests/rs1.json` for seeds from 0 to past 2**200, and
-//! `tests/rs1-draws.json` (T1.22) for every seed of T0.6's model, 2**70
+//! `tests/rs1-draws.json` for every seed of model, 2**70
 //! among them, and for numpy's compiled `random_interval` on both of its
 //! paths, to a maximum of 2**64 - 1. No other stream is reached: the
 //! reference's other draws (RS-2 to RS-5) are on backends and paths the

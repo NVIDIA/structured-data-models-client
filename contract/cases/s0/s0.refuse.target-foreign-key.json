@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The target family: FIRST over a foreign key (PQL_TARGET_AGGREGATION_ON_FOREIGN_KEY)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.target-foreign-key using the shop fixture."
 }

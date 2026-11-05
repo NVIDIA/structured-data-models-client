@@ -7,35 +7,34 @@ r"""The run loop: one core operation, from its ``start`` to its result.
 The loop starts a run with this host's facts, asks it for steps, answers
 each fetch through the caller's provider, shows the run's warnings in the
 order given, and raises the run's error as this client's exception
-(:mod:`.errors`). At each run start it resets the logging bridge's level
+(mod:`.errors`). At each run start it resets the logging bridge's level
 cache, so a change to the ``logging`` configuration takes effect
-(decision H8).
+.
 
 A provider's failure reaches the core as the contract's ``ProviderError``:
 kind, ``retryable``, SQLSTATE, vendor code and an internal driver diagnostic; the
 exception the run then ends with names the driver's class and is raised
-``from None`` (decision H17). A failure is retryable when the provider's
+``from None``. A failure is retryable when the provider's
 exception says so, by a ``retryable`` attribute that is ``True``, and not
 otherwise.
 
-A provider may answer a fetch one page at a time (design choice 1,
-paging): it returns a :class:`Page`, one page with more following, and the
+A provider may answer a fetch one page at a time: it returns a:class:`Page`, one page with more following, and the
 core asks again with the same request and the page's ``continuation`` in
 the step (``step['continuation']``), until the provider returns its last
 page as an answer; the core reads the pages as one answer.
 
-A model call (from T1.11d, ``predict``'s) is answered by the caller's
+A model call (``predict``'s) is answered by the caller's
 ``model``: given the body's bytes, it returns the answer's bytes, which the
-core reads as the endpoint's 200; it raises :class:`TransportFailed` when
+core reads as the endpoint's 200; it raises:class:`TransportFailed` when
 the client's transport failed (the endpoint could not be reached, or its
 answer could not be read), which the core is told as the contract's
 transport error (kind and ``retryable`` only, never the transport's text);
 anything else it raises (the endpoint's refusal, which the caller has made
 safe to show) cancels the run and is raised as it is. A serving endpoint's
-transport raises :class:`~sdm_client.core.transport.EndpointFailed` for a
+transport raises:class:`~sdm_client.core.transport.EndpointFailed` for a
 failure with no answer, which the core is told as it is (the contract's
 failed outcome: the status, the SDK's message as an attachment, its code
-and class), and names (T3.13).
+and class), and names.
 """
 
 from __future__ import annotations
@@ -55,7 +54,7 @@ from sdm_client.errors import StructuredDataError
 
 # A provider (``sdm_connectors.providers.Provider``) answers one fetch, the
 # ``FetchStep`` as the contract writes it, with an object that exports Arrow
-# through ``__arrow_c_stream__``, or with a :class:`Page` of it; the key
+# through ``__arrow_c_stream__``, or with a:class:`Page` of it; the key
 # sets its plan names are handed over with it, by attachment id, each an
 # object exporting Arrow the same way.
 
@@ -82,7 +81,7 @@ class Page:
 
 class TransportFailed(Exception):
     r"""The client's transport failed: the endpoint could not be reached,
-    or its answer could not be read. Raised by a :data:`Model`, and told to
+    or its answer could not be read. Raised by a:data:`Model`, and told to
     the core as a transport error. It carries no text."""
 
 
@@ -95,7 +94,7 @@ class Refused(Exception):  # noqa: N818 - says what happened to the call
     :data:`Model`. The core is told only that the call failed, its
     ``status`` where the endpoint answered with one, else as a transport
     error, so it ends the run carrying the answers of the calls before it
-    (T2.8c); then ``raised`` is raised with them in its ``details``,
+    ; then ``raised`` is raised with them in its ``details``,
     keeping its own type, code and text."""
 
     def __init__(self, raised: Exception, status: int | None = None) -> None:
@@ -108,7 +107,7 @@ def native() -> ModuleType:
     r"""``sdm_client._native``, imported here and nowhere else.
 
     A wheel without it cannot take a core route, and never falls back to
-    the old one: the call raises :class:`~sdm_client._rust.NativeBoundaryError`.
+    the old one: the call raises:class:`~sdm_client._rust.NativeBoundaryError`.
     """
     try:
         from sdm_client import _native
@@ -159,8 +158,8 @@ def _driver(
         'driver_message': str(error),
     }
     # What the provider reads of its driver's failure beyond the attributes
-    # above (a Databricks failure's SQLSTATE in its message, T3.4, and its
-    # error class, T3.27), as the reference reads them.
+    # above (a Databricks failure's SQLSTATE in its message, and its
+    # error class), as the reference reads them.
     read = getattr(provider, 'error_fields', None)
     said = read(error) if callable(read) else None
     if said is not None:
@@ -201,13 +200,13 @@ def run(
     collects the code of every warning the run gave, shown or not.
 
     ``state``, for a ``materialize``, is where its materializer keeps the
-    sampler state (decision E52): the state held there (``'held'``) is
+    sampler state: the state held there (``'held'``) is
     handed to the run as it was taken, and the state the run leaves, done
     or failed, is put there in its place. This passes the state through and
     reads nothing of it; what it holds is the core's.
 
     Raises:
-        StructuredDataError: The run's error, as :mod:`.errors` maps it.
+        StructuredDataError: The run's error, as:mod:`.errors` maps it.
         NativeBoundaryError: ``sdm_client._native`` cannot be imported.
     """
     core = native()
@@ -247,7 +246,7 @@ def run(
 
 def _drops_the_state(refused: Any) -> bool:
     r"""Whether the core's refusal of a start tells the host to drop the
-    sampler state handed to it (``drop_held``, decision E74): the core's
+    sampler state handed to it (``drop_held``): the core's
     word, never the field the error names."""
     try:
         message = codec.read(refused.control, refused.attachments)
@@ -259,7 +258,7 @@ def _drops_the_state(refused: Any) -> bool:
 
 def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
     r"""Puts the sampler state the run left in ``state``, as it was taken:
-    its version and its memo's bytes (decision E52). A state that cannot be
+    its version and its memo's bytes. A state that cannot be
     taken is lost, and the next run reads again what it would have
     skipped."""
     try:
@@ -347,7 +346,7 @@ def _steps(
             )
         # A provider's failure is named by its driver's class only for the
         # step that failed: the core may carry on past one (a whole-table
-        # read it falls back from, T1.32e), and a later error is no other
+        # read it falls back from), and a later error is no other
         # step's.
         driver_class = None
         for request in step['requests']:
@@ -400,7 +399,7 @@ def _call(
 ) -> Refused | None:
     r"""Answers one model call with ``model``: its answer as a 200, or, when
     the transport failed, the contract's transport error; a refused call
-    (:class:`Refused`) as its status, or as a transport error where it has
+    (class:`Refused`) as its status, or as a transport error where it has
     none, and returned, for the run's end to raise."""
     body = handle.take_attachment(step['body'])
     attached: dict[int, Any] = {}
@@ -468,7 +467,7 @@ def _call(
 
 
 def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
-    r"""The answers the core carried on its error (``answered``, T2.8c),
+    r"""The answers the core carried on its error (``answered``),
     taken from the run and kept on ``error`` as ``_answered``: the Arrow
     result and the rows it scores, which the predict bridge reads."""
     try:
@@ -483,19 +482,19 @@ def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
         error._answered = (stream, answered['rows'])  # type: ignore[attr-defined]
 
 
-#: The core's fields that say what a failed request had answered (T2.8c).
+#: The core's fields that say what a failed request had answered.
 _ANSWERED_FIELDS = ('calls_answered', 'parts_answered')
 #: The core's fields that say which part of a question asked in parts a
 #: failed call was (a forecast's step, a ranking's candidate by its position
 #: among those given, and how many questions the ranking is asked as),
-#: which the client says the refusal of (T2.14b).
+#: which the client says the refusal of.
 _PART_FIELDS = ('forecast_step', 'ranking_candidate', 'ranking_parts')
 
 
 def _carried(error: StructuredDataError, raised: Exception) -> None:
     r"""Puts on ``raised`` what the core carried on ``error``: how many calls
     or parts were answered before it, and their answers where the core
-    carried them (a ranking's are counted, never kept, T2.8), beside any
+    carried them (a ranking's are counted, never kept), beside any
     ``details`` it holds, whatever exception it is, as the reference's
     client does."""
     answered = getattr(error, '_answered', None)
@@ -517,7 +516,7 @@ def _carried(error: StructuredDataError, raised: Exception) -> None:
 def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
     r"""Puts on ``raised``, a refusal the client raises, which part of a
     question asked in parts the core said ``error`` happened in
-    (:data:`_PART_FIELDS`), which the client says it of (T2.14b)."""
+    (data:`_PART_FIELDS`), which the client says it of."""
     if not isinstance(raised, StructuredDataError):
         return
     named = {
@@ -532,8 +531,8 @@ def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
     r"""The key sets ``request``'s plan names, taken from the run by id: the
-    attachments the core sent with the step (decision Q1), each a key set's
-    Arrow or the one text its dialect wrote of it (T3.28)."""
+    attachments the core sent with the step, each a key set's
+    Arrow or the one text its dialect wrote of it."""
     plan = request['plan']
     taken: dict[int, Any] = {}
     for statement in plan.get('statements', ()):

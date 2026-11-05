@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB and Postgres: answered through predict, the target summed over a window holding the NaN"
+    "stage": "predict"
   },
   "why": "A NaN in the aggregated column (orders.price of order 8, user 0's, in the context's windows), which both the preview and the target's sum read: rule float_nan. Not on SQLite, as rule.float-nan-feature",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.float-nan-aggregated using the shop fixture."
 }

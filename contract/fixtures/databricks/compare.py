@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""Compares the core's Databricks statements with the old client's
-(T3.4; the brief's exit 2): each golden of
+(the brief's exit 2): each golden of
 ``rust/crates/sdm-data/tests/databricks_goldens.rs`` printed beside the
 old client's statement of its kind from ``reference-statements.json``
 (the same table where the old client has one), as a unified diff, or
@@ -17,9 +17,9 @@ stand-in). ``capture.json`` (``"fixture": true``) holds, per case, the
 statements the old client sent at the reference commit (43e55f4f) with
 the answers a fake driver replays to the providers' and the catalog
 reader's unit tests; ``reference-statements.json`` holds those statements
-by request kind. They were written once by T3.4's test author with an
+by request kind. They were written once by test author with an
 offline stand-in warehouse that answered from DuckDB; that stand-in is
-removed (T3.4 fix 1, round 1's Codex P1-6), so the answers' values are
+removed, so the answers' values are
 DuckDB's, typed as Unity Catalog types them, and are not evidence of what
 a warehouse answers. C-1's live recording replaces both files.
 """

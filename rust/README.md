@@ -8,7 +8,7 @@ Time zones come from directories the host names, then from a bundled copy.
 
 ## Crates
 
-The last column is what `scripts/rust_core/l0_deps.py` allows, for any kind of dependency, test ones included; the diagram below shows what is used.
+The last column is what `scripts/rust_core/dependency_policy.py` allows, for any kind of dependency, test ones included; the diagram below shows what is used.
 
 | Crate | Purpose | May depend on |
 |---|---|---|
@@ -91,7 +91,7 @@ sdm-pql: depends on no crate of ours
 - Copying a Python library's incidental behavior (a codec, a repr) is confined to three `sdm-pql` modules, named in `scripts/rust_core/emulation-allowlist.txt`: Python's integer digit limit, its float text, and its string escapes.
   Porting an algorithm the Python code defines (random streams, seed hashes, date offsets) is allowed in the crate that owns it.
 
-`scripts/rust_core/l0_deps.py` checks the crate graph and `scripts/rust_core/l0_scan.py` checks the SQL, dialect and Python-behavior rules.
+`scripts/rust_core/dependency_policy.py` checks the crate graph and `scripts/rust_core/architecture_policy.py` checks the SQL, dialect and Python-behavior rules.
 
 ## Building and testing
 

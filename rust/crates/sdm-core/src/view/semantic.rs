@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Snowflake semantic view's conversion, V1 to V7 of T3.5, in the old
+//! A Snowflake semantic view's conversion, V1 to V7 of, in the old
 //! client's order (`RE/graph.py:1967-2275`): the definition read
 //! ([`super::read_definition`], V1); then each table in turn, finished
 //! before the next is read (V2 to V5): its base table and key (V2), each
@@ -43,7 +43,7 @@ fn text(spec: &ViewSpec, node: NodeId) -> Result<String, CoreError> {
 }
 
 /// The base table's catalog, read once, its name tried in each spelling the
-/// data layer gives until one resolves (design S2: Snowflake's as written,
+/// data layer gives until one resolves (Snowflake's as written,
 /// then upper-cased), that spelling kept for the run.
 async fn base_catalog(
     reading: &Reading<'_>,

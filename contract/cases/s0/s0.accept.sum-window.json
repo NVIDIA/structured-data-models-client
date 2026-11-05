@@ -103,5 +103,5 @@
     "stage": "materialize"
   },
   "why": "The first accepted S0 query: validated on the core, then materialized through the old materializer, which is not evidence for core materialization",
-  "source": "phase-1b-inventory.yaml base.regression's query, on its shop base"
+  "source": "Correctness case s0.accept.sum-window using the shop fixture."
 }

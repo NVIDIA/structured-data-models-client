@@ -88,5 +88,5 @@
     "stage": "predict"
   },
   "why": "context_anchor_time 2024-06-01, after the anchor: the reference answers with a warning",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.context-anchor-time.later using the shop fixture."
 }

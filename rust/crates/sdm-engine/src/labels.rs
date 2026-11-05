@@ -3,41 +3,41 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Labels over fetched rows, as the reference's pandas executor computes
-//! them (`PQueryPandasExecutor`), in Rust, never compiled to SQL
-//! (decision E19), compared exactly.
+//! them (`PQueryPandasExecutor`), in Rust, never compiled to SQL,
+//! compared exactly.
 //!
 //! - A column is read as the executor reads it (`execute_column`): a float
-//!   at float32, an integer at int64, a decimal exactly; a null, and a
-//!   float's NaN, is no value.
+//! at float32, an integer at int64, a decimal exactly; a null, and a
+//! float's NaN, is no value.
 //! - A windowed aggregation ([`aggregate`], `execute_aggregation`) takes, of
-//!   each example, the rows whose value is present and whose time is after
-//!   its window's start, when it has one, and not after its end, in row
-//!   order: `SUM` of a float at float32 with Kahan's compensation (register
-//!   PK-2), of an integer in int64, of a decimal exactly at any size
-//!   (T2.0c); `COUNT` the rows; `AVG` a float's
-//!   Kahan sum at float32 over the count, an integer's at float64, a
-//!   decimal's exact sum over the count, at any size; `MIN` and `MAX`
-//!   exactly; then each read at float32, a decimal's exact value rounded
-//!   once to the nearest float32 (T2.0c).
-//!   An example with no row is 0 for `SUM` and `COUNT` and has no label
-//!   for the others.
+//! each example, the rows whose value is present and whose time is after
+//! its window's start, when it has one, and not after its end, in row
+//! order: `SUM` of a float at float32 with Kahan's compensation (register
+//! PK-2), of an integer in int64, of a decimal exactly at any size;
+//! `COUNT` the rows; `AVG` a float's
+//! Kahan sum at float32 over the count, an integer's at float64, a
+//! decimal's exact sum over the count, at any size; `MIN` and `MAX`
+//! exactly; then each read at float32, a decimal's exact value rounded
+//! once to the nearest float32.
+//! An example with no row is 0 for `SUM` and `COUNT` and has no label
+//! for the others.
 //! - A condition (`column_compare`, `execute_rel_op`) compares the values its
-//!   target has with a constant read at the target's type: at float32 for a
-//!   float32 target, at float64 for an integer target and a float constant,
-//!   at int64 for an integer target and an integer constant; a decimal
-//!   target exactly, at no scale but their own (T2.0c, KO2-50); a boolean,
-//!   text or time with its own kind. `IN` (`execute_member_op`) reads its
-//!   list at the target's type the same way, then tests membership.
+//! target has with a constant read at the target's type: at float32 for a
+//! float32 target, at float64 for an integer target and a float constant,
+//! at int64 for an integer target and an integer constant; a decimal
+//! target exactly, at no scale but their own; a boolean,
+//! text or time with its own kind. `IN` (`execute_member_op`) reads its
+//! list at the target's type the same way, then tests membership.
 //! - `NOT`, `AND` and `OR` ([`truth`], `execute_logical_operation`) join
-//!   their conditions' answers row by row, and label only the rows every
-//!   condition has a value for; a target's filter (`execute_filter`) keeps
-//!   the rows its condition holds for, which [`aggregate_kept`] aggregates
-//!   (T2.10).
+//! their conditions' answers row by row, and label only the rows every
+//! condition has a value for; a target's filter (`execute_filter`) keeps
+//! the rows its condition holds for, which [`aggregate_kept`] aggregates.
+//!
 //! - [`label`] puts them together as `execute` does: the examples whose
-//!   target has a value keep their label, in order; the rest have none.
+//! target has a value keep their label, in order; the rest have none.
 //!
 //! What the executor does by a path this does not port is refused by name
-//! ([`crate::not_yet`], register P1B-3).
+//! ([`crate::not_yet`], B-3).
 
 use sdm_contract::{CoreError, Sentence};
 
@@ -110,12 +110,12 @@ pub struct Aggregated {
 
 /// The `f64` Arrow's `Decimal128::ToDouble` gives a decimal, shared with
 /// inference (`sdm-schema`), which counts a scaled decimal as the
-/// reference's cast to float64 gives it (T2.14b).
+/// reference's cast to float64 gives it.
 pub use sdm_contract::scalar::decimal_to_f64;
 
 /// The exact sum of decimals' unscaled values, in 256 bits, two's
 /// complement (`high * 2**128 + low`): no sum of `i128`s a request holds
-/// passes it, so nothing wraps and nothing is refused (T2.0c, exact
+/// passes it, so nothing wraps and nothing is refused (exact
 /// decimals: the reference since `main`'s eb6c68eb sums a decimal column
 /// as float64 and answers a sum past 38 digits).
 #[derive(Clone, Copy, Default)]
@@ -234,7 +234,7 @@ fn decimal_to_f32(value: i128, scale: i8) -> f32 {
 
 /// The exact sum of decimals of `scale`, at any size, rounded once to the
 /// nearest float32. A sum past the column's declared digits is a sum like
-/// any other (T2.0c).
+/// any other.
 fn decimal_sum(values: impl Iterator<Item = i128>, scale: i8) -> f32 {
     let (negative, limbs) = ExactSum::of(values).magnitude();
     exact_to_f32(negative, limbs, 1, scale)
@@ -242,7 +242,7 @@ fn decimal_sum(values: impl Iterator<Item = i128>, scale: i8) -> f32 {
 
 /// The exact mean of `n` decimals of `scale`, their exact sum over the
 /// count, at any size, rounded once to the nearest float32: never first at
-/// the column's scale (T2.0c, round 1).
+/// the column's scale (round 1).
 fn decimal_mean(values: impl Iterator<Item = i128>, n: usize, scale: i8) -> f32 {
     let (negative, limbs) = ExactSum::of(values).magnitude();
     exact_to_f32(negative, limbs, n as u64, scale)
@@ -568,7 +568,7 @@ fn constant_decimal(constant: &Constant) -> Option<(i128, i32)> {
 }
 
 /// How a decimal of unscaled `value` at `scale` orders against `constant`,
-/// exactly, at no scale but their own (T2.0c, KO2-50: `d > 1.5` holds for
+/// exactly, at no scale but their own (: `d > 1.5` holds for
 /// a `DECIMAL(38, 0)` `d` of 2): the constant is never rounded to the
 /// column's scale, and one past the column's digits orders by its sign.
 /// An infinite constant orders past every value; a NaN, which the PQL
@@ -635,7 +635,7 @@ fn null_condition(has: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError> {
 /// label, each `False` for `=` and `True` for `!=` (it drops the others
 /// before it compares); the rest have none. Where some have none, the
 /// reference's `execute` fails after this, which its caller refuses
-/// (register P1B-21).
+/// (B-21).
 fn aggregated_null(present: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError> {
     let label = match op {
         RelOp::Eq => false,
@@ -678,7 +678,7 @@ pub enum Column {
 
 impl Column {
     /// Whether each row holds a value: not null, and for a float not NaN
-    /// (`notna()` after `execute_column`'s float32).
+    /// (`notna` after `execute_column`'s float32).
     fn present(&self) -> Vec<bool> {
         match self {
             Column::Float(v) => v.iter().map(|v| v.is_some_and(|v| !v.is_nan())).collect(),
@@ -695,11 +695,11 @@ impl Column {
 /// A decimal column as a target. At scale 0, where every value fits, an
 /// int64, as the reference reads it since `main`'s eb6c68eb. Otherwise:
 /// - a regression's labels are numbers, each value rounded once to the
-///   nearest float32 (round 1: a regression has no classes to keep apart);
+/// nearest float32 (round 1: a regression has no classes to keep apart);
 /// - a classification's are spelled as the reference spells its classes
-///   (float64, then float32, as [`decimal_to_f64`] reads it), and where two
-///   distinct values meet at one float32, each value's own digits instead,
-///   so no two values become one class (T2.0c).
+/// (float64, then float32, as [`decimal_to_f64`] reads it), and where two
+/// distinct values meet at one float32, each value's own digits instead,
+/// so no two values become one class.
 fn decimal_target(values: &[Option<i128>], scale: i8, classes: bool) -> (Vec<bool>, Labels) {
     let mask: Vec<bool> = values.iter().map(Option::is_some).collect();
     let present: Vec<i128> = values.iter().flatten().copied().collect();
@@ -815,7 +815,7 @@ enum Test<'a> {
 /// example's other side: the reference's packs an average's, a minimum's
 /// and a maximum's values onto the examples that have one before it joins
 /// them, which misaligns them where an earlier example has none (register
-/// entry of T2.10).
+/// entry of ).
 pub fn truth(target: &Target) -> Result<Truth, CoreError> {
     match target {
         Target::Condition {
@@ -870,7 +870,7 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
 /// executor reads without its missing values first (`filter_na=True`), so
 /// an integer column is a numpy int64 that refuses a float with a
 /// fraction in an `IN` list; elsewhere such a float is compared exactly
-/// and matches no integer ([`int_member`], KO2-73).
+/// and matches no integer ([`int_member`]).
 fn leaf(target: &Target, test: &Test<'_>, top: bool) -> Result<Truth, CoreError> {
     match target {
         Target::Column(column) => {
@@ -1077,7 +1077,7 @@ fn column_member(column: &Column, values: &[Constant], top: bool) -> Result<Vec<
 /// reference refuses it on every database), a float past int64 refused by
 /// name (`condition_value`) where numpy's int64 raises an overflow.
 /// Elsewhere (a target's filter, a logical target) a float is compared
-/// exactly (KO2-73): a whole one matches its integer, and one with a
+/// exactly: a whole one matches its integer, and one with a
 /// fraction or past int64 matches no row, where the reference takes it
 /// toward zero on DuckDB and SQLite and refuses it on Postgres (register
 /// P2E-17).
@@ -1318,7 +1318,7 @@ mod tests {
     #[test]
     fn a_decimal_sum_past_38_digits_is_summed_exactly() {
         // Past the column's 38 digits, and past i128, the total is exact
-        // and read once at float32 (T2.0c; the reference since eb6c68eb
+        // and read once at float32 (the reference since eb6c68eb
         // answers these as float64 sums).
         let big = 60_000_000_000_000_000_000_000_000_000_000_000_000_i128;
         let nine = 90_000_000_000_000_000_000_000_000_000_000_000_000_i128;
@@ -1450,7 +1450,7 @@ mod tests {
 
     #[test]
     fn a_decimal_regression_target_meeting_at_one_float32_stays_numbers() {
-        // Round 1 (Claude P1-1): a regression has no classes to keep apart,
+        // A regression has no classes to keep apart,
         // so values meeting at one float32 are numbers, each rounded once to
         // the nearest float32, never text (which a regression's payload
         // refuses as an internal error). DECIMAL(12, 2) amounts past
@@ -1511,7 +1511,7 @@ mod tests {
     fn a_decimal_is_compared_with_a_constant_of_any_scale_exactly() {
         use Constant::{Float, Int};
         use RelOp::{Eq, Ge, Gt, Le, Lt, Ne};
-        // KO2-50: the constant is never rounded to the column's scale.
+        //: the constant is never rounded to the column's scale.
         assert!(holds(2, 0, Gt, Float(1.5)));
         assert!(!holds(1, 0, Gt, Float(1.5)));
         assert!(holds(1, 0, Lt, Float(1.5)));
@@ -1543,7 +1543,7 @@ mod tests {
 
     #[test]
     fn a_decimal_mean_is_exact_and_rounded_once() {
-        // Round 1 (Codex P1): the mean is the exact sum over the count, never
+        // Round 1: the mean is the exact sum over the count, never
         // first rounded to the column's scale: 1 and 2 at scale 0 average
         // 1.5, not 2.
         for (terms, scale, wanted) in [
@@ -1577,7 +1577,7 @@ mod tests {
 
     #[test]
     fn a_decimal_sum_never_wraps_nor_flips_its_sign() {
-        // Round 1 (Codex P1): two values of -2**126 sum to i128::MIN, whose
+        // Round 1: two values of -2**126 sum to i128::MIN, whose
         // magnitude is 2**127, which read as an i64 high half flipped sign.
         let half = -85_070_591_730_234_615_865_843_651_857_942_052_864_i128;
         assert_eq!(half * 2, i128::MIN);
@@ -1611,7 +1611,7 @@ mod tests {
 
     #[test]
     fn a_decimal_aggregate_is_rounded_once_to_float32() {
-        // Round 1 (Codex P1): 1 + 2**-24 is a float32 midpoint; a hair above
+        // Round 1: 1 + 2**-24 is a float32 midpoint; a hair above
         // it rounds up, a hair below rounds down, where rounding first to
         // float64 lands on the midpoint and then to even, 1.0.
         let above = 1_000_000_059_604_644_775_390_625_000_001_i128;
@@ -1672,7 +1672,7 @@ mod tests {
     }
 
     // The reference's executor's answers below were read from it at
-    // 6298913c over these values (T2.10's probe): six entities, `cat`
+    // 6298913c over these values (probe): six entities, `cat`
     // `['US', 'DE', 'IN', NULL, 'DE', 'IN']`, `flag`
     // `[true, false, false, true, NULL, false]`, `ni` `[0, 1, 2, 3, 0, NULL]`.
     fn cat() -> Box<Target> {
@@ -1767,7 +1767,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(refused.code, ErrorCode::InvalidRequest);
         // `e.ni IN (1, 2.5) OR e.flag = true`: 2.5 is compared exactly and
-        // matches no integer (KO2-73), where the reference takes it as 2:
+        // matches no integer, where the reference takes it as 2:
         // [T, T, F, T], mask 1 1 1 1 0 0.
         let or = label(&Target::Both {
             op: BoolOp::Or,
@@ -1814,7 +1814,7 @@ mod tests {
 
     #[test]
     fn a_filter_keeps_the_rows_its_condition_holds_for_a_missing_value_failing_it() {
-        // `COUNT(a.* WHERE NOT a.v > 3, ...)`: a row whose `v` is null fails
+        // `COUNT(a.* WHERE NOT a.v > 3,...)`: a row whose `v` is null fails
         // `a.v > 3`, so `NOT` keeps it.
         let v = Target::Column(Column::Float(vec![Some(1.0), None, Some(5.0), Some(2.0)]));
         let kept = truth(&Target::Not(Box::new(Target::Condition {

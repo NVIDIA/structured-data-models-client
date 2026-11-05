@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The Java binding over sdm-host, the native library of `com.nvidia.sdm`
-//! (design choice 10).
+//!.
 //!
 //! A thin layer over [`HostRun`], as `sdm-py` is: control messages cross as
 //! `byte[]` both ways, never as `String`, so no text meets JNI's modified
@@ -12,24 +12,24 @@
 //! one `NativeError`. It makes no semantic call into Java.
 //!
 //! - Arrow crosses through the Arrow C Data interface only, with no copy:
-//!   an Arrow attachment in is an `ArrowArrayStream` struct Java exported
-//!   its data into and hands over by address, which this layer moves out
-//!   of; one out is a [`NativeArrow`] handle, which Java exports into a
-//!   struct of its own when it reads it ([`export_arrow`]).
+//! an Arrow attachment in is an `ArrowArrayStream` struct Java exported
+//! its data into and hands over by address, which this layer moves out
+//! of; one out is a [`NativeArrow`] handle, which Java exports into a
+//! struct of its own when it reads it ([`export_arrow`]).
 //! - Every native resource has one owner and an explicit release: a run is
-//!   a `Box<HostRun>` Java's `Run` owns and releases once
-//!   ([`Java_com_nvidia_sdm_internal_NativeCore_release`]); an Arrow
-//!   attachment out is a `Box<ArrowData>` Java's `NativeArrow` owns and
-//!   releases once. Java guards each handle so no call reaches a released
-//!   one.
+//! a `Box<HostRun>` Java's `Run` owns and releases once
+//! ([`Java_com_nvidia_sdm_internal_NativeCore_release`]); an Arrow
+//! attachment out is a `Box<ArrowData>` Java's `NativeArrow` owns and
+//! releases once. Java guards each handle so no call reaches a released
+//! one.
 //! - Every exported entry contains a panic: the core's own are contained by
-//!   `sdm-host` (`contain`) and come back as `INTERNAL_ERROR` with
-//!   `fields.panic`, and one in this layer is caught at the entry and
-//!   thrown the same way, so no unwind crosses into the JVM.
+//! `sdm-host` (`contain`) and come back as `INTERNAL_ERROR` with
+//! `fields.panic`, and one in this layer is caught at the entry and
+//! thrown the same way, so no unwind crosses into the JVM.
 //! - The core's `tracing` events reach SLF4J through the `log` facade
-//!   ([`logging`]), installed when Java first loads the library.
+//! ([`logging`]), installed when Java first loads the library.
 //! - Loading the library starts no thread; it reads no environment
-//!   variable.
+//! variable.
 
 mod logging;
 
@@ -82,7 +82,7 @@ impl From<jni::errors::Error> for Failure {
 
 /// The `error` control message for a panic in this layer: `INTERNAL_ERROR`
 /// with `fields.panic`, as `sdm-host` writes a contained one, with nothing
-/// of the panic's message (decision H17).
+/// of the panic's message.
 fn panicked() -> Outgoing {
     let error = CoreError::new(
         Sentence::Internal,
@@ -234,7 +234,7 @@ fn graph_of<'a>(handle: jlong) -> Result<&'a FrameGraph, Failure> {
 /// releases nothing twice. The batches keep Java's buffers, with no copy,
 /// and release them through the stream's callbacks when dropped. A failure
 /// of the producer is the provider's; a batch Arrow cannot build in the
-/// stream's own schema fails check (a); neither keeps any text (H17).
+/// stream's own schema fails check (a); neither keeps any text.
 fn read_stream(address: jlong) -> Result<Result<ArrowData, Unreadable>, Failure> {
     if address == 0 {
         return Err(Failure::Usage(
@@ -464,8 +464,8 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
 }
 
 /// The table of what every error's and warning's sentence says, as its
-/// JSON bytes (`sdm_host::templates`, T3.17), the twin of `sdm-py`'s
-/// `templates()`: the host reads it once and fills each sentence from it.
+/// JSON bytes (`sdm_host::templates`), the twin of `sdm-py`'s
+/// `templates`: the host reads it once and fills each sentence from it.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_templates0<'caller>(
@@ -494,7 +494,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_isPosixZone<'call
 
 /// The machine's files as Java reads them, for the local zone's rule:
 /// `NativeCore.isRegularFile` and `NativeCore.realPath` (`Files.isRegularFile`
-/// and `Path.toRealPath`), so the binding does no I/O of its own (T3.12).
+/// and `Path.toRealPath`), so the binding does no I/O of its own.
 /// A JNI failure is kept, and the entry fails with it after the rule.
 struct JavaZoneFiles<'local, 'caller> {
     env: std::cell::RefCell<&'local mut Env<'caller>>,
@@ -558,7 +558,7 @@ impl sdm_host::ZoneFiles for JavaZoneFiles<'_, '_> {
 }
 
 /// The local zone a host's facts name, by the one rule every host reads it
-/// with (`sdm_host::local_zone`, T3.12), the twin of `sdm-py`'s
+/// with (`sdm_host::local_zone`), the twin of `sdm-py`'s
 /// `local_zone`: `setting` is `TZ`'s UTF-8 bytes, or null when unset, and
 /// `roots` the JSON array of the zone lookup roots' paths in the host's
 /// order; the JSON bytes of `{"iana": name}`, `{"posix": text}` or `null`.
@@ -604,8 +604,8 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_localZone0<'calle
 }
 
 /// What each model supports, as the client describes it to a caller, as
-/// the core's JSON bytes (`sdm_host::capabilities`, T3.12), the twin of
-/// `sdm-py`'s `capabilities()`.
+/// the core's JSON bytes (`sdm_host::capabilities`), the twin of
+/// `sdm-py`'s `capabilities`.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_capabilities0<'caller>(
@@ -619,7 +619,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_capabilities0<'ca
 
 /// A Postgres `json` or `jsonb` value, given as the server's UTF-8 text, as
 /// the reference's provider hands it to the core
-/// (`sdm_host::json_value_text`, T3.12 fix 1): its UTF-8 text, or null
+/// (`sdm_host::json_value_text`, fix 1): its UTF-8 text, or null
 /// for a JSON null; an exception for text that is not JSON.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
@@ -642,7 +642,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_jsonText0<'caller
 
 /// The UTC offset, in seconds, at `micros` in the zone a psycopg session
 /// whose `TimeZone` is the UTF-8 `name` reads in, through the lookup roots
-/// (a JSON list of paths) (`sdm_host::session_zone_offset`, T3.12 fix 3);
+/// (a JSON list of paths) (`sdm_host::session_zone_offset`, fix 3);
 /// `jint::MIN` where Python's `ZoneInfo` finds no such zone.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
@@ -721,7 +721,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_next<'caller>(
 
 /// Hands the run a `fetch_reply` or `model_reply`, with the attachments it
 /// names. An Arrow attachment that could not be read still answers the
-/// fetch it was sent for, as sdm-host decides (decision H16).
+/// fetch it was sent for, as sdm-host decides.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_reply<'caller>(
@@ -797,7 +797,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_takeWarnings<'cal
 }
 
 /// The sampler state the run left, as one `sampler_state` message, or null
-/// when it left none (decision E52).
+/// when it left none.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_takeSamplerState<'caller>(

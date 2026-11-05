@@ -76,7 +76,7 @@ impl ArrowData {
 pub enum FetchResult {
     Data(ArrowData),
     /// One page of the answer, more following: the run asks again with the
-    /// provider's `continuation` (design choice 1, paging) and gives the
+    /// provider's `continuation` and gives the
     /// body the pages as one answer, so a body never sees a page.
     Page {
         data: ArrowData,
@@ -99,7 +99,7 @@ pub enum ModelResult {
     /// host.
     TransportError { kind: ErrorKind, retryable: bool },
     /// The endpoint failed with no body, as the host's transport reported
-    /// it (`ModelOutcome::Failed`, T3.27): its status, the error's text or
+    /// it (`ModelOutcome::Failed`): its status, the error's text or
     /// body, read only for codes, and the codes the transport carried
     /// apart from it.
     Failed {
@@ -156,7 +156,7 @@ struct Shared {
     /// host.
     attachments: BTreeMap<AttachmentId, Attachment>,
     warnings: Vec<CoreWarning>,
-    /// The sampler memo the operation leaves for the host (decision E52),
+    /// The sampler memo the operation leaves for the host,
     /// as it last kept it.
     memo: Option<SamplerMemo>,
     /// Answered, not yet taken by the body.
@@ -205,7 +205,7 @@ impl Asker {
     /// renamed fails the read rather than reading another value of its
     /// name, as the reference reads a Databricks table (a column named
     /// like a session word, `user`, read as the session's value;
-    /// `_quoted_source_name`, T3.4). The provider renders it, or reads the
+    /// `_quoted_source_name`). The provider renders it, or reads the
     /// table whole where no column needs it.
     pub(crate) fn guard(&self, relation: &Relation, columns: Vec<String>) {
         if self
@@ -304,9 +304,9 @@ impl Asker {
     }
 
     /// The answer to one data request, planned by the run's data layer for
-    /// its provider (decision H14) and bound as the provider binds it, one
+    /// its provider and bound as the provider binds it, one
     /// fetch or several asked in one step, their answers joined in order
-    /// (T3.28); a request the plan refuses, or an operation that names no
+    ///; a request the plan refuses, or an operation that names no
     /// provider, is the error.
     pub fn fetch(&self, request: DataRequest) -> Result<Ask, CoreError> {
         let Some(data) = &self.data else {
@@ -338,7 +338,7 @@ impl Asker {
             }
             Route::Fallback(limits) => limits,
         };
-        // The in-memory fallback (T2.6): the request is never the host's;
+        // The in-memory fallback: the request is never the host's;
         // its seeds, attached for the host, come back to the core.
         let seeds = match &request {
             DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => {
@@ -386,7 +386,7 @@ impl Asker {
     }
 
     /// `plan` bound as the run's provider binds it (`DataAccess::bind`,
-    /// T3.28): the key sets it names handed to the data layer as the core
+    /// ): the key sets it names handed to the data layer as the core
     /// made them; each batch a fetch binds installed as one of the run's
     /// attachments, its fetch's plan naming it by that id; and each key set
     /// the core made that no fetch names any longer taken back, so the host
@@ -552,7 +552,7 @@ impl Asker {
 
     /// The catalog answer `data` holds, the admitted answer to `request`,
     /// a `describe`: read by the run's data layer into the contract's
-    /// dialect-neutral shape (decision E54), so the operation reads no
+    /// dialect-neutral shape, so the operation reads no
     /// dialect's catalog.
     pub fn read(
         &self,
@@ -644,7 +644,7 @@ impl Asker {
 
     /// Keeps `memo` as what the run leaves the host, in place of any kept
     /// before: what a `materialize` run has read of its source, which the
-    /// host takes once the run ends, done or failed (decision E52).
+    /// host takes once the run ends, done or failed.
     pub fn keep(&self, memo: SamplerMemo) {
         lock(&self.shared).memo = Some(memo);
     }
@@ -706,14 +706,14 @@ pub struct Ask {
     state: AskState,
     /// What the answer may hold, checked as each page arrives.
     budget: Option<Box<Budget>>,
-    /// A chunk of a request asked as several (T3.28): its answer is kept as
+    /// A chunk of a request asked as several: its answer is kept as
     /// the provider handed it over, read (`DataAccess::conform`) and held
     /// to its schema only once the request's chunks are joined.
     raw: bool,
 }
 
 /// What one fetch's answer may hold, the in-memory fallback's limits on a
-/// scan it asks (T2.6): checked as each page arrives, so past either the
+/// scan it asks: checked as each page arrives, so past either the
 /// run ends with that limit's error, at once, and no later page is asked
 /// for or its failure awaited.
 pub(crate) struct Budget {
@@ -765,11 +765,11 @@ enum AskState {
     /// request with explicit lossless transport conversions.
     Projection(Box<ProjectionAsk>),
     /// Asked as several fetches in one step, each a chunk of the request's
-    /// key set (T3.28), whose answers, joined in order, are the request's
+    /// key set, whose answers, joined in order, are the request's
     /// one answer: read as the run reads an answer (`data`, its
     /// `conform`) and held to `expect`, once, over the whole.
     Chunks(Box<Chunked>),
-    /// Answered by the in-memory fallback (T2.6), which asks its own
+    /// Answered by the in-memory fallback, which asks its own
     /// requests of the host through the run.
     Fallback(Pin<Box<dyn Future<Output = Reply> + Send>>),
     /// Asked under the id; a fetch keeps its request and plan, to ask for
@@ -841,7 +841,7 @@ fn next_reply(shared: &mut Shared) -> Option<ReplyId> {
 }
 
 /// `page` added to the pages read before it, which it must match in
-/// schema: a provider's pages are one answer (design choice 1, paging).
+/// schema: a provider's pages are one answer.
 fn add_page(pages: Option<ArrowData>, page: ArrowData) -> Result<ArrowData, CoreError> {
     add_part(pages, page, "page")
 }
@@ -1148,7 +1148,7 @@ impl Run {
     /// hands over, as its data layer declares it; `None` for a provider
     /// that declares none, or an operation that names no provider. The host
     /// layer reads an opaque column by its vendor's layout only when the
-    /// column names this vendor (register P1B-43).
+    /// column names this vendor (B-43).
     pub fn opaque_vendor(&self) -> Option<&str> {
         self.opaque_vendor.as_deref()
     }
@@ -1269,7 +1269,7 @@ impl Run {
     }
 
     /// The host's answer to fetch `id`. Data must match the schema the
-    /// request expects back, stored with the request (decision H16, check
+    /// request expects back, stored with the request (check
     /// (b)): the same columns in the same order, by name, each of the
     /// expected closed-set type, holding the field metadata the request
     /// requires, and no nulls where it expects none. A mismatch is
@@ -1294,10 +1294,10 @@ impl Run {
                     return Ok(());
                 }
                 // Its values read as the reference reads them, before it is
-                // held to the schema expected (T2.14d), on a stack of their
+                // held to the schema expected, on a stack of their
                 // own: a JSON value is read by a reader that recurses once
                 // per level, and the host's thread may have a small stack
-                // (a JVM's), so no value it hands over overflows it (T3.12).
+                // (a JVM's), so no value it hands over overflows it.
                 // The host's own data is kept here until the read returns,
                 // so its buffers are released on the host's stack, never the
                 // grown one (a JVM's releases call back into the JVM).
@@ -1411,7 +1411,7 @@ impl Run {
         lock(&self.shared).attachments.remove(&id)
     }
 
-    /// Takes the sampler state the run left (decision E52), its memo
+    /// Takes the sampler state the run left, its memo
     /// attached as JSON under the run's next id, for the host to take; none
     /// when the run kept none, or it was taken. A host takes it once the
     /// run has ended, whether it finished or failed.

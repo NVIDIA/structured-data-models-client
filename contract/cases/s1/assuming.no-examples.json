@@ -83,9 +83,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "no example meets the assumption: failed to collect any context examples"
+    "code": "INVALID_REQUEST"
   },
   "why": "an assumption no example meets: a value the reference refuses after reading",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case assuming.no-examples using the shop fixture."
 }

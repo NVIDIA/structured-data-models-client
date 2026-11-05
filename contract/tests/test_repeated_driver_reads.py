@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 
 
 def _own() -> ModuleType:
-    name = 't32_recording_own_fixtures'
+    name = 'test_repeated_driver_reads_recording_own_fixtures'
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(

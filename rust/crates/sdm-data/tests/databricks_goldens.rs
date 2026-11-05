@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4 on Databricks (T3.4, the brief's exit 2): the goldens of every
+//! L4 on Databricks (the brief's exit 2): the goldens of every
 //! request kind the `databricks` dialect renders, each beside the statement
 //! the old client sent for the same request, so the diff between them is
 //! reviewed (non-gating, in the package's evidence) and the statements the
@@ -16,19 +16,19 @@
 //! reference's statement of its kind, the evidence's diff. The relations are `main`.`shop`.<table>, the catalog and schema
 //! the fixture records under (its `{catalog}` and `{schema}`).
 //!
-//! What gates, by the design (choice 2, exact replay; choice 7 and KO3-41,
+//! What gates, by the design (choice 2, exact replay; choice 7 and,
 //! the old client's sampling SQL; Scope item 1, key sets bound as the old
 //! client binds them):
 //! - each golden request renders exactly its statements ([`goldens::render`]),
-//!   and every request kind has one;
+//! and every request kind has one;
 //! - the catalog statements are the old client's, text and parameters, after
-//!   whitespace is normalised, so the stand-in replays C-1's catalog answers
-//!   and the catalog reader reads the warehouse's real rows;
+//! whitespace is normalised, so the stand-in replays C-1's catalog answers
+//! and the catalog reader reads the warehouse's real rows;
 //! - every entity draw the old client writes (the percentage as Python's
-//!   `str(float)`, `REPEATABLE (seed)`, `LIMIT n`) is a golden's statement;
+//! `str(float)`, `REPEATABLE (seed)`, `LIMIT n`) is a golden's statement;
 //! - every key set is bound through `posexplode(from_json(?, 'array<...>'))`;
 //! - each part of a relation is quoted alone with backticks, a backtick in a
-//!   name doubled, and a relation of more than three parts refused.
+//! name doubled, and a relation of more than three parts refused.
 //!
 //! The other statements' text is the dialect's, pinned here and reviewed
 //! against the old client's: a golden seeded with the old client's text may
@@ -47,7 +47,7 @@ const REFERENCE: &str =
     include_str!("../../../../contract/fixtures/databricks/reference-statements.json");
 
 /// Each request, as the contract writes it, and the statements its plan
-/// carries on Databricks, in order. Seeded by T3.4's test author with the
+/// carries on Databricks, in order. Seeded by test author with the
 /// old client's statement where the request is the one the old client
 /// answered with it; the dialect's own goldens join them.
 const GOLDENS: goldens::Goldens = &[
@@ -213,7 +213,7 @@ fn databricks() -> ProviderChoice {
     serde_json::from_str(r#"{"provider":"sql","dialect":"databricks"}"#).unwrap()
 }
 
-/// The choice naming the source's catalog and schema (T3.8's `namespace`),
+/// The choice naming the source's catalog and schema (`namespace`),
 /// which a listing of the schema's tables reads, no table naming them
 /// (`{catalog}.information_schema.tables WHERE table_schema = ?`).
 fn databricks_in_main_shop() -> ProviderChoice {
@@ -235,7 +235,7 @@ fn reference() -> Value {
 }
 
 /// `text` with every run of whitespace one space, as exact replay compares
-/// statements (design choice 2).
+/// statements.
 fn normalised(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -343,7 +343,7 @@ fn every_request_kind_has_a_golden_on_databricks() {
 /// Exits 2 and 4: the catalog statements are the old client's (DB/table.py
 /// 212-246, 271-300, 318-370; RE/graph.py:1199), text and parameters, so
 /// exact replay serves C-1's catalog answers to the core's catalog reader
-/// (design choice 2). The schema and the table are bound as the old client
+///. The schema and the table are bound as the old client
 /// binds them, `lower(?)` each, never written into the text. Foreign-key
 /// output labels alone are distinct so the driver's Arrow read is valid.
 #[test]
@@ -408,7 +408,7 @@ fn the_catalog_statements_are_the_old_client_s_with_its_parameters() {
     }
 }
 
-/// Exit 2, RS-6 under KO3-41 (design choice 7): every entity draw the old
+/// Exit 2, RS-6 under: every entity draw the old
 /// client writes (DB/sampler.py:201-277), its percentage Python's `str` of
 /// `min(100.0, 100.0 * n / rows * 3.0)` (scientific below 1e-4, the inexact
 /// `0.30000000000000004`, capped at `100.0`, whole as `6.0`), its seed 0,
@@ -443,7 +443,7 @@ fn every_draw_the_old_client_writes_is_a_golden_s_statement() {
 }
 
 /// Exit 2, Scope item 1: "key sets bound as the old client binds them
-/// (`posexplode(from_json(?, ...))`)" (DB/sampler.py:233-241, 339-365,
+/// (`posexplode(from_json(?,...))`)" (DB/sampler.py:233-241, 339-365,
 /// 396-482): every statement binding a key set reads it so, as one JSON
 /// text parameter.
 #[test]
@@ -475,7 +475,7 @@ fn key_sets_are_bound_as_the_old_client_binds_them() {
 }
 
 /// Design choice 4: each part of a relation quoted alone with backticks,
-/// never split on a dot, a backtick in a name doubled (DB/table.py:37, :62,
+/// never split on a dot, a backtick in a name doubled (DB/table.py:37,:62,
 /// 170-195; CN/sql.py:247).
 #[test]
 fn each_name_part_is_quoted_alone_with_backticks() {

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The checks on a view's SQL expressions (T3.5, old-behaviour rows 61 to
+//! The checks on a view's SQL expressions (old-behaviour rows 61 to
 //! 68), ported from the old client's `rfm/view_expr.py` and the Snowflake
 //! qualifier helpers of `rfm/graph.py:107-191`.
 //!
@@ -133,24 +133,24 @@ impl Spaces {
         &self.class
     }
 
-    /// `text.strip()`.
+    /// `text.strip`.
     pub(crate) fn strip<'a>(&self, text: &'a str) -> &'a str {
         text.trim_matches(self.is)
     }
 
-    /// `text.rstrip()`.
+    /// `text.rstrip`.
     pub(crate) fn rstrip<'a>(&self, text: &'a str) -> &'a str {
         text.trim_end_matches(self.is)
     }
 
-    /// `text.split()`: the words between runs of white space.
+    /// `text.split`: the words between runs of white space.
     pub(crate) fn split<'a>(&self, text: &'a str) -> impl Iterator<Item = &'a str> {
         text.split(self.is).filter(|part| !part.is_empty())
     }
 }
 
 /// The answer to one question of a semantic model's text
-/// (`DataLayer::view_text`, T3.27), in `dialect`, its white space
+/// (`DataLayer::view_text`), in `dialect`, its white space
 /// `spaces`, each the helper the question is named after; `declared` reads
 /// a declared type by the dialect's type map. A [`ViewTextAsk::Derive`]
 /// is the relation itself, which the dialect renders where it reads it.

@@ -27,7 +27,7 @@ import java.util.function.Function;
 
 /**
  * What the core's errors and warnings say. The core picks each one's sentence from a closed list
- * (T3.17), and every host fills that sentence's one shared template, which the native library
+ *, and every host fills that sentence's one shared template, which the native library
  * exports as data ({@link NativeCore#templates}); this class chooses no sentence. It fills a
  * template with the values the error or warning names, written as Java writes them (the one
  * value formatter, {@link #literal}), the values only this host holds ({@code {host.<name>}}),
@@ -43,8 +43,8 @@ import java.util.function.Function;
  * time as {@code java.time} writes it), {@code !T} (a list of times of day or text), and for a
  * value the caller gave, held as the JSON text this host wrote it in, {@code !G} (as a literal),
  * {@code !S} (as text), {@code !N} (the name of its Java type) and {@code !I} (the whole number
- * it is); {@code :to(other)}, {@code :place} and {@code :backend}; {@code {host.<name>}} and
- * {@code {advice:<id>(<field>, ...)}}. A sentence that relays a host library's own message (the
+ * it is); {@code:to(other)}, {@code:place} and {@code:backend}; {@code {host.<name>}} and
+ * {@code {advice:<id>(<field>,...)}}. A sentence that relays a host library's own message (the
  * Python host's pandas or NumPy) is said in its shared, neutral words: the Java host relays no
  * such library.
  */
@@ -521,7 +521,7 @@ public final class Wording {
     return formatted(converted(value, conversion), format, fields);
   }
 
-  /** {@code {advice:name(field, ...)}}: the advice spelled in Java, given those fields. */
+  /** {@code {advice:name(field,...)}}: the advice spelled in Java, given those fields. */
   private static String advise(String spec, Map<String, Object> fields) throws Unfilled {
     int open = spec.indexOf('(');
     if (open < 0 || !spec.endsWith(")")) {
@@ -747,7 +747,7 @@ public final class Wording {
   /**
    * A value as Java writes it as a literal: text quoted and escaped, a number, a boolean and null
    * as Java prints them, a list in brackets, a date or time as {@code java.time} writes it, and
-   * any other object as its {@code toString()} (a source, a value only the host holds).
+   * any other object as its {@code toString} (a source, a value only the host holds).
    */
   static String literal(Object value) throws Unfilled {
     if (value == null || value instanceof Boolean || value instanceof Long

@@ -6,7 +6,7 @@
 //! overflowing value is refused by name (a time past int64 microseconds
 //! kept as the microsecond infinity, for `materialize` to refuse), and every Arrow type family outside
 //! the set is refused by name, a bounded representative of each. A run-end
-//! array of every family the set takes is decoded through `HostRun` (E17).
+//! array of every family the set takes is decoded through `HostRun`.
 
 #![allow(
     clippy::disallowed_methods,
@@ -267,7 +267,7 @@ fn assert_out_of_range(result: Result<ArrowData, CoreError>, column: &str) {
 /// A `timestamp[s]` or `timestamp[ms]` value past int64 microseconds is
 /// admitted as DuckDB's microsecond infinity on its side, which
 /// `materialize` refuses as a time past the nanosecond range (DT-14), as
-/// the reference describes the source and refuses there (T1.36 fix 3).
+/// the reference describes the source and refuses there.
 #[test]
 fn a_time_past_int64_microseconds_is_admitted_as_the_microsecond_infinity() {
     let far: ArrayRef = Arc::new(TimestampSecondArray::from(vec![

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! What `DESCRIBE TABLE EXTENDED` says of a metric view (T3.5, M1,
+//! What `DESCRIBE TABLE EXTENDED` says of a metric view (M1,
 //! old-behaviour rows 21 to 24), read from its rows as the old client reads
 //! them (`DB/metric_view.py:1389-1475`): the columns first, up to a blank
 //! row, then sections headed `# Name` with an empty second cell. Only the
@@ -12,7 +12,7 @@
 //! stand in for it.
 //!
 //! The statement itself is the Databricks dialect's, written with the rest
-//! of its catalog statements once that dialect lands (T3.4).
+//! of its catalog statements once that dialect lands.
 
 use super::Spaces;
 

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T3.28's contract follow-up: a plan's attachments renamed by one method
+//! contract follow-up: a plan's attachments renamed by one method
 //! beside `FetchPlan::key_sets`, so the core names a bound fetch's batches
 //! by the run's ids without reading any plan's shape.
 

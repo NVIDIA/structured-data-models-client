@@ -6,7 +6,7 @@
 //!
 //! At each position every rule is tried, the longest match wins, and on equal
 //! length the rule listed first in the grammar wins. Keywords are exact
-//! strings, so `Count` is an identifier and `FOR  EACH` is `FOR` then `EACH`.
+//! strings, so `Count` is an identifier and `FOR EACH` is `FOR` then `EACH`.
 //! Positions count code points: rows from 1, ended by `\n` alone, and columns
 //! from 0, as ANTLR's Python runtime counts them.
 
@@ -253,7 +253,7 @@ impl At<'_> {
 
     /// `QUOTED_ID`, from `from`: `` '`' (~'`' | '``')+ '`' ``, a backtick
     /// in the name doubled and any other character, a line break included,
-    /// as it stands (KO2-36; the reference's grammar takes neither).
+    /// as it stands (the reference's grammar takes neither).
     fn quoted_id(&self, from: usize) -> usize {
         if self.get(from) != Some('`') {
             return 0;
@@ -516,7 +516,7 @@ mod tests {
             ("-infinity", &[(NegInfty, "-infinity")]),
             ("true", &[(Bool, "true")]),
             ("`a b`.c", &[(FqnColumn, "`a b`.c")]),
-            // KO2-36: a doubled backtick and a line break inside the quotes.
+            //: a doubled backtick and a line break inside the quotes.
             ("t.`a``b`", &[(FqnColumn, "t.`a``b`")]),
             ("t.````", &[(FqnColumn, "t.````")]),
             ("t.`a\nb`", &[(FqnColumn, "t.`a\nb`")]),

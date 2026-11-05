@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! T1.32e part 1, the implementer's own checks on `rust-host` (the test
-//! author's acceptance tests are `t132e_time_inference.rs`): the time
+//! part 1, the implementer's own checks on `rust-host` (the test
+//! author's acceptance tests are `time_inference.rs`): the time
 //! column chosen over the whole table, asked of DuckDB in the reference's
 //! one statement, and a whole-table read the source fails falling back to
 //! the preview, as the reference falls back (P1B-38 rejected).
@@ -49,7 +49,7 @@ fn described(setup: &[&str]) -> Observed {
             }
         },
         "expect": {"outcome": "success", "stage": "from_source"},
-        "why": "T1.32e: the time column over the whole table",
+        "why": "Choose the time column using the whole table",
         "source": "rust/crates/sdm-testkit/tests/whole_table_time.rs",
     });
     let case: Case = serde_json::from_value(case).unwrap();

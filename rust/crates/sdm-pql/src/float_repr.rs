@@ -2,18 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The text Python gives a float, the shortest that reads back to it, in
-//! Python's layout: one of the emulation modules this crate may hold
-//! (`scripts/rust_core/emulation-allowlist.txt`, Phase 1 decisions A4).
-//! The reference writes a float constant built from a value with it
-//! (`Constant.from_value`); here it writes a float literal's value into
-//! messages, and decides no validity (Phase 1 decisions, E9).
-//!
-//! From T3.5 it also writes the other values the old client's messages
-//! quote (a view definition's YAML values and the pieces of an expression):
-//! [`Shown`], a value as Python held it, with its `repr` and `str`, and
-//! [`text_repr`], a text's `repr`. They decide nothing either: `sdm-core`
-//! words a view's conversion with them.
+//! Stable Python-compatible formatting for numbers and values in diagnostics.
+//! [`float_repr`] produces the shortest round-tripping float text in Python's layout.
+//! [`Shown`] and [`text_repr`] format values used by semantic-view diagnostics.
+//! These routines format values; they do not decide query validity.
 
 use crate::conversions::{Clock, date_iso, datetime_iso};
 use crate::printable::NOT_PRINTABLE;

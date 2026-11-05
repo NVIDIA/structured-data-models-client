@@ -2,11 +2,11 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The view definitions' YAML reader (T3.5, design part 5, old-behaviour
+//! The view definitions' YAML reader (design part 5, old-behaviour
 //! row 69) against `contract/view-yaml-vectors.json`: what PyYAML 6.0.3's
 //! `safe_load` made of each text, YAML 1.1's values included (`yes`, `on`
 //! and `off` booleans, `017` octal, `1:30` base 60, `1e3` text and
-//! `1.0e+3` a float), and from T3.5 fix 1 mapping keys Python takes as one,
+//! `1.0e+3` a float), and fix 1 mapping keys Python takes as one,
 //! integers of any size, aliases of their own anchor, block scalars at the
 //! end of the text, an anchor named twice and a byte order mark; from fix 2
 //! block scalars whose last line looks like a comment or ends the
@@ -15,7 +15,7 @@
 //! (`sdm-pql/tests/shown.rs`, `sdm-core/tests/view_words.rs`).
 //!
 //! The YAML outside what view definitions use is refused by name
-//! (register P3J-9): an explicit tag, a merge, a key that is a collection,
+//! (J-9): an explicit tag, a merge, a key that is a collection,
 //! nesting past [`MAX_DEPTH`], an integer Python would not write. The few
 //! texts `yaml-rust2` scans otherwise than PyYAML are registered
 //! differences (P3J-6), each named below and held to what the core does.
@@ -253,8 +253,7 @@ fn yaml_1_1_values_hold() {
 }
 
 /// An alias is its anchor's node, held once: eighteen doublings of an alias
-/// are read in no time and no memory, and a list may hold itself (Codex
-/// review 1, P1-7).
+/// are read in no time and no memory, and a list may hold itself.
 #[test]
 fn an_alias_is_its_anchor_s_node() {
     let mut text = String::from("source: c.s.t\nmaterialization:\n  a0: &a0 [x]\n");
@@ -279,7 +278,7 @@ fn an_alias_is_its_anchor_s_node() {
 
 /// A block scalar ending the text keeps the line break PyYAML keeps,
 /// judged from where the scalar ends, not from how its last line looks
-/// (Codex review 2, P0-1).
+///.
 #[test]
 fn a_block_scalar_at_the_end_keeps_python_s_breaks() {
     let value = |text: &str| {
@@ -301,8 +300,8 @@ fn a_block_scalar_at_the_end_keeps_python_s_breaks() {
 }
 
 /// The YAML outside what view definitions use is refused by name, each
-/// for what it is (register P3J-9), a mapping keyed by itself before it is
-/// made (Codex review 2, P1-2).
+/// for what it is (J-9), a mapping keyed by itself before it is
+/// made.
 #[test]
 fn yaml_outside_the_subset_is_refused_by_name() {
     let refused = |text: &str| load(text).unwrap_err().outside;
@@ -352,7 +351,7 @@ fn yaml_outside_the_subset_is_refused_by_name() {
 }
 
 /// A value a later key replaces is still made, so it refuses the text as
-/// PyYAML's constructor did (Codex review 2, P2).
+/// PyYAML's constructor did.
 #[test]
 fn a_replaced_value_is_still_read() {
     assert!(load("v: {a: 2024-13-01, a: 2}").is_err());
@@ -362,7 +361,7 @@ fn a_replaced_value_is_still_read() {
 }
 
 /// A block scalar's chomping is its header's, read from its indicator,
-/// never from an indicator in the header's comment (Codex review 3, P0-1).
+/// never from an indicator in the header's comment.
 #[test]
 fn a_block_header_s_comment_is_no_indicator() {
     let value = |text: &str| {
@@ -409,8 +408,7 @@ fn a_str_tag_reads_as_text_and_a_flow_dash_is_named() {
 }
 
 /// Block nesting is refused by name past the bound, a million levels as
-/// promptly as two hundred and one, with no recursion to overflow (Claude
-/// review 3, P1-1).
+/// promptly as two hundred and one, with no recursion to overflow.
 #[test]
 fn deep_block_nesting_is_refused_by_name() {
     for levels in [MAX_DEPTH + 1, 3_000, 1_000_000] {
@@ -439,8 +437,7 @@ fn deep_block_nesting_is_refused_by_name() {
     assert!(load(&shallow).is_ok());
 }
 
-/// Many block scalars read in time linear in the text (Claude review 4,
-/// P2-1): eight times as many take not much over eight times as long,
+/// Many block scalars read in time linear in the text: eight times as many take not much over eight times as long,
 /// where each block once re-walked the text to its end (20,000 took 224
 /// s).
 #[test]

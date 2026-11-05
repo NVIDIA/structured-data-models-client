@@ -29,11 +29,11 @@ if TYPE_CHECKING:
 
 __all__ = ['CoreQuery', 'gather']
 
-#: The options the contract carries in fields of their own (from T1.28a
+#: The options the contract carries in fields of their own (
 #: the seed, the statistic and the inference options among the call's
-#: values; from T2.9, contract v27, ``lag_timesteps`` among them, and from
-#: T2.11 the sampling options). The core is told the names of the rest
-#: (decision E61).
+#: values; contract v27, ``lag_timesteps`` among them, and from
+#: the sampling options). The core is told the names of the rest
+#:.
 TAKEN = frozenset(
     {
         'anchor_time',
@@ -54,9 +54,9 @@ TAKEN = frozenset(
 )
 
 #: The options whose values the core reads, as the caller gave them, in the
-#: call's values (T1.28a; ``lag_timesteps`` from T2.9, the sampling options
-#: from T2.11): their types and bounds are the core's. ``context_anchor_time``
-#: is written as the anchor time is (:func:`_context_anchor`).
+#: call's values (``lag_timesteps`` the sampling options
+# ): their types and bounds are the core's. ``context_anchor_time``
+#: is written as the anchor time is (func:`_context_anchor`).
 VALUED = frozenset(
     {
         'random_seed',
@@ -78,7 +78,7 @@ VALUED = frozenset(
 def _anchor(value: Any) -> dict[str, Any] | None:
     r"""The anchor time as the contract's ``ts`` scalar, in nanoseconds; a
     zoned one as its UTC instant with its zone, which the core reads at its
-    UTC wall clock, as the engine reads it (T1.25). The literal ``'entity'``
+    UTC wall clock, as the engine reads it. The literal ``'entity'``
     is carried as ``anchor_entity``, beside it.
     """
     import pandas as pd
@@ -97,7 +97,7 @@ def _anchor(value: Any) -> dict[str, Any] | None:
 
 def _context_anchor(options: dict[str, Any]) -> dict[str, Any]:
     r"""``context_anchor_time`` among the call's values, where the call names
-    it (T2.11): a ``pandas.Timestamp`` as the anchor time is written, the
+    it: a ``pandas.Timestamp`` as the anchor time is written, the
     literal ``'entity'`` and none as they are, and any other value as the
     text ``unreadable``, which the core refuses as the engine refuses it,
     where the engine refuses it."""
@@ -124,7 +124,7 @@ def _indices(indices: Sequence[Any]) -> Any:
     Arrow's null type. A float NaN pyarrow infers stays a NaN, which the
     core reads as missing, as it reads this null. The core casts the
     column to the key's type under its own rule table, and refuses an
-    entity that does not cast (T1.32a); this host decides nothing of it."""
+    entity that does not cast; this host decides nothing of it."""
     import pyarrow as pa
 
     values = list(indices)
@@ -142,17 +142,17 @@ def _indices(indices: Sequence[Any]) -> Any:
 
 
 def _candidates(candidates: Sequence[Any]) -> list[Any]:
-    r"""A ranking's candidates as the contract's given candidates (T2.8),
+    r"""A ranking's candidates as the contract's given candidates,
     each as the caller gave it. Which candidates repeat is Python's: a
     candidate equal to one given before it, by
     Python's own ``==`` and ``hash`` as the reference's ``dict.fromkeys``
     keeps the first of each, is ``repeat``, which the core leaves out
-    (T2.14b fix 7); the core holds each other as given.
+    ; the core holds each other as given.
     One Python cannot hash, which ``dict.fromkeys`` fails on, is
     ``unreadable``, the contract's word for a value of the host's no
-    contract type holds (decision E101), which the core refuses by name.
+    contract type holds, which the core refuses by name.
     Each other is read as the Python value it holds (a NumPy value's
-    ``.item()``): a missing one (``None``, a NaN, ``pd.NA``, ``pd.NaT``)
+    ``.item``): a missing one (``None``, a NaN, ``pd.NA``, ``pd.NaT``)
     null; a boolean; an integer as an ``i64``, or past it as its digits; a
     finite decimal as its digits in fixed point, exactly
     (``format(value, 'f')``); a float as the double it is; text as itself;
@@ -168,7 +168,7 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
     written: list[Any] = []
     # The candidates kept as dict.fromkeys keeps them, by Python's own ==
     # and hash: each later one equal to one given before it is a repeat
-    # (T2.14b fix 7).
+    # .
     kept: dict[Any, None] = {}
     # The kinds and texts of the typed candidates sent.
     spoken: set[tuple[str, str]] = set()
@@ -207,7 +207,7 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
             # one kind and text one candidate, so one Python holds distinct
             # from an earlier one of the same kind and text (one wall time
             # in two zones) is sent spelled, which the core merges with
-            # none (T2.14b fix 8).
+            # none.
             typed = (_kind(value), str(value))
             if typed in spoken:
                 written.append({'spelled': typed[1]})
@@ -234,7 +234,7 @@ def _kind(value: Any) -> str:
 def _text(value: Any) -> str:
     r"""A value as its text, a boolean as Arrow writes one and a float as
     the core writes a float entity (``sdm_engine::keys``'s ``float_text``,
-    T1.36 fix 4), which is the reference's text of it: pyarrow's cast of
+     fix 4), which is the reference's text of it: pyarrow's cast of
     the float to text, at its own width (a NumPy ``float32`` as a 32-bit
     float; a NumPy ``float64`` is a ``float``), so the core reads back the
     number the host was given. That is the shortest digits that read back
@@ -274,27 +274,27 @@ def gather(
 ) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
     r"""The payloads of the request, gathered on the core; what the core
     resolved of the query; and what the request keeps for predict on the
-    core (:class:`~sdm_client._rust.results.CoreRequest`), with the parts of
+    core (class:`~sdm_client._rust.results.CoreRequest`), with the parts of
     a request the core gathered in parts.
 
     The schema is handed over as it stands, as plain data
-    (:func:`~sdm_client._rust.spec.held_schema`, T3.16): the core reads
+    (func:`~sdm_client._rust.spec.held_schema`): the core reads
     from the source what it needs of a column that carries no facts.
 
     ``candidates``, a ranking's, are handed over as the caller named them,
     each as the contract's given candidate of its own type
-    (:func:`_candidates`, T2.8): the core asks one question per distinct
+    (func:`_candidates`): the core asks one question per distinct
     candidate and refuses them on any other question.
 
     A request of more entities than one call scores is gathered by the core
-    as several calls (``main``'s 1fc5a686, T2.8c): its payloads are each
+    as several calls (``main``'s 1fc5a686): its payloads are each
     call's, in order, and the state keeps how many rows each later call
     scores. The most entities and calls one ``materialize`` holds are this
     client's (``MOST_ENTITIES``, ``MOST_CALLS``), which the core holds the
     call to.
 
     Raises:
-        StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
+        StructuredDataError: The core's refusal, as:mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for what it does not
             materialize yet; and the client's own checks of the call's
             types.
@@ -315,14 +315,14 @@ def gather(
         # a seed of another type or none (an unseeded sample) for the core.
         'seed': codec.seed(options.get('random_seed')),
         'anchor_entity': isinstance(anchor, str) and anchor == 'entity',
-        # The call's values the core reads (T1.28a), the seed among them: a
+        # The call's values the core reads, the seed among them: a
         # seed given as None asks for an unseeded sample, a new one each
         # call, never the default; the core says whether it takes it.
         'values': 5,
         'options': sorted(set(options) - TAKEN),
         # How many parts the caller lets a question be asked as, which the
         # core holds a forecast's steps and a ranking's candidates to
-        # (T1.36 fix 21, T2.8); only the core knows which a query is.
+        # ( fix 21); only the core knows which a query is.
         'most_parts': max(0, min(int(decompose.MOST_PARTS), 2**32 - 1)),
     }
     attachments = {
@@ -345,7 +345,7 @@ def gather(
         ),
     }
     # The ceilings on what one materialize holds, which the caller may set
-    # as it sets the most steps of a forecast (T2.8c).
+    # as it sets the most steps of a forecast.
     from sdm_client.materializers import relational
 
     operation['most_entities'] = max(
@@ -357,9 +357,9 @@ def gather(
         attachments[6] = codec.attachment(_candidates(candidates))
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
-    # (decision E52); the run leaves its own in its place, done or failed.
+    # ; the run leaves its own in its place, done or failed.
     # A semantic model's, as the core's refusal of a table or column the
-    # model no longer gives names it (T3.5, plan B).
+    # model no longer gives names it (plan B).
     with errors.holding(
         **errors.source_values(schema.source),
         inference_option=lambda fields: options['inference_config'][
@@ -399,7 +399,7 @@ def unpack_state(
     payloads = [payload]
     batches = None
     if state.batches is not None:
-        # A request asked in several calls (T2.8c): each later call's
+        # A request asked in several calls: each later call's
         # payload, in order, and the rows the core gathered it to score.
         for batch in state.batches:
             payloads.append(json.loads(finished.take(batch.payload)))
@@ -407,7 +407,7 @@ def unpack_state(
     parts = None
     if state.ranking is not None:
         # A ranking, which the core asked as one binary question per
-        # candidate (T2.8): the first candidate's position, query and name
+        # candidate: the first candidate's position, query and name
         # (the JSON text of its value, as the result names it), each later
         # one's position among the candidates given, name, payload and
         # query, and how many candidates a row keeps.
@@ -428,7 +428,7 @@ def unpack_state(
             ),
         )
     elif state.forecast is not None:
-        # A forecast, which the core asked as one regression per step (T1.36
+        # A forecast, which the core asked as one regression per step (
         # fix 21): step 1's query, and each later step's number, payload
         # and query, from which the client keeps one request per step.
         parts = results.CoreParts(

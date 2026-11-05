@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The driver capture's controls (design, "Driver capture"; decision Q2).
+"""The driver capture's controls (design, "Driver capture").
 
 Run in an environment with the client, the relational engine and DuckDB:
 
@@ -300,13 +300,13 @@ def test_the_scripted_cursor_control() -> None:
         }
     ]
     # Each result read has its values in canonical form, with the driver's
-    # column names and types (T1.11e); the rows read, not those left.
+    # column names and types; the rows read, not those left.
     first = log.statements[0]['results'][0]['values']
     assert first == run_python.result_values(
         ['a', 'b'], ['BIGINT', 'VARCHAR'], [(1, 'x')]
     )
     assert log.incomplete == [] and log.passed == []
-    # Batch boundaries do not reach a result's digest (decision H9).
+    # Batch boundaries do not reach a result's digest.
     one = pa.Table.from_batches([got[7].combine_chunks().to_batches()[0]])
     assert run_python._arrow_digest(one) == run_python._arrow_digest(got[7])
 

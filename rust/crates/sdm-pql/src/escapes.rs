@@ -6,7 +6,7 @@
 //! Python's `unicode-escape` codec over the literal's text. Which escapes
 //! read, and which make a literal unreadable, decides validity, so this is
 //! one of the modules allowed to emulate Python
-//! (`scripts/rust_core/emulation-allowlist.txt`, Phase 1 decisions, E9).
+//! (`scripts/rust_core/emulation-allowlist.txt`).
 
 /// The text a string literal stands for, its escapes read. Only the
 /// grammar's escapes reach it (`\\ \" \' \/ \b \f \n \r \t \uXXXX`): the

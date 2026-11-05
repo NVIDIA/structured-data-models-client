@@ -2,13 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A key's text where an engine stores it as text: a decimal key on SQLite,
-//! whose column is declared `TEXT` since one declared `DECIMAL` takes
-//! numeric affinity and rounds what it stores (Phase 2 design, choice 2;
-//! KO2-35). The contract loader (`contract/runners/databases.py`) stores a
-//! decimal as this text and a key binder binds one as it, so equal values
-//! of any scale meet: `contract/type-map-vectors.json` holds both to it
-//! (`tests/type_map_vectors.rs` here).
+//! Canonical text for decimal keys stored in SQLite TEXT columns.
+//! SQLite numeric affinity can round decimal values, so loaders and key binders
+//! share this exact representation across scales.
 
 /// A decimal's one text, `value` ten-to-the-`scale`ths: plain positional
 /// notation, no exponent, no trailing fractional zeros, no trailing point,

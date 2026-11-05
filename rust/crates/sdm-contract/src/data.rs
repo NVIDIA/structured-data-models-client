@@ -8,14 +8,14 @@
 //! requests. Every provider answers `describe` and `scan`; the optional
 //! requests make common steps faster, and a provider declares which it
 //! supports. A key set never travels as JSON: it is an Arrow attachment the
-//! request names by id (decision Q1).
+//! request names by id.
 //!
-//! The port (decision H14): a [`DataLayer`] plans each request for the
+//! The port: a [`DataLayer`] plans each request for the
 //! run's provider, as SQL statements in a dialect it renders or as the
 //! typed request passed to a host provider, with the Arrow schema the plan
 //! returns ([`FetchPlan`]), and reads each `describe` answer the provider
 //! returned into the catalog's answer, in no dialect's shape
-//! ([`crate::catalog`], decision E54). The core holds one data layer, in
+//! ([`crate::catalog`]). The core holds one data layer, in
 //! its composition root, and names no dialect; `sdm-data` implements it.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,11 +30,11 @@ use crate::scalar::Scalar;
 use crate::types::{ColumnType, Field, Unit};
 use crate::view::{ViewTextAnswer, ViewTextAsk};
 
-/// The column of a seed key set that holds each seed's key (decision H15).
+/// The column of a seed key set that holds each seed's key.
 pub const SEED_KEY: &str = "key";
 /// The field metadata key (and its value, [`BIG_INTEGER_MARKED`]) the host
 /// layer sets on a big-integer column it read from an opaque extension type
-/// (a HUGEINT, UHUGEINT or VARINT, register P1B-43), so the core holds the
+/// (a HUGEINT, UHUGEINT or VARINT, B-43), so the core holds the
 /// column to one tier and keeps its declared type.
 pub const BIG_INTEGER_MARKER: &str = "sdm:big_integer";
 pub const BIG_INTEGER_MARKED: &str = "true";
@@ -58,7 +58,7 @@ pub const DECLARED_SCALE_MARKER: &str = "sdm:declared_scale";
 
 /// The magnitude past which an exponent is read as this bound: far past
 /// every decimal's 38 places and every float's range, and far within
-/// `i64`, so no arithmetic on a scale overflows (T1.32a fix round 1).
+/// `i64`, so no arithmetic on a scale overflows ( fix round 1).
 const EXPONENT_BOUND: i64 = 1 << 40;
 
 /// A decimal number as written: its sign, its significant digits (no
@@ -152,7 +152,7 @@ pub fn exact_number_text(text: &str) -> String {
 /// catalog's `type`, kept as `DescribedColumn::declared_type`), set by the
 /// core for floating and `decimal128(38, 0)` seed keys.
 /// Only the data layer interprets it: a SQL layer preserves the destination's
-/// floating coercion and exact integer/decimal comparisons (register P1B-43).
+/// floating coercion and exact integer/decimal comparisons (B-43).
 /// A host provider may ignore it.
 pub const SEED_KEY_TYPE: &str = "sdm:key_declared_type";
 /// The column of a seed key set that holds each seed's batch position, and
@@ -238,7 +238,7 @@ pub struct KeySet {
 /// cannot read the same way. Two schema tables over one source are two
 /// equal relations.
 ///
-/// A relation may be derived (contract v28, design choice 3 of Phase 3):
+/// A relation may be derived:
 /// `columns`, where given, are the relation's columns, each a name with
 /// the source column it reads or an SQL text expression over the source's
 /// columns, and `filter` an SQL text condition every row read holds, as a
@@ -263,7 +263,7 @@ pub struct Relation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
     /// The columns are the ones the source's catalog found, each read by
-    /// its own name, with no filter (T3.4, round 2): a provider may read
+    /// its own name, with no filter (round 2): a provider may read
     /// the table through them, so that one since dropped or renamed fails
     /// the read rather than reading anything else by its name (the
     /// reference's Databricks reads, `_quoted_source_name`), or read the
@@ -444,7 +444,7 @@ pub fn refuse_relation(
 /// for the composite keys a later contract takes. The core refuses a
 /// schema keyed by several columns at materialize before it samples, as
 /// the reference does (`sdm-core`'s `refuse_composite_keys`; register
-/// P2E-5, decision KO2-68), so no sampler request names a key of more than
+/// P2E-5), so no sampler request names a key of more than
 /// one column yet.
 pub fn seed_key_columns(columns: usize) -> Vec<String> {
     match columns {
@@ -492,7 +492,7 @@ pub enum DescribePart {
     /// those names written unqualified, by its own resolution of such a
     /// name (on DuckDB, through its search path): none when it would read
     /// none, which is how the core learns a name the caller gave is not
-    /// the source's, never by matching names itself (T1.23, decision
+    /// the source's, never by matching names itself (decision
     /// E59).
     Tables,
     /// Each table's columns, with their declared types, nullability and
@@ -517,18 +517,18 @@ pub enum DescribePart {
     IndexColumns,
     /// The namespace a relation of one part is read in, as the source names
     /// a table it holds: one row per part, outermost first, its name
-    /// (contract v28, T3.8): a Postgres source's current schema, under
+    /// (contract v28): a Postgres source's current schema, under
     /// which the reference names a table it cannot find; no row for a
     /// source whose tables are named alone (DuckDB's, SQLite's). Asked only
     /// to name a table the source lacks.
     Namespace,
     /// The exact names of the tables in the named table's namespace whose
-    /// declared primary keys the source enforces (T3.6). Asked lazily once
+    /// declared primary keys the source enforces. Asked lazily once
     /// per namespace, only before counting a key containing that declared
     /// primary key, when `key_enforcement` is declared. A failed or unreadable
     /// listing establishes no enforcement. It does not change lookup checks.
     KeyEnforcement,
-    /// The definition of the one semantic model named (contract v28, T3.27):
+    /// The definition of the one semantic model named (contract v28):
     /// a Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake
     /// semantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into
     /// [`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect
@@ -554,14 +554,14 @@ pub struct TableKey {
     /// The number a `key_counts` row for this key is labelled with, where
     /// not its position among the keys asked: the reference labels each by
     /// its table's place among the tables with a key, a key it does not
-    /// count included (T2.12).
+    /// count included.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<u64>,
     /// The source keeps the key unique (a declared primary or unique key
     /// that may still hold a null): its distinct values are the rows
     /// holding all of it, which a rendering may count as the rows less
     /// those missing part of it, as the reference counts such a key
-    /// (`_key_count_sql`; contract v28, carried row P2-T2.2-3). The count
+    /// (`_key_count_sql`; contract v28, carried row P2--3). The count
     /// is the same either way.
     #[serde(default, skip_serializing_if = "is_false")]
     pub unique: bool,
@@ -774,7 +774,7 @@ pub enum DataRequest {
         rows: Option<u64>,
     },
     /// The rows of `table` whose `key` equals a seed's key, `columns` in
-    /// order after the seed's batch position (decision H15). `key` names the
+    /// order after the seed's batch position. `key` names the
     /// table's key columns in order, one or several (design choice 1; a key
     /// of several is groundwork, [`seed_key_columns`]);
     /// `seeds` holds the key's columns ([`seed_key_columns`]), `batch` and
@@ -957,7 +957,7 @@ impl DataRequest {
 }
 
 /// A key names some columns, and seeds hold the role-named columns of each
-/// of its columns ([`seed_key_columns`]) and `batch` (decision H15).
+/// of its columns ([`seed_key_columns`]) and `batch`.
 fn check_seeds(request: &DataRequest, key: &[String], seeds: &KeySet) -> Result<(), CoreError> {
     if key.is_empty() {
         return Err(refused(request, "key", "a key names no columns"));
@@ -1044,7 +1044,7 @@ pub enum TextTimes {
     /// source's text time column (`to_datetime(values, unit='ns')`).
     ValueByValue,
     /// The column uses the core's approved text formats (date-rules.md,
-    /// T1.25b) and normalizes mixed offsets to UTC, like frame conversion.
+    /// ) and normalizes mixed offsets to UTC, like frame conversion.
     ClientRules,
 }
 
@@ -1105,7 +1105,7 @@ pub struct ProviderCapabilities {
     pub sampling: Determinism,
     /// The largest seed the provider samples with (register entry RS-7),
     /// which every provider declares: there is no "any seed" default
-    /// (design choice 1). The core refuses a sample with a larger seed,
+    ///. The core refuses a sample with a larger seed,
     /// `INVALID_REQUEST` naming the seed, before the sample is planned;
     /// which seeds a provider takes is the provider's to declare, never a
     /// name the core matches.
@@ -1124,7 +1124,7 @@ pub struct ProviderCapabilities {
     pub index_advice: Option<IndexAdvice>,
     /// The limits within which the core answers an optional request the
     /// provider does not declare itself, in memory, from the rows a `scan`
-    /// reads (design choice 1, the in-memory fallback, T2.6); left out,
+    /// reads; left out,
     /// the provider declares none, and such a request is refused,
     /// `UNSUPPORTED_REQUEST`, as before. A declared request that fails is
     /// the provider's error either way, never answered by the fallback.
@@ -1177,7 +1177,7 @@ pub struct ProviderCapabilities {
     /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
     /// metadata's `vendor_name`) the provider hands over: the host layer
     /// reads an opaque column by that vendor's layout only when the column
-    /// names this vendor (register P1B-43). Left out, none, and no opaque
+    /// names this vendor (B-43). Left out, none, and no opaque
     /// column is read as anything but its storage (contract v28, carried
     /// row P2-MID2-2: before it, a flag of the data layer's).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1200,7 +1200,7 @@ pub struct ProviderCapabilities {
     /// The reference reads the provider's rows into a frame of NumPy-backed
     /// floats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,
     /// read as Python objects); otherwise as Arrow-backed pandas does, where
-    /// a NaN is a value and the two zeros are two values (T2.12). Left out,
+    /// a NaN is a value and the two zeros are two values. Left out,
     /// `false` (P2-MID2-2).
     #[serde(default, skip_serializing_if = "is_false")]
     pub reads_nan_as_missing: bool,
@@ -1220,7 +1220,7 @@ pub struct FallbackLimits {
 }
 
 /// A built-in SQL dialect, by the name the host gives it. The contract
-/// names no dialect and knows none (decision E54): which names a build
+/// names no dialect and knows none: which names a build
 /// serves is the data layer's, which refuses one it does not serve before
 /// the run exists ([`DataLayer::capabilities`]).
 #[derive(
@@ -1256,7 +1256,7 @@ impl Dialect {
 /// A dialect takes as many parts as a relation's parts before its table's,
 /// and refuses by name more, or a part given inside one left `null`.
 ///
-/// A SQL provider's `view` (contract v28, T3.27) names the semantic model
+/// A SQL provider's `view` (contract v28) names the semantic model
 /// the source is read through, a Databricks metric view or a Snowflake
 /// semantic view by its dialect, as the caller named it, with whether the
 /// caller trusts its expressions: its logical tables are then the
@@ -1296,7 +1296,7 @@ impl ProviderChoice {
     }
 
     /// The semantic model a SQL provider's source is read through, if any
-    /// (T3.5); none for a host provider.
+    ///; none for a host provider.
     pub fn view(&self) -> Option<&ViewChoice> {
         match self {
             ProviderChoice::Sql { view, .. } => view.as_ref(),
@@ -1367,7 +1367,7 @@ pub struct ViewChoice {
 /// register an Arrow relation. A dialect that binds its key sets as JSON
 /// text names none: [`DataLayer::bind`] turns each into a `text` parameter.
 ///
-/// A `text` parameter (contract v28, T3.27) binds the one text cell of a
+/// A `text` parameter (contract v28) binds the one text cell of a
 /// one-row, one-column Arrow attachment: a key set the dialect writes as
 /// JSON text itself, past the control message's size ([`DataLayer::bind`]).
 /// In a [`BoundFetch`] the attachment is a local reference the data layer
@@ -1390,7 +1390,7 @@ pub struct SqlStatement {
     pub params: Vec<SqlParam>,
 }
 
-/// How a provider answers one request (decision H14): SQL statements run
+/// How a provider answers one request: SQL statements run
 /// in order on one session, the last one's rows the answer, or the typed
 /// request itself, passed to a host provider that answers it; either way
 /// with the Arrow schema the whole plan returns, and answered with one
@@ -1428,7 +1428,7 @@ impl FetchPlan {
 
     /// Each attachment the plan's statements bind, a key set's or a text's,
     /// that `to` names, named by what `to` maps it to (contract v28,
-    /// T3.28): how the core names a bound fetch's batches by the run's ids
+    /// ): how the core names a bound fetch's batches by the run's ids
     /// ([`DataLayer::bind`]). A host plan binds none.
     pub fn rename_attachments(&mut self, to: &BTreeMap<AttachmentId, AttachmentId>) {
         let FetchPlan::Sql { statements, .. } = self else {
@@ -1464,10 +1464,10 @@ impl FetchPlan {
     }
 }
 
-/// The data-layer port (decision H14): what the core plans every data
+/// The data-layer port: what the core plans every data
 /// request through, and reads every catalog answer with. A host provider's
 /// choice carries the capabilities it declared; for a SQL dialect the layer
-/// fills them itself (decision E33).
+/// fills them itself.
 pub trait DataLayer: Send + Sync {
     /// What the run's provider answers: the capabilities a host provider
     /// declared, or those this layer fills for its SQL dialect. A dialect
@@ -1513,7 +1513,7 @@ pub trait DataLayer: Send + Sync {
     /// The catalog answer the run's provider returned to `request`, a
     /// `describe`, read into the contract's dialect-neutral shape (decision
     /// E54). The core calls it after admission: `batches` already hold the
-    /// schema the request's plan expects (decision H16, check (b)). A
+    /// schema the request's plan expects (check (b)). A
     /// request that is not a `describe` is refused with `INTERNAL_ERROR`.
     fn read(
         &self,
@@ -1524,7 +1524,7 @@ pub trait DataLayer: Send + Sync {
 
     /// The run's provider's answer to a fetch, admitted, read as the
     /// reference reads its source's values where the provider hands over
-    /// the driver's own (T2.14d, MID2 P2-3): a dialect's value rules, such
+    /// the driver's own (MID2 P2-3): a dialect's value rules, such
     /// as Postgres's text of a JSON value and its reading of a `numeric`
     /// past the digits an Arrow decimal holds (each `float_text`, the text
     /// the reference's language gives a double, where it writes one).
@@ -1542,10 +1542,10 @@ pub trait DataLayer: Send + Sync {
     }
 
     /// Whether `provider`'s source holds a type per column that a caller's
-    /// type for the column must match (plan B's check, T3.4). `true`, the
+    /// type for the column must match (plan B's check). `true`, the
     /// default and a host provider's; `false` for a source whose columns
     /// hold affinities only (SQLite's), where the old client reads any
-    /// column as the type its caller gives (T3.28).
+    /// column as the type its caller gives.
     fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
         let _ = provider;
         true
@@ -1554,7 +1554,7 @@ pub trait DataLayer: Send + Sync {
     /// Whether `provider` reads a source of tables, a database or warehouse
     /// whose tables each `materialize` reads as they stand at that run:
     /// their location where the provider leaves a part to the session,
-    /// their columns and their types (the owner's plan B, T3.4). `false`,
+    /// their columns and their types. `false`,
     /// the default and a host provider's: the host's tables are its own,
     /// and only a column holding no facts is read from it.
     fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
@@ -1564,7 +1564,7 @@ pub trait DataLayer: Send + Sync {
 
     /// The database the run's provider reads, by the name its built-in
     /// dialect has (`duckdb`, `sqlite`, `postgres`), which a host words a
-    /// refusal naming the source with (T3.8). `None`, the default and a
+    /// refusal naming the source with. `None`, the default and a
     /// host provider's: no database is named.
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         let _ = provider;
@@ -1578,7 +1578,7 @@ pub trait DataLayer: Send + Sync {
     /// catalog names a referenced table in full): the core then reads the
     /// source's namespace first
     /// ([`DescribePart::Namespace`]) and runs under the parts it answers
-    /// ([`DataLayer::settled`]; T3.4). `false`, the default and a host
+    /// ([`DataLayer::settled`]). `false`, the default and a host
     /// provider's.
     fn unsettled(&self, provider: &ProviderChoice) -> bool {
         let _ = provider;
@@ -1594,7 +1594,7 @@ pub trait DataLayer: Send + Sync {
 
     /// `relation` as the run's provider reads it: under the provider's
     /// namespace where the layer reads one (contract v28), else as it is,
-    /// the default and a host provider's (T3.8).
+    /// the default and a host provider's.
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
         let _ = provider;
         relation.clone()
@@ -1608,8 +1608,8 @@ pub trait DataLayer: Send + Sync {
     }
 
     /// What the run's provider's failure says, as facts each step of the
-    /// core reads the one of that fits what it asked (contract v28, T3.27,
-    /// design S3): a spelling retry reads `not_found`, a join's table read
+    /// core selects according to the operation: a spelling retry reads
+    /// `not_found`, a join's table read
     /// `unusable`, an expression sample `refuses_expression`. The dialect
     /// reads them from the driver's SQLSTATE, vendor code and error class,
     /// as the old client's separate predicates do. None set, the default
@@ -1620,7 +1620,7 @@ pub trait DataLayer: Send + Sync {
     }
 
     /// The name forms the catalog read of `relation` tries, in order, kept
-    /// for that run once one resolves (contract v28, T3.27, design S2):
+    /// for that run once one resolves (contract v28):
     /// Snowflake's as given, then upper-cased. As given alone, the default
     /// and a host provider's. How names compare is another question, the
     /// dialect's `name_case`.
@@ -1631,13 +1631,13 @@ pub trait DataLayer: Send + Sync {
 
     /// `plan`, the run's provider's answer to `request`, with the key sets
     /// it binds, `keys`, by the attachment the plan names each by, bound as
-    /// the provider binds them (contract v28, T3.27, design S4): one fetch
+    /// the provider binds them (contract v28): one fetch
     /// or more, each a plan and the batches it binds, named by local
     /// references the core installs in the run and renames to the run's
     /// ids ([`FetchPlan::rename_attachments`]); their answers, in order,
     /// are the request's. A double the binding writes is written as
     /// `float_text` writes it, the text the reference's language gives a
-    /// double, which the core passes in (T3.28). The default, and a host
+    /// double, which the core passes in. The default, and a host
     /// provider's: one fetch, the plan as it is, binding the key sets as
     /// the core made them.
     fn bind(
@@ -1658,7 +1658,7 @@ pub trait DataLayer: Send + Sync {
     }
 
     /// The answer to one question about a semantic model's text (contract
-    /// v28, T3.27, design S5): a name, a condition, an expression checked
+    /// v28): a name, a condition, an expression checked
     /// against its table's columns, a derived relation rendered, each in
     /// the run's provider's dialect. Refused by name, the default and a
     /// host provider's: no semantic model is read through it.
@@ -1741,7 +1741,7 @@ pub struct BoundFetch {
 /// H16). The counts and bounds are aggregates every rendering names by
 /// alias, the reference's own aliases, as the result helper columns of
 /// `neighbors` and `lookup` are, so each answer is the result of the
-/// reference statement it stands for (H9).
+/// reference statement it stands for.
 ///
 /// A `describe` answer is a catalog's, whose columns a SQL dialect's own
 /// catalog fixes: a SQL plan expects the shape of the statement its dialect
@@ -1764,7 +1764,7 @@ pub mod results {
     pub const BOUNDS_MAX: &str = "max_date";
 }
 
-/// The columns a host provider answers a `describe` with (decision E54):
+/// The columns a host provider answers a `describe` with:
 /// the catalog's answer in no dialect's shape, which the data layer reads
 /// into a [`CatalogAnswer`] as it is.
 pub mod catalog_columns {
@@ -1808,7 +1808,7 @@ impl DataRequest {
     /// largest values are of each column's type, which the core checks the
     /// shape of itself, and a repeated key, of the key's types) and for a
     /// count no provider renders yet. A SQL dialect's plan expects the same, but for a `describe`,
-    /// whose answer is its own catalog's (decision E54).
+    /// whose answer is its own catalog's.
     pub fn expected(&self) -> ExpectedSchema {
         use ColumnType::{Bool, Int32, Int64, Utf8};
         use catalog_columns as c;
@@ -1898,7 +1898,7 @@ pub enum ExpectedSchema {
 /// as a diagnostic for the data layer alone. What the failure means is the
 /// data layer's to say ([`DataLayer::failure`]), from these facts; the
 /// message is never echoed into an error the core gives, since drivers
-/// quote values there (decision H17).
+/// quote values there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderError {
@@ -1907,16 +1907,16 @@ pub struct ProviderError {
     pub sqlstate: Option<String>,
     pub vendor_code: Option<String>,
     /// The driver's error class, a name of its closed list such as
-    /// Databricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read
+    /// Databricks's `INSUFFICIENT_PERMISSIONS` (contract v28), read
     /// as the old client reads it (`error_class`: the driver's own answer,
     /// else the bracketed name its message opens with). Left out, none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<String>,
     /// The driver's message, passed through by the host unread (contract
-    /// v28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,
+    /// v28): an internal diagnostic only [`DataLayer::failure`] reads,
     /// where the old client reads a failure by its text (Snowflake's
     /// "does not exist", `SNOW/table.py:34-45`), and never echoed into a
-    /// public error (decision H17). Left out, none.
+    /// public error. Left out, none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver_message: Option<String>,
 }

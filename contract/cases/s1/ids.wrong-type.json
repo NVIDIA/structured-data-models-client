@@ -128,9 +128,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "refused by the validator: text compared with an integer key"
+    "code": "INVALID_REQUEST"
   },
   "why": "an entity named as text against an integer key: a query the reference refuses",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case ids.wrong-type using the shop fixture."
 }

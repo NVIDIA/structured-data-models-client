@@ -123,9 +123,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: the query validator refuses the window (\"TARGET cannot have an aggregation in the past. Both start and end need to be non negative.\")"
+    "code": "INVALID_REQUEST"
   },
   "why": "An aggregation with no window start, SUM(orders.price, -INF, 30, days): the query validator refuses a target window in the past on both routes before the core's rule open_window is reached, so it is held where the reference holds it",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "source": "Correctness case target.open-window using the shop fixture."
 }

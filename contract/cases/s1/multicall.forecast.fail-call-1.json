@@ -97,5 +97,5 @@
     "message": "[500] {\"error\": \"scripted_failure\", \"call\": 1}. This is forecast step 2 of 2."
   },
   "why": "a two-step forecast whose second step's call (numbered 1) fails: the error carries the step already answered (details answered, by step, and parts_answered 1)",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.forecast.fail-call-1 using the shop fixture."
 }

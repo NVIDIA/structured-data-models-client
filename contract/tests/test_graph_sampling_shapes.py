@@ -105,7 +105,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t219_run_python', RUNNER)
+    return _module('test_graph_sampling_shapes_run_python', RUNNER)
 
 
 def key(case_id: str, database: str) -> str:
@@ -117,7 +117,7 @@ KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 
 @functools.cache
 def cases() -> dict[str, tuple[dict[str, Any], str]]:
-    r"""The T2.19 cases by id, each with its digest, as the runner loads
+    r"""The cases by id, each with its digest, as the runner loads
     them."""
     loaded = runner().load_cases([CASES / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}
@@ -252,7 +252,7 @@ def test_one_column_links_two_tables() -> None:
 
 def _server() -> bool:
     r"""Whether a Postgres server is named; where none is, one must not be
-    required (H26)."""
+    required."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -263,7 +263,7 @@ def _server() -> bool:
 
 @functools.cache
 def core_run(database: str) -> dict[str, Any]:
-    r"""python-core over the T2.19 cases on ``database``, as that database's
+    r"""python-core over the cases on ``database``, as that database's
     job runs them: each observation by its key, or under ``''`` why the run
     failed whole."""
     with tempfile.TemporaryDirectory(prefix='t219-') as tmp:

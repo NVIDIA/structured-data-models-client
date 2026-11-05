@@ -37,7 +37,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 R = _module(
-    'column_names_record', ROOT / 'contract/support/column_name_vectors.py'
+    'column_name_vectors', ROOT / 'contract/support/column_name_vectors.py'
 )
 
 RECORDED: dict[str, Any] = {'vectors': R.vectors()}
@@ -55,7 +55,7 @@ def reachable(database: str) -> bool:
 
 
 def _cases() -> dict[str, dict[str, Any]]:
-    runner = _module('t218_run_python', RUNNER)
+    runner = _module('test_column_names_run_python', RUNNER)
     return {
         case['id']: case
         for case, _ in runner.load_cases([ROOT / 'contract/cases/s1'])
@@ -210,7 +210,7 @@ def test_each_case_predicts_through_native_operations(
         return
 
     def check() -> None:
-        runner = _module('t218_run_python', RUNNER)
+        runner = _module('test_column_names_run_python', RUNNER)
         observed = _cases_on(database)
         problems = []
         for case_id, case in sorted(_cases().items()):

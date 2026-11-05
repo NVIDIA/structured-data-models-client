@@ -20,8 +20,8 @@ pub struct Table {
     /// payload use.
     pub name: String,
     /// The relation of the source the table reads, which every data request
-    /// names (design choice 12), as the reference's engine reads a table
-    /// named otherwise by its source name (decision E61).
+    /// names, as the reference's engine reads a table
+    /// named otherwise by its source name.
     pub source: sdm_contract::data::Relation,
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Option<String>,

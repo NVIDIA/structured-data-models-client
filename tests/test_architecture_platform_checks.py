@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 SCAN = runpy.run_path(
-    str(Path(__file__).resolve().parents[1] / 'scripts/rust_core/l0_scan.py')
+    str(
+        Path(__file__).resolve().parents[1]
+        / 'scripts/rust_core/architecture_policy.py'
+    )
 )
 
 

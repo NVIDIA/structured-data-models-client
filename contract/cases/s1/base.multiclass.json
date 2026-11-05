@@ -76,8 +76,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "task multiclass_classification, target dtype string, classes ['IN', 'DE', 'US'] (in that order)"
+    "stage": "predict"
   },
   "why": "Covers client.predict/multiclass/duckdb, a static target with no time window, and class order",
   "source": "scope-python.yaml paths"

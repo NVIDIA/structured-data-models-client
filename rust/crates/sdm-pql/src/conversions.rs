@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The conversions a view's parameter default goes through in the old
-//! client (T3.5, `_default_text`), as Python 3.12 makes them: `int(text)`,
+//! client (`_default_text`), as Python 3.12 makes them: `int(text)`,
 //! `format(Decimal(text), 'f')`, `date.fromisoformat(text)` and
 //! `datetime.fromisoformat(text)`, with the text `isoformat` writes back.
 //! Which texts they accept decides whether a default is a value of its
@@ -21,7 +21,7 @@ pub use crate::pyint::MAX_STR_DIGITS;
 use crate::syntax::is_space;
 
 /// The longest text a conversion writes, in characters; a longer one is
-/// refused by name (register P3J-10).
+/// refused by name (J-10).
 pub const LONGEST_TEXT: usize = 1 << 22;
 
 /// Why a text gives no value.
@@ -55,7 +55,7 @@ pub fn not_an_integer_text(text: &str) -> String {
     )
 }
 
-/// `text.strip()`: Python's white space (`str.isspace`) off both ends.
+/// `text.strip`: Python's white space (`str.isspace`) off both ends.
 pub fn strip(text: &str) -> &str {
     text.trim_matches(is_space)
 }
@@ -83,7 +83,7 @@ pub fn decimal_digit(c: char) -> Option<u8> {
 }
 
 /// `str(int(text))` where the old client hands `int` a text: one whose
-/// `str.strip()` is an optional sign and decimal digits of any script
+/// `str.strip` is an optional sign and decimal digits of any script
 /// (`[+-]?\d+`, `DB/metric_view.py:529-532`); anything else is invalid.
 /// `int` itself strips less ([`Unconverted::NotAnInteger`]), and refuses
 /// more digits than Python reads, leading zeros counted.
@@ -549,7 +549,7 @@ fn valid_date(year: i32, month: i32, day: i32) -> bool {
         && day <= days_in(year, month)
 }
 
-/// `date.isoformat()`: `2024-01-01`, the one writer of a date's ISO text.
+/// `date.isoformat`: `2024-01-01`, the one writer of a date's ISO text.
 pub fn date_iso(year: i32, month: u8, day: u8) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
@@ -606,7 +606,7 @@ fn small(value: i32) -> u8 {
     u8::try_from(value).unwrap_or(0)
 }
 
-/// `date.fromisoformat(text).isoformat()`.
+/// `date.fromisoformat(text).isoformat`.
 pub fn date_text(text: &str) -> Result<String, Unconverted> {
     let bytes = Bytes(text.as_bytes());
     let len = text.len();

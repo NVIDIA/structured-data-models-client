@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `sdm-contract-run` runs a case only where the case runs (T3.3): a
+//! `sdm-contract-run` runs a case only where the case runs: a
 //! warehouse-only S2 case (its `warehouses`) is selected out of a DuckDB
 //! run, never run on DuckDB, while an S0 case beside it still runs.
 

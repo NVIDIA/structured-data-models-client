@@ -54,5 +54,5 @@
     "stage": "predict"
   },
   "why": "base.binary's question over a connection sdm_connectors.databricks.warehouse() opened (CN/databricks.py:67-158: the warehouse looked up, connected with the partner user agent, CN/backends/databricks.py:192-240), handed to Schema.from_source as the raw connection, so the backend is found by detection (CN/source.py:97-107); sampled through the same connection to predict",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "source": "Correctness case databricks.connect.warehouse using the shop fixture."
 }

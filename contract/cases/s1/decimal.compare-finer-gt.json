@@ -79,9 +79,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: task binary_classification; context labels by entity: {\"number\": \"2\"}: false, {\"number\": \"3\"}: false, {\"number\": \"4\"}: true, {\"number\": \"5\"}: false, {\"number\": \"6\"}: false, {\"number\": \"7\"}: false"
+    "stage": "predict"
   },
   "why": "A DECIMAL(38, 0) compared with a constant finer than its scale: d = 2 is past 1.5 and d = 1 is not; reading 1.5 at scale 0 (2) would say otherwise",
-  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+  "source": "Correctness case decimal.compare-finer-gt using the shop fixture."
 }

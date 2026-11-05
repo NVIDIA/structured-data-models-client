@@ -4,7 +4,7 @@
 
 //! Every request kind, on every dialect this build renders, in the shapes
 //! that steer its rendering, held to what the dialects rendered before
-//! they shared one SQL builder (T3.18, design fix E): the plan (each
+//! they shared one SQL builder (design fix E): the plan (each
 //! statement's text and parameters, and the schema it expects) or the
 //! refusal, byte for byte, and each dialect's capabilities and quirks.
 //!
@@ -20,7 +20,7 @@
 //! A deliberate SQL change fails here, as it fails a golden. Regenerate
 //! with `SDM_DIALECT_MATRIX_WRITE=1 cargo test -p sdm-data --test dialect_matrix
 //! every_request_kind_renders_as_recorded_on_every_dialect -- --exact`.
-//! The explicit write mode exports the same `rendered()` answers used by
+//! The explicit write mode exports the same `rendered` answers used by
 //! the check; review the generated answer diff and keep the inputs intact.
 
 use sdm_contract::data::{
@@ -37,8 +37,8 @@ use serde_json::{Value, json};
 /// explicitly requested test-only generator writes the fixture.
 const RECORDED: &str = include_str!("dialect_matrix.jsonl");
 
-/// The dialects held: the five this build renders (Databricks from T3.4,
-/// Snowflake from T3.6), and one it refuses, a name it does not know.
+/// The dialects held: the five this build renders (Databricks
+/// Snowflake ), and one it refuses, a name it does not know.
 const RENDERED: [&str; 5] = ["duckdb", "sqlite", "postgres", "databricks", "snowflake"];
 const REFUSED: [&str; 1] = ["nope"];
 

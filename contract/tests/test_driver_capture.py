@@ -224,7 +224,7 @@ def test_a_connect_case_opens_its_source_by_detection() -> None:
 
 
 def test_psycopg_copy_stream_and_executemany_are_recorded() -> None:
-    r"""P2-T2.1a-2: a psycopg statement run by copy, stream or executemany
+    r"""P2--2: a psycopg statement run by copy, stream or executemany
     is recorded, never passed through unseen."""
 
     class Copy:
@@ -272,7 +272,7 @@ def test_psycopg_copy_stream_and_executemany_are_recorded() -> None:
 
 
 def test_a_postgres_row_read_is_kept_as_the_provider_types_it() -> None:
-    r"""T3.20 r2: a psycopg read is kept as the Arrow the core's Postgres
+    r"""r2: a psycopg read is kept as the Arrow the core's Postgres
     provider builds from the driver's type codes (an ``int4`` an
     ``int32``), never the type Arrow infers from the values (``int64``)."""
     import datetime as dt
@@ -563,7 +563,7 @@ def test_s2_cases_run_only_on_their_warehouses_and_s1_on_every_leg() -> None:
 
 @pytest.mark.parametrize('constant', ['NaN', 'Infinity', '-Infinity'])
 def test_a_non_json_constant_is_refused(tmp_path: Path, constant: str) -> None:
-    r"""P2-T2.1i-1: NaN and Infinity are not JSON; both loaders refuse them."""
+    r"""P2--1: NaN and Infinity are not JSON; both loaders refuse them."""
     case = _case()
     case['input']['materialize']['rows_per_call'] = 7
     text = json.dumps(case).replace(
@@ -575,7 +575,7 @@ def test_a_non_json_constant_is_refused(tmp_path: Path, constant: str) -> None:
 
 
 def test_a_negative_zero_call_is_refused(tmp_path: Path) -> None:
-    r"""P2-T2.1i-1: ``fail_call`` is a whole number written as one; -0 is
+    r"""P2--1: ``fail_call`` is a whole number written as one; -0 is
     refused by both loaders (the test author's reading)."""
     case = _case()
     case['input']['fail_call'] = 7

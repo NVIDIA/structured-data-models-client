@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A ranking (`RANK TOP k`), asked as one binary question per candidate and
-//! answered as one ranking (T2.8), as the reference's client decomposes it
+//! answered as one ranking, as the reference's client decomposes it
 //! (`decompose.parts_of`, `PredictiveQuery._in_parts`,
 //! `SDMClient._answer_in_parts`), the questions written and the answers put
 //! back together by [`sdm_request::ranking`].

@@ -24,7 +24,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * decimal128} as wide as the widest needs, nulls alone the null type; values of more than one
  * kind, or a whole number past 64 bits, each as its text ({@link #text}), a null null. The core
  * casts the column to the key's type by its own rule table and refuses an entity that does not
- * cast (T1.32a); this decides nothing of it. Not part of the API.
+ * cast; this decides nothing of it. Not part of the API.
  */
 public final class Indices {
   private Indices() {}

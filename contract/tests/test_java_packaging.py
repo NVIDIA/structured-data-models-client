@@ -32,7 +32,7 @@ CASES = ROOT / 'contract/cases'
 
 S0 = CASES / 's0'
 
-VECTORS = ROOT / 'contract/t311-java-vectors.json'
+VECTORS = ROOT / 'contract/native-binding-vectors.json'
 
 RUN_CLASS = 'com.nvidia.sdm.internal.Run'
 
@@ -99,7 +99,7 @@ def _cases(directory: Path) -> dict[str, dict[str, Any]]:
 
 
 def _here() -> str:
-    r"""The current platform, as :data:`PLATFORM_TOKENS` names it."""
+    r"""The current platform, as:data:`PLATFORM_TOKENS` names it."""
     system = {'Linux': 'linux', 'Darwin': 'macos'}[platform.system()]
     machine = platform.machine().lower()
     arch = 'aarch64' if machine in ('aarch64', 'arm64') else 'x86_64'
@@ -139,7 +139,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
 
-public class T311Load {
+public class PackagedJarProbe {
     public static void main(String[] args) throws Exception {
         Path at = Path.of(args[0]);
         byte[] start = Files.readAllBytes(at.resolve("start.bin"));
@@ -205,7 +205,7 @@ def _probe(
     (scratch / 'start.bin').write_bytes(json.dumps(start).encode())
     for key, value in vector['attachments'].items():
         (scratch / f'{key}.bin').write_bytes(base64.b64decode(value))
-    source = scratch / 'T311Load.java'
+    source = scratch / 'PackagedJarProbe.java'
     source.write_text(PROBE % {'run': RUN_CLASS}, encoding='utf-8')
     empty = scratch / 'no-libraries'
     empty.mkdir(exist_ok=True)
@@ -229,7 +229,7 @@ def _probe(
 
 
 @pytest.mark.skipif(not _java_job(), reason='SDM_JAVA_JAR is not configured')
-def test_t311_the_jar_loads_on_each_jdk_in_a_clean_environment(
+def test_the_jar_loads_on_each_jdk_in_a_clean_environment(
     tmp_path: Path,
 ) -> None:
     # Exit 4: on each JDK given, the JAR alone, with the two flags and
@@ -251,7 +251,7 @@ def test_t311_the_jar_loads_on_each_jdk_in_a_clean_environment(
 
 
 @pytest.mark.skipif(not _java_job(), reason='SDM_JAVA_JAR is not configured')
-def test_t311_the_jar_is_java_17_bytecode() -> None:
+def test_the_jar_is_java_17_bytecode() -> None:
     # Choice 10: Java 17 bytecode, so the one JAR runs on JDK 17 and 21.
     jar = _jar()
     majors = set()
@@ -264,7 +264,7 @@ def test_t311_the_jar_is_java_17_bytecode() -> None:
 
 
 @pytest.mark.skipif(not _java_job(), reason='SDM_JAVA_JAR is not configured')
-def test_t311_the_jar_holds_a_native_for_every_platform_named() -> None:
+def test_the_jar_holds_a_native_for_every_platform_named() -> None:
     # Exit 4 and check 14's control (a JAR missing one architecture's
     # native): each platform named holds exactly one native in the JAR.
     jar = _jar()
@@ -283,7 +283,7 @@ def test_t311_the_jar_holds_a_native_for_every_platform_named() -> None:
 
 
 @pytest.mark.skipif(not _java_job(), reason='SDM_JAVA_JAR is not configured')
-def test_t311_a_jar_without_this_platform_s_native_is_a_named_error(
+def test_a_jar_without_this_platform_s_native_is_a_named_error(
     tmp_path: Path,
 ) -> None:
     # Brief, input axes: the native for the current platform missing is a
@@ -321,10 +321,8 @@ def test_t311_a_jar_without_this_platform_s_native_is_a_named_error(
     assert any(a in lower for a in arches), said[-4000:]
 
 
-def test_t311_sdm_jni_depends_on_sdm_host_and_sdm_contract_and_no_pyo3() -> (
-    None
-):
-    # Exit 5 on the real tree (T3.2's seeded fixture holds l0_deps.py's
+def test_sdm_jni_depends_on_sdm_host_and_sdm_contract_and_no_pyo3() -> None:
+    # Exit 5 on the real tree (seeded fixture holds dependency_policy.py's
     # rule): sdm-jni is a workspace member on jni, whose first-party edges
     # are sdm-host and sdm-contract only, with no pyo3 and no database
     # driver; and sdm-py names no jni.
@@ -362,7 +360,7 @@ def test_t311_sdm_jni_depends_on_sdm_host_and_sdm_contract_and_no_pyo3() -> (
     assert 'jni' not in python.get('dependencies', {})
 
 
-def test_t311_the_vectors_cover_every_s0_case() -> None:
+def test_the_vectors_cover_every_s0_case() -> None:
     # The recorder's input, current: every S0 case has its binding and
     # reference vectors, recorded from the case as it stands.
     document = json.loads(VECTORS.read_text(encoding='utf-8'))

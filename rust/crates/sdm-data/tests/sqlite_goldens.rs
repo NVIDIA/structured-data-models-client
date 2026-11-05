@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4 on SQLite (T2.2; checked against the run since T2.4): every statement
+//! L4 on SQLite (checked against the run ): every statement
 //! the SQLite dialect rendered for the contract cases and the key-pair
 //! vectors on SQLite, on both core hosts, pinned verbatim beside the
 //! request it answers. Each request is planned here and must render exactly
@@ -1123,7 +1123,7 @@ const GOLDENS: goldens::Goldens = &[
         r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
         &["PRAGMA index_list(\"stores\")"],
     ),
-    // T2.18 (KO2-36): the name.* cases, a column named with a dot, a
+    //: the name.* cases, a column named with a dot, a
     // backtick or a line feed, each quoted alone as any name is.
     (
         r##"{"columns":["a.b","age","country"],"key":["a.b"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
@@ -2363,7 +2363,7 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\", t.\"channel\"\nFROM temp.\"__sdm_seeds_b39714a059063271__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"order_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"order_id\"",
         ],
     ),
-    // T2.10: the ranking cases' fetches as rust-host makes them on SQLite
+    //: the ranking cases' fetches as rust-host makes them on SQLite
     // (its seeds differ from python-core's, so its statements are pinned too).
     (
         r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,

@@ -92,5 +92,5 @@
     "message": "'exclude_cols_dict' names table 'nope', which is not in the graph"
   },
   "why": "exclude_cols_dict names a table not in the graph: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.exclude-cols.unknown-table using the shop fixture."
 }

@@ -323,7 +323,7 @@
               "type": "string"
             },
             "top_k": {
-              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
@@ -394,7 +394,7 @@
               "type": "string"
             },
             "top_k": {
-              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
@@ -461,7 +461,7 @@
               "type": "string"
             },
             "top_k": {
-              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
@@ -831,7 +831,7 @@
           }
         },
         "prediction_statistic": {
-          "description": "A regression's statistic, where the caller chose one (T1.28a).",
+          "description": "A regression's statistic, where the caller chose one.",
           "type": "string"
         }
       },
@@ -917,7 +917,7 @@
                   "type": "boolean"
                 },
                 "target_transforms": {
-                  "description": "Each a transform's name, or null, which the engine's type takes and\nwrites as null (T2.13).",
+                  "description": "Each a transform's name, or null, which the engine's type takes and\nwrites as null.",
                   "type": "array",
                   "items": {
                     "type": [

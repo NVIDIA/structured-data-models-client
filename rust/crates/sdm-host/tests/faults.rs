@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Faults through `HostRun` (T1.7c): fetched data that does not match its
+//! Faults through `HostRun`: fetched data that does not match its
 //! declared schema (check (a)) or the schema its request expects back
 //! (check (b)) is refused with `PROVIDER_SCHEMA_MISMATCH` and never
-//! admitted (decision H16); a test-only operation that panics while the run
+//! admitted; a test-only operation that panics while the run
 //! starts, in its body, or on the PQL adapter's grown stack is contained,
-//! and only a panic poisons a run (H17); and no input value, planted as a
+//! and only a panic poisons a run; and no input value, planted as a
 //! canary in a malformed control message, a malformed attachment or a panic
 //! payload, reaches an error's message, fields or cause, or stderr, which
 //! the last test captures from a child process.
@@ -526,7 +526,7 @@ fn an_error_carrying_fields_panic_does_not_poison_a_finished_run() {
 
 const CANARY: &str = "CANARY-7f3a";
 
-/// Every error path a canary can reach through `HostRun` at T1.7c, each
+/// Every error path a canary can reach through `HostRun` each
 /// error checked for the canary.
 #[test]
 fn canaries_reach_no_error() {
@@ -678,7 +678,7 @@ fn canaries_reach_no_stderr() {
     assert!(!stdout.contains(CANARY), "{stdout}");
 }
 
-/// A predict run through `HostRun` (T1.11d), its request state's payload
+/// A predict run through `HostRun`, its request state's payload
 /// `payload` at `version`.
 fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
     HostRun::start(
@@ -752,7 +752,7 @@ fn after_answer(outcome: ModelOutcome, body: Option<&str>) -> CoreError {
     error(run.next().unwrap_err())
 }
 
-/// Every error path `predict` adds at T1.11d, each checked for the canary:
+/// Every error path `predict` adds each checked for the canary:
 /// a request state of another version, a payload that is not JSON, the
 /// model's answers the core cannot read or that are not this request's,
 /// an endpoint's refusal, and a transport that failed.
@@ -810,7 +810,7 @@ fn predict_s_canaries_reach_no_error() {
             ErrorCode::InvalidResponse,
             ErrorCode::InvalidResponse,
             ErrorCode::InvalidResponse,
-            // A regression's prediction that is not a number (T1.28b, P1B-23).
+            // A regression's prediction that is not a number (P1B-23).
             ErrorCode::InvalidResponse,
             ErrorCode::InvalidResponse,
             ErrorCode::TransportError,

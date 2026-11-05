@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A result's rows in canonical form (decision H9; design, "Observations
+//! A result's rows in canonical form (design, "Observations
 //! and comparator"), as `contract/runners/run_python.py`'s
 //! `result_values` writes them, so the comparator can hold this host's
 //! statement results to the Python runners' and the reference's: each value
@@ -18,8 +18,8 @@
 //! (a timestamp without a zone), `["tstz", nanoseconds since the UTC
 //! epoch]`, `["time", nanoseconds since midnight]`, `["dur",
 //! nanoseconds]`, each temporal count read from the array's integer storage
-//! at its unit, `["list", cells]`, `["struct", [[name, cell], ...]]`,
-//! `["map", [[key, value], ...]]` (Arrow's entry order, duplicate keys
+//! at its unit, `["list", cells]`, `["struct", [[name, cell],...]]`,
+//! `["map", [[key, value],...]]` (Arrow's entry order, duplicate keys
 //! kept), `["union", type code, member name, cell]` (never null itself:
 //! a null member, or a union DuckDB writes as null, keeps its tag) and
 //! `["interval", months, days, nanoseconds as digits]` (a month-day-nano
@@ -826,7 +826,7 @@ mod tests {
     use super::*;
 
     /// The JSON text and its canonical row that
-    /// `tests/test_t21e_json_cell.py` holds the Python runner's reading to.
+    /// `tests/test_json_cell.py` holds the Python runner's reading to.
     const TEXT: &str = r#"{"b": [1], "a": {"n": -0, "big": 123456789012345678901234567890}, "c": [2.5, 1e2, null, true, "\u00e9\ud83d\ude00"], "b": "last"}"#;
     const ROW: &str = r#"[["struct",[["b",["s","last"]],["a",["struct",[["n",["i","0"]],["big",["i","123456789012345678901234567890"]]]]],["c",["list",[["f","4004000000000000"],["f","4059000000000000"],null,true,["s","\u00e9\ud83d\ude00"]]]]]]]"#;
 
@@ -859,7 +859,7 @@ mod tests {
     }
 
     /// The canonical row of `timedelta(days=31, microseconds=5)`, which
-    /// `tests/test_t21e_interval_timedelta.py` holds the Python runner's
+    /// `tests/test_interval_timedelta.py` holds the Python runner's
     /// reading to.
     const DELTA_ROW: &str = r#"[["dur","2678400000005000"]]"#;
 

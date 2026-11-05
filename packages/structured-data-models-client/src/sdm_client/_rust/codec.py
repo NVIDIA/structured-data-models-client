@@ -9,16 +9,16 @@ names in a ``dict`` by id. Two rules come from the contract:
 
 - A message the core writes whose encoding would pass the 64 KB control cap
   travels whole as a bytes attachment of its JSON, named by
-  ``{"message": "attached", "attachment": n}``; :func:`read` gives the
-  message that attachment carries (decision H7).
+  ``{"message": "attached", "attachment": n}``;:func:`read` gives the
+  message that attachment carries.
 - Every scalar is a tagged object whose value is a JSON string, so nothing
-  passes through a double (decision E4). :func:`decode_scalar` reads every
+  passes through a double.:func:`decode_scalar` reads every
   tag exactly; the encoders, for the scalars this host writes, write only
   what the core's decoder takes, and refuse anything else rather than
   write it.
 
 Input-sized fields of a ``start`` travel as bytes attachments of their JSON
-(decision H5); :func:`attachment` writes one.
+;:func:`attachment` writes one.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ class CodecError(ValueError):
     r"""A control message or scalar the contract does not hold.
 
     It names the position or the tag, never the text it read, which may be
-    an input value (decision H17).
+    an input value.
     """
 
 
@@ -89,9 +89,9 @@ def _digits(tag: str, text: object) -> int:
 def decode_scalar(scalar: Any) -> Any:
     r"""A contract scalar as a Python value, read exactly.
 
-    Integers are ``int``, floats ``float``, decimals :class:`~decimal.Decimal`
+    Integers are ``int``, floats ``float``, decimals:class:`~decimal.Decimal`
     built from their digits, text ``str``, binary ``bytes``, and temporal
-    values :class:`Temporal`; ``null`` is ``None``.
+    values:class:`Temporal`; ``null`` is ``None``.
     """
     if not isinstance(scalar, dict) or not isinstance(scalar.get('t'), str):
         raise CodecError('a scalar is a tagged object')
@@ -253,9 +253,9 @@ def timestamp(value: int, unit: str, zone: str | None) -> dict[str, Any]:
 def seed(value: Any) -> str | None:
     r"""A seed as the contract writes one: an integer of any size (a NumPy
     integer too) as signed hexadecimal text with no leading zeros, so no
-    integer reader's digit limit is met (decision H7). None for none, or for
+    integer reader's digit limit is met. None for none, or for
     a value of another type, which the call's values carry to the core as
-    given, and the core refuses (T1.28a)."""
+    given, and the core refuses."""
     if isinstance(value, bool) or not isinstance(value, numbers.Integral):
         return None
     value = int(value)
@@ -277,13 +277,12 @@ def _integral(value: Any) -> int:
 
 def _scalar(value: Any) -> Any:
     r"""A host scalar the JSON encoder does not know, written as the Python
-    value it holds, losslessly: an integer (:func:`_integral`), and from
-    T1.28a a NumPy boolean or float, its type kept (a float32 is exactly the
+    value it holds, losslessly: an integer (func:`_integral`), and a NumPy boolean or float, its type kept (a float32 is exactly the
     double it widens to), so the core reads the call's option values as the
     caller gave them; a sequence the encoder does not know (a ``range``, and
-    from T1.28b a NumPy array) as its items, as the client reads a sequence
+    a NumPy array) as its items, as the client reads a sequence
     of hop counts and the engine's config classes a sequence of transforms;
-    any other value refused, as the encoder refuses it. From T1.28b a NumPy
+    any other value refused, as the encoder refuses it. a NumPy
     float wider than a double (``np.longdouble``) is written as the double
     it holds where that double is exactly its value, or as NaN where it
     holds NaN, as the engine's config classes read it, else refused."""
@@ -307,7 +306,7 @@ def _scalar(value: Any) -> Any:
     ):
         return list(value)
     if isinstance(value, (decimal.Decimal, fractions.Fraction)):
-        # From T2.9, a finite decimal or fraction as its nearest double,
+        # a finite decimal or fraction as its nearest double,
         # its sign and whether it is zero kept, which is all an option the
         # core reads as a number asks of it: one a double cannot reach is
         # held at the double nearest it of the same sign (the least
@@ -337,7 +336,7 @@ def encode(message: dict[str, Any]) -> bytes:
     r"""A control message the host sends, within the control cap.
 
     A message past the cap is refused: whatever grows with the input travels
-    as an attachment (:func:`attachment`), so a message past it is a defect
+    as an attachment (func:`attachment`), so a message past it is a defect
     of this host.
     """
     data = json.dumps(
@@ -356,9 +355,8 @@ def attachment(
     r"""An input-sized field as a bytes attachment of its JSON. A value JSON
     cannot hold (one of a type the encoder does not know, a number that is
     not finite, one nested past what the encoder writes) is refused as the
-    client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
-    call's option values travel here as the caller gave them, and from
-    T2.9 (``named``, for them alone) the refusal names the first option
+    client's transport refuses it, ``INVALID_REQUEST``: the
+    call's option values travel here as the caller gave them, and (``named``, for them alone) the refusal names the first option
     whose value JSON cannot hold, in ``details['field']``.
     With ``option_values``, nonfinite numeric tokens cross losslessly for
     Rust's option admission; ordinary attachments remain strict JSON."""
@@ -381,7 +379,7 @@ def attachment(
         pass
     from sdm_client.errors import StructuredDataError
 
-    # A mapping's first member JSON cannot hold is named (T2.9: the call's
+    # A mapping's first member JSON cannot hold is named (the call's
     # option values, a NaN or an infinity among them, say which option).
     option = next(
         (
@@ -407,7 +405,7 @@ def attachment(
 #
 # The conformance rule of the contract's ``Given`` (``sdm-contract``'s ops.rs):
 # a value the host can write faithfully as the contract's type is written
-# ``{"value": ...}``; any other is written ``"unreadable"``, and the core
+# ``{"value":...}``; any other is written ``"unreadable"``, and the core
 # refuses it. The host asks nothing else of the value: what a null, an empty
 # key or a name the table lacks means is the core's. In Python, text is a
 # ``str`` (a subclass written as the plain ``str``); a collection is any
@@ -418,8 +416,8 @@ def attachment(
 
 #: A value no contract type holds, as the contract writes it.
 UNREADABLE = 'unreadable'
-#: The longest text :func:`spelled` gives the core; a value whose ``repr``
-#: is longer is given as :data:`UNREADABLE`, so a control message stays
+#: The longest text:func:`spelled` gives the core; a value whose ``repr``
+#: is longer is given as:data:`UNREADABLE`, so a control message stays
 #: within its cap.
 SPELLED_MOST = 2_000
 
@@ -427,8 +425,8 @@ SPELLED_MOST = 2_000
 def spelled(value: Any, *, include_type: bool = False) -> Any:
     r"""A value no contract type holds, as ``Given`` writes it with the
     text Python shows it as (``repr``), which the core names in its refusal
-    as the reference names the value (T2.14b); :data:`UNREADABLE` where its
-    ``repr`` fails or is past :data:`SPELLED_MOST` characters.
+    as the reference names the value;:data:`UNREADABLE` where its
+    ``repr`` fails or is past:data:`SPELLED_MOST` characters.
     ``include_type`` also names the native type in that bounded diagnostic."""
     try:
         text = repr(value)
@@ -456,7 +454,7 @@ def given_text(value: Any) -> Any:
 
 def given_name_or_none(value: Any) -> Any:
     r"""A name or ``None`` (a time column), as the contract writes it, or
-    any other value :func:`spelled`."""
+    any other value:func:`spelled`."""
     if value is None:
         return given(None)
     return given_text(value)

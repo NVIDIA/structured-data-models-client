@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The data layer's reader of catalog answers (decision E54): DuckDB's own
+//! The data layer's reader of catalog answers: DuckDB's own
 //! catalog answers and a host provider's answers in the contract's shape,
 //! for the same catalog, read into the same dialect-neutral answer; the
 //! reading of DuckDB's constraint types and index expressions, which only
@@ -308,7 +308,7 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
 /// DuckDB's index expressions, read as the reference's `_indexed_column`
 /// reads them: one column, its quotes taken off, only from a bracketed
 /// list without a comma; a list holding a comma, between expressions or
-/// inside one, is unresolved, never split (T1.26a), as is text not in
+/// inside one, is unresolved, never split, as is text not in
 /// brackets. Each text is the one DuckDB 1.5.6 writes for the index named.
 #[test]
 fn duckdb_s_index_expressions_read_as_the_reference_reads_them() {
@@ -456,7 +456,7 @@ fn a_duckdb_plan_and_a_host_plan_expect_different_catalog_shapes() {
 /// provider is asked for today (its keys and indexes give their columns):
 /// read as the host reader reads it, each name in the index's order, an
 /// expression's null kept as `None`, never dropped or guessed (carried row
-/// P2-T2.1b-1).
+/// P2--1).
 #[test]
 fn a_host_s_index_columns_answer_reads_each_name_in_order() {
     let request = DataRequest::Describe {

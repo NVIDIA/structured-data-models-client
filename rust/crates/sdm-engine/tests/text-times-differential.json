@@ -1,7 +1,7 @@
 {
  "format": "sdm-text-times-differential/1",
  "reference": "pandas 3.0.6",
- "inputs": "the columns of text-times.json as T1.25 recorded them (b455b94), 13456 columns",
+ "inputs": "Text columns recorded at b455b94: 13,456 input columns.",
  "year": 2026,
  "outcomes": {
   "materialize": {

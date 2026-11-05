@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The composition root: the one data layer every run plans its data
-//! requests through (decision H14).
+//! requests through.
 //!
 //! The root holds one `Arc<dyn DataLayer>`, which `sdm_host::default_root`
 //! builds; swapping the data layer replaces that one value. A run takes the
@@ -11,9 +11,9 @@
 //! it, asks for data only through [`DataAccess::plan`] (bound as the
 //! provider binds it, [`DataAccess::bind`]), and reads a
 //! catalog answer only through [`DataAccess::read`], into the contract's
-//! dialect-neutral shape (decision E54). Nothing in the core matches on a
+//! dialect-neutral shape. Nothing in the core matches on a
 //! backend's name: what a provider takes is what its capabilities say, and
-//! the core refuses by reading them (the requests it declared; from T1.22,
+//! the core refuses by reading them (the requests it declared;
 //! the largest seed it samples with, register entry RS-7).
 
 use std::collections::BTreeMap;
@@ -88,7 +88,7 @@ impl DataAccess {
     }
 
     /// Whether the run's provider reads a source of tables, whose tables
-    /// each `materialize` reads as they stand (the owner's plan B, T3.4;
+    /// each `materialize` reads as they stand (
     /// `DataLayer::reads_tables_as_they_stand`), where a host provider's
     /// tables are the host's own.
     pub fn reads_a_source(&self) -> bool {
@@ -96,7 +96,7 @@ impl DataAccess {
     }
 
     /// The semantic model the run's provider reads the source through,
-    /// if any (`ProviderChoice::Sql.view`, T3.5).
+    /// if any (`ProviderChoice::Sql.view`).
     pub fn view(&self) -> Option<ViewChoice> {
         self.provider.view().cloned()
     }
@@ -175,7 +175,7 @@ impl DataAccess {
 
     /// An admitted answer of the run's provider, its values read as the
     /// reference reads them where the provider hands over the driver's own
-    /// (`DataLayer::conform`, T2.14d); the answer as it is where the data
+    /// (`DataLayer::conform`); the answer as it is where the data
     /// layer holds no rule for it.
     pub fn conform(&self, data: ArrowData) -> Result<ArrowData, CoreError> {
         match self.layer.conform(
@@ -195,7 +195,7 @@ impl DataAccess {
 
     /// `plan`, the run's provider's answer to `request`, bound as the
     /// provider binds it with the key sets `keys` it names
-    /// (`DataLayer::bind`, T3.28): one fetch or more, each with the
+    /// (`DataLayer::bind`): one fetch or more, each with the
     /// batches it binds by local reference, a double written as the
     /// reference's language writes one ([`crate::pql::float_text`]).
     pub fn bind(
@@ -244,7 +244,7 @@ impl DataAccess {
     /// provider, as [`DataAccess::plan`] gives it, or, for an optional
     /// request the provider did not declare while it declares the
     /// in-memory fallback's limits, the fallback within them (design
-    /// choice 1, T2.6), which the core answers from the rows `scan`s read.
+    /// choice 1), which the core answers from the rows `scan`s read.
     /// Refused as [`DataAccess::plan`] refuses, but for the fallback's
     /// request; a request the provider declared is never the fallback's.
     pub fn route(&self, request: &DataRequest) -> Result<Route, CoreError> {
@@ -289,7 +289,7 @@ impl DataAccess {
     /// declares and, where given, the fallback's `limits` declared in place
     /// of its own: for the test-only fetch, so the conformance kit asks any
     /// provider, a SQL one included, a request it then does not declare
-    /// (T2.5, T2.6).
+    ///.
     #[cfg(feature = "test-ops")]
     pub(crate) fn declaring(
         mut self,
@@ -307,8 +307,8 @@ impl DataAccess {
 
     /// The catalog answer the run's provider returned to `request`, a
     /// `describe` it planned, read by the data layer into the contract's
-    /// dialect-neutral shape (decision E54). `batches` are the answer as
-    /// the run admitted it (decision H16, check (b)).
+    /// dialect-neutral shape. `batches` are the answer as
+    /// the run admitted it (check (b)).
     pub fn read(
         &self,
         request: &DataRequest,

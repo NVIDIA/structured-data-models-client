@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `PROVIDERS`, the staging rule's marker (T2.1a), is exactly the dialects
+//! `PROVIDERS`, the staging rule's marker, is exactly the dialects
 //! this build renders: each listed one answers its capabilities, and the
 //! corpus's other databases are refused as dialects it does not render.
 

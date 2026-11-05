@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! What the core asks the data layer about a semantic model's text, and
-//! what it answers (T3.27, design S5): [`DataLayer::view_text`]'s
+//! what it answers: [`DataLayer::view_text`]'s
 //! [`ViewTextAsk`] and [`ViewTextAnswer`].
 //!
 //! A semantic model's conversion is one ordered routine in the core, in the
@@ -11,7 +11,7 @@
 //! or a condition is a pure question of text in the run's provider's
 //! dialect, which the data layer answers, so the core never reads SQL and
 //! the data layer never sees the definition's YAML or the run. Expressions
-//! cross as opaque text. The types are the T3.5 pure modules' own
+//! cross as opaque text. The types are the pure modules' own
 //! (`sdm-data`'s `view_expr` and `view_expr::metric`, at lane j's fix 2),
 //! taken as they are; each refusal is typed, and the core words it as the
 //! old client did.
@@ -74,7 +74,7 @@ pub enum ExprRefusal {
     QuotedFunction,
     /// A call of a qualified name: its last part.
     QualifiedFunction(String),
-    /// A function named through `IDENTIFIER()`.
+    /// A function named through `IDENTIFIER`.
     Identifier,
     /// A call of a function off the dialect's allow-list, as written.
     NotPure(String),
@@ -83,7 +83,7 @@ pub enum ExprRefusal {
     /// A session word read quoted, its quotes included.
     QuotedSessionValue(String),
     /// A pattern the check reads it by failed on it, so it cannot be read
-    /// safely (T3.5 fix 1; the old client has no such limit).
+    /// safely ( fix 1; the old client has no such limit).
     Unreadable(Unreadable),
 }
 

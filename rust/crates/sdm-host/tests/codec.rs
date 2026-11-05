@@ -4,7 +4,7 @@
 
 //! The control codecs: a message round-trips; one from the host past the
 //! 64 KB cap, or not of the contract, is refused before it is read; one the
-//! core writes past the cap travels whole as an attachment (decision H7).
+//! core writes past the cap travels whole as an attachment.
 
 use std::collections::BTreeMap;
 
@@ -208,7 +208,7 @@ fn description_of(size: usize) -> Vec<u8> {
 #[test]
 fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
     // The description is input-sized, so it is an attachment of its JSON
-    // beside a Done that names it (decision H5); the Done stays small.
+    // beside a Done that names it; the Done stays small.
     let mut lengths = std::collections::BTreeSet::new();
     for size in [
         CONTROL_CAP - 1,
@@ -245,7 +245,7 @@ fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
 
 #[test]
 fn the_core_never_writes_what_its_contract_refuses() {
-    // A decimal of precision 0 is outside the contract (decision E4).
+    // A decimal of precision 0 is outside the contract.
     let warning = CoreWarning::new(Sentence::ContextCapped, "").with_field(
         "d",
         Detail::Scalar(Scalar::Decimal128 {

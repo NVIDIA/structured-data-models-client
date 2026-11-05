@@ -88,5 +88,5 @@
     "stage": "predict"
   },
   "why": "context_anchor_time 2024-01-01, two months before the anchor: the context is labelled back from there",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.context-anchor-time using the shop fixture."
 }

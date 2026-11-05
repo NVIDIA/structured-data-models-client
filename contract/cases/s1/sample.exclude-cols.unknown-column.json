@@ -92,5 +92,5 @@
     "message": "'exclude_cols_dict' names column 'nope' of table 'users', which is not one of its feature columns"
   },
   "why": "exclude_cols_dict names a column users does not have: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.exclude-cols.unknown-column using the shop fixture."
 }

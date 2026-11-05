@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A key set bound as JSON text (T3.28, design S4): the one binding of a
+//! A key set bound as JSON text: the one binding of a
 //! dialect whose statement reads its key set from a text parameter
-//! (Databricks's `posexplode(from_json(?, ...))`, Postgres's
+//! (Databricks's `posexplode(from_json(?,...))`, Postgres's
 //! `jsonb_array_elements($1::jsonb)`), written here once over the
 //! dialect's hooks ([`SqlDialect::key_rows`], [`SqlDialect::key_budget`]),
 //! so no provider writes or splits one.

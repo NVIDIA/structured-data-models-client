@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """The Python host reads every result the core gives through its own typed
-structures (T3.16, the structure design's fix D and rule 10): a sample of
-each ``OperationResult`` variant (:data:`messages.RESULTS`) decodes once
+structures (the structure design's fix D and rule 10): a sample of
+each ``OperationResult`` variant (data:`messages.RESULTS`) decodes once
 into frozen dataclasses of ``sdm_client._rust.results``, and a result of a
 shape the contract does not hold is refused by name, never read as it is."""
 

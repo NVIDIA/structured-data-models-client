@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The in-memory fallback (design choice 1, T2.6).
+//! The in-memory fallback.
 //!
 //! A provider may declare limits for it (`ProviderCapabilities::fallback`):
 //! an optional request it does not declare is then answered here, from the
@@ -337,7 +337,7 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                     .collect();
                 let missing = (0..total).filter(|&row| !holds(&present, row)).count();
                 // Labelled as the dialects label it: its label, where it
-                // gives one, else its position (T2.12).
+                // gives one, else its position.
                 positions
                     .push(i32::try_from(key.label_at(at)).map_err(|_| internal("too many keys"))?);
                 for (count, value) in counts.iter_mut().zip([total, distinct.len(), missing]) {

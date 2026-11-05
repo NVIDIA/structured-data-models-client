@@ -506,7 +506,7 @@ def core_indices(indices: list[int]) -> list[dict[str, str]]:
 def core_source(from_source: dict[str, Any] | None) -> dict[str, Any]:
     r"""``Schema.from_source``'s keywords as the core's source spec (the
     case's ``core.describe_source.source``), as the client's bridge builds
-    it: each key and time column as the contract's ``Given`` (T1.32h)."""
+    it: each key and time column as the contract's ``Given``."""
     given = from_source or {}
     return {
         'tables': [
@@ -584,7 +584,7 @@ def digest(parsed: Any) -> str:
     it: the policy's exclusions masked to their type, numbers as
     ``number_form`` reads them, written as JSON with sorted keys, no
     spaces and UTF-8 text unescaped (``sdm-testkit``'s
-    ``tests/t132d_empty_null_vectors.rs`` writes the same bytes)."""
+    ``tests/empty_null_vectors.rs`` writes the same bytes)."""
     for path in exclusions():
         parsed = _masked(parsed, path)
     canonical = json.dumps(

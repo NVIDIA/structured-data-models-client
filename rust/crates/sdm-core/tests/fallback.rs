@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The in-memory fallback (T2.6), the implementer's own tests: a host
+//! The in-memory fallback, the implementer's own tests: a host
 //! provider that declares no optional request and the fallback's limits,
 //! each scan the fallback asks answered here from one in-memory table, and
 //! the answers held to what each request's pushdown gives on that table,

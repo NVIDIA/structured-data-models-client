@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A metric view's definition read as the old client's `parse_metric_view`
-//! reads it (`DB/metric_view.py:727-1081`, T3.5's M2), once its parameters
+//! reads it (`DB/metric_view.py:727-1081`, M2), once its parameters
 //! are read: the joins kept and skipped, the filter, the dimensions and the
 //! measures, in that order, each question of text asked of the data layer
 //! in the run provider's dialect ([`Ask`]). Nothing here reads a warehouse;
@@ -834,7 +834,7 @@ fn read_filter(
         checked = Some(substituted_filter);
     }
     // A refusal of the check quotes the filter as checked, its parameters
-    // read (`_check_filter(row_filter, ...)`).
+    // read (`_check_filter(row_filter,...)`).
     let shown = match &checked {
         Some(text) => view_words::quote(text),
         None => shown,

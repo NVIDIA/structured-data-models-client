@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Pulls an image CI runs, pinned by digest, with retries (decision E131).
+# Pulls an image CI runs, pinned by digest, with retries.
 #
 #     pull_image.sh REGISTRY/NAME[:TAG]@sha256:DIGEST
 #

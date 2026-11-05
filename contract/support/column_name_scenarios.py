@@ -18,7 +18,7 @@ TYPO = 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id'
 
 
 def _names() -> Any:
-    name = 'column_names_record'
+    name = 'column_name_vectors'
     if name not in sys.modules:
         path = ROOT / 'contract/support/column_name_vectors.py'
         spec = importlib.util.spec_from_file_location(name, path)

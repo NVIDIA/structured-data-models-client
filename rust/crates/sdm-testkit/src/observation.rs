@@ -6,7 +6,7 @@
 //! format of `contract/observation.schema.json` (`sdm-observation/1`). A
 //! field this host cannot observe is null, never filled in: it has no
 //! stage, exception class, warnings section or Python runtime cell. From
-//! T1.11e a case whose operations read data has a `driver` section, what
+//! a case whose operations read data has a `driver` section, what
 //! the DuckDB provider ran ([`crate::driver`]).
 
 use std::path::Path;
@@ -64,7 +64,7 @@ pub fn repository(directory: &Path) -> Result<std::path::PathBuf> {
     Ok(String::from_utf8(out.stdout)?.trim().into())
 }
 
-/// The DuckDB version this host links, from `SELECT version()`, without
+/// The DuckDB version this host links, from `SELECT version`, without
 /// its leading `v`.
 pub fn duckdb_version() -> Result<String> {
     let connection = duckdb::Connection::open_in_memory()?;
@@ -103,10 +103,10 @@ pub fn write(
         }
         Answer::Predicted(answer) => {
             // `core.predicted` holds python-core's shape: its `body` the
-            // last call's (T1.36 fix 22) and, where there were several
-            // calls, `calls`, every call's body in order (T2.1g); its
+            // last call's and, where there were several
+            // calls, `calls`, every call's body in order; its
             // result's explanation where the core gave one, the JSON text
-            // it wrote (T2.16a), as python-core records it.
+            // it wrote, as python-core records it.
             let mut predicted = answer.clone();
             if let (Some(explanation), Some(result)) = (
                 &observed.explanation,
@@ -153,7 +153,7 @@ pub fn write(
         },
     });
     // What the provider ran, for a case whose operations read data; a
-    // case that reads none has no driver section (T1.11e).
+    // case that reads none has no driver section.
     if let Some(driver) = &observed.driver {
         observation["driver"] = driver.clone();
     }

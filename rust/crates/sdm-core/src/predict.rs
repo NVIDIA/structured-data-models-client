@@ -5,8 +5,8 @@
 //! `predict`: a materialized request sent to the model, and its answer.
 //!
 //! The run reads the request state a `materialize` run answered and the
-//! host held since (decision H23), and runs the client's predict-side
-//! rules in the reference's order (`sdm_request::predict`, T1.28b): the
+//! host held since, and runs the client's predict-side
+//! rules in the reference's order (`sdm_request::predict`): the
 //! model and outputs checked and the default outputs chosen (`prepare`); a
 //! request with no row to score answered without a call (`empty`); the
 //! adapter's checks of what the call sends (`preflight`, its notice of a
@@ -22,14 +22,14 @@
 //! An answer with a status other than 2xx is the endpoint's refusal, which
 //! the host's transport reports as the reference's does; a host that hands
 //! one over gets `INVALID_RESPONSE` naming the status. A Databricks Model
-//! Serving endpoint the host names (`Predict::model_endpoint`, T3.13) is
+//! Serving endpoint the host names (`Predict::model_endpoint`) is
 //! the core's to speak to: each call is wrapped in its envelope and weighed
 //! against the caller's limit when it is sent, and its every answer, its
 //! failures included, is read as the old client's serving transport reads
 //! it ([`sdm_request::serving`]). A transport that
 //! failed before an answer is `TRANSPORT_ERROR` with the kind and
 //! retryability the host gave. No error carries a value of the request or
-//! the answer (decision H17).
+//! the answer.
 
 use sdm_contract::error::AnsweredParts;
 use sdm_contract::ops::{ModelEndpoint, OperationResult, Predicted};
@@ -87,20 +87,20 @@ pub(crate) struct Inputs {
     /// The inference options the caller set at `materialize`.
     pub inference_asked: Vec<String>,
     /// A forecast's later steps, each its number, payload, query and the
-    /// request id its call carries (T1.36 fix 24), in order; none for a
-    /// forecast of one step, and `None` for any other request (T1.36 fix
+    /// request id its call carries, in order; none for a
+    /// forecast of one step, and `None` for any other request ( fix
     /// 21).
     pub forecast: Option<Vec<LaterStep>>,
     /// A ranking's questions, each its candidate's position, payload, query
     /// and the request id its call carries, the state's own first, and how
-    /// many candidates a row keeps (T2.8); `None` for any other request.
+    /// many candidates a row keeps; `None` for any other request.
     pub ranking: Option<(Vec<crate::ranking::Question>, Option<u32>)>,
     /// The later calls of a request asked in several, in order, each
     /// scoring the rows after the last (`RequestState::batches`); `None`
     /// for a request of one call.
     pub batches: Option<Vec<LaterCall>>,
     /// The serving endpoint the host's transport calls, whose envelope the
-    /// core writes and whose answers it reads (T3.13); `None` for the
+    /// core writes and whose answers it reads; `None` for the
     /// client's own endpoint.
     pub endpoint: Option<ModelEndpoint>,
 }
@@ -337,7 +337,7 @@ fn carried(
 
 /// The JSON list of the outputs the answer left out ([`left_out`]), which
 /// the result's schema carries under `absent` for a host to read a caller's
-/// `absent(...)` off (T3.12 fix 1): the rule stays here.
+/// `absent(...)` off: the rule stays here.
 fn absent_text(merged: &Part) -> Result<String, CoreError> {
     let named = left_out(merged);
     String::from_utf8(Value::texts(named.iter().map(String::as_str)).to_bytes())
@@ -383,7 +383,7 @@ pub(crate) fn finish_table(
 }
 
 /// One request's answer, the outputs it asked for and the rows it scores:
-/// the body of `predict` before T1.36 fix 21, of a request sent in one call
+/// the body of `predict` before fix 21, of a request sent in one call
 /// or, from `main`'s multi-call `predict`, in several (`calls`, in order).
 /// As the client's `predict`, every call is checked and written before the
 /// first is sent (`prepare`, `preflight`, then each call's body), each
@@ -584,10 +584,10 @@ pub(crate) async fn call_answer(
             // client's transport decodes every answer's body as JSON, a
             // `NaN` or `Infinity` token taken as the number Python's
             // reader takes it for, and a token past a double's range as an
-            // infinity (owner decision of 2026-10-12, register P1B-4).
+            // infinity.
             // Text nested past the reader's depth is refused before
             // anything of it is built (`sdm_wire::json::MAX_DEPTH`,
-            // approved by the owner, register P1B-22).
+            // approved by the owner, B-22).
             json::read_answer(&body).map_err(|e| {
                 let reason = match e.category {
                     "depth" => "too_deep",

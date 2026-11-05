@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The conversions a view's parameter default goes through (T3.5), held to
+//! The conversions a view's parameter default goes through, held to
 //! the old client's answers for each text default in
 //! `contract/view-step-vectors.json` (`default_text`), among them the
 //! second reviews' timestamps and numbers: Python 3.12's `int`, `Decimal`
@@ -91,7 +91,7 @@ fn a_decimal_past_the_bound_is_refused_by_name() {
     );
 }
 
-/// No text panics a conversion (T3.5 fix 2, the owner's stop rule): a few
+/// No text panics a conversion ( fix 2, the owner's stop rule): a few
 /// seconds of texts made of the pieces of dates, times, offsets and
 /// numbers, digits of other scripts and white space among them.
 #[test]

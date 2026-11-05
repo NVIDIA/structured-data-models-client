@@ -39,7 +39,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def recorder() -> ModuleType:
-    return _module('wording_record', RECORDER)
+    return _module('error_wording_scenarios', RECORDER)
 
 
 def runner() -> ModuleType:
@@ -81,7 +81,7 @@ NAMED: dict[str, list[str]] = {
     'date.day-first-then-packed': ['99999-01-01'],
     'empty.indices': ['indices'],
     # The value past int64 is a context example's key read from the data,
-    # which the core keeps out (KO2-86, register P2D-4): the column, the
+    # which the core keeps out (D-4): the column, the
     # row and the remedy, as the reference names them.
     'key.uint64-above-int64-max': [
         "Column 'instance_table.__kumo_entity_ref_0' row 0",
@@ -121,7 +121,7 @@ NAMED: dict[str, list[str]] = {
     'wording.rank-text-candidate': ['buys.item_id', "'1'"],
     'wording.float32-classification': ['non-finite', 'inf'],
     'wording.float32-regression': ['non-finite', 'inf'],
-    # A binary target with one class in its sample (T2.8 round 3).
+    # A binary target with one class in its sample ( round 3).
     'wording.binary-one-class': [
         "'PREDICT COUNT(orders.*, 0, 30, days) > 1000 FOR EACH users.user_id'",
         'two classes',
@@ -205,7 +205,7 @@ def vectors() -> dict[str, Any]:
 
 
 def _named_keys() -> list[str]:
-    r"""The case keys whose message is held: each of :data:`NAMED`'s cases
+    r"""The case keys whose message is held: each of:data:`NAMED`'s cases
     on each database where the reference refuses with every named word in
     its message."""
     out = []
@@ -231,9 +231,9 @@ WARNED_KEYS = tuple(
 
 def test_every_case_held_here_is_recorded_and_named() -> None:
     r"""Control (no vacuous key): every case here has a vector on each of
-    its databases at its case file, every case of :data:`NAMED` is held on
+    its databases at its case file, every case of:data:`NAMED` is held on
     DuckDB at least (the reference refusing there with every named word),
-    and :data:`WARNED`'s cases give each label's warning on DuckDB on the
+    and:data:`WARNED`'s cases give each label's warning on DuckDB on the
     reference."""
     document = vectors()
     for case_id in recorder().CASE_IDS:
@@ -289,7 +289,7 @@ def test_expected_wording_outcomes_match_cases() -> None:
 
 def _server() -> bool:
     r"""Whether a Postgres server is named; where none is, one must not be
-    required (H26)."""
+    required."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -322,7 +322,7 @@ def _outcome(outcome: dict[str, Any]) -> tuple[Any, ...]:
 def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
     r"""Two outcomes the same, but that the core route raises a refusal
     coded ``UNSUPPORTED_REQUEST`` as ``UnsupportedRequestError``, a
-    subclass of the reference's ``StructuredDataError`` (register P1B-20,
+    subclass of the reference's ``StructuredDataError`` (B-20,
     approved by the owner, E78)."""
     if want == got:
         return True
@@ -342,7 +342,7 @@ def _words(message: str | None) -> str:
 
 @pytest.mark.parametrize('case_key', NAMED_KEYS)
 def test_python_core_names_what_the_reference_names(case_key: str) -> None:
-    r"""G15, the carried generic-refusal notes and T2.8 round 3:
+    r"""G15, the carried generic-refusal notes and round 3:
     python-core refuses as the reference does, and its message names what
     the reference's names (the table, the column or key, the value given
     and an example of what is taken), never only its code's sentence."""

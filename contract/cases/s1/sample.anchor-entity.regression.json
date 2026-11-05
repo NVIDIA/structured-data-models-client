@@ -86,5 +86,5 @@
     "stage": "predict"
   },
   "why": "anchor_time='entity' for a static regression: each user anchored at its signup time",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.anchor-entity.regression using the shop fixture."
 }

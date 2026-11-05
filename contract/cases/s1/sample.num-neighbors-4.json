@@ -90,5 +90,5 @@
     "stage": "predict"
   },
   "why": "num_neighbors=[4]: one hop of at most 4 orders per user, where each user has 10",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-neighbors-4 using the shop fixture."
 }

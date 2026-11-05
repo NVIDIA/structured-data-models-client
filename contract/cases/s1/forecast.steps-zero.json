@@ -123,9 +123,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"FORECAST value must be at least 1, got 0.\""
+    "code": "INVALID_REQUEST"
   },
   "why": "num_forecasts of 0, refused before anything is gathered (S0 holds the query; this is the public call on each database)",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "source": "Correctness case forecast.steps-zero using the shop fixture."
 }

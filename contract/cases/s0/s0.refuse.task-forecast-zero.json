@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The task family: zero forecast timeframes (PQL_TASK_FORECAST_NOT_POSITIVE)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.task-forecast-zero using the shop fixture."
 }

@@ -74,9 +74,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "UNSUPPORTED_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"501 entities gathered 200 times over, 100,200 in all, is past the 100,000 one materialize() will hold at once\", before anything is read"
+    "code": "UNSUPPORTED_REQUEST"
   },
   "why": "The entity ceiling over a ranking (main's MOST_ENTITIES, 100,000): the entities gathered once per candidate, 501 by 200, one past it by 200, refused before anything is read",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.entities-by-candidates.over using the shop fixture."
 }

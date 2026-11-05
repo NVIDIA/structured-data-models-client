@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: answered through predict on DuckDB and Postgres; on DuckDB order_id and orderid tie (Schema.from_source warns and gives orders no key), on Postgres the NaN is missing and orderid is the key"
+    "stage": "predict"
   },
-  "why": "orders' two key candidates, order_id and orderid, both DOUBLE, order 3's order_id NaN: whether a NaN is a distinct value decides whether they tie (rules float_nan and key_tie; T2.12 round 1)",
-  "source": "T2.12 round 1 (Codex P2): float inference as each database previews it, and a NaN key at materialize"
+  "why": "Orders' two key candidates, order_id and orderid, both DOUBLE, order 3's order_id NaN: whether a NaN is a distinct value decides whether they tie (rules float_nan and key_tie)",
+  "source": "Correctness case rule.float-nan-key-tie using the shop fixture."
 }

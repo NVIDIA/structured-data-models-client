@@ -122,5 +122,5 @@
     "message": "[500] {\"error\": \"scripted_failure\", \"call\": 2}"
   },
   "why": "rows_per_call=3 over 8 entities with the third call (numbered 2) failed by the endpoint: the error carries the two calls answered before it (details answered, calls_answered 2, rows_answered 6)",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.fail-call-2 using the shop fixture."
 }

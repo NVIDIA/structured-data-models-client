@@ -2,29 +2,29 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Time (design, "Time"; decision F3): the core's one instant and one span,
+//! Time (design, "Time"): the core's one instant and one span,
 //! civil arithmetic, the zones a run resolves names with, and the reading
 //! of times a source stores as text.
 //!
 //! - [`Instant`] is nanoseconds since 1970-01-01T00:00Z and [`Span`] a
-//!   fixed duration in nanoseconds, both `i128`, so every count an int64
-//!   of any unit holds converts in and out exactly; a conversion to a
-//!   named unit is checked and refuses with `VALUE_OUT_OF_RANGE`.
+//! fixed duration in nanoseconds, both `i128`, so every count an int64
+//! of any unit holds converts in and out exactly; a conversion to a
+//! named unit is checked and refuses with `VALUE_OUT_OF_RANGE`.
 //! - [`Civil`] is a proleptic Gregorian date and time of day for any year
-//!   such a count reaches, by civil arithmetic, not `jiff`'s calendar,
-//!   whose timestamps stop at 9999-12-30T22:00Z (decision E6).
+//! such a count reaches, by civil arithmetic, not `jiff`'s calendar,
+//! whose timestamps stop at 9999-12-30T22:00Z.
 //! - A zone's offset comes from `jiff` inside its range; outside it the
-//!   instant is moved by whole 400-year Gregorian cycles into a window
-//!   `jiff` holds on the same side of the zone's history and the offset
-//!   read there ([`Instant::to_local`], [`localize`]): before a zone's
-//!   first transition its offset is the one it starts with, after its last
-//!   the rule its database ends with repeats every cycle.
+//! instant is moved by whole 400-year Gregorian cycles into a window
+//! `jiff` holds on the same side of the zone's history and the offset
+//! read there ([`Instant::to_local`], [`localize`]): before a zone's
+//! first transition its offset is the one it starts with, after its last
+//! the rule its database ends with repeats every cycle.
 //! - [`text_shapes`] is the client's two shapes `date-rules.md` names a
-//!   date in text by, and [`text`] reads text by the core's fixed list of
-//!   formats within them (`date-rules.md`, "The core's text formats";
-//!   T1.25b), refusing by name any other text it is asked to read.
+//! date in text by, and [`text`] reads text by the core's fixed list of
+//! formats within them (`date-rules.md`, "The core's text formats";
+//! ), refusing by name any other text it is asked to read.
 //! - [`offset`] is a query window's `pd.DateOffset`, months by `jiff`'s
-//!   calendar arithmetic, clamped to the month's end (T1.27).
+//! calendar arithmetic, clamped to the month's end.
 
 pub mod offset;
 pub mod text;
@@ -38,14 +38,14 @@ use sdm_contract::{CoreError, Detail, Sentence};
 
 /// A zone name the run's zones do not hold. It carries no name: a zone's
 /// name can come from the data or the caller, and no input value reaches a
-/// `CoreError` (decision H17).
+/// `CoreError`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnknownZone;
 
 /// The zones a run resolves names with: the host's zone lookup roots in
 /// order, then a bundled database, with the source of each zone recorded
-/// by the host (decision A7). The host passes them to `sdm_core::start`
-/// (decision H14), and the core resolves through nothing else.
+/// by the host. The host passes them to `sdm_core::start`
+///, and the core resolves through nothing else.
 pub trait Zones: Send + Sync {
     /// The zone `name`, in any case, or [`UnknownZone`].
     fn zone(&self, name: &str) -> Result<TimeZone, UnknownZone>;

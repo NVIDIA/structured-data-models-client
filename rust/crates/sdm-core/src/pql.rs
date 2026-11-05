@@ -4,7 +4,7 @@
 
 //! The PQL adapter: the one module that names the PQL parser.
 //!
-//! Behind it is `sdm-pql`, this client's own parser (decision E18). It
+//! Behind it is `sdm-pql`, this client's own parser. It
 //! answers in the validated-query format ([`sdm_contract::pql`]), and the
 //! model capability checks ([`crate::profiles`]) read that format, so
 //! nothing past this module depends on the parser's own types.
@@ -57,22 +57,22 @@ pub struct Validation {
     /// The query, when it has no errors.
     pub query: Option<ValidatedQuery>,
     /// The query, when it has no errors, written back as the reference's
-    /// `ValidatedPredictiveQuery.to_string()` writes it.
+    /// `ValidatedPredictiveQuery.to_string` writes it.
     pub text: Option<String>,
     /// The warnings of the literals read, in order, accepted or not.
     pub warnings: Vec<CoreWarning>,
     /// A forecast's plan, when it has no errors: how many steps it asks,
     /// and what each step's regression is written from ([`per_step`]),
     /// never the steps themselves, which a caller writes within its own
-    /// bound ([`ForecastPlan::step`], T1.36 fix 23).
+    /// bound ([`ForecastPlan::step`], fix 23).
     pub steps: Option<ForecastPlan>,
     /// A ranking's plan, when it has no errors: what each candidate's
-    /// question is written from ([`per_candidate`], T2.8).
+    /// question is written from ([`per_candidate`]).
     pub ranking: Option<RankingPlan>,
     /// The entity filter's condition, when the query has no errors and
     /// filters its entity, written as the reference writes it
     /// (`str(query.entity_ast.condition)`), which its notices and its
-    /// refusal of a sample left empty quote (T2.13b).
+    /// refusal of a sample left empty quote.
     pub entity_filter: Option<String>,
 }
 
@@ -90,7 +90,7 @@ impl Validation {
     }
 
     /// The answer `validate_query` gives over `schema`: an accepted
-    /// query's facts and its text as written back with it (T3.8).
+    /// query's facts and its text as written back with it.
     pub fn to_result(&self, schema: &QuerySchema) -> QueryValidation {
         QueryValidation {
             accepted: self.query.is_some(),
@@ -103,7 +103,7 @@ impl Validation {
     }
 
     /// The facts of the accepted query a host reads ([`QueryFacts`],
-    /// T2.18); `None` when the query was refused.
+    /// ); `None` when the query was refused.
     pub fn facts(&self, schema: &QuerySchema) -> Option<QueryFacts> {
         let query = self.query.as_ref()?;
         let features = features(query, schema);
@@ -160,7 +160,7 @@ pub fn validate(
 /// the outcome, whether the query was answered or the run ends with an
 /// error (a packed literal, a two-digit year the run's zone cannot place):
 /// the literals read before the error keep their warnings, as the
-/// reference's reader gives each as it reads it (carried row U1, T2.13).
+/// reference's reader gives each as it reads it (carried row U1).
 pub fn validate_warned(
     query: &str,
     schema: &QuerySchema,
@@ -193,7 +193,7 @@ impl From<CoreError> for Halted {
     }
 }
 
-/// `query` as the PQL library writes it back (its `to_string()`, the text a
+/// `query` as the PQL library writes it back (its `to_string`, the text a
 /// host sends materialize after validating, redundant parentheses dropped),
 /// or `None` when it does not parse. Read for training with no current year,
 /// on the adapter's stack ([`on_adapter_stack`]).
@@ -320,7 +320,7 @@ fn resolve_here(
 
 /// A forecast as the client's `_per_step` splits it, kept compact: how
 /// many steps it asks, and the parts every step's regression is written
-/// from. Nothing here grows with the step count (T1.36 fix 23).
+/// from. Nothing here grows with the step count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForecastPlan {
     explain: bool,
@@ -355,13 +355,13 @@ impl ForecastPlan {
 }
 
 /// A forecast's plan, the regressions the client's `_per_step` asks it as
-/// (T1.36 fix 21), written by [`ForecastPlan::step`]; none for a query that
+///, written by [`ForecastPlan::step`]; none for a query that
 /// is not a forecast. A forecast whose target ends in no aggregation the
 /// reference cannot split (an `AttributeError`), refused by name, as the
 /// regression it would ask is; one whose window has no start the query's
 /// validation refuses first ("TARGET cannot have an aggregation in the
-/// past"), so reaching it here is a fault of this build (T2.10). Nothing is
-/// written per step here (T1.36 fix 23).
+/// past"), so reaching it here is a fault of this build. Nothing is
+/// written per step here.
 fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, CoreError> {
     let query = &validated.query;
     if query.problem_type != Some(t::ProblemType::Forecast) {
@@ -398,7 +398,7 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
     }))
 }
 
-/// A ranking as the client's `_per_candidate` asks it (T2.8): what every
+/// A ranking as the client's `_per_candidate` asks it: what every
 /// candidate's binary question is written from, read off the validated
 /// query; nothing is refused here, the core refusing in the client's order
 /// what the client refuses as it writes the questions
@@ -428,7 +428,7 @@ fn per_candidate(validated: &parser::ValidatedQuery) -> Option<RankingPlan> {
             };
             let text = ast::to_string(target);
             // The table and the column ranked: the column node's own, held
-            // apart (KO2-36); the text split at its first dot where the target
+            // apart; the text split at its first dot where the target
             // is no lone column, as the client splits it.
             let (table, column) = match &target.borrow().kind {
                 Kind::Column { name, .. } => (name.table_name.clone(), name.col_name.clone()),
@@ -473,7 +473,7 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 /// by name and where it is: the reference reads such a literal through
 /// `dateutil`, or refuses it. It names the literal and the query, as the
 /// caller wrote them (`literal`, `query`), as the reference's message does
-/// (KO2-86, narrowing decision E79: a value of the caller's own call).
+/// (narrowing: a value of the caller's own call).
 fn packed(query: &str, location: Option<ast::Location>, literal: &str) -> CoreError {
     let mut error = CoreError::new(
         Sentence::DateLiteralPacked,
@@ -770,7 +770,7 @@ fn validated_query(validated: &parser::ValidatedQuery) -> Result<ValidatedQuery,
 }
 
 /// The parser holds a column's table and column apart, as the contract
-/// does, so neither is ever split on a dot (KO2-36).
+/// does, so neither is ever split on a dot.
 fn column_ref(name: &parser::schema::ColumnKey) -> ColumnRef {
     ColumnRef {
         table: name.table_name.clone(),
@@ -1059,7 +1059,7 @@ fn ranks_foreign_key(target: &PqlNode, schema: &QuerySchema) -> bool {
 }
 
 /// A name as the query language spells it, in backticks where a bare name
-/// cannot (T2.8: a ranking's questions name the ranked table so), from
+/// cannot (a ranking's questions name the ranked table so), from
 /// here, the one module that names the parser.
 pub(crate) fn quote_name(name: &str) -> String {
     parser::names::quote_name(name)
@@ -1077,7 +1077,7 @@ pub fn float_text(x: f64) -> String {
 /// [`sdm_pql::conversions::LONGEST_TEXT`], or its nesting, through the
 /// aliases of collections inside themselves, the depth a quote follows.
 /// Python wrote such a text or ran out of memory; it is refused by name
-/// (register P3J-10).
+/// (J-10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TooLarge;
 
@@ -1178,7 +1178,7 @@ fn shown(
 
 /// The text the old client's messages quote a view definition's value by,
 /// Python's `repr` of what PyYAML made of it ([`sdm_pql::float_repr`]),
-/// from here, the one module that names the parser (T3.5).
+/// from here, the one module that names the parser.
 pub(crate) fn value_repr(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
@@ -1189,7 +1189,7 @@ pub(crate) fn value_repr(
 }
 
 /// Python's `str` of a view definition's value, as the old client wrote
-/// it into a message or a parameter's default (T3.5).
+/// it into a message or a parameter's default.
 pub(crate) fn value_text(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
@@ -1200,13 +1200,13 @@ pub(crate) fn value_text(
 }
 
 /// Python's `repr` of a text, as the old client quotes a piece of an
-/// expression or a name (T3.5).
+/// expression or a name.
 pub(crate) fn text_repr(text: &str) -> String {
     parser::float_repr::text_repr(text)
 }
 
 /// How a view definition's YAML is read: Python's limit on an integer's
-/// digits, from the parser (T3.5).
+/// digits, from the parser.
 pub fn yaml_rules() -> sdm_schema::view::yaml::Rules {
     sdm_schema::view::yaml::Rules {
         most_digits: parser::conversions::MAX_STR_DIGITS,
@@ -1216,21 +1216,21 @@ pub fn yaml_rules() -> sdm_schema::view::yaml::Rules {
 
 /// Python's white space (`str.isspace`), from the parser's one rule of
 /// it, as the data layer's view checks take it, with the class its
-/// patterns are compiled with derived from it once (T3.5).
+/// patterns are compiled with derived from it once.
 pub fn spaces() -> &'static sdm_data::view_expr::Spaces {
     static SPACES: std::sync::LazyLock<sdm_data::view_expr::Spaces> =
         std::sync::LazyLock::new(|| sdm_data::view_expr::Spaces::new(parser::syntax::is_space));
     &SPACES
 }
 
-/// `date.isoformat()` of a view definition's date, from the parser's one
-/// writer of it (T3.5).
+/// `date.isoformat` of a view definition's date, from the parser's one
+/// writer of it.
 pub(crate) fn date_iso(date: &sdm_schema::view::yaml::Date) -> String {
     parser::conversions::date_iso(date.year, date.month, date.day)
 }
 
 /// `datetime.isoformat(separator)` of a view definition's date and time,
-/// from the parser's one writer of it (T3.5).
+/// from the parser's one writer of it.
 pub(crate) fn datetime_iso(moment: &sdm_schema::view::yaml::Timestamp, separator: char) -> String {
     parser::conversions::datetime_iso(
         (moment.date.year, moment.date.month, moment.date.day),
@@ -1246,7 +1246,7 @@ pub(crate) fn datetime_iso(moment: &sdm_schema::view::yaml::Timestamp, separator
 }
 
 /// The conversions of a parameter's default, as the old client's Python
-/// made them ([`sdm_pql::conversions`]): `text.strip()`, `str(int(text))`,
+/// made them ([`sdm_pql::conversions`]): `text.strip`, `str(int(text))`,
 /// `format(Decimal(text), 'f')`, and the ISO readers and writers.
 pub(crate) mod conversions {
     pub(crate) use sdm_pql::conversions::{
@@ -1365,7 +1365,7 @@ mod tests {
         assert!(local_year(&facts(i64::MIN, None), &NewYork).is_err());
     }
 
-    /// Carried row U1 (T2.13): a day-first literal read before the error a
+    /// Carried row U1: a day-first literal read before the error a
     /// query then ends with (a packed literal, a two-digit year the run's
     /// zone cannot place) keeps its warning; one read after it is never
     /// read, as the reference's reader stops there too.

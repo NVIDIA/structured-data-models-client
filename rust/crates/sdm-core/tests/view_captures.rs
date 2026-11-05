@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Databricks metric view's conversion (T3.5, M1 to M11) against what the
+//! A Databricks metric view's conversion (M1 to M11) against what the
 //! old client read and answered on a SQL warehouse (`contract/view-captures.json`,
-//! from the recordings package T3.20, `contract/fixtures/views/captures.py`):
+//! retained as independent warehouse evidence):
 //! the core's `describe_source` over the view, each statement it plans
 //! answered by the warehouse's recorded rows, in the old client's order, every
 //! one asked, and the schema the old client gave.
@@ -12,8 +12,8 @@
 //! The statements are the old client's text, but for an expression's sample:
 //! the old client read `SELECT {expr} AS name FROM {the table's rows}`, and
 //! the core reads the expression inside the relation the data layer renders,
-//! `SELECT name FROM (SELECT ({expr}) AS name FROM t AS source ...)`, the same
-//! rows (register P3J-12); the test reads the core's as the old client's text
+//! `SELECT name FROM (SELECT ({expr}) AS name FROM t AS source...)`, the same
+//! rows (J-12); the test reads the core's as the old client's text
 //! to find its recorded rows.
 
 use std::collections::BTreeMap;
@@ -141,7 +141,7 @@ fn as_expected(data: ArrowData, expect: &ExpectedSchema) -> ArrowData {
 }
 
 /// `text` with each placeholder the recordings write for a private name
-/// (`{catalog}`, `{schema}`, ...) as a plain name, which an unquoted part of
+/// (`{catalog}`, `{schema}`,...) as a plain name, which an unquoted part of
 /// a name may hold, as the warehouse's own names did.
 fn unplaced(text: &str) -> String {
     let mut out = String::with_capacity(text.len());

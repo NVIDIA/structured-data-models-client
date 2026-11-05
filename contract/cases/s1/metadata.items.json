@@ -85,9 +85,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "each item carries the endpoint's metadata, kept on the result's items"
+    "stage": "predict"
   },
   "why": "an answer whose items carry metadata (the core refuses it by name, response_field)",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case metadata.items using the shop fixture."
 }

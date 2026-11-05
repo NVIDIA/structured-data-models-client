@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Postgres provider (T2.3): it answers a fetch step by running the
+r"""The Postgres provider: it answers a fetch step by running the
 statements its plan carries, in order, on one cursor of the source's
 psycopg connection, and hands back the last one's rows as an Arrow table,
 built from the driver's values with no pandas, an empty result keeping its
@@ -16,13 +16,13 @@ read leaves the caller's connection usable.
 
 A key set a plan names (the seeds of a ``neighbors`` or ``lookup``
 request) is bound as the dialect binds it: the statement's one parameter,
-``$1``, the JSON text the core wrote of it (T3.28: each seed as the old
+``$1``, the JSON text the core wrote of it (each seed as the old
 client writes it, which the statement reads in the source's own types),
 handed over as a one-cell attachment and bound as it was handed; the core
 splits a key set past the reference's budget into one fetch per chunk, so
 this provider neither writes nor splits one.
 psycopg writes a parameter ``%s`` and a ``%`` as ``%%``, so such a
-statement's text is given to it so written (:func:`_psycopg_text`), its
+statement's text is given to it so written (func:`_psycopg_text`), its
 ``$1`` the one outside quotes; one holding no such ``$1``, or several, is
 not run. A plan this
 provider cannot run, one for a host provider, one with a scalar parameter,
@@ -35,16 +35,16 @@ by the type's name in the driver's registry, never by its number (a type
 the registry does not name, a user's composite or enum, is read as text,
 which is how the driver reads it); the values are the driver's, moved into
 Arrow by pyarrow, and how the reference reads each is the core's
-(``sdm-data``'s Postgres value rules, T2.14d). The driver reads each value
+(``sdm-data``'s Postgres value rules). The driver reads each value
 as it reads the reference's (its own loaders, so the statements' results
 are the reference's): a ``json`` or ``jsonb`` value is handed over as the
 JSON text of the value the driver read, its field marked as JSON (Arrow's
 ``arrow.json`` metadata, :data:`JSON_TAG`); an ``interval`` (the driver's
 ``timedelta``, a month counted as 30 days as the reference's driver counts
 it) as pyarrow's ``MonthDayNano`` of it, its field tagged ``sdm:interval``
-= ``timedelta`` (:data:`INTERVAL_TAG`); a ``numeric`` no Arrow decimal
+= ``timedelta`` (data:`INTERVAL_TAG`); a ``numeric`` no Arrow decimal
 holds as each value's exact text, its declaration marked
-(:func:`_numeric_field`). A ``timestamptz`` is built as the instant in UTC,
+(func:`_numeric_field`). A ``timestamptz`` is built as the instant in UTC,
 whatever the session's zone.
 """
 
@@ -159,7 +159,7 @@ def _psycopg_text(text: str) -> str:
 def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
     r"""The last statement's rows as a pyarrow table, in batches of at most
     ``batch_rows``, each column typed by its Postgres type
-    (:func:`postgres_arrow.rows_arrow`)."""
+    (func:`postgres_arrow.rows_arrow`)."""
     description = cursor.description
     if description is None:
         raise PlanNotRun('a plan whose last statement returns no rows')

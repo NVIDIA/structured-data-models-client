@@ -1,5 +1,5 @@
 {
- "about": "RS-2: random_state(seed).randint(0, 2**31 - 1, size=4), the reference's SQLite seeded-hash coefficients, recorded from the reference environment's numpy 2.5.3 by T2.2 (the reference's sdm_relational_engine.rfm.base.utils.random_state).",
+ "about": "RS-2: random_state(seed).randint(0, 2**31 - 1, size=4), the reference's SQLite seeded-hash coefficients, recorded from the reference environment's numpy 2.5.3 (the reference's sdm_relational_engine.rfm.base.utils.random_state).",
  "vectors": [
   {
    "seed": "0",

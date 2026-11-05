@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4 on DuckDB for the whole corpus (T2.4): every statement the DuckDB
+//! L4 on DuckDB for the whole corpus: every statement the DuckDB
 //! dialect rendered for the contract cases, pinned verbatim beside the
 //! request it answers, beside the families' pins this directory already
 //! holds (`duckdb_catalog.rs` and the `*_family.rs` files, which
@@ -1089,7 +1089,7 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT\n  0 as table_index,\n  MIN(CAST(\"ts\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"ts\" AS TIMESTAMP)) as max_date\nFROM \"lines\"\nUNION ALL\nSELECT\n  1 as table_index,\n  MIN(CAST(\"ts\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"ts\" AS TIMESTAMP)) as max_date\nFROM \"orders\"",
         ],
     ),
-    // T2.18 (KO2-36): the name.* cases, a column named with a dot, a
+    //: the name.* cases, a column named with a dot, a
     // backtick or a line feed, each quoted alone as any name is.
     (
         r##"{"columns":["a.b","age","country"],"key":["a.b"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
@@ -2385,7 +2385,7 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\", t.\"channel\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST",
         ],
     ),
-    // T2.10: the ranking cases' fetches as python-core makes them, and
+    //: the ranking cases' fetches as python-core makes them, and
     // rank.odd-column's key check numbered as the reference numbers it.
     (
         r##"{"columns":["item_id","kind"],"key":["item_id"],"request":"lookup","seeds":{"attachment":10,"columns":[{"name":"key","nullable":true,"type":{"precision":18,"scale":0,"type":"decimal128"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,

@@ -15,7 +15,7 @@ import pyarrow as pa
 import pytest
 
 HERE = Path(__file__).resolve().parent
-NAME = 't320e_recording_fixtures'
+NAME = 'test_driver_fetch_failures_recording_fixtures'
 spec = importlib.util.spec_from_file_location(
     NAME, HERE / 'test_driver_capture.py'
 )

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:sdm:observation:1",
   "title": "Contract observation",
-  "description": "What one runner observed of one case, one JSON object per line of a runner's output. identity is validated on its own and never compared as a field. A field a runner cannot observe is null, never filled in: rust-host has no stage, exception class or host section, and python-old and python-ref have no core section. No message text is recorded.",
+  "description": "One runner's observation of one case, written as one JSON object per line. Identity is validated separately. Unobservable fields are null; native-host observations have no Python host section. No message text is recorded.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "case", "identity", "outcome", "host", "core"],
@@ -30,7 +30,7 @@
       "properties": {
         "warnings": {"type": "array", "items": {"type": "string"}},
         "origins": {
-          "description": "Each warning in order, its class and the top-level module whose files raised it (null when none of those loaded holds the file): python-core and python-old from T1.29 (register HOST-5), never python-ref.",
+          "description": "Python warning origins in order: warning class and top-level module owning the source file, or null when no loaded module owns it.",
           "type": "array",
           "items": {
             "type": "object",
@@ -45,7 +45,7 @@
       }
     },
     "driver": {
-      "description": "The statements a case ran on DuckDB and DuckDB's own query log, read after the case. On a Python runner, the test-only driver capture (design, Driver capture; decision Q2), null when the run handed the source the driver connection itself (the conservation control); on rust-host (from T1.11e), its DuckDB provider's own record of what it ran, for a case whose core operations read data, and no driver section for a case whose operations read none. Setup, everything run before the connection reaches Schema.from_source (on rust-host, before describe_source starts), is in neither.",
+      "description": "The statements a case ran on DuckDB and DuckDB's own query log, read after the case. On a Python runner, the test-only driver capture, null when the run handed the source the driver connection itself (the conservation control); on rust-host, its DuckDB provider's own record of what it ran, for a case whose core operations read data, and no driver section for a case whose operations read none. Setup, everything run before the connection reaches Schema.from_source (on rust-host, before describe_source starts), is in neither.",
       "type": "object",
       "additionalProperties": false,
       "required": ["capture", "query_log"],
@@ -82,7 +82,7 @@
                       }
                     }
                   },
-                  "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands (T3.4).", "enum": ["locate"]}
+                  "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands.", "enum": ["locate"]}
                 }
               }
             },
@@ -125,7 +125,7 @@
           }
         },
         "query_log": {
-          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped. On SQLite and Postgres (T2.1a), the driver's own statement log: every statement its cursors executed, and every relation bound by name (ADBC's adbc_ingest), counted alike.",
+          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped. On SQLite and Postgres, the driver's own statement log: every statement its cursors executed, and every relation bound by name (ADBC's adbc_ingest), counted alike.",
           "type": "object",
           "additionalProperties": false,
           "required": ["statements", "bindings", "compared", "differing"],
@@ -139,12 +139,12 @@
       }
     },
     "public": {
-      "description": "Python runners only: the public projection the capture must not change (design, Driver capture): the public Schema, each request the scripted endpoint received, and the public result through to_pandas(). Warnings and the error outcome are host.warnings and outcome.",
+      "description": "Python runners only: the public projection the capture must not change: the public Schema, each request the scripted endpoint received, and the public result through to_pandas(). Warnings and the error outcome are host.warnings and outcome.",
       "type": "object",
       "additionalProperties": false,
       "required": ["schema", "payloads", "result"],
       "properties": {
-        "result_text": {"description": "The SHA-256 of the public result's rows with each value as its text, in order (T3.2, P2-T2.21-1), beside the result so every projection of result is as before: what a more_exact excuse of result.digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"},
+        "result_text": {"description": "The SHA-256 of the public result's rows with each value as its text, in order, beside the result so every projection of result is as before: what a more_exact excuse of result.digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"},
         "schema": {"type": ["object", "null"]},
         "payloads": {
           "type": "array",
@@ -176,7 +176,7 @@
             },
             "rows": {"type": "integer", "minimum": 0},
             "digest": {"$ref": "#/$defs/sha256"},
-            "text_digest": {"description": "The SHA-256 of the rows with each value as its text (str), in order (T3.2, P2-T2.21-1): what a more_exact excuse of digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"}
+            "text_digest": {"description": "The SHA-256 of the rows with each value as its text (str), in order: what a more_exact excuse of digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"}
           }
         }
       }
@@ -282,7 +282,7 @@
           "required": ["body", "model", "request_id", "metadata", "result"],
           "properties": {
             "body": {"type": "object"},
-            "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
+            "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's; absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
             "metadata": {"type": "object"},
@@ -293,7 +293,7 @@
               "properties": {
                 "columns": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "type"], "properties": {"name": {"type": "string"}, "type": {"type": "string"}}}},
                 "rows": {"type": "array", "items": {"type": "array"}},
-                "explanation": {"description": "The result's explanation where the core gave one: its Arrow schema's metadata key explanation, the JSON text the core wrote, as text (T2.13; recorded by both core runners from T2.16a, so the gate holds the hosts to the same bytes); absent where it gave none. An item's explanation and metadata are the result's own columns, among the rows.", "type": "string"}
+                "explanation": {"description": "The result's explanation where the core gave one: its Arrow schema's metadata key explanation, the JSON text the core wrote, as text; absent where it gave none. An item's explanation and metadata are the result's own columns, among the rows.", "type": "string"}
               }
             }
           }
@@ -308,7 +308,7 @@
           }
         },
         "edits": {
-          "description": "From T1.24b, beside inputs, whose shape a gate's checkpoint fixes: each edit_schema's start (the description the core last answered, the schema as the host holds it, the edit) and materialize's held schema, in order; from T3.16 each edit_schema's start is the schema as the host holds it, as plain data, and the edit, and materialize's schema is its input's. A runner of an earlier checkpoint records none.",
+          "description": "Schema-edit starts and materialization schemas in execution order, recorded as host-held plain data. Earlier observation formats may omit this field.",
           "type": "array",
           "minItems": 1,
           "items": {
@@ -330,7 +330,7 @@
                 "required": ["op", "schema", "edit"],
                 "properties": {
                   "op": {"const": "edit_schema"},
-                  "schema": {"description": "The contract's HeldSchema (T3.16).", "type": "object"},
+                  "schema": {"description": "The contract's HeldSchema.", "type": "object"},
                   "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
                 }
               },
@@ -351,7 +351,7 @@
   },
   "$defs": {
     "key": {
-      "description": "The case a line is of, and the database or warehouse leg it ran on (design choice 2, T2.0f; Phase 3 design choice 1): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres, and a warehouse leg's by <case>@<leg> (databricks-sql, databricks-spark, snowflake, lakebase). Observations, reference lines, captures and baselines use the same keys.",
+      "description": "The case a line is of, and the database or warehouse leg it ran on: a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres, and a warehouse leg's by <case>@<leg> (databricks-sql, databricks-spark, snowflake, lakebase). Observations, reference lines, captures and baselines use the same keys.",
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres|databricks-sql|databricks-spark|snowflake|lakebase))?$"
     },
@@ -380,7 +380,7 @@
       }
     },
     "result": {
-      "description": "One read of a statement's result: the method, the rows it gave, their Arrow schema when it gave Arrow, their digest as the Python capture computes it (batch boundaries left out; integrity within one runner only, never compared across runners, and rust-host writes none), and their values in the canonical form both languages write (values; decision H9, which the comparator compares).",
+      "description": "One read of a statement's result: the method, the rows it gave, their Arrow schema when it gave Arrow, their digest as the Python capture computes it (batch boundaries left out; integrity within one runner only, never compared across runners, and rust-host writes none), and their values in the canonical form both languages write (values, which the comparator compares).",
       "type": "object",
       "additionalProperties": false,
       "required": ["method", "rows", "values"],
@@ -421,9 +421,9 @@
       "if": {"properties": {"runner": {"not": {"const": "java"}}}},
       "then": {"properties": {"versions": {"required": ["duckdb"]}}},
       "properties": {
-        "runner": {"description": "The runner: the reference, the candidate on the core or its old route, the pure-Rust host, or the Java host (Phase 3 design choice 10, T3.11's contract/runners/run_java.py).", "enum": ["python-ref", "python-core", "python-old", "rust-host", "java"]},
+        "runner": {"description": "Producer identity for current Python, Rust and Java observations, with historical runner names retained for reading independent expected data.", "enum": ["python-ref", "python-core", "python-old", "rust-host", "java"]},
         "cell": {
-          "description": "The runtime cell (design, Runtime cells) whose versions the runner's environment has exactly, or null when it has none's.",
+          "description": "The runtime cell whose versions the runner's environment has exactly, or null when it has none's.",
           "enum": ["ref-pandas3", "dbr17-pandas2", "floor-pandas2.2", null]
         },
         "platform": {"type": "string", "minLength": 1},
@@ -466,7 +466,7 @@
         "contract": {"description": "The contract version of the core it ran, or null.", "type": ["integer", "null"]},
         "versions": {
           "type": "object",
-          "description": "The versions the runner ran with: DuckDB's, required of every runner but Java's, whose S0 leg opens no database; Java's host names its runtime's (java), and DuckDB's where its leg opens DuckDB (T3.2).",
+          "description": "The versions the runner ran with: DuckDB's, required of every runner but Java's, whose S0 leg opens no database; Java's host names its runtime's (java), and DuckDB's where its leg opens DuckDB.",
           "additionalProperties": false,
           "properties": {
             "python": {"type": "string"},

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The panic test's subprocess (exit 3 of T3.11): a panic inside the core, at a run's start and in
+ * The panic test's subprocess (exit 3 of ): a panic inside the core, at a run's start and in
  * its body, reaches Java as an exception, and the JVM runs on to validate a query. It prints one
  * line per panic, then {@code survived}.
  */

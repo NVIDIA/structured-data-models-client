@@ -52,5 +52,5 @@
     "stage": "predict"
   },
   "why": "base.binary's question over the notebook's own Spark session handed to Schema.from_source as is, so it is detected as a Spark session (CN/source.py:72, :97-107) and wrapped in SparkConnection, whose fetch is toArrow() on DBR 17.3 or later or serverless environment 4 or later (CN/backends/spark.py:84-91, :132); sampled through it to predict",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "source": "Correctness case databricks.connect.spark using the shop fixture."
 }

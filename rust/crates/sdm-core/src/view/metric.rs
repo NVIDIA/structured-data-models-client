@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Databricks metric view's conversion, M1 to M11 of T3.5, in the old
+//! A Databricks metric view's conversion, M1 to M11 of, in the old
 //! client's order (`RE/graph.py:1369-1966`): the definition read
 //! ([`super::read_definition`], M1), parsed (M2, the source table's columns
 //! read first where the view has parameters), the source table's columns

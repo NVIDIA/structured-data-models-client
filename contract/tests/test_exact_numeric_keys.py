@@ -60,17 +60,19 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t221_run_python', RUNNER)
+    return _module('test_exact_numeric_keys_run_python', RUNNER)
 
 
-R = _module('exact_keys_record', ROOT / 'contract/support/exact_key_scenarios.py')
+R = _module(
+    'exact_key_scenarios', ROOT / 'contract/support/exact_key_scenarios.py'
+)
 
 GIVEN_VECTORS = tuple(R.CONTROL)
 
 
 def _server() -> bool:
     r"""Whether a Postgres server is named; where none is, one must not be
-    required (H26)."""
+    required."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -170,7 +172,7 @@ def test_python_core_answers_a_given_or_edited_key_as_a_catalog_key(
 
 @functools.cache
 def cases() -> dict[str, tuple[dict[str, Any], str]]:
-    r"""The T2.21 cases by id, each with its digest, as the runner loads
+    r"""The cases by id, each with its digest, as the runner loads
     them."""
     loaded = runner().load_cases([CASES / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}

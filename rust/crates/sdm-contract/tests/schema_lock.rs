@@ -303,7 +303,7 @@ fn a_doc_comment_change_keeps_the_hash_and_a_property_named_description_does_not
     assert_eq!(sha256(&reworded), sha256(&generated));
 }
 
-// --- The attachments the control messages name (T1.22) -----------------------
+// --- The attachments the control messages name -----------------------
 
 /// Whether `node` refers to an attachment id: directly; as one of a
 /// union's members; as a list's items, a tuple's members or a map's values;

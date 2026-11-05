@@ -4,7 +4,7 @@
 
 """Which of a crate's files ``rust_notices.py`` reproduces as its terms.
 
-yaml-rust2 (T3.5) ships its two licences as ``MIT-LICENSE`` and
+yaml-rust2 ships its two licences as ``MIT-LICENSE`` and
 ``Apache-LICENSE``, which the pattern missed, so the notices script stopped
 with "ships no licence file" though the crate ships both.
 """

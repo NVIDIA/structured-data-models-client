@@ -53,13 +53,13 @@ _BY_KIND: dict[str, tuple[str, str]] = {
 def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     r"""The provider choice a run over ``source`` names, and the provider
     answering its fetches, by the source's kind (``Source.kind``, design fix
-    F): its built-in SQL dialect, DuckDB's, SQLite's (T2.2), Postgres's
-    (T2.3) or Databricks's (T3.4, a SQL warehouse or a Spark session), on
-    its connection, or Snowflake's (T3.6, a connector connection or a
+    F): its built-in SQL dialect, DuckDB's, SQLite's, Postgres's
+     or Databricks's (a SQL warehouse or a Spark session), on
+    its connection, or Snowflake's (a connector connection or a
     Snowpark session's own).
 
     The choice carries the source's namespace (contract v28,
-    ``Source.namespace_parts()``, design fix C): the schema a
+    ``Source.namespace_parts``, design fix C): the schema a
     ``PostgresSource`` was given, the catalog and schema of a
     ``DatabricksSource``, the database and schema of a ``SnowflakeSource``,
     each ``None`` where the connection's current one
@@ -67,7 +67,7 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     tables, as the reference qualifies each read by them; left out where
     the source names none.
 
-    A semantic model (T3.5, design S6) is read through the source it is
+    A semantic model is read through the source it is
     kept in, on that source's dialect and provider, and its choice names
     the model (``view``): its name as given and whether its expressions
     are trusted. The core reads the model afresh at every run, so the

@@ -88,5 +88,5 @@
     "message": "num_neighbors is empty, which asks for no hop at all, and the endpoint reads between 1 and 6"
   },
   "why": "num_neighbors=[] asks for no hop: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-neighbors.empty using the shop fixture."
 }

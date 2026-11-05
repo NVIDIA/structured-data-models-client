@@ -118,5 +118,5 @@
     "message": "rows_per_call is 3.0, and a call scores a whole number of rows, at least one"
   },
   "why": "an invalid rows_per_call (3.0): a call scores a whole number of rows, at least one; refused INVALID_REQUEST at materialize before anything is gathered",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.rows-per-call.whole-float using the shop fixture."
 }

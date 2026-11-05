@@ -158,8 +158,8 @@ def said_as_parts_are(
     candidates: list[Any] | None,
 ) -> StructuredDataError:
     r"""A refusal the core gave of a question it asks in parts, on the core
-    route (T1.36 fix 21, T2.8), with the details the old route's has: the
-    core's sentences already name the part it happened in (T3.17 fix 2), so
+    route ( fix 21), with the details the old route's has: the
+    core's sentences already name the part it happened in, so
     the part's fields (``ranking_candidate``, ``ranking_parts``,
     ``forecast_step``, ``forecast_steps``) leave its details, and a
     candidate named by its position among ``candidates`` is named as
@@ -182,10 +182,10 @@ def said_as_parts_are(
 def _decimal_as_typed(value: Decimal, dtype: str | None = None) -> Any:
     r"""``value`` as the Python type its column is typed as on the wire.
 
-    A warehouse ``DECIMAL`` reaches a caller as a :class:`~decimal.Decimal`,
+    A warehouse ``DECIMAL`` reaches a caller as a:class:`~decimal.Decimal`,
     and written as a string it asks after the row named ``"1"`` on a column of
     integers, a question the validator refuses and nobody wrote. Which type
-    that is does not follow from the Python type: :func:`_decimal_dtype` is
+    that is does not follow from the Python type::func:`_decimal_dtype` is
     what decides whether such a column travels as an integer, a float, or its
     digits. ``dtype`` carries the column's; the value alone is used only where
     the column is not known.

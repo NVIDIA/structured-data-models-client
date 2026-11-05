@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "as rule.float-nan-key-double: answered on DuckDB, refused INVALID_REQUEST at materialize on Postgres"
+    "stage": "predict"
   },
-  "why": "As rule.float-nan-key-double, a FLOAT key (rule float_nan; T2.12 round 1)",
-  "source": "T2.12 round 1 (Codex P2): float inference as each database previews it, and a NaN key at materialize"
+  "why": "As rule.float-nan-key-double, a FLOAT key (rule float_nan)",
+  "source": "Correctness case rule.float-nan-key-float using the shop fixture."
 }

@@ -8,8 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Where the core's {@code tracing} events arrive (design choice 10, KO3-30): each is written to
- * the SLF4J logger its target names, the Rust path's {@code ::} read as {@code .} ({@code
+ * Where the core's {@code tracing} events arrive (design choice 10): each is written to
+ * the SLF4J logger its target names, the Rust path's {@code::} read as {@code.} ({@code
  * sdm_core::test_ops} is the logger {@code sdm_core.test_ops}). The JAR declares the SLF4J 2 API
  * and binds no implementation. Not part of the API.
  */

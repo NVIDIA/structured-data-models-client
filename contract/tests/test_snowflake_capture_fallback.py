@@ -26,7 +26,7 @@ def _module(name: str, path: Path) -> Any:
 
 
 OWN = _module(
-    't310_fallback_recording_fixtures',
+    'test_snowflake_capture_fallback_fallback_recording_fixtures',
     Path(__file__).with_name('test_driver_capture.py'),
 )
 run = OWN.run

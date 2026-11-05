@@ -2,18 +2,18 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The keys family's DuckDB statements (T1.32a, T1.30 folded in), pinned
+//! The keys family's DuckDB statements (folded in), pinned
 //! as text beside `duckdb_catalog.rs`'s: each data request the `key.*`
 //! cases make through `from_source` and `materialize` on the pure-Rust
 //! host, as `sdm-testkit` recorded it, with the one statement this layer
 //! renders for it. A statement that changes without its pin changing here
-//! fails this test, and `sdm-testkit`'s `tests/t132a_keys_sql.rs` runs
+//! fails this test, and `sdm-testkit`'s `tests/keys_sql.rs` runs
 //! the cases on DuckDB and fails on any statement they run that is pinned
 //! nowhere in these files. The key's type changes no statement but one:
 //! its values travel in the key set the statements join, which DuckDB reads
 //! in the key's own type; a `decimal128(38, 0)` seed key naming an integer
-//! key type the core read from the catalog is cast to that type (T1.33
-//! part 3, register P1B-43: no one SQL type compares it exactly with a
+//! key type the core read from the catalog is cast to that type (
+//! part 3, B-43: no one SQL type compares it exactly with a
 //! VARINT and a UHUGEINT key alike), so its statements are pinned beside
 //! the narrower decimal's.
 

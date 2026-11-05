@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A metric view's definition and its joins (T3.5, design S5 and part 5's
+//! A metric view's definition and its joins (design S5 and part 5's
 //! M2) against `contract/view-metric-vectors.json`: each definition the old
-//! client's `parse_metric_view` read in its own tests, in the T3.5 cases and
+//! client's `parse_metric_view` read in its own tests, in the cases and
 //! in the first review's cases, with its whole answer.
 //!
 //! The joins are walked as the core walks them (`view_steps::walk_joins`:
@@ -160,7 +160,7 @@ fn each_definition_reads_as_the_old_client_read_it() {
         let mut spec = match metric::parse(definition, &yaml_rules()) {
             Ok(spec) => spec,
             // YAML outside what view definitions use, refused by name
-            // where the old client read it (register P3J-9).
+            // where the old client read it (J-9).
             Err(ViewRefusal {
                 reason:
                     RefusalReason::Yaml(YamlError {
@@ -319,7 +319,7 @@ fn each_definition_reads_as_the_old_client_read_it() {
 
         let parameters: BTreeSet<String> = spec.parameters.iter().map(|p| p.name.clone()).collect();
         // Each parameter read as its default, with its default's text, the
-        // literal's (Codex review 2, P0-1).
+        // literal's.
         let read = view_steps::parameters(&spec, &[], &ask).unwrap();
         for note in old["notes"].as_array().unwrap() {
             let name = note[0].as_str().unwrap();

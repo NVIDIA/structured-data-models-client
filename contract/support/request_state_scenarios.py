@@ -16,7 +16,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t214b-host-vectors.json'
+OUT = ROOT / 'contract/request-state-vectors.json'
 FORMAT = 'sdm-t214b-host-vectors/1'
 
 SETUP = (
@@ -101,7 +101,10 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t214b_run_python', ROOT / 'contract/runners/run_python.py')
+    return _module(
+        'request_state_scenarios_run_python',
+        ROOT / 'contract/runners/run_python.py',
+    )
 
 
 def endpoint() -> ModuleType:

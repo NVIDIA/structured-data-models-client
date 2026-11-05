@@ -100,9 +100,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "regression; the request's context rows per table, the same on all three databases: addresses 5, customers 12, orders 4"
+    "stage": "predict"
   },
-  "why": "T2.19 (main eb6c68eb): the diamond read by Schema.from_source(source) from the keys its catalog declares, sampled from addresses, compared at the payload: addresses are reached from orders directly and through customers",
-  "source": "main's test_sql_sampler_parity.py _SHAPES and _shape_frames (eb6c68eb, the reference at 6298913c), as T2.19 names them"
+  "why": "The diamond read by Schema.from_source(source) from the keys its catalog declares, sampled from addresses, compared at the payload: addresses are reached from orders directly and through customers",
+  "source": "Correctness case shape.diamond-from-source using the shop fixture."
 }

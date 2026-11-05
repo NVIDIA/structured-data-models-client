@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_odd_columns_use_only_the_existing_databricks_backtick_exclusion():
     spec = importlib.util.spec_from_file_location(
-        't320f_policy', ROOT / 'scripts/live/runner_guard.py'
+        'test_warehouse_exclusion_policy_policy',
+        ROOT / 'scripts/live/runner_guard.py',
     )
     assert spec is not None and spec.loader is not None
     live_policy = importlib.util.module_from_spec(spec)

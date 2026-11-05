@@ -118,5 +118,5 @@
     "message": "8 entities are more than the 3 one call scores, and this question is asked as 2 of them, one per step. A part is not batched, and the calls would be the batches times the steps rather than the steps that were counted. Ask about fewer entities at a time"
   },
   "why": "a two-step forecast over 8 entities with rows_per_call=3: a step would take several calls, and a part is not batched; refused UNSUPPORTED_REQUEST at materialize (the batched-forecast refusal)",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.forecast.batched using the shop fixture."
 }

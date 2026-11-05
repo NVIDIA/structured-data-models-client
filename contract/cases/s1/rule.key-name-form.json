@@ -107,9 +107,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: answered through predict, users keyed by its column named as the table's singular"
+    "stage": "predict"
   },
   "why": "A key guessed by name where the column, user, equals one form of its table's name, users: the branch rule key_name_order guards, which refuses such a key when another form of the name also scores (the reference's score then depends on the order it meets the forms in). The key is the column on every database",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.key-name-form using the shop fixture."
 }

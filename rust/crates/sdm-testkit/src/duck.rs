@@ -11,21 +11,21 @@
 //! The Python wheel of DuckDB links ICU, so a session there takes `SET
 //! TimeZone` and casts a `TIMESTAMPTZ` in that zone. The `icu` feature of
 //! `duckdb` 1.10506.0 needs DuckDB's sources beside the crate, which the
-//! published crate does not carry, so it cannot be built (decision E37).
+//! published crate does not carry, so it cannot be built.
 //! [`open`] loads ICU explicitly instead, the extension DuckDB signs for
 //! this exact version, installed from DuckDB's repository the first time
 //! (a signature-checked network bootstrap, not a hermetic one; CI caches
 //! the extension directory), its bytes checked against the digest recorded
 //! for the platform before it is loaded; autoloading and autoinstalling
 //! stay off, so nothing else loads, and the loaded ICU's version is
-//! checked. JSON, which the Python wheel also links, is loaded the same way
-//! (T1.33), so a JSON column can be set up here.
+//! checked. JSON, which the Python wheel also links, is loaded the same way,
+//! so a JSON column can be set up here.
 //!
 //! Tests run in parallel, as threads of one binary and as several binaries
 //! (or one process per test, under nextest), and the first `INSTALL` writes
 //! the extension directory every one of them reads. [`open`] therefore
 //! installs, checks and loads the extensions holding an exclusive lock on a
-//! file in that directory (T2.0): one install runs at a time, and no host
+//! file in that directory: one install runs at a time, and no host
 //! reads an extension's file while another writes it.
 
 use std::collections::BTreeMap;
@@ -70,7 +70,7 @@ const ICU_SHA256: [(&str, &str); 4] = [
 ];
 
 /// The SHA-256 of DuckDB's signed JSON extension for v1.5.6, by platform,
-/// recorded as [`ICU_SHA256`] is (T1.33). The Python wheel the reference
+/// recorded as [`ICU_SHA256`] is. The Python wheel the reference
 /// runs links JSON; this host loads it the way it loads ICU, rather than
 /// building it into the bundled DuckDB, which would rebuild DuckDB and leave
 /// CI's cached build beside a second one.
@@ -156,7 +156,7 @@ fn extension_lock(connection: &Connection) -> Result<File> {
 /// Loads DuckDB's signed extension `name`: installed once per machine from
 /// DuckDB's repository, signature checked by DuckDB; its bytes are checked
 /// here against the digest recorded for the platform before it is loaded
-/// (decision E37), and the loaded version must be the linked DuckDB's. The
+///, and the loaded version must be the linked DuckDB's. The
 /// caller holds [`extension_lock`].
 fn load(connection: &Connection, name: &str, digests: &[(&str, &str)]) -> Result<()> {
     let installed = |connection: &Connection| -> Result<Option<String>> {
@@ -225,7 +225,7 @@ pub fn answer(connection: &Connection, step: &FetchStep) -> Result<Fetched, Prov
 /// The answer to one fetch step, its key sets bound from `keys`, the
 /// attachments the step named, by id: each as the relation its plan names
 /// it by, on the step's own cursor, as the Python provider registers one;
-/// a key set's rows travel as Arrow, never as text (decision Q1). A plan
+/// a key set's rows travel as Arrow, never as text. A plan
 /// with a scalar parameter, which no request carries yet, is not run.
 pub fn answer_with(
     connection: &Connection,
@@ -236,7 +236,7 @@ pub fn answer_with(
 }
 
 /// [`answer_with`], recording in `log` the cursor, each statement run with
-/// its result, and each key set bound (from T1.11e, the observation's
+/// its result, and each key set bound (the observation's
 /// `driver` section).
 pub fn answer_logged(
     connection: &Connection,

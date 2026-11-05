@@ -342,7 +342,7 @@
       }
     }
   ],
-  "probabilities_description": "The rule of an endpoint told to answer probabilities (serve(probabilities=True), Rust answer_with_probabilities; T2.8's ranking cases): each request answered as call number call, from zero, both endpoints exactly. A classification asking for probabilities is given them, for row i of call k with d = (3k + 5i) mod 9 + 1: the first class (10 - d) / 10, the last d / 10, any other 0.0, the prediction the last class where d > 5, else the first; any other request is the rule's.",
+  "probabilities_description": "The rule of an endpoint told to answer probabilities (serve(probabilities=True), Rust answer_with_probabilities): each request answered as call number call, from zero, both endpoints exactly. A classification asking for probabilities is given them, for row i of call k with d = (3k + 5i) mod 9 + 1: the first class (10 - d) / 10, the last d / 10, any other 0.0, the prediction the last class where d > 5, else the first; any other request is the rule's.",
   "probabilities": [
     {
       "name": "a binary call asking for probabilities, call 0",
@@ -539,7 +539,7 @@
       }
     }
   ],
-  "quantiles_description": "The rule of an endpoint told to answer quantiles (serve(quantiles=True), Rust answer_as_asked; T2.9's forecast cases): each request answered as call number call, from zero, both endpoints exactly. A regression asking for quantiles is given them beside the rule's prediction, for row i of call k with d = (3k + 5i) mod 9 + 1: {\"0.1\": d - 1, \"0.5\": d, \"0.9\": d + 1}, each a float; any other request is the rule's.",
+  "quantiles_description": "The rule of an endpoint told to answer quantiles (serve(quantiles=True), Rust answer_as_asked): each request answered as call number call, from zero, both endpoints exactly. A regression asking for quantiles is given them beside the rule's prediction, for row i of call k with d = (3k + 5i) mod 9 + 1: {\"0.1\": d - 1, \"0.5\": d, \"0.9\": d + 1}, each a float; any other request is the rule's.",
   "quantiles": [
     {
       "name": "a regression call asking for quantiles, call 0",
@@ -742,7 +742,7 @@
       }
     }
   ],
-  "explanation_description": "The rule of an endpoint told to answer explanations (serve(explanation=True), Rust answer_told; T2.13's cases): each request answered as call number call, from zero, both endpoints exactly. A call whose output.fields names explanation is given one on each item, beside what the rule answers, for row i of call k with d = (3k + 5i) mod 9 + 1: {\"format\": \"scripted\", \"summary\": \"row <i> of call <k>\", \"score\": d / 10, \"rank\": d, \"path\": [k, i], \"detail\": {\"call\": k, \"row_index\": i, \"note\": null}}; any other request is the rule's.",
+  "explanation_description": "The rule of an endpoint told to answer explanations (serve(explanation=True), Rust answer_told): each request answered as call number call, from zero, both endpoints exactly. A call whose output.fields names explanation is given one on each item, beside what the rule answers, for row i of call k with d = (3k + 5i) mod 9 + 1: {\"format\": \"scripted\", \"summary\": \"row <i> of call <k>\", \"score\": d / 10, \"rank\": d, \"path\": [k, i], \"detail\": {\"call\": k, \"row_index\": i, \"note\": null}}; any other request is the rule's.",
   "explanation": [
     {
       "name": "a regression call asking for its prediction and an explanation, call 0",
@@ -960,7 +960,7 @@
       }
     }
   ],
-  "item_metadata_description": "The rule of an endpoint told to answer item metadata (serve(item_metadata=True), Rust answer_told; T2.13's cases): each request answered as call number call, from zero, both endpoints exactly. Each item of every call the rule answers carries \"metadata\": {\"call\": k, \"row_index\": i, \"source\": \"scripted\"} for row i of call k, beside what the rule answers; a request the rule refuses is refused as before.",
+  "item_metadata_description": "The rule of an endpoint told to answer item metadata (serve(item_metadata=True), Rust answer_told): each request answered as call number call, from zero, both endpoints exactly. Each item of every call the rule answers carries \"metadata\": {\"call\": k, \"row_index\": i, \"source\": \"scripted\"} for row i of call k, beside what the rule answers; a request the rule refuses is refused as before.",
   "item_metadata": [
     {
       "name": "a regression call, call 0",
@@ -1107,7 +1107,7 @@
       }
     }
   ],
-  "embeddings_description": "The rule of an endpoint told to answer embeddings (serve(embeddings=True), Rust answer_told; T2.11's cases): each request answered as call number call, from zero, both endpoints exactly. A call whose output.fields names embeddings is given one on each item, beside what the rule answers, for row i of call k with d = (3k + 5i) mod 9 + 1: [d / 10, (10 - d) / 10, k, i], each a float; any other request is the rule's.",
+  "embeddings_description": "The rule of an endpoint told to answer embeddings (serve(embeddings=True), Rust answer_told): each request answered as call number call, from zero, both endpoints exactly. A call whose output.fields names embeddings is given one on each item, beside what the rule answers, for row i of call k with d = (3k + 5i) mod 9 + 1: [d / 10, (10 - d) / 10, k, i], each a float; any other request is the rule's.",
   "embeddings": [
     {
       "name": "a regression call asking for its prediction and embeddings, call 0",

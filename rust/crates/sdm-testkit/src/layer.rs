@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A second data layer (T2.7, plan section 3, "Data access"): the data
-//! port (`sdm_contract::data::DataLayer`, decision H14) implemented apart
+//! A second data layer (plan section 3, "Data access"): the data
+//! port (`sdm_contract::data::DataLayer`) implemented apart
 //! from `sdm-data`, for host providers alone, composed at the composition
 //! root in place of `sdm-data`'s ([`root`]). Dev-only.
 //!
@@ -101,7 +101,7 @@ impl DataLayer for HostLayer {
 }
 
 /// An answer the layer cannot read, which the core's check of its shape
-/// (decision H16, check (b)) should have refused first.
+/// (check (b)) should have refused first.
 fn unread_answer() -> CoreError {
     CoreError::new(
         Sentence::Internal,
@@ -135,7 +135,7 @@ fn flag(batch: &RecordBatch, name: &str, row: usize) -> Result<bool, CoreError> 
 /// Row `row` of the list-of-names column `name`: its names in order, a
 /// null name dropped and the others kept, none where the list is null, as
 /// `sdm-data`'s catalog reader reads a key's and a foreign key's columns
-/// (P2-T2.7-1).
+/// (P2--1).
 fn kept_names(batch: &RecordBatch, name: &str, row: usize) -> Result<Vec<String>, CoreError> {
     let lists = column(batch, name)?
         .as_list_opt::<i32>()
@@ -254,7 +254,7 @@ impl Rows {
 
     fn answer(self, part: DescribePart) -> Result<CatalogAnswer, CoreError> {
         Ok(match part {
-            // A host provider is never asked for a view's definition (T3.27).
+            // A host provider is never asked for a view's definition.
             DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
                 return Err(views_unread());
             }

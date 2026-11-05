@@ -86,9 +86,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB: answered through predict; the two encodings are two values, order_id and orderid tie and orders has no key (with the tie's warning)"
+    "stage": "predict"
   },
-  "why": "orders' FLOAT key candidates order_id and orderid, order 3's order_id the NaN 0x7f800001 (signaling) and order 4's 0x7fc00001 (quiet), written bit for bit through a BIT cast: whether the two encodings are two values decides whether they tie (rules float_nan and key_tie; T2.12 round 3). DuckDB only: Postgres and SQLite keep no NaN's bits",
-  "source": "T2.12 round 3 (Codex P2): two NaN encodings of a FLOAT, as DuckDB stores and previews them"
+  "why": "Orders' FLOAT key candidates order_id and orderid, order 3's order_id the NaN 0x7f800001 (signaling) and order 4's 0x7fc00001 (quiet), written bit for bit through a BIT cast: whether the two encodings are two values decides whether they tie (rules float_nan and key_tie). DuckDB only: Postgres and SQLite keep no NaN's bits",
+  "source": "Correctness case rule.float-nan-payload-key-tie using the shop fixture."
 }

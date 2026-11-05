@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The data port and the zones through `HostRun` (T1.11a, decision H14):
+//! The data port and the zones through `HostRun`:
 //! the zones a host's facts name are the ones the core resolves with, an
 //! unknown zone reaches the core by no name, and a fetch the driver handed
 //! over in several batches, or empty, is admitted as one attachment of its
@@ -200,7 +200,7 @@ fn an_unknown_zone_reaches_the_core_by_no_name() {
             .to_string()
             .contains(canary)
     );
-    // The core is told only that the zone is unknown (decision H17).
+    // The core is told only that the zone is unknown.
     let (got, _) = offset(canary, &[]);
     let err = got.unwrap_err();
     assert_eq!(

@@ -9,9 +9,9 @@ r"""Loads one case's data into a new SQLite file, for the pure-Rust host.
 
 The case's DuckDB base and setup are built as ``run_python.py`` builds them
 (``contract/bases.yaml``), and its tables loaded by the one contract loader
-(``contract/runners/databases.py``, T2.1a), so ``sdm-contract-run
+(``contract/runners/databases.py``), so ``sdm-contract-run
 --database sqlite`` reads the same loaded database the reference and
-python-core read (design choice 2). A case whose data cannot be built
+python-core read. A case whose data cannot be built
 exits 2; one the loader refuses by name (``Unloadable``) exits 3, its name
 on standard error; OUT must not exist.
 """

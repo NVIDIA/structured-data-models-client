@@ -2,30 +2,30 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Postgres's value rules (T2.14d, MID2 P2-3): how the reference reads the
+//! Postgres's value rules (MID2 P2-3): how the reference reads the
 //! values its Postgres driver hands over, and how it binds a key set, here
 //! in the dialect, so the host's provider only moves the driver's rows into
 //! Arrow and binds the text it is given.
 //!
 //! - A `json` or `jsonb` value, which the provider hands over as JSON text
-//!   (Arrow's `arrow.json`), is read as the reference's
-//!   `_sanitize_postgres_frame` writes it: a JSON null a null, an object or
-//!   an array as compact JSON, ASCII only (its strings' other characters
-//!   escaped, as `\u` and four hexadecimal digits), and any other value as
-//!   the reference's language writes it (`str`): `true` as `True`, a
-//!   number as its digits or the text of its double (`float_text`), a
-//!   string as itself. A JSON column's elements in an array alike.
+//! (Arrow's `arrow.json`), is read as the reference's
+//! `_sanitize_postgres_frame` writes it: a JSON null a null, an object or
+//! an array as compact JSON, ASCII only (its strings' other characters
+//! escaped, as `\u` and four hexadecimal digits), and any other value as
+//! the reference's language writes it (`str`): `true` as `True`, a
+//! number as its digits or the text of its double (`float_text`), a
+//! string as itself. A JSON column's elements in an array alike.
 //! - A `numeric` declared past the 76 digits an Arrow decimal holds, which
-//!   the provider hands over as each value's exact text, its declared scale
-//!   marked ([`DECLARED_SCALE_MARKER`]), is read by its declaration, as the
-//!   reference's `_to_dtype` reads it: of a scale above zero as doubles,
-//!   of a scale of zero as integers, a column holding a whole number past
-//!   `int64` as its digits (where the reference overflows), a NaN missing.
+//! the provider hands over as each value's exact text, its declared scale
+//! marked ([`DECLARED_SCALE_MARKER`]), is read by its declaration, as the
+//! reference's `_to_dtype` reads it: of a scale above zero as doubles,
+//! of a scale of zero as integers, a column holding a whole number past
+//! `int64` as its digits (where the reference overflows), a NaN missing.
 //! - A key set is written as the JSON text its statement reads, as the
-//!   reference writes it ([`key_rows`], T3.28): a time without a zone as
-//!   pandas' `Timestamp.isoformat` writes it (the reference compares a
-//!   text time column with it as text), binary as `\x` and its
-//!   hexadecimal digits, so the provider binds the text it is handed.
+//! reference writes it ([`key_rows`]): a time without a zone as
+//! pandas' `Timestamp.isoformat` writes it (the reference compares a
+//! text time column with it as text), binary as `\x` and its
+//! hexadecimal digits, so the provider binds the text it is handed.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -198,7 +198,7 @@ pub fn conform(
 /// holding a lone surrogate, which no UTF-8 text holds, is refused by name
 /// (`VALUE_OUT_OF_RANGE`, rule `text_not_utf8`), where the reference fails
 /// unnamed (`UnicodeEncodeError`); in a list, a column the core leaves
-/// out (register P2D-5), such an element is missing (`in_list`).
+/// out (D-5), such an element is missing (`in_list`).
 fn json_column(
     column: &str,
     texts: &StringArray,
@@ -327,7 +327,7 @@ enum Json {
     Int(String),
     Float(f64),
     /// Text as UTF-16 code units, as Python holds a JSON string, a lone
-    /// surrogate an escape names among them (T2.14b fix 1).
+    /// surrogate an escape names among them.
     Text(Vec<u16>),
     List(Vec<Json>),
     Object(Vec<(Vec<u16>, Json)>),
@@ -386,7 +386,7 @@ fn read_reference_text(
 /// JSON text of the value its driver read (`json.dumps` of it: compact,
 /// ASCII only, a float as `float_text` writes it), a JSON null none;
 /// `None` (outer) where `text` is not JSON. For a host whose driver gives
-/// the server's text of a `json` or `jsonb` value (T3.12 fix 1), so how
+/// the server's text of a `json` or `jsonb` value, so how
 /// the value is read stays here.
 pub fn json_text(text: &str, float_text: fn(f64) -> String) -> Option<Option<String>> {
     let mut reader = Reader {
@@ -636,7 +636,7 @@ impl Reader<'_> {
 
 // --- key sets --------------------------------------------------------------------
 
-/// Each seed of a key set as Postgres's statement reads it (T3.28), as the
+/// Each seed of a key set as Postgres's statement reads it, as the
 /// old client writes it (`_dumps`, ASCII only): its key alone (several
 /// columns' as an array), or, with seed times, an object of `id` and the
 /// window's bounds (`e`, `s`, [`key_text::fields`]); the batch left out,
@@ -1118,7 +1118,7 @@ mod tests {
         assert_eq!(text("1 2"), None);
     }
 
-    /// T3.12 fix 1 (Codex P1-4): a JSON value handed over as the text the
+    /// fix 1: a JSON value handed over as the text the
     /// reference's provider writes of it (`json.dumps` of the value its
     /// driver read: compact, ASCII only), a JSON null none, at any depth
     /// the reference's reader reads; for a host whose driver gives the

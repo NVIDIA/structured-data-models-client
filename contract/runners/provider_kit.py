@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The provider conformance kit's runner on the Python host (T2.5, T2.6).
+r"""The provider conformance kit's runner on the Python host.
 
     python -I contract/runners/provider_kit.py --database DATABASE \
         [--fault truncate|silent_capability] --out REPORT
@@ -254,7 +254,7 @@ def _fetch(case: dict[str, Any], source: dict[str, Any], database: str) -> Any:
     fetch: dict[str, Any] = {
         'request': request,
         # A Postgres read names its schema, the case database's ``public``,
-        # as every run names the session's (T3.7).
+        # as every run names the session's.
         'provider': {
             'provider': 'sql',
             'dialect': database,

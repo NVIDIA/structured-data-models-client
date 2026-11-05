@@ -2,13 +2,13 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The schema's edit semantics (T1.24b, decision E67), edit by edit, each
+//! The schema's edit semantics, edit by edit, each
 //! held to what the reference client's setters make of the same assignment
 //! on a table in its source (`Column.__setattr__`,
 //! `_TableShape.__setattr__`, `SourceTable.__delitem__`,
 //! `Schema.__setattr__` and its list); each refusal seeded, so a core that
 //! took an edit the reference refuses fails here; and a schema as a host
-//! holds it, with its facts, read as the description (T3.16).
+//! holds it, with its facts, read as the description.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -504,7 +504,7 @@ fn a_refused_edit_changes_nothing() {
 
 #[test]
 fn a_schema_held_with_its_facts_reads_as_the_description() {
-    // T3.16: the schema a host holds, each column with its facts, is the
+    //: the schema a host holds, each column with its facts, is the
     // schema the edits work on, whatever the core answered of it before.
     let shop = shop();
     let held = sdm_schema::held::held(&shop, &BTreeSet::new(), &BTreeMap::new());
@@ -573,8 +573,10 @@ fn inspect_schema_checks_columns_before_relationships() {
 
 #[test]
 fn compatibility_ledger_names_each_semantic_assignment_contract() {
-    let ledger: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../tests/compatibility/manifest.json")).unwrap();
+    let ledger: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/compatibility/manifest.json"
+    ))
+    .unwrap();
     let record = ledger["type_contracts"]
         .as_array()
         .unwrap()

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The data-request vocabulary carries typed requests rather than core-built
-//! SQL (E28), with precisely reviewed opaque caller-expression seams.
-//! KO3-44 extends the existing relation seam only to a closed neighbor limit.
+//! SQL, with precisely reviewed opaque caller-expression seams.
+//! extends the existing relation seam only to a closed neighbor limit.
 //!
 //! A `DataRequest` names what it wants with typed fields; a provider, or
 //! `sdm-data` for a SQL provider, decides how to fetch it. So no field of
@@ -17,22 +17,22 @@
 //! holds:
 //!
 //! - outside the exact reviewed seams, no property is named as SQL or an
-//!   expression (`DENIED`), anywhere,
-//!   the typed values included, matched against the whole name and against
-//!   each of its `_`-separated parts, so `predicate_expr` is refused;
+//! expression (`DENIED`), anywhere,
+//! the typed values included, matched against the whole name and against
+//! each of its `_`-separated parts, so `predicate_expr` is refused;
 //! - a property typed as a reviewed typed value is refused also when its
-//!   name, or a part of it, is `filter` or `order` (`DENIED_FOR_VALUES`):
-//!   a scalar or a field there would be a condition or an ordering in
-//!   disguise, where the vocabulary has typed structures for both;
+//! name, or a part of it, is `filter` or `order` (`DENIED_FOR_VALUES`):
+//! a scalar or a field there would be a condition or an ordering in
+//! disguise, where the vocabulary has typed structures for both;
 //! - text (a string, at any depth of lists, maps, options or newtypes) is
-//!   held only by a property named as an identifier the request refers to
-//!   (`IDENTIFIERS`), the nearest property naming it, or by the exact
-//!   checked numeric-token value or scoped opaque-expression seam below;
+//! held only by a property named as an identifier the request refers to
+//! (`IDENTIFIERS`), the nearest property naming it, or by the exact
+//! checked numeric-token value or scoped opaque-expression seam below;
 //! - an any-typed schema (`true` or `{}`, as `serde_json::Value` gives, or a
-//!   map of anything) is refused, since it can hold text of any shape;
+//! map of anything) is refused, since it can hold text of any shape;
 //! - the typed values (`TYPED_VALUES`: a scalar, an Arrow field and its
-//!   type) are reviewed: a reference to one of them is accepted at that
-//!   reference, and only the name check goes inside.
+//! type) are reviewed: a reference to one of them is accepted at that
+//! reference, and only the name check goes inside.
 //!
 //! A new text field fails until it is added to `IDENTIFIERS` in review, so
 //! it is a name the request refers to, never text a provider interprets.
@@ -73,16 +73,15 @@ const IDENTIFIERS: &[&str] = &[
     "column",
     "columns",
     "key",
-    // A column of a `neighbors` request's seed key set (decision H15).
+    // A column of a `neighbors` request's seed key set.
     "seed_column",
-    // A relation's name parts, each quoted alone (design choice 12,
-    // contract v26): the source a request reads, never text interpreted.
+    // A relation's name parts, each quoted alone: the source a request reads, never text interpreted.
     "source",
     // The name a derived relation gives a column (contract v28).
     "name",
 ];
 
-/// The reviewed exceptions of contract v28 (Phase 3, design choice 3): a
+/// The reviewed exceptions of contract v28: a
 /// derived relation's filter and expression columns, SQL text of the
 /// source's own that the core carries opaque, never reading or writing it,
 /// which only `sdm-data`'s dialects render and only for a provider
@@ -212,7 +211,7 @@ fn closed_bound(schema: &Value, property: &str, child: &[(&str, Value)]) -> bool
         )
 }
 
-/// KO3-44: preserve unsigned counts, checked negative numeric text and one
+///: preserve unsigned counts, checked negative numeric text and one
 /// distinct caller-expression property. Never admit a whole unreviewed type.
 fn closed_neighbor_limit(schema: &Value, defs: &Map<String, Value>) -> bool {
     let Some(branches) = schema.get("anyOf").and_then(Value::as_array) else {

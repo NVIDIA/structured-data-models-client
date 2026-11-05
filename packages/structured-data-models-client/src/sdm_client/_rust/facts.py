@@ -12,7 +12,7 @@ in (contract ``HostFacts``):
   host's parser takes, or none when this host cannot name one, by the
   core's rule (``sdm_host::local_zone``, which the Java host reads too);
 - ``zone_roots``: the zone lookup roots, in the order Python's own zone
-  library, :mod:`zoneinfo`, searches them (``zoneinfo.TZPATH``, then the
+  library,:mod:`zoneinfo`, searches them (``zoneinfo.TZPATH``, then the
   ``tzdata`` package), each with the database version read there;
 - ``platform``: the operating system, and whether its ``strftime`` pads a
   year below 1000 to four digits (``date-rules.md``);
@@ -60,7 +60,7 @@ def _system_version(root: Path) -> str | None:
 
 
 def zone_roots() -> list[dict[str, Any]]:
-    r"""The zone lookup roots, in :mod:`zoneinfo`'s order, with versions.
+    r"""The zone lookup roots, in:mod:`zoneinfo`'s order, with versions.
 
     ``zoneinfo.TZPATH`` first, the directories that exist, then the
     ``tzdata`` package's ``zoneinfo`` directory when it is installed, with
@@ -94,7 +94,7 @@ def local_zone(
     r"""The local zone, as the platform names it.
 
     Read by the one rule every host reads it with, the core's
-    (``native.local_zone``, ``sdm_host::local_zone``, T3.12), from ``TZ``
+    (``native.local_zone``, ``sdm_host::local_zone``), from ``TZ``
     and the zone lookup roots this host reads: ``TZ`` when set, an IANA
     name a root holds, else a POSIX ``TZ`` string a run's start reads, so a
     ``TZ`` the run could not read is passed as no zone and never refuses
@@ -146,7 +146,7 @@ def host_facts(native: ModuleType) -> dict[str, Any]:
     r"""The facts of a run starting now, as the contract's ``HostFacts``.
 
     ``native`` is ``sdm_client._native``, whose rule names the local zone
-    (:func:`local_zone`).
+    (func:`local_zone`).
     """
     roots = zone_roots()
     facts: dict[str, Any] = {

@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The kinds each code may carry, checked where an error crosses the
-//! boundary (decision E22): an outgoing error outside the table becomes
+//! boundary: an outgoing error outside the table becomes
 //! `INTERNAL_ERROR` naming the pair, a host-to-core message carrying one is
 //! refused with `INVALID_MESSAGE`, and a provider's kind outside its
 //! code's set ends that fetch as `INTERNAL_ERROR`, never as a refusal of
-//! the reply. No Phase 1a operation calls the model, so the transport's
-//! kind check is `CoreError::transport`'s, tested in `sdm-contract`.
+//! the reply. Transport error kinds are also checked by
+//! `CoreError::transport`, tested in `sdm-contract`.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

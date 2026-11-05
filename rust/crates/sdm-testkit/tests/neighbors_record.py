@@ -3,18 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Records ``neighbors.json``, the reference's SQL sampler's two neighbor
-reads on DuckDB (``_by_fkey`` and ``_by_time``, T1.26b), which
+reads on DuckDB (``_by_fkey`` and ``_by_time``), which
 ``neighbors.rs`` holds the core's ``neighbors`` requests to (register
-ORD-2, decision F2).
+ORD-2).
 
 Run once, by hand, in the reference's environment from the reference
 checkout; CI never runs it, and the vectors are not recorded again to pass a
-dependency bump (F4):
+dependency bump:
 
     python rust/crates/sdm-testkit/tests/neighbors_record.py OUT.json
 
 The reads are the reference sampler's own, on a sampler its client builds
-(``RelationalMaterializer._get_model()._sampler``) over a DuckDB source of
+(``RelationalMaterializer._get_model._sampler``) over a DuckDB source of
 the tables ``setup`` makes, with its global zone ``UTC`` (the machine's zone
 the reference's cursors read in) and the source connection's session zone
 ``America/New_York``, which no read sees (register DT-13). Each case gives

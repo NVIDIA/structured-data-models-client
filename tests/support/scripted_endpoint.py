@@ -5,7 +5,7 @@
 r"""The scripted model endpoint, in Python (design, "Runners").
 
 One written rule, served over localhost HTTP, which the Python runners reach
-through the client's real transport. The Rust endpoint of T1.11d implements
+through the client's real transport. The Rust endpoint of implements
 the same rule; ``tests/fixtures/scripted-endpoint.json`` holds both to it.
 
 The rule, for ``POST /v1/predictions`` with a JSON object body:
@@ -28,18 +28,18 @@ The rule, for ``POST /v1/predictions`` with a JSON object body:
   ``instance_id`` column, an instance id that is neither an integer nor
   text, a classification without classes or with a first class that is not
   text) is answered ``400`` with ``{"error": "<reason>"}``, the reason one
-  of :data:`REASONS`;
+  of:data:`REASONS`;
 - any other method or path is answered ``404`` with ``{"error":
   "not_found"}``.
 
 Each request a served endpoint receives is a call, numbered from zero in
-the order received (T2.1a; T2.8c's multi-call cases). An endpoint told to
+the order received (multi-call cases). An endpoint told to
 fail a call answers that one ``500`` with ``{"error": "scripted_failure",
 "call": <its number>}``, a status the client's transport does not retry,
 and every other call by the rule; told to fail none, it answers every call
 by the rule.
 
-An endpoint told to answer probabilities (T2.8's ranking cases, whose
+An endpoint told to answer probabilities (ranking cases, whose
 model answers how sure it is, as a real one does) answers a
 classification call whose ``output.fields`` names ``probabilities`` with
 them: for row ``i`` of call ``k``, ``d = (3k + 5i) mod 9 + 1``, the item
@@ -48,7 +48,7 @@ last ``d / 10`` and any other ``0.0``, and its prediction is the last
 class where ``d > 5``, else the first. Every other call, and every call of
 an endpoint not told to, is answered by the rule above.
 
-An endpoint told to answer quantiles (T2.9's forecast cases, as a model
+An endpoint told to answer quantiles (forecast cases, as a model
 answers the spread of a regression) answers a regression call whose
 ``output.fields`` names ``quantiles`` with them: for row ``i`` of call
 ``k``, with ``d`` as above, the item carries ``quantiles`` ``{"0.1": d - 1,
@@ -56,7 +56,7 @@ answers the spread of a regression) answers a regression call whose
 Every other call, and every call of an endpoint not told to, is answered
 by the rules above.
 
-An endpoint told to answer explanations (T2.13's cases, as a model
+An endpoint told to answer explanations (cases, as a model
 explains the one entity it is asked to) answers a call whose
 ``output.fields`` names ``explanation`` with one on each item: for row
 ``i`` of call ``k``, with ``d`` as above, ``{"format": "scripted",
@@ -64,12 +64,12 @@ explains the one entity it is asked to) answers a call whose
 i], "detail": {"call": k, "row_index": i, "note": null}}``, beside what
 the rules above answer.
 
-An endpoint told to answer item metadata (T2.13's cases, as a model
+An endpoint told to answer item metadata (cases, as a model
 reports something of each answer) gives each item of every call it
 answers by the rules above ``"metadata": {"call": k, "row_index": i,
 "source": "scripted"}``.
 
-An endpoint told to answer embeddings (T2.11's cases, as a model answers
+An endpoint told to answer embeddings (cases, as a model answers
 the vector it holds of each entity) answers a call whose ``output.fields``
 names ``embeddings`` with one on each item: for row ``i`` of call ``k``,
 with ``d`` as above, ``[d / 10, (10 - d) / 10, k, i]``, each a float,
@@ -79,7 +79,7 @@ Numbers are read as the tokens the request wrote, never through a float,
 so an id past 2**53 is answered as it was asked.
 
 Every answer's JSON text is sent as UTF-8, unless the endpoint is told how
-to write it (T2.16's tests, as an endpoint may answer UTF-16 or with a byte
+to write it (tests, as an endpoint may answer UTF-16 or with a byte
 order mark, which the reference's reader takes); the text is the rule's
 either way.
 """
@@ -358,7 +358,7 @@ class _Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     # The reply's headers and body go out as two writes on a kept-alive
     # connection; with Nagle's algorithm the body waits for the client's
-    # delayed acknowledgement, about 40 ms a call (T2.1l).
+    # delayed acknowledgement, about 40 ms a call.
     disable_nagle_algorithm = True
 
     def log_message(self, *args: object) -> None:

@@ -82,9 +82,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"unsupported operand type(s) for *: 'float' and 'DateOffset'. This is forecast step 1 of 2. (the engine's TypeError, said INVALID_REQUEST)\""
+    "code": "INVALID_REQUEST"
   },
   "why": "lag_timesteps of 2.0, a float though whole, refused as the reference refuses it",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "source": "Correctness case forecast.lag-whole-float using the shop fixture."
 }

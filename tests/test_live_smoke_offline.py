@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """The live-model smoke script's offline parts (``scripts/live/rfm_smoke.py``,
-decision E27, T1.11d): its argument handling, its redaction, its refusal to
+): its argument handling, its redaction, its refusal to
 run with no endpoint, and its dry run, which builds the request on the core
 and shows what would be sent with every socket connection refused. Nothing
 here reaches a model endpoint or reads Databricks configuration; the live
@@ -323,7 +323,7 @@ def test_the_dry_run_reads_no_profile(
 def test_a_warning_is_the_client_s_by_its_category_alone() -> None:
     # The client's categories are shown, redacted; anyone else's text is
     # withheld, a "[CODE]" prefix or a path under sdm_client
-    # notwithstanding (T1.11d review round 4).
+    # notwithstanding ( review round 4).
     script = (
         'import importlib.util, sys, warnings\n'
         f'spec = importlib.util.spec_from_file_location("s", {str(SCRIPT)!r})\n'

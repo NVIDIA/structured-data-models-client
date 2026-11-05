@@ -282,7 +282,7 @@ def test_a_key_and_a_time_column_given_as_numpy_text_are_kept_as_given(
 ) -> None:
     # A name given as ``np.str_``, a ``str`` subclass, is the object each
     # table holds after the edit, on the core as the reference's setters
-    # keep it (T1.24b's review, taken at T1.27).
+    # keep it (review, taken ).
     import numpy as np
 
     schema = _schema()
@@ -315,7 +315,7 @@ def test_a_setter_that_skips_the_core_fails_here(
 def test_manual_schema_changes_can_be_edited_and_materialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # T3.16: the schema is plain data, each column with what the source said
+    #: the schema is plain data, each column with what the source said
     # of it, so a column retyped by hand or a table pointed at another source
     # table is no longer refused (`schema_edited`): the edit is made and the
     # schema sampled as the old route makes and samples them.
@@ -369,7 +369,7 @@ def test_frame_schema_edits_reach_the_core(
 #: Edits naming a column by a value no name is, and cannot be looked up:
 #: the reference raises Python's TypeError from the lookup, unnamed; the
 #: core refuses the value it cannot read, INVALID_REQUEST naming the field
-#: (register entry P1B-16, proposed).
+#: (B-16, proposed).
 UNHASHABLE: dict[str, Edit] = {
     'time_column': lambda s: setattr(s['users'], 'time_column', ['age']),
     'stype': lambda s: setattr(s['users']['age'], 'stype', ['ID']),
@@ -398,7 +398,7 @@ def test_invalid_names_are_refused_without_mutating_the_schema(
 def test_a_key_named_on_a_link_s_foreign_key_is_refused_at_materialize(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Found by the E49 differential (T1.24b): the reference's engine
+    # Found by the E49 differential: the reference's engine
     # refuses a link whose foreign key is its own table's key
     # (Graph._edge_error); the core's consistency check now does too.
     query = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'

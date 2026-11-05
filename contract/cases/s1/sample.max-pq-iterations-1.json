@@ -88,5 +88,5 @@
     "stage": "predict"
   },
   "why": "max_pq_iterations=1 over a 3-day average, whose labels are mostly empty: fewer tries find fewer context examples (53 of the default 60)",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.max-pq-iterations-1 using the shop fixture."
 }

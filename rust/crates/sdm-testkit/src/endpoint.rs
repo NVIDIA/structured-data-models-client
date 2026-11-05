@@ -17,20 +17,20 @@
 //! the rule cannot read otherwise is `400` naming the reason; any other
 //! method or path is `404 not_found`.
 //!
-//! Told to answer probabilities ([`answer_with_probabilities`]; T2.8's
+//! Told to answer probabilities ([`answer_with_probabilities`];
 //! ranking cases, as a model answers how sure it is), a classification
 //! call whose `output.fields` names `probabilities` is answered with them:
 //! for row `i` of call `k`, `d = (3k + 5i) mod 9 + 1`, the first class
 //! `(10 - d) / 10`, the last `d / 10` and any other `0.0`, the prediction
 //! the last class where `d > 5`, else the first.
 //!
-//! Told to answer quantiles ([`answer_as_asked`]; T2.9's forecast cases, as
+//! Told to answer quantiles ([`answer_as_asked`]; forecast cases, as
 //! a model answers the spread of a regression), a regression call whose
 //! `output.fields` names `quantiles` is answered with them beside the
 //! rule's prediction: for row `i` of call `k`, with `d` as above,
 //! `{"0.1": d - 1, "0.5": d, "0.9": d + 1}`, each a float.
 //!
-//! Told to answer explanations ([`answer_told`]; T2.13's cases, as a model
+//! Told to answer explanations ([`answer_told`]; cases, as a model
 //! explains the entity it is asked about), a call whose `output.fields`
 //! names `explanation` is answered with one on each item: for row `i` of
 //! call `k`, with `d` as above, `{"format": "scripted", "summary": "row <i>
@@ -39,7 +39,7 @@
 //! metadata, each item of every call answered by the rule carries
 //! `"metadata": {"call": k, "row_index": i, "source": "scripted"}`.
 //!
-//! Told to answer embeddings ([`answer_told`]; T2.11's cases, as a model
+//! Told to answer embeddings ([`answer_told`]; cases, as a model
 //! answers the vector it holds of each entity), a call whose
 //! `output.fields` names `embeddings` is answered with one on each item:
 //! for row `i` of call `k`, with `d` as above, `[d / 10, (10 - d) / 10, k,
@@ -48,19 +48,19 @@
 //! Calls are numbered from zero in the order received, and an endpoint
 //! told to fail a call answers that one `500` with `{"error":
 //! "scripted_failure", "call": <its number>}` and every other call by the
-//! rule ([`Endpoint`], [`answer_call`]; T2.1a, for T2.8c's multi-call
+//! rule ([`Endpoint`], [`answer_call`]; for multi-call
 //! cases).
 //!
 //! The pure-Rust host calls the rule in process ([`answer`]): it has no
 //! transport of its own to exercise, so no HTTP server or client is built
-//! into the test kit (decision E46).
+//! into the test kit.
 //!
 //! A test may stand a script of its own in for the rule on its thread
 //! ([`answered_by`]): each model call the host makes there is then
 //! answered by the script, given the call's number (from zero) and body,
 //! with a status and the answer's bytes as they travel, so an answer the
 //! rule never gives (probabilities, a `NaN` token, a failed call) reaches
-//! the core as a recorded answer does (T2.8's ranking vectors).
+//! the core as a recorded answer does (ranking vectors).
 
 use std::cell::RefCell;
 
@@ -189,7 +189,7 @@ pub struct Told {
     pub explanation: bool,
     /// Each item answered carries its metadata.
     pub item_metadata: bool,
-    /// A call asking for embeddings is given one on each item (T2.11).
+    /// A call asking for embeddings is given one on each item.
     pub embeddings: bool,
 }
 

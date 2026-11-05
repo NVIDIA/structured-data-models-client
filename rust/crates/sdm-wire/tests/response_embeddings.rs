@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! An item's `embeddings`, read as the client's bindings read it
-//! (`_float_tuple`, T2.11): an array of finite numbers, a number spelled as
+//! (`_float_tuple`): an array of finite numbers, a number spelled as
 //! text among them; anything else refused naming the field.
 
 use sdm_wire::json;

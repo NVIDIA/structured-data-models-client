@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""The rules every SQL provider applies to a plan before running it are
-written once, in ``sdm_connectors.providers`` (design fix F; T3.4 fix 1,
-round 1's Codex P1-7 and Claude P2-3): each driver's provider refuses a
+written once, in ``sdm_connectors.providers``: each driver's provider refuses a
 plan with the one ``PlanNotRun`` and reads a key set with the one reader.
 """
 
@@ -30,7 +29,7 @@ def test_each_provider_refuses_with_the_one_shared_rule(dialect: str) -> None:
     module, provider = MODULES[dialect]
     assert module.PlanNotRun is shared.PlanNotRun
     # A key set's Arrow is read with the one reader; a provider binding the
-    # text the core wrote of one (T3.28) reads it with the one text reader.
+    # text the core wrote of one reads it with the one text reader.
     assert getattr(module, 'arrow_table', shared.arrow_table) is (
         shared.arrow_table
     )
@@ -77,7 +76,7 @@ def test_a_key_set_not_handed_over_is_refused_by_name() -> None:
 
 def test_a_key_set_name_binds_one_key_set_however_often_it_is_named() -> None:
     r"""The relation each key set is bound under, one rule for every
-    provider binding key sets by name (round 2's Codex P1-3)."""
+    provider binding key sets by name."""
 
     def param(attachment: int) -> dict[str, Any]:
         return {
@@ -95,7 +94,7 @@ def test_a_key_set_name_binds_one_key_set_however_often_it_is_named() -> None:
 
 
 def test_a_key_set_s_text_is_read_by_the_one_shared_reader() -> None:
-    r"""A key set the dialect writes as text (T3.28) is handed over as a
+    r"""A key set the dialect writes as text is handed over as a
     one-cell text attachment; every provider binding one reads it here."""
     import pyarrow as pa
 

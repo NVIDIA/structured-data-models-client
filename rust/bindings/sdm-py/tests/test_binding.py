@@ -4,7 +4,7 @@
 
 """`sdm_client._native` as any build of it ships: the module its stub
 describes, a run of a real operation, the one `CoreError`, and an import
-that changes nothing in the process (decision F5)."""
+that changes nothing in the process."""
 
 from __future__ import annotations
 
@@ -205,7 +205,7 @@ def test_an_object_with_only_pyarrow_s_private_export_is_refused() -> None:
 
 def test_a_start_with_an_unnamed_failing_stream_is_an_invalid_message() -> None:
     # The start's whole set of attachments is checked first: one it does
-    # not name is the envelope's refusal, readable or not (E13).
+    # not name is the envelope's refusal, readable or not.
     class Failing:
         def __arrow_c_stream__(self, requested_schema: object = None) -> object:
             raise RuntimeError(CANARY)

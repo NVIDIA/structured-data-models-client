@@ -86,9 +86,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: a regression, each context row labelled with the sum of its web and app orders' prices in the window (contract/t210-target-vectors.json holds the labels); the scripted endpoint answers it through predict"
+    "stage": "predict"
   },
   "why": "A filter inside the target's aggregation on a text column's membership in a list, orders.channel IN ('web', 'app') (the core's rule target_filter)",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "source": "Correctness case target.filter.text-in using the shop fixture."
 }

@@ -212,7 +212,7 @@ pub enum ConstValue {
 #[derive(Debug)]
 pub enum Kind {
     Column {
-        /// The table and the column, apart (KO2-36).
+        /// The table and the column, apart.
         name: ColumnKey,
         /// Whether a `COUNT` aggregates this column (`_count_col`).
         count_col: bool,
@@ -271,8 +271,8 @@ pub enum BuildError {
     Unplaced,
     /// A date literal with a run of five digits or more (D8,
     /// `Reading::Packed`), refused by name where it is: no diagnostic; the
-    /// literal as the caller wrote it, which the refusal may name (KO2-86,
-    /// narrowing decision E79).
+    /// literal as the caller wrote it, which the refusal may name (
+    /// narrowing ).
     Packed(Option<Location>, String),
 }
 
@@ -309,7 +309,7 @@ fn base_at(location: Option<Location>) -> Base {
 }
 
 /// `Column(fqn=..., location=...)`: the table and the column held apart,
-/// so neither is split on a dot (KO2-36), where the reference splits
+/// so neither is split on a dot, where the reference splits
 /// `fqn` and refuses one that is not two parts.
 pub fn column(name: ColumnKey, location: Option<Location>) -> Built {
     finish(wrap(

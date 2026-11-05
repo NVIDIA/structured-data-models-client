@@ -84,9 +84,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 1 call; the context target the negation, each lagged target the inner condition (all false in the context, true and false in the rows scored); result columns row_index, id, prediction"
+    "stage": "predict"
   },
-  "why": "lag_timesteps of 2 on a negated target over a filtered count (T2.10 round 2's carried note): the request carries the lagged targets, each the inner condition, the NOT dropped as the reference drops it",
-  "source": "T2.13b's test author, the reference at 6298913c"
+  "why": "Lag_timesteps of 2 on a negated target over a filtered count: the request carries the lagged targets, each the inner condition, the NOT dropped as the reference drops it",
+  "source": "Correctness case lag.not-filtered-2 using the shop fixture."
 }

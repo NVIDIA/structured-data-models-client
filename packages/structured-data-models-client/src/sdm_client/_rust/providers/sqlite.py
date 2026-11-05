@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The SQLite provider (T2.2): it answers a fetch step by running the
+r"""The SQLite provider: it answers a fetch step by running the
 statements its plan carries, in order, on a cursor of the source's ADBC
 connection, and hands back the last one's result as the driver's Arrow
 table, every batch the driver made, an empty result keeping its schema.

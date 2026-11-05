@@ -2,11 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The contract loader's own tests (``contract/runners/databases.py``,
-T2.1a): its type map is the vector file's, every S1 case's tables load on
+r"""The contract loader's own tests (``contract/runners/databases.py``): its type map is the vector file's, every S1 case's tables load on
 SQLite with each column declared as the map says, and a value Postgres
 cannot hold exactly is refused by name. The acceptance tests are
-``tests/test_t21a_type_map.py``'s.
+``tests/test_type_map.py``'s.
 """
 
 from __future__ import annotations
@@ -81,7 +80,7 @@ def _duck(case: dict[str, object]) -> object:
 def test_every_s1_case_loads_on_sqlite(path: Path, tmp_path: Path) -> None:
     r"""Each table, its columns declared by the map and its rows in
     DuckDB's order, every value kept (a JSON or ISO text read back). A case
-    whose ``databases`` leave SQLite out (T2.12's float cases, under their
+    whose ``databases`` leave SQLite out (float cases, under their
     exclusion) holds a value SQLite cannot store, which the loader refuses
     by name."""
     case = json.loads(path.read_text())
@@ -272,7 +271,7 @@ def _sqlite_rows(tmp_path: Path, *statements: str) -> list[tuple[object, ...]]:
 
 
 def test_a_null_array_keeps_its_neighbours_values(tmp_path: Path) -> None:
-    r"""T2.1a fix 1: a NULL fixed-size or variable list before and between
+    r"""fix 1: a NULL fixed-size or variable list before and between
     others moves no value to another row."""
     assert _sqlite_rows(
         tmp_path,
@@ -283,7 +282,7 @@ def test_a_null_array_keeps_its_neighbours_values(tmp_path: Path) -> None:
 
 
 def test_an_empty_map_stays_a_map(tmp_path: Path) -> None:
-    r"""T2.1a fix 1: an empty map is the empty object, alone and nested."""
+    r"""fix 1: an empty map is the empty object, alone and nested."""
     assert _sqlite_rows(
         tmp_path,
         'CREATE TABLE t AS SELECT * FROM (VALUES '
@@ -293,7 +292,7 @@ def test_an_empty_map_stays_a_map(tmp_path: Path) -> None:
 
 
 def test_a_nan_sqlite_cannot_hold_is_refused_by_name(tmp_path: Path) -> None:
-    r"""T2.1a fix 1: SQLite stores a NaN as NULL, so the loader refuses it,
+    r"""fix 1: SQLite stores a NaN as NULL, so the loader refuses it,
     naming the column, rather than load a null (``sqlite_refuses``)."""
     assert databases.TYPE_MAP['float64']['sqlite_refuses'] == 'NaN'
     with pytest.raises(databases.Unloadable, match=r't\.v: a NaN'):
@@ -303,7 +302,7 @@ def test_a_nan_sqlite_cannot_hold_is_refused_by_name(tmp_path: Path) -> None:
 def test_a_negative_zero_sqlite_cannot_hold_is_refused_by_name(
     tmp_path: Path,
 ) -> None:
-    r"""T2.12: SQLite stores a REAL -0.0 as 0.0, so the loader refuses it,
+    r""": SQLite stores a REAL -0.0 as 0.0, so the loader refuses it,
     naming the column, rather than load another value; 0.0 still loads."""
     for name in ('minus', 'minus32', 'plus'):
         (tmp_path / name).mkdir()
@@ -332,7 +331,7 @@ def test_a_negative_zero_sqlite_cannot_hold_is_refused_by_name(
 
 
 def test_nested_composites_load_on_postgres() -> None:
-    r"""T2.1a fix 1: a struct in a struct, and a list of structs, load on
+    r"""fix 1: a struct in a struct, and a list of structs, load on
     Postgres as composite types created inner first."""
     import os
     import uuid

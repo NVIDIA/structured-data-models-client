@@ -23,7 +23,7 @@ import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-VECTORS = ROOT / 'contract/t132g-p2e-vectors.json'
+VECTORS = ROOT / 'contract/arrow-interval-vectors.json'
 OLD_VECTORS = ROOT / 'contract/result-vectors.json'
 
 
@@ -104,7 +104,7 @@ def test_the_vector_file_is_what_it_says() -> None:
     others = {
         v['name']
         for v in json.loads(
-            (ROOT / 'contract/t132g-p2c-vectors.json').read_text()
+            (ROOT / 'contract/arrow-map-union-vectors.json').read_text()
         )['vectors']
     }
     # Names unique across 2c's and 2e's files: the rust-host pending list

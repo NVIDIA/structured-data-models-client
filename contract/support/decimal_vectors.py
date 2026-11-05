@@ -48,11 +48,11 @@ def _module(name: str, path: Path) -> ModuleType:
     return sys.modules[name]
 
 
-#: T1.32d's recorder: the public answer's projection (``project``), the
+#: recorder: the public answer's projection (``project``), the
 #: payload rule's digest, the outcome classes and the register marks are
 #: its, so both families' vectors are read by one code.
 E = _module(
-    'empty_null_record', ROOT / 'contract/support/empty_null_vectors.py'
+    'empty_null_vectors', ROOT / 'contract/support/empty_null_vectors.py'
 )
 
 # --- the decimal types and their values --------------------------------------
@@ -517,7 +517,7 @@ def _keys() -> list[dict[str, Any]]:
                 'indices': [base, base + 1],
             }
         )
-    # The key-type pair matrix (design, T2.17's exit, moved into T2.0c):
+    # The key-type pair matrix (design, exit, moved into ):
     # primary and foreign keys of different decimal precisions and scales
     # holding equal values (1.00 against 1.0000) join, in both directions;
     # and values float64 would merge (10**17 + 0 to 7, 16 apart at most in
@@ -674,7 +674,7 @@ K = _module('scalar_fixture', ROOT / 'contract/support/scalar_fixture.py')
 def core_indices(indices: list[Any]) -> list[dict[str, Any]]:
     r"""The entities as the core's contract scalars (the case's
     ``core.materialize.indices``): the host's natural Arrow column of them,
-    as the client's bridge hands it over (T1.32a's ``host_arrow``): int64
+    as the client's bridge hands it over (``host_arrow``): int64
     for the small ones, uint64 past int64, text past uint64."""
     return list(K.host_arrow(list(indices))['values'])
 
@@ -704,7 +704,7 @@ def case_for(vector: dict[str, Any]) -> dict[str, Any]:
     case['core']['materialize']['indices'] = core_indices(indices)
     case['core']['materialize']['anchor_time'] = core_anchor(anchor)
     case['expect'] = {'outcome': 'success', 'stage': 'predict'}
-    case['why'] = f'T1.32b vector {vector["id"]}'
+    case['why'] = f'Vector {vector["id"]}'
     case['source'] = 'contract/support/decimal_vectors.py'
     case.pop('register', None)
     return case
@@ -794,7 +794,7 @@ def project(
     observation: dict[str, Any], vector: dict[str, Any]
 ) -> dict[str, Any]:
     r"""The public answer of one run of ``vector``, as both Python runners
-    record it: T1.32d's projection and the vector's columns."""
+    record it: projection and the vector's columns."""
     answer = E.project(observation, vector)
     answer['columns'] = columns_projection(observation, vector)
     return answer
@@ -815,7 +815,7 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
         ['instance_table', 'TARGET'],
         ['orders', 'price'],
     ],
-    # T2.0c's exact-decimal cases.
+    # exact-decimal cases.
     **{
         f'decimal.{name}': [['instance_table', 'TARGET'], ['users', 'd']]
         for name in (
@@ -834,7 +834,7 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
         ['instance_table', 'TARGET'],
         ['users', 't'],
     ],
-    # T2.14b's: a scaled decimal read as the reference counts it.
+    #: a scaled decimal read as the reference counts it.
     'decimal.stype-past-float-precision': [['orders', 'd']],
 }
 

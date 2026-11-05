@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The contract's locked definition of the request state's payload is the
-//! schema the typed payload derives (T1.28w, decision E74): the copy
+//! schema the typed payload derives: the copy
 //! `sdm-contract` embeds, `schema/state-payload.json`, is the one these
 //! types generate, so a change to them fails here until it is regenerated,
 //! and then fails the contract lock until the version moves with it.

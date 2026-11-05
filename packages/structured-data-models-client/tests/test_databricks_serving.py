@@ -139,7 +139,7 @@ def opened(**kwargs: Any) -> tuple[SDMClient, Endpoints]:
 
 def test_a_serving_client_holds_what_an_http_client_holds():
     """A serving client is built without ``__init__``, so state added only
-    there was missing from it until a call reached for it: ``close()`` raised
+    there was missing from it until a call reached for it: ``close`` raised
     ``AttributeError`` on the set of pinned contexts. Both now set their
     state in one place, and this holds them to the same attributes.
     """
@@ -881,7 +881,7 @@ def test_an_unusable_timeout_is_refused_at_construction(bad):
 def test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # T1.28b fix round 3: an answer nested past what this interpreter's
+    # fix round 3: an answer nested past what this interpreter's
     # reader reads (Python before 3.12 raises RecursionError) is the same
     # TRANSPORT_ERROR as any answer that is not JSON, flagged so the core
     # route reports it as too deep; a malformed answer is not flagged.

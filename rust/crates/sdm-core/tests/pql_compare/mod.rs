@@ -333,7 +333,7 @@ pub fn first_difference(a: &Value, b: &Value, path: &str) -> String {
 }
 
 /// The format of the reference's day-first warning, pandas' `UserWarning`
-/// "Parsing dates in <format> format when dayfirst=False ...".
+/// "Parsing dates in <format> format when dayfirst=False...".
 pub fn reference_format(message: &str) -> String {
     let rest = message
         .strip_prefix("Parsing dates in ")
@@ -345,7 +345,7 @@ pub fn reference_format(message: &str) -> String {
 }
 
 /// Whether `query` holds a date literal with a run of five digits or more
-/// (D8), which the core refuses by name from T1.6c: a `DATE` token, three
+/// (D8), which the core refuses by name: a `DATE` token, three
 /// runs of digits joined by one of `/`, `-` or `.`, with such a run, or
 /// followed by a `TIME` token, three runs joined by `:`, with one.
 pub fn holds_packed_date(query: &str) -> bool {
@@ -368,7 +368,7 @@ pub fn holds_packed_date(query: &str) -> bool {
     })
 }
 
-/// Whether `error` is the core's refusal by name of a D8 literal (T1.6c):
+/// Whether `error` is the core's refusal by name of a D8 literal:
 /// `INVALID_REQUEST` for `validate_query`'s rule `date_literal_packed`.
 pub fn is_packed_refusal(error: &CoreError) -> bool {
     let text = |name: &str| match error.fields.get(name) {

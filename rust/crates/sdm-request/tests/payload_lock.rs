@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The request state's payload against the contract's locked definition
-//! of it (`$defs/StatePayload`, T1.22; from T1.28w the schema
+//! of it (`$defs/StatePayload`; the schema
 //! `sdm_wire::payload::StatePayload` derives): the payload the producer
 //! ([`sdm_request::payload::regression`]) builds holds, for a sample
 //! shaped as `base.regression`'s and for one shaped as the family cases
@@ -273,7 +273,7 @@ fn the_payload_the_producer_builds_is_the_locked_definition_s() {
     );
 }
 
-/// Lagged target columns (`lag_timesteps`, T2.9) are laid out after the
+/// Lagged target columns (`lag_timesteps`) are laid out after the
 /// label in both halves, with no semantic type, as the reference's engine
 /// lays out its task table's columns: an aggregation's as `float64`, its
 /// float32s as doubles and a missing one null; a condition's as `bool`, or
@@ -304,7 +304,7 @@ fn lagged_target_columns_follow_the_label_in_both_halves() {
     assert_eq!(columns["__kumo_arl1__"], json!({"dtype": "bool"}));
     assert_eq!(columns["__kumo_arl2__"], json!({"dtype": "float64"}));
     // A call's slice keeps a condition's column bool though its own rows
-    // hold no value (T2.9 fix 3).
+    // hold no value.
     let mut slice = shop();
     slice.lags = sampled
         .lags
@@ -418,7 +418,7 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         |p| p["context"]["instance_table"]["format"] = json!("records"),
         "format",
     );
-    // A dtype or stype the wire does not name (the typed payload's, T1.28w).
+    // A dtype or stype the wire does not name (the typed payload's).
     refused(
         |p| p["schema"]["related_tables"]["orders"]["columns"]["price"]["dtype"] = json!("int32"),
         "dtype",
@@ -441,7 +441,7 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         "metadata is missing",
     );
     // A regression's options losing both members a classification's lack
-    // (fix round 1, Codex P2-3): the options are told apart by their kind,
+    //: the options are told apart by their kind,
     // so neither shape takes them.
     refused(
         |p| {
@@ -551,7 +551,7 @@ fn what_the_readers_read_is_defined_with_the_type_they_read() {
 
 #[test]
 fn a_missing_entity_anchor_is_sent_as_null_and_the_others_as_their_times() {
-    // T2.11 fix 1: a scored entity anchored at its own time, which is
+    // fix 1: a scored entity anchored at its own time, which is
     // null, is the reference's `NaT`: null in the anchor column, never the
     // no-anchor sentinel's 1677 time; the payload still holds the payload
     // definition.

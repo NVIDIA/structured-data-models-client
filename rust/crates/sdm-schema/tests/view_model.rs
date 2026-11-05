@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The logical model's steps (T3.5, design S5: `add_table`, `add_join`
+//! The logical model's steps (design S5: `add_table`, `add_join`
 //! with its undo, `add_relationship`, and the finish: measure notes, time
 //! columns, invalid edges, validation), the graph's part of the old
 //! client's conversion (`RE/graph.py:250-421`, `:1820-1943`, `:2209-2256`,

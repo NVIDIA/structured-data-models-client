@@ -5,15 +5,13 @@
 # Validation evidence and open limits
 
 This page records tested revisions and scope; it does not certify current HEAD or authorize publication.
-For commands and current CI policy, see [CONTRIBUTING](../../CONTRIBUTING.md) and the [compatibility suite](../../tests/parity/README.md).
+For commands and current CI policy, see [CONTRIBUTING](../../CONTRIBUTING.md) and the [compatibility suite](../../tests/compatibility/README.md).
 The compatibility manifest and execution receipts remain authoritative for individual capabilities.
 
 ## Recorded evidence
 
 | Revision / campaign | Result and scope |
 |---|---|
-| Phase 3 `ff86cd1c` | Generated/held-out source and provider comparisons plus 21 runtime profiles / 42 executions; 255 questions included 114 positive pairs and 141 matched endpoint refusals. Historical evidence only. |
-| Phase 4 | 582 historical comparisons and 210 type/raw-reader comparisons; retained evidence identifies its own producer revisions. These counts do not certify later changes. |
 | Rust source `59addf5cc` | Host AddressSanitizer/leak check: 128 tests across 18 executables, no ignored tests or diagnostics; nightly-2026-07-15 with rebuilt standard library. Not Python/JVM sanitizer coverage. |
 | Candidate `08d027795`, baseline main `847a1e9e3` | 792 local live cells, 396 per language across 15 connectors; same fixture/model versions. Old Python comparison: 303 strict matches and 93 classified differences. |
 | `d140e0d6d` labels compatibility fix | Fresh wheel passed 60 focused tests on Arrow 14 and Arrow 26, each with one expected inapplicable parameter skip. Prediction benchmarks do not exercise this adapter. |
@@ -41,7 +39,6 @@ The live comparison used matched pandas 2.3.3, NumPy 2.5.4 and Arrow 24; observa
 Candidate Python preparation/schema stages were slower than old main; relational memory sampling/encoding was faster.
 No benchmark-driven tuning was performed.
 Historical accepted costs include approximately 2× Databricks latency, 21–32% Snowflake overhead, native library size around 16 MB versus 9.6 MB, and specific SQLite cases; these are scoped decisions, not blanket acceptance of future regressions.
-Phase 3 retained raw held-out failures (33 IDs / 82 legs); reviewed dispositions left one residual against a threshold of four, not an all-green raw corpus.
 
 | Limit / follow-up | Required interpretation |
 |---|---|
@@ -55,12 +52,11 @@ Phase 3 retained raw held-out failures (33 IDs / 82 legs); reviewed dispositions
 
 After merging into main, review larger runners, safe sharding, connector concurrency and artifact reuse for unchanged build inputs.
 The recorded hosted configuration used standard GitHub-hosted Linux runners and two concurrent connector shards.
-Phase 9 changes need their own affected-behavior evidence; these older passes are not inherited automatically.
+Subsequent changes need their own affected-behavior evidence; these older passes are not inherited automatically.
 
 ## Evidence retention
 
 Historical plans remain in Git at `0b3afe8fa:docs/design/rust-core/`; no extra in-repository archive is needed.
 Private receipts and raw model/warehouse observations remain outside Git under `~/.local/share/sdm-orchestration/`; they are not portable public CI artifacts and must not be silently deleted during cleanup.
-Useful locations are `phase-3/final-ff86-source-acceptance.private.json`, `phase-4/coverage-audit/historical582/report.json`, `phase-4/type-parity/wire-comparison-complete.json`, and the Phase 8 validation and `benchmark-real` directories.
 The benchmark summary records raw SHA-256 hashes, harness/artifact identities, per-process timings, work counts and memory samples.
 Retain unmodified receipts; never commit credentials or full warehouse captures.

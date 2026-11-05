@@ -2,18 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! One table's inference, by the reference's rules: each column's data type
-//! from the Arrow type its preview returned, its semantic type from its name
-//! and the preview's values, the primary key from the catalog or, where it
-//! declares none, from names and values, and the time column among the
-//! timestamps, those named as a load, an edit or a birth passed over
-//! (T1.21d), and from T1.23 those whose values say nothing, then the one
-//! left, the creation stamp or the earliest; a list column left out. From
-//! T1.32e a preview that may not hold every row has the timestamps' values
-//! read over the whole table ([`Previewed::whole_table_columns`],
-//! [`whole_table`], [`finish`]), as the reference asks its source.
-//! Every path these rules take that this build does not port is refused
-//! by name ([`crate::not_yet`]).
+//! Inference for a single table.
+//! Arrow types, catalog keys, names and preview values determine column semantics,
+//! the primary key and the time column.
+//! When preview rows are insufficient, [`Previewed::whole_table_columns`] requests
+//! additional evidence before [`finish`] resolves the result.
+//! Unsupported cases return structured errors.
 
 use std::collections::BTreeSet;
 
@@ -36,7 +30,7 @@ pub const PREVIEW_ROWS: u64 = 1_000;
 /// How inference reads text as times, by the core's list of formats
 /// (`date-rules.md`, "The core's text formats"): each value's instant in
 /// nanoseconds since the epoch, in UTC, or `None`. `sdm-engine::time::text`
-/// holds it (T1.25, T1.25b), above this crate; `sdm-core` hands it in.
+/// holds it, above this crate; `sdm-core` hands it in.
 pub trait TextTimes {
     /// The values read, to UTC where `utc`, or why not ([`TextUnread`]).
     fn read(&self, values: &[Option<&str>], utc: bool) -> Result<Vec<Option<i128>>, TextUnread>;
@@ -599,7 +593,7 @@ impl Keyed {
     }
 
     /// What the source says of `declared`, whose preview returned `field`
-    /// (T3.16: one reading for `describe_source` and `materialize`): the type
+    /// (one reading for `describe_source` and `materialize`): the type
     /// its declaration fixes, where the catalog reads one (SQLite's, as the
     /// reference types a column by it first, whatever its values), else its
     /// values' type; the type admitted; whether it may hold no value (a
@@ -616,7 +610,7 @@ impl Keyed {
         let dtype = match declared.dtype {
             // A declaration the reference reads as unsupported (Databricks'
             // struct, map or interval, `_to_dtype`) is refused by name, as
-            // a struct or map the values give is (register P1B-10).
+            // a struct or map the values give is (B-10).
             Some(Dtype::Unsupported) => return Err(not_yet("column_type")),
             Some(declared) => declared,
             None => dtype_of(field.data_type())?,
@@ -638,7 +632,7 @@ impl Keyed {
 /// `catalog` and `constraints` and whose preview returned `schema`, in the
 /// catalog's order, as [`preview_keyed`] reads it, with no inference: the
 /// facts `materialize` reads of a column the host's schema holds none of
-/// (T3.16). The declared type of a big integer is the caller's to set.
+///. The declared type of a big integer is the caller's to set.
 pub fn source_facts(
     relation: &Relation,
     catalog: &[CatalogColumn],
@@ -667,7 +661,7 @@ pub fn source_facts(
 /// [`preview`], where `key_stated` says whether the caller names the
 /// table's key (`primary_keys=`, or a schema's own key): the key inference
 /// would take then never decides anything, so one of a type no key takes is
-/// left unset rather than refused (T3.8 fix 3), and the caller's key is
+/// left unset rather than refused, and the caller's key is
 /// applied after, as the reference applies a named key over any it read.
 #[allow(
     clippy::too_many_arguments,
@@ -1440,7 +1434,7 @@ pub trait WallClocks {
 /// reading, the UTC instant or the wall clock, lies outside the years 1 to
 /// 9999 its Schema.from_source fails unnamed (an `OverflowError`). The core
 /// refuses the table there by name, `VALUE_OUT_OF_RANGE` naming the table
-/// and the column, the first such in table order (register P1B-81, T1.36
+/// and the column, the first such in table order (B-81,
 /// fixes 3, 11 and 13). `clocks` gives a zone's offset, as the run resolves zones; a
 /// zone they do not hold is read at its UTC instant. A later row's value,
 /// and a nanosecond's (which never leaves those years in any zone), are

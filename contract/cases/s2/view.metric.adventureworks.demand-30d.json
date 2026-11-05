@@ -54,6 +54,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "The deleted AdventureWorks notebook (contract/fixtures/adventureworks/notebook-fa0637d4.ipynb), view_demand_30d, a regression through the view, with the notebook's four-estimator inference_config and its top product on the fixture (709). The owner's existing AdventureWorks metric view (KO3-21), named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
-  "source": "written by T3.5's test author from the reference at 43e55f4f"
+  "why": "The deleted AdventureWorks notebook (contract/fixtures/adventureworks/notebook-fa0637d4.ipynb), view_demand_30d, a regression through the view, with the notebook's four-estimator inference_config and its top product on the fixture (709). The owner's existing AdventureWorks metric view, named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
+  "source": "Correctness case view.metric.adventureworks.demand-30d using the adventureworks fixture."
 }

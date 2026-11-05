@@ -2,19 +2,18 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A core-built schema's edits, checked and made on the core (T1.24b).
+r"""A core-built schema's edits, checked and made on the core.
 
 An edit to a schema ``Schema.from_source`` described on the core, whose
-columns hold what the source said of them (``Column._source``, T3.16), (a key or
+columns hold what the source said of them (``Column._source``), (a key or
 time column set or cleared, a column's meaning, a column left out, the
 relationships replaced or edited as a list) reaches here from the setter
 the caller's assignment ran (``Column.__setattr__``,
 ``_TableShape.__setattr__`` and ``Schema.__setattr__``, under the owner's
-allowance of 2026-10-11, decision E66(g); ``SourceTable.__delitem__`` and
+allowance of 2026-10-11,; ``SourceTable.__delitem__`` and
 the relationships' list, ``_Links``), which passes it on and returns. The
 core's ``edit_schema`` checks and makes it, as the reference's setters do,
-over the schema as this client holds it, as plain data (decision E67,
-T3.16), and answers the schema with the edit made,
+over the schema as this client holds it, as plain data, and answers the schema with the edit made,
 or refuses it at the assignment; this module stores the answer on the
 objects and decides nothing of it.
 
@@ -29,7 +28,7 @@ reference's setters take it. Nothing here imports the core until an edit
 is made, and nothing imports the relational engine.
 
 Raises (from each edit):
-    StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
+    StructuredDataError: The core's refusal, as:mod:`.errors` maps it,
         ``INVALID_REQUEST`` where the reference refuses the edit.
 """
 
@@ -150,7 +149,7 @@ def _made(schema: Any, edit: dict[str, Any]) -> dict[str, Any]:
     from sdm_client._rust.spec import held_schema
 
     # The schema as it stands, as plain data, as materialize sends it
-    # (T3.16).
+    # .
     operation = {'op': 'edit_schema', 'schema': 1, 'edit': 2}
     attachments = {
         1: codec.attachment(held_schema(schema)),
@@ -176,7 +175,7 @@ def _store(
     keys, its columns left out, each column's meaning and what it meant
     before the schema joined on it, what the source said of it, and its
     data type where the source's reading of it changed (a column of exact
-    numbers is read by its role, T2.21); the column whose meaning the
+    numbers is read by its role); the column whose meaning the
     caller chose. A value the object holds that the answer agrees with is
     kept as the caller gave it."""
     from sdm_client._rust import codec

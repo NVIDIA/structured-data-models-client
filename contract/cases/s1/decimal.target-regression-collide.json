@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: task regression; context labels by entity: {\"number\": \"2\"}: {\"number\": \"1234567.0\"}, {\"number\": \"3\"}: {\"number\": \"1234567.0\"}, {\"number\": \"4\"}: {\"number\": \"1234567.0\"}, {\"number\": \"5\"}: {\"number\": \"1234567.0\"}, {\"number\": \"6\"}: {\"number\": \"1234567.0\"}, {\"number\": \"7\"}: {\"number\": \"1234567.125\"}"
+    "stage": "predict"
   },
   "why": "A static DECIMAL(12, 2) regression target (users.t, set numerical) whose distinct values, 1234567.00 + user_id * 0.01, land on two float32 values (1234567.0 and 1234567.125)",
-  "source": "T2.0c exact decimals (KO2-50); the Claude review's request, made a static target by Codex's round 2"
+  "source": "Correctness case decimal.target-regression-collide using the shop fixture."
 }

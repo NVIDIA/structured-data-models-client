@@ -9,8 +9,8 @@
 //! by [`schema_json`], committed as `schema/sdm-contract-<version>.json`,
 //! and locked in `schema/contract.lock` by the SHA-256 of a projection that
 //! strips only the annotation keywords (`description`, `title`,
-//! `examples`), so a doc comment needs no bump while a change of shape does
-//! (decision H7). A change of shape, or of behavior (validation, units,
+//! `examples`), so a doc comment needs no bump while a change of shape does.
+//! A change of shape, or of behavior (validation, units,
 //! ownership, defaults or error meaning), bumps [`CONTRACT_VERSION`]
 //! independently of the package version.
 //! Only the current schema is retained in the checkout; Git preserves prior versions.
@@ -61,7 +61,7 @@ pub const CONTRACT_VERSION: u32 = 71;
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON
 /// of each bytes attachment a control message names, which the root's
-/// `x-attachments` refers to, so the lock covers them (T1.22).
+/// `x-attachments` refers to, so the lock covers them.
 pub fn schema_json() -> String {
     let mut generator = schemars::SchemaGenerator::default();
     let attachments = generator.subschema_for::<ops::Attachments>();

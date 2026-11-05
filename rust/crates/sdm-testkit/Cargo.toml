@@ -16,13 +16,13 @@ publish.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
-# The non-SQL test provider (T2.7) answers from in-memory Arrow tables:
+# The non-SQL test provider answers from in-memory Arrow tables:
 # selecting, ordering and grouping their rows.
 arrow-array.workspace = true
 arrow-row.workspace = true
 arrow-schema.workspace = true
 arrow-select.workspace = true
-# The Postgres replay (KO2-20): a recorded answer is an Arrow IPC stream
+# The Postgres replay: a recorded answer is an Arrow IPC stream
 # in base64 text.
 arrow-ipc.workspace = true
 base64.workspace = true
@@ -36,14 +36,14 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 # The dev-only SQLite provider of `sdm-contract-run --database sqlite`
-# (T2.2), SQLite bundled so the host reads the version it builds.
+#, SQLite bundled so the host reads the version it builds.
 rusqlite.workspace = true
 
 [dev-dependencies]
 # The test-only fetch, which echoes what the core admitted, for the
 # provider's tests.
 sdm-host = { path = "../sdm-host", features = ["test-ops"] }
-# T2.2's tests execute the SQLite dialect's relation goldens on SQLite.
+# tests execute the SQLite dialect's relation goldens on SQLite.
 rusqlite.workspace = true
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the

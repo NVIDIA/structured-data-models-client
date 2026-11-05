@@ -4,7 +4,7 @@
 
 //! The schema's assembly from the tables inferred and the foreign keys the
 //! catalog declares, by the reference client's rules (`Schema.from_source`
-//! after the engine has read the source, decision E50, T1.21d): a keyless
+//! after the engine has read the source, ): a keyless
 //! table keyed by the one column declared foreign keys refer to; links
 //! inferred by name, kept only where they can join, each once; a lone edit
 //! stamp settled by the links; the columns the schema joins on marked as
@@ -14,7 +14,7 @@
 //!
 //! The warnings are codes and fields, the names and values a warning
 //! speaks of; the words, the reference client's with its Python remedies,
-//! are each host's to give from them (decision E59, the design's
+//! are each host's to give from them (the design's
 //! presentation rule). A warning's `message` is a sentence that names
 //! nothing, for a host with no words of its own.
 
@@ -497,11 +497,11 @@ fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
 /// identifiers, what each meant kept, and gives the table's other columns
 /// back what they meant; naming a time column makes it a timestamp; a time
 /// column cleared (`None`) leaves the table none, its columns meaning what
-/// they meant, as the reference's setter takes `None` (decision E61). A key
+/// they meant, as the reference's setter takes `None`. A key
 /// or time column the host could not write as names (`unreadable`) is
 /// refused by name, after its table is found, as `edit_schema` refuses it;
 /// a key of `null` names no column and is refused as an empty key, as the
-/// reference's `_as_key_tuple` reads `None` (decision E101). Refusals are
+/// reference's `_as_key_tuple` reads `None`. Refusals are
 /// `INVALID_REQUEST`, naming the field.
 pub fn apply_keys_and_times(
     tables: &mut [InferredTable],
@@ -689,8 +689,8 @@ pub(crate) fn no_table<'a>(
 
 /// A key the host could not write as a column or a sequence of them
 /// (`unreadable`), refused alike by `describe_source` and `edit_schema`,
-/// `field` each operation's own (decision E101), naming the value as the
-/// host spelled it, where it did (`given`, KO2-86).
+/// `field` each operation's own, naming the value as the
+/// host spelled it, where it did (`given`).
 pub(crate) fn key_not_names(table: &str, field: &str, spelled: Option<&str>) -> CoreError {
     let refused = |sentence| {
         invalid(
@@ -707,7 +707,7 @@ pub(crate) fn key_not_names(table: &str, field: &str, spelled: Option<&str>) -> 
 }
 
 /// `refused`, naming the host's text of a value the caller gave (`given`),
-/// where the host gave one (KO2-86); `refused` says the sentence that
+/// where the host gave one; `refused` says the sentence that
 /// names it.
 pub(crate) fn with_given(refused: CoreError, spelled: Option<&str>) -> CoreError {
     match spelled {
@@ -719,9 +719,9 @@ pub(crate) fn with_given(refused: CoreError, spelled: Option<&str>) -> CoreError
 }
 
 /// A time column the host could not write as a name (`unreadable`),
-/// refused alike by `describe_source` and `edit_schema` (decision E101) as
+/// refused alike by `describe_source` and `edit_schema` as
 /// a column the table does not have: where the host spelled the value, it
-/// is named (`given`, KO2-86), with the table's columns.
+/// is named (`given`), with the table's columns.
 pub(crate) fn time_column_not_a_name<S: AsRef<str>>(
     table: &str,
     field: &str,
@@ -886,10 +886,10 @@ pub enum Unjoinable {
     Types,
 }
 
-/// The data type names a host gave its columns (T3.16), which the
+/// The data type names a host gave its columns, which the
 /// reference's checks of the caller's schema read: each by table and
 /// column, but for a column of exact numbers, whose type its role decides
-/// (T2.21); and those of them no data type has, which those checks let
+///; and those of them no data type has, which those checks let
 /// through. A column with no name here is named by its type's wire name.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HostTypes {
@@ -942,7 +942,7 @@ fn named<'a>(types: &'a HostTypes, at: &ColumnRef, column: &DescribedColumn) -> 
 /// Whether `link` can join (`_require_joinable`): it names columns the
 /// schema holds, refers to its table's primary key of one column, and its
 /// two columns hold values of one family, each column's type read by the
-/// name `types` gives it (the host's, T3.16).
+/// name `types` gives it (the host's).
 pub fn joins(
     tables: &[DescribedTable],
     link: &[ColumnRef],
@@ -985,7 +985,7 @@ pub(crate) fn once(links: Vec<Link>) -> Vec<Link> {
 /// Each column of numbers handed over as their exact text
 /// ([`DescribedColumn::exact_number`]) in the type its role in `tables`
 /// keyed as they stand and joined by `links` gives it, both ends of a link
-/// decided together (learnings lesson 19, T2.21): its text (`string`,
+/// decided together (learnings lesson 19): its text (`string`,
 /// received as `utf8`) where its catalog declares it a key, as the
 /// reference reads it, or where the schema keys it (a primary key's
 /// column) or joins on it and every column it joins to is read as text
@@ -1117,9 +1117,9 @@ pub fn mark_keys(description: &mut SourceDescription) {
 /// reads anything (`_check_relationships`, `schema.py:971`): each link names
 /// a table and column the schema holds at each end, joins its target's
 /// primary key of one column, and its two columns' types, read by the name
-/// `types` gives them (the host's, T3.16), are of one family
+/// `types` gives them (the host's), are of one family
 /// (`_require_joinable`), each refusal naming the link as the reference's
-/// does (T3.16 review round 3).
+/// does ( review round 3).
 pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result<(), CoreError> {
     for link in &description.links {
         checked(&description.tables, link, types)?;
@@ -1131,7 +1131,7 @@ pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result
 /// graph it built over the tables it read (`Graph.validate`'s
 /// `_edge_error`, run as `KumoRelational` is built, `relational.py:418`),
 /// each in its order: a foreign key that is its own table's primary key
-/// (T1.24b: found by the E49 differential), then a foreign key and the key
+/// (found by the E49 differential), then a foreign key and the key
 /// it refers to holding values of two kinds, a number and a string, by the
 /// types the source holds (`description`'s, read after the tables are
 /// kept). The rest of `_edge_error` (an edge whose column or target key is
@@ -1199,7 +1199,7 @@ fn texts<S: AsRef<str>>(names: &[S]) -> Detail {
 
 /// A warning of `code`, saying `message`, a sentence that names nothing,
 /// with `fields`, whose names and values the warning speaks of: the host
-/// words it from these (decision E59).
+/// words it from these.
 fn warning(sentence: Sentence, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
     CoreWarning::new(sentence, message).with_fields(fields)
 }
@@ -1298,7 +1298,7 @@ pub fn key_tied(table: &InferredTable) -> Vec<CoreWarning> {
 /// table's key, so each table's tied candidates are said after every
 /// table's unread times and day-first dates, in table order, and the
 /// columns each table leaves out after them, as the schema describes the
-/// tables (T2.12 fix 1).
+/// tables.
 pub fn after_reading(tables: &[InferredTable]) -> Vec<CoreWarning> {
     tables
         .iter()

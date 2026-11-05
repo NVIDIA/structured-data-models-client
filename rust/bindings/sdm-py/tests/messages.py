@@ -4,7 +4,7 @@
 
 """Control messages the binding's tests send, written as the contract's JSON.
 
-The Python host of T1.9 writes these for real; here they are spelled out,
+The Python host of writes these for real; here they are spelled out,
 so a test reads as the messages it exchanges.
 """
 
@@ -144,7 +144,7 @@ def read(control: bytes) -> dict[str, Any]:
 
 #: A sample of every operation's result, as a ``done`` step carries it
 #: (``OperationResult``), each field set: what a host decodes into its own
-#: typed structures (T3.16, the structure design's fix D). Java reads the
+#: typed structures (the structure design's fix D). Java reads the
 #: same samples.
 RESULTS: dict[str, dict[str, Any]] = {
     'validate_query': {
@@ -221,7 +221,7 @@ RESULTS: dict[str, dict[str, Any]] = {
     },
 }
 
-#: A column's source facts as ``HeldColumn.source`` carries them (T3.16).
+#: A column's source facts as ``HeldColumn.source`` carries them.
 SOURCE_FACTS: dict[str, Any] = {
     'relation': {'source': ['users']},
     'dtype': 'string',

@@ -6,9 +6,9 @@
 Python 3.12 does not print as themselves in a ``repr``
 (``str.isprintable``), as ranges, generated from the interpreter that runs
 this, which must be 3.12 (Unicode 15.0). Run from the repository root with
-the old client's interpreter::
+a Python 3.12 interpreter::
 
-    ~/code/sdmc-reference/.venv/bin/python contract/fixtures/views/gen_printable.py
+    python3.12 contract/fixtures/views/gen_printable.py
 """
 
 import sys

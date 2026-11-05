@@ -88,9 +88,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB: answered through predict, the feature numerical (51 distinct values, the two encodings two of them)"
+    "stage": "predict"
   },
-  "why": "A FLOAT feature of 1,000 users, 49 distinct finite values and the NaNs 0x7f800001 and 0x7fc00001: whether the two encodings are two values decides whether the preview reads it as categorical (rule float_nan; T2.12 round 3). DuckDB only, as rule.float-nan-payload-key-tie",
-  "source": "T2.12 round 3 (Codex P2): two NaN encodings of a FLOAT, as DuckDB stores and previews them"
+  "why": "A FLOAT feature of 1,000 users, 49 distinct finite values and the NaNs 0x7f800001 and 0x7fc00001: whether the two encodings are two values decides whether the preview reads it as categorical (rule float_nan). DuckDB only, as rule.float-nan-payload-key-tie",
+  "source": "Correctness case rule.float-nan-payload-category using the shop fixture."
 }

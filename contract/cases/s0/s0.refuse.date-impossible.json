@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "A date literal that does not exist, the 29th of February in a common year (date rule D9; PQL_VALUE_INVALID_LITERAL)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.date-impossible using the shop fixture."
 }

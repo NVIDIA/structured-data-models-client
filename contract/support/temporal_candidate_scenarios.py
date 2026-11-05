@@ -17,7 +17,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t214b-regression-vectors.json'
+OUT = ROOT / 'contract/temporal-candidate-vectors.json'
 UTC = dt.timezone.utc
 PLUS_ONE = dt.timezone(dt.timedelta(hours=1))
 
@@ -93,7 +93,7 @@ CANDIDATES: dict[str, tuple[str, Any]] = {
             dt.time(2, tzinfo=UTC),
         ],
     ),
-    # Claude r4: a pandas Timestamp and NumPy's datetime64[ns] of the same
+    # a pandas Timestamp and NumPy's datetime64[ns] of the same
     # moment (one key of dict.fromkeys), beside a date.
     'timestamp-beside-datetime64': (
         'date',
@@ -155,14 +155,17 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t214b_run_python', ROOT / 'contract/runners/run_python.py')
+    return _module(
+        'temporal_candidate_scenarios_run_python',
+        ROOT / 'contract/runners/run_python.py',
+    )
 
 
 def host() -> ModuleType:
     r"""Shared shop, ranking and endpoint helpers, whose
     these scenarios reuse."""
     return _module(
-        't214b_host_record',
+        'request_state_scenarios',
         ROOT / 'contract/support/request_state_scenarios.py',
     )
 
@@ -178,13 +181,13 @@ def _refusal(error: BaseException) -> dict[str, Any]:
 def _keyed(kind: str, given: list[Any]) -> Any:
     r"""The shop, the ranking's items keyed by text of ``kind``, or, for
     ``literal``, items 0 to 2 keyed by the ``str`` of the candidates
-    given, in order (Codex r3's reproducer), the fourth ``other``; for
+    given, in order, the fourth ``other``; for
     ``ends``, items 0 and 1 by the first and the last given."""
     connection = host()._connection()
     for table in ('items', 'buys'):
         if kind == 'ends':
             # Two of the candidates share a text: items 0 and 1 are keyed
-            # by the first and the last only (Codex r6's reproducer).
+            # by the first and the last only.
             using = (
                 f"CASE item_id WHEN 0 THEN '{given[0]}' WHEN 1 THEN "
                 f"'{given[-1]}' ELSE item_id::VARCHAR END"
@@ -271,7 +274,7 @@ def where() -> dict[str, Any]:
             except Exception as error:  # noqa: BLE001 - recorded
                 out['refusal'] = _refusal(error)
         # Each by its words, a core code's prefix left out (E41(i), E59(d)),
-        # as option_record.py holds a warning.
+        # as query_option_scenarios.py holds a warning.
         out['runtime_warnings'] = [
             CODE_PREFIX.sub('', str(w.message))
             for w in shown

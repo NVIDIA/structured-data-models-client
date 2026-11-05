@@ -5,16 +5,16 @@
 //! The control-message codecs and the control cap.
 //!
 //! A control message is the contract's JSON. The cap bounds a message's
-//! envelope only: input-sized fields travel as attachments (decision H5).
+//! envelope only: input-sized fields travel as attachments.
 //!
 //! - From the host, a message past [`CONTROL_CAP`] bytes, or one the
-//!   contract cannot read, is refused with `INVALID_MESSAGE` before anything
-//!   reads it ([`decode`]).
+//! contract cannot read, is refused with `INVALID_MESSAGE` before anything
+//! reads it ([`decode`]).
 //! - From the core, nothing is truncated, refused or dropped for size: a
-//!   message whose encoding would pass the cap travels whole as a bytes
-//!   attachment of its JSON, named by a minimal `attached` message
-//!   (decision H7; [`write`], [`write_error`]). A message the core's own
-//!   encoder refuses is a defect in the core, `INTERNAL_ERROR`.
+//! message whose encoding would pass the cap travels whole as a bytes
+//! attachment of its JSON, named by a minimal `attached` message
+//! ([`write`], [`write_error`]). A message the core's own
+//! encoder refuses is a defect in the core, `INTERNAL_ERROR`.
 
 use sdm_contract::data::AttachmentId;
 use sdm_contract::{ControlMessage, CoreError, Detail, Scalar, Sentence};
@@ -47,7 +47,7 @@ pub fn decode(bytes: &[u8]) -> Result<ControlMessage, CoreError> {
 
 /// The refusal of JSON the contract cannot read: where in it and what kind
 /// of problem, never the text read there, which may be an input value
-/// (decision H17).
+///.
 fn unreadable(message: &str, e: &serde_json::Error) -> CoreError {
     let category = match e.classify() {
         serde_json::error::Category::Io => "io",
@@ -123,7 +123,7 @@ pub fn write(
 /// run out of attachment ids, is replaced, by the `INTERNAL_ERROR` that
 /// says so; and an error, or a cause in its chain, whose kind its code does
 /// not carry is replaced by the `INTERNAL_ERROR` that names the pair
-/// (decision E22).
+///.
 pub fn write_error(
     error: &CoreError,
     reserve: impl FnOnce() -> Result<AttachmentId, CoreError>,

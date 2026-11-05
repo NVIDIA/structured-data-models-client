@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! DuckDB's catalog renderings (T1.11b): each is the statement the
+//! DuckDB's catalog renderings: each is the statement the
 //! reference runs for the same step, as the driver capture recorded it on
-//! `base.regression` (the T1.11a row of the design maps each statement to
+//! `base.regression` (the row of the design maps each statement to
 //! its request), with the schema the contract fixes for its answer, or,
 //! for a `describe`, the reference statement's own columns, which
-//! `sdm-data` reads into the contract's catalog answer (decision E54).
+//! `sdm-data` reads into the contract's catalog answer.
 
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, ProviderChoice,
@@ -18,7 +18,7 @@ use sdm_data::Data;
 
 /// The statements the reference ran on `base.regression`, in order, through
 /// `Schema.from_source` and the first steps of `materialize`, as the
-/// capture recorded them at T1.11a.
+/// capture recorded them.
 const REFERENCE: [&str; 12] = [
     "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND database_name = current_database() AND schema_name = current_schema()",
     "PRAGMA table_info(\"orders\")",
@@ -59,9 +59,9 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
         DescribePart::Indexes => &["table_name", "expressions"],
         // DuckDB lists an index's columns with the index; never planned.
         DescribePart::IndexColumns => &[],
-        // The contract's own shape: DuckDB names a table alone (T3.8).
+        // The contract's own shape: DuckDB names a table alone.
         DescribePart::Namespace => &["name"],
-        // DuckDB reads no view's definition; never planned (T3.27).
+        // DuckDB reads no view's definition; never planned.
         DescribePart::ViewDefinition => &[],
         // Key-enforcement listings are Snowflake-only; never planned for DuckDB.
         DescribePart::KeyEnforcement => &[],
@@ -208,7 +208,7 @@ fn several_time_columns_are_one_union() {
 
 #[test]
 fn the_column_ranges_are_the_reference_s_whole_table_query() {
-    // T1.32e: the statement the reference ran at b413e9ad for the time
+    //: the statement the reference ran at b413e9ad for the time
     // column's choice over a DuckDB table of 3,000 rows whose preview may
     // not hold every row (`Table._full_range`), its candidates a timestamp
     // named with a double quote, a date, a time of day and text read as
@@ -237,7 +237,7 @@ fn the_column_ranges_are_the_reference_s_whole_table_query() {
 
 #[test]
 fn a_repeated_key_is_read_as_the_reference_reads_one() {
-    // T1.32e: the reference's `_repeated_key_sql` at b413e9ad, one value a
+    //: the reference's `_repeated_key_sql` at b413e9ad, one value a
     // key several rows hold, to show it.
     let text = rendered(&DataRequest::RepeatedKey {
         table: "payments".into(),
@@ -282,7 +282,7 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
     // The table list with a name asked: the relations, tables or views,
-    // DuckDB would read under it, matched as DuckDB folds a name (T1.23
+    // DuckDB would read under it, matched as DuckDB folds a name (
     // fix 2; sdm-testkit's duckdb_provider.rs runs it).
     let FetchPlan::Sql { statements, .. } = Data::new()
         .plan(&describe(&["O'Brien"], DescribePart::Tables), &duckdb())
@@ -300,7 +300,7 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
-/// A scan and a count of rows render on DuckDB from T1.23, so every
+/// A scan and a count of rows render on DuckDB so every
 /// request kind does: what a not-null filter keeps, and a scan's limit;
 /// a filter of another kind is not taken, by name.
 #[test]

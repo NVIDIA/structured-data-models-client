@@ -64,9 +64,8 @@
     "outcome": "refusal",
     "stage": "from_source",
     "error": "ValueError",
-    "code": null,
-    "today": "read from the reference: Encountered unsupported data type for column 'profile' in table 'users'"
+    "code": null
   },
   "why": "A STRUCT feature, every row holding one, described from Unity Catalog (full_data_type, DB/table.py:212-246) on both Databricks legs, where the reference maps a struct type to its unsupported dtype (DB/table.py:493) and refuses the column by name (RE/base/table.py:272)",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "source": "Correctness case databricks.value.struct-feature using the shop fixture."
 }

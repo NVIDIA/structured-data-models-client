@@ -54,14 +54,14 @@ def test_job_dependencies_exist_and_have_no_cycles() -> None:
 #: its 120; the landing job, which every other job waits on,
 #: does no more than read a few commits; the client test matrix, the
 #: ref-pandas3 DuckDB route tests and the engine job (whose pytest step
-#: took 40 minutes and reached its 60-minute limit on two runs, T2.11) take
-#: 14 to 17 minutes since T3.0's split, so 60 (P2-T2.16-14, P2-T2.1o-1);
-#: the checking tools' tests, split out of those (T3.0), take about 43.
+#: took 40 minutes and reached its 60-minute limit on two runs) take
+#: 14 to 17 minutes since split, so 60 (P2--14, P2--1);
+#: the checking tools' tests, split out of those, take about 43.
 TIMEOUT_CEILINGS = {
     'configuration': 10,
     'rust-test': 120,
     'test': 60,
-    'contract-python-ref-pandas3': 60,
+    'contract-python-pandas3': 60,
     'tooling-root': 90,
 }
 TIMEOUT_CEILING = 60
@@ -100,7 +100,7 @@ def _unguarded_named_installs(jobs: dict[str, Any]) -> list[str]:
     r"""The jobs that install one of this repository's distributions by name
     before installing the candidate's own wheels without their
     dependencies: there an index's published distribution of the same
-    version stands in for the candidate's (T2.16, KO2-95)."""
+    version stands in for the candidate's."""
     found = []
     for name, job in jobs.items():
         own_first = False
@@ -147,7 +147,7 @@ def test_each_image_is_named_once_and_pinned_by_digest() -> None:
     text = CI.read_text(encoding='utf-8')
     for key in ('POSTGRES_IMAGE', 'MANYLINUX'):
         assert text.count(env[key]) == 1, key
-    # The aarch64 build's image, named in that job alone (KO2-40).
+    # The aarch64 build's image, named in that job alone.
     aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
     assert DIGEST.search(aarch64) and 'manylinux2014_aarch64:' in aarch64
     assert text.count(aarch64) == 1
@@ -296,7 +296,7 @@ def _expression(condition: object) -> str:
 def _images() -> list[str]:
     r"""Every registry image reference written in the workflow; a Java
     module path in a JVM flag (``--add-opens=java.base/java.nio=...``, the
-    Java jobs', T3.11) has an image's shape and is none."""
+    Java jobs') has an image's shape and is none."""
     text = CI.read_text(encoding='utf-8')
     return [
         image
@@ -324,7 +324,7 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
             assert DIGEST.search(image), image
         env = workflow['env']
         aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
-        # The JAR-load jobs' clean JDK containers (T3.11), the only job
+        # The JAR-load jobs' clean JDK containers, the only job
         # containers: the runner pulls them, anonymously, from MCR.
         load = workflow['jobs']['java-load']
         jdks = {
@@ -455,7 +455,7 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
         for name, job in workflow['jobs'].items():
             assert not re.search(TOKEN, str(job.get('env'))), name
             assert job.get('permissions') is None, name
-            # The JAR-load jobs' JDK containers (T3.11) are pulled
+            # The JAR-load jobs' JDK containers are pulled
             # anonymously: a container named with no credentials.
             assert name == 'java-load' or 'container' not in job, name
             if 'container' in job:
@@ -561,7 +561,7 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
     ``endsWith``, ``contains``, ``fromJSON``, ``format`` and the status
     functions,
     every earlier
-    step having succeeded. With no status function, ``success()`` is
+    step having succeeded. With no status function, ``success`` is
     implied, as GitHub implies it."""
     text = _expression(condition)
     tokens: list[tuple[str, str]] = []
@@ -670,7 +670,7 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
 
 
 @pytest.mark.parametrize(
-    'ref', ['main', 'rust-core', 'feature-x', 'rust-core-phase-5']
+    'ref', ['main', 'rust-core', 'feature-x', 'release-candidate']
 )
 @pytest.mark.parametrize('event', ['push', 'pull_request', 'workflow_dispatch'])
 def test_superseded_runs_cancel_and_trusted_runs_warm_caches(ref, event):
@@ -704,13 +704,13 @@ def test_dependency_caches_restore_before_python_and_java_installation():
                 assert step['with']['cache'] == 'maven'
 
 
-# --- CI7: aarch64 wheels and the Databricks runtime cells (KO2-38, KO2-40) ---
+# --- CI7: aarch64 wheels and the Databricks runtime cells ---
 
-#: The jobs KO2-38 and KO2-40 promise, which the design's CI7 row names:
+#: The jobs and promise, which the design's CI7 row names:
 #: the aarch64 native wheels beside x86_64, the two aarch64 smoke lanes,
 #: and the six runtime cells. The row names the cells only as "six
 #: ``runtime-install (<runtime>)`` jobs"; these are the six the locked set
-#: named for check 10 until KO2-76 judged that check's CI part by land.py's
+#: named for check 10 until judged that check's CI part by land.py's
 #: exact-SHA rule instead.
 CI7_JOBS = (
     'native-wheel (aarch64, shipped)',
@@ -940,7 +940,7 @@ def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
         if entry['runtime'] != 'dbr14.3':
             wanted.add('PyYAML')
         assert set(pins) == wanted, entry
-    # The floor the step holds pandas to is the client's own (KO2-37).
+    # The floor the step holds pandas to is the client's own.
     project = (
         ROOT / 'packages/structured-data-models-client/pyproject.toml'
     ).read_text()
@@ -1075,10 +1075,10 @@ def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(
     assert says in done.stderr, done.stderr
 
 
-# --- T2.0i: main's engine rows on every platform ------------------------------
+# ---: main's engine rows on every platform ------------------------------
 
 
-# --- T3.0: the judging-tool tests in a job of their own, the timing guard,
+# ---: the judging-tool tests in a job of their own, the timing guard,
 # and the comparison base taken at push time ---------------------------------
 #
 # Tooling tests run separately from the supported Python version matrix.
@@ -1086,7 +1086,7 @@ def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(
 T30_MARKER = 'tooling'
 
 
-def _t30_pytest_steps() -> list[tuple[str, str]]:
+def _pytest_steps() -> list[tuple[str, str]]:
     """Each pytest run over the root suite (``tests``) or contract/tests:
     a run in a package's own directory (``cd packages/...``, the engine's
     own ``tests``) or over a package's or binding's tests is neither."""
@@ -1096,12 +1096,12 @@ def _t30_pytest_steps() -> list[tuple[str, str]]:
             run = str(step.get('run', ''))
             if 'pytest' not in run or re.search(r'(?m)^\s*cd\s', run):
                 continue
-            if _t30_suites(run):
+            if _suites(run):
                 found.append((name, run))
     return found
 
 
-def _t30_selects(run: str) -> bool:
+def _selects(run: str) -> bool:
     """Whether a pytest run selects the marker: ``-m <marker>``, quoted or
     not, or an expression holding it but not as ``not <marker>``."""
     expressions = [
@@ -1117,36 +1117,32 @@ def _t30_selects(run: str) -> bool:
     )
 
 
-def _t30_suites(run: str) -> set[str]:
+def _suites(run: str) -> set[str]:
     """The suites a pytest run names: ``tests``, ``contract/tests``."""
     return set(re.findall(r'(?<![\w/$-])((?:contract/)?tests)(?![\w/-])', run))
 
 
-def _t30_tooling_jobs() -> dict[str, dict[str, Any]]:
+def _tooling_jobs() -> dict[str, dict[str, Any]]:
     """The jobs whose pytest runs select the marker: the judging-tool
     jobs (one per suite, when one job would outrun its limit)."""
     jobs = _workflow()['jobs']
-    names = sorted(
-        {name for name, run in _t30_pytest_steps() if _t30_selects(run)}
-    )
+    names = sorted({name for name, run in _pytest_steps() if _selects(run)})
     assert names, f'no job selects -m {T30_MARKER}'
     return {name: jobs[name] for name in names}
 
 
-def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
+def test_the_judging_tool_tests_run_once_in_their_own_job() -> None:
     markers = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
     assert re.search(rf'^\s*"{T30_MARKER}:', markers, re.M)
-    tooling = _t30_tooling_jobs()
+    tooling = _tooling_jobs()
     for name, job in tooling.items():
         matrix = job.get('strategy', {}).get('matrix', {})
         assert not matrix, f'{name} runs in a matrix: {matrix}'
-    runs = [
-        r for n, r in _t30_pytest_steps() if n in tooling and _t30_selects(r)
-    ]
-    covered = [suite for run in runs for suite in sorted(_t30_suites(run))]
+    runs = [r for n, r in _pytest_steps() if n in tooling and _selects(r)]
+    covered = [suite for run in runs for suite in sorted(_suites(run))]
     # Maintained tooling tests live in the root suite; contract tooling was retired.
     assert covered == ['tests'], (covered, runs)
-    for other, run in _t30_pytest_steps():
+    for other, run in _pytest_steps():
         if other not in tooling:
             assert f'not {T30_MARKER}' in run, f'{other} runs them: {run}'
 
@@ -1215,7 +1211,7 @@ def test_contract_observations_run_only_the_native_python_client():
     jobs = _workflow()['jobs']
     step = next(
         step
-        for step in jobs['contract-python-ref-pandas3']['steps']
+        for step in jobs['contract-python-pandas3']['steps']
         if step.get('name') == 'Native Python observations'
     )
     script = step['run']
@@ -1234,7 +1230,7 @@ def test_database_observations_use_current_expectations_and_keep_sql():
     jobs = _workflow()['jobs']
     step = next(
         step
-        for step in jobs['contract-python-ref-pandas3-sqlite']['steps']
+        for step in jobs['contract-python-pandas3-sqlite']['steps']
         if step.get('name')
         == 'Native Python observations on the selected database'
     )
@@ -1255,7 +1251,7 @@ def test_database_observations_use_current_expectations_and_keep_sql():
         ('contract-python-floor-pandas2-2', '3.10', '1.5.6'),
         ('contract-python-floor-pandas2-2-sqlite', '3.10', '1.5.6'),
         ('contract-python-floor-pandas2-2-postgres', '3.10', '1.5.6'),
-        ('contract-python-ref-pandas3', '3.12', '2.0.0'),
+        ('contract-python-pandas3', '3.12', '2.0.0'),
         ('contract-python-dbr17-pandas2', '3.12', '2.0.0'),
     ],
 )

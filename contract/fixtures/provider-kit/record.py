@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Recomputes the provider kit's expected answers from its dataset (T2.5).
+r"""Recomputes the provider kit's expected answers from its dataset.
 
     python -I contract/fixtures/provider-kit/record.py
 

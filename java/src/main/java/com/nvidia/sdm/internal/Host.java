@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>A provider's failure reaches the core as the contract's {@code ProviderError}: its kind,
  * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic.
- * The diagnostic is never public (decision H17), and is omitted if the complete fetch reply
+ * The diagnostic is never public, and is omitted if the complete fetch reply
  * cannot fit the control budget; the error the run then ends with names the driver's exception class ({@code
  * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
  * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
@@ -44,7 +44,7 @@ public final class Host {
   /** Where the core's warnings are written, at {@code WARN}, as they are given. */
   private static final Logger WARNINGS = LoggerFactory.getLogger("com.nvidia.sdm.warnings");
 
-  /** The core's fields that say what a failed request had answered (T2.8c). */
+  /** The core's fields that say what a failed request had answered. */
   private static final List<String> ANSWERED = List.of("calls_answered", "parts_answered", "rows_answered", "answered");
 
   private Host() {}
@@ -96,7 +96,7 @@ public final class Host {
   }
 
   /**
-   * The endpoint failed with no answer the core reads as one (T3.13): its HTTP status and the
+   * The endpoint failed with no answer the core reads as one: its HTTP status and the
    * body it sent, which the core reads only for codes and never repeats; the core names the
    * refusal. It carries no other text.
    */
@@ -526,8 +526,8 @@ public final class Host {
   }
 
   /**
-   * The key sets a request's plan names, taken from the run by attachment id (decision Q1): each
-   * a key set's Arrow, or the one text its dialect wrote of it (T3.28).
+   * The key sets a request's plan names, taken from the run by attachment id: each
+   * a key set's Arrow, or the one text its dialect wrote of it.
    */
   @SuppressWarnings("unchecked")
   private static Map<Integer, ArrowReader> keySets(
@@ -600,7 +600,7 @@ public final class Host {
     } catch (TransportFailed failed) {
       outcome = transportError;
     } catch (EndpointFailed failed) {
-      // The endpoint's failure, its status and its body, for the core to name (T3.13).
+      // The endpoint's failure, its status and its body, for the core to name.
       Map<String, Object> answer = new LinkedHashMap<>();
       answer.put("status", failed.status());
       if (failed.body.length > 0) {
@@ -778,7 +778,7 @@ public final class Host {
     if (ENDPOINT_REFUSED.equals(raised.code())) {
       // As Python raises NimRequestError(status, code=...): the endpoint's status and the code
       // the refusal is raised under, none where it has none, from the core's fields
-      // (REFUSED_STATUS, REFUSED_CODE), which leave the details (T3.27).
+      // (REFUSED_STATUS, REFUSED_CODE), which leave the details.
       Object status = details.remove(REFUSED_STATUS);
       Object code = details.remove(REFUSED_CODE);
       return ModelEndpointException.refused(

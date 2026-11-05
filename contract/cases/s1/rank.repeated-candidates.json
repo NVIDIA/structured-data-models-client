@@ -95,9 +95,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 3 calls, the candidates 2, 1 and 0 in that order (dict.fromkeys keeps the first of each repeat); result columns row_index, id, prediction, rankings"
+    "stage": "predict"
   },
-  "why": "A ranking's candidates given with repeats (2, 1, 2, 1, 0): the reference's dict.fromkeys keeps the first of each, asking 2, 1 and 0, one question each; T2.14b moves the repeat rule into the core (sdm-request), the host passing each candidate as given",
-  "source": "T2.14b's test author, the reference at 6298913c (MID2 P2-2, the candidate-repeat rule)"
+  "why": "Repeated candidates (2, 1, 2, 1, 0) retain their first-occurrence order (2, 1, 0), with one candidate question per distinct value.",
+  "source": "Correctness case rank.repeated-candidates using the shop fixture."
 }

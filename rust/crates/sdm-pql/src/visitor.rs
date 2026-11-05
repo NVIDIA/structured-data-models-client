@@ -45,7 +45,7 @@ impl ParseFailure {
 
 /// Why text is not a parsed query: a diagnostic, a two-digit year with no
 /// current year to place it, or a D8 date literal, refused by name where it
-/// is (decision E79).
+/// is.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Failure(ParseFailure),
@@ -88,7 +88,7 @@ pub struct DateWarning {
 pub enum LiteralWarning {
     DayFirst(DateWarning),
     /// The grammar accepts `\/`, which the reference's decoder deprecates.
-    /// Re-reading it keeps only the first warning (KO2-83).
+    /// Re-reading it keeps only the first warning.
     InvalidStringEscape {
         location: Option<crate::ast::Location>,
     },

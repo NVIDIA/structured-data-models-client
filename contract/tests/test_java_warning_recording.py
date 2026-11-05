@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _recorder():
     spec = importlib.util.spec_from_file_location(
-        't310_binding_warning_recorder',
-        ROOT / 'contract/tools/t311_java_record.py',
+        'test_java_warning_recording_binding_warning_recorder',
+        ROOT / 'contract/tools/native_binding_vectors.py',
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -53,7 +53,7 @@ def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
             'recorder = importlib.util.module_from_spec(spec); '
             'spec.loader.exec_module(recorder); recorder.OUT = Path(sys.argv[2]); '
             "raise SystemExit(recorder.main(['binding']))",
-            str(ROOT / 'contract/tools/t311_java_record.py'),
+            str(ROOT / 'contract/tools/native_binding_vectors.py'),
             str(output),
         ],
         cwd=ROOT,

@@ -86,9 +86,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "the engine cannot read five as an integer"
+    "code": "INVALID_REQUEST"
   },
   "why": "num_estimators as text that is no number: a value the reference refuses",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case config-text.estimators-word using the shop fixture."
 }

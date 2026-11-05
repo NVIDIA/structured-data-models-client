@@ -46,7 +46,7 @@ def test_the_schema_built_from_the_description_is_the_description() -> None:
     for statement in runner.load_bases()['shop']:
         connection.execute(statement)
     # The description the core answered, as the schema was built from it:
-    # the schema keeps none (T3.16), and the runner is handed the one the
+    # the schema keeps none, and the runner is handed the one the
     # run answered.
     answered: list[Any] = []
     build = bridge.build

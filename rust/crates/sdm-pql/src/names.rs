@@ -10,9 +10,9 @@
 //! break included. The quotes are only spelling: once parsed, the tree holds
 //! the table and the column apart ([`ColumnKey`]), each as the data spells
 //! it, so a dot in either is just a character, and writing a query back
-//! quotes them again (Phase 2 decision KO2-36). The reference refuses a
+//! quotes them again. The reference refuses a
 //! quoted name holding a dot, and its grammar one holding a backtick or a
-//! line break; the core answers them (register, T2.18).
+//! line break; the core answers them (register).
 
 use crate::schema::ColumnKey;
 

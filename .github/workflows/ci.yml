@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       pql_runtime_only:
-        description: 'Only native Arm PQL floor/newest evidence; not full CI or a phase-end gate'
+        description: 'Only native Arm PQL floor/newest evidence; not full CI'
         type: boolean
         default: false
       fresh:
@@ -64,8 +64,6 @@ env:
   POSTGRES_IMAGE: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
   # The manylinux2014 image both wheel builds run in (PyPA's, published on quay.io).
   MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
-  # The binding's tests run at the E16 floor; DuckDB, at the reference's
-  # version, is for the DuckDB provider's tests there (T1.11b).
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
 
 jobs:
@@ -195,7 +193,6 @@ jobs:
       run:
         working-directory: rust
     env:
-      SDM_PUSH_BASE: ''
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -215,14 +212,14 @@ jobs:
       # Dependency boundaries, source ownership, lint bans and host protocol.
       - name: L0 graph, bans and scans
         run: |
-          python3 scripts/rust_core/l0_deps.py
-          python3 scripts/rust_core/l0_scan.py
+          python3 scripts/rust_core/dependency_policy.py
+          python3 scripts/rust_core/architecture_policy.py
         working-directory: .
       # Each guard passes on the tree and fails on a fixture seeded with the
       # fault it exists for, and clippy refuses each banned item in a fixture
       # crate under rust/clippy.toml.
       - name: L0 self-tests
-        run: python3 scripts/rust_core/selftest.py
+        run: python3 scripts/rust_core/policy_selftest.py
         working-directory: .
       # Keep the current generated schema and reject unversioned shape changes.
       # Git preserves prior schemas; this checkout needs only the current one.
@@ -237,11 +234,6 @@ jobs:
         working-directory: .
       - run: python3 scripts/mermaid_notices.py --check
         working-directory: .
-      # The open source inventory main's 4cfbcd18 added for nSpect's scan,
-      # uv.lock, current with every distribution's requirements (T2.0c).
-      # Reading the client's version builds its metadata with maturin, so
-      # the pinned toolchain is named: from the client's directory rustup
-      # does not see rust/rust-toolchain.toml.
       - name: uv.lock is current
         run: |
           RUSTUP_TOOLCHAIN=$(sed -n 's/^channel *= *"\(.*\)"$/\1/p' rust/rust-toolchain.toml) \
@@ -296,7 +288,6 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     env:
-      SDM_PUSH_BASE: ''
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       CARGO_PROFILE_TEST_DEBUG: line-tables-only
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
@@ -307,10 +298,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # This job builds the bundled DuckDB; on a cold cache (any Cargo.lock
-      # change misses rust-cache's key) the build ran the runner out of disk
-      # (T1.35). The preinstalled toolchains it never uses are removed first,
-      # the free space printed before and after.
       - name: Free runner disk
         run: |
           df -h /
@@ -321,12 +308,6 @@ jobs:
         with:
           workspaces: rust
           save-if: ${{ env.SAVE_CACHES == 'true' }}
-      # The test host's ICU and JSON, DuckDB's signed extensions for v1.5.6,
-      # which it installs the first time and checks against their recorded
-      # digests before every load (decision E37; JSON from T1.33): cached, so
-      # a run downloads them once. The key names both, so the cache saved
-      # before JSON, which lacks it, is not restored as a hit.
-      # Saved, like every cache here, only where SAVE_CACHES says.
       - id: duckdb-extensions
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -336,12 +317,6 @@ jobs:
       - if: env.FRESH == 'true'
         run: cargo update
       - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
-      # Python, for the contract loader (contract/runners/databases.py),
-      # which loads a case's tables into SQLite for sdm-contract-run
-      # --database sqlite in the tests below (T2.2), and for the steps after
-      # them: DuckDB at the reference's version and pyarrow at the
-      # reference cell's, as the contract jobs pin them, with what the
-      # runner reads the bases with.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
@@ -468,8 +443,6 @@ jobs:
               /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
               export PATH="/tmp/home/maturin/bin:$PATH"
               python scripts/rust_core/native_wheel.py $NATIVE_ARGS --manylinux
-              # The Java binding from the same build (T3.11): JAVA_NATIVE
-              # says which, and none when it is unset.
               case "${JAVA_NATIVE:-}" in
                 shipped) (cd rust && cargo build --release --locked -p sdm-jni) ;;
                 test-ops) (cd rust && cargo build --release --locked -p sdm-jni --features test-ops) ;;
@@ -479,7 +452,6 @@ jobs:
         with:
           name: native-wheel
           path: native/
-      # The Java binding the JAR ships for this platform (T3.11).
       - name: The Java binding, by platform
         run: |
           mkdir -p java-natives/linux-x86_64
@@ -500,11 +472,6 @@ jobs:
     timeout-minutes: 30
     needs: configuration
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
-    # The pinned PostgreSQL service, required (H26), for the Postgres
-    # provider's own test (tests_test_ops/test_the_postgres_provider.py:
-    # L4 executed on Postgres, key sets bound as the dialect binds them),
-    # which needs the test-only fetch this build carries and stands down
-    # with no server named (T2.4, for T2.3b).
     services:
       postgres: *postgres-service
     env:
@@ -526,10 +493,6 @@ jobs:
         with:
           python-version: '3.10'
       - uses: ./.github/actions/python-cache
-      # The connectors are for the canary test's journey over DuckDB
-      # (T1.11d), which tests_test_ops runs here at the floor, and psycopg
-      # for the Postgres provider's test, and ADBC's SQLite driver for L5's,
-      # which runs here at the floor as in l5-conversion (their extras).
       - name: The binding's tests on the test-ops build
         run: |
           python -m venv /tmp/test-ops
@@ -545,21 +508,11 @@ jobs:
         with:
           name: native-wheel-test-ops
           path: native-test-ops/
-      # The Java binding with the test-only operations, which java-test
-      # loads (T3.11).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-test-ops-native
           path: rust/target/release/libsdm_jni.so
 
-  # The client wheel for aarch64 Linux (decision KO2-40), built natively on
-  # an Arm runner by native-wheel's own steps, in PyPA's
-  # manylinux2014_aarch64 image (copied to ghcr.io by the same digest, as
-  # the other images are, decision E131) pinned by digest, which MANYLINUX names
-  # here for this job alone: the shipped build, beside native-wheel's
-  # x86_64 one, and the test-ops build, which only wheel-smoke's aarch64
-  # lanes install. native_wheel.py holds each to its architecture's
-  # manylinux2014 tag.
   native-wheel-aarch64:
     name: native-wheel (aarch64, ${{ matrix.build }})
     runs-on: ubuntu-24.04-arm
@@ -684,18 +637,6 @@ jobs:
           /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production
 
-  # The wheels as a user installs them (T1.17, decision E16), each lane in
-  # a clean container, both gating: the floor (Python 3.10, pyarrow 14.0.1,
-  # pandas 2.2.2, NumPy 1.23.5) and the newest (Python 3.14 with the newest
-  # pandas 3, NumPy 2 and pyarrow, resolved on every run). wheel_smoke.py
-  # runs itself in the lane's Python image, pinned by digest, the checkout
-  # mounted read-only; it installs the shipped wheel and the test-ops one,
-  # as these jobs built them, each in an environment of its own holding
-  # only wheels, and runs the binding's tests on them from outside the
-  # checkout (shared and released buffers, admitted types, outputs after
-  # collection, error and destruction, busy and cancel). Each lane's
-  # resolved environments, reports and environment.json are its artifact,
-  # uploaded whether it passed or not.
   wheel-smoke:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: wheel-smoke (${{ matrix.lane }})
@@ -735,12 +676,6 @@ jobs:
           name: wheel-smoke-${{ matrix.lane }}
           path: wheel-smoke/
 
-  # The same two lanes on an Arm runner with the aarch64 wheels (decision
-  # KO2-40): wheel_smoke.py's aarch64 lanes are the floor and the newest,
-  # whose images are multi-architecture, and also require the interpreter
-  # to run on aarch64. First, the shipped wheel set: one manylinux2014
-  # wheel for each architecture, of one distribution and version, so a set
-  # missing an architecture fails here.
   wheel-smoke-aarch64:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: wheel-smoke (${{ matrix.lane }})
@@ -825,8 +760,6 @@ jobs:
   test:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
-    # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
-    # three-database corpus grew (T2.1o); the cause is being cut separately.
     timeout-minutes: 60
     needs: [configuration, native-wheel]
     strategy:
@@ -843,9 +776,6 @@ jobs:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
-      # Every commit: the root suite runs the gate's real bootstrap on the
-      # real history (tests/test_t20_bootstrap.py, T2.0), which a shallow
-      # checkout lacks.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -884,12 +814,6 @@ jobs:
           pip install -e './packages/structured-data-models-api[test]'  \
             "$(ls native/*.whl)[test,relational]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
-      # In parallel, as contract/tests runs: each test file on one worker,
-      # so its module fixtures are built once. The gate's tooling tests
-      # (the tooling marker) run once, in tooling (root), not on five
-      # Pythons and again in engine (T3.0). A test past 10 minutes
-      # fails with its stack, and a worker that dies ends the run rather
-      # than leaving xdist waiting on it.
       - run: |
           python -m pytest packages/structured-data-models-api/tests  \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
@@ -901,17 +825,13 @@ jobs:
           path: ~/.cache/pip
           key: ${{ steps.pip-cache.outputs.cache-primary-key }}
 
-  contract-python-ref-pandas3:
+  contract-python-pandas3:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
-    name: contract-python (ref-pandas3, duckdb)
+    name: contract-python (pandas3, duckdb)
     runs-on: ubuntu-latest
-    # 120: the job took 80 to 90 minutes on Phase 2's last candidates and
-    # one run on T2.16's ran past 90 (T2.1o first raised it from 60); the
-    # cause is carried into Phase 3 (P2-T2.16-14).
     timeout-minutes: 60
     needs: [configuration, native-wheel, native-test-ops]
     env:
-      SDM_PUSH_BASE: ''
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
     steps:
@@ -929,11 +849,6 @@ jobs:
         with:
           name: native-wheel
           path: native
-      # The cell's pins as constraints, so nothing installed after moves
-      # them; DuckDB 1.5 for Python 3.10 and 2 for newer runtimes; the SQLite and Postgres
-      # drivers (ADBC's SQLite, psycopg), one step for every database's job
-      # (T2.1a); the engine, which a case's materialize needs, built from
-      # source with the runner image's compilers and CMake.
       - &contract-install
         name: Install the cell
         run: |
@@ -945,13 +860,6 @@ jobs:
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
              "$(ls native/*.whl)[test]"
-      # The provider conformance kit (T2.5, T2.6) asks the core one data
-      # request at a time through the test-only fetch, which only the
-      # test-ops build carries (E23): an interpreter over this job's
-      # environment holding that build alone, which the kit's runner
-      # (contract/runners/provider_kit.py) runs under (SDM_KIT_PYTHON)
-      # when the shipped build it starts on has no test-only operations;
-      # every other step runs the shipped build.
       - &contract-kit-wheel
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -964,14 +872,6 @@ jobs:
           "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
           "$RUNNER_TEMP/kit/bin/python" -I -c 'import sdm_client._native as n; assert n.TEST_OPS'
           echo "SDM_KIT_PYTHON=$RUNNER_TEMP/kit/bin/python" >> "$GITHUB_ENV"
-      # In parallel, each test file on one worker so its module fixtures are
-      # built once; the results match a serial run's, test by test. The
-      # files whose module fixtures hold a family run parsed share one
-      # worker, one after the other (contract/tests/conftest.py), so this
-      # runner's memory holds one at a time. A test past 10 minutes fails
-      # with its stack, and a worker that dies ends the run rather than
-      # leaving xdist waiting on it.
-      # The checking tools' own tests run in tooling (contract) (T3.0).
       - name: The runner's controls and the route tests
         run: python -m pytest contract/tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # Observe the installed native client in each supported dependency cell.
@@ -1044,7 +944,6 @@ jobs:
     timeout-minutes: 20
     needs: [configuration, native-wheel]
     env:
-      SDM_PUSH_BASE: ''
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
     steps:
@@ -1064,7 +963,6 @@ jobs:
     timeout-minutes: 20
     needs: [configuration, native-wheel]
     env:
-      SDM_PUSH_BASE: ''
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
     steps:
@@ -1079,14 +977,13 @@ jobs:
 
   # Run the native client on each database and supported dependency stack.
   # The provider's executed SQL observations also feed the golden checks.
-  contract-python-ref-pandas3-sqlite:
+  contract-python-pandas3-sqlite:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
-    name: contract-python (ref-pandas3, sqlite)
+    name: contract-python (pandas3, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [configuration, native-wheel, native-test-ops]
     env:
-      SDM_PUSH_BASE: ''
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: sqlite
@@ -1124,16 +1021,15 @@ jobs:
           path: database-observations/python-core.jsonl
           if-no-files-found: error
 
-  contract-python-ref-pandas3-postgres:
+  contract-python-pandas3-postgres:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
-    name: contract-python (ref-pandas3, postgres)
+    name: contract-python (pandas3, postgres)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [configuration, native-wheel, native-test-ops]
     services:
       postgres: *postgres-service
     env:
-      SDM_PUSH_BASE: ''
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: postgres
@@ -1151,23 +1047,10 @@ jobs:
       - &contract-postgres-required
         name: The Postgres service, and the contract loader on it
         run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
-      # T2.3's regression and key vectors, on the service with the job's
-      # DSN, failing where it is not there (SDM_REQUIRE_POSTGRES), in every
-      # cell: the key vectors hold a run's host fields (the frame, the
-      # warning classes) to its own cell's recording, and every core field,
-      # statement and joined row to the reference cell's. The provider's own
-      # test needs the test-ops build, and runs in native-test-ops. T2.21's
-      # exact-key vectors too: an unconstrained numeric keyed or linked by
-      # the caller, held to python-ref's catalog control on the service; and
-      # T2.14c's numeric spellings, one number spelled two ways being one
-      # key (P2-T2.14c-1).
       - &contract-postgres-vectors
-        name: T2.3's Postgres regression and key vectors, T2.21's exact-key vectors and T2.14c's numeric spellings, on the service
+        name: Postgres regression, exact-key and numeric-spelling checks
         run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_exact_numeric_keys.py packages/structured-data-models-client/tests/test_postgres_keyless_order.py -q -m "not live_nim"
-      # T2.14b's Postgres JSON regressions (a document escaping a lone
-      # surrogate kept as the reference keeps it), on the service, in the
-      # reference cell (T2.14b fix 7).
-      - name: T2.14b's Postgres JSON regressions, on the service
+      - name: Postgres JSON regression checks
         run: python -m pytest contract/tests/test_temporal_candidates_json_values.py -k json -q
       - *contract-kit-wheel
       - *contract-kit-python
@@ -1187,7 +1070,6 @@ jobs:
     timeout-minutes: 30
     needs: [configuration, native-wheel]
     env:
-      SDM_PUSH_BASE: ''
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
       DATABASE: sqlite
@@ -1210,7 +1092,6 @@ jobs:
     services:
       postgres: *postgres-service
     env:
-      SDM_PUSH_BASE: ''
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
       DATABASE: postgres
@@ -1235,7 +1116,6 @@ jobs:
     timeout-minutes: 30
     needs: [configuration, native-wheel]
     env:
-      SDM_PUSH_BASE: ''
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: sqlite
@@ -1258,7 +1138,6 @@ jobs:
     services:
       postgres: *postgres-service
     env:
-      SDM_PUSH_BASE: ''
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: postgres
@@ -1283,9 +1162,9 @@ jobs:
     timeout-minutes: 30
     needs:
       - configuration
-      - contract-python-ref-pandas3
-      - contract-python-ref-pandas3-sqlite
-      - contract-python-ref-pandas3-postgres
+      - contract-python-pandas3
+      - contract-python-pandas3-sqlite
+      - contract-python-pandas3-postgres
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && !cancelled() }}
     strategy:
       fail-fast: false
@@ -1316,20 +1195,6 @@ jobs:
           SDM_L4_OBSERVATIONS: ${{ github.workspace }}/l4/python-core.jsonl
         run: cargo test -p sdm-data --locked --test ${{ matrix.database }}_goldens
 
-  # L5 (design, locked check 4; KO2-47; T2.4), in every cell, so pandas 2
-  # and 3 and each cell's pyarrow and NumPy: tests_test_ops's
-  # test_l5_conversion.py on the test-ops build, which takes the core's
-  # test-only fetch, beside the pinned Postgres service. A table of each
-  # type of the type map, built on DuckDB and loaded into SQLite and
-  # Postgres by the contract loader, read through each database's
-  # provider and admitted by the core: each column's Arrow type is the
-  # conversion table's (a unit or scale change in one driver's path fails,
-  # seeded), its values are what the database's own driver reads, the
-  # types all three store as their own reach the core as identical Arrow,
-  # and each type an engine stores in another form is the type map's,
-  # printed per engine; and each layout of the result the core hands the
-  # host is presented by to_pandas() as the presentation table says for
-  # this pandas major. pytz is for DuckDB's own read of a TIMESTAMPTZ.
   l5-conversion:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: l5-conversion (${{ matrix.cell }})
@@ -1374,7 +1239,7 @@ jobs:
             ./packages/structured-data-models-api  \
             './packages/structured-data-models-connectors[sqlite,postgres]' \
             "$(ls native-test-ops/*.whl)"
-          /tmp/l5/bin/python -m pytest packages/structured-data-models-client/tests_test_ops/test_l5_conversion.py \
+          /tmp/l5/bin/python -m pytest packages/structured-data-models-client/tests_test_ops/test_result_conversion.py \
             -q -s -p no:cacheprovider
 
   build:
@@ -1411,12 +1276,6 @@ jobs:
       # at, read from what was just built rather than written here.
       - run: |
           python scripts/check_wheel_provenance.py --write-version dist/VERSION dist/*.whl
-      # Building each one proves nothing about installing them together. A pin
-      # only one distribution carries makes the set unsatisfiable, and the
-      # resolver is the only thing that says so.
-      # The candidate's own wheels go in first, without their dependencies,
-      # so the resolver sees them and never the published distributions of
-      # the same version (T2.16, KO2-95).
       - run: |
           VERSION=$(cat dist/VERSION)
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
@@ -1448,11 +1307,6 @@ jobs:
         with:
           name: wheels
           path: dist
-      # The candidate's own wheels first, without their dependencies, as
-      # runtime-install installs them: --find-links alone lets pip take a
-      # published distribution of the same version from the index instead
-      # (it took the published connectors, whose duckdb extra admits 2.0;
-      # T2.16), so the job would test that rather than the candidate.
       -
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: '2'
@@ -1578,8 +1432,6 @@ jobs:
             exit 1
           fi
           pip check
-          # A runtime's pandas below the client's floor (2.2.2, KO2-37) is
-          # upgraded by the line; one at or above it is kept.
           pandas_after=$(python -c 'import importlib.metadata as m; print(m.version("pandas"))')
           echo "pandas: the runtime's $pandas_before, after the install $pandas_after"
           python -c 'import importlib.metadata as m; print("after the install:", ", ".join(f"{n} {m.version(n)}" for n in ("numpy", "pandas", "pyarrow", "PyYAML")))'
@@ -1626,8 +1478,6 @@ jobs:
       - run: |
           pip install --upgrade pip cyclonedx-bom
           VERSION=$(cat dist/VERSION)
-          # The candidate's own wheels first, as installed-wheel installs
-          # them (T2.16, KO2-95).
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
@@ -1658,8 +1508,6 @@ jobs:
             runner: macos-15-intel
           - platform: windows-x86_64
             runner: windows-latest
-    # A Java job: the Java tests fail rather than pass without what they
-    # need (T3.11's gate).
     defaults:
       run:
         shell: bash
@@ -1721,9 +1569,6 @@ jobs:
             grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
               || { echo "::error::the JAR holds no $native"; exit 1; }
           done
-      # The JAR, its runtime dependencies, the JDBC drivers the Java legs
-      # open their databases with (T3.12), and the JAR-load test's program,
-      # so the load jobs need no checkout.
       - name: The JAR's artifact
         run: |
           mkdir -p java-jar
@@ -1744,11 +1589,6 @@ jobs:
           name: java-jar
           path: java-jar/
 
-  # Every Java test (mvn verify, with the runtime flags) on JDK 17 and 21,
-  # loading the native with the test-only operations: the binding's
-  # lifetimes, Arrow both ways, the panic test in a subprocess JVM; from
-  # T3.12 the S1 API on DuckDB, SQLite and the pinned Postgres service,
-  # required (H26).
   java-test:
     name: java-test (${{ matrix.jdk }})
     runs-on: ubuntu-latest
@@ -1789,12 +1629,6 @@ jobs:
           pip install --quiet pytest
           python -m pytest -q tests/compatibility/test_junit_results.py
 
-  # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
-  # runtime dependencies alone, on each JDK and platform the JAR promises,
-  # where no Rust toolchain is: in a clean JDK container on Linux
-  # (Microsoft's build of OpenJDK, pinned by digest, pulled anonymously
-  # from MCR, which sets no anonymous pull limit), and on the runner on
-  # macOS, which runs no containers, with no Rust step.
   java-load:
     name: java-load (${{ matrix.jdk }}, ${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
@@ -1899,7 +1733,6 @@ jobs:
             platform: macos-x86_64
             runner: macos-15-intel
     env:
-      SDM_PUSH_BASE: ''
       FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
       SDM_REQUIRE_JAVA: '1'
     steps:
@@ -1946,13 +1779,6 @@ jobs:
           path: java.jsonl
           if-no-files-found: warn
 
-  # Java S1 (T3.12): every S1 case on Java's paths through the Java host's
-  # JDBC providers on DuckDB, SQLite and the pinned Postgres service, on
-  # Linux, where the client wheel the runner's capture reads with is built;
-  # its lines judged on their own against the reference with the effective
-  # expectations, so a difference only Java shows fails the job. The
-  # Postgres legs run L5 for Java beside it (x86_64 has the test-ops build
-  # the test-only fetch needs).
   java-db:
     name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, ${{ matrix.database }})
     runs-on: ${{ matrix.runner }}
@@ -1986,7 +1812,6 @@ jobs:
             wheel: native-wheel-aarch64
             database: postgres
     env:
-      SDM_PUSH_BASE: ''
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: ${{ matrix.database }}
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
@@ -2029,7 +1854,7 @@ jobs:
         run: |
           unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
-            -Dtest=T312SchemaTest,T312PredictTest,T312PostgresReadTest,PostgresKeylessOrderTest test
+            -Dtest=SchemaTest,PredictTest,PostgresReadTest,PostgresKeylessOrderTest test
       - name: The S1 cases on the Java host
         run: |
           python contract/runners/run_java.py --database "$DATABASE" \
@@ -2051,7 +1876,7 @@ jobs:
           python -m venv --system-site-packages "$RUNNER_TEMP/kit"
           "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
           cd packages/structured-data-models-client
-          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_l5_java.py tests_test_ops/test_t312_driver_parity.py
+          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_java_results.py tests_test_ops/test_driver_parity.py
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

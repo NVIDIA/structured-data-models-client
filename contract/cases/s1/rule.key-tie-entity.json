@@ -120,9 +120,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: Schema.from_source warns of the tie and gives users no key (so no link reaches it), and materialize refuses the query, whose entity is no primary key"
+    "code": "INVALID_REQUEST"
   },
   "why": "Two key candidates of the entity table, user_id and userid, tie on the score: rule key_tie, the tie left keyless where the query names its entity",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.key-tie-entity using the shop fixture."
 }

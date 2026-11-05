@@ -84,9 +84,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 1 call; each lag of an average drops the examples whose window holds no order and packs the rest at the top of the column, so values sit on other examples' rows and the last rows get none: users 0 and 1, predicted at 2023-05-01, get no first lag where their windows hold 34.0 and 35.5 (the core fixes it under KO2-70)"
+    "stage": "predict"
   },
-  "why": "lag_timesteps of 2 on a temporal regression of an AVG whose windows are sometimes empty (each user orders every 56 days, the window is 28), one call: the reference's lagged average is misaligned, and the core puts each window's value on its own example (the orchestrator's decision under KO2-70)",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "why": "lag_timesteps of 2 on a temporal regression of an AVG whose windows are sometimes empty (each user orders every 56 days, the window is 28), one call: the reference's lagged average is misaligned, and the core puts each window's value on its own example (the orchestrator's decision under )",
+  "source": "Correctness case lag.average-empty-windows using the shop fixture."
 }

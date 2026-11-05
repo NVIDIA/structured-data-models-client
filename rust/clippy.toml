@@ -5,7 +5,7 @@
 # Clippy's configuration for the domain and shipped crates: every crate but
 # sdm-testkit, which has its own. Clippy reads the nearest file and merges
 # none, so bindings/sdm-py/clippy.toml repeats the bans below, and
-# scripts/rust_core/l0_scan.py holds each file to them (T1.10c).
+# scripts/rust_core/architecture_policy.py holds each file to them.
 #
 # The core does no I/O and holds no global state: what varies by machine,
 # run or moment comes from the host, as data (design, "Data access" and
@@ -16,8 +16,8 @@
 # from no random generator but the registered streams.
 #
 # A use the core needs is allowed at its site with one reasoned #[allow],
-# and l0_scan.py pins each such site to its statement; today the only one
-# is sdm-host's reading of the host's zone lookup roots (decision E24).
+# and architecture_policy.py pins each such site to its statement; today the only one
+# is sdm-host's reading of the host's zone lookup roots.
 # Tests are not the core: a test file that reads its vectors allows the ban
 # once, at its top, with its reason.
 #
@@ -28,13 +28,13 @@
 #   into an output would need an ordered copy first, and review holds that.
 # - A Zoned parsed from text (`str::parse::<Zoned>`, `Zoned::from_str`)
 #   looks its zone up in the global database through a trait clippy cannot
-#   ban; l0_scan.py's bans check refuses those spellings in shipped code.
+#   ban; architecture_policy.py's bans check refuses those spellings in shipped code.
 #   It is a lexical scan: a parse whose target type is only inferred, such
 #   as `s.parse()` returned as `Result<Zoned, _>` or `Option<Zoned>`, is
 #   not seen, and review covers it.
 # - The rand entries are marked allow-invalid: rand is not a workspace
 #   dependency, so they are inert until something adds it, and then they
-#   apply. selftest.py's clippy fixture uses every other entry.
+#   apply. policy_selftest.py's clippy fixture uses every other entry.
 msrv = "1.97"
 
 disallowed-types = [
@@ -101,11 +101,11 @@ disallowed-methods = [
     { path = "std::path::Path::read_link", reason = "the core does no I/O" },
     { path = "std::path::Path::canonicalize", reason = "the core does no I/O" },
     # Zone databases: zones come from the host's lookup roots, passed in,
-    # then the bundled copy (decision A7), never from the global database,
+    # then the bundled copy, never from the global database,
     # which reads TZDIR and the system's directory.
     { path = "jiff::tz::db", reason = "the global zone database reads the environment; zones come through the host's lookup roots" },
     { path = "jiff::tz::TimeZoneDatabase::from_env", reason = "reads the environment; zones come through the host's lookup roots" },
-    { path = "jiff::tz::TimeZoneDatabase::from_dir", reason = "reads the file system; only sdm-host reads the host's lookup roots (E24)" },
+    { path = "jiff::tz::TimeZoneDatabase::from_dir", reason = "reads the file system; only sdm-host reads the host's lookup roots" },
     { path = "jiff::tz::TimeZoneDatabase::from_concatenated_path", reason = "reads the file system; zones come through the host's lookup roots" },
     { path = "jiff::tz::TimeZone::get", reason = "looks the name up in the global database; resolve zones through the host's lookup roots" },
     { path = "jiff::tz::TimeZone::system", reason = "the local zone is a host fact (HostFacts.local_zone)" },

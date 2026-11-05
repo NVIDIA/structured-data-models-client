@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "as rule.float-signed-nan-category-double: numerical on DuckDB and Postgres"
+    "stage": "predict"
   },
-  "why": "As rule.float-signed-nan-category-double, a FLOAT feature (rule float_nan; T2.12 round 2)",
-  "source": "T2.12 round 2 (Codex P2): a NaN of each sign as DuckDB previews it, and a static query over a NaN key"
+  "why": "As rule.float-signed-nan-category-double, a FLOAT feature (rule float_nan)",
+  "source": "Correctness case rule.float-signed-nan-category-float using the shop fixture."
 }

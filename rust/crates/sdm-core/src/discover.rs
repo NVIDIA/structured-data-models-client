@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The source's facts of a table's columns, read once for `describe_source`
-//! and `materialize` alike (T3.16, fix A): the catalog's columns and keys
+//! and `materialize` alike (fix A): the catalog's columns and keys
 //! (one step, then any index's columns), the preview, each big integer's
 //! tier over the whole column ([`whole_column_tiers`]) and each exact
 //! number's type by its role ([`exact_number::settle`]), limited to the
@@ -11,7 +11,7 @@
 //!
 //! `describe_source` infers each table from what [`table`] reads;
 //! `materialize` reads by it every table of a source as it stands at each
-//! run (`describe::initialize`, the owner's plan B), and a host provider's
+//! run (`describe::initialize`), and a host provider's
 //! columns that hold no facts ([`facts`]), taking each column's facts from
 //! that read ([`facts_read`]), as `describe_source` would have read them.
 //! The cost, per table read: the `columns` and
@@ -52,7 +52,7 @@ pub(crate) struct Discovered {
 
 /// The facts of each column of `held` that carries none, read from the
 /// source as `describe_source` reads them ([`table`]), by table and column
-/// (T3.16), for a host provider's tables: none asked for a schema whose
+///, for a host provider's tables: none asked for a schema whose
 /// columns all carry theirs. A column the source does not hold has none,
 /// and the schema read without it ([`sdm_schema::held::read`]); a table
 /// the source does not hold is refused as describing it refuses one
@@ -348,7 +348,7 @@ pub(crate) struct Catalog {
 }
 
 /// One table's catalog alone, as a semantic model's conversion reads a base
-/// table before any of its rows (T3.5, design S5): its columns, then its
+/// table before any of its rows: its columns, then its
 /// keys, asked as [`table`] asks them, never its rows. `Ok(None)` where the
 /// source answers no column, as for a table it does not hold; the
 /// provider's failure, whole, for the caller to read by what it asked

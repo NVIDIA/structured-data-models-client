@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The text the old client's messages quote a value by (T3.5): its `repr`
+//! The text the old client's messages quote a value by: its `repr`
 //! and `str`, held to each value PyYAML read in
 //! `contract/view-yaml-vectors.json` with the texts Python gave it.
 
@@ -14,7 +14,7 @@ const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json"
 /// A recorded value, its typed form, as the text helpers take it; `open`
 /// the kinds of the collections it is inside (a list `true`). `None` for a
 /// value outside the YAML view definitions use (a byte string, a set, a
-/// list of pairs), which the core refuses (register P3J-9).
+/// list of pairs), which the core refuses (J-9).
 fn shown(value: &Json, open: &mut Vec<bool>) -> Option<Shown> {
     let inner = &value["v"];
     let nested =
@@ -73,7 +73,7 @@ fn date(text: &str) -> (i32, u8, u8) {
     )
 }
 
-/// `datetime.isoformat()`'s text, read back.
+/// `datetime.isoformat`'s text, read back.
 fn datetime(text: &str) -> Shown {
     let (day, time) = text.split_once('T').unwrap();
     let (year, month, day) = date(day);
@@ -162,7 +162,7 @@ fn cycles_are_written_as_python_writes_them() {
 }
 
 /// A text is written up to its bound exactly: one character over, it is
-/// refused, and nothing past the bound is built (Codex review 3, P1-4).
+/// refused, and nothing past the bound is built.
 #[test]
 fn a_text_is_written_up_to_its_bound_exactly() {
     let value = Shown::List(vec![
@@ -185,7 +185,7 @@ fn a_text_is_written_up_to_its_bound_exactly() {
 }
 
 /// Python 3.12 escapes an unassigned code point, a format character and a
-/// soft hyphen in a `repr` (Codex review 3, P0-2).
+/// soft hyphen in a `repr`.
 #[test]
 fn python_s_printability_is_its_own_table() {
     assert_eq!(text_repr("\u{378}"), "'\\u0378'");

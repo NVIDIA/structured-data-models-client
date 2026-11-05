@@ -86,9 +86,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"top_k is how many candidates a ranking keeps, and a forecast ranks nothing\""
+    "code": "INVALID_REQUEST"
   },
   "why": "The forecast's top_k refusal, in the core",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case forecast.top-k using the shop fixture."
 }

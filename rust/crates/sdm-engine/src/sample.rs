@@ -2,10 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The reference's sampler, as far as `materialize` reaches it at T1.11c:
+//! The reference's sampler, as far as `materialize` reaches it:
 //! the examples' entities and anchor times (`sample_target`'s temporal
-//! walk; their labels are [`crate::labels`]'s from T1.27), the seeds a
-//! `neighbors` or `lookup` request carries, the order `_by_fkey` keeps neighbors in, and, from T1.26b, the
+//! walk; their labels are [`crate::labels`]'s ), the seeds a
+//! `neighbors` or `lookup` request carries, the order `_by_fkey` keeps neighbors in, and, the
 //! sampler's three reads as typed requests ([`by_pkey`], [`by_fkey`],
 //! [`by_time`]). It holds no SQL: what it asks for is typed requests,
 //! which `sdm-data` plans.
@@ -28,7 +28,7 @@ use crate::random::Pcg64;
 /// (`_by_time`'s `__kumo_start__` and `__kumo_end__`).
 pub const SEED_TIME: &str = "time";
 /// An example's anchor where its entity's own time is missing
-/// (`anchor_time='entity'` over a null time, T2.11): pandas' `NaT` as the
+/// (`anchor_time='entity'` over a null time): pandas' `NaT` as the
 /// reference's anchors hold it, `i64::MIN` nanoseconds, distinct from the
 /// no-anchor sentinel (`pd.Timestamp.min`). It anchors no window: a read by
 /// time reaches no row for it, and the payload sends it as null.
@@ -404,7 +404,7 @@ pub fn seeds(keys: ArrayRef, times: Vec<(&str, Vec<i64>)>) -> Result<RecordBatch
 /// provider declares (`ProviderCapabilities::null_order`), never a
 /// dialect's default written here. Without a key, every column of the
 /// table but the time column and lists, in name order, each ascending
-/// (`_neighbor_order_by`'s keyless order, from T1.29: a fact table left
+/// (`_neighbor_order_by`'s keyless order,: a fact table left
 /// without a key, its key's nulls declining it, is read so), and the
 /// foreign key alone where no column is left.
 pub fn tie_break(table: &Table, fkey: &str, nulls: NullOrder) -> Result<TieBreak, CoreError> {

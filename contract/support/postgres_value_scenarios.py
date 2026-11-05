@@ -15,7 +15,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/l5-vectors.json'
+OUT = ROOT / 'contract/result-conversion-vectors.json'
 SECTION = 'postgres_values'
 
 #: Each column, its Postgres type, its values (``id`` 1 onwards, a null
@@ -60,7 +60,7 @@ COLUMNS: dict[str, dict[str, Any]] = {
     },
 }
 #: The tables: one per column, ``id`` and the column's values as ``v``,
-#: then one of events keyed by user and time, which :data:`SEEDS` seed.
+#: then one of events keyed by user and time, which:data:`SEEDS` seed.
 SETUP = [
     statement
     for name, column in COLUMNS.items()
@@ -110,7 +110,7 @@ def cells(values: list[Any]) -> list[Any]:
 
 
 class Database:
-    r"""A Postgres database made for one run, :data:`SETUP` in it."""
+    r"""A Postgres database made for one run,:data:`SETUP` in it."""
 
     def __init__(self, dsn: str) -> None:
         import psycopg
@@ -140,7 +140,7 @@ class Database:
 
 
 def _arrow_type(field: Any) -> str:
-    r"""``field``'s type as ``test_l5_conversion.py`` spells it."""
+    r"""``field``'s type as ``test_result_conversion.py`` spells it."""
     import pyarrow as pa
 
     kind = field.type
@@ -171,7 +171,7 @@ def admitted(provider: Any, name: str) -> Any:
             'limit': None,
         },
         # Under the database's schema, as every Postgres read names one
-        # (T3.7).
+        # .
         'provider': {
             'provider': 'sql',
             'dialect': 'postgres',

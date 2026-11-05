@@ -2723,11 +2723,11 @@
           "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructors_preserve_end_time_role"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#theShopIsDescribedAsTheReferenceDescribesIt",
-          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#whatTheCallerDeclaresIsTakenByName",
-          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#anEditGivesANewSchemaAndLeavesTheOldOneAsItWas",
-          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#anEditTheReferenceRefusesIsRefusedByTheCore",
-          "java/src/test/java/com/nvidia/sdm/T312SchemaTest.java#theHeldSchemaCarriesWhatTheSourceSaidOfEachColumn",
+          "java/src/test/java/com/nvidia/sdm/SchemaTest.java#theShopIsDescribedAsTheReferenceDescribesIt",
+          "java/src/test/java/com/nvidia/sdm/SchemaTest.java#whatTheCallerDeclaresIsTakenByName",
+          "java/src/test/java/com/nvidia/sdm/SchemaTest.java#anEditGivesANewSchemaAndLeavesTheOldOneAsItWas",
+          "java/src/test/java/com/nvidia/sdm/SchemaTest.java#anEditTheReferenceRefusesIsRefusedByTheCore",
+          "java/src/test/java/com/nvidia/sdm/SchemaTest.java#theHeldSchemaCarriesWhatTheSourceSaidOfEachColumn",
           "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#directSchemaAndOptionsAreOwnedAndInferenceTravelsOnPredictAndScore",
           "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#temporalTaskOptionIsRefusedBeforeNetworkAndFalseIsNotTemporal",
           "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#nativeInferenceChecksRejectLossyIntegersBeforeSending",
@@ -3042,7 +3042,7 @@
       "tests": {
         "python": [
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_copy_and_pickle_preserve_origin_and_edit_isolation",
-          "tests/test_t32_request_pickle.py::test_a_materialized_request_refuses_pickle_by_its_source",
+          "tests/test_request_pickle.py::test_a_materialized_request_refuses_pickle_by_its_source",
           "packages/structured-data-models-client/tests/test_saved_requests.py::test_saved_fixture_inventory",
           "packages/structured-data-models-client/tests/test_saved_requests.py::test_saved_request_predicts_without_its_original_runtime",
           "packages/structured-data-models-client/tests/test_saved_requests.py::test_payloads_restore_missing_native_state",
@@ -3341,22 +3341,22 @@
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aNamedOfficialSdkProfileSuppliesTheCredentials",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#sdkAuthenticationFailuresDoNotExposeTheirCredentialDiagnostic",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#theServingDeadlineIncludesCredentialRefresh",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#timedOutRefreshesDoNotAccumulateBlockedAuthenticationThreads",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#theCoresEnvelopeIsPostedAsItIsAndItsRowRead",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#utf8FeatureValuesUseTheSharedEnvelopeAndActualByteLimit",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#theFourBaseJ2ShapesUseTheSameCoreWithDirectAndServingEndpoints",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#anEndpointsFailureIsPythonsRefusal",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#anAnswerWithNoRowIsATransportError",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aCallPastTheCallersLimitIsRefusedBeforeItIsSent",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aCallTheEndpointThrottlesIsTriedAgainWithTheSameBytes",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#anEndpointThatCannotBeReachedIsAFailureAtItsDeadline",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aResponseBodyThatStallsAfterHeadersIsBoundedByTheCallDeadline",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aRetryHasOnlyTheRemainingCallBudgetToReadItsBody",
-          "java/src/test/java/com/nvidia/sdm/T313DatabricksServingTest.java#aServingConfigurationThatCannotBeUsedIsRefusedWithoutRepeatingIt"
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#aNamedOfficialSdkProfileSuppliesTheCredentials",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#sdkAuthenticationFailuresDoNotExposeTheirCredentialDiagnostic",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#theServingDeadlineIncludesCredentialRefresh",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#timedOutRefreshesDoNotAccumulateBlockedAuthenticationThreads",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#theCoresEnvelopeIsPostedAsItIsAndItsRowRead",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#utf8FeatureValuesUseTheSharedEnvelopeAndActualByteLimit",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#theFourBaseJ2ShapesUseTheSameCoreWithDirectAndServingEndpoints",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#anEndpointsFailureIsPythonsRefusal",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#anAnswerWithNoRowIsATransportError",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#aCallPastTheCallersLimitIsRefusedBeforeItIsSent",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#aCallTheEndpointThrottlesIsTriedAgainWithTheSameBytes",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#anEndpointThatCannotBeReachedIsAFailureAtItsDeadline",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#aResponseBodyThatStallsAfterHeadersIsBoundedByTheCallDeadline",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#aRetryHasOnlyTheRemainingCallBudgetToReadItsBody",
+          "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#aServingConfigurationThatCannotBeUsedIsRefusedWithoutRepeatingIt"
         ]
       },
       "gate": "local",
@@ -3604,12 +3604,12 @@
           "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_uses_type_name_for_empty_message"
         ],
         "java": [
-          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#aCallPast16MiBIsSentAsTheBytesGiven",
-          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#aTransientStatusIsTriedAgain",
-          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#aRefusalIsTheEndpointsAndIsNotTriedAgain",
-          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anAnswerThatIsNoJsonObjectIsAFailedTransport",
-          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anEmptyAnswerIsAnEmptyObject",
-          "java/src/test/java/com/nvidia/sdm/internal/T312TransportTest.java#anAnswerWhoseBodyIsHeldBackTimesOut"
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aCallPast16MiBIsSentAsTheBytesGiven",
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aTransientStatusIsTriedAgain",
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aRefusalIsTheEndpointsAndIsNotTriedAgain",
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anAnswerThatIsNoJsonObjectIsAFailedTransport",
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anEmptyAnswerIsAnEmptyObject",
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anAnswerWhoseBodyIsHeldBackTimesOut"
         ]
       },
       "ownership": {
@@ -4630,7 +4630,7 @@
           "packages/structured-data-models-client/tests/test_runtime_ownership.py::test_installed_explanations_has_one_origin_and_no_retired_dependencies",
           "packages/structured-data-models-client/tests/test_relational_explanations.py::test_explain_one_class_refusal_names_source_column",
           "packages/structured-data-models-client/tests/test_tabular_explanations.py::test_empty_explanation_view_retains_columns",
-          "packages/structured-data-models-client/tests/test_t128a_payload_rules.py::test_client_only_provenance_does_not_consume_model_payload_limit"
+          "packages/structured-data-models-client/tests/test_payload_rules.py::test_client_only_provenance_does_not_consume_model_payload_limit"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#publicGradientCollectionSurvivesNestedMergesAndSessions",
@@ -8203,6 +8203,36 @@
       "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
       "record": "api_contracts/large-values",
       "reason": "Rename the retained timestamp-buffer test module by behavior; required test and large-value coverage are unchanged."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "api_contracts/errors",
+      "reason": "Rename milestone-prefixed correctness test files to behavior names; required assertions, supported capabilities and API boundaries are unchanged."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "Rename milestone-prefixed correctness test files to behavior names; required assertions, supported capabilities and API boundaries are unchanged."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "api_contracts/persistence",
+      "reason": "Rename milestone-prefixed correctness test files to behavior names; required assertions, supported capabilities and API boundaries are unchanged."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "api_contracts/public-serving-refusals",
+      "reason": "Rename milestone-prefixed correctness test files to behavior names; required assertions, supported capabilities and API boundaries are unchanged."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "api_contracts/schema-edits",
+      "reason": "Rename milestone-prefixed correctness test files to behavior names; required assertions, supported capabilities and API boundaries are unchanged."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "type_contracts/arrow-admission-and-inference",
+      "reason": "Rename test files and remove historical fixture prose; all type vectors and their expected outcomes remain identical. Update the whole-file digest for metadata changes."
     }
   ],
   "capabilities": [
@@ -9734,15 +9764,15 @@
       ],
       "tests": {
         "rust": [
-          "rust/crates/sdm-host/tests/t133_type_set.rs::the_vectors_are_of_the_arrow_schema_the_workspace_locks",
-          "rust/crates/sdm-host/tests/t133_type_set.rs::every_variant_of_data_type_has_a_vector_and_no_type_has_two",
-          "rust/crates/sdm-host/tests/t133_type_set.rs::each_parameterized_family_has_each_parameter",
-          "rust/crates/sdm-host/tests/t133_type_set.rs::each_type_is_admitted_and_inferred_as_its_vector_says",
-          "rust/crates/sdm-host/tests/t133_type_set.rs::every_expected_refusal_is_named"
+          "rust/crates/sdm-host/tests/type_set.rs::the_vectors_are_of_the_arrow_schema_the_workspace_locks",
+          "rust/crates/sdm-host/tests/type_set.rs::every_variant_of_data_type_has_a_vector_and_no_type_has_two",
+          "rust/crates/sdm-host/tests/type_set.rs::each_parameterized_family_has_each_parameter",
+          "rust/crates/sdm-host/tests/type_set.rs::each_type_is_admitted_and_inferred_as_its_vector_says",
+          "rust/crates/sdm-host/tests/type_set.rs::every_expected_refusal_is_named"
         ]
       },
       "evidence_level": "local-boundary",
-      "vectors_sha256": "c622bf77ce9b8f1bef0b2aedbc8ba363fd2623f77b58228c5dd49b76744842e3"
+      "vectors_sha256": "7affcc95bf8f09ab93695adf80a42d05746722ae28e87e9d7a406c7e5d4bd904"
     },
     {
       "id": "semantic-types",

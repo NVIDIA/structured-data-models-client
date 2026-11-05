@@ -9,7 +9,7 @@ made, an empty result keeping its schema.
 
 The statements are the core's (``sdm-data`` renders DuckDB's SQL); this
 module writes none. Each request gets its own cursor, as the reference's
-reads do. A key set a plan names (from T1.11c, the seeds of a ``neighbors``
+reads do. A key set a plan names (the seeds of a ``neighbors``
 or ``lookup`` request) is the Arrow attachment the core sent with the step,
 which the run loop hands over by id: it is registered on the cursor as the
 relation its parameter names, as the reference registers its key tables,

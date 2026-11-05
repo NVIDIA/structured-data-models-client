@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `predict` of a request the core did not materialize (T3.26, owner
+//! `predict` of a request the core did not materialize (owner
 //! decision 2026-10-23), through `sdm_core::start`: a request held, its
 //! payloads, questions and a ranking's candidates as the host holds them,
 //! is predicted exactly as the request state `materialize` would have

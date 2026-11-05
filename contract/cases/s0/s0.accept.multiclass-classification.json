@@ -103,5 +103,5 @@
     "stage": "materialize"
   },
   "why": "Multiclass classification: a static categorical column of the entity table, accepted and materialized",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.accept.multiclass-classification using the shop fixture."
 }

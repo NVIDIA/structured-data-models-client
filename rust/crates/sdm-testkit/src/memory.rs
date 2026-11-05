@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The minimal non-SQL test provider (T2.7, plan section 3, "Data
+//! The minimal non-SQL test provider (plan section 3, "Data
 //! access"): a host provider that answers the core's typed data requests
 //! from in-memory Arrow tables, never through SQL. Dev-only; nothing
 //! shipped reaches it.
@@ -23,7 +23,7 @@
 //! `lookup`), the two the core's sampler requires of a provider before it
 //! reads anything (`time_bounds`, `sample_entities`), and `column_ranges`,
 //! over every row, so the core chooses a time column on a table bigger
-//! than its preview from the whole table, as on a SQL source (P2-T2.7-2).
+//! than its preview from the whole table, as on a SQL source (P2--2).
 //! Its only filter is the not-null filter the core writes.
 //! A sample keeps the table's order: every row where `n` covers them, else
 //! its own seeded draw ([`drawn`]). Values are compared
@@ -262,7 +262,7 @@ impl Memory {
                     z.push(count(present.iter().filter(|p| !**p).count()));
                 }
                 // Each row labelled as the dialects label it: the key's
-                // label, where it gives one, else its position (T2.12).
+                // label, where it gives one, else its position.
                 let positions = asked
                     .iter()
                     .enumerate()
@@ -402,7 +402,7 @@ impl Memory {
                 // One row over every row of the table, as the reference's
                 // `_full_range` reads it: the table's rows, then each
                 // column's smallest and largest value, of its own type, and
-                // the rows holding one (P2-T2.7-2).
+                // the rows holding one (P2--2).
                 let rows = &self.table(table)?.rows;
                 let mut fields = vec![Field::new("count", DataType::Int64, false)];
                 let mut arrays: Vec<ArrayRef> =
@@ -469,7 +469,7 @@ impl Memory {
         };
         let columns = match part {
             // A host provider is never asked for a view's definition
-            // (T3.27): the layer refuses it before it is asked.
+            //: the layer refuses it before it is asked.
             DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(not_read()),
             DescribePart::Tables => {
                 // Every table, or each one named that the source holds.

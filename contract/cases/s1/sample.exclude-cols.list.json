@@ -90,5 +90,5 @@
     "message": "exclude_cols_dict must map a table name to the columns to leave out, got list"
   },
   "why": "exclude_cols_dict=['age'] is no mapping: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.exclude-cols.list using the shop fixture."
 }

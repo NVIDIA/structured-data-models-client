@@ -30,7 +30,7 @@ EXPECTED = json.loads((PICKLES / 'expected.json').read_text(encoding='utf-8'))
 
 
 def writer() -> ModuleType:
-    name = 't214b_write_request_pickles'
+    name = 'test_saved_request_compatibility_write_request_pickles'
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(
             name, ROOT / 'tests/support/pickle_observations.py'

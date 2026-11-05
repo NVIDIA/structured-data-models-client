@@ -54,6 +54,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "A forecast through a metric view, over the view's filtered fact table. The view is created in the test schema from the yaml, its sources named with the {catalog} and {schema} placeholders the capture writes (no private name), each part backtick-quoted since Databricks reads a catalog's hyphen only quoted; its joins' on keys are bare, as people write them, so PyYAML reads each as the key true (KO3-40), which the reference reads too (DB/metric_view.py:825-909, join_cfg.get(True))",
-  "source": "written by T3.5's test author from the reference at 43e55f4f"
+  "why": "A forecast through a metric view, over the view's filtered fact table. The view is created in the test schema from the yaml, its sources named with the {catalog} and {schema} placeholders the capture writes (no private name), each part backtick-quoted since Databricks reads a catalog's hyphen only quoted; its joins' on keys are bare, as people write them, so PyYAML reads each as the key true, which the reference reads too (DB/metric_view.py:825-909, join_cfg.get(True))",
+  "source": "Correctness case view.metric.forecast using the shop fixture."
 }

@@ -82,5 +82,5 @@
     "stage": "materialize"
   },
   "why": "M4: an anchor time more than a day after the latest time in the data is warned of, naming the anchor and the latest time, in the reference's words",
-  "source": "T2.14b's test author, the reference at 6298913c"
+  "source": "Correctness case wording.anchor-after-data using the shop fixture."
 }

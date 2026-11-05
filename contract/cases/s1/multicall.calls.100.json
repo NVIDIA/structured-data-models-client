@@ -575,5 +575,5 @@
     "stage": "predict"
   },
   "why": "rows_per_call=1 over 100 entities: 100 calls, the most one request is asked in; each call carries about 109 context rows, more than 10,000 summed, so the pre-send context check is held to each call, not to the sum",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.calls.100 using the shop fixture."
 }

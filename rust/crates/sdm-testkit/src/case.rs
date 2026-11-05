@@ -8,7 +8,7 @@
 //! the Python runner validates against: what is required is required, null
 //! only where the schema takes it, and the schema's `minItems`,
 //! `minProperties` and `minLength` and `expect`'s `if`/`then`/`else` held
-//! (T1.21b, T1.21c; `contract/tests/malformed-cases.json` holds both loaders
+//! (`contract/tests/malformed-cases.json` holds both loaders
 //! to the same changes). Its patterns and enumerations of text (an id, a
 //! slice, a seam, a path or cell, a seed's digits) are the Python
 //! validator's alone.
@@ -37,13 +37,12 @@ pub struct Case {
     pub status: Status,
     pub slice: String,
     /// The databases the case runs on when not all three (design choice
-    /// 2, KO2-19); only beside `exclusion`, the owner's decision row.
+    /// 2); only beside `exclusion`, the owner's decision row.
     #[serde(default, deserialize_with = "some_databases")]
     pub databases: Option<Vec<Database>>,
     #[serde(default, deserialize_with = "some_text")]
     pub exclusion: Option<String>,
-    /// The warehouse legs an S2 case runs on, and only there (Phase 3
-    /// design choice 1); never beside `databases`.
+    /// The warehouse legs an S2 case runs on, and only there; never beside `databases`.
     #[serde(default, deserialize_with = "some_warehouses")]
     pub warehouses: Option<Vec<Warehouse>>,
     pub paths: Vec<String>,
@@ -125,7 +124,7 @@ impl Database {
     }
 }
 
-/// A warehouse leg (Phase 3 design choice 1), in the order every case runs
+/// A warehouse leg, in the order every case runs
 /// on them; its observations are keyed `<case>@<leg>`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -157,7 +156,7 @@ impl Warehouse {
 }
 
 /// The S1 cases left off the warehouse legs: the two 100,001-row batching
-/// cases (KO3-45), as `run_python.py`'s `OFF_WAREHOUSES` lists them.
+/// cases, as `run_python.py`'s `OFF_WAREHOUSES` lists them.
 pub const OFF_WAREHOUSES: [&str; 2] = ["multicall.entities.100000", "multicall.entities.100001"];
 
 impl Case {
@@ -214,7 +213,7 @@ pub enum Until {
 }
 
 /// The public call's inputs. The pure-Rust host reads `pql` for S0, and the
-/// base and the setup for an operation that reads data (from T1.11b); the
+/// base and the setup for an operation that reads data; the
 /// public call's arguments are the Python runner's.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -225,58 +224,57 @@ pub struct Input {
     #[serde(default, deserialize_with = "some_from_source")]
     pub from_source: Option<FromSource>,
     /// The user's edits to the schema `Schema.from_source` returned, in
-    /// order, at least one; the Python runner makes them (T1.21b).
+    /// order, at least one; the Python runner makes them.
     #[serde(default, deserialize_with = "some_edits")]
     pub edits: Option<Vec<Edit>>,
     #[serde(deserialize_with = "text")]
     pub pql: String,
     pub materialize: Materialize,
     /// The call the scripted endpoint fails, numbered from zero in the
-    /// order received (T2.1a, for `main`'s multi-call `predict`, T2.8c); a
+    /// order received (for `main`'s multi-call `predict`); a
     /// JSON integer written as one, `1.0` refused as the Python loader
     /// refuses it.
     #[serde(default, deserialize_with = "some_call")]
     pub fail_call: Option<u64>,
     /// Whether the scripted endpoint answers a classification call asking
-    /// for probabilities with them (T2.8's ranking cases), a JSON boolean.
+    /// for probabilities with them (ranking cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub probabilities: Option<bool>,
     /// Whether the scripted endpoint answers a regression call asking for
-    /// quantiles with them (T2.9's forecast cases), a JSON boolean.
+    /// quantiles with them (forecast cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub quantiles: Option<bool>,
     /// The output fields `predict` asks for (the public call's
-    /// `outputs=`), as written (T2.9's quantile cases); absent, the
+    /// `outputs=`), as written (quantile cases); absent, the
     /// model's defaults for the task.
     #[serde(default, deserialize_with = "present")]
     pub outputs: Option<Vec<String>>,
     /// Whether the scripted endpoint answers a call asking for an
-    /// explanation with one (T2.13's cases), a JSON boolean.
+    /// explanation with one (cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub explanation: Option<bool>,
     /// Whether the scripted endpoint gives each item it answers its
-    /// metadata (T2.13's cases), a JSON boolean.
+    /// metadata (cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub item_metadata: Option<bool>,
     /// Whether the scripted endpoint answers a call asking for embeddings
-    /// with one on each item (T2.11's cases), a JSON boolean.
+    /// with one on each item (cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub embeddings: Option<bool>,
-    /// The semantic model the case's source is (Phase 3 design choice 1),
+    /// The semantic model the case's source is,
     /// only on a case naming `warehouses`.
     #[serde(default, deserialize_with = "present")]
     pub view: Option<View>,
-    /// The connect path the case's connection is opened through (Phase 3
-    /// design choice 1), only on a case naming exactly its leg.
+    /// The connect path the case's connection is opened through, only on a case naming exactly its leg.
     #[serde(default, deserialize_with = "present")]
     pub connect: Option<Connect>,
     /// The one namespace part the case's source names, the other read from
-    /// the session (the second early capture, T3.20): only beside
+    /// the session (the second early capture): only beside
     /// `warehouses` with two namespace parts, never beside `connect`.
     #[serde(default, deserialize_with = "present")]
     pub named_part: Option<NamedPart>,
     /// Statements the run sends on the warehouse leg after the case's
-    /// tables are loaded (T3.20), at least one; only beside `warehouses`.
+    /// tables are loaded, at least one; only beside `warehouses`.
     #[serde(default, deserialize_with = "some_statements")]
     pub warehouse_setup: Option<Vec<String>>,
 }
@@ -354,7 +352,7 @@ pub struct FromSource {
     pub primary_keys: Option<serde_json::Map<String, Value>>,
     #[serde(default, deserialize_with = "present")]
     pub time_columns: Option<serde_json::Map<String, Value>>,
-    /// The relationships passed in (T1.21b).
+    /// The relationships passed in.
     #[serde(default, deserialize_with = "present")]
     pub relationships: Option<Vec<Relationship>>,
 }
@@ -375,7 +373,7 @@ impl<'de> Deserialize<'de> for Name {
 }
 
 /// A relationship passed to `Schema.from_source`: `source_table.source_column`
-/// refers to `target_table.target_column` (T1.21b). Read only from an object
+/// refers to `target_table.target_column`. Read only from an object
 /// ([`object_only`]), never from a list of its fields.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "Object")]
@@ -386,8 +384,8 @@ pub struct Relationship {
     pub target_column: Name,
 }
 
-/// One edit to the schema `Schema.from_source` returned (T1.21b; from
-/// T1.24b a key, a time column, a meaning and the relationships set). Read
+/// One edit to the schema `Schema.from_source` returned (from
+/// a key, a time column, a meaning and the relationships set). Read
 /// only from an object ([`object_only`]), never from a list of its fields.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "Object")]
@@ -406,7 +404,7 @@ pub enum Edit {
         column: Name,
         stype: Name,
     },
-    /// `schema.relationships = [Relationship(**link) for link in ...]`.
+    /// `schema.relationships = [Relationship(**link) for link in...]`.
     SetRelationships { relationships: Vec<Relationship> },
 }
 
@@ -553,7 +551,7 @@ fn some_warehouses<'de, D: Deserializer<'de>>(
 
 /// `input.fail_call`, when given: a whole number from 0 to `2**64 - 1`
 /// written as one; `-0`, a fraction or an exponent, `1.0` included, is
-/// refused, as the Python loader refuses them (P2-T2.1i-1).
+/// refused, as the Python loader refuses them (P2--1).
 fn some_call<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u64>, D::Error> {
     let raw = Box::<RawValue>::deserialize(deserializer)?;
     let text = raw.get().trim();
@@ -664,16 +662,16 @@ pub struct Materialize {
     pub indices: Vec<Index>,
     #[serde(default, deserialize_with = "present")]
     pub indices_as: Option<IndicesAs>,
-    /// An ISO timestamp, or `entity`: each entity at its own time (T2.11).
+    /// An ISO timestamp, or `entity`: each entity at its own time.
     #[serde(default, deserialize_with = "present")]
     pub anchor_time: Option<String>,
-    /// The context's anchor time (T2.11), written as `anchor_time` is.
+    /// The context's anchor time, written as `anchor_time` is.
     #[serde(default, deserialize_with = "present")]
     pub context_anchor_time: Option<String>,
-    /// The inference options passed, kept as written, free-form (T1.21b).
+    /// The inference options passed, kept as written, free-form.
     #[serde(default, deserialize_with = "some_options")]
     pub inference_config: Option<serde_json::Map<String, Value>>,
-    /// The rows a ranking is over, each read as an index is (E153).
+    /// The rows a ranking is over, each read as an index is.
     #[serde(default, deserialize_with = "present")]
     pub candidates: Option<Vec<Index>>,
     /// A JSON integer of any size, written as one, as the case schema's
@@ -681,18 +679,18 @@ pub struct Materialize {
     /// refuses, is a case's input.
     #[serde(default, deserialize_with = "present")]
     pub top_k: Option<Integer>,
-    /// How many entities one call scores (`main`'s 1fc5a686, T2.8c), kept
+    /// How many entities one call scores (`main`'s 1fc5a686), kept
     /// as written, whatever JSON scalar it is, so a value the reference
     /// refuses is the case's input.
     #[serde(default, deserialize_with = "present")]
     pub rows_per_call: Option<Written>,
     /// How many past steps of the target are added as lagged features
-    /// (T2.9), kept as written, whatever JSON scalar it is, as
+    ///, kept as written, whatever JSON scalar it is, as
     /// `rows_per_call` is, so a value the reference refuses is the case's
     /// input.
     #[serde(default, deserialize_with = "present")]
     pub lag_timesteps: Option<Written>,
-    /// The sampling options (T2.11), each kept as the text the case wrote,
+    /// The sampling options, each kept as the text the case wrote,
     /// any JSON value, `null` included (`Some(AsWritten("null"))`, the
     /// public call's `None`: an unseeded sample for `random_seed`), so a
     /// value the reference refuses is the case's input and no number of
@@ -711,8 +709,7 @@ pub struct Materialize {
     pub return_embeddings: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
     pub exclude_cols_dict: Option<AsWritten>,
-    /// The most context examples materialize takes (Phase 3's quickstart
-    /// cases), kept as written as `rows_per_call` is: any JSON scalar but
+    /// The most context examples materialize takes, kept as written as `rows_per_call` is: any JSON scalar but
     /// `null`.
     #[serde(default, deserialize_with = "present")]
     pub num_context_samples: Option<Written>,
@@ -721,7 +718,7 @@ pub struct Materialize {
 /// Any JSON value, `null`, a list and an object included, kept as the
 /// exact text the case wrote (whitespace around it trimmed): a number of
 /// any size or form, nested or not, passes through nothing that would
-/// change it (T2.11's sampling options).
+/// change it (sampling options).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsWritten(pub String);
 
@@ -826,7 +823,7 @@ pub struct CoreInputs {
 
 /// `predict`'s input beside the request state, which is `materialize`'s
 /// answer, handed back as the host held it: the model the call goes to.
-/// The request id is the host's to draw (decision E35 for its value).
+/// The request id is the host's to draw .
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PredictInput {
@@ -839,14 +836,14 @@ pub struct PredictInput {
 /// scalar or null) and the seed (the contract's signed hexadecimal text, or
 /// null for the default). Not the schema it samples: that is the
 /// description `describe_source` answered, with `input.edits` made, and a
-/// case naming one is refused (`deny_unknown_fields`; decision E50, the
+/// case naming one is refused (`deny_unknown_fields`; the
 /// rust-host journey guard).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializeInput {
     pub provider: Value,
     /// None at all is a call the core refuses, as the reference does
-    /// (`empty.indices`, from T1.32d), which this host carries.
+    /// (`empty.indices`), which this host carries.
     pub indices: Vec<Value>,
     pub anchor_time: Value,
     /// Required, and null for the default.
@@ -927,7 +924,7 @@ impl TryFrom<ExpectFields> for Expect {
 }
 
 /// What the case format holds of a case's warehouse fields beyond each
-/// field's own reading (Phase 3 design choice 1), as `run_python.py`'s
+/// field's own reading, as `run_python.py`'s
 /// schema and `warehouse_problem` hold it: `warehouses` only on an S2 case,
 /// which must name them, and never beside `databases`; `input.view` and
 /// `input.connect` only beside `warehouses`; a view's kind kept on every
@@ -1012,9 +1009,9 @@ fn json_files(directory: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
 
 /// The cases named that run on `database`, each read whole as [`load`]
 /// reads it (a malformed case still fails the load): a case naming only
-/// warehouse legs (`warehouses`, Phase 3 design choice 1) is simply not one
+/// warehouse legs (`warehouses`) is simply not one
 /// of a database's cases, so a walker over every case on DuckDB selects
-/// with this rather than skipping (T3.2).
+/// with this rather than skipping.
 pub fn load_for(paths: &[PathBuf], database: Database) -> Result<Vec<Loaded>> {
     Ok(load(paths)?
         .into_iter()
@@ -1147,7 +1144,7 @@ mod load_for_tests {
     fn a_warehouse_only_case_is_no_duckdb_case_and_still_loads() {
         let contract = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract");
         let vectors: Value = serde_json::from_slice(
-            &std::fs::read(contract.join("tests/t32-case-format-vectors.json")).unwrap(),
+            &std::fs::read(contract.join("tests/case-format-vectors.json")).unwrap(),
         )
         .unwrap();
         let directory = std::env::temp_dir().join(format!("t32-load-for-{}", std::process::id()));

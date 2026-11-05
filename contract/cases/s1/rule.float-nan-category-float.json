@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "as rule.float-nan-category-double: categorical on DuckDB, numerical on Postgres"
+    "stage": "predict"
   },
-  "why": "As rule.float-nan-category-double, a FLOAT feature (rule float_nan; T2.12 round 1)",
-  "source": "T2.12 round 1 (Codex P2): float inference as each database previews it, and a NaN key at materialize"
+  "why": "As rule.float-nan-category-double, a FLOAT feature (rule float_nan)",
+  "source": "Correctness case rule.float-nan-category-float using the shop fixture."
 }

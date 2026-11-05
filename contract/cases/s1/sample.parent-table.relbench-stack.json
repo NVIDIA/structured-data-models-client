@@ -204,5 +204,5 @@
     "stage": "predict"
   },
   "why": "RelBench rel-stack's stack-post-votes-90d (contract/tools/relbench.py), a few dozen rows of its shape: posts as the entity table, linked to its parent users and to itself (ParentId, never null: a null foreign key is P1B-13's, covered by its own cases), votes counted per post over 90 days",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.parent-table.relbench-stack using the shop fixture."
 }

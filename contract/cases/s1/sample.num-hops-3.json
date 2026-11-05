@@ -92,5 +92,5 @@
     "stage": "predict"
   },
   "why": "num_hops=3 over users, orders, lines and shipments: the third hop reaches shipments, which the default two hops leave out",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-hops-3 using the shop fixture."
 }

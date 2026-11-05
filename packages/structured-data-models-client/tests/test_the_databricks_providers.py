@@ -3,17 +3,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""Both Databricks providers' own code over a fake cursor returning the
-warehouse's recorded Arrow (T3.4, the brief's exit 5; blind spot B3).
+warehouse's recorded Arrow (the brief's exit 5; blind spot B3).
 
 The SQL-warehouse provider runs a plan's statements on one cursor of a
-``databricks.sql`` connection and hands back ``cursor.fetchall_arrow()``
+``databricks.sql`` connection and hands back ``cursor.fetchall_arrow``
 (the old client's fetch, DB/sampler.py:152,160,275, DB/table.py:383,430);
 the Spark provider runs each through the notebook's session,
-``spark.sql(text, args=[...])``, and hands back ``frame.toArrow()``
+``spark.sql(text, args=[...])``, and hands back ``frame.toArrow``
 (CN/backends/spark.py:58-91), refusing by name a session whose frames
 cannot (DBR 17.3 or later, serverless environment 4 or later,
-CN/backends/spark.py:33-35, :132). Neither reads pandas or converts
-anything: the recorded Arrow crosses as recorded (design choice 5).
+CN/backends/spark.py:33-35,:132). Neither reads pandas or converts
+anything: the recorded Arrow crosses as recorded.
 
 The recorded Arrow is ``contract/fixtures/databricks/capture.json``'s,
 shaped as the design's ``sdm-capture/1``, a synthetic unit fixture recorded
@@ -24,7 +24,7 @@ a provider that rewrites a statement fails.
 
 The providers' names are this test's reading of the brief ("the SQL-warehouse
 provider (``fetchall_arrow``) and the Spark provider (``spark.sql(...)
-.toArrow()``)", in ``sdm_client/_rust/providers/``), beside the DuckDB,
+.toArrow``)", in ``sdm_client/_rust/providers/``), beside the DuckDB,
 SQLite and Postgres providers' ``<Name>Provider``; a plan is the core's
 fetch step as those take it.
 """
@@ -198,7 +198,7 @@ def _step(*statements: tuple[str, list[dict[str, Any]]]) -> dict[str, Any]:
 
 
 def _key_text(attachment: int) -> dict[str, Any]:
-    r"""A key set's parameter as the core plans it on Databricks (T3.28):
+    r"""A key set's parameter as the core plans it on Databricks:
     the JSON text the core wrote, a one-cell attachment."""
     return {'param': 'text', 'attachment': attachment}
 
@@ -290,7 +290,7 @@ def test_a_statement_without_parameters_binds_none() -> None:
 
 def test_a_key_set_s_text_is_bound_as_one_parameter_as_written() -> None:
     r"""A key set is bound as the old client binds it (DB/sampler.py:39,
-    :116-160): one JSON text parameter, which the core writes (T3.28) and
+    :116-160): one JSON text parameter, which the core writes and
     the provider binds as it was handed, byte for byte."""
     recorded = _recorded()
     statement = _statement('base.binary', 'lookup')

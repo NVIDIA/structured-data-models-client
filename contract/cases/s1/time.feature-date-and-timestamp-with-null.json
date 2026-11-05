@@ -86,8 +86,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "both read as timestamp; users.f_date becomes the users time column, with a warning that it was chosen because its values start earliest of f_date and f_ts"
+    "stage": "predict"
   },
   "why": "Date and timestamp features with nulls; the first attempt read the date as text and refused the null timestamp; also time inference on a dimension table",
   "source": "probe#6; probe#7; dtypes:feature:arrow_date32; dtypes:feature:arrow_timestamp_us"

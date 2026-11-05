@@ -26,12 +26,12 @@ import java.util.Objects;
  *
  * <pre>{@code
  * try (SdmClient client = SdmClient.connect("http://localhost:8000")) {
- *   PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+ * PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
  * }
  * }</pre>
  */
 public final class SdmClient implements AutoCloseable {
-  /** The relational model's id, as Python's {@code KumoRelational()} names it. */
+  /** The relational model's id, as Python's {@code KumoRelational} names it. */
   public static final String KUMO_RELATIONAL = "kumo-relational";
   public static final String KUMO_TABULAR = "kumo-tabular";
 
@@ -52,7 +52,7 @@ public final class SdmClient implements AutoCloseable {
    * http://localhost:8000}).
    *
    * @throws StructuredDataException {@code INVALID_CONFIGURATION} for a URL that is not a base
-   *     endpoint, or a credential over plaintext HTTP to another host
+   * endpoint, or a credential over plaintext HTTP to another host
    */
   public static SdmClient connect(String url) {
     return connect(url, ClientOptions.defaults());
@@ -68,7 +68,7 @@ public final class SdmClient implements AutoCloseable {
   /**
    * A client of a Databricks Model Serving endpoint, as Python's {@code
    * SDMClient.for_databricks_serving}: {@link #predict} works, and the core writes the
-   * endpoint's envelope and reads its every answer and failure (T3.13).
+   * endpoint's envelope and reads its every answer and failure.
    */
   public static SdmClient forDatabricksServing(DatabricksServing serving) {
     return new SdmClient(null, Objects.requireNonNull(serving, "serving"));
@@ -105,7 +105,7 @@ public final class SdmClient implements AutoCloseable {
 
   /**
    * What {@code model} supports, as far as this client knows: the core's table of the models, not
-   * the endpoint's answer, as Python's {@code capabilities()}.
+   * the endpoint's answer, as Python's {@code capabilities}.
    *
    * @throws StructuredDataException {@code UNKNOWN_MODEL} for a model the contract does not carry
    */
@@ -149,9 +149,9 @@ public final class SdmClient implements AutoCloseable {
    * request is asked as, reads each answer and lays out the result.
    *
    * @throws StructuredDataException the core's refusal ({@code UNKNOWN_MODEL}, {@code
-   *     UNSUPPORTED_REQUEST} naming the rule, {@code INVALID_RESPONSE} for an answer it cannot
-   *     read), {@code TRANSPORT_ERROR} when the endpoint could not be reached; a {@link
-   *     ModelEndpointException} when the endpoint refused a call
+   * UNSUPPORTED_REQUEST} naming the rule, {@code INVALID_RESPONSE} for an answer it cannot
+   * read), {@code TRANSPORT_ERROR} when the endpoint could not be reached; a {@link
+   * ModelEndpointException} when the endpoint refused a call
    */
   public PredictionResult predict(Request request, String model, List<String> outputs) {
     Objects.requireNonNull(request, "request");

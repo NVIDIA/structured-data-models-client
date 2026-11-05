@@ -122,5 +122,5 @@
     "message": "[500] {\"error\": \"scripted_failure\", \"call\": 0}"
   },
   "why": "rows_per_call=3 over 8 entities with the first call failed: nothing was answered, so the error carries no answered part",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.fail-call-0 using the shop fixture."
 }

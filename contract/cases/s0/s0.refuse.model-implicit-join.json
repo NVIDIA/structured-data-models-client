@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The model family, what a pretrained model refuses: the entity table's column inside the target's filter (PQL_MODEL_NO_IMPLICIT_JOIN)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.refuse.model-implicit-join using the shop fixture."
 }

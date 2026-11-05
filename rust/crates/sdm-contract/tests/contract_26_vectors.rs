@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The Rust loader over contract v26's vectors (T2.1b; design choices 1
+//! The Rust loader over contract v26's vectors (design choices 1
 //! and 12): `contract-26-vectors.json`, which the Python loader validates
-//! against the committed schema (`tests/test_t21b_contract_v26.py`), read
+//! against the committed schema (`tests/test_native_protocol.py`), read
 //! here into the type each vector names: an accepted vector deserializes
 //! and serializes back to the same JSON, and a refused one does not
 //! deserialize.
@@ -27,7 +27,7 @@ fn vectors() -> Value {
     );
     let document: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     assert_eq!(document["format"], "sdm-contract-vectors/1");
-    // v26's vectors, which v27 (T2.12's key label, optional) reads as
+    // v26's vectors, which v27 (key label, optional) reads as
     // they are.
     assert_eq!(document["contract"], 26);
     document

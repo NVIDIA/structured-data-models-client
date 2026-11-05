@@ -84,8 +84,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "keys and the link come from DuckDB's declared constraints (names alone would not infer buyer -> uid); schema dtype int64 for both; result id int64"
+    "stage": "predict"
   },
   "why": "Covers schema.from-source/catalog-keys/duckdb and an int32 key, and skips the key count for enforced keys",
   "source": "scope-python.yaml paths"

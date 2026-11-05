@@ -85,9 +85,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 2 calls (rows_per_call=1, entities 0 and 1), each lagged target __kumo_arl0__ and __kumo_arl1__ declared bool in every call's schema; result columns row_index, id, prediction"
+    "stage": "predict"
   },
-  "why": "lag_timesteps of 2 on a temporal binary classification (a comparison of an average), asked one entity a call (rows_per_call=1): each call's lagged targets keep the dtype the reference gives them, bool in every call, even where a call's values are all empty (Codex, T2.9 round 2)",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "why": "Lag_timesteps of 2 on a temporal binary classification (a comparison of an average), asked one entity a call (rows_per_call=1): each call's lagged targets keep the dtype the reference gives them, bool in every call, even where a call's values are all empty",
+  "source": "Correctness case lag.condition-per-call using the shop fixture."
 }

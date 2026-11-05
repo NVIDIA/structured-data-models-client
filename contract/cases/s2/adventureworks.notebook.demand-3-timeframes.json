@@ -171,6 +171,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "The deleted AdventureWorks notebook (contract/fixtures/adventureworks/notebook-fa0637d4.ipynb), demand_3_timeframes (the same demand three 30-day windows out), a forecast, on the AdventureWorks base loaded into each warehouse's test schema (choice 1), with the schema and edits of base.adventureworks (the notebook's); the notebook's top product, popular products and frequent customers computed on the fixture, and its anchor the latest OrderDate (2025-06-15) less 180 days. Its other three table questions are the S1 cases base.adventureworks (demand_30d), .churn (inactivity_90d) and .color (product_color), which already run on every warehouse leg (choice 1), so they are not repeated here; one file for every leg whose engine stores the data (T3.4 brief, open question 1)",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "why": "AdventureWorks notebook-derived journey for demand forecasting across three 30-day windows, using fixture-derived candidates and anchor time.",
+  "source": "Correctness case adventureworks.notebook.demand-3-timeframes using the adventureworks fixture."
 }

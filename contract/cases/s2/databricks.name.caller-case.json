@@ -75,5 +75,5 @@
     "stage": "predict"
   },
   "why": "Source names in another case than Unity Catalog's lower-cased ones: the reference folds the literal in its information_schema look-up (table_schema = lower(?), table_name = lower(?), DB/table.py:212-246) and adopts the canonical names read back for every later statement (DB/table.py:262), so the case predicts as base.binary does",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "source": "Correctness case databricks.name.caller-case using the shop fixture."
 }

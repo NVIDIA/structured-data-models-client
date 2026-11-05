@@ -8,7 +8,7 @@
 //! Conditions follow the precedence ANTLR gives the left-recursive rule:
 //! `NOT` binds tighter than `AND`, which binds tighter than `OR`, and both
 //! binary operators group to the left. An array needs two elements or more;
-//! the grammar's actions refuse `(c)` and `(c,)`.
+//! the grammar's actions refuse `(c)` and `(c)`.
 
 use crate::lexer::{Kind, Token};
 
@@ -101,7 +101,7 @@ pub enum CondLhs {
 /// Each condition carries its height: the levels of the tree it is the
 /// root of, counting its constant's array nesting and an aggregation's
 /// filter. No condition is built taller than [`MAX_DEPTH`], whatever mix of
-/// NOT, parentheses, AND, OR and arrays makes it tall (decision H27).
+/// NOT, parentheses, AND, OR and arrays makes it tall.
 pub enum Cond {
     Rel {
         lhs: CondLhs,

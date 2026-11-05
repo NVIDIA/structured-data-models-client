@@ -229,8 +229,7 @@ def test_an_endpoint_s_refusal_is_shown_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The endpoint's own text, its code, detail, title and other fields and
-    # the client's diagnosis of it, as the old route shows them (decision
-    # E47, owner decision 2026-10-10); nothing chained to it.
+    # the client's diagnosis of it, without a chained internal exception.
     request = _materialized()
     for status, answer in (
         (422, {'code': 'UNSUPPORTED_FEATURE', 'detail': 'column x is 5'}),
@@ -324,7 +323,7 @@ def test_distinct_answers_out_of_order_land_on_their_own_entities(
 ) -> None:
     # Entities that are not their rows' positions, answered in reverse
     # order with a distinct prediction each: a swapped column or a misplaced
-    # prediction differs from the old route (T1.11d review round 1, F4).
+    # prediction differs from the old route ( review round 1, F4).
     request = _materialized(indices=[5, 2, 7])
     [rows] = [request.payloads[0]['predict']['instance_table']['rows']]
     instances = [row[0] for row in rows]
@@ -345,7 +344,7 @@ def test_distinct_answers_out_of_order_land_on_their_own_entities(
         core = _outcome(request, url)
     assert not isinstance(core, Exception), core
     # The items keep the endpoint's order, as the old route's (the core's
-    # rows are ordered by row_index, with each answer's place, T1.28b).
+    # rows are ordered by row_index, with each answer's place).
     assert (core.request_id, core.metadata) == ('r7', answer['metadata'])
     frame = core.to_pandas()
     assert frame['id'].tolist() == [5, 2, 7]
@@ -361,7 +360,7 @@ def test_distinct_answers_out_of_order_land_on_their_own_entities(
 def test_quantiles_with_no_prediction_are_the_old_route_s_on_the_core(
     monkeypatch: pytest.MonkeyPatch, outputs: list[str]
 ) -> None:
-    # T2.9: a model asked for quantiles may leave the prediction out (the
+    #: a model asked for quantiles may leave the prediction out (the
     # reference's _report_absent says kumo-relational does when both are
     # asked): each item's quantiles are kept as keyed, no prediction column
     # is made up, and a prediction the caller named and the answer left out
@@ -427,9 +426,9 @@ def test_quantiles_with_no_prediction_are_the_old_route_s_on_the_core(
 def test_an_overflowing_prediction_is_the_old_route_s_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # From T1.28b, by the owner's decision of 2026-10-12, the core reads a
+    # by the owner's decision of 2026-10-12, the core reads a
     # token past a double's range as the infinity the old route reads
-    # (register P1B-4).
+    # (B-4).
     request = _materialized()
     for token in ('1e400', '-1e400', 'NaN', 'Infinity', '-Infinity'):
         answer = (
@@ -457,7 +456,7 @@ def test_an_answer_too_deep_for_python_s_reader_is_too_deep_on_the_core(
     # Before Python 3.12, json.loads raises RecursionError past about 1,000
     # levels, which the transport reports as TRANSPORT_ERROR; on the core
     # route the core is told the answer is too deep, so it is refused
-    # INVALID_RESPONSE on every interpreter (register P1B-22, T1.28b fix
+    # INVALID_RESPONSE on every interpreter (B-22, fix
     # round 2). Seeded here on any interpreter by a reader that refuses
     # deep text as 3.10's and 3.11's do.
     from sdm_client.core import transport
@@ -531,8 +530,8 @@ def test_a_non_finite_number_anywhere_in_the_answer_is_the_old_route_s(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # One policy over the whole answer, as the Rust host's (sdm-core's
-    # tests/predict.rs, the same tokens in the metadata): from T1.28b the
-    # value is passed on, as on the old route (register P1B-4).
+    # tests/predict.rs, the same tokens in the metadata): the
+    # value is passed on, as on the old route (B-4).
     request = _materialized()
     for token in ('1e400', '-1e400', 'Infinity', '-Infinity', 'NaN'):
         answer = (
@@ -556,7 +555,7 @@ def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
     # without recursion, and the core refuses it as too deep. 126 arrays in
     # the metadata nest 128 deep in all, the deepest the core reads. Past
     # that the core refuses it INVALID_RESPONSE, reason too_deep, on every
-    # interpreter (register P1B-22, approved by the owner), also where
+    # interpreter (B-22, approved by the owner), also where
     # Python's own reader cannot take it (about a thousand levels on 3.10
     # and 3.11) and the old route's transport fails, TRANSPORT_ERROR;
     # either way nothing raises a bare RecursionError.
@@ -619,7 +618,7 @@ def test_a_refusal_with_deeply_nested_details_is_shown_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Details the transport read at a depth a recursive copy cannot take
-    # (T1.11d review round 3): the old route's class, status, code and
+    # ( review round 3): the old route's class, status, code and
     # details, and nothing chained.
     request = _materialized()
     for depth in (600, 900):
@@ -765,12 +764,12 @@ def _sent(
 def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Register PD-2 (fix round 1, Codex P2-1): the HTTP transport sends the
+    # Register PD-2: the HTTP transport sends the
     # core's call as the core wrote it, so the bytes the endpoint receives
     # are the bytes the core counted against the limit, characters past
     # ASCII as their own bytes, never json.dumps' escapes. At the limit's
     # edge the call is sent, at most the limit; one character past it,
-    # nothing is sent. Since the reference's 26ecdd28 (T2.0c) the call
+    # nothing is sent. Since the reference's 26ecdd28 the call
     # leaves out the engine's inference config, which the payload holds,
     # so the payload is the larger and meets the limit first: the edge is
     # the payload's, which materialize names in its refusal, and one past
@@ -823,7 +822,7 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
 def test_embeddings_are_the_old_route_s_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # T2.11: an answer's embeddings, asked for among the outputs, read as
+    #: an answer's embeddings, asked for among the outputs, read as
     # the client's bindings read them and given back as the old route
     # gives them: one list per row, the items holding each as a tuple.
     request = _materialized()

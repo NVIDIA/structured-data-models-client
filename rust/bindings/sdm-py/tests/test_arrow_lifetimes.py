@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Arrow through the installed binding, for the wheel smoke (T1.17).
+"""Arrow through the installed binding, for the wheel smoke.
 
 What the clean containers of ``wheel-smoke`` check through
 ``sdm_client._native`` at each lane's pandas, NumPy and pyarrow, over the

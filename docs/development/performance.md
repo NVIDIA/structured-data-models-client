@@ -6,7 +6,7 @@
 
 **Historical benchmark, candidate `08d027795`; not a claim about later commits.**
 
-Across these workloads, candidate Python request preparation and schema stages are slower than main, with most of that difference already present before Phase 6.
+Across these workloads, candidate Python request preparation and schema stages are slower than main, with most of that difference already present in the earlier candidate.
 Relational materialize/sample/encode stages are faster in the candidate memory workload; the overall result depends on the workload and host.
 All 17 workloads completed; no performance tuning was applied during this campaign.
 The measured candidate is artifact revision `08d027795`, compared with main `847a1e9e3` and pre-Phase-6 `4b5df2e2e`.
@@ -87,5 +87,5 @@ The retained evidence includes time-weighted means, sampled peaks, available OS 
 Its late-window RSS comparison uses the 50–70% and 70–90% portions of process lifetime, not aligned iteration boundaries.
 Allocator caching, GC timing and phase mix can affect that proxy; these bounded runs neither establish nor exclude a memory leak.
 
-Evidence is retained outside Git under the Phase 8 `benchmark-real` directory: `campaign-summary.json`, `summarize_campaign.py` and each named raw workload JSON.
+Evidence is retained outside Git under the retained `benchmark-real` campaign directory: `campaign-summary.json`, `summarize_campaign.py` and each named raw workload JSON.
 The summary records raw SHA-256 hashes, artifact revisions, endpoint identities, harness hashes, per-process timings, dispersion, work counters and memory samples; raw results remain unchanged.

@@ -4,7 +4,7 @@
 
 //! Operations only tests reach, built only with the `test-ops` feature,
 //! which a shipped build leaves off. They let a test drive the core through
-//! `HostRun::start` into states no Phase 1a operation reaches yet: a fetch
+//! `HostRun::start` into controlled boundary states: a fetch
 //! with a plan of any size, a result, error or warnings of any size. Their
 //! inputs travel as bytes attachments of JSON, as input-sized fields do, so
 //! the start message stays small. Two more let a binding's tests reach what
@@ -46,7 +46,7 @@ pub enum TestOperation {
     Panic { at: PanicAt, payload: String },
     /// Emits one `tracing` event at its first step, at level `INFO` with
     /// target `sdm_core::test_ops`, then holds the call for `hold_ms`
-    /// milliseconds and finishes with no rows (decision H8).
+    /// milliseconds and finishes with no rows.
     Log { hold_ms: u64 },
     /// Aborts the process at its first step: what no host can contain.
     Abort,
@@ -55,7 +55,7 @@ pub enum TestOperation {
     /// unknown zone fails the run.
     Zone { zone: String, at: Scalar },
     /// Runs `materialize` as its operation does, to the context's labels
-    /// (T1.27), and finishes with them: `TestResult::data` is an Arrow
+    ///, and finishes with them: `TestResult::data` is an Arrow
     /// batch of one row per context example, its entity's key (`entity`),
     /// its anchor (`anchor`, zone-less nanoseconds) and its label
     /// (`target`), `rows` their count. A host runs it in place of the
@@ -119,11 +119,11 @@ pub struct TestFetch {
     pub echo: bool,
     /// Optional requests the `provider` is taken not to declare for this
     /// fetch, out of what its data layer gives it: the conformance kit's
-    /// cases with a capability undeclared, on any provider (T2.5, T2.6).
+    /// cases with a capability undeclared, on any provider.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub undeclared: Vec<OptionalRequest>,
     /// The in-memory fallback's limits the `provider` is taken to declare
-    /// for this fetch, in place of its own (T2.6).
+    /// for this fetch, in place of its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<FallbackLimits>,
 }

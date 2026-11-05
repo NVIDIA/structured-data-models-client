@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The pure-Rust host's SQLite (T2.2): a case's tables loaded by the one
+//! The pure-Rust host's SQLite: a case's tables loaded by the one
 //! contract loader, and the dev-only `rusqlite` provider, which answers a
 //! fetch step as the Python host's SQLite provider does through ADBC.
 //!
@@ -10,7 +10,7 @@
 //! (`contract/runners/databases.py`, through `contract/tools/load_case.py`,
 //! run by the Python `SDM_PYTHON` names, `python3` by default), so this
 //! host reads the same loaded database the reference and python-core read
-//! (design choice 2).
+//!.
 //!
 //! [`Sqlite`] runs the statements a plan carries, in order, and hands the
 //! last one's rows back as Arrow typed as ADBC's SQLite driver types them,

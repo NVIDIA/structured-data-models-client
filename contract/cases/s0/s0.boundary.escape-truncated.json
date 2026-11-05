@@ -104,6 +104,6 @@
     "error": "StructuredDataError",
     "code": "INVALID_REQUEST"
   },
-  "why": "An escape the codec cannot finish, a \\u with two hex digits, makes the literal unreadable (escapes, decision E9; PQL_VALUE_INVALID_LITERAL)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "why": "An escape the codec cannot finish, a \\u with two hex digits, makes the literal unreadable (escapes; PQL_VALUE_INVALID_LITERAL)",
+  "source": "Correctness case s0.boundary.escape-truncated using the shop fixture."
 }

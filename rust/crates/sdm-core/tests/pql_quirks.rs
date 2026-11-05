@@ -11,14 +11,14 @@
 //! reads, or `PQL_VALUE_INVALID_LITERAL` where it refuses, and D4's warning
 //! by format.
 //!
-//! From T1.6c a row whose date literal has a run of five digits or more
+//! a row whose date literal has a run of five digits or more
 //! (D8) is held to the core's refusal by name (`date_literal_packed`)
 //! instead, whatever the reference read; its recorded reading stays in the
 //! table as evidence of the old behaviour.
 //!
-//! From T2.18 a query row marked `core_only` is held to the core's own
+//! a query row marked `core_only` is held to the core's own
 //! answer there (its `errors`), where the reference refuses a spelling the
-//! core reads (KO2-36, register P2E-1); the reference's answer stays in the
+//! core reads (E-1); the reference's answer stays in the
 //! row, and the core must differ from it, so a mark that no longer differs
 //! fails.
 
@@ -71,10 +71,10 @@ fn every_quirk_has_a_row() {
 
 /// Every query row as the reference answers it, except the one whose date
 /// literal is D8 (`date-digit-counts/long-year`, `12345-1-1`, which the
-/// reference refuses as `PQL_VALUE_INVALID_LITERAL`): from T1.6c the core
+/// reference refuses as `PQL_VALUE_INVALID_LITERAL`): the core
 /// refuses it by name (brief: "update the quirk expectations for D8
 /// literals from read to refused").
-/// The two rows marked `core_only` (T2.18) are held to the core's answer
+/// The two rows marked `core_only` are held to the core's answer
 /// instead, and to differing from the reference's.
 #[test]
 fn every_query_row_answers_as_the_reference_does() {
@@ -136,7 +136,7 @@ fn time_of(node: &PqlNode) -> Option<(String, Option<i32>)> {
 
 /// Every date row as the reference reads it, except the four with a run of
 /// five digits or more (`10000-01-01`, `230203-06-09`, `20240101-01-01`,
-/// `1-1-20240101`), which from T1.6c the core refuses by name, where the
+/// `1-1-20240101`), which the core refuses by name, where the
 /// reference read two and refused two: no reading, no diagnostic, no
 /// warning (brief: "update the quirk expectations for D8 literals").
 #[test]

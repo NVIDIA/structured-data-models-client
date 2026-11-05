@@ -89,7 +89,7 @@ pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
 /// `Infinity` or `-Infinity` token outside text as the number Python's
 /// reader takes it for, as the reference's client reads an answer (owner
 /// decision of 2026-10-12, relayed: a non-finite prediction is passed
-/// through, register P1B-4): each such token is a [`Value::Number`] of the
+/// through, B-4): each such token is a [`Value::Number`] of the
 /// token as written, which `str::parse::<f64>` reads as a NaN or an
 /// infinity, and which [`Value::to_bytes`] writes back as written.
 ///
@@ -105,7 +105,7 @@ pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
 ///
 /// A lone surrogate, which Python's reader keeps in a string and UTF-8
 /// cannot hold, is read as U+FFFD, the replacement character, and the
-/// answer is read on (register P1B-24, the owner's KO2-93): one escaped in
+/// answer is read on (B-24, the owner's ): one escaped in
 /// text (`\ud800` with no low surrogate escaped after it, or a low one
 /// alone), one in UTF-16 or UTF-32 ([`answer_text`]), and one written in
 /// UTF-8 as its three bytes (`ED A0 80`), as Python's reader takes them
@@ -231,7 +231,7 @@ fn read_answer_utf8(bytes: &[u8]) -> Result<Value, ReadError> {
 /// as they are. Text that does not decode is refused, category `encoding`,
 /// as Python's decoding raises; a lone surrogate, which Python's decoding
 /// keeps (`surrogatepass`), is read as U+FFFD, as [`read_answer`] reads one
-/// escaped (register P1B-24). The position is the first byte's.
+/// escaped (B-24). The position is the first byte's.
 pub fn answer_text(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, ReadError> {
     use std::borrow::Cow;
     #[derive(Clone, Copy)]

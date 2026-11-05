@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The logical model a view converts into (design S5): its tables, each
+//! The logical model a view converts into: its tables, each
 //! with its columns, as the source holds them or as expressions, and its
 //! primary key, and the links between them. Its steps are the graph's part
 //! of the old client's conversion (`RE/graph.py`):

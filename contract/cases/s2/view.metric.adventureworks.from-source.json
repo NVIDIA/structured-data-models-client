@@ -72,6 +72,6 @@
     "outcome": "success",
     "stage": "from_source"
   },
-  "why": "Schema.from_source(source.semantic_model(view)) on the owner's view, as both AdventureWorks notebooks read it: its source table keeps its catalog name, each join becomes a table named after it, and the measures are conversion notes. The owner's existing AdventureWorks metric view (KO3-21), named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
-  "source": "written by T3.5's test author from the reference at 43e55f4f"
+  "why": "Schema.from_source(source.semantic_model(view)) on the owner's view, as both AdventureWorks notebooks read it: its source table keeps its catalog name, each join becomes a table named after it, and the measures are conversion notes. The owner's existing AdventureWorks metric view, named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
+  "source": "Correctness case view.metric.adventureworks.from-source using the adventureworks fixture."
 }

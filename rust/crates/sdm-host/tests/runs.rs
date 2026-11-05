@@ -4,7 +4,7 @@
 
 //! Run ownership through the host layer: starting from bytes, panic
 //! containment, busy handling, replies with their attachments, admission on
-//! the way in, and the attachment-id rules of decision E2.
+//! the way in, and the attachment-id rules of.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -235,7 +235,7 @@ fn a_panic_is_contained_and_poisons_the_run() {
         (ErrorKind::Internal, ErrorCode::InternalError)
     );
     assert!(is_panic(&err));
-    // The location, never the panic's message (decision H17).
+    // The location, never the panic's message.
     let written = serde_json::to_string(&err).unwrap();
     assert!(!written.contains("boom"), "{written}");
     assert!(matches!(
@@ -405,7 +405,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     .unwrap();
     let second = fetch_id(&run.next().unwrap());
     assert_ne!(first, second);
-    // ...and may name other data 1 in the next; the first id means nothing
+    //...and may name other data 1 in the next; the first id means nothing
     // now.
     let error = ProviderError {
         error_class: None,
@@ -559,7 +559,7 @@ fn a_model_call_s_body_is_the_run_s_attachment_1_and_its_answer_the_host_s() {
     let Step::CallModel(call) = step(&run.next().unwrap()) else {
         panic!("a model call");
     };
-    // The core numbers its attachments from 1 in each run (E2).
+    // The core numbers its attachments from 1 in each run.
     assert_eq!(call.body, AttachmentId(1));
     let Some(Attachment::Bytes(body)) = run.take_attachment(call.body).unwrap() else {
         panic!("the body is bytes");

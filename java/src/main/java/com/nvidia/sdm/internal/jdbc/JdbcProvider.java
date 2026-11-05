@@ -33,14 +33,14 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * only:
  *
  * <ul>
- *   <li>how a key set the plan names is bound ({@link KeySets}): DuckDB registers it as Arrow and
- *       keeps it as a temporary table, SQLite ingests it as a temporary table as ADBC does,
- *       Postgres binds the JSON text the core wrote of it (T3.28), handed over as one text cell, as
- *       the statement's one parameter, as it was handed; Databricks binds each statement's values
- *       to its {@code ?} markers in order, a text scalar and a key set's text alike, as Python's
- *       Databricks provider binds them (T3.13);
- *   <li>how a result becomes Arrow: the driver's column of the conversion table ({@link
- *       ConversionTable}).
+ * <li>how a key set the plan names is bound ({@link KeySets}): DuckDB registers it as Arrow and
+ * keeps it as a temporary table, SQLite ingests it as a temporary table as ADBC does,
+ * Postgres binds the JSON text the core wrote of it, handed over as one text cell, as
+ * the statement's one parameter, as it was handed; Databricks binds each statement's values
+ * to its {@code ?} markers in order, a text scalar and a key set's text alike, as Python's
+ * Databricks provider binds them;
+ * <li>how a result becomes Arrow: the driver's column of the conversion table ({@link
+ * ConversionTable}).
  * </ul>
  *
  * A plan this provider cannot run (one for a host provider, one of another dialect, one with a
@@ -166,7 +166,7 @@ public final class JdbcProvider implements Host.Provider {
         Map<String, Object> param = (Map<String, Object>) p;
         Object kind = param.get("param");
         if ("text".equals(kind)) {
-          // The key set's JSON text the core wrote (T3.28), which Postgres binds.
+          // The key set's JSON text the core wrote, which Postgres binds.
           if (driver != Driver.POSTGRES) {
             throw new PlanNotRun("a key set's text on a driver binding key sets as relations");
           }
@@ -260,7 +260,7 @@ public final class JdbcProvider implements Host.Provider {
   // --- DuckDB ---------------------------------------------------------------------------
 
   /**
-   * On a cursor of its own (the connection {@code duplicate()}d, as the Python provider takes a
+   * On a cursor of its own (the connection {@code duplicate}d, as the Python provider takes a
    * cursor), each key set bound, the statements run, and the last one's result exported by the
    * driver as Arrow, every batch it made.
    */
@@ -353,7 +353,7 @@ public final class JdbcProvider implements Host.Provider {
 
   /**
    * The statements run in a transaction as the reference's reads take one (psycopg's {@code
-   * connection.transaction()}): none under autocommit; outside a transaction, one of its own,
+   * connection.transaction}): none under autocommit; outside a transaction, one of its own,
    * committed, or rolled back if the read fails; inside the caller's, a savepoint, so a failed read
    * leaves the caller's transaction usable and the caller's work is the caller's to commit. Each
    * statement binds its key set's text, as the core wrote it, as its one parameter, every value

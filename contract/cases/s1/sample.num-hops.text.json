@@ -88,5 +88,5 @@
     "message": "num_hops must be a whole number, got str '2'"
   },
   "why": "num_hops='2' is no whole number: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-hops.text using the shop fixture."
 }

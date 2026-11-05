@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "as rule.float-signed-nan-key-tie-double: a tie and no key on DuckDB, orderid on Postgres"
+    "stage": "predict"
   },
-  "why": "As rule.float-signed-nan-key-tie-double, FLOAT candidates (rules float_nan and key_tie; T2.12 round 2)",
-  "source": "T2.12 round 2 (Codex P2): a NaN of each sign as DuckDB previews it, and a static query over a NaN key"
+  "why": "As rule.float-signed-nan-key-tie-double, FLOAT candidates (rules float_nan and key_tie)",
+  "source": "Correctness case rule.float-signed-nan-key-tie-float using the shop fixture."
 }

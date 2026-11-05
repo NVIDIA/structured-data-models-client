@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The one SQL builder (T3.18, design fix E): every statement shape the
+//! The one SQL builder (design fix E): every statement shape the
 //! dialects share, written once over [`SqlDialect`], and the one lookup of
 //! a dialect by its name ([`dialect`]).
 //!
@@ -13,7 +13,7 @@
 //! JSON text where the statement reads it so, [`crate::key_text`]), how a
 //! time is cast, the seeded sample, the per-seed neighbor read and the key
 //! lookup, its catalog statements and the reading of their answers, and
-//! the quirks the core asks of a provider. A warehouse dialect (T3.4
+//! the quirks the core asks of a provider. A warehouse dialect (
 //! onward) plugs in the same way: one more `impl SqlDialect` and one more
 //! entry in [`DIALECTS`].
 //!
@@ -113,7 +113,7 @@ pub(crate) trait SqlDialect: Sync {
 
     // --- quoting, depths and namespace -------------------------------------
 
-    /// The most name parts a relation takes (design choice 12).
+    /// The most name parts a relation takes.
     fn most_parts(&self) -> usize;
 
     /// `name` as an identifier: in double quotes, each one in it doubled.
@@ -136,7 +136,7 @@ pub(crate) trait SqlDialect: Sync {
     /// (design fix C): the parts the provider leaves to the connection, a
     /// leading one included, read once as the session's current ones, so
     /// each relation is read under the full namespace, as the reference
-    /// reads a Databricks source (`current_catalog()`, `current_schema()`)
+    /// reads a Databricks source (`current_catalog`, `current_schema`)
     /// and as its catalog names a table a foreign key refers to. `false`,
     /// the default: a relation of fewer parts is read in the connection's
     /// current ones.
@@ -165,7 +165,7 @@ pub(crate) trait SqlDialect: Sync {
     }
 
     /// The dialect a semantic model's expressions are checked in, where
-    /// this dialect reads semantic models (T3.5); `None`, the default: it
+    /// this dialect reads semantic models; `None`, the default: it
     /// reads none, and each question of one is refused by name.
     fn expr_dialect(&self) -> Option<crate::view_expr::ExprDialect> {
         None
@@ -177,7 +177,7 @@ pub(crate) trait SqlDialect: Sync {
     }
 
     /// A semantic model's declared column type read by the dialect's type
-    /// map (T3.5); unknown, the default, left to the sampled values.
+    /// map; unknown, the default, left to the sampled values.
     fn declared_type(&self, _data_type: &str) -> sdm_contract::view::DeclaredType {
         sdm_contract::view::DeclaredType::Unknown
     }
@@ -386,7 +386,7 @@ pub(crate) trait SqlDialect: Sync {
     /// takes one. The statement's text and the parameters it binds, in its
     /// placeholders' order: none for a dialect that writes each name in
     /// place, as DuckDB, SQLite and Postgres do; a warehouse's catalog read
-    /// binds the names it looks for (Databricks's `lower(?)`, T3.4).
+    /// binds the names it looks for (Databricks's `lower(?)`).
     fn describe(
         &self,
         request: &DataRequest,
@@ -458,7 +458,7 @@ pub(crate) trait SqlDialect: Sync {
         true
     }
 
-    // --- a key set bound as text (T3.28, [`crate::key_text`]) -------------------
+    // --- a key set bound as text ([`crate::key_text`]) -------------------
 
     /// Each seed of the key set `request` reads, `schema` and `batches` as
     /// the core made it, as the JSON its statement reads, in order, a
@@ -514,7 +514,7 @@ pub(crate) fn not_taken(request: &DataRequest, field: &str, message: &str) -> Co
 }
 
 /// The one rendering of a relation every dialect's `FROM` goes through
-/// (design choice 12): each part of `relation` quoted alone by the
+///: each part of `relation` quoted alone by the
 /// dialect, never split on a dot, joined by dots. A relation of no part,
 /// or of more than the dialect's [`SqlDialect::most_parts`], is refused by
 /// name (rule `relation`, [`refuse_relation`]) as `field` of `request`, and
@@ -628,7 +628,7 @@ pub(crate) struct SeedRead<'a> {
     pub columns: &'a [String],
     pub seeds: &'a KeySet,
     pub window: Option<&'a Window>,
-    /// The seeds of the chunks before this statement's own (T3.28): the
+    /// The seeds of the chunks before this statement's own: the
     /// batch of its key set's first seed, which a dialect numbering seeds
     /// by their position in the key set's JSON counts from.
     pub offset: usize,
@@ -730,7 +730,7 @@ impl SeedRead<'_> {
 
 /// The statements answering `request` in `dialect`, with the schema its
 /// answer has; `namespace` the provider's, for a dialect that takes one; a
-/// key set's seeds numbered from `offset`, a later chunk's (T3.28,
+/// key set's seeds numbered from `offset`, a later chunk's (
 /// [`crate::key_text`]), else 0.
 pub(crate) fn plan(
     dialect: &dyn SqlDialect,
@@ -1081,7 +1081,7 @@ fn key_counts(
             let nulls = format!("COUNT(CASE WHEN {missing} THEN 1 END)");
             // A key the source keeps unique has one distinct value per row
             // holding all of it, so the reference counts only its nulls
-            // (`_key_count_sql`, carried row P2-T2.2-3).
+            // (`_key_count_sql`, carried row P2--3).
             let distinct = match quoted.as_slice() {
                 _ if key.unique => format!("COUNT(*) - {nulls}"),
                 [one] => format!("COUNT(DISTINCT {one})"),

@@ -84,9 +84,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: answered; Schema.from_source leaves the column out with one SDMWarning per table (a predictive query cannot name a column holding a dot, a backtick or a line break), so no request carries it; the core keeping every column as data (KO2-36) sends it as a feature"
+    "stage": "predict"
   },
-  "why": "A column named with a line feed (inside the quoted name) (\"a\\nb\"), as kept as data: a feature of users the query does not name: KO2-36, any column name works, kept as data and nameable in a query",
-  "source": "T2.18 any column name (KO2-36), the design row"
+  "why": "A column named with a line feed (inside the quoted name) (\"a\\nb\"), as kept as data: a feature of users the query does not name: , any column name works, kept as data and nameable in a query",
+  "source": "Correctness case name.line-break-feature using the shop fixture."
 }

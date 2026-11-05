@@ -81,9 +81,8 @@
     "outcome": "refusal",
     "stage": "predict",
     "error": "UnsupportedRequestError",
-    "code": "UNSUPPORTED_REQUEST",
-    "today": "recorded at the reference 6298913c: refused UNSUPPORTED_REQUEST at predict; materialize gathers a binary_classification whose 6 context labels are all false (measured), one class, which predict refuses; a core reading 1.5 as 2 would label d = 2 true and answer"
+    "code": "UNSUPPORTED_REQUEST"
   },
   "why": "No DECIMAL(38, 0) equals 1.5; reading 1.5 at scale 0 (2) would make d = 2 equal",
-  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+  "source": "Correctness case decimal.compare-finer-eq using the shop fixture."
 }

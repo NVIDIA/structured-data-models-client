@@ -2,16 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The keys counted over every row held to the reference's rules (its
-//! client's `_check_source_keys`, T1.32e; the owner moved them out of
-//! Phase 2 on 2026-10-13): a key the caller named that holds a null is
-//! refused; a key the caller named or the catalog declares whose rows
-//! repeat a value in more than 1% of them is refused; an inferred key whose
-//! rows are less than 99% distinct is declined, the table left without a
-//! key; and a key kept with rows missing a value or repeating one is said.
-//! Each count is the answer to the one `key_counts` request the core asks,
-//! with a repeated value read for each key that repeats (`repeated_key`),
-//! as the reference reads one to show it.
+//! Validate keys using whole-table counts.
+//! Named keys containing nulls are refused.
+//! Named or declared keys with more than 1% repeated values are refused;
+//! inferred keys below 99% distinctness are declined.
+//! Kept keys with missing or repeated values produce diagnostics.
+//! Counts and example repeated values come from typed data requests.
 
 use std::collections::BTreeSet;
 

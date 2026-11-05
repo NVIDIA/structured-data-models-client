@@ -175,7 +175,7 @@ def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
 #: year; pandas 2 (on Python 3.10, which pandas 3 does not support) only
 #: 1677 to 2262, so there the old route refuses a date in year 0 or 1 as a
 #: query (OutOfBoundsDatetime), and the core, told pandas 2's range by the
-#: host, refuses it alike (T1.20 fix 1).
+#: host, refuses it alike.
 PANDAS_3 = int(pd.__version__.split('.')[0]) >= 3
 
 #: Date literals with a run of five digits or more (D8), which the
@@ -206,9 +206,9 @@ def _filtered(condition: str) -> str:
 def _assert_refused_as_packed(
     refused: StructuredDataError, literal: str, query: str
 ) -> None:
-    r"""T1.6c's refusal by name: ``INVALID_REQUEST`` naming ``operation``
+    r"""refusal by name: ``INVALID_REQUEST`` naming ``operation``
     ``validate_query`` and ``rule`` ``date_literal_packed``, with the
-    literal's place. From KO2-86 (an error may name a value of the caller's
+    literal's place. From (an error may name a value of the caller's
     own call) it names the query given (``query``) and its packed literal
     (``literal``), exactly, and its message names the literal; no other
     detail holds the literal's text."""
@@ -236,9 +236,9 @@ def _assert_refused_as_packed(
 def test_a_packed_date_literal_is_refused_by_name_on_the_core(
     core: list[str], literal: str
 ) -> None:
-    # T1.6c brief, Tests: a D8 literal is refused by name on python-core,
+    # brief, Tests: a D8 literal is refused by name on python-core,
     # through materialize and the validation it runs (register DT-9's two
-    # queries included: no longer read, as T1.6b read them), where the
+    # queries included: no longer read, as read them), where the
     # reference reads it or refuses it as a query.
     text = _filtered(f'orders.ts > {literal}')
     schema = _orders_schema()
@@ -297,7 +297,7 @@ def test_ordinary_date_literals_have_explicit_outcomes(
 def test_an_earlier_refusal_wins_over_a_packed_date_on_the_core(
     core: list[str],
 ) -> None:
-    # T1.6c: node order decides. A D9 literal built first refuses the query
+    #: node order decides. A D9 literal built first refuses the query
     # as on the old route; a D8 literal built first ends the parse, by name.
     schema = _orders_schema()
     with pytest.raises(StructuredDataError) as refused:
@@ -316,7 +316,7 @@ def test_an_earlier_refusal_wins_over_a_packed_date_on_the_core(
 def test_a_packed_date_needs_no_local_zone_on_the_core(
     core: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # T1.6c: a D8 literal is refused before it is read, so a local zone the
+    #: a D8 literal is refused before it is read, so a local zone the
     # run cannot read is never asked for, even for a six-digit packed date,
     # whose two-digit year the reference places.
     from sdm_client._rust import facts

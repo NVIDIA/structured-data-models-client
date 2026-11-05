@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""The warehouse loader's own tests (``contract/runners/databases.py``,
-T3.3; design, choice 1): each engine's type map, the statements loading a
+; design, choice 1): each engine's type map, the statements loading a
 case's tables into Databricks and Snowflake (every one fully qualified,
 every value written as a literal the engine reads back), the types an
 engine stores no column of, refused by name, and the Postgres loader
@@ -275,7 +275,7 @@ DSN = os.environ.get('SDM_POSTGRES_TEST_DSN')
 def database():
     r"""A new database on ``SDM_POSTGRES_TEST_DSN``'s server, or ``None``
     where it names none and ``SDM_REQUIRE_POSTGRES`` is not set: a test
-    given ``None`` has nothing to hold and returns (H26)."""
+    given ``None`` has nothing to hold and returns."""
     if not DSN:
         assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
             'SDM_REQUIRE_POSTGRES is set and no server is named'
@@ -461,7 +461,7 @@ def test_a_leg_s_schema_holds_one_case_at_a_time_through_its_target() -> None:
 
 
 def test_a_table_the_case_did_not_load_is_refused_by_name() -> None:
-    # Review r1 (Claude) P2-1: a table left by a killed run, or loaded by
+    # Review r1 P2-1: a table left by a killed run, or loaded by
     # the other Databricks leg into the same schema, never enters a case.
     names = {
         'catalog': 'cat_u',
@@ -478,7 +478,7 @@ def test_a_table_the_case_did_not_load_is_refused_by_name() -> None:
 
 
 def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
-    # Review r1 (Claude) P1-1: the YAML's name is the case's view name.
+    # Review r1 P1-1: the YAML's name is the case's view name.
     names = {'catalog': 'DB_V', 'schema': 'SCH_V'}
     warehouse = _Warehouse()
     yaml = 'name: shop_semantics\ntables:\n- name: users\n  base_table: {database: DB_V, schema: SCH_V, table: users}\n'
@@ -578,7 +578,7 @@ def test_empty_nested_columns_load_on_each_warehouse(
 def test_a_case_s_warehouse_setup_runs_in_the_guard_s_setup_and_is_dropped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # T3.20: the case's warehouse setup runs after its tables, each
+    #: the case's warehouse setup runs after its tables, each
     # statement inside the write guard's setup scope, and a view it creates
     # is the case's own: not "a relation this case did not load", and
     # dropped before the next case loads.

@@ -2,14 +2,14 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The words of a view's conversion (T3.5): the old client's sentences, as
+//! The words of a view's conversion: the old client's sentences, as
 //! it wrote them, from the typed facts `sdm-schema` and `sdm-data` answer
 //! with. A value or a piece of an expression is quoted as the old client
 //! quoted it, Python's `repr` or `str`, through the parser's text helpers
 //! ([`crate::pql`], the one module that names the parser), so no other crate
 //! writes Python's text.
 //!
-//! Each function gives the sentence's text; T3.27 turns each into a
+//! Each function gives the sentence's text; turns each into a
 //! `Sentence` of the contract, its template and fields, which every host
 //! words alike. A sentence that quotes a value too large to quote is
 //! refused by name ([`TooLarge`]).

@@ -119,7 +119,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 def _regressions() -> ModuleType:
     return _module(
-        'postgres_regressions_record',
+        'postgres_scenarios',
         ROOT / 'contract/support/postgres_scenarios.py',
     )
 

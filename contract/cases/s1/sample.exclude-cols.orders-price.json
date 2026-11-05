@@ -92,5 +92,5 @@
     "stage": "predict"
   },
   "why": "exclude_cols_dict={'orders': ['price']}: orders.price, the aggregated column, left out of the request",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.exclude-cols.orders-price using the shop fixture."
 }

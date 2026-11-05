@@ -2,42 +2,42 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The Databricks dialect (T3.4): Databricks SQL as a SQL warehouse and a
+//! The Databricks dialect: Databricks SQL as a SQL warehouse and a
 //! notebook's Spark session both run it, through the shared builder's
-//! hooks ([`crate::sql`], T3.18): only what is Databricks's own is here.
+//! hooks ([`crate::sql`]): only what is Databricks's own is here.
 //!
 //! Each rendering is the statement the reference's Databricks engine runs
 //! for the same step (`rfm/backend/databricks` at the reference commit),
-//! so each statement's result is that statement's (decision H9 gates on
+//! so each statement's result is that statement's ( gates on
 //! results, not text), and the catalog statements are its text and
 //! parameters:
 //!
 //! - names quoted with backticks, a backtick in one doubled (`quote_ident`);
 //! - a relation of one to three parts (catalog, schema, table), a source's
-//!   relations read under its namespace of a catalog and a schema (design
-//!   fix C), Unity Catalog's names compared without regard to case;
+//! relations read under its namespace of a catalog and a schema (design
+//! fix C), Unity Catalog's names compared without regard to case;
 //! - the catalog read through `<catalog>.information_schema`, the schema
-//!   and table bound as parameters and folded with `lower(?)`, as Unity
-//!   Catalog stores them (`DatabricksTable._get_source_columns`); the
-//!   table keeps the name its caller gives it, which the host takes back;
+//! and table bound as parameters and folded with `lower(?)`, as Unity
+//! Catalog stores them (`DatabricksTable._get_source_columns`); the
+//! table keeps the name its caller gives it, which the host takes back;
 //! - a column typed by its declaration first, as the reference types it
-//!   (`_to_dtype`, [`declared_dtype`]);
+//! (`_to_dtype`, [`declared_dtype`]);
 //! - a key set bound as one parameter of JSON text, unpacked by
-//!   `posexplode(from_json(?, '<type>'))`, the position the seed's batch
-//!   (`_by_pkey`, `_by_fkey`, `_by_time`);
+//! `posexplode(from_json(?, '<type>'))`, the position the seed's batch
+//! (`_by_pkey`, `_by_fkey`, `_by_time`);
 //! - an entity sample as `TABLESAMPLE (<p> PERCENT) REPEATABLE (<seed>)`,
-//!   the percentage the reference's arithmetic over the table's rows,
-//!   written as the reference's language writes a float
-//!   ([`percent_text`], KO3-41);
-//! - a neighbor read limited per seed with `QUALIFY ROW_NUMBER()`;
+//! the percentage the reference's arithmetic over the table's rows,
+//! written as the reference's language writes a float
+//! ([`percent_text`]);
+//! - a neighbor read limited per seed with `QUALIFY ROW_NUMBER`;
 //! - a derived relation read as the reference reads a metric view's table
-//!   (`_quoted_source_name`).
+//! (`_quoted_source_name`).
 //!
 //! Where the reference fetches rows and finishes in its own process (a
 //! key lookup's duplicates removed after the fetch) the statement does the
 //! same in SQL, so the answer is the contract's.
 //!
-//! A key set's binding (T3.28): [`key_rows`] writes each seed as the
+//! A key set's binding: [`key_rows`] writes each seed as the
 //! old client's JSON writes it (`_dumps`, ASCII only), the batch
 //! column left out (the position in the JSON array is the batch, the seeds
 //! being in batch order from 0), a key as the reference coerces it
@@ -124,8 +124,8 @@ impl SqlDialect for Databricks {
             // several fetches, as the reference's `_chunk_rows` splits it
             // ([`crate::key_text`]), so the core sends any number.
             max_keys_per_request: None,
-            // `TABLESAMPLE ... REPEATABLE (seed)` draws the same rows of
-            // the same table (register entry RS-6, KO3-41).
+            // `TABLESAMPLE... REPEATABLE (seed)` draws the same rows of
+            // the same table (register entry RS-6).
             sampling: Determinism::SeededStable,
             // The reference writes the seed into `REPEATABLE` as it is.
             max_seed: u64::MAX,
@@ -161,8 +161,8 @@ impl SqlDialect for Databricks {
         NAMESPACE_DEPTH
     }
 
-    /// Each part read, as the reference reads `current_catalog()` and
-    /// `current_schema()` for those a source leaves out and names every
+    /// Each part read, as the reference reads `current_catalog` and
+    /// `current_schema` for those a source leaves out and names every
     /// table in full, as Unity Catalog names a table a foreign key refers
     /// to.
     fn settles_namespace(&self) -> bool {
@@ -176,7 +176,7 @@ impl SqlDialect for Databricks {
     }
 
     /// A metric view's expressions are checked as Databricks reads them
-    /// (T3.5).
+    ///.
     fn expr_dialect(&self) -> Option<crate::view_expr::ExprDialect> {
         Some(crate::view_expr::ExprDialect::Databricks)
     }
@@ -286,7 +286,7 @@ impl SqlDialect for Databricks {
     }
 
     /// The unpacked key set, `TMP`: the reference's `posexplode(from_json(?,
-    /// ...))`, its position the batch, its key read as the reference reads
+    ///...))`, its position the batch, its key read as the reference reads
     /// a key by its data type (`_elem_type`), each seed time as text.
     fn seeds_prelude(&self, read: &SeedRead<'_>) -> Result<String, CoreError> {
         seed_cte(self, read)
@@ -339,7 +339,7 @@ impl SqlDialect for Databricks {
     }
 
     /// The reference's `_by_fkey`: each seed's rows within its window, the
-    /// first `limit` in `terms`' order (`QUALIFY ROW_NUMBER()`), the result
+    /// first `limit` in `terms`' order (`QUALIFY ROW_NUMBER`), the result
     /// in `(batch, order)`.
     fn neighbors_per_seed(
         &self,
@@ -799,9 +799,9 @@ mod batch_transport_tests {
 /// The source's namespace, one row per part, outermost first: each part
 /// `namespace` gives, the parts aligned to the innermost (a catalog and a
 /// schema, or a schema alone), or the session's current one where it
-/// gives none (`current_catalog()`, `current_schema()`), as the reference
-/// reads the parts a source leaves out (`SELECT current_catalog(),
-/// current_schema()`).
+/// gives none (`current_catalog`, `current_schema`), as the reference
+/// reads the parts a source leaves out (`SELECT current_catalog,
+/// current_schema`).
 fn current_namespace(
     request: &DataRequest,
     tables: &[Relation],
@@ -1169,7 +1169,7 @@ pub(crate) fn sample_percent(n: u64, rows: Option<u64>) -> f64 {
 }
 
 /// The text the reference's f-string writes a finite double as (its `str`,
-/// KO3-41): the shortest decimal that reads back as the value, the nearest
+/// ): the shortest decimal that reads back as the value, the nearest
 /// of that many digits, a tie to the even; positional with at least one
 /// fraction digit (`100.0`, `0.30000000000000004`) from `1e-4` up to below
 /// `1e16`, otherwise one digit, the rest as a fraction, and a signed

@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * Reading the control messages the core writes: a whole message, an {@code attached} one replaced
- * by the message its attachment carries (decision H7), and an error's fields as plain Java values.
+ * by the message its attachment carries, and an error's fields as plain Java values.
  * It needs nothing but the JDK, so a core error is read wherever the library is loaded. Not part
  * of the API.
  */
@@ -22,7 +22,7 @@ public final class Messages {
 
   /**
    * A control message the core wrote, whole: an {@code attached} one is replaced by the message
-   * its bytes attachment carries (decision H7).
+   * its bytes attachment carries.
    */
   @SuppressWarnings("unchecked")
   public static Map<String, Object> read(NativeMessage message) {

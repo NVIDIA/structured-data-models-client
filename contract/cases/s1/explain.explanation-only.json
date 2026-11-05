@@ -82,9 +82,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "the call asks for an explanation alone; the result holds the prediction and the explanation"
+    "stage": "predict"
   },
   "why": "an explanation alone asked of predict, on a binary target",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case explain.explanation-only using the shop fixture."
 }

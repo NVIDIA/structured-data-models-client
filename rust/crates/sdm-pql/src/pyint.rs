@@ -2,14 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integers as Python reads them: any size, from a query's digits, refused
-//! past Python's limit of 4,300 digits. This is one of the two emulation
-//! modules this crate may hold (`scripts/rust_core/emulation-allowlist.txt`,
-//! Phase 1 decisions A4), because the limit decides whether a query with a
-//! longer integer is valid.
-//!
-//! PQL only compares integers with small bounds and prints them, so they are
-//! kept as their decimal digits, exactly.
+//! Exact decimal integers for PQL bounds and diagnostics.
+//! Inputs exceeding 4,300 digits are refused consistently with the public parser
+//! contract; accepted values retain their exact decimal digits.
+//! See `scripts/rust_core/emulation-allowlist.txt` for compatibility-sensitive modules.
 
 use std::cmp::Ordering;
 use std::fmt;

@@ -86,9 +86,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: on DuckDB and SQLite answered through predict, the catalog's key of two columns not taken (orders has no key); on Postgres Schema.from_source fails with an unnamed ValueError (register P2C-11)"
+    "stage": "predict"
   },
   "why": "A primary key of two columns the catalog declares for a fact table (orders keyed by order_no and line): rule composite_key at describe_source",
-  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+  "source": "Correctness case rule.composite-key-declared using the shop fixture."
 }

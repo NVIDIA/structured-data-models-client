@@ -103,5 +103,5 @@
     "stage": "materialize"
   },
   "why": "Binary classification: a condition over a windowed count, accepted and materialized",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.accept.binary-classification using the shop fixture."
 }

@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: answered through predict on DuckDB and Postgres; the feature described categorical on DuckDB (its preview keeps a NaN as a value) and numerical on Postgres (a NaN read as missing)"
+    "stage": "predict"
   },
-  "why": "A DOUBLE feature of 1,000 users, 30 distinct values and 970 NaNs: whether a NaN is a value or missing decides whether the preview reads it as categorical (rule float_nan; T2.12 round 1)",
-  "source": "T2.12 round 1 (Codex P2): float inference as each database previews it, and a NaN key at materialize"
+  "why": "A DOUBLE feature of 1,000 users, 30 distinct values and 970 NaNs: whether a NaN is a value or missing decides whether the preview reads it as categorical (rule float_nan)",
+  "source": "Correctness case rule.float-nan-category-double using the shop fixture."
 }

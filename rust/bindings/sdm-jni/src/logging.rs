@@ -2,8 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The bridge from the core's `tracing` events to SLF4J (design choice 10,
-//! KO3-30), as `pyo3-log` is Python's: `tracing`'s `log` feature writes each
+//! The bridge from the core's `tracing` events to SLF4J, as `pyo3-log` is Python's: `tracing`'s `log` feature writes each
 //! event to the `log` facade, and this logger hands it to
 //! `com.nvidia.sdm.internal.NativeLog.log(level, target, message)`, which
 //! writes it to the SLF4J logger the target names. The JAR declares the

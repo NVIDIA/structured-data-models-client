@@ -98,9 +98,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: candidate 9, which no buy names, has a context of one class: left out unscored with an SDMWarning and no call sent for it, two calls for 0 and 1, answered with probabilities; each user ranks 0 and 1"
+    "stage": "predict"
   },
   "why": "A candidate whose context holds one class is left out of the ranking unscored, before any call",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.unscored-candidate using the shop fixture."
 }

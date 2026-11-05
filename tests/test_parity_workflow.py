@@ -115,7 +115,7 @@ def test_optional_giant_acceptance_is_sequential_and_private():
     )
     assert "'evidence/giant.json'" in script
     assert "root / ('giant-' + language + '.log')" in script
-    assert giant['env']['SDM_T136_BIG'] == '1'
+    assert giant['env']['SDM_GIANT_TESTS'] == '1'
 
 
 @pytest.mark.parametrize(

@@ -59,16 +59,16 @@ CONTRACT_VERSION: int
 TEST_OPS: bool
 #: The databases this build's core provides for, by name: the staging
 #: rule's private, plain-data marker (contract/runners/run_python.py's
-#: check_legs; T2.1a), never public API.
+#: native provider admission), never public API.
 PROVIDERS: tuple[str, ...]
 #: Every code an error of the core may carry, in the contract's order.
 ERROR_CODES: tuple[_Code, ...]
 #: Each ``(stype, dtype)`` the language lets a column mean, by the
-#: contract's names (T3.16): the client's check of a meaning, read in place
+#: contract's names: the client's check of a meaning, read in place
 #: of the old PQL package's.
 MEANINGS: tuple[tuple[str, str], ...]
 #: Each data type name a host may give a column, and the contract's name
-#: of the type it names (T3.16): the one table of them.
+#: of the type it names: the one table of them.
 DTYPE_NAMES: tuple[tuple[str, str], ...]
 
 class _ArrowStreamExportable(Protocol):
@@ -125,15 +125,14 @@ def reset_log_cache() -> None:
 
 def templates() -> str:
     """The table of what every error's and warning's sentence says, as
-    JSON (T3.17)."""
+    JSON."""
 
 def is_posix_zone(text: str) -> bool:
     """Whether a run takes ``text`` as a POSIX ``TZ`` local zone."""
 
 def local_zone(setting: str | None, roots: list[str]) -> tuple[str, str] | None:
-    """The local zone by the core's rule (T3.12): ``('iana', name)``,
+    """The local zone by the core's rule: ``('iana', name)``,
     ``('posix', text)`` or ``None``, from ``TZ`` and the lookup roots."""
 
 def capabilities() -> str:
-    """Each model's capabilities, as the client describes them, as JSON
-    (T3.12)."""
+    """Each model's capabilities, as the client describes them, as JSON."""

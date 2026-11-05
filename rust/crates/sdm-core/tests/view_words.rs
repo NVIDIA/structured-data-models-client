@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The words of a view's conversion (T3.5): the data and schema layers
+//! The words of a view's conversion: the data and schema layers
 //! answer with typed facts, and the core words them, quoting a value as
 //! Python's `repr` and `str` write it through `sdm-pql`, the one crate that
 //! writes Python's text. Each text is held to the old client's, from
 //! `contract/view-expr-vectors.json`, `view-yaml-vectors.json` and
-//! `view-step-vectors.json`. T3.27 turns each into a `Sentence`.
+//! `view-step-vectors.json`. turns each into a `Sentence`.
 
 use sdm_contract::CoreError;
 use sdm_contract::data::{DataLayer, ProviderChoice};
@@ -109,7 +109,7 @@ fn yaml_of(json: &Json) -> Option<String> {
             }
         }
         "str" => serde_json::to_string(inner.as_str().unwrap()).unwrap(),
-        // Outside the YAML view definitions use (register P3J-9).
+        // Outside the YAML view definitions use (J-9).
         "bytes" | "set" | "tuple" => return None,
         "date" | "datetime" => inner.as_str().unwrap().to_owned(),
         "list" => {
@@ -132,7 +132,7 @@ fn yaml_of(json: &Json) -> Option<String> {
 
 /// A recorded value, loaded: its document and node; `None` for one
 /// outside the YAML view definitions use, a YAML 1.1 line break in a text
-/// among them (register P3J-9).
+/// among them (J-9).
 fn loaded(json: &Json) -> Option<(Document, NodeId)> {
     let document = match yaml::load(&format!("v: {}", yaml_of(json)?), &yaml_rules()) {
         Ok(document) => document,
@@ -295,7 +295,7 @@ fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
         let class = view_steps::type_class(&ask, data_type).unwrap();
         let read = view_steps::default_text(class, &document, default);
         // Python ran out of memory writing the text; the core refuses it
-        // by name before writing it (register P3J-10).
+        // by name before writing it (J-10).
         if vector["error"]["type"] == "MemoryError" {
             return (read != Err(DefaultRefusal::TooLong))
                 .then(|| format!("{data_type} {}: {read:?}", vector["default_repr"]));
@@ -567,7 +567,7 @@ fn each_edge_reason_and_key_reason_is_worded_by_name() {
     );
 }
 
-/// The long tokens' refusals (T3.5 fix 1), worded as the old client
+/// The long tokens' refusals, worded as the old client
 /// worded them.
 #[test]
 fn a_long_token_s_refusal_is_worded_as_the_old_client_worded_it() {

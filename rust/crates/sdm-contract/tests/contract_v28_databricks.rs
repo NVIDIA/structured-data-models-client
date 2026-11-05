@@ -2,11 +2,11 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Contract v28's Databricks vocabulary (T3.4, design choice 3): derived
+//! Contract v28's Databricks vocabulary: derived
 //! relations, opaque SQL text the core carries but never reads, refused by
 //! name for a provider that does not read them; the capabilities and
 //! request fields the old client's warehouse samplers need; a provider
-//! error's class (T3.27, in place of its saying the source refused an
+//! error's class (in place of its saying the source refused an
 //! expression). Each optional, so a v27
 //! message reads the same.
 
@@ -92,7 +92,7 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
         }
     ));
     // The error's class is a fact the host hands over; what it means is
-    // the data layer's to say (T3.27, `DataLayer::failure`).
+    // the data layer's to say (`DataLayer::failure`).
     let error: ProviderError = read(json!({
         "kind": "data_source", "retryable": false, "sqlstate": "42703",
         "vendor_code": null, "error_class": "UNRESOLVED_COLUMN"
@@ -102,7 +102,7 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
 
 /// A description, a held schema and a materialize carry no shape or
 /// location of a table between runs: each `materialize` reads every table
-/// as it stands (the owner's plan B, T3.4), so a namespace, a reading or a
+/// as it stands, so a namespace, a reading or a
 /// notices flag is no field of theirs.
 #[test]
 fn nothing_of_a_table_s_shape_travels_between_runs() {
@@ -122,8 +122,7 @@ fn nothing_of_a_table_s_shape_travels_between_runs() {
     );
 }
 
-/// The columns a catalog read found, marked on a relation (round 2's
-/// Claude P2-2), apart from a derived relation's own columns.
+/// The columns a catalog read found, marked on a relation, apart from a derived relation's own columns.
 #[test]
 fn a_relation_marks_the_columns_its_catalog_found() {
     use sdm_contract::data::Relation;
@@ -143,7 +142,7 @@ fn a_relation_marks_the_columns_its_catalog_found() {
 /// A relation marked `found` holds the columns a catalog found, each read by
 /// its own name, with no filter; one marked so that renames a column, reads
 /// an expression or filters its rows is refused by name, never read as the
-/// bare table (round 3's Codex P2-1).
+/// bare table.
 #[test]
 fn a_found_relation_is_its_catalog_s_columns_or_refused() {
     use sdm_contract::data::{DataRequest, Relation, refuse_derived};
@@ -175,7 +174,7 @@ fn a_found_relation_is_its_catalog_s_columns_or_refused() {
 }
 
 /// A run asks its host for data, a model call, or nothing more: there is
-/// no step that only tells the host something (the owner's plan B, T3.4).
+/// no step that only tells the host something.
 #[test]
 fn a_run_has_no_notice_steps() {
     use sdm_contract::run::Step;

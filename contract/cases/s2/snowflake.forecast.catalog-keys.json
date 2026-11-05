@@ -48,9 +48,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "a forecast with indices pins its context to indices[0] (RE/rfm.py:2288-2297), so the entity table is read with WHERE uid IN (?) under the qmark paramstyle (SNOW/sampler.py:109-117, SNOW/binding.py:15-38) and never sampled; each step's window is read with ::TIMESTAMP_NTZ bounds (SNOW/sampler.py:423-425)"
+    "stage": "predict"
   },
-  "why": "The forecast kind on Snowflake, over the keys and link the catalog declares (uid, buyer); not the shared shop forecast every leg runs (T3.4's), and never sampled, since a forecast with indices reads its entity by key.",
-  "source": "written by T3.6's test author from the reference at 43e55f4f"
+  "why": "Snowflake forecasting over catalog-declared keys and relationships; explicitly indexed entities are fetched by key.",
+  "source": "Correctness case snowflake.forecast.catalog-keys using the declared fixture."
 }

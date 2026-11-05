@@ -23,10 +23,10 @@ pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error}
 pub use local_zone::{LOCALTIME, ZoneFiles, local_zone};
 pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone};
 /// The types a binding hands across, so a binding depends on `sdm-host`
-/// and on `sdm-contract` for types, never on `sdm-core` (decision E21);
+/// and on `sdm-contract` for types, never on `sdm-core`;
 /// `CompositionRoot` too, so a host composes its own data layer
 /// (`CompositionRoot::new`) where it does not take [`default_root`]'s, as
-/// the dev-only test host swaps one in (T2.7).
+/// the dev-only test host swaps one in.
 pub use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FrameGraph, dtype_names, meanings,
     wire_names,
@@ -36,7 +36,7 @@ pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offs
 /// A Postgres `json` or `jsonb` value, given as the server's text, as the
 /// reference's provider hands it to the core (`sdm_data::json_text`, the
 /// reference's float text): for a host whose driver gives the server's
-/// text (T3.12 fix 1), so how the value is read stays in the data layer.
+/// text, so how the value is read stays in the data layer.
 /// `None` where the text is not JSON; `Some(None)` for a JSON null.
 pub fn json_value_text(text: &str) -> Option<Option<String>> {
     let read = || sdm_data::json_text(text, sdm_core::float_text);
@@ -80,7 +80,7 @@ fn nesting(text: &str) -> usize {
 }
 
 /// The table of what every sentence says, which a binding exports as the
-/// JSON it is (`sdm_contract::wording`, T3.17): a host reads it once and
+/// JSON it is (`sdm_contract::wording`): a host reads it once and
 /// fills each error's and warning's sentence from it, formatting nothing
 /// the table does not name.
 pub fn templates() -> String {
@@ -88,7 +88,7 @@ pub fn templates() -> String {
 }
 
 /// What each model supports, as the client describes it to a caller
-/// (`capabilities()`; Python's `ModelCapabilities`), as the JSON a binding
+/// (`capabilities`; Python's `ModelCapabilities`), as the JSON a binding
 /// exports: `{"models": [...]}`, each model's `model`, `tasks` and
 /// `outputs` (sorted), `single_table`, `multiple_tables`, `relationships`,
 /// `explanation_formats`, `sessions` and `source` (`sdk`: the client side,
@@ -126,7 +126,7 @@ pub fn normalized_query(query: &str) -> Option<String> {
 }
 
 /// The composition root a binding starts its runs with: the one data layer,
-/// `sdm-data`'s, built here where every binding reaches it (decisions E21,
+/// `sdm-data`'s, built here where every binding reaches it (
 /// H14, E30).
 pub fn default_root() -> CompositionRoot {
     CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::reading_views(

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The schema's edit semantics (decision E67, T1.24b): an edit to a schema
+//! The schema's edit semantics: an edit to a schema
 //! the core described, checked and made as the reference client's setters
 //! check and make it on a table that stays in its source
 //! (`Column.__setattr__`, `_TableShape.__setattr__`,
@@ -19,7 +19,7 @@
 //! value it cannot read.
 //!
 //! The schema edited is the one the host holds, as plain data
-//! ([`crate::held`], T3.16): a column the source was never asked of is
+//! ([`crate::held`]): a column the source was never asked of is
 //! edited by its data type, as the reference's setters edit any column.
 
 use sdm_contract::ops::{
@@ -66,7 +66,7 @@ pub struct Edited {
 /// `description` with `edit` made, as the reference's setters make it, or
 /// the reference's refusal of it at the assignment (`INVALID_REQUEST`,
 /// naming the field, and the table and column where it names them); each
-/// column's data type read by the name the host gave it (`types`, T3.16),
+/// column's data type read by the name the host gave it (`types`),
 /// as the setters read a column's `dtype`: a meaning or key checked against
 /// it, a name no data type has let through, a link's two columns joined by
 /// their names' families, and a refusal quoting the name.
@@ -283,7 +283,7 @@ fn primary_key(
     for name in names {
         let column = &shape.columns[column_at(shape, name, "primary_key")?];
         // A column named by no data type the old client knows, which its
-        // checks let through (`supports_dtype`, T3.16).
+        // checks let through (`supports_dtype`).
         if !types.is_unknown(table, name) && !can_identify(column.dtype) {
             return Err(key_cannot_identify(
                 table,
@@ -621,7 +621,7 @@ fn relationships(
     types: &HostTypes,
 ) -> Result<Vec<CoreWarning>, CoreError> {
     // Each column of exact numbers read as the links given read it, before
-    // they are checked (T2.21); a refusal leaves the schema as it was.
+    // they are checked; a refusal leaves the schema as it was.
     let readable: Vec<Link> = links
         .iter()
         .filter_map(|link| link.value().cloned())

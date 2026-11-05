@@ -48,9 +48,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "lakebase() looks up the endpoint's host, mints a database credential and opens psycopg with sslmode=require and autocommit (CN/databricks.py:178-262); Source(connection) detects psycopg as postgres (CN/source.py:51-58, :97-107), so the source is a PostgresSource"
+    "stage": "predict"
   },
   "why": "The source opened by sdm_connectors.databricks.lakebase() and found by auto detection, Source(connection); the endpoint and database come from the environment.",
-  "source": "written by T3.7's test author from the reference at 43e55f4f"
+  "source": "Correctness case lakebase.connect using the shop fixture."
 }

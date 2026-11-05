@@ -4,7 +4,7 @@
 
 //! What this host's DuckDB provider ran for one case, recorded as the
 //! Python runners' driver capture records it (the observation's `driver`
-//! section, from T1.11e), so the comparator holds this host's statements
+//! section), so the comparator holds this host's statements
 //! and their results to the reference's as H9 says: each statement in the
 //! order run, with the cursor it ran on (each fetch's own, numbered from 1
 //! as the Python capture numbers derived cursors), the public call it ran
@@ -31,7 +31,7 @@ pub struct DriverLog {
     pub stage: &'static str,
     /// Why the core asked the fetch the statements now answer, where it
     /// said (`FetchStep::purpose`: `locate`, plan B's read of a table as
-    /// it stands, T3.4), recorded on each statement.
+    /// it stands), recorded on each statement.
     pub purpose: Option<&'static str>,
     statements: Vec<Value>,
     bindings: Vec<Value>,

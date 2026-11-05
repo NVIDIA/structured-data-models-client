@@ -83,9 +83,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "no user passes the filter, so no context example is gathered; the message names the filter"
+    "code": "INVALID_REQUEST"
   },
   "why": "an entity filter no entity passes: a value the reference refuses after reading",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case filter.matches-none using the shop fixture."
 }

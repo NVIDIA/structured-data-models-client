@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Postgres service a Postgres job runs against is there (H26; T2.1a).
+r"""The Postgres service a Postgres job runs against is there.
 
 A job that runs the contract on Postgres sets ``SDM_REQUIRE_POSTGRES`` and
 names its server in ``SDM_POSTGRES_TEST_DSN`` (the pinned service of the
@@ -13,7 +13,7 @@ stands down, so a Postgres job can't pass without its database. Where
 environment, and the test has nothing to hold.
 
 ``sdm-testkit``'s ``tests/postgres_required.rs`` holds the same for the Rust
-side; ``tests/test_t21a_postgres_required.py`` runs this file against an
+side; ``tests/test_postgres_prerequisites.py`` runs this file against an
 unreachable server and holds it to failing.
 """
 

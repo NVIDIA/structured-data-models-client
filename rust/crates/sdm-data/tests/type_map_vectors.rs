@@ -4,7 +4,7 @@
 
 //! The key binders' canonical decimal text against
 //! `contract/type-map-vectors.json`, the vector the Python loader runs too
-//! (`tests/test_t21a_type_map.py`; T2.1a): each literal at its column's
+//! (`tests/test_type_map.py`): each literal at its column's
 //! scale gives the vector's text, equal values of different scales give
 //! one text, and the SQLite pair and the join keys give theirs.
 

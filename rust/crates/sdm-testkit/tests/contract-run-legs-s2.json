@@ -73,6 +73,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "A DECIMAL(38,6) key on both ends of the link, asked for by three spellings of key values (0, 1.0 and 2.000000, each read as a Decimal), meeting Phase 2's exact decimals (KO2-35); one of the key-type pair matrix of exit 3, recorded in C-1",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "why": "A DECIMAL(38,6) key on both ends of the link, asked for by three spellings of key values (0, 1.0 and 2.000000, each read as a Decimal), preserving exact decimal values; one of the key-type pair matrix of exit 3, recorded in C-1",
+  "source": "Independent warehouse-runner fixture."
 }

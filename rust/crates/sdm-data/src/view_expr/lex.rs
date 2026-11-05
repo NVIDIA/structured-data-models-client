@@ -76,7 +76,7 @@ enum Lexeme {
 
 /// How a lexeme is matched: by its pattern, or, for Databricks' numbers
 /// and names, by hand. Those two end with a lookahead that a megabyte-long
-/// run of digits or letters overflows the pattern engine's stack on (T3.5
+/// run of digits or letters overflows the pattern engine's stack on (
 /// fix 1); since the lookahead only asks that the run of name characters
 /// end there, it is decided on that run exactly.
 #[derive(Clone)]

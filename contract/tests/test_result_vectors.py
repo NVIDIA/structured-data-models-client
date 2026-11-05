@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The canonical form of a statement's result (decision H9; T1.11e).
+"""The canonical form of a statement's result.
 
     python -m pytest contract/tests/test_result_vectors.py -q
 
@@ -58,8 +58,8 @@ def _vectors() -> list[dict[str, Any]]:
 def test_the_vector_file() -> None:
     vectors = _vectors()
     # Not vacuous: every kind of cell the form names but a duration (which
-    # DuckDB's SQL cannot make) appears, an interval in its form (T1.32g
-    # part 2e; what stays unencodable is held by t132g-p2e-vectors.json),
+    # DuckDB's SQL cannot make) appears, an interval in its form (
+    # part 2e; what stays unencodable is held by arrow-interval-vectors.json),
     # nanosecond times differ from each other, and one vector has no rows.
     kinds = set()
 
@@ -142,7 +142,7 @@ def test_rows_read_as_arrow_or_are_unencodable(vector: dict[str, Any]) -> None:
 
 def test_nanoseconds_a_microsecond_read_would_lose_are_kept() -> None:
     r"""Two ``TIME_NS`` values a nanosecond apart differ as Arrow, nested
-    or not (Codex's repro); read as rows they are unencodable."""
+    or not; read as rows they are unencodable."""
 
     def read(clock: str) -> Any:
         cursor = duckdb.connect().cursor()
@@ -234,8 +234,8 @@ def test_lossiness_is_read_from_the_types(
 
 
 def test_a_union_read_as_rows_never_compares_equal() -> None:
-    r"""``fetchall`` gives a union's value without its tag, so ``i := 1``
-    and ``j := 1`` would read alike: read as rows, both are unencodable."""
+    r"""``fetchall`` gives a union's value without its tag, so ``i:= 1``
+    and ``j:= 1`` would read alike: read as rows, both are unencodable."""
     reads = []
     for member in ('i', 'j'):
         cursor = duckdb.connect().cursor()

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The Postgres service a Postgres job runs against is there (H26; T2.1a),
+//! The Postgres service a Postgres job runs against is there,
 //! the Rust side of `contract/tests/test_postgres_required.py`.
 //!
 //! A job that runs the core on Postgres sets `SDM_REQUIRE_POSTGRES` and

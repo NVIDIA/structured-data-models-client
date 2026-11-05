@@ -209,5 +209,5 @@
     "stage": "predict"
   },
   "why": "RelBench rel-avito's avito-ad-clicks-4d (contract/tools/relbench.py), a few dozen rows of its shape: AdsInfo as the entity table, no time column, linked to its parents Location and Category, clicks summed per ad over 4 days from a keyless event table, CamelCase names",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.parent-table.relbench-avito using the shop fixture."
 }

@@ -87,9 +87,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: answered through predict on DuckDB; on Postgres materialize is refused, INVALID_REQUEST"
+    "stage": "predict"
   },
-  "why": "users.user_id a DOUBLE key, user 3's NaN, against orders' BIGINT foreign key: the NaN key sampled at materialize (rule float_nan; T2.12 round 1)",
-  "source": "T2.12 round 1 (Codex P2): float inference as each database previews it, and a NaN key at materialize"
+  "why": "Users.user_id a DOUBLE key, user 3's NaN, against orders' BIGINT foreign key: the NaN key sampled at materialize (rule float_nan)",
+  "source": "Correctness case rule.float-nan-key-double using the shop fixture."
 }

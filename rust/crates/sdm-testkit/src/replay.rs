@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The pure-Rust host's strict SQL replay: it reads actual recorded fetch
-//! results instead of opening another database driver (KO2-20).
+//! results instead of opening another database driver.
 //!
 //! A recording is what a source answered each fetch the core asked
 //! for one case, in order: the fetch's request and plan as the core wrote
@@ -20,7 +20,7 @@
 //! to make again, never as stale rows answering another question. A fetch
 //! past the recording's end is its own error, [`PastTheRecording`]; for a
 //! diagnostic case it is instead answered as the provider's error,
-//! [`PAST_THE_RECORDING`] its vendor code ([`Replay::past_the_end`], T2.8
+//! [`PAST_THE_RECORDING`] its vendor code ([`Replay::past_the_end`],
 //! fix 4), so the case is observed, refused, and its difference reported:
 //! python-core records only the fetches it made, and on a case the Python
 //! host fails before the core reads (`s0.boundary.depth-999`, whose query
@@ -44,7 +44,7 @@
 //! Warehouse lines also carry `core`, the existing case core-input shape,
 //! projected from the actual host starts. Namespace and view names stay
 //! paired with the raw fetches. Materialize descriptions and predict
-//! states are never recorded as inputs: this host builds its own (E50).
+//! states are never recorded as inputs: this host builds its own.
 
 use std::cell::Cell;
 use std::collections::BTreeMap;

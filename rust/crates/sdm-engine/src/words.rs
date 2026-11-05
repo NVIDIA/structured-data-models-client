@@ -12,7 +12,7 @@
 //! Unicode's simple mapping ([`lower_case`]), as the reference's frame
 //! lowers the Arrow-backed text `astype(str)` gives it (Arrow's
 //! `utf8_lower`: no final sigma, and U+0130 lowered to `i` alone); each of
-//! `'".,()!?;:` and each `<br>`, `<br/>`, `<br />` (any whitespace before
+//! `'".,!?;:` and each `<br>`, `<br/>`, `<br />` (any whitespace before
 //! the slash) becomes a space; and the text is split on whitespace, the
 //! first 50 words kept. Whitespace is what `str.isspace` counts, which the
 //! reference's `\s` and `split` both use ([`space`]): Unicode's
@@ -20,7 +20,7 @@
 //! separators U+001C to U+001F, which Unicode does not count.
 //!
 //! `words.json`, recorded in the reference's environment, holds the
-//! lowering of every code point and the words of 772 values (T1.26b).
+//! lowering of every code point and the words of 772 values.
 
 /// The most words a value keeps (`max_words`).
 pub const MAX_WORDS: usize = 50;

@@ -9,15 +9,15 @@
 //! whose answer is the case's outcome as the S0 route maps it: an accepted
 //! query succeeds, a refused one is `INVALID_REQUEST`, and a core error is
 //! a refusal with its own code (design, "Routing seam"); a step other than
-//! `Done` is this host's failure, since S0 fetches nothing. From T1.11b it
+//! `Done` is this host's failure, since S0 fetches nothing. it
 //! runs `describe_source` too, over the case's DuckDB base built with
 //! `duckdb-rs`, answering each fetch with the DuckDB provider
 //! ([`crate::duck`]); its answer is the source's description, or the core's
 //! error. Either way it records the operation's inputs and every fetch the
-//! core asked for, the step trace its fields come from. From T1.21d its
+//! core asked for, the step trace its fields come from. its
 //! `materialize` samples the description its own `describe_source`
 //! answered, with the case's edits made ([`crate::edits`]): the case names
-//! no schema for it, and its loader refuses one (decision E50).
+//! no schema for it, and its loader refuses one.
 
 #[cfg(test)]
 #[path = "host_replay_validation_tests.rs"]
@@ -77,33 +77,33 @@ pub struct Observed {
     /// the answer, which a later `predict` replaces.
     pub materialized: Option<Value>,
     /// `validate_query`'s acceptance where the call went on past it (off
-    /// DuckDB, T2.1d): kept apart from the answer, which a later
+    /// DuckDB): kept apart from the answer, which a later
     /// `materialize` replaces, as python-core records both.
     pub accepted: Option<bool>,
     pub answer: Answer,
     /// The core's warnings, in the order given, each its code and fields
-    /// as the `warnings` control message carries them (T1.23): what the
+    /// as the `warnings` control message carries them: what the
     /// hosts are held to agree on, each wording them itself.
     pub warnings: Vec<Value>,
     /// What the DuckDB provider ran, and DuckDB's query log, for a case
-    /// whose operations read data (the observation's `driver`, T1.11e).
+    /// whose operations read data (the observation's `driver`).
     pub driver: Option<Value>,
     /// What this host passed each `edit_schema`, the schema as it held it
-    /// and the edit, in order (T1.24b; from T3.16 the schema alone), as the
+    /// and the edit, in order (the schema alone), as the
     /// Python runner records them in `core.edits`: apart from `inputs`,
     /// whose shape a gate's checkpoint fixes, and written by no observation
     /// yet.
     pub edits: Vec<Value>,
     /// What a failed `predict` had answered before it failed, as the core
-    /// carried it on its error (`CoreError.answered`, T2.1g): the result's
+    /// carried it on its error (`CoreError.answered`): the result's
     /// columns and rows, as a predicted answer's, and the rows those calls
     /// score. In process only; no observation writes it yet.
     pub answered: Option<Value>,
-    /// The explanation of `predict`'s result (T2.13), where the core gave
+    /// The explanation of `predict`'s result, where the core gave
     /// one: its Arrow schema's `explanation` metadata, the JSON text the
     /// core wrote. Apart from the answer, whose shape a gate's checkpoint
     /// fixes; the observation writes it as `core.predicted.result`'s
-    /// `explanation` (T2.16a), and an item's explanation and metadata are
+    /// `explanation`, and an item's explanation and metadata are
     /// the result's own columns, among the rows.
     pub explanation: Option<String>,
 }
@@ -124,7 +124,7 @@ pub enum Answer {
     Predicted(Value),
     /// A core error's kind and code, as the contract spells them, and its
     /// text fields by name (`operation` and `rule` for a refusal of a rule
-    /// not ported), which the refusal maps read (T1.21b); the observation
+    /// not ported), which the refusal maps read; the observation
     /// records the kind and code.
     Error {
         kind: String,
@@ -203,7 +203,7 @@ fn answer_of(error: &CoreError) -> Result<Answer> {
 }
 
 /// What a failed run had answered before it failed, as its error carries
-/// it (`CoreError.answered`, T2.1g), the result taken from the run: its
+/// it (`CoreError.answered`), the result taken from the run: its
 /// columns and rows, as a predicted answer's, and the rows those calls
 /// score; none where the error carries none.
 fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
@@ -312,7 +312,7 @@ fn error_of(out: &Outgoing) -> Result<Answer> {
 }
 
 /// Whether an `error` control message tells the host to drop the sampler
-/// state it handed the run (`drop_held`, decision E74).
+/// state it handed the run (`drop_held`).
 fn drops_sampler(out: &Outgoing) -> Result<bool> {
     match read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))? {
         ControlMessage::Error { error } => Ok(error
@@ -367,7 +367,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
     })
 }
 
-/// `pql` as the PQL library writes a query back (`to_string()`), read
+/// `pql` as the PQL library writes a query back (`to_string`), read
 /// through the core's adapter: the Python host sends materialize that text; `pql` as
 /// it is where it does not parse (or holds a date literal whose year needs
 /// the current one, which no host fact here places).
@@ -469,7 +469,7 @@ const MODEL: &str = "kumo-relational";
 
 /// `case` with every call it makes through its `until` named in its core
 /// operations, on `dialect`'s SQL provider, as python-core makes them off
-/// DuckDB (T2.1d, `run_python.routes_on`), where a case routes on the core
+/// DuckDB (`run_python.routes_on`), where a case routes on the core
 /// only the calls DuckDB lets it make (S0's validation, a source DuckDB
 /// refuses at `from_source`): each operation the case names, its provider
 /// on `dialect`; `describe_source` of every table with no key or time
@@ -516,7 +516,7 @@ pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
     let given = &case.input.materialize;
     if case.until != Until::FromSource && core.materialize.is_none() {
         // A ranking's candidates and `top_k` are read from the case's
-        // input, as on DuckDB (T2.8).
+        // input, as on DuckDB.
         if given.indices_as.is_some()
             || given.inference_config.is_some()
             || given.rows_per_call.is_some()
@@ -617,8 +617,8 @@ fn validate(
 
 /// Where a case's fetches are answered: its DuckDB base, through the
 /// DuckDB provider; its tables loaded into SQLite, through the dev-only
-/// `rusqlite` provider ([`crate::sqlite`], T2.2); or a Postgres server's
-/// recorded answers, replayed ([`crate::replay`], KO2-20).
+/// `rusqlite` provider ([`crate::sqlite`]); or a Postgres server's
+/// recorded answers, replayed ([`crate::replay`]).
 #[derive(Clone, Copy)]
 enum Source<'a> {
     Duck(&'a duckdb::Connection),
@@ -662,7 +662,7 @@ impl Source<'_> {
     }
 
     /// The composition root a run over this source starts with: the one
-    /// the non-SQL provider's run was given (T2.7); `sdm-data`'s for every
+    /// the non-SQL provider's run was given; `sdm-data`'s for every
     /// other.
     fn root(self) -> CompositionRoot {
         match self {
@@ -674,8 +674,8 @@ impl Source<'_> {
 
 /// Runs `case` over its data loaded into a new SQLite file by the contract
 /// loader ([`crate::sqlite::load`], run from `repository`) and read through
-/// the dev-only `rusqlite` provider (T2.2): every call the case makes
-/// through its `until`, on SQLite's provider ([`through_until`], T2.1d), as
+/// the dev-only `rusqlite` provider: every call the case makes
+/// through its `until`, on SQLite's provider ([`through_until`]), as
 /// python-core makes them over a SQLite source; the record of what ran is
 /// the provider's own log of its statements and bindings.
 pub fn run_sqlite(case: &Case, bases: &Bases, repository: &std::path::Path) -> Result<Observed> {
@@ -790,7 +790,7 @@ pub fn run_replayed_on(case: &Case, recording: &Recording, leg: &str) -> Result<
         edits.push(made);
     }
     // A diagnostic case's fetch past the recording is answered as the
-    // provider's error, so the case is observed (T2.8 fix 4).
+    // provider's error, so the case is observed.
     let replay = recording.replay(&key)?;
     let replay = if case.status == crate::case::Status::Diagnostic {
         replay.past_the_end()
@@ -842,9 +842,9 @@ fn require_replayed_completion(
 }
 
 /// Runs `case` as [`run`] runs it on DuckDB, over its DuckDB base copied
-/// into the minimal non-SQL test provider ([`crate::memory`], T2.7), every
+/// into the minimal non-SQL test provider ([`crate::memory`]), every
 /// run started with `root`: the second data layer's
-/// ([`crate::layer::root`]) to run it swapped, or `default_root()`, over
+/// ([`crate::layer::root`]) to run it swapped, or `default_root`, over
 /// `sdm-data`, to run the same provider on the default layer. Every
 /// operation the case names, its fetches answered from in-memory Arrow
 /// tables, never by a statement; its run records no driver.
@@ -856,7 +856,7 @@ pub fn run_memory(case: &Case, bases: &Bases, root: &CompositionRoot) -> Result<
 }
 
 /// Runs `case` as [`run_memory`] does, over `memory` as given in place of
-/// the case's base: a source a test built or changed (T2.21: a column
+/// the case's base: a source a test built or changed (a column
 /// handed over as a host provider hands it, such as Postgres's exact
 /// numbers as their marked text).
 pub fn run_memory_over(case: &Case, memory: &Memory, root: &CompositionRoot) -> Result<Observed> {
@@ -955,7 +955,7 @@ fn drive(
                 for step in &requests {
                     let mut fetched = json!({"request": step.request, "plan": step.plan});
                     // Plan B's read of a table as it stands, marked as the
-                    // core marks it (T3.4), on the fetch and its statements.
+                    // core marks it, on the fetch and its statements.
                     log.purpose = step.purpose.map(|_| "locate");
                     if let Some(purpose) = step.purpose {
                         fetched["purpose"] = json!(purpose);
@@ -1086,7 +1086,7 @@ fn describe_on(
         )
     })?;
     let provider = source.provider(provider);
-    // Off DuckDB a case runs every call through its `until` (T2.1d).
+    // Off DuckDB a case runs every call through its `until`.
     let off_duckdb = !matches!(
         &provider,
         ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
@@ -1155,7 +1155,7 @@ fn describe_on(
     observed.described = Some(described.clone());
     observed.answer = Answer::Described(described.clone());
     // The user's edits, each checked and made by the core's edit_schema
-    // (decision E67), finish describing the schema: a refusal of one is the
+    //, finish describing the schema: a refusal of one is the
     // case's outcome, as the Python runner records it at from_source.
     let mut schema: SourceDescription = serde_json::from_value(described)
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
@@ -1173,10 +1173,10 @@ fn describe_on(
     // (design, "Routing seam"), as the reference refuses it before any
     // data is read; so a case that names validate_query beside
     // describe_source runs it after the description, and runs materialize
-    // only once it is accepted (refuse.unknown-column, T1.32d; whether or
+    // only once it is accepted (refuse.unknown-column; whether or
     // not the case names materialize, carried row G5). On DuckDB it is
     // validated with the schema and profile the case gives; off DuckDB a
-    // case runs every call through its `until` (T2.1d, [`through_until`]),
+    // case runs every call through its `until` ([`through_until`]),
     // and the query is validated on the schema this host described, as
     // the Python host builds its query schema from the source's.
     let materializing = case.core.as_ref().and_then(|c| c.materialize.as_ref());
@@ -1230,7 +1230,7 @@ fn describe_on(
         return Ok(observed);
     };
     // The schema materialize samples is this host's own description, with
-    // the user's edits made: never one the case carries (decision E50).
+    // the user's edits made: never one the case carries.
     let Some(state) = materialize(case, spec, &schema, source, &mut observed, log, None)? else {
         return Ok(observed);
     };
@@ -1301,7 +1301,7 @@ fn edit_schema(
 }
 
 /// A ranking's candidates as the case names them, each the contract scalar
-/// the Python host writes of the same value, as a given value (T2.8): an integer an `i64`, a
+/// the Python host writes of the same value, as a given value: an integer an `i64`, a
 /// `u64` past it, and past both a decimal of scale 0; text `utf8`.
 fn candidates_of(given: &[Index]) -> Result<Vec<GivenCandidate>> {
     given
@@ -1335,9 +1335,9 @@ fn candidates_of(given: &[Index]) -> Result<Vec<GivenCandidate>> {
 /// One Arrow column of contract scalars, all of one type, nulls among
 /// them; a column of nulls alone is Arrow's null type. This host hands the
 /// core the entities as the case types them, each scalar's type its own
-/// (T1.32a: the core casts them to the key's type). None at all is a
+/// (the core casts them to the key's type). None at all is a
 /// column of the null type and no rows, which the core refuses as naming
-/// no entity (`empty.indices`, T1.32d).
+/// no entity (`empty.indices`).
 fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
     use duckdb::arrow::array::NullArray;
     use duckdb::arrow::array::builder::{
@@ -1485,12 +1485,12 @@ pub struct HeldState {
     pub payload: Vec<u8>,
     pub query: Vec<u8>,
     /// A forecast's later steps, each its number, payload and query
-    /// (T1.36 fix 21).
+    ///.
     pub forecast: Option<Vec<HeldStep>>,
     /// A request asked in several calls (`RequestState.batches`, contract
     /// v26): each later call's payload and the rows it scores, in order.
     pub batches: Option<Vec<HeldBatch>>,
-    /// A ranking's state (T2.8), as the core answered it.
+    /// A ranking's state, as the core answered it.
     pub ranking: Option<HeldRanking>,
 }
 
@@ -1515,7 +1515,7 @@ pub type HeldBatch = (Vec<u8>, u64);
 pub type HeldStep = (u32, Vec<u8>, Vec<u8>);
 
 /// A materializer's sampler state as this host keeps it between runs
-/// (decision E52): its version and its memo's bytes, as the run left them.
+///: its version and its memo's bytes, as the run left them.
 pub type HeldSampler = (u32, Vec<u8>);
 
 /// `materialize` over the case's DuckDB base, after its `describe_source`,
@@ -1655,11 +1655,11 @@ fn start_materialize(
     let batch = RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![column])?;
     // What this host sends, as it encodes it, is what it records: the
     // description the core last answered, and the schema as this host
-    // holds it (decision E67).
+    // holds it.
     let schema_bytes = serde_json::to_vec(&edits::held(schema))?;
-    // Off DuckDB the call is the Python host's on the core route (T2.1d):
+    // Off DuckDB the call is the Python host's on the core route:
     // it sends the validated query as the PQL library writes it back
-    // (`to_string()`), which `sdm-pql` writes the same way; a query it does
+    // (`to_string`), which `sdm-pql` writes the same way; a query it does
     // not parse is sent as the case gives it.
     let off_duckdb = !matches!(
         &provider,
@@ -1671,11 +1671,11 @@ fn start_materialize(
         case.input.pql.clone()
     };
     let query_bytes = serde_json::to_vec(&query)?;
-    // The call's option values, as the client passes them (T1.28a's
+    // The call's option values, as the client passes them (
     // `Materialize.values`, `_rust/materialize.py`): the context size, none
     // here, since the case format carries none, and of the options whose
     // values the core reads, those the case's call gives: its inference
-    // options as written (T1.29, for `base.adventureworks`).
+    // options as written (for `base.adventureworks`).
     let mut values = serde_json::Map::from_iter([("num_context_samples".to_owned(), Value::Null)]);
     if let Some(options) = &case.input.materialize.inference_config {
         values.insert(
@@ -1683,7 +1683,7 @@ fn start_materialize(
             Value::Object(options.clone()),
         );
     }
-    // The sampling options the case's call gives (T2.11), as the Python
+    // The sampling options the case's call gives, as the Python
     // host passes them (`VALUED`), spliced in below as the case wrote them;
     // `context_anchor_time` as that host writes it (a `ts` scalar, or the
     // literal `entity`).
@@ -1716,7 +1716,7 @@ fn start_materialize(
             values_bytes.extend_from_slice(format!(r#","{name}":{}}}"#, written.0).as_bytes());
         }
     }
-    // `rows_per_call` as the case wrote it (T2.8c's cases), whatever JSON
+    // `rows_per_call` as the case wrote it (cases), whatever JSON
     // scalar it is, read as the Python host reads and hands the caller's
     // value over (`as_python_sends`): the core holds its type and size to
     // what the reference takes. Spliced in as text, so a whole number past
@@ -1735,7 +1735,7 @@ fn start_materialize(
         values_bytes.pop();
         values_bytes.extend_from_slice(format!(r#","rows_per_call":{sent}}}"#).as_bytes());
     }
-    // A ranking's `top_k` as the case wrote it (T2.8), whatever integer it
+    // A ranking's `top_k` as the case wrote it, whatever integer it
     // is, as the Python host hands the caller's value over: the core holds
     // it to what the reference takes. Spliced in as text, so an integer
     // past 64 bits is not read through a double.
@@ -1743,7 +1743,7 @@ fn start_materialize(
         values_bytes.pop();
         values_bytes.extend_from_slice(format!(r#","top_k":{}}}"#, top_k.0).as_bytes());
     }
-    // A ranking's candidates, as the Python host hands them over (T2.8).
+    // A ranking's candidates, as the Python host hands them over.
     let candidates = case
         .input
         .materialize
@@ -1751,7 +1751,7 @@ fn start_materialize(
         .as_ref()
         .map(|given| candidates_of(given))
         .transpose()?;
-    // `lag_timesteps` as the case wrote it (T2.9's cases), as `rows_per_call`
+    // `lag_timesteps` as the case wrote it (cases), as `rows_per_call`
     // is, read as the Python host reads and hands the caller's value over
     // (`as_python_sends`): the core holds its type and sign to what the
     // reference's engine takes; one the Python host cannot send as JSON is
@@ -1848,7 +1848,7 @@ fn start_materialize(
 /// `case`'s `describe_source`, then the operation `as_op` makes of its
 /// `materialize` in its place, over one DuckDB base, for a case without
 /// edits: what the host observed, and the run and how it ended, or none
-/// when the case was answered before (T1.27: the test-only `labels`
+/// when the case was answered before (the test-only `labels`
 /// operation, whose result `as_op`'s caller reads).
 pub fn materialize_as(
     case: &Case,
@@ -1918,7 +1918,7 @@ fn keep_sampler(handle: &HostRun, held: &mut Option<HeldSampler>) -> Result<()> 
 
 /// `case`'s `describe_source`, then its `materialize` `calls` times on one
 /// materializer, each run handed the sampler state the one before it left
-/// (decision E52), over one DuckDB base: what each call observed, its
+///, over one DuckDB base: what each call observed, its
 /// fetches and warnings, as a binding's materializer makes its calls.
 pub fn materialize_repeatedly(case: &Case, bases: &Bases, calls: usize) -> Result<Vec<Observed>> {
     materialize_repeatedly_holding(case, bases, calls, None)
@@ -1994,19 +1994,19 @@ pub fn materialize_repeatedly_holding(
 
 /// The id this host's `predict` requests carry. The reference's client
 /// draws one at random for every request; this host draws none, and the
-/// comparison leaves its value out under decision E35 (approved by the
+/// comparison leaves its value out under (approved by the
 /// owner on 2026-10-10; `contract/compare-policy.yaml`).
 pub const REQUEST_ID: &str = "sdm-000000000000";
 
 /// One Arrow result as rows of tagged cells, the same for both core
 /// runners: an integer as `{"i64": digits}`, a float as its IEEE-754 bits
 /// `{"f64_bits": 16 hex digits}`, so no text form of a float is compared,
-/// and text as `{"utf8": text}`; from T1.28b, which lays out a
+/// and text as `{"utf8": text}`; which lays out a
 /// classification's answers, a boolean as `{"bool": value}` and a class's
-/// probabilities as `{"map": [[class, its bits], ...]}`, in order; from
-/// T2.8, which lays out a ranking's `scores`, `rankings` and `candidates`
+/// probabilities as `{"map": [[class, its bits],...]}`, in order; from
+///, which lays out a ranking's `scores`, `rankings` and `candidates`
 /// (contract v27),
-/// a list as `{"list": [cell, ...]}`, each member a cell as above.
+/// a list as `{"list": [cell,...]}`, each member a cell as above.
 pub fn result_rows(data: &ArrowData) -> Result<Value> {
     use duckdb::arrow::array::{
         Array, BooleanArray, Float64Array, Int64Array, LargeListArray, ListArray, MapArray,
@@ -2160,7 +2160,7 @@ fn predict(
                 }),
                 // Each later question after the other attachments (none
                 // where there is a ranking), with this host's one constant
-                // id, as each step's (T2.8).
+                // id, as each step's.
                 ranking: state.ranking.as_ref().map(|held| Ranking {
                     top_k: held.top_k,
                     candidate: held.candidate,
@@ -2182,11 +2182,11 @@ fn predict(
             request_id: REQUEST_ID.into(),
             // The outputs the case's caller named, as the Python host
             // hands them over; none named, the task's default ones, as the
-            // client asks when its caller names none (T1.28b).
+            // client asks when its caller names none.
             outputs: case.input.outputs.clone().unwrap_or_default(),
             default_outputs: case.input.outputs.is_none(),
             // The inference options the case's caller set, which alone the
-            // call sends (the reference's 26ecdd28, T2.0c), as the Python
+            // call sends (the reference's 26ecdd28), as the Python
             // host hands over the keys of the request's asked config.
             inference_asked: case
                 .input
@@ -2223,13 +2223,13 @@ fn predict(
             return Ok(());
         }
     };
-    // Each model call answered in turn, a forecast's one per step (T1.36
+    // Each model call answered in turn, a forecast's one per step (
     // fix 21); the body recorded is the last call's, as the Python runner
     // records `core.predicted.body`, and every call's is kept in the
-    // answer's `calls`, which the observation leaves out (T1.36 fix 22).
+    // answer's `calls`, which the observation leaves out.
     let mut bodies: Vec<Value> = Vec::new();
     // The scripted endpoint over the calls in order, failing the case's
-    // `fail_call` (T2.1a), as the Python runner serves it.
+    // `fail_call`, as the Python runner serves it.
     let mut scripted = endpoint::Endpoint::new(case.input.fail_call);
     let mut next = handle.next();
     take_warnings(&handle, &mut observed.warnings)?;
@@ -2266,7 +2266,7 @@ fn predict(
         // scripted endpoint, failing the case's call, and answering beside
         // the rule's prediction what the case tells it to (probabilities,
         // quantiles, an explanation, item metadata, embeddings), as the
-        // Python runner serves it (T2.8, T2.9, T2.13, T2.11), by the call's
+        // Python runner serves it (, ), by the call's
         // number.
         let (status, answered) = match endpoint::scripted(&body) {
             Some(given) => given,
@@ -2380,7 +2380,7 @@ mod written_back_tests {
     #[test]
     fn a_query_is_written_back_as_the_python_host_sends_it() {
         // s0.boundary.deepest's query, its 400 redundant parentheses as the
-        // PQL library's to_string() drops them (python-core's materialize
+        // PQL library's to_string drops them (python-core's materialize
         // input on SQLite).
         let deepest = format!(
             "PREDICT COUNT(orders.* WHERE {}orders.price > 1{}, 0, 30, days) FOR EACH users.user_id",
@@ -2403,7 +2403,7 @@ mod rows_per_call_tests {
     use super::as_python_sends;
 
     /// What the Python host sends for each scalar a case may write, as
-    /// `json.loads` then `json.dumps` give it (T2.8c, its round 1 review).
+    /// `json.loads` then `json.dumps` give it (its round 1 review).
     #[test]
     fn rows_per_call_is_sent_as_the_python_host_sends_it() {
         for (written, sent) in [

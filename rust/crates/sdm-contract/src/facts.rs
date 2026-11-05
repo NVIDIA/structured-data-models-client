@@ -28,10 +28,8 @@ pub struct HostFacts {
     /// (`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a
     /// host: pandas 2 holds a literal as a nanosecond `Timestamp`.
     ///
-    /// A bridge fact: it is needed only because the Python host's S0
-    /// shadow check runs the old pandas validator on every query the core
-    /// accepts. It is deleted with that check in Phase 5, and the core then
-    /// reads years 0 to 9999 on every host.
+    /// Optional host representation limit; omit it to accept the core's full
+    /// supported date range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_literal_range: Option<InstantRange>,
 }

@@ -12333,7 +12333,7 @@
       "span": {"start_row": 1, "start_col": 14, "end_row": 1, "end_col": 14}
      }
     ],
-    "why": "KO2-36 (T2.18): the core reads a quoted name holding a dot or a line break as one name, held apart from its table, where the reference refuses its spelling; no such name is in the schema, so the core refuses it by name. The reference's answer stays as the row's evidence (register P2E-1)."
+    "why": "the core reads a quoted name holding a dot or a line break as one name, held apart from its table, where the reference refuses its spelling; no such name is in the schema, so the core refuses it by name. The reference's answer stays as the row's evidence (register P2E-1)."
    }
   },
   {
@@ -12392,7 +12392,7 @@
       "span": {"start_row": 1, "start_col": 66, "end_row": 1, "end_col": 66}
      }
     ],
-    "why": "KO2-36 (T2.18): the core reads a quoted name holding a dot or a line break as one name, held apart from its table, where the reference refuses its spelling; no such name is in the schema, so the core refuses it by name. The reference's answer stays as the row's evidence (register P2E-1)."
+    "why": "the core reads a quoted name holding a dot or a line break as one name, held apart from its table, where the reference refuses its spelling; no such name is in the schema, so the core refuses it by name. The reference's answer stays as the row's evidence (register P2E-1)."
    }
   },
   {

@@ -83,9 +83,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "the endpoint answers no explanation: the result holds none, with SDMWarning saying it is absent"
+    "stage": "predict"
   },
   "why": "an explanation asked of predict that the model does not give",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case explain.not-answered using the shop fixture."
 }

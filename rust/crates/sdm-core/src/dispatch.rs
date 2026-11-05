@@ -20,7 +20,7 @@ use crate::profiles::Profile;
 use crate::run::{Attachment, Attachments, Run, internal};
 
 /// Refuses a start from a host speaking another contract version, before
-/// anything else of the message is read (decision H25): host and core ship
+/// anything else of the message is read: host and core ship
 /// together, and no other version's fields mean anything here.
 pub fn check_contract(contract: u32) -> Result<(), CoreError> {
     if contract == CONTRACT_VERSION {
@@ -36,12 +36,12 @@ pub fn check_contract(contract: u32) -> Result<(), CoreError> {
 }
 
 /// The run of `start`'s operation, with the attachments the start names
-/// and the zones of the host's facts (decision H14): the run resolves zone
+/// and the zones of the host's facts: the run resolves zone
 /// names through `zones` and nothing else. A contract version other than
 /// this build's, host facts the contract does not allow, attachments other
 /// than the ones the operation names, or a provider the root's data layer
 /// cannot serve, are refused before any run exists. Input-sized fields are
-/// read from their attachments here (decision H5).
+/// read from their attachments here.
 pub fn start(
     root: &CompositionRoot,
     start: StartRun,
@@ -49,7 +49,7 @@ pub fn start(
     zones: Arc<dyn Zones>,
 ) -> Result<Run, CoreError> {
     check_contract(start.contract)?;
-    // The clock is an instant in UTC, spelled as the contract spells it (E5).
+    // The clock is an instant in UTC, spelled as the contract spells it.
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
             Sentence::HostClockNotUtc,
@@ -451,7 +451,7 @@ pub fn start(
             let zones = Arc::clone(&zones);
             Run::with_data(access, move |asker| async move {
                 // A semantic model is read through its own definition, which
-                // names its base tables: no session read settles them (T3.5).
+                // names its base tables: no session read settles them.
                 if asker.data().is_some_and(|data| data.view().is_some()) {
                     let reader = crate::describe::text_reader(&facts)?;
                     return crate::view::describe_source(asker, source, &reader).await;
@@ -493,7 +493,7 @@ pub fn start(
             }
             // What predict asks: the state `materialize` answered, or a
             // request the core did not materialize, rebuilt from what the
-            // host holds of it (T3.26).
+            // host holds of it.
             let asked = match (request.state, request.held) {
                 (Some(state), None) => from_state(state, &request.request_id, &mut attachments)?,
                 (None, Some(held)) => {
@@ -532,7 +532,7 @@ pub fn start(
 /// What `state`, the request state `materialize` answered, asks of
 /// `predict`, its attachments taken from `attachments`; the first call
 /// carries `request_id`. A version other than this build's is refused by
-/// name before anything of the state is read (decision H23).
+/// name before anything of the state is read.
 fn from_state(
     request_state: RequestState,
     request_id: &str,
@@ -557,9 +557,9 @@ fn from_state(
         return Err(internal("the payload is not the bytes named"));
     };
     // The query rides with the state: the constant-context notice names the
-    // target from it where the wire calls it TARGET (T1.28b).
+    // target from it where the wire calls it TARGET.
     let query: String = take_json(attachments, request_state.query)?;
-    // A forecast's later steps, each as the first is (T1.36 fix 21).
+    // A forecast's later steps, each as the first is.
     let forecast = match &request_state.forecast {
         None => None,
         Some(steps) => {
@@ -569,7 +569,7 @@ fn from_state(
                     return Err(internal("the payload is not the bytes named"));
                 };
                 let query: String = take_json(attachments, step.query)?;
-                // Each step's call carries its own id (T1.36 fix 24).
+                // Each step's call carries its own id.
                 let Some(request_id) = step.request_id.clone() else {
                     return Err(CoreError::new(
                         Sentence::StateUnread,
@@ -582,7 +582,7 @@ fn from_state(
             Some(later)
         }
     };
-    // A ranking's later questions, each as the first is (T2.8): the first
+    // A ranking's later questions, each as the first is: the first
     // asks after the first candidate given, at position 0.
     let ranking = match &request_state.ranking {
         None => None,
@@ -685,7 +685,7 @@ pub(crate) fn materialize(
 ) -> Result<Run, CoreError> {
     match operation {
         Operation::Materialize(request) => {
-            // The schema as the host holds it, as plain data (T3.16): read
+            // The schema as the host holds it, as plain data: read
             // at the run's start, where a column with no facts is read from
             // the source (`crate::discover`).
             let held: HeldSchema = take_json(&mut attachments, request.schema)?;
@@ -700,7 +700,7 @@ pub(crate) fn materialize(
             let candidates: Option<Vec<GivenCandidate>> =
                 take_json_if(&mut attachments, request.candidates)?;
             // The decoder takes a seed of any size and sign; which seeds a
-            // run takes is the core's rule (decision H7): not a negative
+            // run takes is the core's rule: not a negative
             // one, and none past the largest the provider declares (RS-7),
             // which the core reads when it plans the sample
             // (`DataAccess::plan`).
@@ -717,10 +717,10 @@ pub(crate) fn materialize(
                 ));
             }
             // The sampler state's version first, by name, before anything of
-            // the state is read, as a request state's (decision H23); then
+            // the state is read, as a request state's; then
             // its memo, which a run reads only if it was made under this
-            // provider and description (decision E52). Each refusal of the
-            // state tells the host to drop it (decision E74), so its next
+            // provider and description. Each refusal of the
+            // state tells the host to drop it, so its next
             // run starts afresh rather than being refused the same way.
             let memo = match &request.sampler_state {
                 None => None,
@@ -746,7 +746,7 @@ pub(crate) fn materialize(
             };
             // The call's option values, as the host attached them: read with
             // the wire's bounded reader, so text nested past its depth is
-            // refused by name, never read recursively (decision E49).
+            // refused by name, never read recursively.
             let values = match request.values {
                 None => None,
                 Some(id) => {
@@ -767,7 +767,7 @@ pub(crate) fn materialize(
             let provider = request.provider;
             // The run's inputs, once the schema is read (below) and its
             // fingerprint taken: the memo is read only if it was made under
-            // this provider and schema (decision E52).
+            // this provider and schema.
             let inputs =
                 move |description, source: String, pending, types| crate::materialize::Inputs {
                     frames: None,
@@ -798,7 +798,7 @@ pub(crate) fn materialize(
                 // at each run, their location, columns and types, once the
                 // request's inputs are checked (`describe::initialize`), and
                 // nothing of them is remembered between runs (the owner's
-                // plan B, T3.4); a host provider's columns with no facts are
+                // plan B); a host provider's columns with no facts are
                 // read from it then. Until then the schema is read as the
                 // caller holds it, a column with no facts by its data type,
                 // as an edit reads it.
@@ -813,7 +813,7 @@ pub(crate) fn materialize(
                 )?;
                 // The schema as the caller holds it first, as the reference's
                 // `check_consistent` reads it; then as its engine reads the
-                // source (T3.16 review round 1), where its facts are held.
+                // source ( review round 1), where its facts are held.
                 crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
                 sdm_schema::assemble::check_links(&read.description, &read.types)?;
                 let description = read.by_the_source();

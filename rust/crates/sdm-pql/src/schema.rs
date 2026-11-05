@@ -25,7 +25,7 @@ pub struct TableDefinition {
 }
 
 /// A column within a schema, and a column a query names: its table and its
-/// column held apart, so either may hold a dot (Phase 2 decision KO2-36).
+/// column held apart, so either may hold a dot.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ColumnKey {
     pub table_name: String,

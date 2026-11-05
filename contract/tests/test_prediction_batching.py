@@ -131,11 +131,11 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t28c_run_python', RUNNER)
+    return _module('test_prediction_batching_run_python', RUNNER)
 
 
 def recorder() -> ModuleType:
-    return _module('multicall_record', RECORDER)
+    return _module('batch_prediction_scenarios', RECORDER)
 
 
 def key(case_id: str, database: str) -> str:
@@ -144,7 +144,7 @@ def key(case_id: str, database: str) -> str:
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 #: The case keys observed with a call raising an error that is not the
-#: client's own (``multicall_record.RAISED``): what each call answered
+#: client's own (``batch_prediction_scenarios.RAISED``): what each call answered
 #: before it, kept on it, by case.
 RAISED = {
     'multicall.rows-per-call-3': {'calls_answered': 2, 'rows_answered': 6},
@@ -164,7 +164,7 @@ def test_every_multi_call_case_is_named_here() -> None:
 
 @functools.cache
 def cases() -> dict[str, tuple[dict[str, Any], str]]:
-    r"""The T2.8c cases by id, each with its digest, as the runner loads
+    r"""The cases by id, each with its digest, as the runner loads
     them."""
     loaded = runner().load_cases([CASES / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}
@@ -488,7 +488,7 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
 
 def _server() -> bool:
     r"""Whether a Postgres server is named; where none is, one must not be
-    required (H26)."""
+    required."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -499,7 +499,7 @@ def _server() -> bool:
 
 @functools.cache
 def core_run(database: str) -> dict[str, Any]:
-    r"""python-core over the T2.8c cases on ``database``, as that
+    r"""python-core over the cases on ``database``, as that
     database's job runs them: each observation by its key, or under ``''``
     why the run failed whole."""
     with tempfile.TemporaryDirectory(prefix='t28c-') as tmp:
@@ -579,7 +579,7 @@ def differences(want: Any, got: Any, at: str = '') -> list[str]:
 def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
     r"""Two outcomes the same, but that the core route raises a refusal
     coded ``UNSUPPORTED_REQUEST`` as ``UnsupportedRequestError``, a
-    subclass of the reference's ``StructuredDataError`` (register P1B-20,
+    subclass of the reference's ``StructuredDataError`` (B-20,
     approved by the owner, E78)."""
     if want == got:
         return True
@@ -603,7 +603,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
     python-core runs the case on the database on the core route (the
     native module loaded, each of the case's core operations run), and its
     outcome, each request the scripted endpoint received (each call's
-    walk and context) and its result through ``to_pandas()`` (columns, row
+    walk and context) and its result through ``to_pandas`` (columns, row
     count and the rows' digest, so their numbering and order) are
     python-ref's."""
     database = case_key.partition('@')[2] or 'duckdb'
@@ -706,7 +706,7 @@ def test_the_reference_keeps_the_answers_when_a_call_raises(
     case_key: str,
 ) -> None:
     r"""Exit "answered parts on a failed call", for a failure that is not
-    the client's own (T2.8c round 1): with the client's transport raising
+    the client's own ( round 1): with the client's transport raising
     ``ValueError`` on the third call of ``rows_per_call=3`` over 8, or on
     the second step's call of the two-step forecast, as the Databricks SDK
     raises one on a failed OAuth refresh, the reference raises that
@@ -742,7 +742,7 @@ def test_python_core_keeps_the_answers_when_a_call_raises(
     case_key: str,
 ) -> None:
     r"""Exit "answered parts on a failed call", for a failure that is not
-    the client's own (T2.8c round 1): python-core, on the core route, its
+    the client's own ( round 1): python-core, on the core route, its
     transport raising the same ``ValueError`` on the same call, raises it
     as the reference does, with the reference's answers kept on it
     (``details['answered']`` row by row, and ``calls_answered`` and

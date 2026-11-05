@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The Python host's DuckDB provider, through the core (T1.11b).
+"""The Python host's DuckDB provider, through the core.
 
 Each fetch is planned by the core's data layer for DuckDB, answered by the
 provider, admitted by the core and echoed back by the test-only fetch, and
@@ -10,10 +10,10 @@ provider tests read too: a result the driver hands over in several batches
 is admitted as one attachment of its rows, the same as when handed over
 whole; an empty one keeps its schema; and a ``TIMESTAMPTZ`` column reads in
 the database zone's wall clock, a zone set for the source's session alone
-being seen by no read, as in the reference. From T1.11c, a key set the core
+being seen by no read, as in the reference. a key set the core
 sends with a step is bound by the provider exactly: keys that collide as
 float64 (an unsigned key past int64, 38-digit and scale-18 decimals) each
-find their own row, which keys forced to float64 do not (decision H22), and a
+find their own row, which keys forced to float64 do not, and a
 key set past the 64 KB control cap travels as an attachment beside a step
 under it.
 """
@@ -315,7 +315,7 @@ def _base(name: str) -> Any:
 
 
 def test_every_request_kind_runs_on_every_base_as_the_vectors_say() -> None:
-    # T1.23: every data request kind, planned by the core's data layer for
+    #: every data request kind, planned by the core's data layer for
     # DuckDB, answered by this host's provider and admitted, is the Arrow
     # schema and rows contract/request-kinds.json records, which the
     # pure-Rust host's provider is held to as well.

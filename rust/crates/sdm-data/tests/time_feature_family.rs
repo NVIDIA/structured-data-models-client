@@ -2,13 +2,13 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The time and feature family's DuckDB statements (T1.32e, T1.30 folded
+//! The time and feature family's DuckDB statements (folded
 //! in), pinned as text beside `duckdb_catalog.rs`'s: each data request the
 //! `time.*` and `feature.*` cases make through `from_source` and
 //! `materialize` on the pure-Rust host that no other file here pins
 //! already, as `sdm-testkit` recorded it, with the one statement this layer
 //! renders for it. A statement that changes without its pin changing here
-//! fails this test, and `sdm-testkit`'s `tests/t132e_time_feature_sql.rs`
+//! fails this test, and `sdm-testkit`'s `tests/time_feature_sql.rs`
 //! runs the cases on DuckDB and fails on any statement they run that is
 //! pinned nowhere in these files. The family's own statements are those
 //! naming its columns: `time.text-declared`'s time column `happened` (its

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Carried row G5 (T2.5's implementer's test): on DuckDB, rust-host runs a
+//! Carried row G5 (implementer's test): on DuckDB, rust-host runs a
 //! case's `validate_query` after `describe_source` also when the case names
 //! `materialize`, as the Python host validates a query before it
 //! materializes, and materializes only once the query is accepted.

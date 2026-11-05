@@ -171,7 +171,7 @@ def _driver(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     r"""The Databricks SQL connector's modules as stand-ins naming its
     ``Connection`` the fake warehouse, whether or not the connector is
     installed: the old route takes only its driver's connection, which
-    these runs never reach (round 2's Codex P2). Every module that read
+    these runs never reach. Every module that read
     the driver is imported anew over the stand-ins, and forgotten after,
     so a later test sees the driver as it is installed."""
     # Importing a child also caches it on its parent package. Restore those
@@ -333,7 +333,7 @@ def test_a_column_named_like_a_session_word_is_read_through_the_table(
 ) -> None:
     r"""Each read of ``users`` names its columns through the table, so a
     ``user`` column since dropped fails the read rather than reading the
-    session user (round 1's Codex P0; ``_quoted_source_name``)."""
+    session user."""
     connection = _SessionWordConnection()
     # The preview of ``users`` is not recorded with the column added.
     with pytest.raises(Exception):  # noqa: B017, PT011
@@ -493,7 +493,7 @@ def test_a_declared_foreign_key_is_linked_whatever_namespace_the_source_names(
     r"""A declared foreign key names its table in full (catalog, schema,
     table); the parts the source leaves to the connection are read
     (``current_catalog()``, ``current_schema()``), so the link is kept as
-    the old client keeps it (round 2's Claude P0-1)."""
+    the old client keeps it."""
     core_schema = Schema.from_source(
         DatabricksSource(_DeclaredKeyConnection(), **namespace)
     )
@@ -552,7 +552,7 @@ def test_a_described_schema_rebuilt_on_another_catalog_reads_that_catalog(
 ) -> None:
     r"""A schema built anew from a described schema's tables on a source
     naming another catalog reads that catalog's tables, as the old route
-    reads a new schema's tables afresh (round 3's P0, Claude's case)."""
+    reads a new schema's tables afresh."""
     connection = _Connection()
     described = Schema.from_source(DatabricksSource(connection))
     rebuilt = Schema(
@@ -569,7 +569,7 @@ def test_a_described_schema_rebuilt_on_another_connection_reads_its_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""A schema built anew on another connection, whose session's schema is
-    ``other``, reads ``other``'s tables (round 3's P0, Claude's case)."""
+    ``other``, reads ``other``'s tables."""
     described = Schema.from_source(DatabricksSource(_Connection()))
     elsewhere = _Connection()
     elsewhere.schema = 'other'
@@ -589,7 +589,7 @@ def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
     r"""A described table pointed at another source table after the session
     moved to ``other`` is read under ``other``, as the old route reads a
     table it has not read yet; a table left as described is read where it
-    was described (round 3's P0, Codex's case).
+    was described.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -681,8 +681,7 @@ def test_a_table_adopted_in_place_is_read_where_the_receiving_schema_read_it(
     r"""A table assigned into a schema from another schema described under
     another session is read where the receiving schema read its table of
     that name, as the old route reads it (its own reading of the source,
-    by source name): on one connection or two (round 4's P0, Claude's
-    case)."""
+    by source name): on one connection or two."""
     dev_connection = _SessionConnection()
     dev = Schema.from_source(DatabricksSource(dev_connection))
     if connections == 'one':
@@ -703,8 +702,7 @@ def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
 ) -> None:
     r"""A schema read under ``shop`` that adopts its ``users`` from a later
     reading of the same source under ``other`` reads ``users`` where it
-    read it itself, ``shop``, as the old route keeps its own reading
-    (round 4's P0-1, Codex's case).
+    read it itself, ``shop``, as the old route keeps its own reading.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -728,8 +726,7 @@ def test_an_edit_keeps_each_table_where_it_was_read(
     ``users`` read nowhere yet (a schema built anew), then is edited (a
     relationship assigned, an unrelated column's meaning changed), reads
     ``orders`` under ``shop`` and ``users`` under the session's ``other``,
-    as the old route does: an edit spreads no table's reading onto another
-    (round 4's P0-2, Codex's case).
+    as the old route does: an edit spreads no table's reading onto another.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -942,8 +939,7 @@ def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
 ) -> None:
     r"""A schema built anew whose first ``materialize`` fails after reading
     its tables reads them there again when retried after the session moved,
-    as the old route keeps the tables a run read before it failed (round
-    6's P0, Codex's ``retry``).
+    as the old route keeps the tables a run read before it failed.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -964,8 +960,7 @@ def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
 ) -> None:
     r"""A described table taken out of the schema, an edit made meanwhile,
     then put back, is read where the schema read it, after the session
-    moved, as the old route keeps every table it read (round 6's P0,
-    Codex's ``remove_edit_restore``).
+    moved, as the old route keeps every table it read.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -988,7 +983,7 @@ def test_a_snapshot_shares_the_tables_its_original_reads_later(
     r"""A schema and a snapshot of it share the tables either reads after
     the snapshot was taken, as the old route shares its engine reading: a
     table the one reads first is read there by the other after the session
-    moved, whichever reads first (round 6's P0, Codex's ``snapshot``).
+    moved, whichever reads first.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -1101,7 +1096,7 @@ def test_a_first_run_in_the_wrong_schema_keeps_nothing_and_the_fixed_retry_runs(
 ) -> None:
     r"""A first ``materialize`` with the session in a schema that holds no
     such table fails and keeps no reading, so a retry once the session is
-    fixed reads ``shop`` (round 7's P0 and P1, Claude's wrong session)."""
+    fixed reads ``shop``."""
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     connection.schema = 'missing'
@@ -1116,8 +1111,7 @@ def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
 ) -> None:
     r"""A first ``materialize`` failing at its namespace read leaves the
     schema an engine reading of its own, empty, which a snapshot taken then
-    shares, so the original's retry's readings reach the snapshot (round 7's
-    P0, Codex's early failure).
+    shares, so the original's retry's readings reach the snapshot.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -1138,7 +1132,7 @@ def test_an_interrupted_first_run_keeps_the_readings_it_made(
 ) -> None:
     r"""A first ``materialize`` interrupted while it samples, after it read
     its tables, keeps where it read them, so a retry after the session
-    moved reads them there (round 7's P0, Codex's interrupt).
+    moved reads them there.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -1328,7 +1322,7 @@ def test_a_preview_failing_before_the_tables_are_located_keeps_none(
     r"""A first ``materialize`` over a table whose columns hold no facts,
     failing at that table's preview (the same statement on both routes),
     keeps no table's location: a retry after the session moved reads
-    ``other`` (round 9's P0, Codex)."""
+    ``other``."""
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
     _fresh(schema, 'users')
@@ -1347,7 +1341,7 @@ def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
     meaning its source type does not carry, is refused once the tables are
     read and kept, as the old route checks meanings after it keeps its
     tables (``relational.py:586``): a retry after the meaning is put right
-    and the session moved reads ``shop`` (round 10's P0, Codex).
+    and the session moved reads ``shop``.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -1543,8 +1537,7 @@ def test_refusals_preserve_source_read_order(
     source refuses having read nothing, and a retry after the session moved
     reads where the session says; each it makes once its engine read and
     kept the tables refuses having read them, and a retry reads them where
-    it did (round 11: Codex's P0 primary key and time column retries, and
-    one case per row of the tracker's table that refuses).
+    it did.
     On the core, which keeps no table between runs (plan B), each run
     reads where the session says then (``_KEPT``).
     """
@@ -1630,8 +1623,7 @@ def test_an_empty_table_is_refused_before_the_tables_are_kept(
     table it has not kept in full, its preview included, before keeping
     any, as the old route's engine reads every table it keeps: a table with
     no rows is refused there (``databricks/table.py:385-386``), nothing
-    kept, so a retry after the session moved reads there (round 12's P0-1,
-    Codex)."""
+    kept, so a retry after the session moved reads there."""
     from sdm_client.errors import StructuredDataError
 
     connection = _EmptyingConnection()
@@ -1818,7 +1810,7 @@ def test_a_column_the_source_gained_is_sent_only_where_the_schema_names_it(
     column of any request the schema does not name it in, on both routes;
     named by hand, it is sent on the core, which reads each table as the
     source holds it at each ``materialize`` (plan B), where the old route
-    leaves it out of the table it kept (round 13's P0-1, Codex)."""
+    leaves it out of the table it kept."""
     from sdm_client import Column
 
     connection = _AddingConnection()
@@ -1929,8 +1921,7 @@ def test_a_repeated_declared_key_is_refused_as_databricks_enforces_none(
 ) -> None:
     r"""A key Databricks declares, which it does not enforce, is counted
     when the schema is described: a repeated value is refused, naming the
-    source as one that does not enforce declared keys (round 15's P0-1,
-    Codex)."""
+    source as one that does not enforce declared keys."""
     from sdm_client.errors import StructuredDataError
 
     connection = _RepeatedKeyConnection()
@@ -1946,8 +1937,7 @@ def test_a_repeated_declared_key_left_unchecked_is_read_once_in_the_context(
 ) -> None:
     r"""With the key check off, a key Databricks declares and does not
     enforce, repeated in the table, is read once per key in the context,
-    as the old route keeps the first row of a key several rows hold (round
-    15's P0-1, Codex)."""
+    as the old route keeps the first row of a key several rows hold."""
     import pandas as pd
 
     from sdm_client import PredictiveQuery
@@ -1968,8 +1958,7 @@ def test_a_repeated_declared_key_scored_is_refused_by_name(
 ) -> None:
     r"""With the key check off, an entity scored by a key Databricks
     declares and does not enforce, which two rows hold, is refused by name,
-    as the old route refuses guessing which row is meant (round 15's P0-1,
-    Codex)."""
+    as the old route refuses guessing which row is meant."""
     import pandas as pd
 
     from sdm_client import PredictiveQuery

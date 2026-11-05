@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The empty, null and refuse family's DuckDB statements (T1.32d, T1.30
+//! The empty, null and refuse family's DuckDB statements (
 //! folded in), pinned as text beside `duckdb_catalog.rs`'s: each data
 //! request the `empty.*`, `null.*` and `refuse.*` cases make through
 //! `from_source` and `materialize` on the pure-Rust host that no other file

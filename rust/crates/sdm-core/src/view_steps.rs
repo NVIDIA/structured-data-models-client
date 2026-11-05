@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The first steps of a metric view's conversion (T3.5, M2), each a pure
+//! The first steps of a metric view's conversion (M2), each a pure
 //! composition of the schema's order and the data layer's reading: the
 //! source table's name, the parameters' defaults, and the joins kept or
 //! skipped, in the old client's order (`DB/metric_view.py:513-909`). The
@@ -139,7 +139,7 @@ pub fn default_text(
 /// Each parameter of the view as the data layer reads it: its type if the
 /// definition writes it as text, and its default, unless null, converted
 /// for each type it may be read as, the definition's and any `described`
-/// for its name (D3 of T3.27).
+/// for its name (D3 of ).
 pub fn parameter_inputs(
     spec: &ViewSpec,
     described: &[(String, String)],

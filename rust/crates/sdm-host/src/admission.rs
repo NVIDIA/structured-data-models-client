@@ -23,7 +23,7 @@
 //! | `run_end_encoded<R, V>` | `V`, admitted (values tagged `arrow.bool8`, `boolean`), the runs decoded |
 //!
 //! Before anything is admitted, each batch must match the schema its
-//! attachment declares (check (a) of decision H16): the same number of
+//! attachment declares (check (a) of ): the same number of
 //! columns, in the same order, with the same names, types and field
 //! metadata, and no nulls in a column declared non-nullable; a mismatch,
 //! such as an extra column, two same-typed columns swapped, another decimal
@@ -38,7 +38,7 @@
 //! (`arrow.bool8` as `boolean`) drops the extension's two keys, which would
 //! name a storage the admitted field no longer has. DuckDB hands its
 //! booleans over as `arrow.bool8` under `arrow_lossless_conversion`, its
-//! catalog's included (T1.33). The received schema
+//! catalog's included. The received schema
 //! is kept beside the admitted one ([`ArrowData::received`]). Anything the
 //! table does not take into the set is refused with `UNSUPPORTED_TYPE`,
 //! naming the column (with its path through nested types) and the Arrow
@@ -188,9 +188,9 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
         }
         // Any other dictionary is decoded to its values.
         D::Dictionary(_, values) => convert_type(column, values)?,
-        // A run-end array is decoded to its values (E17); values tagged
+        // A run-end array is decoded to its values; values tagged
         // `arrow.bool8` are booleans, as the same column unencoded is
-        // (admitted_field), the tag on any other storage refused (T2.12, FR
+        // (admitted_field), the tag on any other storage refused (FR
         // P3-8).
         D::RunEndEncoded(_, values) if values.extension_type_name() == Some(BOOL8) => {
             if !is_bool8(values) {
@@ -231,7 +231,7 @@ pub fn admit(data: &ArrowData) -> Result<ArrowData, CoreError> {
 /// [`admit`], for data a provider whose opaque Arrow extension types are
 /// `vendor`'s handed over (`Run::opaque_vendor`): a top-level opaque
 /// column naming that vendor is read as what it means (crate::extensions,
-/// register P1B-43); one naming another vendor or none is admitted by its
+/// B-43); one naming another vendor or none is admitted by its
 /// storage, as before.
 pub fn admit_from(data: &ArrowData, vendor: Option<&str>) -> Result<ArrowData, CoreError> {
     admitted(data, OFFSET_CAPACITY, vendor)
@@ -518,7 +518,7 @@ const MICROS_PAST: i64 = i64::MAX;
 
 /// Scales every valid timestamp by `factor`, a value past what an int64
 /// count of microseconds holds kept as [`MICROS_PAST`] on its side, as
-/// DuckDB hands over a microsecond infinity (register DT-14, T1.36 fix 3):
+/// DuckDB hands over a microsecond infinity (register DT-14, fix 3):
 /// every such value is past what a nanosecond count holds, which
 /// `materialize` refuses with `VALUE_OUT_OF_RANGE` wherever it reads one,
 /// and kept so it orders after (or before) every value the type holds. A

@@ -2,16 +2,16 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The user's edits to the schema, as this host makes them (decision E67,
-//! T1.24b): each passed to the core's `edit_schema` with the schema as
+//! The user's edits to the schema, as this host makes them
+//! : each passed to the core's `edit_schema` with the schema as
 //! this host holds it, the core
 //! function the Python client's setters pass theirs to, so the core checks
 //! and makes every edit and this host decides none (`crate::host` runs
 //! them). The case names only the edits, never the schema `materialize`
-//! samples (decision E50). An edit the core refuses is the case's outcome,
+//! samples. An edit the core refuses is the case's outcome,
 //! at the from_source stage, as the Python runner records it.
 //!
-//! This host holds a schema as plain data ([`held`], T3.16): the
+//! This host holds a schema as plain data ([`held`]): the
 //! description the core answered, each column with its facts, and each
 //! edit's answer read back ([`described`]).
 
@@ -57,7 +57,7 @@ pub struct Link {
 
 impl SchemaEdit {
     /// The case format's edit as this host makes it, every edit of the
-    /// format (from T1.27, whose gate's checkpoint loader holds T1.24b's
+    /// format (whose gate's checkpoint loader holds
     /// four: `set_primary_key`, `set_time_column`, `set_stype`,
     /// `set_relationships`). An `Option` for [`crate::host::run`]'s
     /// refusal of an edit a checkpoint's loader might not name.
@@ -151,7 +151,7 @@ impl SchemaEdit {
     }
 }
 
-/// The schema as this host holds it, as plain data (T3.16): the
+/// The schema as this host holds it, as plain data: the
 /// description the core last answered, each column's data type by its wire
 /// name and with what the source said of it.
 pub fn held(described: &SourceDescription) -> HeldSchema {

@@ -46,9 +46,8 @@
   "until": "predict",
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "the tables listed from information_schema.tables in the source's schema (RE/graph.py, from_postgres), each read qualified as \"schema\".\"table\" (PG/table.py:146-153)"
+    "stage": "predict"
   },
   "why": "base.binary's kind on the lakebase leg: Postgres over a psycopg connection to the Lakebase database, opened as PostgresSource(connection), the explicit open and the leg's default (CN/source.py:400).",
-  "source": "written by T3.7's test author from the reference at 43e55f4f"
+  "source": "Correctness case lakebase.binary using the shop fixture."
 }

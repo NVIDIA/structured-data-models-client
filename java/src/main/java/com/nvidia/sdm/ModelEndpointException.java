@@ -14,7 +14,7 @@ import java.util.Set;
  * The model endpoint refused a call, as Python's {@code NimRequestError}: the endpoint's status
  * ({@link #status}), its own code ({@link #code}, which may be null), its message (its {@code
  * detail} or {@code title}, else the start of its answer) and its other fields in {@link
- * #details}, as the endpoint wrote them (decision E47). When the core had answered earlier calls
+ * #details}, as the endpoint wrote them. When the core had answered earlier calls
  * of the same request, {@code details} also holds how many ({@code calls_answered}).
  *
  * <p>A Databricks Model Serving endpoint's refusal is named by the core, as Python's serving
@@ -48,7 +48,7 @@ public final class ModelEndpointException extends StructuredDataException {
   }
 
   /**
-   * The refusal the core named an endpoint's failure as ({@code ENDPOINT_REFUSED}, T3.13): the
+   * The refusal the core named an endpoint's failure as ({@code ENDPOINT_REFUSED}): the
    * endpoint's status, the code it is raised under (null where there is none), the core's
    * sentence, and the rest of the core's fields as its details, as Python raises {@code
    * NimRequestError(status, code=...)}. For the library's own use.

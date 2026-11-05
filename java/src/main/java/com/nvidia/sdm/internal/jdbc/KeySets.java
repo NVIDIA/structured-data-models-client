@@ -55,9 +55,9 @@ import org.apache.arrow.vector.types.pojo.Field;
  * lookup} request), the attachment the core sent with the step, as the Python provider for that
  * driver binds it: DuckDB's Arrow registered (kept as a temporary table, since a registered
  * stream is read once), SQLite's ingested as a temporary table of the types ADBC gives it,
- * Postgres's the statement's one parameter, the JSON text the core wrote of it (T3.28), handed
+ * Postgres's the statement's one parameter, the JSON text the core wrote of it, handed
  * over as one text cell ({@link #text}), and Databricks's the same text, bound to its {@code ?}
- * marker (T3.13). Not part of the API.
+ * marker. Not part of the API.
  */
 abstract class KeySets {
   /** A key set read whole: its Arrow IPC bytes, its fields and each column's values. */
@@ -312,7 +312,7 @@ abstract class KeySets {
   }
 
   /**
-   * The one text cell of {@code reader}, a key set the core wrote as its dialect's JSON (T3.28),
+   * The one text cell of {@code reader}, a key set the core wrote as its dialect's JSON,
    * which the provider binds as it is; {@code reader} is closed.
    *
    * @throws JdbcProvider.PlanNotRun the attachment is not one text cell

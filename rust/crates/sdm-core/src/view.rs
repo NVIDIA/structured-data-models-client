@@ -2,16 +2,16 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A semantic model's conversion (T3.5, design S5): one routine in the old
+//! A semantic model's conversion: one routine in the old
 //! client's read order, a Databricks metric view's M1 to M11
 //! ([`metric`]) and a Snowflake semantic view's V1 to V7 ([`semantic`]), at
-//! every `describe_source` and `materialize` (the owner's plan B: a view is
+//! every `describe_source` and `materialize` (a view is
 //! read as it stands at each run, nothing kept between runs).
 //!
 //! Each step reads through the run's asker and sees its answer before the
 //! next, as the old client did; every question of the view's text is the
 //! data layer's (`DataLayer::view_text`), and every failure is read by the
-//! fact that fits what was asked (`DataLayer::failure`, design S3). The
+//! fact that fits what was asked (`DataLayer::failure`). The
 //! logical model is `sdm-schema`'s ([`sdm_schema::view::model`]); each
 //! logical table reads a relation the data layer renders, which lives in
 //! the run alone ([`Converted::relations`]).
@@ -534,7 +534,7 @@ pub(crate) fn model_columns(table: &ViewTable, previewed: &Previewed) -> Vec<Mod
 }
 
 /// The relations, by logical table, and the schema the model gives, its
-/// tables named after the logical tables (design S6).
+/// tables named after the logical tables.
 pub(crate) fn describe(
     model: &ViewModel,
     tables: &[ViewTable],
@@ -644,7 +644,7 @@ pub(crate) enum ReadTask {
 
 /// A finite diagnosis from known codes, with the operation the core requested.
 /// Driver messages and unrecognized free-text fields remain internal (H17,
-/// KO2-86). Table and column context is added by the existing message site.
+/// ). Table and column context is added by the existing message site.
 pub(crate) fn failure_text(error: &ProviderError, task: ReadTask) -> String {
     let class = error
         .error_class
@@ -706,7 +706,7 @@ pub(crate) fn failure_text(error: &ProviderError, task: ReadTask) -> String {
     explanation
 }
 
-/// `describe_source` of a semantic model (T3.5): the view converted, the
+/// `describe_source` of a semantic model: the view converted, the
 /// tables the caller names kept (all where none), its notes and what it
 /// left out given here alone.
 pub(crate) async fn describe_source(

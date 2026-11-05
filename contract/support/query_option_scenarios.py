@@ -17,10 +17,10 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t213-option-vectors.json'
+OUT = ROOT / 'contract/option-vectors.json'
 CASES = ROOT / 'contract/cases/s1'
 FORMAT = 'sdm-t213-option-vectors/1'
-#: The T2.13 cases, by the start of their ids.
+#: The cases, by the start of their ids.
 PREFIXES = (
     'filter.',
     'ids.',
@@ -33,7 +33,7 @@ PREFIXES = (
     'date.',
 )
 DATABASES = ('duckdb', 'sqlite', 'postgres')
-#: How a warning T2.13's exits name opens: the entity filter's notice, an
+#: How a warning exits name opens: the entity filter's notice, an
 #: explanation asked for and not given, a day-first date literal.
 WARNINGS = (
     'the entity filter ',
@@ -56,7 +56,10 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t213_run_python', ROOT / 'contract/runners/run_python.py')
+    return _module(
+        'query_option_scenarios_run_python',
+        ROOT / 'contract/runners/run_python.py',
+    )
 
 
 def endpoint() -> ModuleType:
@@ -66,7 +69,7 @@ def endpoint() -> ModuleType:
 
 
 def case_ids() -> list[str]:
-    r"""T2.13's case ids, in name order."""
+    r"""case ids, in name order."""
     return sorted(
         path.name[: -len('.json')]
         for path in CASES.glob('*.json')
@@ -94,7 +97,7 @@ def as_json(value: Any) -> Any:
 
 
 def projection(result: Any) -> dict[str, Any] | None:
-    r"""A ``PredictionResult`` through ``to_pandas()``: its columns, its
+    r"""A ``PredictionResult`` through ``to_pandas``: its columns, its
     row count and its rows."""
     if result is None or not hasattr(result, 'to_pandas'):
         return None
@@ -122,7 +125,7 @@ def item_metadata(result: Any) -> list[Any] | None:
 
 
 def said(shown: list[Any]) -> list[list[str]]:
-    r"""The warnings :data:`WARNINGS` names, each as its class name and
+    r"""The warnings:data:`WARNINGS` names, each as its class name and
     text (a core code's prefix left out), once each, in the order first
     given."""
     found: list[list[str]] = []

@@ -8,7 +8,7 @@
 //! tables sampled for it, the output fields, the inference options and the
 //! metadata. The payload is `sdm-wire`'s typed one
 //! ([`sdm_wire::payload::StatePayload`]), whose derived schema is the
-//! contract's locked definition of it (T1.28w); each cell is a JSON value
+//! contract's locked definition of it; each cell is a JSON value
 //! whose number is the token written ([`sdm_wire::json::Value`]).
 //!
 //! Each column's wire dtype comes from the Arrow type sampled, by the
@@ -24,7 +24,7 @@
 //! decimal float64 does not hold exactly refused as the caller's error, as
 //! the reference refuses it. Any other type is refused by name.
 //!
-//! From T1.28a the layout is the task's (`_task_spec`, `_target_dtype`): a
+//! the layout is the task's (`_task_spec`, `_target_dtype`): a
 //! regression's target at the labels' type, a binary task's as booleans
 //! with the classes `false` and `true`, a multiclass task's as text where
 //! the labels are booleans (`'False'`, `'True'`) and its classes in the
@@ -133,7 +133,7 @@ pub struct SampledLink {
     pub pairs: Vec<(usize, usize)>,
 }
 
-/// The values of one lagged target column (`__kumo_arl<k>__`, T2.9), one
+/// The values of one lagged target column (`__kumo_arl<k>__`), one
 /// per example of the request, a missing one `None`: an aggregation's at
 /// float32, or a condition's.
 #[derive(Debug, Clone, PartialEq)]
@@ -142,12 +142,12 @@ pub enum LagValues {
     Bool(Vec<Option<bool>>),
     /// A condition's column that no example of the whole request has a
     /// value in, so many rows: `float64` nulls, as pandas types a column of
-    /// booleans with nothing in it (T2.9 fix 3: decided over the request,
+    /// booleans with nothing in it ( fix 3: decided over the request,
     /// not over one call's rows).
     Empty(usize),
 }
 
-/// One lagged target column of the instance table (T2.9), as the reference's
+/// One lagged target column of the instance table, as the reference's
 /// engine adds it to the task (`add_lagged_target`) and lays it out
 /// (`_instance_dataframe`): after the label, with no semantic type; an
 /// aggregation's as `float64`, its float32s as doubles; a condition's as
@@ -162,7 +162,7 @@ pub struct LagColumn {
 
 impl LagColumn {
     /// The column at `rows`, its type kept: a call's slice of the
-    /// request's column (T2.9 fix 3), a condition's `bool` though the
+    /// request's column, a condition's `bool` though the
     /// call's rows hold no value.
     pub fn rows(&self, rows: &[usize]) -> LagColumn {
         fn picked<T: Copy>(values: &[Option<T>], rows: &[usize]) -> Vec<Option<T>> {
@@ -207,24 +207,24 @@ pub struct Sampled {
     pub source_query: String,
     pub run_mode: RunMode,
     /// Whether the model is told each example's anchor time
-    /// (`use_prediction_time`, T2.11).
+    /// (`use_prediction_time`).
     pub use_prediction_time: bool,
     /// Whether the outputs name `embeddings` (`return_embeddings`,
-    /// `_output_fields`, T2.11).
+    /// `_output_fields`).
     pub return_embeddings: bool,
     /// The inference options, read for this task ([`crate::options`]).
     pub options: Options,
     /// The regression's statistic the caller chose.
     pub statistic: Option<String>,
     /// How many candidates the call asked be kept (`top_k`), written into
-    /// the task as the engine writes it (T2.8).
+    /// the task as the engine writes it.
     pub top_k: Option<u32>,
     /// The most rows any call of the request this payload is one call of
     /// scores (`_the_largest_batch`, `main`'s multi-call `predict`): the
     /// size a refusal of a payload past the endpoint's limit names as the
     /// one to ask below.
     pub rows_per_call: usize,
-    /// The lagged target columns (`lag_timesteps`, T2.9), in order; none
+    /// The lagged target columns (`lag_timesteps`), in order; none
     /// where the call asks for none.
     pub lags: Vec<LagColumn>,
     /// The text a float's class is spelled in: the shortest digits that
@@ -305,7 +305,7 @@ fn type_dtype(data_type: &DataType) -> Result<Dtype, CoreError> {
 /// one of up to 18 digits as `int64`; a wider whole one as `int64` where
 /// every value fits, and as `string` where one does not. A decimal of
 /// negative scale, which no source this core reads hands over, is refused
-/// by name (`wire_dtype`, register P1B-3).
+/// by name (`wire_dtype`, B-3).
 pub fn wire_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
     match array.data_type() {
         DataType::Decimal128(_, scale) if *scale > 0 => Ok(Dtype::Float64),
@@ -326,7 +326,7 @@ pub fn wire_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
 /// `string` where one does not. A decimal key with a scale, which the
 /// reference cannot sample, is `string`, each value its exact decimal text
 /// with no trailing zeros, never a double, which could make two keys one
-/// (T1.32a fix round 1, P1B-33). No question sums a key, so the declared
+/// ( fix round 1, P1B-33). No question sums a key, so the declared
 /// precision a decimal feature's sum is held to (`wire_dtype`) never
 /// applies to one.
 pub fn key_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
@@ -374,7 +374,7 @@ fn decimal_text(value: i128, scale: i8) -> String {
 pub(crate) fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
     if value < i128::from(i64::MIN) || value > i128::from(i64::MAX) {
         // The range, for the host's words (the reference's
-        // `_cell_json_value`), never the value (decision H17); the table and
+        // `_cell_json_value`), never the value; the table and
         // row are its caller's.
         return Err(invalid(
             Sentence::PastInt64,
@@ -399,7 +399,7 @@ pub(crate) fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
 }
 
 /// A decimal's unscaled `value` at `scale` as a float64 cell: the nearest
-/// double to its exact value, rounded once, whatever its digits (T2.0c:
+/// double to its exact value, rounded once, whatever its digits (
 /// the reference since `main`'s eb6c68eb sends every decimal feature as a
 /// float64, where it refused one a double does not hold exactly; its cast
 /// can be one unit in the last place off, where this is the nearest).
@@ -1065,7 +1065,7 @@ fn build_mode(
     };
     // A float32 key's reference is a float64: the reference builds the
     // column from the keys as Python floats, which pandas types float64
-    // (T2.12; each value is written widened either way).
+    // (each value is written widened either way).
     let reference_dtype = match key_dtype(key_array)? {
         Dtype::Float32 => Dtype::Float64,
         dtype => dtype,
@@ -1292,7 +1292,7 @@ fn build_mode(
             })
             .collect::<Result<_, _>>()?;
         // A float32 key's foreign key is a float64, as pandas types the
-        // column the reference fills with the keys as Python floats (T2.12;
+        // column the reference fills with the keys as Python floats (
         // each value is written widened either way).
         let column = FrameColumn {
             name: link.fkey.clone(),
@@ -1647,7 +1647,7 @@ mod tests {
             number("0.12345678901234568")
         );
         // What a double does not hold exactly is sent rounded, not refused
-        // (T2.0c): 2**53 + 1 whole, and 2**53 - 1 + 0.5.
+        //: 2**53 + 1 whole, and 2**53 - 1 + 0.5.
         let unit = 10_i128.pow(18);
         assert_eq!(
             decimal_float(((1_i128 << 53) + 1) * unit, 18, "c").unwrap(),

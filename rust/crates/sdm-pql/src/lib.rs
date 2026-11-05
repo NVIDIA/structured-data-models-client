@@ -2,24 +2,14 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The PQL parser: the lexer, parser, visitor, syntax tree and seven
-//! validators, first ported from the first attempt
-//! (`archive/rust-core-attempt-1`, `rust/crates/pql`) and this client's own
-//! from then on (decision E18), behind `sdm-core`'s adapter.
+//! PQL parsing, schema resolution and validation.
+//! [`parse`] builds the query representation and [`resolve`] resolves it against a
+//! schema; the core determines whether the selected model supports the result.
+//! Resolution consults [`Filters`] for filter-specific capabilities.
 //!
-//! Only `sdm_core::pql` uses this crate. It parses a query ([`parse`]) and
-//! resolves it against a schema ([`resolve`]); whether the model on the
-//! other end can answer the resolved query is asked by the core, not here,
-//! except for the two filter capabilities resolution itself consults
-//! ([`Filters`]).
-//!
-//! Python behavior is emulated only in the modules listed in
-//! `scripts/rust_core/emulation-allowlist.txt`: [`pyint`], Python's limit of
-//! 4,300 digits on reading an integer, and [`float_repr`], the text Python
-//! gives a float (Phase 1 decisions, A4), and [`escapes`], how the reference
-//! reads a string literal's escapes (E9), and from T3.5 [`conversions`], the
-//! conversions a view's parameter default goes through. Message text is not
-//! promised, so nothing else copies Python's printing.
+//! Compatibility-sensitive literal conversion is limited to the modules listed in
+//! `scripts/rust_core/emulation-allowlist.txt`: integer bounds, float formatting,
+//! string escapes and semantic-view parameter conversions.
 
 #![forbid(unsafe_code)]
 

@@ -36,10 +36,10 @@ def _tool(name: str) -> ModuleType:
     r"""A module of ``scripts/rust_core``, its siblings importable."""
     if str(RUST_CORE) not in sys.path:
         sys.path.insert(0, str(RUST_CORE))
-    return _module(f't32_tools_{name}', RUST_CORE / f'{name}.py')
+    return _module(f'architecture_tools_{name}', RUST_CORE / f'{name}.py')
 
 
-# --- l0_deps.py and l0_scan.py ---------------------------------------------------
+# --- dependency_policy.py and architecture_policy.py ---------------------------------------------------
 
 
 @pytest.mark.parametrize('missing_first', [False, True])
@@ -49,7 +49,7 @@ def test_sql_cli_discovers_error_members_once_and_refreshes_next_invocation(
     capsys: pytest.CaptureFixture[str],
     missing_first: bool,
 ) -> None:
-    scan = _tool('l0_scan')
+    scan = _tool('architecture_policy')
     declarations = tmp_path / 'rust/crates/sdm-contract/src/error.rs'
     declarations.parent.mkdir(parents=True)
     members = (
@@ -128,7 +128,7 @@ def test_sql_cli_without_present_crates_does_not_discover_error_members(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    scan = _tool('l0_scan')
+    scan = _tool('architecture_policy')
     real_read = Path.read_text
     reads: list[Path] = []
 
@@ -160,7 +160,7 @@ def _crate_manifest(name: str) -> Path:
 
 class Workspace:
     r"""``cargo metadata``'s shape for the workspace as the design draws it,
-    built without cargo: every first-party crate ``l0_deps.py`` classifies
+    built without cargo: every first-party crate ``dependency_policy.py`` classifies
     and finds in the tree, at its real manifest, on the first-party edges
     its ``ALLOWED`` gives it; ``without`` leaves a crate out, as if it
     did not exist yet, so ``sdm-jni`` can be seeded whether or not the tree
@@ -236,25 +236,27 @@ def _l0_problems(l0: ModuleType, workspace: Workspace) -> list[str]:
 def test_seeded_workspace_matches_allowed_dependencies() -> None:
     r"""Not vacuous: the workspace built without cargo passes every L0
     check as the tree is, and an unclassified binding in it fails (the
-    brief's first ``l0_deps.py`` example, which passes today too)."""
-    l0 = _tool('l0_deps')
+    brief's first ``dependency_policy.py`` example, which passes today too)."""
+    l0 = _tool('dependency_policy')
     assert _l0_problems(l0, Workspace(l0)) == []
 
 
 def test_jni_depends_only_on_host_and_contract(
     tmp_path: Path,
 ) -> None:
-    r"""``sdm-jni`` is a binding of ``l0_deps.py``'s own lists, allowed only
-    ``sdm-host`` and ``sdm-contract``, and passes absent: a workspace
+    r"""``sdm-jni`` is a binding of ``dependency_policy.py``'s own lists, allowed only
+    ``sdm-host`` and ``sdm-contract``. A workspace missing it fails;
     holding it on those and ``jni`` passes; with a ``pyo3`` edge, or an
     edge to ``sdm-core``, it fails naming the edge; an unclassified binding
     fails as unclassified."""
-    l0 = _tool('l0_deps')
+    l0 = _tool('dependency_policy')
     assert l0.CLASSES.get('sdm-jni') == l0.BINDING
     assert l0.ALLOWED.get('sdm-jni') == frozenset({'sdm-host', 'sdm-contract'})
     absent = Workspace(l0, without=('sdm-jni',))
     assert 'sdm-jni' not in [p['name'] for p in absent.data['packages']]
-    assert _l0_problems(l0, absent) == []
+    assert _l0_problems(l0, absent) == [
+        'sdm-jni: classified, but not a workspace crate'
+    ]
 
     def with_jni(*extra: str) -> list[str]:
         workspace = Workspace(l0, without=('sdm-jni',))
@@ -279,9 +281,9 @@ def test_jni_depends_only_on_host_and_contract(
 def test_jni_cannot_contain_provider_specific_words(
     tmp_path: Path,
 ) -> None:
-    r"""``l0_scan.py``'s dialects check holds ``sdm-jni`` as it holds
-    ``sdm-py``, once the crate exists, and asks nothing of it before."""
-    scan = _tool('l0_scan')
+    r"""``architecture_policy.py``'s dialects check holds ``sdm-jni`` as it holds
+    ``sdm-py``; both bindings must exist."""
+    scan = _tool('architecture_policy')
     assert not [p for p in scan.check_dialects(ROOT) if 'sdm-jni' in p]
     for parent in ('rust/crates', 'rust/bindings'):
         shutil.copytree(
@@ -289,12 +291,11 @@ def test_jni_cannot_contain_provider_specific_words(
             tmp_path / parent,
             ignore=shutil.ignore_patterns('target', '__pycache__', '.venv'),
         )
-    # The copy without sdm-jni, whether or not the tree holds it yet: the
-    # check asks nothing of a crate that does not exist.
+    # Removing a required binding must fail before scanning its contents.
     for parent in ('rust/crates', 'rust/bindings'):
         if (tmp_path / parent / 'sdm-jni').exists():
             shutil.rmtree(tmp_path / parent / 'sdm-jni')
-    assert scan.check_dialects(tmp_path) == []
+    assert scan.check_dialects(tmp_path) == ['rust/crates/sdm-jni/src: missing']
     source = tmp_path / 'rust/bindings/sdm-jni/src/lib.rs'
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -330,7 +331,7 @@ def test_jni_cannot_contain_provider_specific_words(
 def test_core_orchestration_references_keep_sql_and_provider_bans(
     tmp_path, monkeypatch, relative, declaration
 ):
-    scan = _tool('l0_scan')
+    scan = _tool('architecture_policy')
     monkeypatch.setattr(scan, 'SQL_FREE_CRATES', ('sdm-core',))
     path = tmp_path / 'rust/crates/sdm-core/src' / relative
     path.parent.mkdir(parents=True)

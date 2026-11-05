@@ -56,11 +56,11 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t214b_run_python', RUNNER)
+    return _module('test_request_state_endpoint_bytes_run_python', RUNNER)
 
 
 def recorder() -> ModuleType:
-    return _module('t214b_host_record', RECORDER)
+    return _module('request_state_scenarios', RECORDER)
 
 
 def endpoint() -> ModuleType:
@@ -364,12 +364,10 @@ def test_repeated_candidates_are_asked_as_the_reference_keeps_them(
 
 
 def test_another_request_state_version_is_refused_by_name() -> None:
-    r"""Design exit "an unknown ``RequestState`` version refused by name"
-    (H23): a request whose kept state names another version is refused
-    before any call, ``INVALID_REQUEST`` with ``field: state.version`` and
-    the version given (passes on the base); and the message says what is
-    refused, the request's state version, not only that the request is not
-    one the core accepts."""
+    r"""Unknown request-state versions fail before any endpoint call.
+
+    The error identifies ``state.version`` and includes the supplied version.
+    """
     from sdm_client import StructuredDataError
 
     request = recorder()._materialize(_schema(), recorder().QUERIES['windowed'])

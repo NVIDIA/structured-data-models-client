@@ -6,16 +6,16 @@
 //! (protected paths: they are never recorded again to pass a dependency
 //! bump, F4):
 //!
-//! - `rs1.json` (T1.11c): the seed sequence's state, the raw 64-bit draws,
-//!   and a run of shuffles on one generator, which carries the 32-bit
-//!   draw's kept half from one shuffle to the next, for seeds from 0 to
-//!   past 2**200 (more entropy words than the pool holds);
-//! - `rs1-draws.json` (T1.22, `rs1_record.py`): T0.6's model of the example
-//!   shuffle for each of its seeds, 0, 42, 123456789 and 2**70 (a fresh
-//!   generator's state, raw draws and `shuffle(arange(50))`), and numpy's
-//!   bounded draw itself, `random_interval`, over maxima that cross the
-//!   32-bit path's edge and reach the 64-bit path's end, called from
-//!   numpy's compiled library.
+//! - `rs1.json`: the seed sequence's state, the raw 64-bit draws,
+//! and a run of shuffles on one generator, which carries the 32-bit
+//! draw's kept half from one shuffle to the next, for seeds from 0 to
+//! past 2**200 (more entropy words than the pool holds);
+//! - `rs1-draws.json` (`rs1_record.py`): model of the example
+//! shuffle for each of its seeds, 0, 42, 123456789 and 2**70 (a fresh
+//! generator's state, raw draws and `shuffle(arange(50))`), and numpy's
+//! bounded draw itself, `random_interval`, over maxima that cross the
+//! 32-bit path's edge and reach the 64-bit path's end, called from
+//! numpy's compiled library.
 //!
 //! [`check`] compares a document with the port and counts what it
 //! compared; it fails closed: a perturbed draw, and evidence missing,
@@ -27,7 +27,7 @@ use serde_json::Value;
 const RS1: &str = include_str!("rs1.json");
 const DRAWS: &str = include_str!("rs1-draws.json");
 
-/// T0.6's seeds for the example shuffle, in hex.
+/// seeds for the example shuffle, in hex.
 const MODEL_SEEDS: [&str; 4] = ["0x0", "0x2a", "0x75bcd15", "0x400000000000000000"];
 
 fn text<'a>(value: &'a Value, at: &str) -> Result<&'a str, String> {
@@ -169,7 +169,7 @@ fn the_streams_are_numpy_s() {
 }
 
 #[test]
-fn t06_s_model_and_the_bounded_draws_are_numpy_s() {
+fn model_seeds_and_bounded_draws_match_numpy() {
     let document = parsed(DRAWS);
     let seeds = |section: &str| -> Vec<String> {
         document[section]
@@ -179,7 +179,7 @@ fn t06_s_model_and_the_bounded_draws_are_numpy_s() {
             .map(|case| case["seed"].as_str().unwrap().to_owned())
             .collect()
     };
-    // Every seed of T0.6's model, 2**70 among them, in both sections.
+    // Every seed of model, 2**70 among them, in both sections.
     assert_eq!(seeds("model"), MODEL_SEEDS);
     assert_eq!(seeds("intervals"), MODEL_SEEDS);
     // Both of the bounded draw's paths, and each edge between them.

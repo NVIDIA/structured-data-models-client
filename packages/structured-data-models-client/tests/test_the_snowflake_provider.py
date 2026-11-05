@@ -2,14 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Snowflake provider (T3.6) on fake cursors: it runs a fetch step's
+r"""The Snowflake provider on fake cursors: it runs a fetch step's
 statements in order on one cursor of the source's connection, each with
 the connection's parameter style switched to ``qmark`` for that statement
 and restored after (``SNOW/binding.py:15-38``), and hands back the last
 one's result: the connector's Arrow (``fetch_arrow_all(force_return_table=
 True)``), or, for a result the connector gives as rows only (``SHOW``,
 ``DESCRIBE``: ``fetch_arrow_all`` raises ``NotSupportedError``), Arrow the
-row adapter builds from ``cursor.description`` and ``fetchall()``: every
+row adapter builds from ``cursor.description`` and ``fetchall``: every
 column nullable text, in the description's order, each non-null cell its
 ``str``, an empty result keeping its columns.
 
@@ -315,7 +315,7 @@ def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
 
 class _Text:
     r"""A one-cell text attachment, as the core hands over a key set it
-    wrote as JSON (T3.28)."""
+    wrote as JSON."""
 
     def __init__(self, text: str) -> None:
         self._table = pa.table({'keys': pa.array([text], pa.string())})

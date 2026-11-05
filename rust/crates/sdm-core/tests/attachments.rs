@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The JSON attachments dispatch decodes, held to the contract's locked
-//! classification of them (`$defs/Attachments`, T1.22; subagent P3-3 of
+//! classification of them (`$defs/Attachments`; subagent P3-3 of
 //! its review): each `take_json` in `src/dispatch.rs` decodes the type the
 //! lock names for that attachment, and every attachment the lock names on
 //! the way in is decoded there, so a change to either fails here. Seeded:
@@ -11,9 +11,9 @@
 //!
 //! A decode is read as a statement, however rustfmt breaks it over lines,
 //! and from whichever value names the attachment: the operation's request,
-//! the request state, a forecast's later step or the sampler state (M1,
-//! T2.1b: the two-line decode of `SamplerState.memo` and the decode of
-//! `ForecastStep.query` were not read before); and, from T3.26, a request
+//! the request state, a forecast's later step or the sampler state (M1,:
+//! the two-line decode of `SamplerState.memo` and the decode of
+//! `ForecastStep.query` were not read before); and, a request
 //! held, its later parts and its ranking, decoded in `src/held.rs`.
 
 #![allow(
@@ -186,7 +186,7 @@ fn locked(attachments: &Value, name: &str) -> Option<String> {
     match (property.get("$ref"), property.get("type")) {
         (Some(Value::String(target)), _) => target.rsplit('/').next().map(str::to_owned),
         (None, Some(Value::String(kind))) if kind == "string" => Some("String".into()),
-        // A list of one type, as `Materialize.candidates` (T2.8).
+        // A list of one type, as `Materialize.candidates`.
         (None, Some(Value::String(kind))) if kind == "array" => {
             let item = property.get("items")?.get("$ref")?.as_str()?;
             item.rsplit('/').next().map(|ty| format!("Vec<{ty}>"))
@@ -220,7 +220,7 @@ fn mismatches(source: &str) -> Vec<String> {
 }
 
 /// Dispatch's text, and that of `src/held.rs`, which rebuilds a request
-/// held from the attachments the predict arm hands it (T3.26).
+/// held from the attachments the predict arm hands it.
 fn dispatch() -> String {
     ["/src/dispatch.rs", "/src/held.rs"]
         .iter()
@@ -259,7 +259,7 @@ fn a_retyped_or_dropped_decode_fails() {
         mismatches(&dropped),
         ["RequestState.query: in the lock, not decoded by dispatch"]
     );
-    // M1: the decodes read before T2.1b missed, the two-line one and the
+    // M1: the decodes read before missed, the two-line one and the
     // one from a forecast's step, are each held too.
     let retyped = source.replace("let memo: SamplerMemo =", "let memo: SamplerState =");
     assert_ne!(retyped, source);

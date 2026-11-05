@@ -64,7 +64,7 @@ _ZONED = re.compile(
 
 def _unzoned(where: str, statements: list[str]) -> list[str]:
     r"""``where``, when its statements hold a zoned timestamp and none sets
-    the zone with ``SET GLOBAL TimeZone`` (C18, T3.2)."""
+    the zone with ``SET GLOBAL TimeZone`` (C18)."""
     zoned = any(_ZONED.search(each) for each in statements)
     if zoned and not any(_GLOBAL_ZONE.match(each) for each in statements):
         return [f'{where}: zoned timestamps with no zone set']
@@ -84,7 +84,7 @@ def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
         setup = case['input'].get('setup', [])
         named += sum(bool(_ZONE.search(each)) for each in setup)
         problems += _zone_problems(case['id'], setup)
-    # C18 (T3.2): a base setting the zone sets it for every cursor too, and
+    # C18: a base setting the zone sets it for every cursor too, and
     # a case holding zoned timestamps sets the zone, so its answers never
     # depend on the recorder's.
     bases = run_python.load_bases()
@@ -148,7 +148,7 @@ def _vector_zone_problems(where: str, statements: list[str]) -> list[str]:
     GLOBAL``: every cursor then takes the global zone, and the session
     statement only sets the setup's own connection, as a vector may do on
     purpose to show that the source does not read in it
-    (t136-host2-zone-vectors.json's session.* and verbatim.* vectors). Any
+    (host2-zone-vectors.json's session.* and verbatim.* vectors). Any
     other form (RESET, LOCAL, set_config, a compound statement) is still a
     problem, global zone or not."""
     pinned = any(_GLOBAL_ZONE.match(each) for each in statements)
@@ -163,7 +163,7 @@ def _vector_zone_problems(where: str, statements: list[str]) -> list[str]:
 
 
 def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
-    r"""Each setup ``node`` holds under :data:`_VECTOR_SETUP_KEYS`, with
+    r"""Each setup ``node`` holds under:data:`_VECTOR_SETUP_KEYS`, with
     the id of the nearest enclosing object that has one."""
     found: list[tuple[str, list[str]]] = []
     if isinstance(node, dict):
@@ -182,7 +182,7 @@ def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
 
 
 def test_a_vector_sets_its_time_zone_for_every_cursor() -> None:
-    # T1.36 C16: a vector's setup runs on one connection and the source
+    # C16: a vector's setup runs on one connection and the source
     # reads through cursors, which take the process's local zone unless the
     # database's is set, so a per-connection SET TimeZone made the recorded
     # reference answer depend on the recorder's TZ (empty-null-vectors.json
@@ -258,7 +258,7 @@ def _holds_packed_date(query: str) -> bool:
 
 
 def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
-    # T1.12's boundary cases, held to the shapes their `why` states.
+    # boundary cases, held to the shapes their `why` states.
     cases = {
         case['id']: case for case, _ in run_python.load_cases([CASES / 's0'])
     }
@@ -271,7 +271,7 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     for name, digits in (('digits-4300', 4300), ('digits-4301', 4301)):
         literal = pql(name).split('orders.price > ')[1].split(',')[0]
         assert literal == '0' * (digits - 1) + '1'
-    # Past the 64 KB control cap (decision H5).
+    # Past the 64 KB control cap.
     assert len(pql('start-past-64kb').encode()) > 64 * 1024
     # Below the depth the reference reaches before RecursionError (about
     # 461 in the runner on Python 3.12) and the core's MAX_DEPTH (999).
@@ -279,7 +279,7 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     assert deepest.count('(' * 400) == 1 and '(' * 401 not in deepest
     # The two date cases with a run of five digits or more (D8's packed
     # date and DT-9's long field) stay diagnostic (a changed case file
-    # needs an approved entry). From T1.6c the core refuses such a literal
+    # needs an approved entry). the core refuses such a literal
     # by name where the reference reads it, so no acceptance case may
     # expect it to succeed: each S0 case holding one is diagnostic, under a
     # register entry, or expects the refusal.
@@ -342,7 +342,7 @@ def test_a_case_nested_past_the_parser_s_depth_is_refused_by_name(
     tmp_path: Path,
 ) -> None:
     # sdm-testkit's loader refuses it by serde_json's depth limit; the Python
-    # loader refused nothing and raised RecursionError (T1.21c's probe).
+    # loader refused nothing and raised RecursionError (probe).
     case = json.loads(
         (ROOT / 'contract/cases/s1/base.adventureworks.json').read_text()
     )
@@ -370,7 +370,7 @@ def test_both_loaders_refuse_the_same_malformed_edits_and_relationships(
     tmp_path: Path,
 ) -> None:
     # sdm-testkit's tests/s0_cases.rs loads the same changes with the Rust
-    # loader, which must refuse and take the same ones (T1.21b).
+    # loader, which must refuse and take the same ones.
     listed = json.loads(MALFORMED.read_text())
     case = json.loads((ROOT / listed['case']).read_text())
     assert len(listed['refused']) >= 54

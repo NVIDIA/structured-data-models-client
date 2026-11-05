@@ -95,5 +95,5 @@
     "stage": "predict"
   },
   "why": "orders as the entity table, which links to its parent users (the core's parent_table rule): lines per order summed",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.parent-table using the shop fixture."
 }

@@ -2,15 +2,15 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Records ``t21b-statements.json``: every SQL statement the core hands the
+"""Records ``statements.json``: every SQL statement the core hands the
 Python host's DuckDB provider on the public route, in order, for
 ``Schema.from_source`` and ``PredictiveQuery.materialize`` over the ``shop``
 base, once as it is and once with ``orders`` held in a table named ``a.b``
-beside a schema ``a`` holding a table ``b`` (T2.1b).
+beside a schema ``a`` holding a table ``b``.
 
 Recorded at contract version 25, before the table source became a
 ``Relation``: v26 renders a one-part relation as v25 rendered the name, so
-``tests/test_t21b_contract_v26.py`` holds every later core to these texts
+``tests/test_native_protocol.py`` holds every later core to these texts
 (the design's "SQL goldens unchanged"; "a dotted source name still reads as
 one table, a golden shows it"). Regenerated, never edited, and only when a
 rendering changes on purpose:
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / 'tests/golden/t21b-statements.json'
+GOLDEN = ROOT / 'tests/golden/statements.json'
 
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 ANCHOR = '2024-03-01'
@@ -109,8 +109,8 @@ def main() -> None:
             'PredictiveQuery.materialize over the shop base, as it is '
             '("plain") and with orders held in a table named "a.b" beside a '
             'schema a holding a table b ("dotted"). Recorded by '
-            't21b_statements_record.py at the contract version named; '
-            'regenerated, never edited (T2.1b).'
+            'scripts/record_sql_statements.py at the contract version named; '
+            'regenerated, never edited.'
         ),
         'contract': _native.CONTRACT_VERSION,
         'query': QUERY,

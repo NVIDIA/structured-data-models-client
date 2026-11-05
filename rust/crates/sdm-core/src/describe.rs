@@ -2,29 +2,11 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `describe_source`: the tables of a source, read through the data port
-//! and inferred by `sdm-schema`, as `Schema.from_source` reads them.
-//!
-//! The steps are the reference's, in its order, one data request for each
-//! statement it runs (design, T1.11a row): the table list; for each table,
-//! its columns and constraints (one step), then its first 1,000 rows, and,
-//! where those may not be every row and the table has timestamps to choose
-//! its time column among, their ranges over every row (from T1.32e); the
-//! declared foreign keys of every table (one step); and, when keys are
-//! checked, one count over every key the source does not enforce. Each
-//! catalog answer is read by the run's data layer, in no dialect's shape
-//! (decision E54), before anything here reads it. It refuses by name
-//! ([`sdm_schema::not_yet`]) an input whose description takes a rule it
-//! does not port yet (register entry P1B-2). From T1.21d the description
-//! is the schema as the reference's client assembles it
-//! ([`sdm_schema::assemble`], decision E55): a keyless table keyed by the
-//! column foreign keys refer to before the count, then the links, the edit
-//! stamps, the columns joined on, and the warnings, which the run gives the
-//! host as codes and fields. From T1.23 (decision E59) it takes tables
-//! named, each read by its source name with no listing of the source's
-//! tables, the keys and time columns named, applied between the reading and
-//! the count, and the relationships given, in place of the declared and
-//! inferred ones.
+//! Source-description orchestration through the typed data port.
+//! Catalog answers and Arrow previews feed schema inference and assembly.
+//! The data layer normalizes dialect-specific metadata before this module reads it.
+//! Caller-supplied table names, keys, time columns and relationships are applied
+//! before final validation; warnings travel as structured codes and fields.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -53,7 +35,7 @@ use crate::run::{
 
 /// The reader of text times for a run whose clock is `facts.now`: its
 /// year, in UTC, places a two-digit year, as the date literals' reader
-/// placed one before T1.6b; date literals now read the year in the local
+/// placed one before; date literals now read the year in the local
 /// zone (`pql::local_year`).
 pub(crate) fn text_reader(facts: &HostFacts) -> Result<Reader, CoreError> {
     let Scalar::Timestamp { unit, value, .. } = &facts.now else {
@@ -297,7 +279,7 @@ pub(crate) async fn run(
 
     // The schema as the reference's client assembles it: the links, the
     // edit stamps they settle, the columns joined on marked, and the
-    // warnings, given in the reference's order (decision E55).
+    // warnings, given in the reference's order.
     let Assembled {
         mut description,
         warnings,
@@ -408,7 +390,7 @@ pub(crate) fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreErr
     let mut seen = std::collections::BTreeSet::new();
     for table in &spec.tables {
         assemble::check_table_name(&table.name)?;
-        // A relation of no part is no source's (design choice 12): refused
+        // A relation of no part is no source's: refused
         // by its rule here, whatever reads it; how many parts a source takes
         // is its dialect's or provider's to refuse.
         if table.source.source.is_empty() {
@@ -456,7 +438,7 @@ fn declared_links(
     // in the order each source name first appears: a relation of one part
     // by that part, and each relation also by its name read under the
     // source's namespace, as a catalog names a referenced table
-    // (`qualified`, Databricks's `catalog.schema.table`, T3.4).
+    // (`qualified`, Databricks's `catalog.schema.table`).
     let mut by_source: Vec<(&str, &InferredTable)> = Vec::new();
     for (described, dotted) in tables.iter().zip(qualified) {
         let names =
@@ -519,7 +501,7 @@ fn declared_links(
 
 /// The characters of a column name the reference's `Schema.from_source`
 /// leaves the column out for (`_INVALID_NAME_CHARS`): its query language
-/// cannot say such a name. The core keeps the column (KO2-36).
+/// cannot say such a name. The core keeps the column.
 const UNSAYABLE: [char; 4] = ['`', '\n', '\r', '.'];
 
 /// Whether the reference leaves the column `name` out ([`UNSAYABLE`]).
@@ -540,10 +522,10 @@ struct KeyShape {
 /// The keys the key-count request asks, each with the label its row
 /// carries, in label order: as the reference labels them, each by its
 /// table's place among the tables with a key it reads (those the source
-/// enforces included, T2.12). A table whose key holds a column the
+/// enforces included). A table whose key holds a column the
 /// reference leaves out has no key there: it takes no place, so the keys
 /// after it are numbered as the reference numbers them, and its own key,
-/// still counted, takes a label past every one the reference gives (T2.10).
+/// still counted, takes a label past every one the reference gives.
 fn key_labels(tables: &[KeyShape]) -> Vec<(usize, u64)> {
     let numbered = tables.iter().filter(|t| t.keyed && !t.unsayable).count() as u64;
     let mut place = 0_u64;
@@ -654,7 +636,7 @@ async fn count_keys(
         .enumerate()
         .map(|(at, &(i, label))| TableKey {
             // A key the source keeps unique, counted as the reference
-            // counts one (`_key_count_sql`, carried row P2-T2.2-3).
+            // counts one (`_key_count_sql`, carried row P2--3).
             unique: enforced[i] || tables[i].keeps_unique(&tables[i].primary_key),
             table: tables[i].source.clone(),
             columns: tables[i].primary_key.clone(),
@@ -739,7 +721,7 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
 /// The data a request's answer holds, or the provider's own error, kept
 /// whole so the data layer can say what it means
 /// (`DataLayer::failure`): a semantic model's conversion reads each failure
-/// by what it asked (design S3).
+/// by what it asked.
 pub(crate) async fn attempt(
     asker: &Asker,
     request: DataRequest,
@@ -756,7 +738,7 @@ pub(crate) async fn attempt(
 /// the source's current parts read once (`describe` of its namespace) and
 /// every later relation read under them, as the reference reads a
 /// Databricks source naming its catalog alone under the session's current
-/// schema (`SELECT current_catalog(), current_schema()`, T3.4).
+/// schema (`SELECT current_catalog, current_schema`).
 pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
     let Some(data) = asker.data().filter(|data| data.unsettled()).cloned() else {
         return Ok(asker);
@@ -776,8 +758,7 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
 /// (`pending`); none otherwise, the run reading `description` as handed.
 ///
 /// A source's tables (a SQL provider's) are read as they stand at this run
-/// and nothing of them is remembered between runs (the owner's plan B,
-/// T3.4): each table's location (a part the provider leaves to the
+/// and nothing of them is remembered between runs : each table's location (a part the provider leaves to the
 /// connection read from the session once), its catalog (a table the source
 /// does not hold refused by name, every later read of it naming the
 /// columns the catalog lists, [`Asker::guard`]) and its preview (a table of
@@ -787,7 +768,7 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
 /// (`column_not_in_source`), and so is a type the caller gave a column
 /// that the source's does not match (`column_type_unmatched`), the owner's
 /// items 1 and 3. A host provider's columns that hold no facts are read
-/// from it, and the schema read without one it does not hold (T3.16).
+/// from it, and the schema read without one it does not hold.
 /// Once a run, the answer kept for its later parts.
 pub(crate) async fn initialize(
     asker: &Asker,
@@ -801,7 +782,7 @@ pub(crate) async fn initialize(
         return Ok(Some(located));
     }
     let located = if asker.data().is_some_and(|data| data.view().is_some()) {
-        // A semantic model, read again as it stands (T3.5, plan B).
+        // A semantic model, read again as it stands (plan B).
         let reader = text_reader(facts)?;
         asker.asking_for(Some(sdm_contract::run::FetchPurpose::Locate));
         let located = crate::view::located(asker, held, &reader).await;
@@ -964,7 +945,7 @@ async fn read_as_it_stands(
     }
     // A source whose columns hold affinities only (SQLite's) holds no type
     // a caller's must match: the old client reads its values as the
-    // caller's type (T3.28).
+    // caller's type.
     let typed = asker
         .data()
         .is_none_or(crate::compose::DataAccess::holds_column_types);
@@ -991,7 +972,7 @@ fn not_in_source(table: &str, column: &str, relation: &Relation) -> CoreError {
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,
-/// then read by the run's data layer (decision E54).
+/// then read by the run's data layer.
 pub(crate) async fn describe(
     asker: &Asker,
     request: DataRequest,
@@ -1119,7 +1100,7 @@ mod tests {
 
     /// A key holding a column the reference leaves out (`items."i.d"`)
     /// takes no place: the keys after it are numbered as the reference
-    /// numbers them, and it is counted under a label past theirs (T2.10).
+    /// numbers them, and it is counted under a label past theirs.
     #[test]
     fn a_key_the_reference_leaves_out_takes_no_place_among_the_labels() {
         let shape = |keyed, asked, unsayable| KeyShape {

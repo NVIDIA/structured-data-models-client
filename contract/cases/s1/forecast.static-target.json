@@ -123,9 +123,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"FORECAST can only be used with targets that have a forward-looking time range (e.g., SUM(table.col, 0, 7, days)). Static column targets are not supported with FORECAST.\""
+    "code": "INVALID_REQUEST"
   },
   "why": "A forecast of a static column, which has no window to step, refused",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "source": "Correctness case forecast.static-target using the shop fixture."
 }

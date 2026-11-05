@@ -79,9 +79,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: task binary_classification; context labels by entity: {\"number\": \"2\"}: true, {\"number\": \"3\"}: true, {\"number\": \"4\"}: true, {\"number\": \"5\"}: false, {\"number\": \"6\"}: true, {\"number\": \"7\"}: true"
+    "stage": "predict"
   },
   "why": "A negative constant finer than the scale: d = -1 is past -1.5 and d = -2 is not",
-  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+  "source": "Correctness case decimal.compare-finer-negative using the shop fixture."
 }

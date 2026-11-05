@@ -93,9 +93,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: top_k=1 given beside RANK TOP 2, the candidates in the order given (2 then 0), one call each, answered with probabilities; each user keeps its one likeliest candidate"
+    "stage": "predict"
   },
   "why": "The top_k option over a ranking, which is the whole ranking's and not sent with any part, and candidates asked in the order given",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.top-k-option using the shop fixture."
 }

@@ -2,14 +2,14 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A SQL provider's namespace (contract v28, T3.8): a Postgres source given
+//! A SQL provider's namespace (contract v28): a Postgres source given
 //! its schema is read under it, every table qualified by it and the source's
 //! tables listed in it, as the reference's `PostgresTable` and
 //! `Graph.from_postgres` read the schema they were given; a part left
 //! `null` is the connection's current one, as before v28; DuckDB's and
 //! SQLite's sources name none, so a namespace given them is refused by
 //! name. A Postgres source given no schema has the session's current one
-//! read once per run and every relation named under it (T3.7).
+//! read once per run and every relation named under it.
 
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation,
@@ -71,7 +71,7 @@ fn a_postgres_namespace_lists_and_reads_under_its_schema() {
 }
 
 /// A Postgres source given no schema is read under the session's current
-/// one, which the core reads once per run before any table (T3.7): until
+/// one, which the core reads once per run before any table: until
 /// then a relation of one part is under no schema, refused as the
 /// reference refuses a session with none, never read where the search path
 /// finds it.
@@ -121,7 +121,7 @@ fn a_namespace_the_dialect_cannot_write_is_refused_by_name() {
 }
 
 /// The namespace a relation of one part is read in, which the core asks for
-/// only to name a table the source lacks (T3.8 fix 2): a Postgres source's
+/// only to name a table the source lacks: a Postgres source's
 /// given schema, or its current one; none for DuckDB's and SQLite's, whose
 /// missing tables the reference names alone.
 #[test]
@@ -130,7 +130,7 @@ fn the_namespace_asked_for_is_the_one_a_table_is_named_under() {
         tables: vec![],
         part: DescribePart::Namespace,
     };
-    // The old client's own read of the session's schema (T3.7).
+    // The old client's own read of the session's schema.
     assert_eq!(
         text(&asked, &sql("postgres", &[])),
         "SELECT current_schema()"

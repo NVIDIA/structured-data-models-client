@@ -3,21 +3,21 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""The contract loader: a case's DuckDB-built tables, loaded into SQLite
-or Postgres through Arrow (Phase 2 design, choice 2; T2.1a).
+or Postgres through Arrow.
 
-    load(duck, 'sqlite', path)       # a new SQLite file
-    load(duck, 'postgres', dsn)      # the DSN's current schema
+    load(duck, 'sqlite', path) # a new SQLite file
+    load(duck, 'postgres', dsn) # the DSN's current schema
 
 Every table of the DuckDB connection's ``main`` schema is read as Arrow and
 created in the target with each column stored as the type map says
-(:data:`TYPE_MAP`, the same entries as ``contract/type-map-vectors.json``'s
+(data:`TYPE_MAP`, the same entries as ``contract/type-map-vectors.json``'s
 ``map``): an engine's own type wherever it has one, and otherwise a stored
 form the map names (``*_value``): canonical decimal text, JSON text for a
 nested value, ISO text for a time. A table's primary key, unique keys,
 ``NOT NULL`` columns and foreign keys are carried as DuckDB declares them,
 and its rows are inserted in the order DuckDB scans them. A value the
 target cannot hold exactly (a nanosecond on Postgres, a map with keys that
-are not text) is refused by name (:class:`Unloadable`), never rounded: an
+are not text) is refused by name (class:`Unloadable`), never rounded: an
 input an engine can't load is an owner's exclusion, not a silent change.
 
 The reference and both core hosts read the same loaded database.
@@ -40,11 +40,11 @@ from pathlib import Path
 from typing import Any
 
 #: The databases a case's tables load into, beside DuckDB itself: the two
-#: local ones, and the warehouses' engines (T3.3), where Lakebase is a
+#: local ones, and the warehouses' engines, where Lakebase is a
 #: Postgres server in a schema of its own.
 TARGETS = ('sqlite', 'postgres', 'databricks', 'snowflake', 'lakebase')
 
-#: The engines loaded by SQL statements alone (:func:`warehouse_statements`).
+#: The engines loaded by SQL statements alone (func:`warehouse_statements`).
 WAREHOUSE_ENGINES = ('databricks', 'snowflake')
 
 #: Each warehouse leg's engine, whose column of the type map it loads by:
@@ -59,7 +59,7 @@ ENGINE = {
 
 #: The type map, by Arrow type family: DuckDB's type, and the type each
 #: engine declares; ``<engine>_value`` names the stored form of a type the
-#: engine lacks (``canonical``: :func:`canonical_decimal_text`; ``json``:
+#: engine lacks (``canonical``::func:`canonical_decimal_text`; ``json``:
 #: JSON text; ``iso``: ISO 8601 text; ``digits``: the integer's decimal
 #: digits), and its absence means the engine's own type holds the value.
 #: ``<engine>_refuses`` names a value of the type the engine cannot hold at
@@ -67,14 +67,14 @@ ENGINE = {
 #: refuses a float -0.0 on SQLite too, which SQLite stores as 0.0.
 #: ``(p,s)`` is the column's precision and scale; ``(n)`` the column's own
 #: composite type, created beside its table and named by
-#: :func:`composite_name`; ``(f)`` the fractional digits of the column's
+#::func:`composite_name`; ``(f)`` the fractional digits of the column's
 #: unit (0, 3, 6 or 9). A value past what the engine's
 #: type holds (a nanosecond on Postgres's microsecond times) is refused.
-#: Databricks and Snowflake (T3.3) have no unsigned integers, so an
+#: Databricks and Snowflake have no unsigned integers, so an
 #: unsigned column is declared in a type holding its whole range, as on
 #: Postgres; a type an engine has no column type for at all (a time of day
 #: or an interval on Databricks) is stored in a form of its own and listed
-#: by :func:`non_native`, never counted as covered there (KO2-47).
+#: by:func:`non_native`, never counted as covered there.
 TYPE_MAP: dict[str, dict[str, str]] = {
     'boolean': {
         'duckdb': 'BOOLEAN',
@@ -263,13 +263,13 @@ TYPE_MAP: dict[str, dict[str, str]] = {
 }
 
 
-#: The live write guard (KO3-51): a check every statement the loader
+#: The live write guard: a check every statement the loader
 #: writes with on a live warehouse passes before it runs, raising for a
 #: write outside the one test schema; the live runs set it
 #: (``scripts/live/runner_guard.py``), and offline it is ``None``.
 WRITE_GUARD: Callable[[str], None] | None = None
 #: The live write guard's case-setup scope (its ``setup``), set with
-#: :data:`WRITE_GUARD`: a case's warehouse setup runs within it, where
+#::data:`WRITE_GUARD`: a case's warehouse setup runs within it, where
 #: alone the guard admits a view in the test schema and a Postgres
 #: temporary table.
 WRITE_GUARD_SETUP: Callable[[], Any] | None = None
@@ -394,7 +394,7 @@ def _interval_text(months: int, days: int, nanos: int) -> str:
 def _cells(array: Any) -> list[Any]:
     r"""An Arrow array's values as plain Python data: integers, floats,
     decimals, text, bytes, lists and dicts; a temporal value as its
-    ``(kind, ...)`` parts, read from its integer storage so no precision
+    ``(kind,...)`` parts, read from its integer storage so no precision
     passes through a library's own type; ``None`` for a null."""
     import pyarrow as pa
 
@@ -588,7 +588,7 @@ def _postgres_type(
 ) -> str:
     r"""The Postgres type of an Arrow type at ``path`` (its table, column
     and members' names). A struct's is a composite type
-    (:func:`composite_name`) in ``schema``, which ``create`` (a statement's
+    (func:`composite_name`) in ``schema``, which ``create`` (a statement's
     runner) creates after the composite types of its members, at any depth,
     so every type a composite names exists before it; a list's element may
     be any type but a list (Postgres arrays are not lists of lists)."""
@@ -819,7 +819,7 @@ def _holds_lost(kind: Any) -> bool:
 
 
 def _lost(duck: Any, table: str) -> None:
-    # A relation over the quoted name: DuckDB's table() reads a name with
+    # A relation over the quoted name: DuckDB's table reads a name with
     # a double quote in it as written, not unescaped.
     relation = duck.sql(f'FROM {quote(table)}')
     for column, kind in zip(relation.columns, relation.types, strict=True):
@@ -1008,11 +1008,11 @@ def _load_postgres(
             connection.close()
 
 
-# --- the warehouses (T3.3) ----------------------------------------------------------
+# --- the warehouses ----------------------------------------------------------
 #
 # Databricks and Snowflake are loaded by SQL statements alone, run through
 # the caller's statement runner (a DB-API connection's cursor, Spark's
-# ``spark.sql``, or either wrapped in the live write guard, KO3-51), so the
+# ``spark.sql``, or either wrapped in the live write guard), so the
 # loader needs no bulk API and every write names its table fully
 # qualified, as the guard requires. Each cell is written as a literal the
 # engine reads back exactly: text and bytes as hexadecimal, a decimal as
@@ -1053,7 +1053,7 @@ def column_type(kind: Any, engine: str, where: str) -> str:
     r"""The column type ``engine`` (``databricks`` or ``snowflake``)
     declares for the Arrow type ``kind``: the type map's, with a decimal's
     precision and scale, a time's fractional digits, and Databricks'
-    nested types spelled out; :class:`Unloadable` names ``where`` for a
+    nested types spelled out;:class:`Unloadable` names ``where`` for a
     type it cannot hold in any form."""
     if engine not in WAREHOUSE_ENGINES:
         raise ValueError(f'no warehouse engine {engine!r}')
@@ -1131,7 +1131,7 @@ def _stored_type(kind: Any, engine: str) -> Any:
 
 
 def _stored_cell(value: Any, kind: Any, engine: str, where: str) -> Any:
-    r"""One cell of :func:`_cells` as :func:`_stored_type` holds it."""
+    r"""One cell of:func:`_cells` as:func:`_stored_type` holds it."""
     if value is None:
         return None
     name = family(kind)
@@ -1240,8 +1240,8 @@ def _stored_array(cells: list[Any], kind: Any, stored: Any) -> Any:
 
 def stored(duck: Any, table: str, engine: str) -> Any:
     r"""DuckDB's ``table`` as the loader sends it to ``engine``: each column
-    in the type map's stored form (:func:`_stored_type`), its rows in
-    DuckDB's order; :class:`Unloadable` names ``table.column`` for a type
+    in the type map's stored form (func:`_stored_type`), its rows in
+    DuckDB's order;:class:`Unloadable` names ``table.column`` for a type
     or a value the engine cannot hold exactly (a nanosecond on Databricks,
     which holds microseconds)."""
     import pyarrow as pa
@@ -1286,7 +1286,7 @@ def _float_text(value: float) -> str:
 
 
 def _databricks_literal(value: Any, kind: Any, where: str) -> str:
-    r"""A stored cell (:func:`_cells` of :func:`stored`'s column) as a
+    r"""A stored cell (func:`_cells` of:func:`stored`'s column) as a
     Databricks SQL literal of the column's type."""
     declared = column_type(kind, 'databricks', where)
     if value is None:
@@ -1337,7 +1337,7 @@ def _databricks_literal(value: Any, kind: Any, where: str) -> str:
 
 def _snowflake_text(value: Any, name: str, where: str) -> str | None:
     r"""A stored cell as the text constant Snowflake's ``SELECT`` converts
-    (:func:`_snowflake_reader`); ``name`` the column's family."""
+    (func:`_snowflake_reader`); ``name`` the column's family."""
     if value is None:
         return None
     if 'snowflake_value' in TYPE_MAP[name] or name == 'string':
@@ -1357,7 +1357,7 @@ def _snowflake_text(value: Any, name: str, where: str) -> str | None:
 
 
 def _snowflake_reader(name: str, declared: str, column: str) -> str:
-    r"""The expression reading a column of :func:`_snowflake_text`'s text
+    r"""The expression reading a column of:func:`_snowflake_text`'s text
     constants as ``declared``."""
     stored = TYPE_MAP[name].get('snowflake_value')
     if stored == 'json':
@@ -1370,7 +1370,7 @@ def _snowflake_reader(name: str, declared: str, column: str) -> str:
 
 
 def _sql_text(text: str | None) -> str:
-    r"""A text constant for Snowflake: every text :func:`_snowflake_text`
+    r"""A text constant for Snowflake: every text:func:`_snowflake_text`
     writes is digits, letters, signs, points, colons and spaces, so it
     needs no escape; anything else is a fault here."""
     if text is None:
@@ -1399,7 +1399,7 @@ def _warehouse_constraints(
     fold: bool = False,
 ) -> tuple[set[str], list[str], list[str]]:
     r"""A table's ``NOT NULL`` columns, the key clauses ``engine`` stores
-    and a note for each it does not (:data:`CONSTRAINTS_NOT_STORED`)."""
+    and a note for each it does not (data:`CONSTRAINTS_NOT_STORED`)."""
     quote_as = backtick if engine == 'databricks' else quote
 
     def quoting(name: str) -> str:
@@ -1483,13 +1483,13 @@ def warehouse_statements(
 ) -> tuple[list[str], list[str]]:
     r"""The statements loading every table of ``duck``'s main schema into
     ``engine``'s schema ``namespace`` (catalog or database, then schema),
-    each table dropped first, every value as :func:`stored` sends it, and
+    each table dropped first, every value as:func:`stored` sends it, and
     a note for each constraint the engine does not store. A value the
-    engine cannot hold is refused by name (:class:`Unloadable`). With
+    engine cannot hold is refused by name (class:`Unloadable`). With
     ``fold``, every table and column is named as Snowflake stores an
     unquoted name, in upper case, so a semantic view's YAML, which names
     them unquoted as a user writes it, reads them
-    (:meth:`CaseSchema.create_view`)."""
+    (meth:`CaseSchema.create_view`)."""
     if engine not in WAREHOUSE_ENGINES:
         raise ValueError(f'no warehouse engine {engine!r}')
     if len(namespace) != 2 or not all(namespace):
@@ -1600,9 +1600,9 @@ def load(
     fold: bool = False,
 ) -> list[str]:
     r"""Every table of ``duck``'s main schema, loaded into ``database``,
-    each column stored as the type map says; :class:`Unloadable` names a
+    each column stored as the type map says;:class:`Unloadable` names a
     column the target cannot hold. Returns a note for each constraint the
-    target does not store (:data:`CONSTRAINTS_NOT_STORED`).
+    target does not store (data:`CONSTRAINTS_NOT_STORED`).
 
     - ``'sqlite'``: a new file at ``target``;
     - ``'postgres'``: the libpq DSN ``target``, the tables created in its
@@ -1614,9 +1614,9 @@ def load(
       statement runner (Spark's ``spark.sql``; the write guard's wrapped
       connection), the tables created in ``namespace`` (catalog or
       database, then schema), replacing the case's tables already there
-      (:func:`warehouse_statements`);
-    - a warehouse leg (:data:`ENGINE`'s keys): ``target`` the recording
-      mode's ``WarehouseTarget`` (``run_python.py``, T3.2), loaded by
+      (func:`warehouse_statements`);
+    - a warehouse leg (data:`ENGINE`'s keys): ``target`` the recording
+      mode's ``WarehouseTarget`` (``run_python.py``), loaded by
       :func:`load_leg`.
 
     A float -0.0, which SQLite stores as 0.0, is refused on SQLite unless
@@ -1652,15 +1652,15 @@ def load(
 
 class CaseSchema:
     r"""One warehouse leg's test schema across a run's cases (C-1, E-0):
-    each :meth:`load` first drops every table (and Lakebase composite type)
+    each:meth:`load` first drops every table (and Lakebase composite type)
     the run loaded before, children first, so the schema holds exactly the
-    case's tables when the old client reads its catalog; :meth:`clear`
+    case's tables when the old client reads its catalog;:meth:`clear`
     drops what is left. It drops what this object loaded, and a table of
-    the case's own name before creating it (:func:`warehouse_statements`):
-    the schema is the dedicated test schema (KO3-51), which
+    the case's own name before creating it (func:`warehouse_statements`):
+    the schema is the dedicated test schema, which
     :func:`load_leg` checks holds nothing else.
 
-    ``target`` is what :func:`load` takes for ``database``: a statement
+    ``target`` is what:func:`load` takes for ``database``: a statement
     runner or DB-API connection for Databricks and Snowflake, an open
     psycopg connection for Lakebase."""
 
@@ -1677,7 +1677,7 @@ class CaseSchema:
         self.views: list[tuple[str, str]] = []
         # Whether the tables loaded are named as unquoted names are stored.
         self.folded = False
-        # What the schema holds now, as :func:`holding` digests it, and the
+        # What the schema holds now, as:func:`holding` digests it, and the
         # notes its load gave; ``None`` once anything else may be there.
         self.loaded: tuple[str, bool] | None = None
         self.notes: list[str] = []
@@ -1695,7 +1695,7 @@ class CaseSchema:
         r"""Drops every view, table and type loaded so far, the last
         first. What the schema held is forgotten before the first drop, so a
         clear cut short (a case past its time limit, a driver's error)
-        leaves the next load to load again (Codex r1 P1)."""
+        leaves the next load to load again."""
         self.loaded = None
         for kind, name in reversed(self.views):
             if kind == 'semantic_view':
@@ -1729,10 +1729,10 @@ class CaseSchema:
     def create_view(self, kind: str, name: str, yaml: str) -> None:
         r"""The case's view, created in the schema from its YAML under the
         name the case reads it by, ``name``: a Databricks metric view
-        (``CREATE VIEW ... WITH METRICS LANGUAGE YAML``), or a Snowflake
+        (``CREATE VIEW... WITH METRICS LANGUAGE YAML``), or a Snowflake
         semantic view (``SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML``, which
         names the view by the YAML's ``name``, so that is set to ``name``);
-        dropped, by that name, by the next :meth:`load` or :meth:`clear`."""
+        dropped, by that name, by the next:meth:`load` or:meth:`clear`."""
         if '$$' in yaml:
             raise Unloadable(f'{name}: a view YAML holding $$')
         if kind == 'metric_view' and self.database == 'databricks':
@@ -1756,7 +1756,7 @@ class CaseSchema:
             document['name'] = name
             # Each base table stays as the case's YAML names it, unquoted,
             # as a user writes it: Snowflake reads it in upper case, as the
-            # case's tables are created (:func:`warehouse_statements`).
+            # case's tables are created (func:`warehouse_statements`).
             text = pyyaml.safe_dump(
                 document, sort_keys=False, allow_unicode=True
             )
@@ -1774,7 +1774,7 @@ class CaseSchema:
     def run_setup(self, statements: list[str]) -> None:
         r"""The case's warehouse setup, after its tables and view: each
         statement run in the write guard's setup scope; a view it creates
-        is dropped with the case's own (``CREATE VIEW <t> AS ...``)."""
+        is dropped with the case's own (``CREATE VIEW <t> AS...``)."""
         scope = WRITE_GUARD_SETUP or contextlib.nullcontext
         for statement in statements:
             with scope():
@@ -1796,11 +1796,11 @@ class CaseSchema:
             self.target.commit()
 
     def load(self, duck: Any, fold: bool = False) -> list[str]:
-        r"""The case's tables in the schema, alone; :func:`load`'s notes;
+        r"""The case's tables in the schema, alone;:func:`load`'s notes;
         with ``fold``, its columns named as Snowflake stores unquoted names.
 
         Tables the schema already holds, loaded by the case before from the
-        same tables (:func:`holding`: names, types, constraints and rows),
+        same tables (func:`holding`: names, types, constraints and rows),
         with no view created since, are not loaded again: the drops and
         writes would put back what is there (the Spark recording's
         root-cause analysis, 2026-10-24: about a third of each case's
@@ -1830,7 +1830,7 @@ class CaseSchema:
 
 #: Each leg's test schema across the run's cases, by leg and schema: the
 #: recording mode opens a connection per case, and the schema must hold
-#: one case's tables at a time (:class:`CaseSchema`).
+#: one case's tables at a time (class:`CaseSchema`).
 _SCHEMAS: dict[tuple[str, ...], CaseSchema] = {}
 
 

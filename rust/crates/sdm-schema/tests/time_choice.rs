@@ -6,11 +6,11 @@
 //! a birth or of the last edit passed over by its name, as the reference's
 //! `choose_time_column` passes them over, where this build refused them all
 //! before (`time_name`); a lone edit stamp kept as the last resort, which
-//! the links settle (T1.21d). From T1.23, the rest of the choice: a
+//! the links settle. the rest of the choice: a
 //! timestamp passed over for its values (`time_values`), the one creation
 //! stamp or the earliest of several (`time_several`), a time of day passed
 //! over as holding no time (`time_of_day`), and a list column left out
-//! (`column_type`). From T1.32e, a preview that may not hold every row
+//! (`column_type`). a preview that may not hold every row
 //! reads the timestamps over the whole table (`time_whole_table`).
 
 use std::sync::Arc;

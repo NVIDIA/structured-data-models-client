@@ -334,6 +334,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "PR #29's kumo_relational_quickstart.ipynb at the reference, the large-order question (an order with TotalDue over 1000 in the next 90 days), a binary classification with a filtered count, on the AdventureWorks base loaded into each warehouse's test schema (choice 1): the schema as the notebook builds it (four keys, both event tables timed by OrderDate, customers and products with no time column, its three relationships, its leave_out columns deleted), the customers or products the notebook selects computed on the fixture, PAST its latest OrderDate less 180 days. The notebook also passes num_context_samples=5000, which the case format has no field for yet (T3.2), so the case asks with the default context; one file for every leg whose engine stores the data (T3.4 brief, open question 1)",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "why": "AdventureWorks quickstart journey for an order exceeding 1000 over 90 days, using the shared fixture and explicit schema.",
+  "source": "Correctness case adventureworks.quickstart.large-order-90d using the adventureworks fixture."
 }

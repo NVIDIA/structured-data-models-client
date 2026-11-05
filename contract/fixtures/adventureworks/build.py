@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Builds the ``adventureworks`` base of ``contract/bases.yaml`` (T1.21b).
+r"""Builds the ``adventureworks`` base of ``contract/bases.yaml``.
 
     python -I contract/fixtures/adventureworks/build.py --source DIR [--write]
 
@@ -131,7 +131,7 @@ CHUNK = 50
 #: The line before the base in bases.yaml, from which this script writes to
 #: the end of the file.
 MARKER = (
-    "  # E27's AdventureWorks base (T1.21b), written by "
+    '  # AdventureWorks fixture, written by '
     'contract/fixtures/adventureworks/build.py; do not edit it by hand.'
 )
 HEADER = [
@@ -319,8 +319,17 @@ def committed() -> tuple[str, str]:
     r"""bases.yaml before the base, and the base as committed."""
     text = BASES.read_text(encoding='utf-8')
     lines = text.splitlines(keepends=True)
-    marker = MARKER + '\n'
-    if marker not in lines:
+    marker = next(
+        (
+            line
+            for line in lines
+            if line.startswith('  # ')
+            and 'contract/fixtures/adventureworks/build.py; do not edit it by hand.'
+            in line
+        ),
+        None,
+    )
+    if marker is None:
         return text, ''
     at = lines.index(marker)
     return ''.join(lines[:at]), ''.join(lines[at:])

@@ -2,8 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! What each [`Sentence`] says: one shared template a sentence, data only
-//! (invariant 8 of the Phase 3 structure design, T3.17). The core picks the
+//! One shared template per [`Sentence`]. The core picks the
 //! sentence of every error and warning; each host fills its template with
 //! the values the error or warning names, as that host writes them, and
 //! formats nothing else. [`template`] matches every sentence with no
@@ -13,27 +12,27 @@
 //! for a brace:
 //!
 //! - `{name}`: the field `name` as text; `{name[0]}` the first of a list;
-//!   `{name:,}` a whole number with its thousands grouped;
+//! `{name:,}` a whole number with its thousands grouped;
 //! - `{name!c}`: the field with a conversion, the host's one value
-//!   formatter: `r` the value as the host writes it as a literal, `l` a
-//!   list of them as an and-list (`'a', 'b' and 'c'`), `a` a list of text
-//!   as an and-list as it is, `j` joined by commas, `c` a list of text
-//!   joined by commas as it is, `R` joined by semicolons, `d` joined by
-//!   dots, `p` a row of values (a list as the host writes a tuple, else as
-//!   `r`), `t` a date or time as the host's time type writes it, `T` a list
-//!   of times of day or text as the host writes a list of them, and for a
-//!   value the caller gave, held as the JSON text the host wrote it in, `G`
-//!   as a literal, `S` as text, `N` the name of its type and `I` the whole
-//!   number it is (so `{name!I:,}` groups its thousands);
+//! formatter: `r` the value as the host writes it as a literal, `l` a
+//! list of them as an and-list (`'a', 'b' and 'c'`), `a` a list of text
+//! as an and-list as it is, `j` joined by commas, `c` a list of text
+//! joined by commas as it is, `R` joined by semicolons, `d` joined by
+//! dots, `p` a row of values (a list as the host writes a tuple, else as
+//! `r`), `t` a date or time as the host's time type writes it, `T` a list
+//! of times of day or text as the host writes a list of them, and for a
+//! value the caller gave, held as the JSON text the host wrote it in, `G`
+//! as a literal, `S` as text, `N` the name of its type and `I` the whole
+//! number it is (so `{name!I:,}` groups its thousands);
 //! - `{name:to(other)}`: a list paired with the list `other`, each pair as
-//!   the two literals joined by ` to `, the pairs by commas;
+//! the two literals joined by ` to `, the pairs by commas;
 //! - `{name:place}`, `{name:backend}`: a database the field names, by the
-//!   names the data layer gives it ([`DatabaseNames`]);
+//! names the data layer gives it ([`DatabaseNames`]);
 //! - `{host.name}`: a value only the host holds, such as a candidate as the
-//!   caller gave it, which the host supplies by name (conversions as
-//!   above);
-//! - `{advice:id(field, ...)}`: what to write in the host's language, an
-//!   [`Advice`] each host spells once, given the fields named.
+//! caller gave it, which the host supplies by name (conversions as
+//! above);
+//! - `{advice:id(field,...)}`: what to write in the host's language, an
+//! [`Advice`] each host spells once, given the fields named.
 //!
 //! The sentence of the part of a question asked in parts an error happened
 //! in (a forecast's step, a ranking's candidate, [`crate::Code::Part`]) is
@@ -109,7 +108,7 @@ pub enum Group {
     ColumnsLeftOut,
     /// What a semantic model's conversion left out, said as one warning
     /// opened by the model as the host names it
-    /// (`CL/materializers/sources.py:285-294`, T3.27).
+    /// (`CL/materializers/sources.py:285-294`).
     ViewReadInPart,
 }
 
@@ -220,7 +219,7 @@ advice! {
 }
 
 /// Sentences whose improvements remain proposed under the recorded owner
-/// decisions (T3.27). A producer must not use one until the owner approves
+/// decisions. A producer must not use one until the owner approves
 /// it; releasing an approved name here changes neither its wire identity
 /// nor its template. The blanket null-anchor refusal remains unapproved.
 pub const PROPOSED: &[Sentence] = &[Sentence::NullAnchor];
@@ -1350,7 +1349,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::PartRankingCandidate => said(
             r#"This is the question asked for candidate {host.part_candidate!r}, one of {ranking_parts} this ranking is asked as."#,
         ),
-        // A semantic model's conversion (T3.27, `old-behaviour/T3.5-views.md`),
+        // A semantic model's conversion (`old-behaviour/-views.md`),
         // in the old client's words. A `{reason}`, `{lost}`, `{reasons}` or
         // `{failure}` is a clause the core writes from the old client's
         // words; a quoted value of the definition (`{source}`, `{join}`,
@@ -1533,7 +1532,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::ViewParameterNote => said(
             r#"Read the parameter '{parameter}' as its default '{default}', as a query of the view without arguments does"#,
         ),
-        // Snowflake (T3.27, `old-behaviour/T3.6-snowflake.md`).
+        // Snowflake (`old-behaviour/-snowflake.md`).
         S::NoCurrentSchema => said(
             r#"No current 'schema' set. Please specify the {database:backend} schema manually"#,
         ),
@@ -1551,7 +1550,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::SeedIgnored => said(
             r#"The '{database}' backend does not support seeded random sampling, so 'random_seed' is ignored when drawing in-context examples. Repeated calls with the same seed may return different predictions."#,
         ),
-        // A Databricks Model Serving endpoint (T3.27, for T3.13,
+        // A Databricks Model Serving endpoint (for,
         // `CL/core/databricks_serving.py`).
         S::ServingValueNotJson => {
             said(r#"this request carries a value that cannot be sent as JSON: {reason}"#)

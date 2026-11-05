@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Reading catalog answers into the contract's dialect-neutral
-//! [`CatalogAnswer`] (decision E54): the column readers each dialect's
+//! [`CatalogAnswer`]: the column readers each dialect's
 //! reader is built of, and the reader of a host provider's answer, which
 //! is in the contract's own shape (`catalog_columns`).
 //!
 //! The core calls a reader after check (b) held the answer to its plan's
-//! schema (decision H16), so each column is there, of its type, and holds
+//! schema, so each column is there, of its type, and holds
 //! no null where the plan takes none. A reader still never panics on an
 //! answer that is not so: a column missing or of another type is
 //! `INTERNAL_ERROR`, naming the column.
@@ -260,7 +260,7 @@ pub(crate) fn host(
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => namespace(batches, c::NAME),
         DescribePart::KeyEnforcement => Ok(CatalogAnswer::KeyEnforcement(text_names(

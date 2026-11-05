@@ -77,9 +77,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "UNSUPPORTED_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"10,001 entities are more than the 10,000 one call scores, and this question is asked as 2 of them, one per candidate. A part is not batched\", before anything is gathered"
+    "code": "UNSUPPORTED_REQUEST"
   },
   "why": "The batched-ranking refusal: a ranking over more entities than one call scores (10,000, main's multi-call predict), never batched",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.batched using the shop fixture."
 }

@@ -2,21 +2,15 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Materialization's payload, the response and the result layout
-//! (Phase 1b). It holds no SQL and matches on no provider.
+//! Model request preparation and prediction-result interpretation.
+//! This crate turns sampled data into typed payloads, validates inference options,
+//! and interprets model responses for relational and single-table tasks.
+//! It contains no SQL or connector-specific dispatch.
 //!
-//! It lays out the payload of a request from what the sampler gathered
-//! ([`payload`]), as the reference's engine lays it out, as `sdm-wire`'s
-//! typed payload, whose objects keep their order and whose numbers are
-//! exact (T1.28w), with the payload's rules the reference's client holds
-//! (T1.28a): the classification task's classes, the context that answers
-//! the question taken out, and the call's options read as the engine reads
-//! them ([`options`]: the run mode, the statistic, the inference options);
-//! a column type or value the layout does not port yet is refused by name.
-//! It also writes the call the client makes of a payload and lays out the
-//! answer ([`predict`]), thin until T1.28b: a regression's answer alone.
-//! A Databricks Model Serving endpoint's envelope and answers are
-//! [`serving`]'s (T3.13).
+//! [`payload`] lays out relational requests, [`tabular`] handles single-table data,
+//! and [`predict`] prepares calls and reads their answers.
+//! [`frame_session`] prepares in-memory session operations, [`gradients`] interprets
+//! explanations, and [`serving`] handles model-serving envelopes.
 
 #![forbid(unsafe_code)]
 

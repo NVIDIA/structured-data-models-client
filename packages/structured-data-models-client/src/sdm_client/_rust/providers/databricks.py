@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Databricks providers (T3.4): they answer a fetch step by running
+r"""The Databricks providers: they answer a fetch step by running
 the statements its plan carries, in order, on one cursor of the source's
 connection, and hand back the last one's result as the driver's Arrow
 table (``fetchall_arrow``), an empty result keeping its schema.
@@ -10,15 +10,15 @@ table (``fetchall_arrow``), an empty result keeping its schema.
 One implementation serves both connections a Databricks source takes: a
 SQL warehouse's (the Databricks SQL connector's), and a notebook's Spark
 session wrapped in ``sdm_connectors``' ``SparkConnection``, whose cursor
-runs ``spark.sql`` and fetches with ``DataFrame.toArrow()``. Both bind
+runs ``spark.sql`` and fetches with ``DataFrame.toArrow``. Both bind
 positional ``?`` markers from ``execute(sql, parameters=[...])``, as the
 reference's sampler binds them (``DB/sampler.py``).
 
 The statements are the core's (``sdm-data`` renders Databricks' SQL); this
 module writes none. A statement's parameters are bound in order: a scalar
-as the Python value the contract's scalar holds (:mod:`..codec`), a key set
+as the Python value the contract's scalar holds (mod:`..codec`), a key set
 (the seeds of a ``neighbors`` or ``lookup`` request) as the one JSON text the
-core wrote of it (T3.28), handed over as a one-cell attachment the run loop
+core wrote of it, handed over as a one-cell attachment the run loop
 passes by id, bound as it was handed. The core writes that text as the
 reference binds it (``_dumps``) and splits a key set past the reference's
 budget of the warehouse's parameter size into one fetch per chunk
@@ -28,7 +28,7 @@ dialect, one naming a text it was not handed, or one binding the core's
 Arrow key set, raises, and the run loop hands the core a provider error.
 
 What a Databricks failure says (its SQLSTATE, and whether it refused an
-expression) is read by :func:`error_fields`, as the reference reads it
+expression) is read by:func:`error_fields`, as the reference reads it
 (``DB/errors.py``), for the run loop to hand the core.
 
 It imports nothing of pandas; it reads a key set's text with pyarrow, the
@@ -51,15 +51,15 @@ from sdm_client._rust import codec
 class DatabricksProvider:
     r"""Answers fetch steps on ``connection``, a Databricks SQL connection,
     a ``SparkConnection``, or what stands in for one: an object whose
-    ``cursor()`` is a context manager with ``execute(sql, parameters=...)``
-    and ``fetchall_arrow()``."""
+    ``cursor`` is a context manager with ``execute(sql, parameters=...)``
+    and ``fetchall_arrow``."""
 
     def __init__(self, connection: Any) -> None:
         self._connection = connection
 
     @staticmethod
     def error_fields(error: BaseException) -> dict[str, Any] | None:
-        r"""What a Databricks failure tells the core (:func:`error_fields`),
+        r"""What a Databricks failure tells the core (func:`error_fields`),
         for the run loop (``sdm_connectors.providers.Provider``)."""
         return error_fields(error)
 
@@ -203,7 +203,7 @@ _DRIVER_MODULES = ('databricks.sql', 'pyspark')
 def sql_state(error: BaseException) -> str | None:
     r"""The SQLSTATE of a Databricks failure, if it says one, as the
     reference's ``sql_state`` reads it: what a Spark error answers
-    (``getSqlState()``), else the last state the SQL connector's message
+    (``getSqlState``), else the last state the SQL connector's message
     writes before the statement it appends."""
     answer = getattr(error, 'getSqlState', None)
     state = answer() if callable(answer) else None
@@ -228,7 +228,7 @@ def error_class(error: BaseException) -> str | None:
     r"""The error class of a Databricks failure, such as
     ``UNRESOLVED_COLUMN.WITH_SUGGESTION``, if it says one, as the
     reference's ``error_class`` reads it: what a Spark error answers
-    (``getCondition()``, else ``getErrorClass()``), else the bracketed name
+    (``getCondition``, else ``getErrorClass``), else the bracketed name
     the SQL connector's message opens with."""
     for method in ('getCondition', 'getErrorClass'):
         answer = getattr(error, method, None)
@@ -244,7 +244,7 @@ def error_fields(error: BaseException) -> dict[str, Any] | None:
     its ``sqlstate`` and its ``error_class``, each where it says one, and
     ``None`` for a failure that is not Databricks'. What the failure means
     (a refused expression, a table that cannot be used) is the core's to
-    say from these facts (T3.27, the data layer's ``failure``). Its message
+    say from these facts (the data layer's ``failure``). Its message
     is never kept."""
     if not _is_databricks(error):
         return None

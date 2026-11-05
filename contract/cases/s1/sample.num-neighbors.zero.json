@@ -90,5 +90,5 @@
     "stage": "predict"
   },
   "why": "num_neighbors=[0]: a hop that takes no neighbour, so orders is left out with a warning; the reference answers",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-neighbors.zero using the shop fixture."
 }

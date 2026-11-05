@@ -39,7 +39,7 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 M = _module(
-    'sqlite_key_pairs_record',
+    'sqlite_key_scenarios',
     ROOT / 'contract/support/sqlite_key_scenarios.py',
 )
 
@@ -47,7 +47,7 @@ R = M.R
 
 
 def test_the_core_reports_a_sqlite_provider() -> None:
-    r"""Exit (the staging rule's marker, T2.1a): the core under test reports
+    r"""Exit (the staging rule's marker): the core under test reports
     a SQLite provider (``sdm_client._native.PROVIDERS``), so a SQLite job
     and the gate run its core legs there."""
 
@@ -63,7 +63,9 @@ def test_the_core_reports_a_sqlite_provider() -> None:
 def _cases_on_sqlite() -> dict[str, dict[str, Any]]:
     r"""python-core over every case on SQLite, as the SQLite job runs it:
     each observation by its key."""
-    with tempfile.TemporaryDirectory(prefix='t22-cases-') as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix='test_sqlite_sql_key_joins_cases-'
+    ) as tmp:
         out = Path(tmp) / 'python-core.jsonl'
         done = subprocess.run(
             [
@@ -100,7 +102,7 @@ def literals(source: str) -> list[str]:
     r"""Every string literal of a Rust source, its escapes read: ``"..."``
     (``\n``, ``\t``, ``\r``, ``\0``, ``\\``, ``\"``, ``\'`` and a line
     continuation) and raw ``r"..."``, ``r#"..."#``; comments and character
-    literals skipped (``sdm-testkit``'s ``t132a_keys_sql.rs`` reads them
+    literals skipped (``sdm-testkit``'s ``keys_sql.rs`` reads them
     so)."""
     out: list[str] = []
     i = 0
@@ -269,7 +271,7 @@ def _by_id() -> dict[str, dict[str, Any]]:
 
 
 def test_the_join_check_fails_on_a_wrong_join() -> None:
-    r"""Control: :func:`joins` passes the reference's own request on SQLite
+    r"""Control::func:`joins` passes the reference's own request on SQLite
     (``base.regression@sqlite``: the shop, its question and entities, as
     ``pair.bigint.bigint`` asks) and fails it with one order moved to
     another entity, and with one entity's age taken from another."""

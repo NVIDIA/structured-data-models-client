@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 HERE = Path(__file__).resolve().parent
-NAME = 't310_spark_recording_fixtures'
+NAME = 'test_spark_driver_version_spark_recording_fixtures'
 spec = importlib.util.spec_from_file_location(
     NAME, HERE / 'test_driver_capture.py'
 )

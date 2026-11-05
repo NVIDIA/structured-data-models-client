@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A metric view's expression helpers (T3.5, `DB/metric_view.py` and
+//! A metric view's expression helpers (`DB/metric_view.py` and
 //! `RE/graph.py:424-430`) against `contract/view-step-vectors.json`: every
 //! call the old client's own tests made of them, with its answer, and its
 //! answers to the recorder's probes. Where the old client answered with a

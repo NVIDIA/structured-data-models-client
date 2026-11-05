@@ -88,5 +88,5 @@
     "stage": "predict"
   },
   "why": "as sample.anchor-entity.null-time, with use_prediction_time=True: the request says so, the null anchor sent as is",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.anchor-entity.null-time.prediction-time using the shop fixture."
 }

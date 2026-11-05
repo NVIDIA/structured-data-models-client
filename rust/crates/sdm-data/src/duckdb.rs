@@ -6,19 +6,19 @@
 //! rendering for, so a request it cannot render is refused by name before
 //! it is planned.
 //!
-//! As built at T1.11b it renders the catalog: `describe` in each part,
+//! As built it renders the catalog: `describe` in each part,
 //! `preview`, `key_counts` and `time_bounds`. Each rendering is the
 //! statement the reference runs for the same step on DuckDB, written the
-//! same way, so each answer is that statement's result (decision H9) and
+//! same way, so each answer is that statement's result and
 //! the driver capture can hold the two texts equal: the table list, `PRAGMA
 //! table_info`, the constraints and foreign keys of one table, the
 //! indexes, the first 1,000 rows, the key counts' and the time bounds'
-//! single `UNION ALL` (the T1.11a row of the design maps each). Names are
+//! single `UNION ALL` (the row of the design maps each). Names are
 //! quoted as the reference quotes them: an identifier in double quotes and
 //! a table name compared as text in single quotes, each with its quote
 //! doubled, which DuckDB's standard-conforming strings make sufficient.
 //!
-//! From T1.11c it renders the sampler's requests too: `sample_entities` as
+//! it renders the sampler's requests too: `sample_entities` as
 //! the reference's reservoir sample, text for text, and `neighbors` and
 //! `lookup` as the reference's joins against a key set, which the provider
 //! binds as the relation the plan names ([`SEEDS`], or longer where the
@@ -28,21 +28,21 @@
 //! columns (`key`, `batch`) could meet a source column's name, so the
 //! table's columns are read from its alias. What each returns is the
 //! reference statement's result, its helper columns under the reference's
-//! names (decision H9 gates on the results, not the text).
+//! names ( gates on the results, not the text).
 //!
-//! From T1.32e it renders `column_ranges`, the reference's one query over
+//! it renders `column_ranges`, the reference's one query over
 //! every row of a table for its time column's choice, and `repeated_key`,
 //! its read of one value a key repeats, each in its text.
 //!
-//! From T1.21c it reads its catalog's answers too ([`read`], decision E54):
-//! the columns of `PRAGMA table_info`, `duckdb_tables()`,
-//! `duckdb_constraints()` and `duckdb_indexes()`, which its plans expect
+//! it reads its catalog's answers too ([`read`]):
+//! the columns of `PRAGMA table_info`, `duckdb_tables`,
+//! `duckdb_constraints` and `duckdb_indexes`, which its plans expect
 //! ([`expected`]), its constraint types and its index expressions, read
 //! into the contract's dialect-neutral catalog answer, so the core reads
 //! no DuckDB.
 //!
 //! The statements are built once, by the shared builder ([`crate::sql`]),
-//! through [`Duckdb`]'s hooks (T3.18): only what is DuckDB's own is here.
+//! through [`Duckdb`]'s hooks: only what is DuckDB's own is here.
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, IndexCoverage, KeyKind};
@@ -67,7 +67,7 @@ pub(crate) struct Duckdb;
 /// The columns of DuckDB's catalog answers: what the statements it renders
 /// for `describe` return, the reference's statements' own.
 mod catalog {
-    /// `duckdb_tables()` and `duckdb_indexes()`: the table's name.
+    /// `duckdb_tables` and `duckdb_indexes`: the table's name.
     pub const TABLE_NAME: &str = "table_name";
     /// `PRAGMA table_info`: each column's position, name, declared type,
     /// whether it is declared `NOT NULL`, its default and whether it is
@@ -78,14 +78,14 @@ mod catalog {
     pub const NOTNULL: &str = "notnull";
     pub const DFLT_VALUE: &str = "dflt_value";
     pub const PK: &str = "pk";
-    /// `duckdb_constraints()`: each constraint's type and columns, and for
+    /// `duckdb_constraints`: each constraint's type and columns, and for
     /// a foreign key its index, the table referred to and its columns.
     pub const CONSTRAINT_TYPE: &str = "constraint_type";
     pub const CONSTRAINT_COLUMN_NAMES: &str = "constraint_column_names";
     pub const CONSTRAINT_INDEX: &str = "constraint_index";
     pub const REFERENCED_TABLE: &str = "referenced_table";
     pub const REFERENCED_COLUMN_NAMES: &str = "referenced_column_names";
-    /// `duckdb_indexes()`: each index's expressions, as one text.
+    /// `duckdb_indexes`: each index's expressions, as one text.
     pub const EXPRESSIONS: &str = "expressions";
     /// The item field of DuckDB's lists.
     pub const LIST_ITEM: &str = "l";
@@ -111,7 +111,7 @@ fn seeds_for(table: &Relation) -> String {
 }
 
 /// The most name parts a DuckDB relation takes: a database, a schema and a
-/// table (design choice 12).
+/// table.
 const MOST_PARTS: usize = 3;
 
 /// The largest seed DuckDB's `REPEATABLE` takes: its parser refuses one
@@ -138,7 +138,7 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
         item: Box::new(field(c::LIST_ITEM, Utf8, true)),
     };
     let fields = match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
             return ExpectedSchema::Discover {};
         }
@@ -178,7 +178,7 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
 fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         // None: the reference names a DuckDB table it cannot find alone.
         DescribePart::Namespace => {
@@ -236,7 +236,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
     }
 }
 
-/// A constraint type as `duckdb_constraints()` spells it.
+/// A constraint type as `duckdb_constraints` spells it.
 fn key_kind(constraint_type: &str) -> KeyKind {
     match constraint_type {
         "PRIMARY KEY" => KeyKind::Primary,
@@ -319,12 +319,12 @@ impl SqlDialect for Duckdb {
             fallback_text_order: None,
             fallback: None,
             // DuckDB's driver hands a HUGEINT, UHUGEINT or VARINT over as
-            // its opaque extension type (register P1B-43).
+            // its opaque extension type (B-43).
             opaque_vendor: Some(OPAQUE_VENDOR.to_owned()),
         }
     }
 
-    /// A database, a schema and a table (design choice 12): each part
+    /// A database, a schema and a table: each part
     /// quoted alone as an identifier, never split on a dot, so `["a.b"]` is
     /// `"a.b"` and `["main", "t"]` is `"main"."t"`, which DuckDB resolves as
     /// it resolves any name so written.
@@ -456,7 +456,7 @@ impl SqlDialect for Duckdb {
 
 /// One part of the catalog. The table list and the indexes are read whole,
 /// as the reference reads them, so a request naming tables is refused
-/// (tables named arrive with the overrides, T1.24); the columns, keys and
+/// (tables named arrive with the overrides); the columns, keys and
 /// foreign keys are read one table at a time, one statement each, as the
 /// reference reads them, so a request naming none or several is refused.
 fn describe(
@@ -466,7 +466,7 @@ fn describe(
 ) -> Result<String, CoreError> {
     let one = || sql::one_table(request, tables);
     Ok(match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         DescribePart::Tables if tables.is_empty() => format!(
             "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
@@ -512,11 +512,11 @@ fn describe(
 /// not one the name reads. Asked only when reading a named table's columns
 /// has failed: no row says the source holds no such relation, so the
 /// caller named one it lacks; any row, that the failure was another
-/// (T1.23 fix 3). A search path naming a schema of another attached
+///. A search path naming a schema of another attached
 /// database (`SET search_path = 'other.main'`) is not followed: the
 /// filter holds the current database. No provider of this build sets
 /// such a path on the connection it reads through, so it is unreachable
-/// today; recorded here rather than ported (T1.23's review).
+/// today; recorded here rather than ported (review).
 ///
 /// A relation of several parts is read by its parts, as [`in_catalog`]
 /// finds it, each a condition of its own beside the names of one part.
@@ -576,8 +576,8 @@ fn held_names(names: &[&str]) -> String {
 /// `double"quote`, no such schema for `a.b`) or, where one exists, reads in
 /// its place (`main.x` read as `x`). Quoting cannot help: DuckDB 1.5.6
 /// unquotes no doubled quote there. Such a table's columns are read by its
-/// own name, as text, from `duckdb_columns()` and its primary key from
-/// `duckdb_constraints()`, as the other catalog reads are, the answer's
+/// own name, as text, from `duckdb_columns` and its primary key from
+/// `duckdb_constraints`, as the other catalog reads are, the answer's
 /// columns, types and rows those the pragma gives for a table of an
 /// ordinary name. Where the reference refuses (its `TableNotFoundError`,
 /// `INVALID_REQUEST`), the core now describes the table: register entry
@@ -605,13 +605,13 @@ fn columns(table: &Relation) -> String {
     )
 }
 
-/// The condition on a catalog function's rows (`duckdb_constraints()`,
-/// `duckdb_columns()`, `duckdb_tables()`, `duckdb_views()`) holding
+/// The condition on a catalog function's rows (`duckdb_constraints`,
+/// `duckdb_columns`, `duckdb_tables`, `duckdb_views`) holding
 /// `relation`, its table's name compared as text in the column `table`,
 /// the database and schema in `prefix`'s `database_name` and
 /// `schema_name`, the condition's later lines indented by `indent`: one
 /// part, the table of that name in the database and schema an unquoted
-/// name resolves in, as Phase 1 read it; three parts, the database, schema
+/// name resolves in; three parts, the database, schema
 /// and table so named; two parts, `[x, t]`, as DuckDB resolves `x.t`: the
 /// table `t` of the schema `x` of the current database, or, where the
 /// current database has no schema `x`, of the default schema `main` of the
@@ -656,7 +656,7 @@ fn in_catalog(relation: &Relation, table: &str, prefix: &str, indent: &str) -> S
 
 /// The vendor DuckDB names in the metadata of its opaque Arrow extension
 /// types (`arrow.opaque`'s `vendor_name`), which the host layer reads by
-/// DuckDB's layouts only for a column naming it (register P1B-43).
+/// DuckDB's layouts only for a column naming it (B-43).
 pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 
 /// The integer type a seed key column, `seed_column`, is cast to before it
@@ -667,7 +667,7 @@ pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 /// that type is an integer one: then the seed is cast to the key's own
 /// type, `t.key = TRY_CAST(s.key AS type)`, so the two compare as one type,
 /// exactly, by the key's native equality, and a seed the type cannot hold
-/// is null and matches nothing (register P1B-43). Without it a VARINT key
+/// is null and matches nothing (B-43). Without it a VARINT key
 /// cannot be compared with a DECIMAL(38, 0) at all (DuckDB has no such
 /// cast), and a HUGEINT seed would meet a UHUGEINT key through DOUBLE. A
 /// VARINT (BIGNUM) key takes its seed through HUGEINT, which holds every
@@ -677,7 +677,7 @@ pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 ///
 /// A key of several columns joins each column to its seed column by the
 /// same rule, the conditions joined by `AND` (design choice 1; composite
-/// keys, T2.12).
+/// keys).
 fn seed_cast(read: &SeedRead<'_>, seed_column: &str) -> Option<Integer> {
     read.seeds
         .columns

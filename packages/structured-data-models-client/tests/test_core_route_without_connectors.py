@@ -4,7 +4,7 @@
 
 r"""A core route over frames runs where the warehouse package
 (``sdm_connectors``, an optional dependency of the client) is not installed
-(T3.4 fix 3, round 3's Codex P1-1): the run loop imports nothing of it."""
+: the run loop imports nothing of it."""
 
 from __future__ import annotations
 

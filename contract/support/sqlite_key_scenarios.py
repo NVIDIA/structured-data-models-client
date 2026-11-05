@@ -38,9 +38,9 @@ def _module(name: str, path: Path) -> ModuleType:
     return sys.modules[name]
 
 
-#: T1.32b's recorder: the case template, the projection and the statement
+#: recorder: the case template, the projection and the statement
 #: counts are its, so both families' vectors are read by one code.
-R = _module('decimal_record', ROOT / 'contract/support/decimal_vectors.py')
+R = _module('decimal_vectors', ROOT / 'contract/support/decimal_vectors.py')
 KEYS = R.KEYS
 
 # --- the vectors -------------------------------------------------------------------
@@ -119,7 +119,7 @@ def _wide() -> list[dict[str, Any]]:
     return out
 
 
-#: T2.0c's decimal-key vectors this matrix takes, with their control.
+#: decimal-key vectors this matrix takes, with their control.
 DECIMAL_KEYS = ('key.pair', 'key.foreign-only.', 'key.primary-only.')
 CONTROL = 'key.both.d9-0'
 
@@ -166,11 +166,11 @@ def offset(vector: dict[str, Any]) -> Decimal:
 
 
 def case_for(vector: dict[str, Any]) -> dict[str, Any]:
-    r"""The vector as the case each host runs: ``decimal_record.py``'s, on
+    r"""The vector as the case each host runs: ``decimal_vectors.py``'s, on
     no routes (a Python runner forces its own) and named ``t22.<id>``."""
     case = R.case_for({**vector, 'id': vector['id']})
     case['id'] = f't22.{vector["id"]}'
-    case['why'] = f'T2.2 vector {vector["id"]}'
+    case['why'] = f'Vector {vector["id"]}'
     case['source'] = 'contract/support/sqlite_key_scenarios.py'
     return case
 
@@ -251,7 +251,7 @@ def joined(observation: dict[str, Any], vector: dict[str, Any]) -> bool | None:
 
 def sqlite_holds(vector: dict[str, Any]) -> dict[str, Any]:
     r"""Each key column as the contract loader stores it: the type SQLite
-    declares and each stored value as ``quote()`` writes it, in rowid
+    declares and each stored value as ``quote`` writes it, in rowid
     order."""
     import duckdb
 
@@ -260,7 +260,9 @@ def sqlite_holds(vector: dict[str, Any]) -> dict[str, Any]:
     try:
         for statement in R.E.shop() + vector['setup']:
             duck.execute(statement)
-        with tempfile.TemporaryDirectory(prefix='t22-holds-') as directory:
+        with tempfile.TemporaryDirectory(
+            prefix='sqlite_key_scenarios_holds-'
+        ) as directory:
             path = Path(directory) / 'case.sqlite'
             loader.load(duck, DATABASE, path)
             with closing(sqlite3.connect(path)) as connection:
@@ -333,7 +335,7 @@ def run(
 
 def register(answer: dict[str, Any], right: bool | None) -> list[str]:
     r"""Why a host may differ from the reference on this vector only under a
-    register entry: T1.32d's marks, and a wrong join."""
+    register entry: marks, and a wrong join."""
     why = list(R.register(answer))
     if right is False:
         why.append('the reference joins a row to another entity')

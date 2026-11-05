@@ -74,9 +74,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 500 entities by 200 candidates, 100,000 in all, at the ceiling and not past it: gathered, the first part refused because the entities 8 to 499 name no user (\"The primary keys [8, 9, ...\")"
+    "code": "INVALID_REQUEST"
   },
   "why": "The entity ceiling over a ranking at its boundary: 500 by 200, exactly 100,000, is not refused by it, and is refused only for entities the data does not hold",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.entities-by-candidates.at using the shop fixture."
 }

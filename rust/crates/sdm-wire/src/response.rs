@@ -12,32 +12,32 @@
 //! one they read is read (`tests/fixtures/response-vectors.json` holds the two
 //! together). A refusal names the field and why, never a value.
 //!
-//! From T1.28b an item's `probabilities` is read as the bindings'
+//! an item's `probabilities` is read as the bindings'
 //! `_float_dict` reads it: absent or `null` is none, any other value not an
 //! object is refused (`not_an_object`), and each member's value is a
 //! number, or text a float reads, not a boolean (`not_a_number`) and
 //! finite (`not_finite`), kept in the order written.
 //!
-//! From T2.8 an item's `scores` is read as the bindings' `_float_tuple`
+//! an item's `scores` is read as the bindings' `_float_tuple`
 //! reads it (an array, each member read as a probability is), and its
 //! `rankings` as their `_mapping_tuple` reads it (each member a mapping,
 //! [`mappings`]).
 //!
-//! From T2.13 an item's `explanation` and `metadata` are each read as the
+//! an item's `explanation` and `metadata` are each read as the
 //! bindings' `_dict_or_none` reads them, Python's `dict` of the value
-//! ([`mapping`], the one reader T2.8 lands).
+//! ([`mapping`], the one reader lands).
 //!
-//! From T2.9 an item's `quantiles` is read as the bindings' `_float_dict`
+//! an item's `quantiles` is read as the bindings' `_float_dict`
 //! reads it, as `probabilities` is (an object, each member's value a
 //! finite number, each refusal naming `prediction.quantiles`), and kept as
 //! the [`mapping`] it is, each value written as the double it reads as.
 //!
-//! From T2.11 an item's `embeddings` is read as the bindings'
+//! an item's `embeddings` is read as the bindings'
 //! `_float_tuple` reads it, as `scores` is: absent or `null` is none, any
 //! value not an array refused (`not_a_sequence`), each member a number.
 //!
-//! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it. From T2.11 every other field the bindings read is
+//! As built the item's `prediction` is taken as written, as the
+//! bindings take it. every other field the bindings read is
 //! read, so [`PredictionItem::carried`] names none. Members the bindings
 //! do not read are ignored, as there.
 
@@ -76,23 +76,23 @@ pub struct PredictionItem {
     /// alike are `None`.
     pub probabilities: Option<Vec<(String, f64)>>,
     /// The item's scores, in the order written; absent and `null` alike are
-    /// `None` (T2.8).
+    /// `None`.
     pub scores: Option<Vec<f64>>,
     /// The item's rankings, each a mapping as a JSON object, in the order
-    /// written; absent and `null` alike are `None` (T2.8).
+    /// written; absent and `null` alike are `None`.
     pub rankings: Option<Vec<Value>>,
     /// The item's explanation, a mapping as [`mapping`] lays one out;
-    /// absent and `null` alike are `None` (T2.13).
+    /// absent and `null` alike are `None`.
     pub explanation: Option<Value>,
     /// The item's own metadata, a mapping as [`mapping`] lays one out;
-    /// absent and `null` alike are `None` (T2.13).
+    /// absent and `null` alike are `None`.
     pub metadata: Option<Value>,
     /// The item's quantiles, a mapping as [`mapping`] lays one out, each
     /// value the double it reads as; absent and `null` alike are `None`
-    /// (T2.9).
+    ///.
     pub quantiles: Option<Value>,
     /// The item's embedding, in the order written; absent and `null` alike
-    /// are `None` (T2.11).
+    /// are `None`.
     pub embeddings: Option<Vec<f64>>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
@@ -304,12 +304,12 @@ fn numbers(mapping: Value, field: &'static str) -> Result<Value, Refused> {
 /// equal as Python's are ([`key_of`]). Anything else is refused
 /// (`not_a_mapping`, naming `field`), as `dict` refuses it.
 ///
-/// The one reader of a mapping-valued response field (T2.8; the
+/// The one reader of a mapping-valued response field (the
 /// explanation, the item metadata and the quantiles read it too): the core
 /// lays a mapping out as JSON object text in a Utf8 column, a list of
 /// mappings as a list of those texts. A mapping keyed by text alone is the
 /// JSON object; one with another key (a number, a boolean or null) is the
-/// JSON list of its pairs, `[[key, value], ...]`, as a JSON object holds no
+/// JSON list of its pairs, `[[key, value],...]`, as a JSON object holds no
 /// other key. Both forms are read here, keys equal as Python's are in both.
 pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
     let not = || refused(field, "not_a_mapping");
@@ -401,7 +401,7 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
 /// objects are two keys to Python's `dict`, but the client reads a
 /// response with `json.loads`, which gives every `NaN` token the same NaN
 /// object, and `dict` finds a key that is the same object before it
-/// compares, so the reference keeps one key for them all (T2.13: the
+/// compares, so the reference keeps one key for them all (the
 /// reference's `PredictionItem.from_dict` makes `[[NaN, 1], [NaN, 2]]`
 /// `{NaN: 2}`).
 fn key_of(key: &Value) -> Option<String> {
@@ -437,7 +437,7 @@ fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
 /// The first code point of each run of ten Unicode decimal digits (0 to 9)
 /// that every supported Python's `float` takes as the digits they stand for:
 /// Unicode 13.0's (`unicodedata.decimal` of Python 3.10, the floor), a
-/// portable policy (T1.28b fix round 2): a digit later Unicode versions add,
+/// portable policy ( fix round 2): a digit later Unicode versions add,
 /// which the reference's Python 3.12 and later take, is refused (register
 /// P1B-25).
 const DECIMAL_ZEROS: [u32; 65] = [
@@ -531,7 +531,7 @@ pub fn numeric_text(text: &str) -> Option<f64> {
             (_, true) => f64::NEG_INFINITY,
         });
     }
-    // digits [. [digits]] | . digits, then [e [sign] digits]
+    // digits [. [digits]] |. digits, then [e [sign] digits]
     let (mantissa, exponent) = match unsigned.find(['e', 'E']) {
         Some(at) => (&unsigned[..at], Some(&unsigned[at + 1..])),
         None => (unsigned, None),
@@ -569,7 +569,7 @@ mod tests {
         crate::json::read_answer(text.as_bytes()).unwrap()
     }
 
-    /// T2.13: `dict(value)` as the bindings' `_dict_or_none` makes it, each
+    ///: `dict(value)` as the bindings' `_dict_or_none` makes it, each
     /// answer recorded through the reference's `PredictionItem.from_dict`
     /// (an item's explanation), a key kept as first written.
     #[test]
@@ -628,7 +628,7 @@ mod tests {
 
     /// Every NaN is one key, as the reference holds them: `json.loads` gives
     /// every `NaN` token the same object, which `dict` finds as one key
-    /// (T2.13); the first place is kept and the last value taken, and a NaN
+    ///; the first place is kept and the last value taken, and a NaN
     /// is no other number's key.
     #[test]
     fn every_nan_key_is_one_key() {

@@ -2,11 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! No expression, name or table panics the view expressions' readers (T3.5
+//! No expression, name or table panics the view expressions' readers (
 //! fix 2, the owner's stop rule): a few seconds of expressions made of SQL's
 //! pieces, of the recorded expressions cut and spliced, and of table names
-//! the patterns are made of, a 100,000-character one among them (Codex
-//! review 2, P1-7), each through the lexer, the checks, the name reader and
+//! the patterns are made of, a 100,000-character one among them, each through the lexer, the checks, the name reader and
 //! every pattern built from a definition's text. Each may refuse; none may
 //! panic.
 
@@ -221,7 +220,7 @@ fn no_expression_panics_a_reader() {
 }
 
 /// A table's name too long for the pattern compiler makes the qualifier
-/// check unreadable, never a panic (Codex review 2, P1-7).
+/// check unreadable, never a panic.
 #[test]
 fn a_pattern_past_the_compiler_s_bounds_is_unreadable() {
     let table = "a".repeat(200_000);

@@ -3,12 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Records ``time-ranges.json``, the zone answers at the ends of the time
-range in every vendored zone (design, "Time": T1.25 adds vectors at both
+range in every vendored zone (design, "Time": adds vectors at both
 ends of the int64 microsecond range and at 9999-12-31 in every vendored
 zone), which ``time_ranges.rs`` holds ``sdm_engine::time`` to.
 
 Run once, by hand, under the reference's Python (3.12, ``zoneinfo``); CI
-never runs it (F4):
+never runs it:
 
     python rust/crates/sdm-engine/tests/time_ranges_record.py OUT.json
 

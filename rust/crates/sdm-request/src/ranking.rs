@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A ranking asked as the questions the model serves, and its answers put
-//! back together (T2.8): the client's `decompose._per_candidate` and
+//! back together: the client's `decompose._per_candidate` and
 //! `_as_literal`, and `SDMClient._ranked` and `_how_sure`.
 //!
 //! The endpoint has no ranking task. A ranking over candidates is asked as
@@ -67,7 +67,7 @@ impl Ranked {
     /// The question asked of one candidate, written as `literal`: whether
     /// the entity reaches a row of the ranked table holding it in the
     /// window, `PREDICT COUNT(<table>.* WHERE <target>=<literal>, <start>,
-    /// <end>, <unit>) > 0 FOR EACH ...`; `quote` spells the table as the
+    /// <end>, <unit>) > 0 FOR EACH...`; `quote` spells the table as the
     /// query language names it. None where the window has no start, which
     /// the client cannot write (a `TypeError` there).
     pub fn question(&self, literal: &str, quote: fn(&str) -> String) -> Option<String> {
@@ -277,7 +277,7 @@ fn float(value: f64) -> Candidate {
     }
 }
 
-/// A candidate as the result's `rankings` names it (T2.8): the JSON text of
+/// A candidate as the result's `rankings` names it: the JSON text of
 /// its value, an integer's digits, a float as Python's `repr` writes it
 /// (`float_repr`), a decimal's digits at its scale, text, or a value
 /// spelled as text, as a JSON string; none for a value no question is asked

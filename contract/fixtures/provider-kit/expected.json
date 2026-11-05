@@ -1,7 +1,7 @@
 {
   "format": "sdm-provider-kit/1",
   "about": [
-    "The provider conformance kit's cases and expected answers (T2.5, with T2.6's in-memory fallback), over dataset.sql beside this file, written by T2.5's test author.",
+    "The provider conformance kit's cases and expected answers, over dataset.sql beside this file, independently authored.",
     "Both kit runners read this file and dataset.sql: sdm-testkit's against the rust-host providers, contract/runners/provider_kit.py against each database's Python provider.",
     "Each case is one data request, as the contract spells it (sdm_contract::data::DataRequest), run through the core on the provider under test: the core plans it, asks the provider, reads every page, and admits the answer.",
     "seeds, where given, are the rows of the request's key set, each [key, batch]: a column 'key' of int64 and a column 'batch' of int64, neither null; the runner attaches them and fills the request's 'seeds'.",
@@ -41,7 +41,7 @@
   "cases": [
     {
       "id": "scan.orders",
-      "exit": "T2.5: paging; scan, which every provider answers",
+      "exit": "paging; scan, which every provider answers",
       "checked": "hand",
       "why": "Every row of orders as dataset.sql inserts it: nine rows, five pages of two.",
       "request": {"request": "scan", "table": {"source": ["orders"]}, "columns": ["order_id", "customer_id", "amount"], "filters": []},
@@ -53,7 +53,7 @@
     },
     {
       "id": "scan.orders-not-null",
-      "exit": "T2.5: paging; a filter",
+      "exit": "paging; a filter",
       "checked": "recorded",
       "request": {"request": "scan", "table": {"source": ["orders"]}, "columns": ["order_id", "customer_id", "amount"], "filters": [{"filter": "not_null", "column": "customer_id"}]},
       "answer": {
@@ -64,7 +64,7 @@
     },
     {
       "id": "scan.limit-3",
-      "exit": "T2.5: limits; a scan's row limit, across two pages",
+      "exit": "limits; a scan's row limit, across two pages",
       "checked": "recorded",
       "request": {"request": "scan", "table": {"source": ["orders"]}, "columns": ["order_id", "customer_id", "amount"], "filters": [], "limit": 3},
       "answer": {
@@ -75,7 +75,7 @@
     },
     {
       "id": "scan.limit-past-rows",
-      "exit": "T2.5: limits; a row limit past the table's rows takes them all",
+      "exit": "limits; a row limit past the table's rows takes them all",
       "checked": "recorded",
       "request": {"request": "scan", "table": {"source": ["orders"]}, "columns": ["order_id", "customer_id", "amount"], "filters": [], "limit": 50},
       "answer": {
@@ -86,7 +86,7 @@
     },
     {
       "id": "preview.customers",
-      "exit": "T2.5: limits; a preview's row limit",
+      "exit": "limits; a preview's row limit",
       "checked": "recorded",
       "request": {"request": "preview", "table": {"source": ["customers"]}, "columns": ["id", "name"], "limit": 2},
       "answer": {
@@ -97,7 +97,7 @@
     },
     {
       "id": "count-rows.orders-amount",
-      "exit": "T2.5: expected answers",
+      "exit": "expected answers",
       "checked": "hand",
       "why": "Nine orders, one (order 14) with no amount.",
       "request": {"request": "count_rows", "table": {"source": ["orders"]}, "filters": [{"filter": "not_null", "column": "amount"}]},
@@ -105,7 +105,7 @@
     },
     {
       "id": "key-counts",
-      "exit": "T2.5: expected answers",
+      "exit": "expected answers",
       "checked": "hand",
       "why": "customers.id: five rows, five distinct, none missing. orders.customer_id: nine rows, three distinct (1, 2 and 4), one missing (order 16).",
       "request": {"request": "key_counts", "keys": [{"table": {"source": ["customers"]}, "columns": ["id"]}, {"table": {"source": ["orders"]}, "columns": ["customer_id"]}]},
@@ -113,7 +113,7 @@
     },
     {
       "id": "key-counts.one-source-twice",
-      "exit": "T2.7: two schema tables over one source are two equal relations, each counted by its own key",
+      "exit": "two schema tables over one source are two equal relations, each counted by its own key",
       "checked": "hand",
       "why": "Two schema tables read the one relation orders, one keyed by order_id and one by customer_id. order_id: nine rows, nine distinct, none missing. customer_id: nine rows, three distinct (1, 2 and 4), one missing (order 16). A provider that keys what it holds by relation, or merges equal relations, answers one row or the same counts twice.",
       "request": {"request": "key_counts", "keys": [{"table": {"source": ["orders"]}, "columns": ["order_id"]}, {"table": {"source": ["orders"]}, "columns": ["customer_id"]}]},
@@ -121,7 +121,7 @@
     },
     {
       "id": "repeated-key.region",
-      "exit": "T2.5: expected answers",
+      "exit": "expected answers",
       "checked": "hand",
       "why": "Only 'north' is held by more than one customer (1 and 4); the null region is no value.",
       "request": {"request": "repeated_key", "table": {"source": ["customers"]}, "key": ["region"]},
@@ -129,14 +129,14 @@
     },
     {
       "id": "repeated-key.none",
-      "exit": "T2.5: expected answers; an empty answer keeps its columns",
+      "exit": "expected answers; an empty answer keeps its columns",
       "checked": "recorded",
       "request": {"request": "repeated_key", "table": {"source": ["customers"]}, "key": ["id"]},
       "answer": {"columns": ["id"], "ordered": false, "rows": []}
     },
     {
       "id": "lookup.customers",
-      "exit": "T2.5: expected answers; a seed whose key the table does not hold has no row",
+      "exit": "expected answers; a seed whose key the table does not hold has no row",
       "checked": "hand",
       "why": "Seed 0 is customer 4 (dee, north), seed 1 is key 9, which no customer has, seed 2 is customer 1 (ann, north); each key is held by one row.",
       "request": {"request": "lookup", "table": {"source": ["customers"]}, "key": ["id"], "columns": ["name", "region"]},
@@ -149,7 +149,7 @@
     },
     {
       "id": "neighbors.ordered",
-      "exit": "T2.5: paging; limits (a row limit per seed); expected answers, ordered, with a tie",
+      "exit": "paging; limits (a row limit per seed); expected answers, ordered, with a tie",
       "checked": "hand",
       "why": "Per seed, the customer's orders by seq descending, then order_id ascending, the first two: customer 1 has seq 3 twice (orders 12 and 17, so 12 first) above seq 2; customer 2 has orders 14 (seq 2, no amount) and 13; customer 3 has none; customer 4 has orders 18 (seq 2) and 15; seed 4 is customer 1 again. Eight rows, in (batch, order): four pages of two.",
       "request": {
@@ -172,7 +172,7 @@
     },
     {
       "id": "neighbors.unordered",
-      "exit": "T2.5: paging; expected answers",
+      "exit": "paging; expected answers",
       "checked": "recorded",
       "request": {"request": "neighbors", "table": {"source": ["orders"]}, "key": ["customer_id"], "columns": ["order_id", "amount"]},
       "seeds": [[4, 0], [1, 1]],
@@ -184,66 +184,66 @@
     },
     {
       "id": "capability-failure.declared",
-      "exit": "T2.5: capability failure; a declared request that fails is the provider's error",
+      "exit": "capability failure; a declared request that fails is the provider's error",
       "request": {"request": "lookup", "table": {"source": ["no_such_table"]}, "key": ["id"], "columns": ["name"]},
       "seeds": [[1, 0]],
       "error": {"code": "PROVIDER_ERROR", "kind": "data_source", "retryable": false, "fields": {}}
     },
     {
       "id": "capability-failure.declared-with-fallback",
-      "exit": "T2.5 and T2.6: a declared request that fails is still an error with a fallback declared, never answered by the fallback",
+      "exit": "a declared request that fails is still an error with a fallback declared, never answered by the fallback",
       "request_of": "capability-failure.declared",
       "capabilities": {"fallback": {"max_rows": 1000, "max_bytes": 1048576}},
       "error": {"code": "PROVIDER_ERROR", "kind": "data_source", "retryable": false, "fields": {}}
     },
     {
       "id": "undeclared.no-fallback",
-      "exit": "T2.5: capability failure; an undeclared request with no fallback declared is refused by name",
+      "exit": "capability failure; an undeclared request with no fallback declared is refused by name",
       "request_of": "neighbors.ordered",
       "capabilities": {"withhold": ["neighbors"]},
       "error": {"code": "UNSUPPORTED_REQUEST", "kind": "unsupported", "retryable": false, "fields": {"request": "neighbors"}}
     },
     {
       "id": "retryable.page-2",
-      "exit": "T2.5: retryability; a page that fails after one that answered is an error, retryable as the provider said, never a shorter answer",
+      "exit": "retryability; a page that fails after one that answered is an error, retryable as the provider said, never a shorter answer",
       "request_of": "scan.orders",
       "inject": {"page": 2, "retryable": true},
       "error": {"code": "PROVIDER_ERROR", "kind": "data_source", "retryable": true, "fields": {}}
     },
     {
       "id": "not-retryable.page-2",
-      "exit": "T2.5: retryability, the other way",
+      "exit": "retryability, the other way",
       "request_of": "scan.orders",
       "inject": {"page": 2, "retryable": false},
       "error": {"code": "PROVIDER_ERROR", "kind": "data_source", "retryable": false, "fields": {}}
     },
     {
       "id": "fallback.neighbors-ordered",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer; the fallback's ordering, ties and row limit per seed",
+      "exit": "the capability undeclared gives the pushdown's answer; the fallback's ordering, ties and row limit per seed",
       "same_as": "neighbors.ordered",
       "capabilities": {"withhold": ["neighbors"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.neighbors-unordered",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer",
+      "exit": "the capability undeclared gives the pushdown's answer",
       "same_as": "neighbors.unordered",
       "capabilities": {"withhold": ["neighbors"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.lookup",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer",
+      "exit": "the capability undeclared gives the pushdown's answer",
       "same_as": "lookup.customers",
       "capabilities": {"withhold": ["lookup"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.key-counts",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer",
+      "exit": "the capability undeclared gives the pushdown's answer",
       "same_as": "key-counts",
       "capabilities": {"withhold": ["key_counts"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.count-rows",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer",
+      "exit": "the capability undeclared gives the pushdown's answer",
       "same_as": "count-rows.orders-amount",
       "capabilities": {"withhold": ["count_rows"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
@@ -256,20 +256,20 @@
     },
     {
       "id": "fallback.preview",
-      "exit": "T2.6: the capability undeclared gives the pushdown's answer; the fallback's row limit",
+      "exit": "the capability undeclared gives the pushdown's answer; the fallback's row limit",
       "same_as": "preview.customers",
       "capabilities": {"withhold": ["preview"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.rows-exceeded",
-      "exit": "T2.6: a limit exceeded is a named error: the answer needs eight rows of orders, past the four declared",
+      "exit": "a limit exceeded is a named error: the answer needs eight rows of orders, past the four declared",
       "request_of": "neighbors.ordered",
       "capabilities": {"withhold": ["neighbors"], "fallback": {"max_rows": 4, "max_bytes": 1048576}},
       "error": {"code": "UNSUPPORTED_REQUEST", "kind": "unsupported", "retryable": false, "fields": {"request": "neighbors", "rule": "fallback_limit", "limit": "max_rows"}}
     },
     {
       "id": "key-counts.signed-zero",
-      "exit": "T2.5 round 1: expected answers; a float key's zeros are one value",
+      "exit": "expected answers; a float key's zeros are one value",
       "checked": "hand",
       "why": "zeros.k holds -0.0 and 0.0: two rows, one distinct value, none missing.",
       "request": {"request": "key_counts", "keys": [{"table": {"source": ["zeros"]}, "columns": ["k"]}]},
@@ -277,7 +277,7 @@
     },
     {
       "id": "repeated-key.signed-zero",
-      "exit": "T2.5 round 1: expected answers; a float key's zeros repeat one value",
+      "exit": "expected answers; a float key's zeros repeat one value",
       "checked": "hand",
       "why": "-0.0 and 0.0 are one value held by two rows; either zero is that value.",
       "request": {"request": "repeated_key", "table": {"source": ["zeros"]}, "key": ["k"]},
@@ -285,19 +285,19 @@
     },
     {
       "id": "fallback.key-counts-signed-zero",
-      "exit": "T2.6 round 1: the capability undeclared gives the pushdown's answer, the zeros one value",
+      "exit": "the capability undeclared gives the pushdown's answer, the zeros one value",
       "same_as": "key-counts.signed-zero",
       "capabilities": {"withhold": ["key_counts"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.repeated-key-signed-zero",
-      "exit": "T2.6 round 1: the capability undeclared gives the pushdown's answer, the zeros one value",
+      "exit": "the capability undeclared gives the pushdown's answer, the zeros one value",
       "same_as": "repeated-key.signed-zero",
       "capabilities": {"withhold": ["repeated_key"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
     },
     {
       "id": "fallback.bytes-on-the-first-page",
-      "exit": "T2.6 round 1: a limit exceeded is a named error as soon as a page passes it: the first page of wide (2,048 bytes a row) is past the 1,000 declared, and no later page is asked",
+      "exit": "a limit exceeded is a named error as soon as a page passes it: the first page of wide (2,048 bytes a row) is past the 1,000 declared, and no later page is asked",
       "request": {"request": "preview", "table": {"source": ["wide"]}, "columns": ["v"], "limit": 10},
       "capabilities": {"withhold": ["preview"], "fallback": {"max_rows": 1000, "max_bytes": 1000}},
       "fetched": ["scan"],
@@ -305,7 +305,7 @@
     },
     {
       "id": "fallback.bytes-before-a-failing-page",
-      "exit": "T2.6 round 1: past the byte limit on page 1, the fallback stops there: a provider that would fail page 2 is never asked it, and the error is the limit's, not a retryable provider error",
+      "exit": "past the byte limit on page 1, the fallback stops there: a provider that would fail page 2 is never asked it, and the error is the limit's, not a retryable provider error",
       "request_of": "fallback.bytes-on-the-first-page",
       "capabilities": {"withhold": ["preview"], "fallback": {"max_rows": 1000, "max_bytes": 1000}},
       "inject": {"page": 2, "retryable": true},
@@ -314,7 +314,7 @@
     },
     {
       "id": "fallback.bytes-exceeded",
-      "exit": "T2.6: a limit exceeded is a named error: eight rows of orders hold more than sixteen bytes of Arrow data",
+      "exit": "a limit exceeded is a named error: eight rows of orders hold more than sixteen bytes of Arrow data",
       "request_of": "neighbors.ordered",
       "capabilities": {"withhold": ["neighbors"], "fallback": {"max_rows": 1000, "max_bytes": 16}},
       "error": {"code": "UNSUPPORTED_REQUEST", "kind": "unsupported", "retryable": false, "fields": {"request": "neighbors", "rule": "fallback_limit", "limit": "max_bytes"}}

@@ -16,7 +16,7 @@ Tests need only this checkout; historical clients, archives and recording tools 
 - `duckdb-statements.json` contains the expected SQL statements and their results for the provider regression case.
 - `postgres-statements.json` retains every distinct PostgreSQL statement with its original case and multiplicity, plus all observed key-lookup column/type layouts.
   Write-guard and provider-layout tests exercise these facts without loading full driver result logs.
-- `snowflake.json` contains the statements and result references for the 27 Snowflake cases named by `t36_snowflake.rs` and the public Python Snowflake tests.
+- `snowflake.json` contains the statements and result references for the 27 Snowflake cases named by `snowflake.rs` and the public Python Snowflake tests.
   `snowflake/` shares identical Arrow IPC streams by their SHA-256 names.
   Original driver Arrow bytes are preserved, including their types and metadata.
 - `snowflake-public.json` shares the independent public schema and wire-payload expectations for the 14 cases named by the Python Snowflake consumer.

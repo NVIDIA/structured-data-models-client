@@ -59,7 +59,7 @@ PAGE_ROWS: int = EXPECTED['page_rows']
 def reachable(database: str) -> bool:
     r"""Whether ``database`` can be run here: DuckDB and SQLite always;
     Postgres where ``SDM_POSTGRES_TEST_DSN`` names a server, and a failure
-    where ``SDM_REQUIRE_POSTGRES`` asks for one that is not named (H26)."""
+    where ``SDM_REQUIRE_POSTGRES`` asks for one that is not named."""
     if database != 'postgres' or os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -163,7 +163,7 @@ def error_problem(got: dict[str, Any], wanted: dict[str, Any]) -> str | None:
 
 def _text(detail: Any) -> str:
     r"""An error field's value as text: the value itself, or the value of
-    the contract's scalar as it serializes (``{"t": ..., "v": ...}``)."""
+    the contract's scalar as it serializes (``{"t":..., "v":...}``)."""
     if isinstance(detail, dict) and 'v' in detail:
         return str(detail['v'])
     return str(detail)
@@ -218,7 +218,7 @@ def judge(case: dict[str, Any], seen: dict[str, Any] | None) -> list[str]:
 
 # --- the kit's runs -----------------------------------------------------------
 
-_OUT = Path(tempfile.mkdtemp(prefix='t25-provider-kit-'))
+_OUT = Path(tempfile.mkdtemp(prefix='test_provider_conformance_provider-kit-'))
 
 
 @functools.cache
@@ -326,7 +326,9 @@ def test_the_dataset_loads_into_sqlite_through_the_contract_loader(
 
     import duckdb
 
-    loader = _module('t25_databases', ROOT / 'contract/runners/databases.py')
+    loader = _module(
+        'provider_databases', ROOT / 'contract/runners/databases.py'
+    )
     record = _module('provider_kit_record', KIT_DIR / 'record.py')
     duck = duckdb.connect()
     duck.execute((KIT_DIR / 'dataset.sql').read_text(encoding='utf-8'))
@@ -344,12 +346,12 @@ def test_the_dataset_loads_into_sqlite_through_the_contract_loader(
             ), table
 
 
-# --- T2.5: the kit on each Python provider ------------------------------------
+# ---: the kit on each Python provider ------------------------------------
 
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_the_kit_passes_on_each_python_provider(database: str) -> None:
-    r"""T2.5: every case passes on ``database``'s Python provider: paging,
+    r""": every case passes on ``database``'s Python provider: paging,
     limits, the expected answers, capability failure and retryability, the
     runner exiting 0 and every case judged here too."""
     if not reachable(database):
@@ -367,12 +369,12 @@ def test_the_kit_passes_on_each_python_provider(database: str) -> None:
     check()
 
 
-# --- T2.6: the in-memory fallback ---------------------------------------------
+# ---: the in-memory fallback ---------------------------------------------
 
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_the_fallback_gives_the_pushdown_s_answer(database: str) -> None:
-    r"""T2.6: each case with its request undeclared and the fallback
+    r""": each case with its request undeclared and the fallback
     declared answers as the pushdown case does, the provider never asked
     the request withheld."""
     if not reachable(database):
@@ -393,7 +395,7 @@ def test_the_fallback_gives_the_pushdown_s_answer(database: str) -> None:
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_a_fallback_limit_exceeded_is_a_named_error(database: str) -> None:
-    r"""T2.6: past the fallback's declared rows or bytes, the request fails
+    r""": past the fallback's declared rows or bytes, the request fails
     by name (``UNSUPPORTED_REQUEST``, rule ``fallback_limit``, the limit),
     where the same request within its limits answers."""
     if not reachable(database):
@@ -425,7 +427,7 @@ def _cases_pass(database: str, names: tuple[str, ...]) -> None:
 def test_r1_the_byte_limit_stops_at_the_page_that_passes_it(
     database: str,
 ) -> None:
-    r"""T2.6, round 1: a fallback scan past ``max_bytes`` on a page that is
+    r""", round 1: a fallback scan past ``max_bytes`` on a page that is
     not its last fails by name at that page, asking no later one; a
     provider that would fail page 2 (retryable) is never asked it, so the
     error is the limit's."""
@@ -442,7 +444,7 @@ def test_r1_the_byte_limit_stops_at_the_page_that_passes_it(
 def test_r1_a_signed_zero_through_the_fallback_is_the_pushdown_s(
     database: str,
 ) -> None:
-    r"""T2.6, round 1: over a float key holding -0.0 and 0.0, ``key_counts``
+    r""", round 1: over a float key holding -0.0 and 0.0, ``key_counts``
     and ``repeated_key`` through the fallback answer as pushdown does: one
     distinct value, and the zero repeated."""
     if not reachable(database):
@@ -456,7 +458,7 @@ def test_r1_a_signed_zero_through_the_fallback_is_the_pushdown_s(
     (lambda: _cases_pass(database, names))()
 
 
-# --- T2.5: the seeded faults --------------------------------------------------
+# ---: the seeded faults --------------------------------------------------
 
 
 def _fault(name: str) -> dict[str, Any]:
@@ -465,7 +467,7 @@ def _fault(name: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_a_seeded_truncation_fails_the_kit(database: str) -> None:
-    r"""T2.5: with the last page of every multi-page answer dropped in
+    r""": with the last page of every multi-page answer dropped in
     the Python provider path, the kit fails (exit 1), each case the fault
     names answered short and without an error."""
     if not reachable(database):
@@ -490,7 +492,7 @@ def test_a_seeded_truncation_fails_the_kit(database: str) -> None:
 def test_a_seeded_silent_capability_failure_fails_the_kit(
     database: str,
 ) -> None:
-    r"""T2.5: with every neighbors fetch answered empty and no error in the
+    r""": with every neighbors fetch answered empty and no error in the
     Python provider path, the kit fails (exit 1), each neighbors case
     answered with no rows, and every case that asks no neighbors still
     passes."""

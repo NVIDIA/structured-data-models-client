@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:sdm:case:1",
   "title": "Contract case",
-  "description": "One case of the shared L2 corpus (contract/cases/): a public call and its inputs, how far it runs, and the reference's outcome. The Python runner (contract/runners/run_python.py) makes the public calls; the pure-Rust host (sdm-contract-run) starts the core operations under `core`. A case taken from the Phase 1b inventory keeps every key the inventory gave it.",
+  "description": "A shared correctness case: public inputs, execution stages and expected outcomes. The Python runner (contract/runners/run_python.py) makes the public calls; the pure-Rust host (sdm-contract-run) starts the core operations under `core`.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "id", "status", "slice", "paths", "routes", "cells", "input", "until", "expect", "why", "source"],
   "dependentRequired": {"databases": ["exclusion"], "exclusion": ["databases"]},
   "allOf": [
     {
-      "description": "warehouses only on an S2 case, and never beside databases (Phase 3 design choice 1).",
+      "description": "warehouses only on an S2 case, and never beside databases.",
       "if": {"required": ["warehouses"]},
       "then": {"properties": {"slice": {"const": "S2"}}, "not": {"anyOf": [{"required": ["databases"]}, {"required": ["exclusion"]}]}}
     },
@@ -27,12 +27,12 @@
     },
     "id": {"$ref": "#/$defs/id"},
     "status": {
-      "description": "acceptance: gating; diagnostic: run and reported, gating nothing (design, Merge rules).",
+      "description": "acceptance: gating; diagnostic: run and reported, gating nothing.",
       "enum": ["acceptance", "diagnostic"]
     },
     "slice": {"enum": ["S0", "S1", "S2", "S3"]},
     "databases": {
-      "description": "The databases the case runs on, when not all three (design choice 2, KO2-19): absent, it runs on DuckDB, SQLite and Postgres. Only beside exclusion, the owner's approval for leaving the others out, and leaving at least one out.",
+      "description": "The databases the case runs on, when not all three: absent, it runs on DuckDB, SQLite and Postgres. Only beside exclusion, the owner's approval for leaving the others out, and leaving at least one out.",
       "type": "array",
       "minItems": 1,
       "maxItems": 2,
@@ -45,7 +45,7 @@
       "pattern": "^KO[0-9]+-[0-9]+$"
     },
     "warehouses": {
-      "description": "The warehouse legs an S2 case runs on, and only there (Phase 3 design choice 1): at least one, none twice. Only on an S2 case, which must name them, and never beside databases. A case without it runs on the databases, and an S1 case without databases on every warehouse leg as well (run_python.py's case_legs).",
+      "description": "The warehouse legs an S2 case runs on, and only there: at least one, none twice. Only on an S2 case, which must name them, and never beside databases. A case without it runs on the databases, and an S1 case without databases on every warehouse leg as well (run_python.py's case_legs).",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
@@ -79,38 +79,38 @@
         "pql": {"type": "string", "minLength": 1},
         "materialize": {"$ref": "#/$defs/materialize"},
         "fail_call": {
-          "description": "The call the scripted endpoint fails, numbered from zero in the order the calls are received (T2.1a's serve(fail_call=), for main's multi-call predict, T2.8c): that call is answered 500 scripted_failure and every other by the rule; absent, no call fails. A JSON integer written as one, below 2**64.",
+          "description": "Zero-based call index at which the scripted endpoint returns HTTP 500 scripted_failure; all other calls use the normal response rule. Omit to keep every call successful. The value must be a JSON integer below 2**64.",
           "type": "integer",
           "minimum": 0,
           "maximum": 18446744073709551615
         },
         "probabilities": {
-          "description": "Whether the scripted endpoint answers a classification call asking for probabilities with them, as a model does (contract/runners/scripted_endpoint.py; T2.8's ranking cases, whose order is their probabilities): a JSON boolean; absent, the rule answers none.",
+          "description": "Whether the scripted endpoint answers a classification call asking for probabilities with them, as a model does (contract/runners/scripted_endpoint.py): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
         },
         "quantiles": {
-          "description": "Whether the scripted endpoint answers a regression call asking for quantiles with them, as a model does (contract/runners/scripted_endpoint.py; T2.9's forecast cases): a JSON boolean; absent, the rule answers none.",
+          "description": "Whether the scripted endpoint answers a regression call asking for quantiles with them, as a model does (contract/runners/scripted_endpoint.py): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
         },
         "outputs": {
-          "description": "The output fields SDMClient.predict asks for (its outputs=), passed as written (T2.9's quantile cases); absent, the call names none and the model's defaults for the task are asked.",
+          "description": "The output fields SDMClient.predict asks for (its outputs=), passed as written; absent, the call names none and the model's defaults for the task are asked.",
           "type": "array",
           "items": {"type": "string"}
         },
         "explanation": {
-          "description": "Whether the scripted endpoint answers a call asking for an explanation with one, as a model explains the entity it is asked about (contract/runners/scripted_endpoint.py; T2.13's cases): a JSON boolean; absent, the rule answers none.",
+          "description": "Whether the scripted endpoint answers a call asking for an explanation with one, as a model explains the entity it is asked about (contract/runners/scripted_endpoint.py): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
         },
         "item_metadata": {
-          "description": "Whether the scripted endpoint gives each item it answers its metadata, as a model reports something of each answer (contract/runners/scripted_endpoint.py; T2.13's cases): a JSON boolean; absent, the rule gives none.",
+          "description": "Whether the scripted endpoint gives each item it answers its metadata, as a model reports something of each answer (contract/runners/scripted_endpoint.py): a JSON boolean; absent, the rule gives none.",
           "type": "boolean"
         },
         "embeddings": {
-          "description": "Whether the scripted endpoint answers a call asking for embeddings with one on each item, as a model answers the vector it holds of each entity (contract/runners/scripted_endpoint.py; T2.11's cases): a JSON boolean; absent, the rule answers none.",
+          "description": "Whether the scripted endpoint answers a call asking for embeddings with one on each item, as a model answers the vector it holds of each entity (contract/runners/scripted_endpoint.py): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
         },
         "view": {
-          "description": "The semantic model the case's source is (Phase 3 design choice 1): a Databricks metric view (metric_view, on the Databricks legs only) or a Snowflake semantic view (semantic_view, on the snowflake leg only), passed to the source's semantic_model by name with trust_expressions as written. With yaml, the view is created in the test schema from it before the run; without, it is an existing view, named by a placeholder the run resolves ({shop_metric_view}). Only on a case naming warehouses.",
+          "description": "The semantic model the case's source is: a Databricks metric view (metric_view, on the Databricks legs only) or a Snowflake semantic view (semantic_view, on the snowflake leg only), passed to the source's semantic_model by name with trust_expressions as written. With yaml, the view is created in the test schema from it before the run; without, it is an existing view, named by a placeholder the run resolves ({shop_metric_view}). Only on a case naming warehouses.",
           "type": "object",
           "additionalProperties": false,
           "required": ["kind", "name"],
@@ -122,15 +122,15 @@
           }
         },
         "connect": {
-          "description": "The connect path the case's connection is opened through, handed to Schema.from_source as it is and found by detection (Phase 3 design choice 1): warehouse (sdm_connectors.databricks.warehouse(), databricks-sql), spark (a notebook's Spark session, databricks-spark), snowpark (a Snowpark session, snowflake) or lakebase (sdm_connectors.databricks.lakebase(), lakebase). The case's warehouses are exactly that leg.",
+          "description": "The connect path the case's connection is opened through, handed to Schema.from_source as it is and found by detection: warehouse (sdm_connectors.databricks.warehouse(), databricks-sql), spark (a notebook's Spark session, databricks-spark), snowpark (a Snowpark session, snowflake) or lakebase (sdm_connectors.databricks.lakebase(), lakebase). The case's warehouses are exactly that leg.",
           "enum": ["warehouse", "spark", "snowpark", "lakebase"]
         },
         "named_part": {
-          "description": "The one namespace part the case's source names (the second early capture, T3.20): catalog (Snowflake's database) or schema, the other left for the source to read from the session, which the run opens in the test schema. Only on a case naming warehouses that each have two namespace parts (databricks-sql, databricks-spark, snowflake), and never beside connect, whose source names none.",
+          "description": "The one namespace part the case's source names: catalog (Snowflake's database) or schema, the other left for the source to read from the session, which the run opens in the test schema. Only on a case naming warehouses that each have two namespace parts (databricks-sql, databricks-spark, snowflake), and never beside connect, whose source names none.",
           "enum": ["catalog", "schema"]
         },
         "warehouse_setup": {
-          "description": "Statements the run sends on the warehouse leg after the case's tables (and view) are loaded, in order, with the {catalog} and {schema} placeholders resolved (the second early capture, T3.20): only the forms the live write guard admits in the loader's setup, a view in the test schema over a read, and on Lakebase a temporary table, which lives in the case's session alone. Only on a case naming warehouses.",
+          "description": "Statements the run sends on the warehouse leg after the case's tables (and view) are loaded, in order, with the {catalog} and {schema} placeholders resolved: only the forms the live write guard admits in the loader's setup, a view in the test schema over a read, and on Lakebase a temporary table, which lives in the case's session alone. Only on a case naming warehouses.",
           "type": "array",
           "minItems": 1,
           "items": {"type": "string", "minLength": 1}
@@ -167,13 +167,13 @@
           }
         },
         "materialize": {
-          "description": "materialize's inputs beside the query text, which is input.pql. Not the schema it samples: that is the description describe_source answered, with input.edits made, which each host builds itself; a case naming one is refused (decision E50, the rust-host journey guard).",
+          "description": "materialize's inputs beside the query text, which is input.pql. Not the schema it samples: that is the description describe_source answered, with input.edits made, which each host builds itself; a case naming one is refused (the native journey guard).",
           "type": "object",
           "additionalProperties": false,
           "required": ["provider", "indices", "anchor_time", "seed"],
           "properties": {
             "provider": {"description": "The contract's ProviderChoice.", "type": "object"},
-            "indices": {"description": "The entities to predict for, one Arrow column: each a contract scalar of one integer or text type. None is a call the core refuses as the reference does (empty.indices, from T1.32d), so the host carries it.", "type": "array", "items": {"type": "object"}},
+            "indices": {"description": "The entities to predict for, one Arrow column: each a contract scalar of one integer or text type. None is a call the core refuses as the reference does (empty.indices), so the host carries it.", "type": "array", "items": {"type": "object"}},
             "anchor_time": {"description": "The anchor time, a contract ts scalar, or null for the default.", "type": ["object", "null"]},
             "seed": {"description": "The sampling seed as the contract's signed hexadecimal text, or null for the default.", "type": ["string", "null"], "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"}
           }
@@ -230,7 +230,7 @@
         "primary_keys": {"type": "object"},
         "time_columns": {"type": "object"},
         "relationships": {
-          "description": "Each a Relationship(source_table, source_column, target_table, target_column) passed in (T1.21b).",
+          "description": "Each a Relationship(source_table, source_column, target_table, target_column) passed in.",
           "type": "array",
           "items": {
             "type": "object",
@@ -247,7 +247,7 @@
       }
     },
     "edits": {
-      "description": "Edits to the schema Schema.from_source returned, made in order before materialize (T1.21b): clear_time_column sets schema[table].time_column = None; delete_column runs del schema[table][column]; from T1.24b, set_primary_key sets schema[table].primary_key = column, set_time_column sets schema[table].time_column = column, set_stype sets schema[table][column].stype = stype, and set_relationships sets schema.relationships to a Relationship of each link. They finish describing the schema, so a refusal of one is the from_source stage's.",
+      "description": "Edits to the schema Schema.from_source returned, made in order before materialize: clear_time_column sets schema[table].time_column = None; delete_column runs del schema[table][column]; set_primary_key sets schema[table].primary_key = column, set_time_column sets schema[table].time_column = column, set_stype sets schema[table][column].stype = stype, and set_relationships sets schema.relationships to a Relationship of each link. They finish describing the schema, so a refusal of one is the from_source stage's.",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -328,15 +328,15 @@
       }
     },
     "materialize": {
-      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text); inference_config is passed as written (T1.21b). An index is a JSON integer literal of any size, read without loss, or a string; both case loaders refuse a number written with a fraction or an exponent, 1.0 included, which JSON Schema alone would count as an integer.",
+      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text); inference_config is passed as written. An index is a JSON integer literal of any size, read without loss, or a string; both case loaders refuse a number written with a fraction or an exponent, 1.0 included, which JSON Schema alone would count as an integer.",
       "type": "object",
       "additionalProperties": false,
       "required": ["indices"],
       "properties": {
         "indices": {"type": "array", "items": {"type": ["integer", "string"]}},
         "indices_as": {"const": "decimal"},
-        "anchor_time": {"description": "An ISO timestamp, or the literal entity: each entity at its own time (T2.11).", "type": "string", "anyOf": [{"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}, {"const": "entity"}]},
-        "context_anchor_time": {"description": "The context's anchor time (T2.11), as anchor_time is written: an ISO timestamp, or the literal entity.", "type": "string", "anyOf": [{"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}, {"const": "entity"}]},
+        "anchor_time": {"description": "An ISO timestamp, or the literal entity: each entity at its own time.", "type": "string", "anyOf": [{"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}, {"const": "entity"}]},
+        "context_anchor_time": {"description": "The context's anchor time, as anchor_time is written: an ISO timestamp, or the literal entity.", "type": "string", "anyOf": [{"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}, {"const": "entity"}]},
         "inference_config": {"type": "object", "minProperties": 1},
         "candidates": {
           "description": "The rows a ranking is over (E153), each an entity key read as indices are: a JSON integer literal of any size or a string.",
@@ -344,40 +344,40 @@
           "items": {"type": ["integer", "string"]}
         },
         "top_k": {
-          "description": "How many of the candidates a ranking or forecast answers, a JSON integer written as one; a value the reference refuses (0) is the case's input.",
+          "description": "How many of the candidates a ranking or forecast answers, a JSON integer written as one; an invalid value (0) is the case's input.",
           "type": "integer"
         },
         "rows_per_call": {
-          "description": "How many entities one model call scores (main's 1fc5a686, T2.8c), passed as written: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "description": "How many entities one model call scores, passed as written: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so an invalid value is the case's input.",
           "type": ["integer", "number", "boolean", "string"]
         },
         "lag_timesteps": {
-          "description": "How many past steps of the target materialize adds as lagged features (T2.9), passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "description": "How many past steps of the target materialize adds as lagged features, passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so an invalid value is the case's input.",
           "type": ["integer", "number", "boolean", "string"]
         },
         "random_seed": {
-          "description": "The sampling seed passed to materialize (T2.11), as written: any JSON value, a JSON integer as an integer of any size, null as None (an unseeded sample, a new one each call), so a value the reference refuses is the case's input; absent, the call's default seed."
+          "description": "The sampling seed passed to materialize, as written: any JSON value, a JSON integer as an integer of any size, null as None (an unseeded sample, a new one each call), so an invalid value is the case's input; absent, the call's default seed."
         },
         "num_hops": {
-          "description": "How many hops the sampler walks (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+          "description": "How many hops the sampler walks, passed as written: any JSON value, null as None, so an invalid value is the case's input."
         },
         "num_neighbors": {
-          "description": "How many neighbours the sampler takes at each hop (T2.11), passed as written: any JSON value, a list as a list, null as None, so a value the reference refuses is the case's input."
+          "description": "How many neighbours the sampler takes at each hop, passed as written: any JSON value, a list as a list, null as None, so an invalid value is the case's input."
         },
         "max_pq_iterations": {
-          "description": "How many tries per example the sampler makes to find valid labels (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+          "description": "How many tries per example the sampler makes to find valid labels, passed as written: any JSON value, null as None, so an invalid value is the case's input."
         },
         "use_prediction_time": {
-          "description": "Whether the model reads the prediction time as a feature (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+          "description": "Whether the model reads the prediction time as a feature, passed as written: any JSON value, null as None, so an invalid value is the case's input."
         },
         "return_embeddings": {
-          "description": "Whether materialize asks for embeddings (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+          "description": "Whether materialize asks for embeddings, passed as written: any JSON value, null as None, so an invalid value is the case's input."
         },
         "exclude_cols_dict": {
-          "description": "The columns to leave out of the request, by table (T2.11), passed as written: any JSON value, an object as a dict and a list as a list, null as None, so a value the reference refuses is the case's input."
+          "description": "The columns to leave out of the request, by table, passed as written: any JSON value, an object as a dict and a list as a list, null as None, so an invalid value is the case's input."
         },
         "num_context_samples": {
-          "description": "The most context examples materialize takes (Phase 3's quickstart cases), passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "description": "The most context examples materialize takes, passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so an invalid value is the case's input.",
           "type": ["integer", "number", "boolean", "string"]
         }
       }

@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Lossless widening at admission (decisions H16 and H27): each type the
+//! Lossless widening at admission: each type the
 //! reference accepts and the closed set holds in a wider form is admitted
 //! with every value and null, and with the received type kept beside it; a
 //! batch whose values pass the offset capacity is split between rows, and
 //! only a single value past it is refused, by name. What is still refused
-//! is generated in `admission.rs` and listed in register HOST-2.
+//! is generated in `admission.rs` and listed in register.
 
 use std::sync::Arc;
 

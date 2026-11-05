@@ -208,7 +208,7 @@
       ]
     },
     {
-      "description": "The sampler state a `materialize` run left, which the host takes\nonce the run has ended, done or failed, and hands back with the\nmaterializer's next `materialize` (decision E52).",
+      "description": "The sampler state a `materialize` run left, which the host takes\nonce the run has ended, done or failed, and hands back with the\nmaterializer's next `materialize`.",
       "type": "object",
       "properties": {
         "state": {
@@ -226,7 +226,7 @@
       ]
     },
     {
-      "description": "A message the core wrote whose encoding would pass the control cap:\nit travels whole as a bytes attachment of its UTF-8 JSON, named here\n(decision H7). Nothing the core writes is truncated, refused or\ndropped for size.",
+      "description": "A message the core wrote whose encoding would pass the control cap:\nit travels whole as a bytes attachment of its UTF-8 JSON, named here\n. Nothing the core writes is truncated, refused or\ndropped for size.",
       "type": "object",
       "properties": {
         "attachment": {
@@ -1649,7 +1649,7 @@
       ]
     },
     "HeldSchema": {
-      "description": "A schema as a host holds it, as plain data (contract v28, T3.16): its\ntables, columns, meanings, keys, time columns and links as they stand,\nhowever the host came to hold them (described, built by hand, edited,\ncopied or unpickled), and, on each column the source was asked of,\nwhat the source said of it ([`SourceFacts`]). `edit_schema` and\n`materialize` read it as it is; `materialize` asks the source for the\nfacts of a column that carries none, as `describe_source` reads them.",
+      "description": "A schema as a host holds it, as plain data (contract v28): its\ntables, columns, meanings, keys, time columns and links as they stand,\nhowever the host came to hold them (described, built by hand, edited,\ncopied or unpickled), and, on each column the source was asked of,\nwhat the source said of it ([`SourceFacts`]). `edit_schema` and\n`materialize` read it as it is; `materialize` asks the source for the\nfacts of a column that carries none, as `describe_source` reads them.",
       "type": "object",
       "properties": {
         "inference": {
@@ -1877,7 +1877,7 @@
       ]
     },
     "Relation": {
-      "description": "What a request reads: a relation of the source, by its name's parts,\neach quoted alone and never split on a dot, so `[\"a.b\"]` is one table\nnamed `a.b` and `[\"main\", \"t\"]` the table `t` of `main` (design choice\n12). Plain data, a list of strings, as easily built by a host in any\nlanguage as a name is. How many parts a source takes is its dialect's:\n`sdm-data` renders every dialect's `FROM` from a relation through one\nfunction and refuses one of no part, or of more parts than its dialect\naccepts, by name (rule `relation`); a host provider refuses one it\ncannot read the same way. Two schema tables over one source are two\nequal relations.\n\nA relation may be derived (contract v28, design choice 3 of Phase 3):\n`columns`, where given, are the relation's columns, each a name with\nthe source column it reads or an SQL text expression over the source's\ncolumns, and `filter` an SQL text condition every row read holds, as a\nview's definition gives them. Both are text of the source's own SQL,\nopaque to the core, which never reads or writes them: only a provider\ndeclaring [`ProviderCapabilities::derived_relations`] is asked for a\nderived relation, and the core refuses one for any other by name (rule\n[`DERIVED_RULE`]).",
+      "description": "What a request reads: a relation of the source, by its name's parts,\neach quoted alone and never split on a dot, so `[\"a.b\"]` is one table\nnamed `a.b` and `[\"main\", \"t\"]` the table `t` of `main` (design choice\n12). Plain data, a list of strings, as easily built by a host in any\nlanguage as a name is. How many parts a source takes is its dialect's:\n`sdm-data` renders every dialect's `FROM` from a relation through one\nfunction and refuses one of no part, or of more parts than its dialect\naccepts, by name (rule `relation`); a host provider refuses one it\ncannot read the same way. Two schema tables over one source are two\nequal relations.\n\nA relation may be derived:\n`columns`, where given, are the relation's columns, each a name with\nthe source column it reads or an SQL text expression over the source's\ncolumns, and `filter` an SQL text condition every row read holds, as a\nview's definition gives them. Both are text of the source's own SQL,\nopaque to the core, which never reads or writes them: only a provider\ndeclaring [`ProviderCapabilities::derived_relations`] is asked for a\nderived relation, and the core refuses one for any other by name (rule\n[`DERIVED_RULE`]).",
       "type": "object",
       "properties": {
         "source": {
@@ -1901,7 +1901,7 @@
           ]
         },
         "found": {
-          "description": "The columns are the ones the source's catalog found, each read by\nits own name, with no filter (T3.4, round 2): a provider may read\nthe table through them, so that one since dropped or renamed fails\nthe read rather than reading anything else by its name (the\nreference's Databricks reads, `_quoted_source_name`), or read the\ntable whole where no column needs it. Left out, `false`: the\ncolumns, if any, are the relation's own.",
+          "description": "The columns are the ones the source's catalog found, each read by\nits own name, with no filter (round 2): a provider may read\nthe table through them, so that one since dropped or renamed fails\nthe read rather than reading anything else by its name (the\nreference's Databricks reads, `_quoted_source_name`), or read the\ntable whole where no column needs it. Left out, `false`: the\ncolumns, if any, are the relation's own.",
           "type": "boolean"
         }
       },
@@ -1997,7 +1997,7 @@
       ]
     },
     "SourceFacts": {
-      "description": "What the source said of one column ([`DescribedColumn`]'s facts), which\na host keeps on the column and hands back whole (contract v28, T3.16).",
+      "description": "What the source said of one column ([`DescribedColumn`]'s facts), which\na host keeps on the column and hands back whole (contract v28).",
       "type": "object",
       "properties": {
         "relation": {
@@ -6663,7 +6663,7 @@
       ]
     },
     "Given": {
-      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n(KO2-86, T2.14b).",
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to: the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n.",
       "oneOf": [
         {
           "type": "string",
@@ -7634,7 +7634,7 @@
       ]
     },
     "Given2": {
-      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n(KO2-86, T2.14b).",
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to: the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n.",
       "oneOf": [
         {
           "type": "string",
@@ -7675,7 +7675,7 @@
       ]
     },
     "Given3": {
-      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n(KO2-86, T2.14b).",
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to: the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n.",
       "oneOf": [
         {
           "type": "string",
@@ -7954,7 +7954,7 @@
       ]
     },
     "GivenCandidate": {
-      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\n  no scalar holds, written into its question by its text as `spelled`\n  is, with the name of the kind of value it is (`date`, `datetime` for a\n  timestamp with no zone, `datetime_zoned` for one with one, `time`).\n  Two of one kind and one text are one candidate; a host whose language\n  holds others equal (two zones of one instant) says so with `repeat`\n  (T2.14b).\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
+      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\n), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\nits own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\nholds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\nfixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\ntext the reference writes into its question (in Python, `str` of it);\nit is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\nno scalar holds, written into its question by its text as `spelled`\nis, with the name of the kind of value it is (`date`, `datetime` for a\ntimestamp with no zone, `datetime_zoned` for one with one, `time`).\nTwo of one kind and one text are one candidate; a host whose language\nholds others equal (two zones of one instant) says so with `repeat`\n.\n- `repeat`: a value the host's own language holds equal to one given\nbefore it, left out as the reference's `dict.fromkeys` leaves it out.\nA host whose candidates are all scalars sends none, the core keeping\neach distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\none it cannot hash), which names no row and which the core refuses by\nname, as the reference fails on it.",
       "oneOf": [
         {
           "type": "string",
@@ -10873,28 +10873,28 @@
       "type": "object",
       "properties": {
         "tables": {
-          "description": "The tables to describe, in order, each by the name the schema gives\nit and the name the source holds it under; empty, every table the\nsource lists, each under its own name (decision E59).",
+          "description": "The tables to describe, in order, each by the name the schema gives\nit and the name the source holds it under; empty, every table the\nsource lists, each under its own name.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/NamedTable"
           }
         },
         "primary_keys": {
-          "description": "Declared primary keys, by the schema's name of the table: each its\ncolumns in order, `null` naming none (refused as an empty key), or\n`unreadable` for a value the host could not write as an ordered\nsequence of names (the conformance rule on [`Given`]), which the\ncore refuses (decision E101).",
+          "description": "Declared primary keys, by the schema's name of the table: each its\ncolumns in order, `null` naming none (refused as an empty key), or\n`unreadable` for a value the host could not write as an ordered\nsequence of names (the conformance rule on [`Given`]), which the\ncore refuses.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/Given2"
           }
         },
         "time_columns": {
-          "description": "Declared time columns, by the schema's name of the table: a name,\n`null` saying the table has none, as the caller's `None` does\n(decision E61), or `unreadable` for a value that is not a name.",
+          "description": "Declared time columns, by the schema's name of the table: a name,\n`null` saying the table has none, as the caller's `None` does\n, or `unreadable` for a value that is not a name.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/Given3"
           }
         },
         "relationships": {
-          "description": "The relationships given, each `[foreign key, referenced key]` by the\nschema's names, in place of the declared and inferred ones; an empty\nlist says there are none. Left out, they are the source's declared\nforeign keys and the links inferred by name (decision E59).",
+          "description": "The relationships given, each `[foreign key, referenced key]` by the\nschema's names, in place of the declared and inferred ones; an empty\nlist says there are none. Left out, they are the source's declared\nforeign keys and the links inferred by name.",
           "type": [
             "array",
             "null"
@@ -10925,7 +10925,7 @@
           "$ref": "#/$defs/Relation"
         },
         "columns": {
-          "description": "The columns the schema keeps of the table (contract v28, T3.8), as a\nschema built column by column names them: only these are read and\ndescribed, as the reference reads only the columns a schema\ndescribes (`_copy_for_one_gather`). Left out, every column the\nsource holds.",
+          "description": "The columns the schema keeps of the table (contract v28), as a\nschema built column by column names them: only these are read and\ndescribed, as the reference reads only the columns a schema\ndescribes (`_copy_for_one_gather`). Left out, every column the\nsource holds.",
           "type": [
             "array",
             "null"
@@ -11022,7 +11022,7 @@
           ]
         },
         "time_column_inferred": {
-          "description": "The column inference took as the time column, when the table's\ntime column is now another or none: a lone stamp of the last edit a\nlink then refused (decision E55), or the column inference took where\nthe caller named another (decision E59). `None` when the time column\nis inference's, or inference took none. The host's schema was\nordered by it first, as the reference's was; `materialize` does not\nread it.",
+          "description": "The column inference took as the time column, when the table's\ntime column is now another or none: a lone stamp of the last edit a\nlink then refused, or the column inference took where\nthe caller named another. `None` when the time column\nis inference's, or inference took none. The host's schema was\nordered by it first, as the reference's was; `materialize` does not\nread it.",
           "type": [
             "string",
             "null"
@@ -11062,11 +11062,11 @@
           "$ref": "#/$defs/Dtype"
         },
         "stype": {
-          "description": "What the column means in the schema as it stands: `ID` for a column\nthe schema joins on, its primary key or a link's foreign key\n(decision E55).",
+          "description": "What the column means in the schema as it stands: `ID` for a column\nthe schema joins on, its primary key or a link's foreign key\n.",
           "$ref": "#/$defs/Stype"
         },
         "stype_before_key": {
-          "description": "What the column meant before the schema's joining on it made it an\nidentifier, given back when the schema stops joining on it; `None`\nwhen joining on it changed nothing, or it is not joined on. In a\ndescription `describe_source` answers, the core's; in `materialize`'s\nschema, what the host holds, from which the core marks the columns\njoined on again (decision E55).",
+          "description": "What the column meant before the schema's joining on it made it an\nidentifier, given back when the schema stops joining on it; `None`\nwhen joining on it changed nothing, or it is not joined on. In a\ndescription `describe_source` answers, the core's; in `materialize`'s\nschema, what the host holds, from which the core marks the columns\njoined on again.",
           "anyOf": [
             {
               "$ref": "#/$defs/Stype"
@@ -11092,7 +11092,7 @@
           ]
         },
         "exact_number": {
-          "description": "Set for a column of numbers the host provider handed over as their\nexact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):\nwhether its catalog declares it a key. The schema reads such a column\nby its role in the schema as it stands (T2.21): as its text\n(`received` `utf8`, `dtype` `string`) where the catalog declares it a\nkey, or where the schema keys it or joins it and every column it\njoins to is such a column too; as a double (`float64`) otherwise.\n`None` for every other column, and absent from the JSON.",
+          "description": "Set for a column of numbers the host provider handed over as their\nexact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):\nwhether its catalog declares it a key. The schema reads such a column\nby its role in the schema as it stands: as its text\n(`received` `utf8`, `dtype` `string`) where the catalog declares it a\nkey, or where the schema keys it or joins it and every column it\njoins to is such a column too; as a double (`float64`) otherwise.\n`None` for every other column, and absent from the JSON.",
           "anyOf": [
             {
               "$ref": "#/$defs/ExactNumber"
@@ -11346,7 +11346,7 @@
       ]
     },
     "Given4": {
-      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n(KO2-86, T2.14b).",
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to: the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n.",
       "oneOf": [
         {
           "type": "string",
@@ -11848,7 +11848,7 @@
                   "type": "string"
                 },
                 "top_k": {
-                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it.",
                   "type": "integer",
                   "format": "uint32",
                   "minimum": 0
@@ -11919,7 +11919,7 @@
                   "type": "string"
                 },
                 "top_k": {
-                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it.",
                   "type": "integer",
                   "format": "uint32",
                   "minimum": 0
@@ -11986,7 +11986,7 @@
                   "type": "string"
                 },
                 "top_k": {
-                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it.",
                   "type": "integer",
                   "format": "uint32",
                   "minimum": 0
@@ -12356,7 +12356,7 @@
               }
             },
             "prediction_statistic": {
-              "description": "A regression's statistic, where the caller chose one (T1.28a).",
+              "description": "A regression's statistic, where the caller chose one.",
               "type": "string"
             }
           },
@@ -12442,7 +12442,7 @@
                       "type": "boolean"
                     },
                     "target_transforms": {
-                      "description": "Each a transform's name, or null, which the engine's type takes and\nwrites as null (T2.13).",
+                      "description": "Each a transform's name, or null, which the engine's type takes and\nwrites as null.",
                       "type": "array",
                       "items": {
                         "type": [
@@ -12587,7 +12587,7 @@
           "$ref": "#/$defs/PlatformFacts"
         },
         "date_literal_range": {
-          "description": "The instants the host can hold a PQL date literal as, when it holds\nfewer than the core reads (years 0 to 9999); none when it holds them\nall. A literal outside them is refused as one that cannot be read\n(`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a\nhost: pandas 2 holds a literal as a nanosecond `Timestamp`.\n\nA bridge fact: it is needed only because the Python host's S0\nshadow check runs the old pandas validator on every query the core\naccepts. It is deleted with that check in Phase 5, and the core then\nreads years 0 to 9999 on every host.",
+          "description": "The instants the host can hold a PQL date literal as, when it holds\nfewer than the core reads (years 0 to 9999); none when it holds them\nall. A literal outside them is refused as one that cannot be read\n(`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a\nhost: pandas 2 holds a literal as a nanosecond `Timestamp`.\n\nOptional host representation limit; omit it to accept the core's full\nsupported date range.",
           "anyOf": [
             {
               "$ref": "#/$defs/InstantRange"
@@ -14342,7 +14342,7 @@
           ]
         },
         {
-          "description": "Check one edit to a schema and make it, as the reference client's\nsetters check and make it (decision E67): the schema the host holds, as\nplain data, and the edit; the result is the schema with the edit made,\nor the refusal the reference gives at the assignment (contract v28,\nT3.16: the schema alone, with what the source said of each column on\nthe column, never a description the core answered earlier).",
+          "description": "Check one edit to a schema and make it, as the reference client's\nsetters check and make it: the schema the host holds, as\nplain data, and the edit; the result is the schema with the edit made,\nor the refusal the reference gives at the assignment (contract v28,\n: the schema alone, with what the source said of each column on\nthe column, never a description the core answered earlier).",
           "type": "object",
           "properties": {
             "schema": {
@@ -14395,7 +14395,7 @@
               "$ref": "#/$defs/ProviderChoice"
             },
             "schema": {
-              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the schema to\nsample, as the host holds it (contract v28, T3.16).",
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the schema to\nsample, as the host holds it (contract v28).",
               "$ref": "#/$defs/AttachmentId"
             },
             "query": {
@@ -14414,7 +14414,7 @@
               ]
             },
             "candidates": {
-              "description": "The rows a ranking (`RANK TOP k`) is over, as the caller named them\n(contract v27, optional, T2.8): a bytes attachment of a JSON list of\n[`GivenCandidate`]s, each candidate as the host's value is written,\nso values of several types keep each its own. The core asks a\nranking as one question per distinct candidate, writing each into\nits question by the type of the column ranked, and refuses\ncandidates on any other question.",
+              "description": "The rows a ranking (`RANK TOP k`) is over, as the caller named them\n(contract v27, optional): a bytes attachment of a JSON list of\n[`GivenCandidate`]s, each candidate as the host's value is written,\nso values of several types keep each its own. The core asks a\nranking as one question per distinct candidate, writing each into\nits question by the type of the column ranked, and refuses\ncandidates on any other question.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/AttachmentId"
@@ -14447,15 +14447,15 @@
               ]
             },
             "unseeded": {
-              "description": "Whether the caller asked for an unseeded sample, a new one each\ncall (`random_seed=None`), with `seed` left out; from contract v27\nthe core draws it under a seed of its own, new each call (T2.11).",
+              "description": "Whether the caller asked for an unseeded sample, a new one each\ncall (`random_seed=None`), with `seed` left out; from contract v27\nthe core draws it under a seed of its own, new each call.",
               "type": "boolean"
             },
             "anchor_entity": {
-              "description": "Whether the caller anchored each entity at its own time\n(`anchor_time='entity'`), with `anchor_time` left out; from contract\nv27 taken for a static query (T2.11).",
+              "description": "Whether the caller anchored each entity at its own time\n(`anchor_time='entity'`), with `anchor_time` left out; from contract\nv27 taken for a static query.",
               "type": "boolean"
             },
             "values": {
-              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read from T2.8c); `top_k`, how\nmany candidates a ranking keeps, in place of the query's `TOP k`,\nread from T2.8; from contract v27, `lag_timesteps`, the past steps\nof a temporal target added as features (T2.9), any value, which the\ncore refuses where the reference's engine refuses it, once the\ncontext is labelled; and from contract v27 the sampling options\n(T2.11): `num_hops` and `num_neighbors`, the hops walked and each\none's size; `max_pq_iterations`; `use_prediction_time`;\n`return_embeddings`, which names `embeddings` among the payload's\noutputs; `exclude_cols_dict`, as given; and `context_anchor_time`,\nwritten as `anchor_time` is (a `ts` scalar), or as the text\n`entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.\nWorking v30's option encoding also preserves bare `NaN`, `Infinity`\nand `-Infinity` numeric tokens in this attachment only. The core\nadmits only a NaN `lag_timesteps` under KO3-44; other nonfinite\noption values remain named refusals. Text tokens and ordinary\nmessage JSON retain their existing strict interpretation.",
+              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads, each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload; and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read ); `top_k`, how\nmany candidates a ranking keeps, in place of the query's `TOP k`,\nread; from contract v27, `lag_timesteps`, the past steps\nof a temporal target added as features, any value, which the\ncore refuses where the reference's engine refuses it, once the\ncontext is labelled; and from contract v27 the sampling options\n: `num_hops` and `num_neighbors`, the hops walked and each\none's size; `max_pq_iterations`; `use_prediction_time`;\n`return_embeddings`, which names `embeddings` among the payload's\noutputs; `exclude_cols_dict`, as given; and `context_anchor_time`,\nwritten as `anchor_time` is (a `ts` scalar), or as the text\n`entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.\nWorking v30's option encoding also preserves bare `NaN`, `Infinity`\nand `-Infinity` numeric tokens in this attachment only. The core\nadmits only a NaN `lag_timesteps` under; other nonfinite\noption values remain named refusals. Text tokens and ordinary\nmessage JSON retain their existing strict interpretation.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/AttachmentId"
@@ -14466,14 +14466,14 @@
               ]
             },
             "options": {
-              "description": "The names of the call's other sampling options, which this message\ncarries no value of (none from contract v27: every sampling option\ntravels in `values`): the core refuses any name it is given as\n`INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
+              "description": "The names of the call's other sampling options, which this message\ncarries no value of (none from contract v27: every sampling option\ntravels in `values`): the core refuses any name it is given as\n`INVALID_REQUEST`. The host\npasses each the call gave, so it refuses none of its own.",
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "most_parts": {
-              "description": "The most steps a forecast is asked as, one call each, which the host\nlets its caller set (the client's `decompose.MOST_PARTS`); 200 where\nit names none. A forecast of more is refused, `INVALID_REQUEST`, rule\n`too_many_parts` (T1.36 fix 21).",
+              "description": "The most steps a forecast is asked as, one call each, which the host\nlets its caller set (the client's `decompose.MOST_PARTS`); 200 where\nit names none. A forecast of more is refused, `INVALID_REQUEST`, rule\n`too_many_parts`.",
               "type": [
                 "integer",
                 "null"
@@ -14482,7 +14482,7 @@
               "minimum": 0
             },
             "most_entities": {
-              "description": "The most entities one `materialize` gathers, across the calls it is\nasked in, which the host lets its caller set (`main`'s\n`MOST_ENTITIES`); 100,000 where it names none (design choice 1,\nmulti-call `predict`, read from T2.8c, which asks a request of more\nrows than one call scores in several calls; until then the core\nrefuses more than one call's rows, a lower bound than either).",
+              "description": "The most entities one `materialize` gathers, across the calls it is\nasked in, which the host lets its caller set (`main`'s\n`MOST_ENTITIES`); 100,000 where it names none (design choice 1,\nmulti-call `predict`, read which asks a request of more\nrows than one call scores in several calls; until then the core\nrefuses more than one call's rows, a lower bound than either).",
               "type": [
                 "integer",
                 "null"
@@ -14491,7 +14491,7 @@
               "minimum": 0
             },
             "most_calls": {
-              "description": "The most model calls one request is asked in (`main`'s\n`MOST_CALLS`); 100 where the host names none (read from T2.8c, as\n`most_entities`).",
+              "description": "The most model calls one request is asked in (`main`'s\n`MOST_CALLS`); 100 where the host names none (read as\n`most_entities`).",
               "type": [
                 "integer",
                 "null"
@@ -14500,7 +14500,7 @@
               "minimum": 0
             },
             "sampler_state": {
-              "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it (decision E52); none for a materializer's\nfirst run.",
+              "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it; none for a materializer's\nfirst run.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/SamplerState"
@@ -14554,7 +14554,7 @@
               ]
             },
             "held": {
-              "description": "A request the core did not materialize, as the host holds it (T3.26,\nowner decision 2026-10-23): one an older client gathered, or this\none on its old route. The core rebuilds what it predicts from from\nit alone, as the old client predicts what such a request holds.",
+              "description": "Held data for saved or manually constructed requests without core state.\nThe core rebuilds the prediction request from these payloads alone.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/HeldRequest"
@@ -14580,18 +14580,18 @@
               }
             },
             "default_outputs": {
-              "description": "The caller named no outputs: the core asks the task's default ones\n(a regression's `prediction`, a classification's `prediction` and\n`probabilities`), and gives no notice of one the answer leaves out,\nwhich it gives only for outputs the caller named (T1.28b).",
+              "description": "The caller named no outputs: the core asks the task's default ones\n(a regression's `prediction`, a classification's `prediction` and\n`probabilities`), and gives no notice of one the answer leaves out,\nwhich it gives only for outputs the caller named.",
               "type": "boolean"
             },
             "inference_asked": {
-              "description": "The inference-config keys the caller set at `materialize`, rather\nthan left to their defaults, as the host holds them: a key the model\ndoes not read among them is refused before the call is made, the\nothers' defaults left out of it silently (T1.28a).",
+              "description": "The inference-config keys the caller set at `materialize`, rather\nthan left to their defaults, as the host holds them: a key the model\ndoes not read among them is refused before the call is made, the\nothers' defaults left out of it silently.",
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "model_endpoint": {
-              "description": "The model endpoint the host's transport calls, where the core writes\nits envelope and reads its answers (contract v28, T3.27, for T3.13):\na Databricks Model Serving endpoint, by name, with the request size\nthe caller allows it. Left out, the client's own endpoint, as\nbefore.",
+              "description": "The model endpoint the host's transport calls, where the core writes\nits envelope and reads its answers (contract v28, for ):\na Databricks Model Serving endpoint, by name, with the request size\nthe caller allows it. Left out, the client's own endpoint, as\nbefore.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/ModelEndpoint"
@@ -14617,7 +14617,7 @@
       ]
     },
     "ProviderChoice": {
-      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.\n\nA SQL provider's `view` (contract v28, T3.27) names the semantic model\nthe source is read through, a Databricks metric view or a Snowflake\nsemantic view by its dialect, as the caller named it, with whether the\ncaller trusts its expressions: its logical tables are then the\nrelations of one part a request names, each the logical table's name.\nLeft out, the source's own tables, as before.",
+      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.\n\nA SQL provider's `view` (contract v28) names the semantic model\nthe source is read through, a Databricks metric view or a Snowflake\nsemantic view by its dialect, as the caller named it, with whether the\ncaller trusts its expressions: its logical tables are then the\nrelations of one part a request names, each the logical table's name.\nLeft out, the source's own tables, as before.",
       "oneOf": [
         {
           "type": "object",
@@ -14686,7 +14686,7 @@
       ]
     },
     "Dialect": {
-      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none (decision E54): which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
+      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none: which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
       "type": "string"
     },
     "ViewChoice": {
@@ -14779,7 +14779,7 @@
           ]
         },
         "fallback": {
-          "description": "The limits within which the core answers an optional request the\nprovider does not declare itself, in memory, from the rows a `scan`\nreads (design choice 1, the in-memory fallback, T2.6); left out,\nthe provider declares none, and such a request is refused,\n`UNSUPPORTED_REQUEST`, as before. A declared request that fails is\nthe provider's error either way, never answered by the fallback.",
+          "description": "The limits within which the core answers an optional request the\nprovider does not declare itself, in memory, from the rows a `scan`\nreads (design choice 1, the in-memory fallback); left out,\nthe provider declares none, and such a request is refused,\n`UNSUPPORTED_REQUEST`, as before. A declared request that fails is\nthe provider's error either way, never answered by the fallback.",
           "anyOf": [
             {
               "$ref": "#/$defs/FallbackLimits"
@@ -14821,7 +14821,7 @@
           "type": "boolean"
         },
         "opaque_vendor": {
-          "description": "The vendor whose opaque Arrow extension types (`arrow.opaque`, its\nmetadata's `vendor_name`) the provider hands over: the host layer\nreads an opaque column by that vendor's layout only when the column\nnames this vendor (register P1B-43). Left out, none, and no opaque\ncolumn is read as anything but its storage (contract v28, carried\nrow P2-MID2-2: before it, a flag of the data layer's).",
+          "description": "The vendor whose opaque Arrow extension types (`arrow.opaque`, its\nmetadata's `vendor_name`) the provider hands over: the host layer\nreads an opaque column by that vendor's layout only when the column\nnames this vendor (B-43). Left out, none, and no opaque\ncolumn is read as anything but its storage (contract v28, carried\nrow P2-MID2-2: before it, a flag of the data layer's).",
           "type": [
             "string",
             "null"
@@ -14836,7 +14836,7 @@
           "type": "boolean"
         },
         "reads_nan_as_missing": {
-          "description": "The reference reads the provider's rows into a frame of NumPy-backed\nfloats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,\nread as Python objects); otherwise as Arrow-backed pandas does, where\na NaN is a value and the two zeros are two values (T2.12). Left out,\n`false` (P2-MID2-2).",
+          "description": "The reference reads the provider's rows into a frame of NumPy-backed\nfloats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,\nread as Python objects); otherwise as Arrow-backed pandas does, where\na NaN is a value and the two zeros are two values. Left out,\n`false` (P2-MID2-2).",
           "type": "boolean"
         }
       },
@@ -14887,7 +14887,7 @@
           "const": "value_by_value"
         },
         {
-          "description": "The column uses the core's approved text formats (date-rules.md,\nT1.25b) and normalizes mixed offsets to UTC, like frame conversion.",
+          "description": "The column uses the core's approved text formats (date-rules.md,\n) and normalizes mixed offsets to UTC, like frame conversion.",
           "type": "string",
           "const": "client_rules"
         }
@@ -15134,7 +15134,7 @@
       ]
     },
     "SamplerState": {
-      "description": "What a materializer's runs have read of its source, so a later run\nskips a read the reference's sampler makes once (decision E52): the\ncore holds no state across runs. A `materialize` run leaves it, done or\nfailed, and the host takes it after the run ends (a `sampler_state`\nmessage), keeps it on its materializer as it is, opaque, and hands it\nback with that materializer's next `materialize`.",
+      "description": "What a materializer's runs have read of its source, so a later run\nskips a read the reference's sampler makes once: the\ncore holds no state across runs. A `materialize` run leaves it, done or\nfailed, and the host takes it after the run ends (a `sampler_state`\nmessage), keeps it on its materializer as it is, opaque, and hands it\nback with that materializer's next `materialize`.",
       "type": "object",
       "properties": {
         "version": {
@@ -15196,7 +15196,7 @@
           "$ref": "#/$defs/AttachmentId"
         },
         "forecast": {
-          "description": "A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one\nregression per step, the window moved a span along at each (T1.36\nfix 21): `payload` and `query` are step 1's, and this holds every\nlater step's, in order, empty for a forecast of one step. Absent for\nany other request. `predict` sends each step's payload and gives the\nanswers back as one, each row carrying its step.",
+          "description": "A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one\nregression per step, the window moved a span along at each (\nfix 21): `payload` and `query` are step 1's, and this holds every\nlater step's, in order, empty for a forecast of one step. Absent for\nany other request. `predict` sends each step's payload and gives the\nanswers back as one, each row carrying its step.",
           "type": [
             "array",
             "null"
@@ -15206,7 +15206,7 @@
           }
         },
         "batches": {
-          "description": "A request of more rows than one model call scores, asked in several\ncalls (`main`'s multi-call `predict`, design choice 1, T2.8c):\n`payload` is the first call's, and this holds every later call's, in\norder, each scoring the rows after the last; `predict` numbers each\ncall's rows on from where the previous call's ended and gives the\nanswers back as one. Absent for a request of one call; a forecast or\nranking, already one call per step or candidate, is never batched.",
+          "description": "A request of more rows than one model call scores, asked in several\ncalls (`main`'s multi-call `predict`, design choice 1):\n`payload` is the first call's, and this holds every later call's, in\norder, each scoring the rows after the last; `predict` numbers each\ncall's rows on from where the previous call's ended and gives the\nanswers back as one. Absent for a request of one call; a forecast or\nranking, already one call per step or candidate, is never batched.",
           "type": [
             "array",
             "null"
@@ -15216,7 +15216,7 @@
           }
         },
         "ranking": {
-          "description": "A ranking (`RANK TOP k`), which the core asks as one binary question\nper distinct candidate, whether the entity reaches it in the window\n(the client's `_per_candidate`, contract v27, optional, T2.8):\n`payload` and `query` are the first candidate's question, and this\nholds every later one's, in order. Absent for any other request.\n`predict` asks each and gives the answers back as one ranking.",
+          "description": "A ranking (`RANK TOP k`), which the core asks as one binary question\nper distinct candidate, whether the entity reaches it in the window\n(the client's `_per_candidate`, contract v27, optional):\n`payload` and `query` are the first candidate's question, and this\nholds every later one's, in order. Absent for any other request.\n`predict` asks each and gives the answers back as one ranking.",
           "anyOf": [
             {
               "$ref": "#/$defs/Ranking"
@@ -15250,7 +15250,7 @@
           "$ref": "#/$defs/AttachmentId"
         },
         "request_id": {
-          "description": "The id this step's call carries in its `metadata.request_id`, which\nthe host draws for each step as it draws [`Predict::request_id`] for\nstep 1's, one per call as the reference's client draws them (T1.36\nfix 24). `materialize` writes none; `predict` refuses a later step\nwithout one (`INVALID_REQUEST`).",
+          "description": "The id this step's call carries in its `metadata.request_id`, which\nthe host draws for each step as it draws [`Predict::request_id`] for\nstep 1's, one per call as the reference's client draws them (\nfix 24). `materialize` writes none; `predict` refuses a later step\nwithout one (`INVALID_REQUEST`).",
           "type": [
             "string",
             "null"
@@ -15369,7 +15369,7 @@
       ]
     },
     "HeldRequest": {
-      "description": "A request the core did not materialize, as the host holds it\n([`Predict::held`], T3.26): its public contents only, each payload as the\nrequest holds it and each question's text, with what the host was given\nof a ranking's candidates. The core rebuilds from it what a\n[`RequestState`] gives: a forecast's later steps numbered from 2, in\norder; a ranking's questions named by their place among the candidates\nheld, each by the JSON text of its value, written from the candidate as\n`materialize` writes it; the later calls of a request asked in several,\neach scoring the rows after the last. No version applies: nothing in it\nwas written by a core.",
+      "description": "A request the core did not materialize, as the host holds it\n([`Predict::held`]): its public contents only, each payload as the\nrequest holds it and each question's text, with what the host was given\nof a ranking's candidates. The core rebuilds from it what a\n[`RequestState`] gives: a forecast's later steps numbered from 2, in\norder; a ranking's questions named by their place among the candidates\nheld, each by the JSON text of its value, written from the candidate as\n`materialize` writes it; the later calls of a request asked in several,\neach scoring the rows after the last. No version applies: nothing in it\nwas written by a core.",
       "type": "object",
       "properties": {
         "payload": {
@@ -15501,7 +15501,7 @@
     "FetchOutcome": {
       "oneOf": [
         {
-          "description": "The rows, as an Arrow attachment. With a `continuation`, they are\none page of the answer, and more follow: the core asks again for\nthe same request with that continuation, opaque to it, until a page\ncomes without one (design choice 1, paging), and reads the pages as\none answer; nothing is truncated silently. Every page holds the\nsame schema.",
+          "description": "The rows, as an Arrow attachment. With a `continuation`, they are\none page of the answer, and more follow: the core asks again for\nthe same request with that continuation, opaque to it, until a page\ncomes without one, and reads the pages as\none answer; nothing is truncated silently. Every page holds the\nsame schema.",
           "type": "object",
           "properties": {
             "data": {
@@ -15544,7 +15544,7 @@
       ]
     },
     "ProviderError": {
-      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there (decision H17).",
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there.",
       "type": "object",
       "properties": {
         "kind": {
@@ -15566,14 +15566,14 @@
           ]
         },
         "error_class": {
-          "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
+          "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
           "type": [
             "string",
             "null"
           ]
         },
         "driver_message": {
-          "description": "The driver's message, passed through by the host unread (contract\nv28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error (decision H17). Left out, none.",
+          "description": "The driver's message, passed through by the host unread (contract\nv28): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error. Left out, none.",
           "type": [
             "string",
             "null"
@@ -15685,7 +15685,7 @@
           ]
         },
         {
-          "description": "The endpoint failed with no body to hand over, as an SDK's error\nreports it (contract v28, T3.27, for T3.13): what the host was told.",
+          "description": "The endpoint failed with no body to hand over, as an SDK's error\nreports it (contract v28, for ): what the host was told.",
           "type": "object",
           "properties": {
             "answer": {
@@ -15759,14 +15759,14 @@
           "$ref": "#/$defs/FetchPlan"
         },
         "continuation": {
-          "description": "The continuation the provider's last page of this request gave\n([`FetchOutcome::Data::continuation`]), asking for the rows after\nit; left out on a request's first fetch (design choice 1, paging).",
+          "description": "The continuation the provider's last page of this request gave\n([`FetchOutcome::Data::continuation`]), asking for the rows after\nit; left out on a request's first fetch.",
           "type": [
             "string",
             "null"
           ]
         },
         "purpose": {
-          "description": "Why the run asks it, where a host or a comparison of the run's\nstatements with the old client's needs to know: `locate`, a read of\na table as it stands at this `materialize` (its namespace, catalog,\nkeys and preview), which the owner's plan B adds and the old client\nmade once, at `from_source` (contract v28, T3.4). Left out, a read\nof the operation's own.",
+          "description": "Distinguishes source-refresh reads from the operation's own reads.\n`locate` refreshes a table's namespace, catalog, keys and preview\nat materialization time; absence means an ordinary operation read.",
           "anyOf": [
             {
               "$ref": "#/$defs/FetchPurpose"
@@ -16068,7 +16068,7 @@
           ]
         },
         {
-          "description": "The rows of `table` whose `key` equals a seed's key, `columns` in\norder after the seed's batch position (decision H15). `key` names the\ntable's key columns in order, one or several (design choice 1; a key\nof several is groundwork, [`seed_key_columns`]);\n`seeds` holds the key's columns ([`seed_key_columns`]), `batch` and\nthe seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in\n`order`, and the result is ordered by `(batch, order)`; without it,\nthere is no `order` and the result is unordered.",
+          "description": "The rows of `table` whose `key` equals a seed's key, `columns` in\norder after the seed's batch position. `key` names the\ntable's key columns in order, one or several (design choice 1; a key\nof several is groundwork, [`seed_key_columns`]);\n`seeds` holds the key's columns ([`seed_key_columns`]), `batch` and\nthe seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in\n`order`, and the result is ordered by `(batch, order)`; without it,\nthere is no `order` and the result is unordered.",
           "type": "object",
           "properties": {
             "table": {
@@ -16175,7 +16175,7 @@
       "description": "Which part of the catalog a `describe` reads.",
       "oneOf": [
         {
-          "description": "The source's table names: one row per table. With tables named,\nthe relations, tables or views, the source would read under any of\nthose names written unqualified, by its own resolution of such a\nname (on DuckDB, through its search path): none when it would read\nnone, which is how the core learns a name the caller gave is not\nthe source's, never by matching names itself (T1.23, decision\nE59).",
+          "description": "The source's table names: one row per table. With tables named,\nthe relations, tables or views, the source would read under any of\nthose names written unqualified, by its own resolution of such a\nname (on DuckDB, through its search path): none when it would read\nnone, which is how the core learns a name the caller gave is not\nthe source's, never by matching names itself (decision\nE59).",
           "type": "string",
           "const": "tables"
         },
@@ -16205,17 +16205,17 @@
           "const": "index_columns"
         },
         {
-          "description": "The namespace a relation of one part is read in, as the source names\na table it holds: one row per part, outermost first, its name\n(contract v28, T3.8): a Postgres source's current schema, under\nwhich the reference names a table it cannot find; no row for a\nsource whose tables are named alone (DuckDB's, SQLite's). Asked only\nto name a table the source lacks.",
+          "description": "The namespace a relation of one part is read in, as the source names\na table it holds: one row per part, outermost first, its name\n(contract v28): a Postgres source's current schema, under\nwhich the reference names a table it cannot find; no row for a\nsource whose tables are named alone (DuckDB's, SQLite's). Asked only\nto name a table the source lacks.",
           "type": "string",
           "const": "namespace"
         },
         {
-          "description": "The exact names of the tables in the named table's namespace whose\ndeclared primary keys the source enforces (T3.6). Asked lazily once\nper namespace, only before counting a key containing that declared\nprimary key, when `key_enforcement` is declared. A failed or unreadable\nlisting establishes no enforcement. It does not change lookup checks.",
+          "description": "The exact names of the tables in the named table's namespace whose\ndeclared primary keys the source enforces. Asked lazily once\nper namespace, only before counting a key containing that declared\nprimary key, when `key_enforcement` is declared. A failed or unreadable\nlisting establishes no enforcement. It does not change lookup checks.",
           "type": "string",
           "const": "key_enforcement"
         },
         {
-          "description": "The definition of the one semantic model named (contract v28, T3.27):\na Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake\nsemantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into\n[`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect\nreads views is asked it; every other dialect refuses it by name\n([`Sentence::ViewsUnread`]), and a host provider is never asked it.",
+          "description": "The definition of the one semantic model named (contract v28):\na Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake\nsemantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into\n[`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect\nreads views is asked it; every other dialect refuses it by name\n([`Sentence::ViewsUnread`]), and a host provider is never asked it.",
           "type": "string",
           "const": "view_definition"
         }
@@ -16356,7 +16356,7 @@
           }
         },
         "label": {
-          "description": "The number a `key_counts` row for this key is labelled with, where\nnot its position among the keys asked: the reference labels each by\nits table's place among the tables with a key, a key it does not\ncount included (T2.12).",
+          "description": "The number a `key_counts` row for this key is labelled with, where\nnot its position among the keys asked: the reference labels each by\nits table's place among the tables with a key, a key it does not\ncount included.",
           "type": [
             "integer",
             "null"
@@ -16365,7 +16365,7 @@
           "minimum": 0
         },
         "unique": {
-          "description": "The source keeps the key unique (a declared primary or unique key\nthat may still hold a null): its distinct values are the rows\nholding all of it, which a rendering may count as the rows less\nthose missing part of it, as the reference counts such a key\n(`_key_count_sql`; contract v28, carried row P2-T2.2-3). The count\nis the same either way.",
+          "description": "The source keeps the key unique (a declared primary or unique key\nthat may still hold a null): its distinct values are the rows\nholding all of it, which a rendering may count as the rows less\nthose missing part of it, as the reference counts such a key\n(`_key_count_sql`; contract v28, carried row P2--3). The count\nis the same either way.",
           "type": "boolean"
         }
       },
@@ -16528,7 +16528,7 @@
       ]
     },
     "FetchPlan": {
-      "description": "How a provider answers one request (decision H14): SQL statements run\nin order on one session, the last one's rows the answer, or the typed\nrequest itself, passed to a host provider that answers it; either way\nwith the Arrow schema the whole plan returns, and answered with one\nattachment holding every row.",
+      "description": "How a provider answers one request: SQL statements run\nin order on one session, the last one's rows the answer, or the typed\nrequest itself, passed to a host provider that answers it; either way\nwith the Arrow schema the whole plan returns, and answered with one\nattachment holding every row.",
       "oneOf": [
         {
           "type": "object",
@@ -16604,7 +16604,7 @@
       ]
     },
     "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. A dialect that binds its key sets as JSON\ntext names none: [`DataLayer::bind`] turns each into a `text` parameter.\n\nA `text` parameter (contract v28, T3.27) binds the one text cell of a\none-row, one-column Arrow attachment: a key set the dialect writes as\nJSON text itself, past the control message's size ([`DataLayer::bind`]).\nIn a [`BoundFetch`] the attachment is a local reference the data layer\nchose; the core installs its batch in the run and names it here by the\nrun's own id before the step is sent.",
+      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. A dialect that binds its key sets as JSON\ntext names none: [`DataLayer::bind`] turns each into a `text` parameter.\n\nA `text` parameter (contract v28) binds the one text cell of a\none-row, one-column Arrow attachment: a key set the dialect writes as\nJSON text itself, past the control message's size ([`DataLayer::bind`]).\nIn a [`BoundFetch`] the attachment is a local reference the data layer\nchose; the core installs its batch in the run and names it here by the\nrun's own id before the step is sent.",
       "oneOf": [
         {
           "type": "object",
@@ -16948,7 +16948,7 @@
               }
             },
             "query": {
-              "description": "What the core resolved of an accepted query (contract v28, T3.8),\nwhich a host reads instead of resolving the query again: its facts\nand its text as the core writes it back. Absent for a refused query\nand from a core that does not say.",
+              "description": "What the core resolved of an accepted query (contract v28),\nwhich a host reads instead of resolving the query again: its facts\nand its text as the core writes it back. Absent for a refused query\nand from a core that does not say.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/QueryFacts"
@@ -16979,7 +16979,7 @@
               "$ref": "#/$defs/AttachmentId"
             },
             "notes": {
-              "description": "What a semantic model's conversion notes of the schema it gave\n(contract v28, T3.27): each measure as the predictive query it is,\neach time column taken in place of the view's own, each parameter\nread as its default, in order (`Schema.conversion_notes`). Given at\ndescribe only. Left out, none.",
+              "description": "What a semantic model's conversion notes of the schema it gave\n(contract v28): each measure as the predictive query it is,\neach time column taken in place of the view's own, each parameter\nread as its default, in order (`Schema.conversion_notes`). Given at\ndescribe only. Left out, none.",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ViewNote"
@@ -17044,7 +17044,7 @@
               ]
             },
             "query": {
-              "description": "What the core resolved of the query it gathered (contract v26,\nT2.18), which a host reads instead of resolving the query itself:\nthe core resolves a query naming any column (KO2-36), which a host's\nown validator may not. Absent from a core that does not say.",
+              "description": "What the core resolved of the query it gathered (contract v26,\n), which a host reads instead of resolving the query itself:\nthe core resolves a query naming any column, which a host's\nown validator may not. Absent from a core that does not say.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/QueryFacts"
@@ -17066,11 +17066,11 @@
           ]
         },
         {
-          "description": "The prediction. Nothing inline grows with the result's width or the\nendpoint's answer (decision H5).",
+          "description": "The prediction. Nothing inline grows with the result's width or the\nendpoint's answer.",
           "type": "object",
           "properties": {
             "result": {
-              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `id_as_written` where\nthe ids are not all integers or all text (utf8: the JSON text of the\nreference's item value, null where there was none), `forecast_step`\nwhere an answer given as written carries one, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).\n\nContract v26 fixes the columns ranking and forecasting add (design\nchoice 1; written from T2.8 and T2.9), after `probabilities` and\nbefore `answer_index`, each where an answer carries it: `scores`\n(list of float64, an item's scores in the endpoint's order),\n`rankings` (list of utf8, an item's rankings, each a mapping), and\n`quantiles` (a regression's quantiles, each named as the endpoint\nnamed it, in the order written; from contract v27, T2.9, a\nmapping-valued field, laid out as the next paragraph says, an\nanswer's `{}` the text `{}`, none null).\n\nA mapping-valued field (T2.8, contract v27) is laid out as JSON\nobject text in a Utf8 column, and a list of mappings as a list of\nthose texts: a JSON object when every key is text, otherwise (a key\nthat is a number, a boolean or null) the JSON list of its `[key,\nvalue]` pairs, as a JSON object holds no other key. Each is read\nfrom the answer as Python's `dict` reads it, keys equal as Python's\nare, by the one reader `sdm_wire::response::mapping`.\n\nA ranking's result (T2.8, contract v27), one row per entity asked\nabout, in place\nof `prediction` and `probabilities`: `rankings` (the candidates the\nrow ranks, best first, at most `top_k`, each the JSON text of its\nvalue, as the state names it), `scores` (how sure the endpoint was\nof each, in the same order) and `candidates` (list of int64, each\none's position among the candidates `materialize` was given, its\nfirst where it was given more than once, in the same order), which a\nhost gives back as the outputs named in `outputs`, each candidate as\nthe value it was given as, found by its position.\n\nContract v27 adds, after those, `embeddings` (list of float64, an\nanswer's embedding in the order written, null where it has none;\nT2.11).\nNative result tables also retain scalar `sdm.answer_type` and\n`sdm.text_ids` schema metadata for lossless generic result merging.\nRanking tables need only `sdm.text_ids` because they hold no prediction column.",
+              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them, whose schema\nnames its columns in order: `row_index`, `id`, `id_as_written` where\nthe ids are not all integers or all text (utf8: the JSON text of the\nreference's item value, null where there was none), `forecast_step`\nwhere an answer given as written carries one, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).\n\nContract v26 fixes the columns ranking and forecasting add (design\nchoice 1; written and ), after `probabilities` and\nbefore `answer_index`, each where an answer carries it: `scores`\n(list of float64, an item's scores in the endpoint's order),\n`rankings` (list of utf8, an item's rankings, each a mapping), and\n`quantiles` (a regression's quantiles, each named as the endpoint\nnamed it, in the order written; from contract v27, a\nmapping-valued field, laid out as the next paragraph says, an\nanswer's `{}` the text `{}`, none null).\n\nA mapping-valued field (contract v27) is laid out as JSON\nobject text in a Utf8 column, and a list of mappings as a list of\nthose texts: a JSON object when every key is text, otherwise (a key\nthat is a number, a boolean or null) the JSON list of its `[key,\nvalue]` pairs, as a JSON object holds no other key. Each is read\nfrom the answer as Python's `dict` reads it, keys equal as Python's\nare, by the one reader `sdm_wire::response::mapping`.\n\nA ranking's result (contract v27), one row per entity asked\nabout, in place\nof `prediction` and `probabilities`: `rankings` (the candidates the\nrow ranks, best first, at most `top_k`, each the JSON text of its\nvalue, as the state names it), `scores` (how sure the endpoint was\nof each, in the same order) and `candidates` (list of int64, each\none's position among the candidates `materialize` was given, its\nfirst where it was given more than once, in the same order), which a\nhost gives back as the outputs named in `outputs`, each candidate as\nthe value it was given as, found by its position.\n\nContract v27 adds, after those, `embeddings` (list of float64, an\nanswer's embedding in the order written, null where it has none;\n).\nNative result tables also retain scalar `sdm.answer_type` and\n`sdm.text_ids` schema metadata for lossless generic result merging.\nRanking tables need only `sdm.text_ids` because they hold no prediction column.",
               "$ref": "#/$defs/AttachmentId"
             },
             "model": {
@@ -17093,7 +17093,7 @@
               }
             },
             "unscored_candidates": {
-              "description": "A ranking's candidates no question was sent for, the context sampled\nfor each holding one answer only (T2.8): each its position among the\ncandidates `materialize` was given (of a request held, among the\ncandidates it holds, T3.26), in the order named. Empty for any other\nresult.",
+              "description": "A ranking's candidates no question was sent for, the context sampled\nfor each holding one answer only: each its position among the\ncandidates `materialize` was given (of a request held, among the\ncandidates it holds), in the order named. Empty for any other\nresult.",
               "type": "array",
               "items": {
                 "type": "integer",
@@ -17340,7 +17340,7 @@
           "minimum": 0
         },
         "text": {
-          "description": "The query as the core writes it back, the reference's\n`ValidatedPredictiveQuery.to_string()` (contract v28, T3.8): given\nby `validate_query`; absent from `materialize`'s, whose state holds\neach question's text.",
+          "description": "The query as the core writes it back, the reference's\n`ValidatedPredictiveQuery.to_string` (contract v28): given\nby `validate_query`; absent from `materialize`'s, whose state holds\neach question's text.",
           "type": [
             "string",
             "null"
@@ -17961,11 +17961,11 @@
           "$ref": "#/$defs/ErrorCode"
         },
         "sentence": {
-          "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording (T3.17).",
+          "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording.",
           "$ref": "#/$defs/Sentence"
         },
         "part": {
-          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error (T3.17 fix 2).",
+          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error.",
           "anyOf": [
             {
               "$ref": "#/$defs/Sentence"
@@ -18003,14 +18003,14 @@
           "default": false
         },
         "drop_held": {
-          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
+          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way. The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/HeldState"
           }
         },
         "answered": {
-          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\nT2.8c): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
+          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\n): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
           "anyOf": [
             {
               "$ref": "#/$defs/AnsweredParts"
@@ -18030,7 +18030,7 @@
       ]
     },
     "ErrorCode": {
-      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
+      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm. Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
       "oneOf": [
         {
           "description": "The caller's request is not one the core accepts.",
@@ -18143,7 +18143,7 @@
           "const": "INVALID_MESSAGE"
         },
         {
-          "description": "A model serving endpoint refused the request, with an HTTP status and\nperhaps a code of its own (contract v28, T3.27): the host raises its\nendpoint-refusal error with the status ([`REFUSED_STATUS`]) and the\ncode ([`REFUSED_CODE`], none where there is none), as the old client\nraises `NimRequestError(status, code=...)`, the error's other fields\nits details.",
+          "description": "A model serving endpoint refused the request, with an HTTP status and\nperhaps a code of its own (contract v28): the host raises its\nendpoint-refusal error with the status ([`REFUSED_STATUS`]) and the\ncode ([`REFUSED_CODE`], none where there is none), as the old client\nraises `NimRequestError(status, code=...)`, the error's other fields\nits details.",
           "type": "string",
           "const": "ENDPOINT_REFUSED"
         }
@@ -18153,7 +18153,7 @@
       "description": "A state a host holds between runs and hands back to the core with a\nlater run's start, opaque to it.",
       "oneOf": [
         {
-          "description": "The sampler state a materializer's last run left\n(`Materialize.sampler_state`, decision E52).",
+          "description": "The sampler state a materializer's last run left\n(`Materialize.sampler_state`).",
           "type": "string",
           "const": "sampler_state"
         }
@@ -18190,7 +18190,7 @@
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
         "sentence": {
-          "description": "What the warning says (T3.17).",
+          "description": "What the warning says.",
           "$ref": "#/$defs/Sentence"
         },
         "message": {

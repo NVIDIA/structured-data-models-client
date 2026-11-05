@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The warnings the reference gives once in a process (decision E52): the
+//! The warnings the reference gives once in a process: the
 //! core gives `CONTEXT_COVERAGE` on every run that meets it, holding no
 //! state across runs, and `HostRun::take_warnings`, which every binding
 //! takes its warnings through, gives it the first time a run of the

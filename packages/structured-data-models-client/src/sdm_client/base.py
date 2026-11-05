@@ -60,7 +60,7 @@ class ModelSpec:
     model_id: str
     #: The language's profile the model is asked through, by its name
     #: (``RELATIONAL`` or ``TABULAR``): the name the core validates a query
-    #: for, and :func:`language_profile` the old PQL package's object.
+    #: for, and:func:`language_profile` the old PQL package's object.
     profile: str
     runtime: RuntimeContract
 
@@ -68,7 +68,7 @@ class ModelSpec:
 #: How each of the language's profiles names the model it is asked of
 #: (``Profile.capabilities.model``), which a refusal of a query says, held
 #: here so the core route words it with nothing of the old PQL package
-#: (T3.16, rule 11); ``tests/test_t316_the_schema_as_it_stands.py`` holds
+#: (rule 11); ``tests/test_t316_the_schema_as_it_stands.py`` holds
 #: it to the language's.
 PROFILE_MODELS = {
     'FINE_TUNING': 'fine-tuning',
@@ -81,7 +81,7 @@ PROFILE_MODELS = {
 
 @dataclass(frozen=True)
 class ModelCapabilities:
-    r"""What :meth:`~sdm_client.SDMClient.capabilities` reports.
+    r"""What:meth:`~sdm_client.SDMClient.capabilities` reports.
 
     Describes the client side. Nothing here is read from the endpoint, and
     ``source`` says so, so a caller cannot mistake it for the endpoint's own

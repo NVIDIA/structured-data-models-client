@@ -13,24 +13,24 @@
 //!
 //! # Attachment ids
 //!
-//! The sender of a message numbers the attachments it sends (decision E2).
+//! The sender of a message numbers the attachments it sends.
 //!
 //! - Core to host: a run numbers its attachments from 1 in the order it
-//!   makes them (key sets, model bodies, result payloads), unique within
-//!   that run and never reused. An id stays valid until the host takes the
-//!   attachment, the run is cancelled, or the run is dropped; a run that
-//!   would pass `u32::MAX` ends with `INTERNAL_ERROR`.
+//! makes them (key sets, model bodies, result payloads), unique within
+//! that run and never reused. An id stays valid until the host takes the
+//! attachment, the run is cancelled, or the run is dropped; a run that
+//! would pass `u32::MAX` ends with `INTERNAL_ERROR`.
 //! - Host to core: the host names the attachments of each message it sends
-//!   (`start`, `fetch_reply`, `model_reply`) with ids of its choosing,
-//!   scoped to that one message; the core takes them when it reads the
-//!   message, and the ids mean nothing afterwards.
+//! (`start`, `fetch_reply`, `model_reply`) with ids of its choosing,
+//! scoped to that one message; the core takes them when it reads the
+//! message, and the ids mean nothing afterwards.
 //! - A message the core writes whose encoding would pass the control cap
-//!   travels whole as an attachment, named by an `attached` message; its id
-//!   comes from the run's numbering, and it travels with that message.
+//! travels whole as an attachment, named by an `attached` message; its id
+//! comes from the run's numbering, and it travels with that message.
 //! - Across runs: no id carries over. State that outlives a run, such as
-//!   `RequestState.payload` from `materialize`, leaves as bytes the host
-//!   takes when that run finishes, and comes back attached to the `start`
-//!   of the `predict` run under an id the host picks for that message.
+//! `RequestState.payload` from `materialize`, leaves as bytes the host
+//! takes when that run finishes, and comes back attached to the `start`
+//! of the `predict` run under an id the host picks for that message.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -72,15 +72,12 @@ pub struct FetchStep {
     pub plan: FetchPlan,
     /// The continuation the provider's last page of this request gave
     /// ([`FetchOutcome::Data::continuation`]), asking for the rows after
-    /// it; left out on a request's first fetch (design choice 1, paging).
+    /// it; left out on a request's first fetch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation: Option<String>,
-    /// Why the run asks it, where a host or a comparison of the run's
-    /// statements with the old client's needs to know: `locate`, a read of
-    /// a table as it stands at this `materialize` (its namespace, catalog,
-    /// keys and preview), which the owner's plan B adds and the old client
-    /// made once, at `from_source` (contract v28, T3.4). Left out, a read
-    /// of the operation's own.
+    /// Distinguishes source-refresh reads from the operation's own reads.
+    /// `locate` refreshes a table's namespace, catalog, keys and preview
+    /// at materialization time; absence means an ordinary operation read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purpose: Option<FetchPurpose>,
 }
@@ -129,7 +126,7 @@ pub enum FetchOutcome {
     /// The rows, as an Arrow attachment. With a `continuation`, they are
     /// one page of the answer, and more follow: the core asks again for
     /// the same request with that continuation, opaque to it, until a page
-    /// comes without one (design choice 1, paging), and reads the pages as
+    /// comes without one, and reads the pages as
     /// one answer; nothing is truncated silently. Every page holds the
     /// same schema.
     Data {
@@ -164,7 +161,7 @@ pub enum ModelOutcome {
     /// again may succeed; the transport's message stays in the host.
     TransportError { kind: ErrorKind, retryable: bool },
     /// The endpoint failed with no body to hand over, as an SDK's error
-    /// reports it (contract v28, T3.27, for T3.13): what the host was told.
+    /// reports it (contract v28, for ): what the host was told.
     Failed { answer: ModelAnswer },
 }
 
@@ -219,13 +216,13 @@ pub enum ControlMessage {
     },
     /// The sampler state a `materialize` run left, which the host takes
     /// once the run has ended, done or failed, and hands back with the
-    /// materializer's next `materialize` (decision E52).
+    /// materializer's next `materialize`.
     SamplerState {
         state: crate::ops::SamplerState,
     },
     /// A message the core wrote whose encoding would pass the control cap:
     /// it travels whole as a bytes attachment of its UTF-8 JSON, named here
-    /// (decision H7). Nothing the core writes is truncated, refused or
+    ///. Nothing the core writes is truncated, refused or
     /// dropped for size.
     Attached {
         attachment: AttachmentId,

@@ -27,7 +27,7 @@ import java.util.TimeZone;
 import java.util.function.Function;
 
 /**
- * A JDBC connection standing in for the Databricks JDBC driver's (T3.13), fed answers as the
+ * A JDBC connection standing in for the Databricks JDBC driver's, fed answers as the
  * driver gives them: each result a list of columns, each its type name as the driver names it
  * ({@code getColumnTypeName}), its precision and scale, and its values as the driver's getters
  * read them; a failure a {@link SQLException} with the driver's state and message. It records

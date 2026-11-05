@@ -7,7 +7,7 @@ r"""One connection to one NIM, serving every model it can reach.
 The model is an argument:
 
 >>> with SDMClient(url='http://localhost:8000') as client:
-...     result = client.predict(request, model=KumoTabular())
+... result = client.predict(request, model=KumoTabular)
 
 Each client owns its own transport, so several can target different endpoints
 or tenants at once, including from several threads: a prediction always goes to
@@ -75,7 +75,7 @@ def _adapter_for(spec: ModelSpec) -> ModelAdapter:
 class FittedModel:
     r"""A context pinned on the endpoint, ready to score against.
 
-    Returned by :meth:`SDMClient.fit`. The contract's
+    Returned by:meth:`SDMClient.fit`. The contract's
     ``POST /v1/sessions`` uploads a context and runs no inference; scoring
     against it is a second call. That is what ``fit`` and ``predict`` are here.
 
@@ -243,7 +243,7 @@ class FittedModel:
         block was raising, and under `-W error` that includes a warning, so
         the one place this must not speak is the one where speaking would
         lose the failure the caller actually needs to see. There the session
-        is left to the endpoint's own expiry, and `close()` can be called
+        is left to the endpoint's own expiry, and `close` can be called
         again by a caller who wants to know.
         """
         try:
@@ -260,7 +260,7 @@ class FittedModel:
 class SDMClient:
     r"""A connection to one Universal TFM NIM.
 
-    Use it as a context manager, or call :meth:`close`.
+    Use it as a context manager, or call:meth:`close`.
     """
 
     def __init__(
@@ -275,7 +275,7 @@ class SDMClient:
         r"""Open a client against one NIM.
 
         No request is made here: the endpoint is first contacted by
-        :meth:`health_ready`, :meth:`models`, or a prediction.
+        :meth:`health_ready`,:meth:`models`, or a prediction.
 
         Args:
             url: Base URL of the NIM, e.g. ``'http://localhost:8000'``.
@@ -305,7 +305,7 @@ class SDMClient:
     def _start(self, transport: WireTransport) -> None:
         r"""Set everything a client holds, given what carries its requests.
 
-        The one place a client's state is set. :meth:`for_databricks_serving`
+        The one place a client's state is set.:meth:`for_databricks_serving`
         builds its client without ``__init__``, so state set only there was
         missing from a serving client until something reached for it. Add
         new state here, not to ``__init__``.
@@ -344,10 +344,10 @@ class SDMClient:
         identity, which in a notebook is the notebook's.
 
         >>> with SDMClient.for_databricks_serving('kumo-relational') as client:
-        ...     result = client.predict(request, model=KumoRelational())
+        ... result = client.predict(request, model=KumoRelational)
 
-        A serving endpoint answers one request at a time, so :meth:`predict`
-        works and :meth:`fit` is refused: it has no sessions to pin a context
+        A serving endpoint answers one request at a time, so:meth:`predict`
+        works and:meth:`fit` is refused: it has no sessions to pin a context
         in.
 
         Args:
@@ -394,7 +394,7 @@ class SDMClient:
         r"""Where this client sends requests.
 
         A NIM's base URL, or ``'databricks-serving:<name>'`` for a client
-        opened with :meth:`for_databricks_serving`.
+        opened with:meth:`for_databricks_serving`.
         """
         return self._transport.url
 
@@ -433,12 +433,12 @@ class SDMClient:
 
         Args:
             request: What to ask. Built directly, or by a predictive query.
-            model: A model handle such as ``KumoTabular()``, or a model id.
+            model: A model handle such as ``KumoTabular``, or a model id.
             outputs: The output fields to ask for. Defaults to what the model
                 produces for this task kind.
 
         Returns:
-            Always a :class:`~sdm_client.result.PredictionResult`, never a
+            Always a:class:`~sdm_client.result.PredictionResult`, never a
             frame-or-explanation union.
 
         Raises:
@@ -502,11 +502,11 @@ class SDMClient:
         r"""Post one call already written (the core's, on its route), its
         bytes unchanged where the transport sends bytes as they are, as the
         HTTP transport does, so the bytes the core's size limit counted are
-        the bytes sent (register PD-2, T1.28a), and give back the answer as
-        the bytes the endpoint sent, which the core reads (T2.14b); a
+        the bytes sent (register PD-2), and give back the answer as
+        the bytes the endpoint sent, which the core reads; a
         Databricks serving endpoint's transport posts the envelope the core
         wrote and gives back the endpoint's reply as it came, which the
-        core reads too (T3.13). A transport with no ``predict_body`` answers decoded, which is
+        core reads too. A transport with no ``predict_body`` answers decoded, which is
         written back as JSON text. A refusal the adapter explains as
         :meth:`_send` does."""
         send = getattr(self._transport, 'predict_body', None)
@@ -550,7 +550,7 @@ class SDMClient:
         gives them up because a session cannot know which moments it will be
         asked about: holding the entity back everywhere is the only choice
         that cannot leak, and a leak here has no remedy afterwards. Score at
-        known moments with `predict()` if those examples are worth more than
+        known moments with `predict` if those examples are worth more than
         the certainty.
 
         Args:
@@ -591,7 +591,7 @@ class SDMClient:
         r"""Release pooled connections and retire this client.
 
         Contexts this client pinned are released first, because the transport
-        that would release them is about to close and `FittedModel.close()`
+        that would release them is about to close and `FittedModel.close`
         is the only call that can. Adapters follow, then the transport itself
         even if one of them fails. Its pool is the one that cannot be
         rebuilt on demand.
@@ -644,13 +644,13 @@ def _said_of_the_part(
     error: StructuredDataError, request: Request
 ) -> StructuredDataError:
     r"""A refusal of a question the core predicted in parts, said of the
-    part it happened in, as :meth:`SDMClient._answer_in_parts` says each
+    part it happened in, as:meth:`SDMClient._answer_in_parts` says each
     part's: a forecast's step (the core's ``forecast_step``), or a
     ranking's candidate (the core's ``ranking_candidate``), named as the
     caller gave it; a ranking's refusal naming candidates by their position
     among those given names them as given in its details. A refusal of the
     core says its part in the core's own sentences already, naming the
-    candidates as given from the values the predict route holds (T3.17 fix
+    candidates as given from the values the predict route holds ( fix
     2), so only its details change; one this client raised itself, which
     the core never saw, is said of its part here."""
     rewritten = request._decomposition
@@ -764,7 +764,7 @@ def _empty_answer(
     the one that failed, and failed opaquely.
 
     Nothing is asked, because there is nothing to ask about. The result carries
-    the columns the request would have produced, which `to_pandas()` already
+    the columns the request would have produced, which `to_pandas` already
     knows how to build with no rows in them.
     """
     built = PredictionResult(

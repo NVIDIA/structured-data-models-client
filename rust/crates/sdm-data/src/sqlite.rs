@@ -2,13 +2,13 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The SQLite dialect (T2.2). Its capabilities are the optional requests it
+//! The SQLite dialect. Its capabilities are the optional requests it
 //! has a rendering for, so a request it cannot render is refused by name
 //! before it is planned.
 //!
 //! Each rendering is the statement the reference's SQLite backend runs for
 //! the same step (`SQLiteTable` and `SQLiteSampler` at the reference
-//! commit), so each answer is that statement's result (decision H9): the
+//! commit), so each answer is that statement's result: the
 //! table list from `sqlite_master`, `PRAGMA table_info`, `index_list`,
 //! `index_info` and `foreign_key_list`, the first rows in `rowid` order,
 //! the key counts' and time bounds' single `UNION ALL` (the time bounds
@@ -40,7 +40,7 @@
 //! ingested text the same way.
 //!
 //! The statements are built once, by the shared builder ([`crate::sql`]),
-//! through [`Sqlite`]'s hooks (T3.18): only what is SQLite's own is here.
+//! through [`Sqlite`]'s hooks: only what is SQLite's own is here.
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
@@ -91,7 +91,7 @@ mod catalog {
 }
 
 /// The most name parts a SQLite relation takes: a schema (`main`, `temp`
-/// or an attached database) and a table (design choice 12).
+/// or an attached database) and a table.
 const MOST_PARTS: usize = 2;
 
 /// The prefix of the name a statement reads its seeds by: the key set the
@@ -452,7 +452,7 @@ fn describe(
 ) -> Result<String, CoreError> {
     let one = || sql::one_table(request, tables);
     Ok(match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         DescribePart::Tables if tables.is_empty() => {
             "SELECT name FROM sqlite_master WHERE type='table'".to_owned()
@@ -559,7 +559,7 @@ pub(crate) struct Spelling {
 }
 
 impl Default for Spelling {
-    /// `YYYY-MM-DD HH:MM:SS`, which `datetime()` writes, and what the
+    /// `YYYY-MM-DD HH:MM:SS`, which `datetime` writes, and what the
     /// reference takes when nothing is read.
     fn default() -> Self {
         Spelling {
@@ -700,11 +700,11 @@ fn marked(seeds: &KeySet, name: &str, key: &str) -> bool {
 /// reads it (`SQLiteTable._to_dtype`, SQLite's affinity rules in their
 /// order): `INT` an integer, `TEXT`, `CHAR` or `CLOB` text, `REAL`, `FLOA`
 /// or `DOUB` a float; none for any other (numeric affinity) and for an
-/// `INTERVAL` (KO2-62), whose values say.
+/// `INTERVAL`, whose values say.
 fn declared_dtype(declared: &str) -> Option<Dtype> {
     let declared = declared.trim().to_ascii_uppercase();
     if declared.contains("INTERVAL") {
-        // The owner's KO2-62 (register P2B-14): an INTERVAL column, whose
+        // The owner's (B-14): an INTERVAL column, whose
         // declared name the reference reads as an integer, is typed by its
         // values.
         None
@@ -781,7 +781,7 @@ fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => crate::read::namespace(batches, c::NAME),
         DescribePart::Tables => {

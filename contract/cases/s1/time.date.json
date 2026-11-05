@@ -85,8 +85,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "orders.ts inferred as the time column"
+    "stage": "predict"
   },
   "why": "The first attempt read a date32 time column as text and refused the query",
   "source": "probe#3; dtypes:time:arrow_date32"

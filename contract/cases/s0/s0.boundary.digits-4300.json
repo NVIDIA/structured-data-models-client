@@ -102,6 +102,6 @@
     "outcome": "success",
     "stage": "materialize"
   },
-  "why": "Python's 4,300-digit int limit, inside it: an integer literal of exactly 4,300 digits (4,299 leading zeros, then 1), which reads as 1 and is accepted (pyint, decision A4)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "why": "Python's 4,300-digit int limit, inside it: an integer literal of exactly 4,300 digits (4,299 leading zeros, then 1), which reads as 1 and is accepted (pyint)",
+  "source": "Correctness case s0.boundary.digits-4300 using the shop fixture."
 }

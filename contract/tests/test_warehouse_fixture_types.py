@@ -31,7 +31,7 @@ WAREHOUSE_ENGINES = ('databricks', 'snowflake')
 
 
 def _module(name: str) -> ModuleType:
-    key = f't33_loader_{name}'
+    key = f'fixture_loader_{name}'
     if key in sys.modules:
         return sys.modules[key]
     spec = importlib.util.spec_from_file_location(key, RUNNERS / f'{name}.py')
@@ -114,9 +114,8 @@ def _holds(declared: str, engine: str, low: int, high: int) -> bool:
 # --- the type map ----------------------------------------------------------
 
 
-def test_t33_the_type_map_has_each_warehouse_engine() -> None:
-    r"""Brief, "The loader": Phase 2's loader extended with a type map per
-    engine, in ``databases.py`` and the vector file together; each
+def test_the_type_map_has_each_warehouse_engine() -> None:
+    r"""Each warehouse engine has a consistent type map, in ``databases.py`` and the vector file together; each
     warehouse leg loads through its engine's entries (Lakebase is a
     Postgres server)."""
     vectors = json.loads((ROOT / 'contract/type-map-vectors.json').read_text())
@@ -199,7 +198,7 @@ DECLARED = [
     DECLARED,
     ids=[f'{engine}:{expression}' for expression, engine, _ in DECLARED],
 )
-def test_t33_each_engine_declares_its_own_types(
+def test_each_engine_declares_its_own_types(
     expression: str, engine: str, accepted: set[str]
 ) -> None:
     r"""Brief, "The loader" and "Input axes": each engine's own type where
@@ -222,7 +221,7 @@ UNSIGNED = {
 
 
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
-def test_t33_unsigned_integers_keep_every_value(engine: str) -> None:
+def test_unsigned_integers_keep_every_value(engine: str) -> None:
     r"""Brief, "The loader": Databricks and Snowflake have no unsigned
     integers; each unsigned column is declared in a type that holds its
     whole range, and its largest value and zero load unchanged."""
@@ -248,7 +247,7 @@ def test_t33_unsigned_integers_keep_every_value(engine: str) -> None:
 
 
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
-def test_t33_a_decimal_of_38_digits_keeps_every_digit(engine: str) -> None:
+def test_a_decimal_of_38_digits_keeps_every_digit(engine: str) -> None:
     r"""Brief, "The loader": ``DECIMAL`` up to 38 digits, a key past 64 bits
     included (the Snowflake case snowflake.key.number-38-0.past-int64 keys
     10**25 and up), with its scale."""
@@ -274,9 +273,9 @@ def test_t33_a_decimal_of_38_digits_keeps_every_digit(engine: str) -> None:
     ]
 
 
-def test_t33_types_an_engine_cannot_store_are_listed() -> None:
+def test_types_an_engine_cannot_store_are_listed() -> None:
     r"""Brief, "The loader": a type an engine cannot store is listed, and its
-    cell never counts (KO2-47). No column holds a time of day on
+    cell never counts. No column holds a time of day on
     Databricks; neither engine holds an interval with months, days and a
     time together, nor a union."""
     assert {'time', 'interval', 'union'} <= set(
@@ -293,9 +292,7 @@ def test_t33_types_an_engine_cannot_store_are_listed() -> None:
     assert loaded.num_rows == 1 and loaded.column('v').null_count == 0
 
 
-def test_t33_a_nanosecond_is_refused_where_the_engine_holds_microseconds() -> (
-    None
-):
+def test_a_nanosecond_is_refused_where_the_engine_holds_microseconds() -> None:
     r"""Brief, "Input axes": nanosecond times are refused by name where the
     engine holds microseconds (Databricks), never rounded; a nanosecond
     value with whole microseconds loads there, and Snowflake, whose
@@ -345,7 +342,7 @@ EVERY_FAMILY = (
 
 
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
-def test_t33_a_null_stays_null_in_every_type(engine: str) -> None:
+def test_a_null_stays_null_in_every_type(engine: str) -> None:
     r"""Brief, "Input axes": nulls in every type, on each engine: every
     family's column loads (in its own type or its stored form), its value
     still a value and its NULL still a NULL."""
@@ -376,10 +373,10 @@ S1_CASES = sorted((ROOT / 'contract/cases/s1').glob('*.json'))
 
 
 @pytest.mark.parametrize('engine', WAREHOUSE_ENGINES)
-def test_t33_every_s1_case_loads_or_is_refused_by_name(engine: str) -> None:
+def test_every_s1_case_loads_or_is_refused_by_name(engine: str) -> None:
     r"""Choice 1: every S1 case runs on every warehouse leg whose engine
     stores its data, by the default that runs it on DuckDB; a table an
-    engine cannot hold is refused naming its column (:class:`Unloadable`),
+    engine cannot hold is refused naming its column (class:`Unloadable`),
     never by another error, and a table it holds keeps every row."""
     import duckdb
 
@@ -416,7 +413,7 @@ def test_t33_every_s1_case_loads_or_is_refused_by_name(engine: str) -> None:
 # --- Lakebase, on a local Postgres -----------------------------------------
 
 
-def test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema() -> None:
+def test_a_table_a_catalog_relation_shadows_loads_in_its_schema() -> None:
     r"""The brief's appended section: the loader qualifies its ``COPY`` by
     schema, or the ``pg_roles`` case (lakebase.name.shadowed-by-catalog)
     does not load: an unqualified ``pg_roles`` names ``pg_catalog``'s view

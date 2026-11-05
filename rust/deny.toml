@@ -21,19 +21,19 @@ ignore = [
     # step_by, and clippy runs with -D warnings in CI. Building for the
     # GIL-enabled interpreter does not help with 0177: the GIL serializes
     # calls, but a closure without Sync can still be called from more than
-    # one thread (decision E1).
-    { id = "RUSTSEC-2026-0176", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; nth/nth_back on list and tuple iterators unused (E1)" },
-    { id = "RUSTSEC-2026-0177", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; PyCFunction::new_closure unused (E1)" },
+    # one thread.
+    { id = "RUSTSEC-2026-0176", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; nth/nth_back on list and tuple iterators unused" },
+    { id = "RUSTSEC-2026-0177", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; PyCFunction::new_closure unused" },
     # zip 6 is a build-dependency of libduckdb-sys 1.10506.0 (`zip = "6"`),
     # so the fixed zip 9 is out of reach. Its build script calls
     # ZipArchive::extract only in `mod build_linked`, under
     # #[cfg(not(feature = "bundled"))], to unpack a downloaded libduckdb; the
     # workspace builds duckdb with `bundled`, so that code is not compiled.
     # They leave with the next DuckDB upgrade, or once libduckdb-sys moves to
-    # zip >= 9 (KO2-49).
-    { id = "RUSTSEC-2026-0367", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
-    { id = "RUSTSEC-2026-0368", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
-    { id = "RUSTSEC-2026-0369", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
+    # zip >= 9.
+    { id = "RUSTSEC-2026-0367", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled`" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled`" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled`" },
     { id = "RUSTSEC-2026-0429", reason = "zip 6 is testkit-only via libduckdb-sys 1.10506.0; affected extract is excluded by the required bundled feature; reassess on DuckDB upgrade" },
 ]
 
@@ -93,9 +93,9 @@ deny = [
     { crate = "arrow-select", deny-multiple-versions = true },
     { crate = "arrow-string", deny-multiple-versions = true },
     { crate = "pyo3", deny-multiple-versions = true },
-    # jiff is the one zone library (decision A7); chrono-tz expands rules only
+    # jiff is the one zone library; chrono-tz expands rules only
     # to 2099 and embeds its database at build time.
-    { crate = "chrono-tz", reason = "zones come from jiff (decision A7)" },
+    { crate = "chrono-tz", reason = "zones come from jiff" },
     # Archived and unmaintained; YAML goes through a maintained 1.2 crate.
     { crate = "serde_yaml", reason = "archived; use a maintained YAML 1.2 crate" },
     # The binding alone talks to Python.

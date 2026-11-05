@@ -1,5 +1,5 @@
 {
- "about": "Every data request kind, on each base of contract/bases.yaml (T1.23): each fetch is planned by the core's data layer for DuckDB, answered by the host's DuckDB provider, admitted by the core and echoed back by the test-only fetch (or keyed fetch, with the seeds given as keys, an int64 key and its batch position), and held to its Arrow schema (each field's name and type, as pyarrow spells it) and its rows (each cell: null, a boolean, text, an integer as its decimal text, a float as its hexadecimal form, a timestamp or date as its count; compared in sorted order, since a sample, a scan and the neighbors are unordered). The client's tests_test_ops/test_the_duckdb_provider.py holds the Python host to it and sdm-testkit's tests/duckdb_provider.rs the pure-Rust host, so CI gates that the same fetch gives the same admitted Arrow on both hosts for every base. Recorded through the Python host and held on both; regenerated, never edited, when a rendering or a base changes.",
+ "about": "Typed data-request examples over the shared database fixtures.",
  "fetches": [
   {
    "base": "shop",

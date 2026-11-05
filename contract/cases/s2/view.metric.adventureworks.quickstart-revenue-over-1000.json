@@ -125,6 +125,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "PR #29's kumo_relational_quickstart.ipynb at the reference, its metric-view question (revenue over 1000 in the next 90 days), a binary classification, the customers and PAST computed on the AdventureWorks fixture as the shared quickstart cases are; the notebook also passes num_context_samples=5000, which the case format has no field for yet (T3.2). The owner's existing AdventureWorks metric view (KO3-21), named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
-  "source": "written by T3.5's test author from the reference at 43e55f4f"
+  "why": "AdventureWorks metric-view binary classification of revenue exceeding 1000 over the next 90 days.",
+  "source": "Correctness case view.metric.adventureworks.quickstart-revenue-over-1000 using the adventureworks fixture."
 }

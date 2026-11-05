@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The host's date literal range (T1.20 fix round 1): a PQL date literal
+//! The host's date literal range ( fix round 1): a PQL date literal
 //! whose reading lies outside the instants the host declares it can hold
 //! (`HostFacts::date_literal_range`) is refused exactly as an unreadable
 //! literal (D9) is, with one error diagnostic `PQL_VALUE_INVALID_LITERAL`,
@@ -315,7 +315,7 @@ fn node_order_decides_between_an_out_of_range_and_another_bad_literal() {
         &declared,
         "1600-01-01",
     );
-    // A D8 literal built first is still refused by name (T1.6c).
+    // A D8 literal built first is still refused by name.
     let error = validate(
         &filtered("orders.ts > 20240101-01-01 AND orders.ts < 1600-01-01"),
         &shop(),

@@ -88,5 +88,5 @@
     "message": "this request samples 7 hops and the endpoint reads at most 6"
   },
   "why": "num_hops=7 is past the six hops the endpoint reads: refused UNSUPPORTED_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-hops.seven using the shop fixture."
 }

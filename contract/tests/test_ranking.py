@@ -35,30 +35,28 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 
 #: Each case and the design row item it proves.
 CASES = {
-    'rank.top-k': 'T2.8a: candidates, the decomposition, problem_type for '
+    'rank.top-k': 'candidates, the decomposition, problem_type for '
     "ranking, the query's top_k; each part's payload",
-    'rank.top-k-option': 'T2.8a: the top_k option, sent with no part, and '
+    'rank.top-k-option': 'the top_k option, sent with no part, and '
     'candidates in the order given',
-    'rank.top-k-zero': 'T2.8a: top_k outside 1 to 20, refused',
-    'rank.no-candidates': 'T2.8a: a ranking names its candidates',
-    'rank.candidates-empty': 'T2.8a: no candidate to rank, refused',
-    'rank.candidates-not-a-ranking': 'T2.8a: candidates beside a query that '
+    'rank.top-k-zero': 'top_k outside 1 to 20, refused',
+    'rank.no-candidates': 'a ranking names its candidates',
+    'rank.candidates-empty': 'no candidate to rank, refused',
+    'rank.candidates-not-a-ranking': 'candidates beside a query that '
     'ranks nothing, refused',
-    'rank.most-parts': 'T2.8a: more candidates than MOST_PARTS, refused',
-    'rank.batched': 'T2.8c: the batched-ranking refusal (more entities than '
+    'rank.most-parts': 'more candidates than MOST_PARTS, refused',
+    'rank.batched': 'the batched-ranking refusal (more entities than '
     'one call scores)',
-    'rank.unscored-candidate': 'T2.8a and T2.8b: a candidate whose context '
+    'rank.unscored-candidate': 'a candidate whose context '
     'holds one class left out, unscored, before any call',
-    'rank.all-unscored': 'T2.8b: no candidate left to rank, refused before any '
-    'call',
-    'rank.entities-by-candidates.over': 'T2.8a: the entities gathered once '
+    'rank.all-unscored': 'no candidate left to rank, refused before any call',
+    'rank.entities-by-candidates.over': 'the entities gathered once '
     'per candidate past the 100,000 one materialize holds (501 by 200), '
     'refused before anything is read',
-    'rank.entities-by-candidates.at': 'T2.8a: the same at exactly 100,000 '
+    'rank.entities-by-candidates.at': 'the same at exactly 100,000 '
     '(500 by 200), not refused by that ceiling',
-    'forecast.top-k': "T2.8a: the forecast's top_k refusal in the core",
-    'forecast.most-parts': "T2.8a: the forecast's MOST_PARTS refusal in the "
-    'core',
+    'forecast.top-k': "the forecast's top_k refusal in the core",
+    'forecast.most-parts': "the forecast's MOST_PARTS refusal in the core",
 }
 CASE_IDS = tuple(CASES)
 #: The sentence the reference adds to a part's refusal.
@@ -76,11 +74,11 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def runner() -> ModuleType:
-    return _module('t28_run_python', RUNNER)
+    return _module('test_ranking_run_python', RUNNER)
 
 
 def recorder() -> ModuleType:
-    return _module('t28_ranking_record', RECORDER)
+    return _module('ranking_scenarios', RECORDER)
 
 
 def key(case_id: str, database: str) -> str:
@@ -123,7 +121,7 @@ def on_rust_host(vector: dict[str, Any]) -> bool:
 
 @functools.cache
 def cases() -> dict[str, tuple[dict[str, Any], str]]:
-    r"""The T2.8 cases by id, each with its digest, as the runner loads
+    r"""The cases by id, each with its digest, as the runner loads
     them."""
     loaded = runner().load_cases([CASE_DIR / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}
@@ -141,7 +139,7 @@ def expected_cases() -> dict[str, dict[str, Any]]:
 
 def test_the_cases_are_the_design_rows() -> None:
     r"""Control, "S1 ranking cases at materialize and at predict": each case
-    is the row item :data:`CASES` names, an acceptance case of S1 on all
+    is the row item:data:`CASES` names, an acceptance case of S1 on all
     three databases over one data set, and not vacuous: each input is the
     one its item needs."""
     data = recorder().data_case()
@@ -430,7 +428,7 @@ def test_each_case_is_refused_for_the_argument_it_names() -> None:
 
 def _server() -> bool:
     r"""Whether a Postgres server is named; where none is, one must not be
-    required (H26)."""
+    required."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
@@ -441,7 +439,7 @@ def _server() -> bool:
 
 @functools.cache
 def core_run(database: str) -> dict[str, Any]:
-    r"""python-core over the T2.8 cases on ``database``, as that database's
+    r"""python-core over the cases on ``database``, as that database's
     job runs them: each observation by its key, or under ``''`` why the run
     failed whole."""
     with tempfile.TemporaryDirectory(prefix='t28-') as tmp:
@@ -522,7 +520,7 @@ def differences(want: Any, got: Any, at: str = '') -> list[str]:
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
 ) -> None:
-    r"""T2.8a's exits, "``top_k``, candidates, the decomposition in
+    r"""exits, "``top_k``, candidates, the decomposition in
     ``sdm-request``; ``problem_type`` for ranking; the forecast's ``top_k``
     and ``MOST_PARTS`` refusals in the core": python-core runs the case on
     the database on the core route, its outcome and each request the
@@ -596,7 +594,7 @@ def _dtypes(dtypes: list[str] | None) -> list[str] | None:
 
 
 def held_to(got: dict[str, Any], want: dict[str, Any], name: str) -> None:
-    r"""``got`` is the reference's outcome ``want``, as T2.8b's exits
+    r"""``got`` is the reference's outcome ``want``, as exits
     compare it."""
     assert (got['stage'], got['outcome']) == (want['stage'], want['outcome']), (
         f'{name}: {got["stage"]} {got["outcome"]} '
@@ -642,7 +640,7 @@ def held_to(got: dict[str, Any], want: dict[str, Any], name: str) -> None:
 def test_python_core_answers_each_vector_as_the_reference_does(
     name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""T2.8b's exits, "scores, rankings, ``prediction_statistic``, PD-1,
+    r"""exits, "scores, rankings, ``prediction_statistic``, PD-1,
     reassembly; ``response_field`` for rankings; ``instance_id_type``,
     ``prediction_type``": python-core, on the core route over the vector's
     database (DuckDB unless it names another), answers the vector as

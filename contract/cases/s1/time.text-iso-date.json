@@ -85,8 +85,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "orders.ts (text) inferred as the time column"
+    "stage": "predict"
   },
   "why": "Time inferred from text dates, the rule date-rules.md records",
   "source": "dtypes:time:text; dtypes:time:arrow_text"

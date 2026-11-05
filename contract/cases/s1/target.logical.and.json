@@ -82,9 +82,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: a binary classification, each context row labelled by both windowed conditions (contract/t210-target-vectors.json holds the labels); the scripted endpoint answers it through predict"
+    "stage": "predict"
   },
   "why": "A logical target: two windowed conditions joined by AND, COUNT(orders.*) > 0 AND SUM(orders.price) > 20 (the core's rule logical_target)",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "source": "Correctness case target.logical.and using the shop fixture."
 }

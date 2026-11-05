@@ -144,10 +144,10 @@ pub(crate) fn column(
             DataType::Time64(TimeUnit::Microsecond) => ints!(Time64MicrosecondType),
             DataType::Time64(TimeUnit::Nanosecond) => ints!(Time64NanosecondType),
             // A decimal of scale > 0 as the float64 the reference's cast
-            // gives it (`_sanitize`'s `pa.float64()`, Arrow's
+            // gives it (`_sanitize`'s `pa.float64`, Arrow's
             // `Decimal128::ToDouble`), which inference counts: values that
             // differ only past float64's precision are one value there
-            // (T2.14b). Of scale 0 or less, its unscaled integer, as the
+            //. Of scale 0 or less, its unscaled integer, as the
             // reference reads it as int64 or keeps it exact. Only what
             // inference counts reads this; materialize and predict keep
             // exact decimals (P2B-1).
@@ -173,7 +173,7 @@ pub(crate) fn column(
             }
             // Each float by its own bits at its own width: widening a float32
             // would quiet a signaling NaN, making two NaNs the source and
-            // the reference hold apart one (T2.12 fix 7).
+            // the reference hold apart one.
             DataType::Float32 => {
                 let a = array.as_primitive::<Float32Type>();
                 for i in 0..n {
@@ -409,7 +409,7 @@ mod tests {
     /// A NaN and the two zeros as each reference frame counts them: in
     /// Arrow-backed pandas (DuckDB's and SQLite's) each float is a value of
     /// its own bits, a NaN of each sign and each zero apart; in NumPy-backed
-    /// pandas (Postgres's) a NaN is missing and the zeros are one (T2.12
+    /// pandas (Postgres's) a NaN is missing and the zeros are one (
     /// fixes 3 and 5).
     #[test]
     fn floats_are_counted_as_each_reference_frame_counts_them() {
@@ -436,7 +436,7 @@ mod tests {
 
     /// DuckDB's `0.0/0.0` is a NaN of the sign bit set and its `'NaN'` one
     /// without it; Arrow-backed pandas counts them as two values, as their
-    /// bits differ, and each repeat of one as that one (T2.12 fix 5,
+    /// bits differ, and each repeat of one as that one ( fix 5,
     /// probed on the reference: `nunique` 3 over `[-NaN, NaN, NaN, 1.0]`).
     #[test]
     fn a_nan_of_each_sign_is_two_values_where_floats_keep_their_bits() {
@@ -463,7 +463,7 @@ mod tests {
     /// A signaling and a quiet NaN are two values where floats keep their
     /// bits, at each width: DuckDB stores a float32's `0x7f800001` and
     /// `0x7fc00001` apart and the reference counts them apart, and no
-    /// widening quiets the first (T2.12 fix 7).
+    /// widening quiets the first.
     #[test]
     fn a_signaling_and_a_quiet_nan_are_two_values_at_each_width() {
         use arrow_array::Float32Array;

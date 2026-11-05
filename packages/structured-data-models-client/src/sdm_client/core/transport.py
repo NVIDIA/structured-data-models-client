@@ -77,7 +77,7 @@ def redact_url(url: str | None) -> str | None:
 def scrub_userinfo(text: str) -> str:
     r"""Remove any ``user:secret@`` credential from free text.
 
-    The counterpart to :func:`redact_url` for strings that merely *contain* a
+    The counterpart to:func:`redact_url` for strings that merely *contain* a
     URL rather than being one, chiefly the ``requests`` exception messages
     quoted into transport errors, which echo back whatever URL was requested.
     """
@@ -358,7 +358,7 @@ def _decoded_object(content: bytes, url: str) -> dict[str, Any]:
     r"""``content`` as the JSON object it is supposed to be.
 
     In one place because it was in two, and one checked only that it was JSON:
-    a 200 carrying an array escaped `models()` as a bare ``AttributeError``.
+    a 200 carrying an array escaped `models` as a bare ``AttributeError``.
     A deeply nested body raises `RecursionError`, a `RuntimeError`, which would
     otherwise escape the contract these errors state.
     """
@@ -478,7 +478,7 @@ def _build_session(
 class EndpointFailed(Exception):  # noqa: N818 - says what happened
     r"""An endpoint's failure with no answer to hand over, as its SDK
     reported it, raised by a transport whose answers the core reads (a
-    Databricks serving endpoint's ``predict_body``, T3.13): the status the
+    Databricks serving endpoint's ``predict_body``): the status the
     error's class gives, its message and its code, which the core reads for
     codes only and never repeats, and the class's name. The core names the
     refusal; this carries nothing else of the error, and is never shown."""
@@ -505,7 +505,7 @@ class WireTransport(Protocol):
     and result assembly for all three.
     """
 
-    #: Whether the endpoint can pin a context. A client refuses ``fit()`` up
+    #: Whether the endpoint can pin a context. A client refuses ``fit`` up
     #: front when it cannot, rather than preparing a session to be told so.
     serves_sessions: bool
 
@@ -533,7 +533,7 @@ class Transport:
     r"""The HTTP wire layer to one Universal TFM NIM.
 
     Owns a pooled ``requests.Session`` with retry/backoff on the transient
-    failures :data:`_RETRY_STATUS` names. Not part of the public API surface;
+    failures:data:`_RETRY_STATUS` names. Not part of the public API surface;
     a ``SDMClient`` holds one of these.
 
     ``timeout`` bounds each individual attempt, not the call as a whole: a
@@ -705,14 +705,14 @@ class Transport:
         r"""Sends a prediction call already written as UTF-8 JSON, the bytes
         as they are, and gives back the endpoint's answer as the bytes it
         sent: the core's call on its route, whose size limit counts the
-        bytes it wrote, which are the bytes sent (register PD-2, T1.28a),
-        and whose answer the core reads itself (T2.14b). A refusal by its
-        status is raised as :meth:`predict` raises it. The old route's calls
-        go through :meth:`predict`. An answer :meth:`predict` would refuse
+        bytes it wrote, which are the bytes sent (register PD-2),
+        and whose answer the core reads itself. A refusal by its
+        status is raised as:meth:`predict` raises it. The old route's calls
+        go through:meth:`predict`. An answer:meth:`predict` would refuse
         as not a JSON object is refused as it refuses it; one nested past
         this interpreter's reader is handed over as sent, for the core to
-        refuse as too deep (register P1B-22); an empty one is given as
-        ``{}``, as :meth:`predict` reads it.
+        refuse as too deep (B-22); an empty one is given as
+        ``{}``, as:meth:`predict` reads it.
         """
         url = self._url + _PREDICTIONS_PATH
         content = self._post_raw(_PREDICTIONS_PATH, body) or b'{}'

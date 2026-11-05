@@ -128,9 +128,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "refused by the validator: an assumption needs a temporal aggregation"
+    "code": "INVALID_REQUEST"
   },
   "why": "an assumption with no time range: a query the reference refuses",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case assuming.static using the shop fixture."
 }

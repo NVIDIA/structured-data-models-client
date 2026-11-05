@@ -121,7 +121,7 @@ def _described_on_the_core(schema: Any) -> bool:
 
 def _facts(schema: Any) -> dict[tuple[str, str], Any]:
     r"""What the source said of each column, as the schema keeps it on the
-    column (T3.16)."""
+    column."""
     return {
         (name, column_name): column._source
         for name, table in schema.tables.items()
@@ -202,7 +202,7 @@ def test_source_backed_schema_refuses_pickle_but_detached_state_round_trips() ->
 
 
 def test_an_edited_core_built_schema_round_trips_its_state() -> None:
-    # T1.24b: the edits a core-built schema took (decision E67) are its
+    #: the edits a core-built schema took are its
     # state, the core's last answer among it; reloaded, the schema is the
     # edited one, and its next edit is the core's again.
     from sdm_client import Relationship, Schema, StructuredDataError

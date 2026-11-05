@@ -118,5 +118,5 @@
     "stage": "predict"
   },
   "why": "rows_per_call=3 over 8 entities: three calls of 3, 3 and 2 rows, each with its own walk and context, the rows numbered across the calls (0 to 7 in the order asked)",
-  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+  "source": "Correctness case multicall.rows-per-call-3 using the shop fixture."
 }

@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The Snowflake provider (T3.6): it answers a fetch step by running the
+r"""The Snowflake provider: it answers a fetch step by running the
 statements its plan carries, in order, on one cursor of the source's
 connector connection (a Snowpark session's own, which ``SnowflakeSource``
 takes), and hands back the last one's result.
@@ -16,7 +16,7 @@ A result is the connector's Arrow (``fetch_arrow_all(force_return_table=
 True)``, an empty result keeping its schema). A result the connector gives
 as rows only (``SHOW``, ``DESCRIBE``: ``fetch_arrow_all`` raises
 ``NotSupportedError``) is built here from ``cursor.description`` and
-``fetchall()``: every column nullable text, in the description's order,
+``fetchall``: every column nullable text, in the description's order,
 each non-null cell its ``str``, an empty result keeping its columns. The
 core reads those columns by position, as the reference reads the rows.
 
@@ -47,7 +47,7 @@ from sdm_client._rust import codec
 
 class SnowflakeProvider:
     r"""Answers fetch steps on ``connection``, a Snowflake connector
-    connection, or what stands in for one: an object whose ``cursor()`` has
+    connection, or what stands in for one: an object whose ``cursor`` has
     ``execute``, ``fetch_arrow_all``, ``fetchall``, ``description`` and
     ``close``, and which keeps its parameter style as the connector does."""
 
@@ -81,7 +81,7 @@ def _values(
     read: dict[int, str],
 ) -> list[Any]:
     r"""A statement's parameters, in order: each scalar's Python value, and
-    a key set's text as the core wrote it (T3.28, ``providers.text``),
+    a key set's text as the core wrote it (``providers.text``),
     bound as it is. ``read`` holds each text read so far, by attachment."""
     values: list[Any] = []
     for param in statement['params']:
@@ -126,7 +126,7 @@ def _qmark(connection: Any) -> Iterator[None]:
 
 def _fetched(cursor: Any) -> Any:
     r"""The cursor's result: the connector's Arrow, or the rows it gives as
-    rows only, as text (:func:`_as_text`)."""
+    rows only, as text (func:`_as_text`)."""
     from snowflake.connector.errors import NotSupportedError
 
     try:

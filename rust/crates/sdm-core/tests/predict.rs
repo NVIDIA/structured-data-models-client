@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `predict` (T1.11d, T1.28b): the request state handed back is read only
-//! at its own version, refused by name otherwise (H23); the model and the
+//! `predict`: the request state handed back is read only
+//! at its own version, refused by name otherwise; the model and the
 //! outputs are checked as the client's `_prepare` checks them, the task's
 //! default outputs asked where the caller named none; a request with no row
 //! to score is answered without a call; the context is checked as the
@@ -13,8 +13,8 @@
 //! under each row's entity, ordered by `row_index`, a class as its target's
 //! type; and every answer the result does not carry, or a call that
 //! failed, ends the run with a named error that holds no value of the
-//! request or the answer (H17). The refusals of what the route does not
-//! port are diagnostic, register entry P1B-4.
+//! request or the answer. The refusals of what the route does not
+//! port are diagnostic, B-4.
 
 #![allow(
     clippy::disallowed_methods,
@@ -212,7 +212,7 @@ fn a_request_state_of_another_version_is_refused_by_name() {
 
 #[test]
 fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
-    // The first candidate's position is the state's own (T2.8 fix 4); each
+    // The first candidate's position is the state's own; each
     // later question's is past the one before, or the answers would be
     // given back under other candidates' names.
     let run = |first: u32, later: u32| {
@@ -434,7 +434,7 @@ fn the_answer_is_laid_out_under_each_row_s_entity_ordered_by_row_index() {
     );
     assert_eq!(batch.column(1).data_type(), &DataType::Int64);
     // Ordered by row_index, as the reference's frame orders them, whatever
-    // the endpoint's order (T1.28b).
+    // the endpoint's order.
     assert_eq!(
         batch
             .column(0)
@@ -605,9 +605,9 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
 #[test]
 fn every_field_an_answer_carries_is_laid_out_or_refused_as_malformed() {
     let base = r#"{"id":"r1","model":"m","metadata":{},"predictions":[ITEM,{"id":"3","row_index":1,"prediction":1.0}]}"#;
-    // From T2.11 every field an item carries is laid out: embeddings with
-    // T2.11, quantiles with T2.9, an explanation and metadata with T2.13,
-    // scores and rankings with T2.8; embeddings not a list of numbers are
+    // every field an item carries is laid out: embeddings with
+    //, quantiles with, an explanation and metadata with,
+    // scores and rankings with; embeddings not a list of numbers are
     // the endpoint's fault.
     let item = r#"{"id":"2","row_index":0,"prediction":1.0,"embeddings":[0.5, "0.25"]}"#;
     let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
@@ -617,7 +617,7 @@ fn every_field_an_answer_carries_is_laid_out_or_refused_as_malformed() {
     let error = step.unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidResponse);
     assert_eq!(error.fields["field"], text("prediction.embeddings"));
-    // An item's scores and rankings are laid out (T2.8), read as the
+    // An item's scores and rankings are laid out, read as the
     // bindings read them: a scores field not a list, or a ranking no dict
     // makes, is the endpoint's fault.
     for item in [
@@ -668,7 +668,7 @@ fn every_field_an_answer_carries_is_laid_out_or_refused_as_malformed() {
     );
     assert!(step.is_ok());
     // An integer prediction is a regression's number, and a missing one is
-    // none, laid out as NaN, as the reference's frame gives it (T1.28b).
+    // none, laid out as NaN, as the reference's frame gives it.
     for item in [
         r#"{"id":"2","row_index":0,"prediction":1}"#,
         r#"{"id":"2","row_index":0}"#,
@@ -734,7 +734,7 @@ fn unsupported_models_are_refused_and_float_keys_keep_their_identity() {
     );
     assert!(!written(&error).contains(CANARY));
     // An entity of a float key is read as the reference's `as_declared`
-    // reads it, a double, and given as the JSON text of that value (T1.36
+    // reads it, a double, and given as the JSON text of that value (
     // fix 8; until then refused by rule id_type).
     let payload = payload_text().replace(
         r#""user_id":{"dtype":"int64"}"#,
@@ -807,7 +807,7 @@ fn a_deeply_nested_answer_is_an_invalid_response() {
 }
 
 /// The same answer in a process of its own: it must end the run with that
-/// error, not abort the process on an overflowed stack (T1.11d review
+/// error, not abort the process on an overflowed stack ( review
 /// round 1).
 #[test]
 fn a_deeply_nested_answer_ends_the_run_in_a_process_of_its_own() {
@@ -831,7 +831,7 @@ fn a_deeply_nested_answer_ends_the_run_in_a_process_of_its_own() {
 }
 
 /// A non-finite number in the answer is read as the reference's reader
-/// reads it (owner decision of 2026-10-12, register P1B-4): a prediction
+/// reads it: a prediction
 /// written as a token past a double's range is an infinity, the `NaN` and
 /// `Infinity` tokens a NaN and an infinity, laid out as such; and the
 /// endpoint's metadata keeps each such token as written, which the Python
@@ -874,7 +874,7 @@ fn a_non_finite_prediction_is_read_as_the_reference_reads_it() {
     }
 }
 
-/// The outputs are checked as the client's `_prepare` checks them (T1.28b):
+/// The outputs are checked as the client's `_prepare` checks them:
 /// none named refused `INVALID_REQUEST`; one the model does not produce
 /// refused naming the model; an explanation over two rows refused as the
 /// adapter's `_preflight` refuses it; any the model produces asked as named,
@@ -976,7 +976,7 @@ fn a_classification_s_default_outputs_and_its_answer_as_its_target_s_type() {
         .collect();
     assert_eq!(keys, ["False", "True"]);
     // A class the target's type cannot hold is given back as written, as
-    // the reference's `as_declared` leaves it (T2.8): the column null, and
+    // the reference's `as_declared` leaves it: the column null, and
     // the item's value as its JSON text beside it.
     let multiclass_text = payload_text().replace(
         r#""kind":"regression","target":{"column_name":"TARGET","dtype":"float32"}"#,
@@ -1102,7 +1102,7 @@ fn a_request_with_no_rows_is_answered_without_a_call() {
     assert_eq!(metadata, b"{}");
 }
 
-/// A regression's quantiles (T2.9): each answer's, keyed as the answer
+/// A regression's quantiles: each answer's, keyed as the answer
 /// wrote them and in its order, laid out after the prediction as the JSON
 /// text of the mapping (the one encoding of a mapping-valued field), each
 /// value the double it reads as; one an answer gave as `{}` is `{}`, and
@@ -1261,7 +1261,7 @@ fn an_output_named_and_left_out_is_noted() {
 
 /// The call's size: the core writes the call's bytes, which the host sends
 /// unchanged, and refuses a call past the endpoint's limit before the model
-/// is called (register PD-2, T1.28a's fix round 1); counted to the byte,
+/// is called (register PD-2, fix round 1); counted to the byte,
 /// with characters past ASCII counted as the bytes written.
 #[test]
 fn a_call_past_the_limit_is_refused_before_it_is_sent() {

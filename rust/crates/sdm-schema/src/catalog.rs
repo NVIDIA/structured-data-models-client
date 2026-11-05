@@ -4,9 +4,9 @@
 
 //! The count of keys, read in the shape the contract fixes for it
 //! (`sdm_contract::data::results`); the core has checked the answer's
-//! schema against that shape before it gets here (decision H16, check
+//! schema against that shape before it gets here (check
 //! (b)). The catalog's own answers reach this crate already read, in no
-//! dialect's shape (`sdm_contract::catalog`, decision E54).
+//! dialect's shape (`sdm_contract::catalog`).
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{Int32Type, Int64Type};

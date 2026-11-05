@@ -13,7 +13,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-# The payload's schema, derived from its types (T1.28w).
+# The payload's schema, derived from its types.
 schemars.workspace = true
 # The payload's stypes.
 sdm-contract = { path = "../sdm-contract" }

@@ -10,7 +10,7 @@
 //! key, as that text, any other column as a double ([`settle`]). The
 //! described schema then reads the column by its role in the schema as it
 //! stands, the keys and links the caller named or edited included
-//! (`sdm_schema::assemble::read_exact_numbers`, T2.21), so a key no catalog
+//! (`sdm_schema::assemble::read_exact_numbers`), so a key no catalog
 //! declares stays its exact text too and no two keys a double cannot tell
 //! apart merge; every later fetch of the column is held to the type
 //! described ([`conform`]). A source that marks no column is read as

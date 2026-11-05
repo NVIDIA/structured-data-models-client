@@ -93,5 +93,5 @@
     "stage": "predict"
   },
   "why": "return_embeddings=True and predict(outputs=['prediction', 'embeddings']), the endpoint answering an embedding on each item: the result carries an embeddings column (response_field for embeddings)",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.embeddings-answered using the shop fixture."
 }

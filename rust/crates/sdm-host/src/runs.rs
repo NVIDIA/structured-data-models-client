@@ -11,24 +11,24 @@
 //! threads. Every call:
 //!
 //! - is contained: a panic anywhere below it poisons the run and comes back
-//!   as `INTERNAL_ERROR` with `fields.panic = true` and the panic's
-//!   location, never its message, and never as an unwind through the
-//!   binding; [`contain`] reports the panic out of band, so no error a host
-//!   hands in can poison a run (decision H17);
+//! as `INTERNAL_ERROR` with `fields.panic = true` and the panic's
+//! location, never its message, and never as an unwind through the
+//! binding; [`contain`] reports the panic out of band, so no error a host
+//! hands in can poison a run;
 //! - is refused with `RUN_BUSY` (kind `protocol`) while another call is in
-//!   the run, rather than waiting;
+//! the run, rather than waiting;
 //! - reads control messages through the codecs, under the control cap, and
-//!   writes them whole: one whose encoding would pass the cap travels as an
-//!   attachment numbered in the run's sequence (decision H7).
+//! writes them whole: one whose encoding would pass the cap travels as an
+//! attachment numbered in the run's sequence.
 //!
-//! Attachments follow decision E2. The core numbers its own from 1 in each
+//! Attachments follow. The core numbers its own from 1 in each
 //! run, and the host takes them by id ([`HostRun::take_attachment`]); an
 //! attachment carrying a message whole travels with that message instead.
 //! The host names the attachments of each message it sends with ids of its
 //! choosing, scoped to that message: every id the message names must be
 //! attached, as the kind it names, and every attachment named, and the ids
 //! mean nothing once the message is read. A `start` carries the
-//! operation's input-sized fields this way (decision H5). Fetched Arrow data passes through admission on the way
+//! operation's input-sized fields this way. Fetched Arrow data passes through admission on the way
 //! in; data admission refuses ends the run with that refusal.
 
 use std::cell::{Cell, RefCell};
@@ -63,7 +63,7 @@ pub struct HostRun {
 }
 
 /// What a contained call failed with: an error, or a panic, which
-/// [`contain`] reports out of band (decision H17).
+/// [`contain`] reports out of band.
 #[derive(Debug, Clone)]
 pub struct Failure {
     pub error: CoreError,
@@ -152,7 +152,7 @@ pub enum Unreadable {
 }
 
 /// The provider error a producer's failure is, with nothing of its text,
-/// which may quote values (decision H17).
+/// which may quote values.
 fn producer_failed() -> ProviderError {
     ProviderError {
         error_class: None,
@@ -255,7 +255,7 @@ impl HostRun {
                 return Err(invalid("a run starts with a start message"));
             };
             // The version first: no other field means anything under
-            // another contract (H25). The core checks the attachments.
+            // another contract. The core checks the attachments.
             sdm_core::dispatch::check_contract(start.contract)?;
             check_local_zone(start.facts.local_zone.as_ref())?;
             let zones = Arc::new(ZoneResolver::new(start.facts.zone_roots.iter().map(
@@ -270,7 +270,7 @@ impl HostRun {
                 return Err(unreadable_error(id, failure));
             }
             // The core resolves zones through the host's own resolver, the
-            // one whose sources the host records (decision H14).
+            // one whose sources the host records.
             let core_zones: Arc<dyn sdm_core::Zones> = zones.clone();
             let mut attachments = attachments;
             if let sdm_contract::ops::Operation::PrepareFrameGraph(input) = &start.operation {
@@ -389,8 +389,7 @@ impl HostRun {
                                 return run.submit_fetch(reply.id, FetchResult::Data(arrow));
                             }
                             match admit_from(&arrow, run.opaque_vendor()) {
-                                // A page, more following (design choice 1,
-                                // paging): the run asks for the next.
+                                // A page, more following: the run asks for the next.
                                 Ok(admitted) => match continuation {
                                     Some(continuation) => FetchResult::Page {
                                         data: admitted,
@@ -505,7 +504,7 @@ impl HostRun {
     }
 
     /// The sampler state the run left, as one `sampler_state` control
-    /// message, its memo attached (decision E52); none when it left none.
+    /// message, its memo attached; none when it left none.
     /// A host takes it once the run has ended, done or failed, keeps it on
     /// the materializer the run was for, and hands it back with that
     /// materializer's next `materialize`.

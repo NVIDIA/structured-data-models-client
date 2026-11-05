@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The labels on the Python host (T1.27, decision E19).
+"""The labels on the Python host.
 
 Each baseline case's context labels, as the core computes them over this
 host's fetches, are the reference's exactly, as its payload's context
@@ -15,7 +15,7 @@ with the context's examples. Each reference row is held, by its instance
 id, to the core's example of that position: the entity, the anchor to the
 microsecond the payload writes, and the label, compared exactly. The
 reference leaves out of a static target's context the entities it is asked
-to predict for (T1.28a's rule): an example missing from its rows must be
+to predict for (rule): an example missing from its rows must be
 one of those, and the count must be the payload's
 ``num_context_examples``. ``sdm-testkit``'s ``tests/labels.rs`` holds the
 pure-Rust host to the same rows. The check fails closed on missing, empty
@@ -263,7 +263,7 @@ def test_the_label_check_fails_closed(monkeypatch: Any) -> None:
 
 
 #: Decimal sums whose running total passes 38 digits (or ``i128``) and
-#: comes back (T1.27's fix round 3): user 1's prices in time order and the
+#: comes back (fix round 3): user 1's prices in time order and the
 #: label the reference gives user 1 at 2024-02-01, recorded from the
 #: reference checkout's environment through the public calls (every other
 #: example's label 0.0); the client's ``tests/test_the_materialize_route.py``

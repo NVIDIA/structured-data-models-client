@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """`scripts/rust_core/native_wheel.py` reads a build's target flags and
-refuses `target-cpu` wherever it is set (decision F7), on sample logs, and
+refuses `target-cpu` wherever it is set, on sample logs, and
 leaves each build's wheel and identity in its destination together, on a
 stand-in maturin."""
 

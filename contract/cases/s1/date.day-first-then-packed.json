@@ -127,9 +127,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "the second literal is refused (99999-01-01 is no time), after pandas' day-first UserWarning for the first"
+    "code": "INVALID_REQUEST"
   },
   "why": "U1: a day-first date literal, then one the query is refused for; the warning given for the first is kept",
-  "source": "written by T2.13's test author from the reference at 6298913c"
+  "source": "Correctness case date.day-first-then-packed using the shop fixture."
 }

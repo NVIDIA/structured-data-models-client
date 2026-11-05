@@ -102,6 +102,6 @@
     "outcome": "success",
     "stage": "materialize"
   },
-  "why": "A query of 72,082 bytes, past the 64 KB control cap: an IN list of 12,000 prices. The query travels as an attachment, so the start is not refused for its size (decision H5); accepted",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "why": "A query of 72,082 bytes, past the 64 KB control cap: an IN list of 12,000 prices. The query travels as an attachment, so the start is not refused for its size; accepted",
+  "source": "Correctness case s0.boundary.start-past-64kb using the shop fixture."
 }

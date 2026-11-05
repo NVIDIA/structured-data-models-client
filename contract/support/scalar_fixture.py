@@ -63,7 +63,7 @@ def _scalar(value: Any, arrow_type: Any) -> dict[str, Any]:
         }
     if pa.types.is_date32(arrow_type):
         return {'t': 'date32', 'v': str((value - date(1970, 1, 1)).days)}
-    # T2.12 (FR P3-8): a timedelta or a time of day, as pyarrow infers
+    # (FR P3-8): a timedelta or a time of day, as pyarrow infers
     # them, a count of microseconds.
     one = timedelta(microseconds=1)
     if pa.types.is_duration(arrow_type) and arrow_type.unit == 'us':
@@ -94,7 +94,7 @@ def unscaled(value: Decimal, scale: int) -> int:
 
 def float_text(value: Any) -> str:
     r"""A float as the reference writes a float entity of a text key, the
-    core's text of a float entity since T1.36 (the final review's P2-2):
+    core's text of a float entity (the final review's P2-2):
     pyarrow's cast of the float, at its own width (NumPy's ``float32`` as a
     float32), to text, which pandas' cast to the key's ``ArrowDtype`` of
     text makes. The shortest digits that read back as it, plain from 1e-6
@@ -116,8 +116,8 @@ def float_text(value: Any) -> str:
 def host_text(value: Any) -> str:
     r"""A value as the host's text column holds it where pyarrow infers no
     one type: a float (NumPy's too) as the reference writes a float entity
-    (``float_text``; T1.32g's rule, a float in a mix written as a float
-    alone is, with T1.36's text), any other value its ``str()``."""
+    (``float_text``; rule, a float in a mix written as a float
+    alone is, with text), any other value its ``str``."""
     import numpy as np
 
     if isinstance(value, (float, np.floating)):

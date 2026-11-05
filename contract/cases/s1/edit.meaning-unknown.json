@@ -52,5 +52,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "A meaning that is not a semantic type is refused at the assignment",
-  "source": "T1.24b: the schema's edit semantics, a refused edit's parity across the hosts (decision E67); admitted as an acceptance case by T2.12 (the design row: the nine edit.* S1 cases, reached on both core hosts, admitted as acceptance)"
+  "source": "Correctness case edit.meaning-unknown using the shop fixture."
 }

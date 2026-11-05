@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The queries the first S0 cases and the Phase 1b journey ask
+//! Query validation and materialization journeys
 //! (`tests/pql/journey.json`): every inventory query that reaches PQL,
 //! against the schema the reference's `Schema.from_source` gave it, gives
 //! the reference's answer through the adapter, accepted, or refused with

@@ -86,9 +86,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: task regression, 112 context examples; the labels: {\"number\": \"0.0\"}, {\"number\": \"0.10000000149011612\"}, {\"number\": \"0.699999988079071\"}"
+    "stage": "predict"
   },
   "why": "A DECIMAL(10, 2) summed: 0.70 and 0.10, which no binary float holds",
-  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+  "source": "Correctness case decimal.sum-10-2 using the shop fixture."
 }

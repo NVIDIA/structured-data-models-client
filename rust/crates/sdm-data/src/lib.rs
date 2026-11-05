@@ -2,41 +2,16 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The data layer (Phase 1b): it plans each typed data request as SQL in a
-//! dialect, or passes it to a host provider (decision H14). SQL dialects
-//! live here and in no other domain crate; the wire names a source's
-//! backend only for this crate to interpret.
+//! SQL planning and catalog decoding for supported connectors.
+//! This crate owns dialect-specific SQL; other domain crates use typed requests.
 //!
-//! [`Data`] is the data layer `sdm_host::default_root` builds (decision
-//! E30). A host provider is answered with the typed request itself, and is
-//! asked only for what it declared; a built-in SQL provider is answered
-//! with statements this crate renders for its dialect, and its
-//! capabilities are the requests this crate renders for that dialect. As
-//! built at T1.11b DuckDB renders the catalog (`describe` in each part,
-//! `preview`, `key_counts`, `time_bounds`), and from T1.11c the sampler's
-//! `sample_entities`, `neighbors` and `lookup`, and from T1.32e
-//! `column_ranges` and `repeated_key`; the rest come with the
-//! tasks that reach them. A plan expects the schema the contract fixes for
-//! the request's answer, or discovers it where the answer's columns are the
-//! source's own (`DataRequest::expected`, decision E36), so a host provider
-//! is held to the same shape as a rendering; but a `describe`, whose answer
-//! is a catalog's: a dialect's plan expects its own catalog's shape, and a
-//! host provider answers in the contract's.
+//! [`Data`] dispatches to a SQL dialect or returns typed requests to a host provider.
+//! Both paths enforce the expected result shape from the data contract.
+//! [`DataLayer::read`] converts dialect-specific catalog answers into neutral facts.
 //!
-//! [`DataLayer::read`] reads each `describe` answer, after the core has
-//! admitted it, into the contract's dialect-neutral catalog answer
-//! (decision E54): a dialect's reader knows its catalog's columns and
-//! spelling (DuckDB's `PRAGMA table_info`, its constraint types, its index
-//! expressions), so no other crate does. `l0_scan.py`'s `dialects` check
-//! keeps them here.
-//!
-//! [`view_expr`] checks the expressions a metric or semantic view holds,
-//! as each dialect reads them, before any reaches a statement (T3.5).
-//!
-//! The statements are written once, in [`sql`]'s shared builder, over its
-//! `SqlDialect` trait (T3.18, design fix E): each dialect's module holds
-//! only what differs, and [`Data`] finds a dialect by its name in one
-//! lookup.
+//! [`sql`] shares statement construction through its dialect trait, while each
+//! connector module supplies its differences.
+//! [`view_expr`] validates semantic-view expressions before they enter statements.
 
 #![forbid(unsafe_code)]
 
@@ -88,7 +63,7 @@ const KNOWN: &[&str] = &[
 ];
 
 /// The databases this build's data layer provides for, by the names the
-/// case format and the contract runners use (T2.1a): the dialects it
+/// case format and the contract runners use: the dialects it
 /// renders. The private, plain-data marker of the staging rule
 /// (the current runner admission check): the Python host's
 /// native module reports it as `PROVIDERS`, and a database's core legs run
@@ -99,15 +74,15 @@ pub const PROVIDERS: &[&str] = &[
     sqlite::NAME,
     postgres::NAME,
     // Databricks's two legs, a SQL warehouse and a Spark session, which
-    // both run the one `databricks` dialect (T3.4).
+    // both run the one `databricks` dialect.
     "databricks-sql",
     "databricks-spark",
-    // A connector connection or a Snowpark session's (T3.6).
+    // A connector connection or a Snowpark session's.
     snowflake::NAME,
 ];
 
 /// Each database a sentence may name (`{database:backend}`,
-/// `{database:place}`, T3.17), as the reference names it: as a product, and
+/// `{database:place}`), as the reference names it: as a product, and
 /// as the place a table is held. A warehouse is named as the reference's
 /// remote data backend.
 pub const DATABASE_NAMES: &[DatabaseNames] = &[
@@ -331,7 +306,7 @@ impl DataLayer for Data {
 
     /// `plan` bound as the run's provider binds it: a built-in dialect's key
     /// set written as the text its statement reads where it binds one so,
-    /// split past its budget, one fetch per chunk ([`key_text`], T3.28); a
+    /// split past its budget, one fetch per chunk ([`key_text`]); a
     /// host provider's plan, or one binding the core's Arrow key set as a
     /// relation, one fetch as it is.
     fn bind(
@@ -609,7 +584,7 @@ impl Data {
                 };
                 // The namespace itself, read where a part is left to the
                 // connection inside one given, which the core then reads
-                // every relation under (T3.4).
+                // every relation under.
                 if let DataRequest::Describe {
                     part: DescribePart::Namespace,
                     ..
@@ -635,7 +610,7 @@ impl Data {
                 // A request of a dialect that reads every table under its
                 // full namespace, whose every relation names it in full (a
                 // table the core reads where it was described), reads none
-                // of the parts the provider leaves to the connection (T3.4).
+                // of the parts the provider leaves to the connection.
                 let under = request.relations();
                 if dialect.settles_namespace()
                     && !under.is_empty()

@@ -125,7 +125,7 @@ fn text_nested_past_the_depth_is_refused_before_anything_is_built() {
 }
 
 /// The same check in a process of its own: it must end with a refusal, not
-/// abort on an overflowed stack (T1.11d review round 1).
+/// abort on an overflowed stack ( review round 1).
 #[test]
 fn deep_text_ends_in_a_refusal_in_a_process_of_its_own() {
     let child = std::process::Command::new(std::env::current_exe().unwrap())
@@ -149,7 +149,7 @@ fn deep_text_ends_in_a_refusal_in_a_process_of_its_own() {
 
 /// A wide object reads in about n log n: reading eight times as many
 /// members takes far less than the sixty-four times a scan of the names
-/// before each one would (T1.11d review round 2). Measured as a ratio of
+/// before each one would ( review round 2). Measured as a ratio of
 /// the two sizes, each the best of three reads, so a slow debug build or a
 /// busy runner moves both alike.
 #[test]
@@ -179,7 +179,7 @@ fn a_wide_object_reads_in_n_log_n() {
     assert!(large / small.max(1e-6) < 24.0, "{small} s, then {large} s");
 }
 
-/// An endpoint's answer (T1.28b): `NaN`, `Infinity` and `-Infinity`
+/// An endpoint's answer: `NaN`, `Infinity` and `-Infinity`
 /// tokens outside text read as numbers of the token written, as Python's
 /// reader takes them, and written back as written; text that holds those
 /// words, or the marker the reader stands them in with, stays text; what
@@ -319,7 +319,7 @@ fn an_answer_is_decoded_as_python_s_reader_decodes_bytes() {
     }
     // A lone surrogate in UTF-16, as a UTF-32 code point, and written in
     // UTF-8 as Python's `surrogatepass` keeps it, is read as U+FFFD, as its
-    // escape is (register P1B-24, KO2-93).
+    // escape is (B-24).
     let replaced = Value::Text("\u{FFFD}".into());
     for lone in [
         vec![0, b'"', 0xD8, 0, 0, b'"'],

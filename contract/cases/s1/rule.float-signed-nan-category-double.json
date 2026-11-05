@@ -89,9 +89,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c: answered through predict on DuckDB and Postgres, the feature numerical on both (on DuckDB 51 distinct values, the two NaNs two of them)"
+    "stage": "predict"
   },
-  "why": "A DOUBLE feature of 1,000 users, 49 distinct finite values and NaNs of both signs: whether the two NaNs are two values decides whether the preview reads it as categorical (rule float_nan; T2.12 round 2)",
-  "source": "T2.12 round 2 (Codex P2): a NaN of each sign as DuckDB previews it, and a static query over a NaN key"
+  "why": "A DOUBLE feature of 1,000 users, 49 distinct finite values and NaNs of both signs: whether the two NaNs are two values decides whether the preview reads it as categorical (rule float_nan)",
+  "source": "Correctness case rule.float-signed-nan-category-double using the shop fixture."
 }

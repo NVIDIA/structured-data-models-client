@@ -31,7 +31,7 @@ jobs:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
       PARITY_RUNNER_LABELS: ${{ vars.PARITY_RUNNER_LABELS }}
-      SDM_T136_LIVE_ENDPOINT: ${{ vars.PARITY_GIANT_ENDPOINT }}
+      SDM_GIANT_ENDPOINT: ${{ vars.PARITY_GIANT_ENDPOINT }}
       PARITY_GIANT_MODEL_VERSION: ${{ vars.PARITY_GIANT_MODEL_VERSION }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,7 +50,7 @@ jobs:
             echo '::error::Dedicated parity-live configuration is missing; coverage is incomplete.'
             exit 1
           fi
-          if [ -z "$PARITY_RUNNER_LABELS" ] || [ -z "$SDM_T136_LIVE_ENDPOINT" ] || [ -z "$PARITY_GIANT_MODEL_VERSION" ]; then
+          if [ -z "$PARITY_RUNNER_LABELS" ] || [ -z "$SDM_GIANT_ENDPOINT" ] || [ -z "$PARITY_GIANT_MODEL_VERSION" ]; then
             echo '::error::Explicit high-memory runner and giant endpoint/version configuration are required.'
             exit 1
           fi
@@ -69,14 +69,14 @@ jobs:
       - name: Authenticate the giant route before allocating large values
         run: |
           "$PARITY_DIR/candidate/bin/python" tests/compatibility/resource_preflight.py \
-            --config "$PARITY_DIR/config.json" --giant-endpoint "$SDM_T136_LIVE_ENDPOINT" \
+            --config "$PARITY_DIR/config.json" --giant-endpoint "$SDM_GIANT_ENDPOINT" \
             --out "$PARITY_DIR/evidence/preflight.json" \
             > "$PARITY_DIR/private/preflight.log" 2>&1
       - name: Validate giant values against the real model sequentially
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          SDM_T136_BIG: '1'
+          SDM_GIANT_TESTS: '1'
         run: |
           set -euo pipefail
           umask 077
@@ -89,7 +89,7 @@ jobs:
           commands = [
               ('python', [str(root / 'candidate/bin/python'), '-m', 'pytest', node, '-q', '--junitxml=' + str(root / 'giant-python.xml')]),
               ('java', ['mvn', '-B', '-f', 'java/pom.xml', '-Dtest=DuckDbLargeValueTest',
-                        '-Dsdm.test.giant=true', '-Dsdm.test.giant.endpoint=' + os.environ['SDM_T136_LIVE_ENDPOINT'],
+                        '-Dsdm.test.giant=true', '-Dsdm.test.giant.endpoint=' + os.environ['SDM_GIANT_ENDPOINT'],
                         '-Dsdm.native.library=' + os.environ['PARITY_NATIVE'], 'test']),
           ]
           reports = []

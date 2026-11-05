@@ -123,9 +123,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"Input Mismatch, got '1.5', but expected one of INT (the parser)\""
+    "code": "INVALID_REQUEST"
   },
   "why": "num_forecasts written with a fraction, which the grammar refuses",
-  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+  "source": "Correctness case forecast.steps-fraction using the shop fixture."
 }

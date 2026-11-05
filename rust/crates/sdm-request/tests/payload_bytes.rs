@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The payload limit counts the bytes the request sends (register PD-2,
-//! T1.28a): the builder's UTF-8 bytes, as written, so a payload of exactly
+//! ): the builder's UTF-8 bytes, as written, so a payload of exactly
 //! the limit is taken and one byte more refused, where the reference
 //! counted `json.dumps`' text, which writes each character past ASCII as a
 //! six-byte escape. Held at the limit with ASCII text and with text of two-,

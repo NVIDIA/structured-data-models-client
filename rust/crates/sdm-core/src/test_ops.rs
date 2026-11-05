@@ -117,7 +117,7 @@ pub(crate) fn run(
             let error: CoreError = take_json(attachments, id)?;
             // The one host-to-core message that carries a `CoreError`: one
             // whose kind its code does not carry is refused as the start's
-            // own message (decision E22).
+            // own message.
             if !error.holds_to_table() {
                 return Err(CoreError::protocol(
                     Sentence::InvalidMessage,
@@ -130,7 +130,7 @@ pub(crate) fn run(
         TestOperation::Warn { warnings: id } => {
             let warnings: Vec<CoreWarning> = take_json(attachments, id)?;
             // A warning whose code is not its sentence's is refused as the
-            // start's own message (T3.17).
+            // start's own message.
             if !warnings.iter().all(CoreWarning::holds_to_table) {
                 return Err(CoreError::protocol(
                     Sentence::InvalidMessage,
@@ -176,7 +176,7 @@ pub(crate) fn run(
         },
         // One known event, then a long call, so a binding's tests can show
         // the event reaches the host's logging once and another thread runs
-        // while the core holds the call (decision H8).
+        // while the core holds the call.
         TestOperation::Log { hold_ms } => Run::new(move |_| async move {
             tracing::info!(target: "sdm_core::test_ops", "a test-only event");
             std::thread::sleep(Duration::from_millis(hold_ms));
@@ -188,7 +188,7 @@ pub(crate) fn run(
         }),
         TestOperation::Abort => Run::new(|_| async { std::process::abort() }),
         // The zones the host passed are the ones the run resolves with: the
-        // answer is the offset the run's own zones give (decision H14).
+        // answer is the offset the run's own zones give.
         TestOperation::Zone { zone, at } => Run::new(move |_| async move {
             let instant = match at {
                 Scalar::Timestamp {
@@ -220,7 +220,7 @@ pub(crate) fn run(
 }
 
 /// A zone name the run's zones do not hold. The name is left out: it can
-/// come from the data or the caller (decision H17).
+/// come from the data or the caller.
 fn unknown_zone() -> CoreError {
     CoreError::new(
         Sentence::UnknownZone,

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The pure-Rust host's DuckDB provider (T1.11b): `base.regression`'s
+//! The pure-Rust host's DuckDB provider: `base.regression`'s
 //! schema completes through `HostRun`, and, by `contract/provider-vectors.json`,
 //! which the Python host's provider tests read too, a fetch the driver hands
 //! over in several batches and an empty one are admitted as the vectors
@@ -209,9 +209,9 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     );
     assert!(tables.iter().all(|t| t["duplicate_keys"]["v"] == "0"));
     // One fetch per statement the reference runs: ten in Schema.from_source,
-    // six in materialize (T1.11c); and the six of the two tables' catalogs
+    // six in materialize; and the six of the two tables' catalogs
     // and previews each materialize reads again, as the source holds them
-    // at that run (the owner's plan B, T3.4).
+    // at that run.
     assert_eq!(observed.fetches.len(), 22);
     // The whole description, the request state with its payload, the
     // inputs and the step trace are the ones python-core records
@@ -282,7 +282,7 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     let mut expected_inputs = pinned["inputs"].clone();
     expected_inputs[2]["state"] = expected_materialized;
     assert_eq!(Value::from(observed.inputs.clone()), expected_inputs);
-    // predict's call and result (T1.11d): the call's request id compared by
+    // predict's call and result: the call's request id compared by
     // presence and type only, as capture_check.masked compares it (decision
     // E35, approved by the owner on 2026-10-10, the one exclusion of
     // contract/compare-policy.yaml), since each host draws its own;
@@ -296,7 +296,7 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     // this host held it between the runs.
     assert_eq!(observed.inputs[2]["state"], materialized);
     // Not vacuous: two rows, each its entity, a prediction of 1.0 and its
-    // place in the endpoint's order (answer_index, T1.28b).
+    // place in the endpoint's order (answer_index).
     let rows = pinned["predicted"]["result"]["rows"].as_array().unwrap();
     assert_eq!(
         rows,
@@ -340,7 +340,7 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
 
 #[test]
 fn a_time_of_day_is_passed_over_as_holding_no_time_and_said() {
-    // T1.23: as the reference's engine reads a time of day as no time at
+    //: as the reference's engine reads a time of day as no time at
     // all, it is passed over as holding no value, and the run says so.
     let mut loaded = case::load(&[contract().join("cases/s1/base.regression.json")])
         .unwrap()
@@ -843,7 +843,7 @@ fn arrow_name(duckdb_type: &str) -> String {
     .to_owned()
 }
 
-/// Decision H9, measured at T1.11e: on `base.regression` this host's DuckDB
+/// On `base.regression`, this host's DuckDB
 /// provider runs the reference's number of statements in each public call
 /// (10 in `Schema.from_source`, 6 in `materialize`, none in `predict`), and
 /// each returns the reference statement's result: its columns, its Arrow
@@ -878,7 +878,7 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         ("materialize".to_owned(), 6),
         ("predict".to_owned(), 0),
     ];
-    // The reads the core marks as plan B's taken out (register P3A-1): two
+    // The reads the core marks as plan B's taken out (A-1): two
     // tables' catalog, keys and preview; every statement after them is the
     // reference's.
     let fresh = ours.len() - sdm_testkit::plan_b::as_the_old_client_ran(&ours).len();
@@ -1023,7 +1023,7 @@ fn numbers_again(value: Value) -> Value {
 
 #[test]
 fn every_payload_rust_host_materializes_is_the_locked_definition_s() {
-    // T1.22: the request state's payload of each case the pure-Rust host
+    //: the request state's payload of each case the pure-Rust host
     // materializes, base.regression and the family cases among them,
     // against the contract's locked definition (`$defs/StatePayload`).
     let loaded = case::load_for(&[contract().join("cases")], case::Database::Duckdb).unwrap();
@@ -1179,7 +1179,7 @@ fn canonical(data: &ArrowData) -> Vec<Value> {
 
 #[test]
 fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
-    // T1.23: every data request kind, planned by the root's data layer for
+    //: every data request kind, planned by the root's data layer for
     // DuckDB, answered by this host's provider and admitted, is the Arrow
     // schema and rows contract/request-kinds.json records, which the
     // Python host's provider is held to as well: the same fetch gives the
@@ -1260,7 +1260,7 @@ fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
 
 #[test]
 fn a_source_of_5000_columns_is_described_and_materialized_through_host_run() {
-    // T1.23's exit: describe_source and materialize on a generated source
+    // exit: describe_source and materialize on a generated source
     // of 5,000 columns run to Done through HostRun on this core runner
     // (the client's tests run them on python-core): base.regression with
     // its users widened to 5,000 columns, each a feature.
@@ -1320,7 +1320,7 @@ fn described_as(source: Value, setup: Vec<String>) -> host::Observed {
 
 #[test]
 fn a_named_table_the_source_lacks_is_the_caller_s_naming_refused() {
-    // T1.23 fix 1 (subagent P2-2): DuckDB fails reading a missing table's
+    // fix 1 (subagent P2-2): DuckDB fails reading a missing table's
     // columns; the core asks the table list then and refuses the naming
     // with the reference's INVALID_REQUEST, on this host as on python-core.
     let observed = described_as(
@@ -1336,7 +1336,7 @@ fn a_named_table_the_source_lacks_is_the_caller_s_naming_refused() {
 
 #[test]
 fn a_source_table_named_twice_is_joined_under_its_last_name() {
-    // T1.23 fix 1 (Codex P2): as the reference maps source names to the
+    // fix 1: as the reference maps source names to the
     // schema's (`_declared_links`), a declared foreign key to a table named
     // twice joins the last name, by its exact source name or the one equal
     // in any case.
@@ -1372,7 +1372,7 @@ fn a_source_table_named_twice_is_joined_under_its_last_name() {
 
 #[test]
 fn the_source_says_which_relations_it_holds_under_a_name() {
-    // T1.23 fix 2 (Codex P2): asked only once reading a named table's
+    // fix 2: asked only once reading a named table's
     // columns has failed, the table list with the name asked answers the
     // relations, tables or views, DuckDB would read under it, matched as
     // DuckDB folds a name (ASCII letters only): the core matches no name
@@ -1396,7 +1396,7 @@ fn the_source_says_which_relations_it_holds_under_a_name() {
         ("äpfel", 0),
         ("nope", 0),
         // Not what an unqualified name reads: another schema, another
-        // attached database (T1.23 fix 3).
+        // attached database.
         ("elsewhere", 0),
         ("elsewhere_view", 0),
         ("attached", 0),
@@ -1413,7 +1413,7 @@ fn the_source_says_which_relations_it_holds_under_a_name() {
 
 #[test]
 fn a_listed_table_the_schema_may_not_name_is_refused() {
-    // T1.23 fix 1, the listed path: a table the source lists under a name
+    // fix 1, the listed path: a table the source lists under a name
     // the schema may not give (here a backtick) is refused, INVALID_REQUEST
     // naming the field, as the reference refuses it.
     let observed = described_as(
@@ -1441,7 +1441,7 @@ fn a_materializer_s_later_calls_skip_what_its_first_read() {
     let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let calls = host::materialize_repeatedly(&loaded[0].case, &bases, 3).unwrap();
-    // The reads plan B adds taken out (register P3A-1).
+    // The reads plan B adds taken out (A-1).
     let kinds: Vec<Vec<String>> = calls
         .iter()
         .map(|call| {
@@ -1489,7 +1489,7 @@ fn a_materializer_s_later_calls_skip_what_its_first_read() {
     assert!(answered.iter().all(|a| *a == answered[0]));
 }
 
-/// Decision E74 on this host, the parity of the Python host's
+/// This host also exercises the Python host's
 /// `test_a_state_the_core_refuses_is_not_handed_back_again`: a sampler state
 /// the core refuses at the start (of another version, or a memo that does
 /// not read) is one the core says to drop, and the host follows it alone:
@@ -1510,7 +1510,7 @@ fn a_sampler_state_the_core_refuses_is_dropped_on_its_word() {
         };
         assert_eq!(fields["field"], field);
         assert!(calls[0].materialized.is_none(), "{field}");
-        // The reads plan B adds taken out (register P3A-1).
+        // The reads plan B adds taken out (A-1).
         let fetches = sdm_testkit::plan_b::requests_as_the_old_client_made(&calls[1].fetches);
         let reads: Vec<&str> = fetches
             .iter()

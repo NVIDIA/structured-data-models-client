@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The schema as a host holds it, read into the schema the core works on
-//! and written back (T3.16): each column's facts the host's, as handed; a
+//! and written back: each column's facts the host's, as handed; a
 //! column with none given the facts the source was asked for, else read
 //! by its data type and written back with none, else, where no data type
 //! is to be read by, left out; a table or column held twice refused.
@@ -174,7 +174,7 @@ fn facts_of_another_relation_are_none_of_the_table_s() {
 fn the_data_type_the_host_holds_is_the_one_its_schema_is_read_by() {
     // The caller retyped a described column: its schema says `string`, its
     // facts what the source handed over. The schema the core works on is the
-    // caller's, as the old client's checks read it (T3.16 review round 1);
+    // caller's, as the old client's checks read it ( review round 1);
     // what is fetched is still the source's.
     let mut retyped = schema();
     retyped.tables[0].columns[0].dtype = Some("string".into());

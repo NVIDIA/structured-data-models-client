@@ -28,7 +28,7 @@
 //! rows once; its columns cut to its features (and the entity table's key);
 //! and each text feature as its words ([`sdm_engine::words`]).
 //!
-//! A null where the walk tells rows apart is no link (register P1B-13,
+//! A null where the walk tells rows apart is no link (B-13,
 //! approved by the owner): a null foreign key the walk looks up adds no
 //! row and is sent as null, and a row of a table read by foreign key whose
 //! key is null is no other row's, reached anew. The reference takes such a
@@ -404,7 +404,7 @@ impl Walk<'_> {
                 // The distinct (key, example) pairs, in the order first
                 // reached, and the distinct keys among them, likewise; a
                 // null refers to nothing, so it is looked up for no row and
-                // adds none (register P1B-13), though a lookup is still
+                // adds none (B-13), though a lookup is still
                 // made, of no key when every one missing is null, as the
                 // reference makes it.
                 let mut pairs: Vec<(Key, usize)> = Vec::new();
@@ -681,7 +681,7 @@ impl Walk<'_> {
                             .collect(),
                     );
                     // Rows a walk reached left out for a null key beside
-                    // keys that are not null (register P1B-40, the owner's
+                    // keys that are not null (B-40, the owner's
                     // option (b) of 2026-10-13).
                     self.asker.warn(
                         CoreWarning::new(
@@ -813,7 +813,7 @@ pub(crate) fn exact_text(table: &Table, column: &str) -> bool {
 /// ([`exact_text`], [`keys::read_numbers`]), so `1.0` and `1.00` are one
 /// key, as the source compares them (the reference keys a caller-keyed
 /// column by its double, one key, but a key the catalog declares by its
-/// text, two: register P2G-4 and P2G-5); as [`keys::read`] reads any
+/// text, two: G-4 and P2G-5); as [`keys::read`] reads any
 /// other.
 pub(crate) fn key_values(
     table: &Table,
@@ -863,7 +863,7 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
 /// all null sort, as one null alone does (measured on the reference at
 /// b413e9ad), and a null integer, float or decimal key sorts (a decimal
 /// since `main`'s eb6c68eb, which reads it as an integer or a float: the
-/// reference keeps such a row as it keeps its integer twin's, T2.0c).
+/// reference keeps such a row as it keeps its integer twin's).
 fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<bool>>, CoreError> {
     let column = named(frame, key)?;
     let unsortable = matches!(

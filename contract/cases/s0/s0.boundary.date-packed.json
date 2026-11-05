@@ -100,10 +100,9 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "materialize",
-    "today": "The core answers kind unsupported, UNSUPPORTED_REQUEST: the interim date reader does not read a field of five digits or more (decision E10, register DT-9, approved as temporary); T1.6b reads it and makes this case acceptance"
+    "stage": "materialize"
   },
   "register": "DT-9",
   "why": "A packed date, date rule D8's example: an eight-digit YYYYMMDD field, then an hour field and a six-digit HHMMSS field, read as 2024-01-01T12:34:56; the reference accepts it",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.boundary.date-packed using the shop fixture."
 }

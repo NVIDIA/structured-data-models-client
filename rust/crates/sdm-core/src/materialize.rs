@@ -8,10 +8,10 @@
 //! `materialize_task`) over DuckDB.
 //!
 //! The steps are the reference's, in its order, one data request for each
-//! statement it runs (design, T1.11a row): the source's indexes, for the
+//! statement it runs (design, row): the source's indexes, for the
 //! sampler's "Missing N indices" warning, when a key or foreign key is not
-//! one the source enforces and the provider declares index advice
-//! (T1.26a); the time bounds of the aggregated tables, or of every table
+//! one the source enforces and the provider declares index advice;
+//! the time bounds of the aggregated tables, or of every table
 //! with a time column for a static query; the reservoir sample of the
 //! entity table (`sample_entities`), with the entity table's columns the
 //! query reads; for each aggregated table, the windowed rows each
@@ -22,12 +22,12 @@
 //! them read, `_by_fkey`, nulls placed as the provider declares its source
 //! places them). The examples' order is numpy's (`sdm_engine::random`), the
 //! labels the reference executor's (`sdm_engine::labels`, over the fetched
-//! Arrow, decision E19; a window's months by `sdm_engine::time::offset`),
+//! Arrow; a window's months by `sdm_engine::time::offset`),
 //! the payload the engine's layout (`sdm_request::payload`).
 //!
 //! What the reference's sampler reads once and keeps, the index check and
 //! the time bounds, a run reads only where the memo its host hands back
-//! does not hold it (decision E52): the run keeps what it read in a memo it
+//! does not hold it: the run keeps what it read in a memo it
 //! leaves the host, done or failed (`Asker::keep`), and the core holds no
 //! state across runs. The coverage warning, which the reference gives once
 //! in a process, is given on every run that meets it, and once in a process
@@ -36,13 +36,13 @@
 //! It labels, for each entity of a table that refers to no other, a
 //! windowed `SUM`, `COUNT`, `AVG`, `MIN` or `MAX` of a table referring to
 //! it, a comparison of one with a number or `NULL` (binary), or a column
-//! of the entity's own row (static: multiclass or regression), from T1.27;
-//! from T2.10 every target the query's validation lets through for the
+//! of the entity's own row (static: multiclass or regression);
+//! every target the query's validation lets through for the
 //! relational model: an aggregation of the rows a filter keeps (`WHERE`), a
 //! comparison or `IN` of any column with constants of its type, and `NOT`,
 //! `AND` and `OR` of them (binary), each table aggregated read once over
 //! the window its aggregations span together;
-//! from T1.28a it materializes each of those tasks' requests, with the
+//! it materializes each of those tasks' requests, with the
 //! client's rules the core holds (design, "Host-held semantics"): the run
 //! mode the context size selects (a fast run of 1,000 examples and two
 //! hops of 32 neighbors, or a best run of 10,000 and 64), the context
@@ -114,7 +114,7 @@ pub const MISSING_INDICES: &str = WarningCode::MissingIndices.as_str();
 pub const CONTEXT_COVERAGE: &str = WarningCode::ContextCoverage.as_str();
 
 /// The warnings the reference gives once in a process: a host gives each
-/// once in its process (decision E52), `sdm-host` for every binding, so
+/// once in its process, `sdm-host` for every binding, so
 /// the core, which holds no state across runs, gives it on every run that
 /// meets it.
 pub const ONCE_PER_PROCESS: &[&str] = &[CONTEXT_COVERAGE];
@@ -161,7 +161,7 @@ const TIME_MAX: i64 = i64::MAX;
 const TIME_MIN: i64 = -i64::MAX;
 const DAY_NS: i128 = 86_400_000_000_000;
 /// The version of [`RequestState`]'s format this build writes: the
-/// contract's, which `predict` reads (decision H23).
+/// contract's, which `predict` reads.
 pub use sdm_contract::ops::REQUEST_STATE_VERSION;
 
 /// What a `materialize` start gives its body.
@@ -172,7 +172,7 @@ pub(crate) struct Inputs {
     pub query: String,
     pub indices: Option<ArrowData>,
     /// The rows a ranking is over (`Materialize.candidates`), as the host
-    /// gave them (T2.8).
+    /// gave them.
     pub candidates: Option<Vec<sdm_contract::ops::GivenCandidate>>,
     pub anchor_time: Option<Scalar>,
     pub seed: Option<Seed>,
@@ -194,18 +194,18 @@ pub(crate) struct Inputs {
     /// places a date literal's two-digit year (`pql::local_year`).
     pub zones: Arc<dyn sdm_engine::time::Zones>,
     /// The memo the host handed back, made under this provider and
-    /// description (decision E52).
+    /// description.
     pub memo: Option<SamplerMemo>,
     /// The fingerprint of this provider and description ([`fingerprint`]).
     pub source: String,
     /// The schema as the host holds it, where the run reads its tables once
     /// the request's inputs are checked (`describe::initialize`): every
-    /// table of a source as it stands at this run (the owner's plan B), or
+    /// table of a source as it stands at this run, or
     /// a host provider's columns that hold no facts; `description` is read
     /// until then by the columns' facts, or data types where they hold
-    /// none (T3.4).
+    /// none.
     pub pending: Option<sdm_contract::ops::HeldSchema>,
-    /// The data type names the host gave its columns (T3.16), which the
+    /// The data type names the host gave its columns, which the
     /// request's checks before the source is read take, as the reference's
     /// `check_consistent` reads the caller's schema.
     pub types: sdm_schema::assemble::HostTypes,
@@ -284,7 +284,7 @@ pub fn check_memo(memo: &SamplerMemo) -> Result<(), CoreError> {
 /// `error`, said of the forecast's step it happened in, `step` of `steps`
 /// (`forecast_step`, `forecast_steps`): with the remedy of asking for fewer
 /// steps where the step's window outran the data (`window_outran_the_data`),
-/// as the client says each part's refusal (`about_the_part`, T3.17 fix 2).
+/// as the client says each part's refusal (`about_the_part`, fix 2).
 pub(crate) fn in_step(error: CoreError, step: u32, steps: u32) -> CoreError {
     let outran =
         error.fields.get("window_outran_the_data") == Some(&Detail::Scalar(Scalar::Bool(true)));
@@ -519,7 +519,7 @@ struct Asked {
     /// The conditions that choose the examples, each over the entity's row
     /// and its windowed aggregations: the entity filter (`WHERE`), then
     /// the assumption (`ASSUMING`), and-ed into the examples' mask as the
-    /// reference's executor and-s them (`execute`, T2.13b).
+    /// reference's executor and-s them (`execute`).
     choosing: Vec<Shape>,
 }
 
@@ -617,7 +617,7 @@ fn unvalidated(what: &str) -> CoreError {
 /// The target `node` as a [`Shape`]: a column of the entity's row; a
 /// windowed `SUM`, `COUNT`, `AVG`, `MIN` or `MAX` of a column or of the
 /// rows a filter keeps; a comparison or `IN` of either with constants;
-/// `NOT`, `AND` and `OR` of those (T2.10).
+/// `NOT`, `AND` and `OR` of those.
 fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
     match &node.kind {
         // A join holds an aggregation (`execute_join`).
@@ -966,7 +966,7 @@ const NEGATIVE_INFINITY: i64 = -i64::MAX;
 /// time bounds' cast to `TIMESTAMP` turns a `TIMESTAMP_NS`, `_S` or `_MS`
 /// `'-infinity'` into the microsecond one) as `datetime.min`, 0001-01-01,
 /// which is before every anchor a nanosecond count holds, as `TIME_MIN`
-/// is, and goes on (T1.36 fix 3). Any other time past what nanoseconds
+/// is, and goes on. Any other time past what nanoseconds
 /// hold, a finite one or `'infinity'`, is refused as before (DT-14).
 fn times_ns_from(
     array: &ArrayRef,
@@ -1026,7 +1026,7 @@ fn times_ns_from(
 /// one stored value of each windowed table's time column, read once before
 /// that table's first windowed read and kept in the sampler's memo.
 /// A fresh SQL source read expires it under plan B; host providers keep
-/// it across the materializer's runs (decision E52). The stored value is
+/// it across the materializer's runs. The stored value is
 /// the reference SQLite sampler's `_time_spelling`, named
 /// it on each window bound's seed column ([`SEED_STORED_TIME`]) for the
 /// data layer to spell the bound by.
@@ -1569,7 +1569,7 @@ fn unsigned(array: &ArrayRef) -> Result<Vec<Option<i64>>, CoreError> {
 /// as the executor reads them: a float at float32, an integer at int64,
 /// a boolean, text, a decimal exactly (compared exactly in a condition,
 /// read as a target by `labels::label` and `labels::label_classes`,
-/// T2.0c); a time or any other type is refused by name (`target_type`):
+/// ); a time or any other type is refused by name (`target_type`):
 /// the reference's task table takes none of them.
 fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
     use labels::Column;
@@ -1639,7 +1639,7 @@ fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, Cor
 /// [`static_column`] reads a target; a time too, which the reads have
 /// made a zone-less timestamp ([`Times::read`]), in nanoseconds; and an
 /// unsigned 64-bit column whole, past int64 too, which a condition
-/// compares without the target's signed reading (T2.10 fix 2).
+/// compares without the target's signed reading.
 fn condition_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
     match array.data_type() {
         DataType::Timestamp(_, None) => {
@@ -1701,7 +1701,7 @@ struct Bounds {
 }
 
 /// What the run has read of its source, which it leaves the host
-/// (decision E52): the memo handed back, or a new one.
+///: the memo handed back, or a new one.
 struct Memo<'a> {
     asker: &'a Asker,
     memo: SamplerMemo,
@@ -1863,7 +1863,7 @@ async fn read_bounds(
 
 /// The requests and policies the sampler needs of its provider, each
 /// refused by name before anything is fetched, as a capability is refused
-/// wherever the core reads it (decision E63): the optional requests it
+/// wherever the core reads it: the optional requests it
 /// asks (`UNSUPPORTED_REQUEST` naming the request, as `DataAccess::plan`
 /// refuses one undeclared), then where its source puts a null when it
 /// orders (`null_order`), without which it is not asked for rows in an
@@ -1893,7 +1893,7 @@ fn sampling_capabilities(asker: &Asker) -> Result<NullOrder, CoreError> {
 /// E54): which columns an index covers, or that it cannot tell, is its
 /// dialect's reading, never this module's.
 ///
-/// The check is made once for a materializer (decision E52): a run whose
+/// The check is made once for a materializer: a run whose
 /// memo says it was made skips it, as the reference builds its sampler,
 /// and checks, once; a run that makes it keeps that in its memo, warning
 /// given or not.
@@ -1979,7 +1979,7 @@ fn rows_of(memo: &SamplerMemo, table: &str) -> Option<u64> {
 /// (`ProviderCapabilities::neighbor_lookback`, `_by_fkey`): the table's
 /// rows over the referenced table's, over the seconds its time column
 /// spans (at least one), each step a double as the reference's arithmetic
-/// rounds it, the span its `Timedelta.total_seconds()` (whole microseconds
+/// rounds it, the span its `Timedelta.total_seconds` (whole microseconds
 /// over a million). None for any other provider, and none for a table
 /// whose times or counts are not known.
 async fn lookbacks(
@@ -2081,7 +2081,7 @@ async fn check_indexes(
 /// indices and the tables they are missing from; the host words it.
 fn warn_missing(asker: &Asker, indexes: usize, tables: usize) {
     // Which of the reference's sentences, by its two counts' number
-    // (decision E59(d)).
+    //.
     let (variant, sentence) = match (indexes == 1, tables == 1) {
         (true, true) => ("index_table", Sentence::MissingIndexTable),
         (true, false) => ("index_tables", Sentence::MissingIndexTables),
@@ -2264,7 +2264,7 @@ async fn check_single_columns(asker: &Asker, graph: &Graph) -> Result<(), CoreEr
         };
         // A relation of several parts names its table by them, which an
         // index's one name does not say: it is covered by none (design
-        // choice 12; Phase 2's hosts give one part).
+        // names only one part).
         for table in graph
             .tables
             .iter()
@@ -2291,18 +2291,18 @@ fn warn(asker: &Asker, sentence: Sentence, message: &str) {
 
 /// Holds the schema `materialize` is handed as the reference holds a
 /// schema it is asked to make a request of (`Schema.check_consistent`,
-/// decision E55): the columns it joins on marked again, from what the
+/// ): the columns it joins on marked again, from what the
 /// host holds, so a host's edit is followed as the reference's schema
 /// follows it; each column's meaning one its values can carry, as the
 /// language answers it (`Stype.supports_dtype`); each time column of the
-/// timestamp meaning, as the engine's table takes one (from T1.27's fix
+/// timestamp meaning, as the engine's table takes one (from fix
 /// round 1, found by the differential: a time column set on a column the
 /// schema joins on keeps its identifier's meaning); and each link able to
 /// join. Before anything else of the call is read, as the reference asks
 /// it before the gathering starts.
 /// Refuses a schema whose column means what its data type cannot carry,
 /// before anything else of the call is read, as the reference refuses it
-/// (T3.16): with `types`, as the caller holds it, as its `check_consistent`
+///: with `types`, as the caller holds it, as its `check_consistent`
 /// reads the caller's schema, a column named by no data type the client
 /// knows let through; without, as the source gave it, as its engine refuses
 /// a column of an incompatible semantic type when it reads the table in
@@ -2413,10 +2413,10 @@ fn kept_checks(description: &SourceDescription) -> Result<(), CoreError> {
 }
 
 /// The names of options the host passes without their values
-/// (`Materialize::options`): from T2.11 every sampling option the
+/// (`Materialize::options`): every sampling option the
 /// reference takes travels in the call's values, so any name here is the
 /// host's fault, `INVALID_REQUEST`, refused before anything of the call is
-/// read (decision E61).
+/// read.
 fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
     if inputs.options.is_empty() {
         return Ok(());
@@ -2433,7 +2433,7 @@ fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
 /// (`HostFacts.now`, the core reading none of its own), mixed by
 /// SplitMix64's finalizer, at most the provider's largest seed. Every
 /// provider then draws as it draws under a seed, and the sample is judged
-/// by its properties (KO2-76, register P2I-2).
+/// by its properties (I-2).
 fn fresh_seed(now: &Scalar, max_seed: u64) -> u64 {
     let clock = match now {
         Scalar::Timestamp { value, .. } => *value as u64,
@@ -2488,7 +2488,7 @@ const FOLDED_NAME_MOST: usize = 200;
 /// two the reference reads the source's fold of the first rows
 /// (`_assert_warehouse_folds_like_pandas`), which chooses only between two
 /// refusals of that code; the core makes no such read, one statement fewer
-/// (KO2-68). `Ok` for a schema with no such key.
+///. `Ok` for a schema with no such key.
 fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreError> {
     let refused = |sentence, table: &str, key: &[String], message: &str| {
         invalid(sentence, message, "schema")
@@ -2769,7 +2769,7 @@ fn notices(
 
 /// The body of a `materialize` run.
 /// The most steps a forecast is asked as where the host names no limit:
-/// the client's `decompose.MOST_PARTS` as it ships (T1.36 fix 21).
+/// the client's `decompose.MOST_PARTS` as it ships.
 pub const MOST_PARTS: u32 = 200;
 
 /// One call's payload as gathered: its bytes, and the rows it scores.
@@ -2786,7 +2786,7 @@ pub(crate) enum Gathered {
 
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
     let (steps, ranked, facts) = resolved(&inputs);
-    // A ranking, asked as one binary question per candidate (T2.8).
+    // A ranking, asked as one binary question per candidate.
     if let Some(plan) = ranked {
         if crate::pql::explained_query(&inputs.query).is_some() {
             return Err(CoreError::new(
@@ -2844,7 +2844,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         };
     };
     // A forecast, asked as one regression per step, each gathered as the
-    // client's `_in_parts` gathers it (T1.36 fix 21): in order, each by a
+    // client's `_in_parts` gathers it: in order, each by a
     // materializer of its own, so with no memo of an earlier one's reads,
     // each refusal naming the step it happened in (`forecast_step`).
     // The materializer's own memo is left as it was handed, done or failed,
@@ -2864,7 +2864,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .with_field("field", Detail::text("top_k")));
     }
     // The host's limit is checked against the plan's count before any step
-    // is written, so nothing grows with a count past it (T1.36 fix 23).
+    // is written, so nothing grows with a count past it.
     let most = inputs.most_parts.unwrap_or(MOST_PARTS);
     if steps.count > u64::from(most) {
         return Err(CoreError::new(
@@ -3007,7 +3007,7 @@ pub(crate) fn attach_request(
 /// A forecast's plan ([`crate::pql::resolve`]'s `steps`), when the query
 /// resolves to one, none otherwise, the query then gathered as itself,
 /// which refuses it where it does not resolve as before; and the facts of
-/// the query a host reads ([`QueryFacts`], T2.18), when it resolves.
+/// the query a host reads ([`QueryFacts`]), when it resolves.
 #[allow(
     clippy::type_complexity,
     reason = "three plain parts, named where they are taken"
@@ -3044,11 +3044,11 @@ fn resolved(
     }
 }
 
-/// One question gathered: the body of `materialize` before T1.36 fix 21.
+/// One question gathered: the body of `materialize` before fix 21.
 pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     let frames = inputs.frames.clone();
     // The memo the run leaves the host: the one handed back, or a new one
-    // (decision E52), left as it is by a run refused before it reads.
+    //, left as it is by a run refused before it reads.
     let mut memo = Memo {
         asker,
         memo: inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
@@ -3058,12 +3058,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     };
     memo.keep();
     // The call's option values, each of the type the client takes; then
-    // the context size's bounds and the run mode it selects (T1.28a). The
+    // the context size's bounds and the run mode it selects. The
     // client checks these in another order (the context size's lower
     // bound, the indices, the statistic, the reserved names, then its
     // upper bound, the entity count and the shapes); a call with several
     // faults may be refused here for another of them than the client
-    // names, which the core does not claim to match (decision E41(k)(iii)).
+    // names, which the core does not claim to match ((iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
     let mode = options::run_mode(
         asked_values.num_context_samples,
@@ -3111,7 +3111,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         ..
     } = inputs;
     // The sampling options the engine reads later than the client's
-    // checks, each read where the reference reads it (T2.11).
+    // checks, each read where the reference reads it.
     let deferred = asked_values.clone();
     let options::Asked {
         num_context_samples,
@@ -3139,7 +3139,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // checked (below). The reference's engine's checks wait for its reads.
     consistent(&mut description, &types)?;
     // The seed reaches this entry as the integer the caller gave, of any
-    // size (decision H7); numpy's generator takes it whole, and the sample
+    // size; numpy's generator takes it whole, and the sample
     // takes it as the narrowest exact scalar.
     // An unseeded sample draws under a seed of its own, new each call.
     let seed = match seed {
@@ -3198,7 +3198,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // The statistic the caller chose, one the endpoint reports, and no
     // column named as the wire names its own (the client's checks before
     // it gathers; their order among the checks above is not the client's,
-    // decision E41(k)(iii)).
+    // (iii)).
     let statistic = options::statistic(prediction_statistic.as_deref())?;
     reserved(&description)?;
     // Every input check of the request made, the tables are read, as the
@@ -3233,7 +3233,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     if description.tables.iter().any(|t| t.primary_key.len() > 1) {
         // The reference resolves its query against a schema with no key of
         // several columns (`to_schema_definition`) before its engine folds
-        // one (T2.12).
+        // one.
         let resolved = crate::pql::resolve(
             &query,
             &query_schema(&description),
@@ -3322,7 +3322,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // after it (null entities, then the seed, then the task's shape) are in
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
-    // (decision E41(k)(i)).
+    // ((i)).
     if frames.is_none() {
         missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
     }
@@ -3343,8 +3343,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // A seed past what its scalar carries (10**38 or more) is past every
     // largest seed a provider can declare (a `u64`), which every provider
-    // declares from contract v26 (design choice 1): RS-7's refusal, as for
-    // any seed past it (T1.36 fix 9).
+    // declares from contract v26: RS-7's refusal, as for
+    // any seed past it.
     let seed_value = match seed_scalar(&seed) {
         Ok(value) => value,
         Err(_) if !seed.is_negative() => {
@@ -3419,7 +3419,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
 
     // The tables whose times bound the anchor: a temporal query's
     // aggregated tables; for a static query, every table with a time
-    // column (`get_min_time()`, `get_max_time()`), none of which leaves the
+    // column (`get_min_time`, `get_max_time`), none of which leaves the
     // anchor unchecked (`_validate_time` returns) and, by default, no
     // anchor at all (`pd.Timestamp.min`).
     let bounded: Vec<&Table> = if fetches.is_empty() {
@@ -3491,7 +3491,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // per entity, with the entity table's columns the query reads; for a
     // temporal query, walked back from the context's anchor by the window.
     let context_examples = mode.context_examples();
-    // `max_pq_iterations` times as many candidates as examples (T2.11); a
+    // `max_pq_iterations` times as many candidates as examples; a
     // float's count is no slice bound for a temporal query's walk, the
     // engine's `TypeError`, the caller's error.
     let trials = max_pq_iterations
@@ -3588,7 +3588,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             // A time of day holds no instant: the reference's engine reads
             // each as none (`to_datetime`, see `times_of_day_unread`), so no
             // entity is valid at any anchor and a temporal query collects no
-            // context example, the caller's error below (T1.36 fix 9). A
+            // context example, the caller's error below. A
             // static query never gets here with one: its time bounds read
             // every time column first and fail on it (register DT-12).
             let all = if matches!(
@@ -3604,9 +3604,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         None => None,
     };
     // The entities, cast to the sampled key's type under the core's rule
-    // table (T1.32a), where the reference casts them, after its sample
+    // table, where the reference casts them, after its sample
     // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
-    // not cast is the caller's error, never the core's (E41(l)).
+    // not cast is the caller's error, never the core's.
     let indices = keys::cast(&indices, entity_key.data_type())?;
     let entity_end = entity
         .end_time_column
@@ -3648,7 +3648,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // `float` of `NA`) where an example's key seeds the read of a windowed
     // target's rows (`_by_time`): refused as the caller's error before that
     // read. A static target reads no rows by the key, and such an example
-    // is left out once labelled, below (T2.12).
+    // is left out once labelled, below.
     let nan_key = nan_rows(&entity_key);
     if asker.reads_nan_as_missing()
         && !labelled_fetches.is_empty()
@@ -3663,7 +3663,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .with_field("column", Detail::text(&key)));
     }
     // Their labels, as the reference's executor computes them over the
-    // rows read for them (decision E19).
+    // rows read for them.
     let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
     let labelling = Labelling {
         asker,
@@ -3704,7 +3704,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     if kept.len() >= trials && gathered < context_examples / 2 {
         // The reference warns of it once in a process: given on every run
         // that meets it, and once in a process by the host
-        // ([`ONCE_PER_PROCESS`], decision E52).
+        // ([`ONCE_PER_PROCESS`]).
         asker.warn(CoreWarning {
             fields: [
                 ("examples".to_owned(), count(context_examples)),
@@ -3717,7 +3717,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             )
         });
     }
-    // The target's own past as features (`lag_timesteps`, T2.9), where the
+    // The target's own past as features (`lag_timesteps`), where the
     // reference's engine adds them: its value refused, as the engine
     // refuses it, once the context is labelled; for a temporal query, each
     // aggregated table's rows the lags read, in the labels' order, for the
@@ -3851,7 +3851,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
     }
     // How many candidates the call asked be kept (`_candidates_to_rank`,
-    // T2.8), which the engine writes into the task; then the inference
+    // ), which the engine writes into the task; then the inference
     // options, read for the task's config class, as the engine reads them
     // before it lays out any request.
     let top_k = top_k.as_ref().map(options::top_k).transpose()?;
@@ -3878,7 +3878,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             ));
         }
     }
-    // Then the columns the caller keeps out (`exclude_cols_dict`, T2.11),
+    // Then the columns the caller keeps out (`exclude_cols_dict`),
     // merged after the query's (`_columns_to_leave_out`), each a feature of
     // a table of the graph, as the reference's sampler requires.
     // (`_columns_to_leave_out`, then the hops `_resolve_options` resolves,
@@ -3925,9 +3925,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let train_anchors = anchors.len();
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
     // The labelled context's examples before narrowing, then the entities
-    // predicted for: the examples the lags were read for (T2.9).
+    // predicted for: the examples the lags were read for.
     let labelled_examples = gathered;
-    // The request's lagged columns, made once (T2.9 fix 3), and how many
+    // The request's lagged columns, made once, and how many
     // entities the whole request scores.
     let mut lag_columns: Option<Vec<sdm_request::payload::LagColumn>> = None;
     let all_scored = num_test;
@@ -3997,7 +3997,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         // Each entity to score that more than one row holds, in the order
         // the caller gave them, each value once, as the reference names
         // them (`_refuse_an_id_scored_twice`): the table, its key and the
-        // values, values of the caller's own call (KO2-86).
+        // values, values of the caller's own call.
         let mut repeated: Vec<usize> = positions
             .iter()
             .enumerate()
@@ -4041,7 +4041,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         if positions.len() != examples_total {
             // The table and the keys not found, in the order the caller gave
             // them: values of the caller's own call, which a refusal may name
-            // (KO2-86, narrowing decision H17), as the reference names them.
+            // (narrowing ), as the reference names them.
             let found: BTreeSet<usize> = positions.iter().copied().collect();
             let keys = (num_train..examples_total)
                 .filter(|at| !found.contains(at))
@@ -4128,11 +4128,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             .with_field("limit", count(SUBGRAPH_TABLES)));
         }
         sent.extend(walked.tables.iter().map(|t| t.name.clone()));
-        // The lagged columns of this call's examples (T2.9): the narrowed
+        // The lagged columns of this call's examples: the narrowed
         // context's, then this call's own entities, each its own row's,
         // sliced from the whole request's columns, so each column's type
-        // is the request's whatever this call's rows hold (fix 3), typed
-        // over the gathered context before narrowing (fix 4); the
+        // is the request's whatever this call's rows hold, typed
+        // over the gathered context before narrowing; the
         // columns are computed at the first call's payload, where the
         // reference's size refusal falls, held to the largest call's rows.
         if lag_columns.is_none()
@@ -4273,7 +4273,7 @@ fn shared_anchor() -> CoreError {
 /// The anchor and the context's anchor, in nanoseconds, checked against
 /// the times of the tables that bound them (`bounded`, `_validate_time`):
 /// the anchor given, or the latest time of those tables; the context's
-/// anchor given (`context_anchor_time`, T2.11), or the window's end
+/// anchor given (`context_anchor_time`), or the window's end
 /// (`end`, a temporal query's) before the anchor, by the calendar for
 /// months, a static query's being the anchor itself. Also the earliest
 /// time of those tables, where it was read.
@@ -4355,7 +4355,7 @@ async fn anchors_checked(
             .with_field("earliest", at(bounds.min))
             // As the reference's client marks this refusal
             // (`window_outran_the_data`), so a forecast's step says its
-            // window is that step's (T2.14b fix 7).
+            // window is that step's.
             .with_field("window_outran_the_data", Detail::Scalar(Scalar::Bool(true))));
         }
         // The reference's three warnings of the context's anchor, of which
@@ -4503,7 +4503,7 @@ fn reaches(offset: Offset, at: i64) -> Result<i128, CoreError> {
 /// value: labelled. None with one: numpy's broadcast fails, the caller's
 /// error, `INVALID_REQUEST`. Some without: an `IndexError` the reference
 /// gives as `INTERNAL_ERROR`, refused by name here (`average_null`,
-/// `min_max_null`; register P1B-21, the class of decision E66(b)). An
+/// `min_max_null`; B-21, the class of ). An
 /// example past the batch without a value is left unlabelled, never in a
 /// context, as there.
 fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
@@ -4551,13 +4551,13 @@ fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
 /// ends of its aggregations' windows; `condition` the entity filter's.
 ///
 /// - `no_entity_at_anchor`: the entity table's earliest time is after the
-///   anchor (`entity_table`, `column`, `anchor`, `earliest`, and `later`
-///   where an anchor after it leaves the target's window room in the data);
+/// anchor (`entity_table`, `column`, `anchor`, `earliest`, and `later`
+/// where an anchor after it leaves the target's window room in the data);
 /// - `no_entity_passed`: the data leaves room after the anchor for the
-///   target's whole window, and an entity filter chose no example
-///   (`anchor`, `tables`, `min_time`, `max_time`, `condition`);
+/// target's whole window, and an entity filter chose no example
+/// (`anchor`, `tables`, `min_time`, `max_time`, `condition`);
 /// - `anchor_too_late`: the data leaves no such room (the same facts but
-///   the condition);
+/// the condition);
 /// - `too_restrictive`: anything else, as the reference's generic reason.
 ///
 /// A time bound that cannot be read gives the reason without it, as the
@@ -5138,7 +5138,7 @@ fn text_unread(unread: Unread) -> CoreError {
 }
 
 /// `batch`, fetched from `table`, with each big-integer column in the tier
-/// its column was described in, or refused by name (register P1B-43,
+/// its column was described in, or refused by name (B-43,
 /// [`crate::big_integer::conform`]), and each column of numbers handed over
 /// as their text in the type it was described as
 /// ([`crate::exact_number::conform`]); and whether any column changed.
@@ -5283,7 +5283,7 @@ fn label_examples(
         labelled.labels = labelled.labels.kept(&keep);
     }
     // An example of an entity whose key is NaN is left out of the context
-    // once labelled, as the reference leaves it out (T2.12).
+    // once labelled, as the reference leaves it out.
     if !nan_key.is_empty() {
         let keep: Vec<bool> = (0..labelled.mask.len())
             .filter(|&row| labelled.mask[row])
@@ -5330,7 +5330,7 @@ async fn walk_examples(
 mod tests {
 
     /// An aggregate count is one row of one integer: a second row is the
-    /// provider's answer not reading, never its first row taken (T3.6
+    /// provider's answer not reading, never its first row taken (
     /// round 1; a catalog listing's first row is its dialect's to read).
     #[test]
     fn an_aggregate_count_is_exactly_one_row() {
@@ -5375,8 +5375,8 @@ mod tests {
     /// A filter over an unsigned 64-bit key whose values pass int64
     /// (`9223372036854775808::UBIGINT + order_id`): `order_id > 0` and
     /// `order_id != NULL` keep every row with a value, as the reference's
-    /// executor and the filter before T2.10 keep them, never refused as a
-    /// target's type (T2.10 fix 2, round 2's finding).
+    /// executor and the filter before keep them, never refused as a
+    /// target's type ( fix 2, round 2's finding).
     #[test]
     fn a_filter_tests_an_unsigned_key_past_int64() {
         let past = 1_u64 << 63;
@@ -5434,7 +5434,7 @@ mod tests {
 
     /// The lags of `NOT (COUNT(...) > 0)` are those of `COUNT(...) > 0`, as
     /// the reference's `to_autoregressive_query` drops the whole target's
-    /// `NOT` (T2.10, measured against the reference: the lagged columns of
+    /// `NOT` (measured against the reference: the lagged columns of
     /// the two queries are the same); a `NOT` inside the target stays.
     #[test]
     fn the_lags_of_a_negated_target_are_its_condition_s() {

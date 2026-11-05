@@ -5,23 +5,23 @@
 //! Test-only (the `schema-check` feature, which `test-ops` brings): a JSON value checked against a
 //! definition of the contract's own schema ([`crate::schema_json`]), so a
 //! producer's tests can hold what it writes to the definition the lock
-//! holds (T1.22: the request state's payload, whose definition `sdm-wire`'s
-//! typed payload derives from T1.28w).
+//! holds (the request state's payload, whose definition `sdm-wire`'s
+//! typed payload derives ).
 //!
 //! It is not a JSON Schema implementation: it reads only the keywords the
 //! definition it is used on holds (the request state's payload: `type` of
 //! `object`, `array`, `string`, `boolean`, `integer` or `null`, or a list
-//! of them (from T2.13, a target transform's `["string", "null"]`), `properties`,
+//! of them (a target transform's `["string", "null"]`), `properties`,
 //! `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `minimum`,
 //! the schemas `true` and `false`, and the annotations `description`,
 //! `title`, `format` and any `x-` keyword, which it does not read). It
 //! walks the whole definition before it reads the value, and fails on any
 //! other keyword anywhere in it: under a property the value does not
 //! carry, under a type the value is not, or in an `anyOf` option not tried
-//! or not holding as much as on the value's own path (M3, T2.1b), so no
+//! or not holding as much as on the value's own path (M3), so no
 //! value passes a definition holding a rule this check would not read. A
 //! definition that comes to need another keyword needs it added here, with
-//! a test (T1.28w).
+//! a test.
 
 use serde_json::Value;
 
@@ -288,7 +288,7 @@ mod tests {
         let either = json!({"anyOf": [{"type": "string"}, {"type": "array", "items": true}]});
         assert_eq!(node(&either, &json!([1]), "$"), Ok(()));
         assert!(node(&either, &json!(1), "$").is_err());
-        // A list of types holds where any of them does (T2.13).
+        // A list of types holds where any of them does.
         let nullable = json!({"type": "array", "items": {"type": ["string", "null"]}});
         assert_eq!(readable(&nullable, "$"), Ok(()));
         assert_eq!(node(&nullable, &json!(["quantile", null]), "$"), Ok(()));

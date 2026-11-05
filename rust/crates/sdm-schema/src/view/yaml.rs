@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A view definition's YAML, read as the old client reads it: PyYAML
-//! 6.0.3's `safe_load`, whose values are YAML 1.1's (design T3.5 part 5,
+//! 6.0.3's `safe_load`, whose values are YAML 1.1's (design part 5,
 //! old-behaviour row 69). `yaml-rust2` reads the text into events; the
 //! values are given here, by PyYAML's resolvers and constructors
 //! (`yaml/resolver.py`, `yaml/constructor.py`): `yes`, `on` and `off` are
@@ -17,7 +17,7 @@
 //! Only the YAML view definitions use is read: scalars, block and flow
 //! mappings and lists, block scalars, comments, and anchors and aliases as
 //! plain references. Anything else is refused by name ([`Outside`],
-//! register P3J-9): an explicit tag (`!!binary`, `!!set`, `!!omap`,
+//! J-9): an explicit tag (`!!binary`, `!!set`, `!!omap`,
 //! `!!pairs`, any other), a merge (`<<`), a key that is a collection (a
 //! mapping keyed by itself among them), nesting deeper than [`MAX_DEPTH`],
 //! aliases expanding past [`MAX_VALUES`] values, an integer of more digits
@@ -51,7 +51,7 @@ pub const MAX_VALUES: u64 = 1 << 22;
 
 /// What reading takes from the host, which the core hands in from
 /// `sdm-pql`, the one place each rule is written: the most decimal digits
-/// Python reads into an integer (`sys.get_int_max_str_digits()`), and the
+/// Python reads into an integer (`sys.get_int_max_str_digits`), and the
 /// calendar, a valid date's day counted from 0001-01-01 or `None` for a
 /// date Python refuses.
 #[derive(Clone, Copy, Debug)]

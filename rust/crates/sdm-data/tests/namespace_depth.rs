@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! One namespace model (design fix C, T3.4): each dialect reads a relation
+//! One namespace model (design fix C): each dialect reads a relation
 //! of one part under as many namespace parts as its sources take, its
 //! namespace depth, apart from the parts a relation may have; a part too
 //! many is refused by name, and a part left to the connection (`null`)
@@ -117,9 +117,8 @@ fn a_catalog_alone_reads_its_namespace_with_the_session_s_current_schema() {
 
 /// A Databricks source leaving any part to the connection, a leading one
 /// included, has its namespace read first, as the reference reads
-/// `current_catalog()` and `current_schema()` and names every table in
-/// full, as its catalog names a table a foreign key refers to (round 2's
-/// Claude P0-1); a dialect whose relations need no part given is left as
+/// `current_catalog` and `current_schema` and names every table in
+/// full, as its catalog names a table a foreign key refers to; a dialect whose relations need no part given is left as
 /// it is.
 #[test]
 fn a_databricks_source_leaving_any_part_to_the_connection_is_settled_first() {
@@ -138,7 +137,7 @@ fn a_databricks_source_leaving_any_part_to_the_connection_is_settled_first() {
     assert!(data.unsettled(&choice("databricks", json!(["main", null]))));
     assert!(!data.unsettled(&choice("databricks", json!(["main", "shop"]))));
     // A Postgres source given no schema is settled too, by its session's
-    // current schema (T3.7); one given its schema is not.
+    // current schema; one given its schema is not.
     assert!(data.unsettled(&choice("postgres", json!([]))));
     assert!(data.unsettled(&choice("postgres", json!([null]))));
     assert!(!data.unsettled(&choice("postgres", json!(["shop"]))));

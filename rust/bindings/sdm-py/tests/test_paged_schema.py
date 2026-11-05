@@ -2,13 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""A paged answer is held to its request's schema page by page (T2.1b,
-review round 1, P1).
+"""A paged answer is held to its request's schema page by page (review round 1, P1).
 
 Contract v26 lets a fetch's answer arrive in pages: a ``data`` reply with a
 ``continuation`` is followed by the same request asked again, until a reply
 with none. Each page is a reply like any other, so each must pass the
-schema-match check an unpaged reply passes (check (b), decision H16): a
+schema-match check an unpaged reply passes (check (b)): a
 column the request declares non-nullable holding a null is
 ``PROVIDER_SCHEMA_MISMATCH`` whether it arrives in the first page, a page in
 the middle, or the only reply. A valid paged answer still reads whole.

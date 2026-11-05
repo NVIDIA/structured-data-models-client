@@ -4,23 +4,23 @@
 
 //! Times a source stores as text, read by the core's fixed list of formats
 //! and nothing else: `date-rules.md`, "The core's text formats", is the
-//! spec this module follows (decision E66(h); E68). In short:
+//! spec this module follows. In short:
 //!
 //! - a value is read with its surrounding white space taken off, and an
-//!   empty value holds no time;
+//! empty value holds no time;
 //! - its format is the one of the list it is written in, found from the
-//!   value alone ([`super::text_shapes`], the client's two shapes), and it
-//!   is parsed by that format with `jiff`'s `strtime`;
+//! value alone ([`super::text_shapes`], the client's two shapes), and it
+//! is parsed by that format with `jiff`'s `strtime`;
 //! - a day or month first value is read in the order the values read
-//!   together decide by the client's rule (`day_comes_first`), and a
-//!   two-digit year in the hundred years around the clock's;
+//! together decide by the client's rule (`day_comes_first`), and a
+//! two-digit year in the hundred years around the clock's;
 //! - a value either reads as an instant or is missing (empty); a value in
-//!   a format whose fields name no date or time of day, and any other
-//!   value, is outside the list, and the reading that meets one refuses it
-//!   by name rather than guess ([`Unread::Outside`]).
+//! a format whose fields name no date or time of day, and any other
+//! value, is outside the list, and the reading that meets one refuses it
+//! by name rather than guess ([`Unread::Outside`]).
 //!
 //! No reading here follows pandas or `dateutil`: where the reference reads
-//! text otherwise, the difference is registered (E68).
+//! text otherwise, the difference is registered.
 
 use jiff::fmt::strtime;
 

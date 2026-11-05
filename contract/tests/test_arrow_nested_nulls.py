@@ -23,7 +23,7 @@ import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-VECTORS = ROOT / 'contract/t136-struct-union-vectors.json'
+VECTORS = ROOT / 'contract/struct-union-vectors.json'
 #: Seconds a child read may take; a read is milliseconds.
 TIMEOUT = 120
 

@@ -86,9 +86,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: refused INVALID_REQUEST at materialize; Schema.from_source leaves the column out with one SDMWarning per table (a predictive query cannot name a column holding a dot, a backtick or a line break), and the grammar's quoted name holds no backtick, so the doubled backtick is a syntax error; the core naming any column (KO2-36) answers through predict"
+    "code": "INVALID_REQUEST"
   },
-  "why": "A column named with a backtick (a doubled backtick inside the quoted name) (\"a`b\"), as a filter on orders inside the target's aggregation: KO2-36, any column name works, kept as data and nameable in a query",
-  "source": "T2.18 any column name (KO2-36), the design row"
+  "why": "A column named with a backtick (a doubled backtick inside the quoted name) (\"a`b\"), as a filter on orders inside the target's aggregation: , any column name works, kept as data and nameable in a query",
+  "source": "Correctness case name.backtick-filter using the shop fixture."
 }

@@ -53,5 +53,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "G15: a primary key given as a number is refused saying a key names a column, with the value given",
-  "source": "T2.14b's test author, the reference at 6298913c"
+  "source": "Correctness case wording.key-number using the shop fixture."
 }

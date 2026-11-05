@@ -94,6 +94,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "accounts as the entity table, linked to owners by DECIMAL(20,0) keys 2**53 and 2**53 + 1, one integer apart and one float64: each account reaches its own owner (gold or basic), the keys never merged (KO2-35)",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "why": "accounts as the entity table, linked to owners by DECIMAL(20,0) keys 2**53 and 2**53 + 1, one integer apart and one float64: each account reaches its own owner (gold or basic), the keys never merged",
+  "source": "Correctness case sample.parent-table.decimal-keys using the shop fixture."
 }

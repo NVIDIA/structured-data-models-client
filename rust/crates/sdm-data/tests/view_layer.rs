@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A semantic model through the data layer's port (T3.5 stage 2, design S3
+//! A semantic model through the data layer's port ( stage 2, design S3
 //! and S5): each question of a view's text answered in the provider's
 //! dialect (`view_text`), what a provider's failure says (`failure`), and a
 //! Databricks metric view's definition asked and read (`describe` of

@@ -89,9 +89,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: candidates given to a binary classification: \"candidates are the rows a ranking is over, and ... does not rank anything\""
+    "code": "INVALID_REQUEST"
   },
   "why": "candidates given to a query that ranks nothing, refused by name",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.candidates-not-a-ranking using the shop fixture."
 }

@@ -104,6 +104,6 @@
     "error": "StructuredDataError",
     "code": "INVALID_REQUEST"
   },
-  "why": "Python's 4,300-digit int limit, past it: the same literal with one more leading zero, 4,301 digits, refused (pyint, decision A4; PQL_VALUE_INVALID_LITERAL)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "why": "Python's 4,300-digit int limit, past it: the same literal with one more leading zero, 4,301 digits, refused (pyint; PQL_VALUE_INVALID_LITERAL)",
+  "source": "Correctness case s0.boundary.digits-4301 using the shop fixture."
 }

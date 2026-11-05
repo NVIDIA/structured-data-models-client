@@ -319,7 +319,7 @@ def _shown_on_the_core(text: str) -> tuple[list[str], str | None]:
 
 def test_a_day_first_literal_read_before_an_error_keeps_its_warning() -> None:
     # U1: the literal read before a packed one, which the core refuses by
-    # name (decision E79), is warned of before the error.
+    # name, is warned of before the error.
     shown, code = _shown_on_the_core(
         'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024 AND orders.ts '
         '< 20240101-01-01, 0, 30, days) FOR EACH users.user_id'

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A semantic model's definition as the conversion reads it (design S5):
+//! A semantic model's definition as the conversion reads it:
 //! one [`ViewSpec`] for a metric view and a semantic view alike, with no
 //! dialect in it. It holds the definition's [`Document`] and, for each
 //! logical table, column, relationship, parameter and measure, the node it

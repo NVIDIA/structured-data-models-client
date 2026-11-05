@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A live-model smoke of the Rust core's request (decision E27, T1.11d).
+r"""A live-model smoke of the Rust core's request.
 
 On demand and local only: it never runs in CI, gates nothing, and no
 locked check reads it. It builds ``base.regression``'s request on the Rust
@@ -23,7 +23,7 @@ and never from this repository; the workspace and its credentials only from
 the local Databricks CLI profile (``--profile``, ``SDM_SMOKE_PROFILE``, or
 the SDK's own ``DATABRICKS_CONFIG_PROFILE`` and environment). Nothing this
 script writes names the endpoint, the workspace, a token or a user: every
-line it prints and every warning it shows passes through :func:`redact`,
+line it prints and every warning it shows passes through:func:`redact`,
 which knows, before any client exists, every value of the arguments, the
 ``DATABRICKS_`` and ``SDM_SMOKE_`` variables and the CLI profile, bare host
 names included; an error is reported by its class, its code and its HTTP
@@ -216,9 +216,7 @@ def _usage(reason: str) -> NoReturn:
 
 
 def parse(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = _Parser(
-        description='A live-model smoke of the Rust core request (E27).'
-    )
+    parser = _Parser(description='A live-model smoke of the Rust core request.')
     parser.add_argument(
         '--endpoint',
         help=f'the serving endpoint name; default ${ENDPOINT_VARIABLE}',
@@ -277,7 +275,7 @@ def know_profile(environ: dict[str, str], profile: str | None) -> None:
     r"""Adds to the secrets, before any client exists, each value of the
     profile's section of the CLI's configuration file
     (``DATABRICKS_CONFIG_FILE``, or ``~/.databrickscfg``), a host's bare
-    name included. It reads that file, so :func:`main` calls it only for a
+    name included. It reads that file, so:func:`main` calls it only for a
     live smoke, inside the boundary that reports a failure or an interrupt
     in fixed words."""
     path = Path(

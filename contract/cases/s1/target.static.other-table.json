@@ -123,9 +123,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: the query validator refuses the implicit join (\"Static references to columns from other tables that implicitly contain a foreign key to primary key connection are not supported in foundation model queries.\")"
+    "code": "INVALID_REQUEST"
   },
   "why": "A static column of another table than the entity's, users.age for each order: the query validator refuses the implicit join on both routes before the core's rule static_target is reached, so it is held where the reference holds it",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "source": "Correctness case target.static.other-table using the shop fixture."
 }

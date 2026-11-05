@@ -13,12 +13,12 @@
 //! digits joined by `:` (D1).
 //!
 //! - A literal whose every run has four digits or fewer is read by D2 to
-//!   D7 and D9 ([`Reader::plain`]); a day-first reading warns by D4.
+//! D7 and D9 ([`Reader::plain`]); a day-first reading warns by D4.
 //! - A literal with a run of five digits or more (D8) is not read: it is
-//!   [`Reading::Packed`], refused by name before any field is read, by the
-//!   owner's decision of 2026-10-12 (decision E79, register DT-5). The
-//!   reference reads such a literal through `dateutil` (a packed date, a
-//!   long zero-padded field) or refuses it; the core reads neither.
+//! [`Reading::Packed`], refused by name before any field is read, by the
+//! owner's decision of 2026-10-12 (register DT-5). The
+//! reference reads such a literal through `dateutil` (a packed date, a
+//! long zero-padded field) or refuses it; the core reads neither.
 //!
 //! What the reader takes from the host: the current year, which places a
 //! two-digit year (D5), and whether the platform's `strftime` pads a year
@@ -66,7 +66,7 @@ impl fmt::Display for DateTime {
 
 /// What a literal stands for: a wall date and time, and the UTC offset in
 /// seconds when the literal gives one. Only D8's packed dates gave one, and
-/// since T1.6c they are refused (decision E79), so the reader gives none;
+/// they are refused, so the reader gives none;
 /// the field stays because the validated query's format carries it
 /// (`PqlLiteral::Time`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,7 +104,7 @@ impl Held {
     pub fn holds(&self, stamp: &Stamp) -> bool {
         // pandas bounds the UTC instant; the wall clock is that instant
         // only for a literal without an offset, and the reader gives none
-        // since D8's packed dates are refused (decision E79).
+        // since D8's packed dates are refused.
         debug_assert!(stamp.offset.is_none(), "a date literal read with an offset");
         let at = stamp.at;
         let days = days_from_civil(i64::from(at.year), i64::from(at.month), i64::from(at.day));
@@ -158,7 +158,7 @@ pub enum Reading {
     /// Not a date (D9): the reference refuses it too.
     Refused,
     /// A run of five digits or more (D8), refused by name before it is
-    /// read, needing no current year (decision E79): the reference reads it
+    /// read, needing no current year: the reference reads it
     /// through `dateutil`, or refuses it.
     Packed,
     /// A two-digit year the reader cannot place: the reader was given no
@@ -235,7 +235,7 @@ impl Reader {
                 None => return Reading::Refused,
             },
         };
-        // D8: refused by name, before any field is read (E79).
+        // D8: refused by name, before any field is read.
         if date
             .iter()
             .chain(time.iter().flatten())
@@ -427,7 +427,7 @@ mod tests {
         }
     }
 
-    /// D8 (E79): every literal with a run of five digits or more is
+    /// D8: every literal with a run of five digits or more is
     /// refused by name, those the reference read through `dateutil` and
     /// those it refused alike, with or without a current year; a run of
     /// four digits still reads.

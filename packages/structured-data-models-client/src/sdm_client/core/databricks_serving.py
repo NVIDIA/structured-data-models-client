@@ -103,7 +103,7 @@ _NO_SESSIONS = (
 class DatabricksServingTransport:
     r"""The wire layer to one Databricks Model Serving endpoint.
 
-    Not part of the public API surface; :meth:`SDMClient.for_databricks_serving`
+    Not part of the public API surface;:meth:`SDMClient.for_databricks_serving`
     builds one.
 
     Args:
@@ -205,7 +205,7 @@ class DatabricksServingTransport:
     @property
     def model_endpoint(self) -> dict[str, Any]:
         r"""This endpoint as the core is told of it (``Predict``'s
-        ``model_endpoint``, T3.13): its name and the caller's limit. The
+        ``model_endpoint``): its name and the caller's limit. The
         core writes each call's envelope and reads every answer."""
         return {
             'endpoint': 'serving_endpoint',
@@ -217,10 +217,10 @@ class DatabricksServingTransport:
         r"""Posts the bytes the core wrote, this endpoint's envelope as they
         are, through the workspace's own client (``api_client.do``, which
         rewinds a byte body to retry it), and gives back the bytes the
-        endpoint answered with, for the core to read (T3.13). A failure is
-        raised as :class:`EndpointFailed`, carrying what the SDK's error
+        endpoint answered with, for the core to read. A failure is
+        raised as:class:`EndpointFailed`, carrying what the SDK's error
         says, for the core to name; anything but an ``OSError`` escapes, as
-        from :meth:`predict`."""
+        from:meth:`predict`."""
         self._require_open()
         try:
             answered = self._workspace.api_client.do(
@@ -447,7 +447,7 @@ class _Body(io.BytesIO):
 
 def _failed(error: BaseException) -> EndpointFailed:
     r"""The SDK's failure as the core reads it: the status its class gives
-    (as :meth:`DatabricksServingTransport._error_from` takes it), its
+    (as:meth:`DatabricksServingTransport._error_from` takes it), its
     message and code, and its class's name. Neither logged nor repeated
     here: the message can hold the request body, which is the caller's
     rows."""
@@ -475,7 +475,7 @@ def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
     provider's own ``CODE: `` prefix, or in the ``Error '...'`` right after
     the gateway's fixed wrapper. An upper-case word anywhere else can be the
     caller's value.
-    The provider's code is skipped: ``BAD_REQUEST: ...`` is Databricks
+    The provider's code is skipped: ``BAD_REQUEST:...`` is Databricks
     describing the call, not the model describing the request.
     """
     prefix = f'{provider_code}: '
@@ -635,7 +635,7 @@ def _named_copy(
                 "retry_timeout_seconds on the client's own Config instead",
                 code='INVALID_CONFIGURATION',
             )
-        # copy() shares the attribute dict with the caller's config, so a
+        # copy shares the attribute dict with the caller's config, so a
         # bound set without this would change their client too.
         config._inner = dict(config._inner)
         # The SDK retries for its own retry_timeout_seconds whatever one

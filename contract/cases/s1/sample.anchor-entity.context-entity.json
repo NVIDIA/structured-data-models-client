@@ -87,5 +87,5 @@
     "stage": "predict"
   },
   "why": "anchor_time='entity' and context_anchor_time='entity': the context anchored the same way",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.anchor-entity.context-entity using the shop fixture."
 }

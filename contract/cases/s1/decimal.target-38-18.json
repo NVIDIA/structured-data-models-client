@@ -85,8 +85,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "schema dtype float64 / numerical"
+    "stage": "predict"
   },
   "why": "A summed decimal at the maximum scale; aggregation and label type",
   "source": "DV133; test_decimal_target_accuracy.py (first attempt)"

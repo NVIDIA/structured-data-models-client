@@ -4,7 +4,7 @@
 
 //! A column of numbers handed over as their exact text (a Postgres
 //! `numeric` declared without a precision) read by its role in the schema
-//! as it stands (T2.21, learnings lesson 19): a key its catalog declares
+//! as it stands (learnings lesson 19): a key its catalog declares
 //! is always its text, as the reference reads it; any other is its text
 //! while the schema keys it or joins it to another column read as text,
 //! and a double otherwise. Keys named and links given or edited by the

@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! No definition panics the core's view steps and words (T3.5 fix 2, the
+//! No definition panics the core's view steps and words ( fix 2, the
 //! owner's stop rule): a few seconds of metric views whose parameters,
 //! joins and dimensions are made of random pieces, each read, its
 //! parameters' defaults converted for every type, its joins walked, and
 //! its values quoted. Each may refuse, by name; none may panic, and no
-//! text is built past its bound (Codex review 2, P1-5).
+//! text is built past its bound.
 
 use sdm_contract::CoreError;
 use sdm_contract::data::{DataLayer, ProviderChoice};
@@ -211,8 +211,7 @@ fn a_semantic_view_passes_through_the_metric_steps() {
     assert!(walk.kept.is_empty() && walk.skipped.is_empty());
 }
 
-/// The bound on a written value is its characters, exactly (Codex review
-/// 3, P1-4): a default of 2,100,000 `é` is read whole; a quoted text of
+/// The bound on a written value is its characters, exactly: a default of 2,100,000 `é` is read whole; a quoted text of
 /// 1,100,000 escaped NULs, 4,400,002 characters, and 200,000 aliases of a
 /// date are refused by name, never built past the bound.
 #[test]
@@ -241,7 +240,7 @@ fn the_bound_counts_the_characters_written() {
 
 /// The class the data layer's patterns read `\s` by is derived from the
 /// parser's one rule of white space: it holds exactly the code points the
-/// rule holds, every one of them tested (Codex review 4, P1).
+/// rule holds, every one of them tested.
 #[test]
 fn the_patterns_white_space_is_the_one_rule() {
     let spaces = sdm_core::pql::spaces();

@@ -90,9 +90,8 @@
     "stage": "predict",
     "error": "NimRequestError",
     "code": null,
-    "message": "[400] {\"error\": \"no_classes\"}",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: materialize answers a temporal link prediction, each context row labelled with the distinct items bought in its window (contract/t210-target-vectors.json holds the labels); the scripted endpoint answers no link prediction (its rule answers a classification with its first class, and a stringlist target has none), so predict ends in the endpoint's 400 after the request is sent"
+    "message": "[400] {\"error\": \"no_classes\"}"
   },
   "why": "An aggregation other than SUM, COUNT, AVG, MIN and MAX: LIST_DISTINCT of buys.item_id, a foreign key, for each user, a temporal link prediction whose context rows are each labelled with the distinct items bought in its window (the core's rule aggregation)",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "source": "Correctness case target.aggregation.list-distinct using the shop fixture."
 }

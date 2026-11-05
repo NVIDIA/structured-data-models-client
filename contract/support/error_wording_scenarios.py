@@ -17,11 +17,11 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/t214b-wording-vectors.json'
+OUT = ROOT / 'contract/error-wording-vectors.json'
 CASES = ROOT / 'contract/cases/s1'
 FORMAT = 'sdm-t214b-wording-vectors/1'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
-#: T2.14b's own cases.
+#: own cases.
 OWN = (
     'wording.anchor-after-data',
     'wording.binary-one-class',
@@ -99,7 +99,7 @@ FROM_SOURCE_ROUTES = (
     'schema.from-source/catalog-keys/duckdb',
 )
 #: The code a core warning's or refusal's text is prefixed with on
-#: python-core (E41(i), E59(d)), left out so a warning is held by its words.
+#: python-core, left out so a warning is held by its words.
 CODE_PREFIX = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
 
 
@@ -114,10 +114,11 @@ def _module(name: str, path: Path) -> ModuleType:
 
 
 def options() -> ModuleType:
-    r"""``option_record.py``, whose runner, endpoint and JSON helpers this
+    r"""``query_option_scenarios.py``, whose runner, endpoint and JSON helpers this
     recorder shares."""
     return _module(
-        'option_record', ROOT / 'contract/support/query_option_scenarios.py'
+        'query_option_scenarios',
+        ROOT / 'contract/support/query_option_scenarios.py',
     )
 
 

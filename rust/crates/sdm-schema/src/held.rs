@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The schema as a host holds it, as plain data (contract v28, T3.16): read
+//! The schema as a host holds it, as plain data (contract v28): read
 //! into the schema the core works on, and written back.
 //!
 //! A host hands `edit_schema` and `materialize` its schema as it stands
@@ -132,7 +132,7 @@ pub fn by_data_type(relation: &Relation, dtype: Option<&str>) -> SourceFacts {
 }
 
 /// Every data type name a host may give a column, and the data type it
-/// names (T3.16): the client's wire names, as the old client maps them to
+/// names: the client's wire names, as the old client maps them to
 /// the language's (`int64` and `int32` an integer, `float64` and `float32`
 /// a float, a timestamp of any unit a time), then the language's own names,
 /// which the old client passes through. The one table of them: the Python
@@ -173,7 +173,7 @@ pub fn named_dtype(name: &str) -> Option<Dtype> {
 }
 
 /// Whether a column the caller gave the data type named `name` can be the
-/// source's column of type `source` (the owner's plan B, item 3, T3.4): the
+/// source's column of type `source`: the
 /// two of one kind ([`kind`]); a name no data type has, or the language's
 /// `unsupported`, taking any.
 pub fn type_matches(name: &str, source: Dtype) -> bool {
@@ -328,7 +328,7 @@ fn read_with_frame_widths(
                 },
             };
             // The host's name of the type, which a join reads; but for a
-            // column of exact numbers, whose type its role decides (T2.21).
+            // column of exact numbers, whose type its role decides.
             if let Some(dtype) = &column.dtype {
                 if facts.exact_number.is_none() {
                     types.names.insert(at.clone(), dtype.clone());

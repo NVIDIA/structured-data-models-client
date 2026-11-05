@@ -7,19 +7,19 @@
 //! as its `re` matched:
 //!
 //! - `\s` is the old client's white space, Python's (`str.isspace`), which
-//!   holds the four separators U+001C to U+001F that Rust's `\s` does not
-//!   (T3.5 fix 1): read either way, `WITH\x1cx AS (x)` would open a
-//!   sub-query for the warehouse and none for the check. The rule is
-//!   `sdm-pql`'s, handed in by the core as [`Spaces`]; a pattern's `\s` is
-//!   the class derived from it (every code point the rule holds), and `\S`
-//!   its complement, so no pattern holds the engine's own `\s`. Each fixed
-//!   pattern is compiled on first use with that class, and kept
-//!   ([`Lazy`]);
+//! holds the four separators U+001C to U+001F that Rust's `\s` does not:
+//! read either way, `WITH\x1cx AS (x)` would open a
+//! sub-query for the warehouse and none for the check. The rule is
+//! `sdm-pql`'s, handed in by the core as [`Spaces`]; a pattern's `\s` is
+//! the class derived from it (every code point the rule holds), and `\S`
+//! its complement, so no pattern holds the engine's own `\s`. Each fixed
+//! pattern is compiled on first use with that class, and kept
+//! ([`Lazy`]);
 //! - a match is total: a pattern that runs out of its backtracking budget
-//!   answers [`Unreadable::TooDeep`], never "no match", so no check can
-//!   accept an expression because a pattern failed on it. Each caller
-//!   refuses on it. So does a pattern made of a definition's text that is
-//!   past the compiler's bounds ([`Pattern::build`]).
+//! answers [`Unreadable::TooDeep`], never "no match", so no check can
+//! accept an expression because a pattern failed on it. Each caller
+//! refuses on it. So does a pattern made of a definition's text that is
+//! past the compiler's bounds ([`Pattern::build`]).
 
 use std::borrow::Cow;
 use std::ops::Range;

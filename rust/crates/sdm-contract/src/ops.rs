@@ -5,14 +5,12 @@
 //! Operations: typed requests and their results, not functions looked up by
 //! name.
 //!
-//! Phase 1 needs four: `validate_query` (S0), and `describe_source`,
-//! `materialize` and `predict` for the Phase 1b journey. The journey's three
-//! are the shapes the journey is known to need; Phase 1b refines them, each
-//! change with a contract version bump.
+//! Requests cover schema operations, materialization, prediction, sessions and
+//! result processing through an explicitly versioned protocol.
 //!
 //! # Input-sized fields
 //!
-//! The control cap bounds a message's envelope only (decision H5). A field
+//! The control cap bounds a message's envelope only. A field
 //! whose size grows with what the user hands in (query text, a
 //! [`QuerySchema`], a [`SourceDescription`], the tables a source is
 //! described by) travels as a bytes attachment holding the UTF-8 JSON of the
@@ -634,7 +632,7 @@ pub enum Capability {
 pub struct QueryValidation {
     pub accepted: bool,
     pub diagnostics: Vec<PqlDiagnostic>,
-    /// What the core resolved of an accepted query (contract v28, T3.8),
+    /// What the core resolved of an accepted query (contract v28),
     /// which a host reads instead of resolving the query again: its facts
     /// and its text as the core writes it back. Absent for a refused query
     /// and from a core that does not say.
@@ -706,35 +704,35 @@ pub struct DescribeSource {
 pub struct SourceSpec {
     /// The tables to describe, in order, each by the name the schema gives
     /// it and the name the source holds it under; empty, every table the
-    /// source lists, each under its own name (decision E59).
+    /// source lists, each under its own name.
     pub tables: Vec<NamedTable>,
     /// Declared primary keys, by the schema's name of the table: each its
     /// columns in order, `null` naming none (refused as an empty key), or
     /// `unreadable` for a value the host could not write as an ordered
     /// sequence of names (the conformance rule on [`Given`]), which the
-    /// core refuses (decision E101).
+    /// core refuses.
     pub primary_keys: BTreeMap<String, Given<Option<Vec<String>>>>,
     /// Declared time columns, by the schema's name of the table: a name,
     /// `null` saying the table has none, as the caller's `None` does
-    /// (decision E61), or `unreadable` for a value that is not a name.
+    ///, or `unreadable` for a value that is not a name.
     pub time_columns: BTreeMap<String, Given<Option<String>>>,
     /// The relationships given, each `[foreign key, referenced key]` by the
     /// schema's names, in place of the declared and inferred ones; an empty
     /// list says there are none. Left out, they are the source's declared
-    /// foreign keys and the links inferred by name (decision E59).
+    /// foreign keys and the links inferred by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationships: Option<Vec<Vec<ColumnRef>>>,
 }
 
 /// A table named for the schema: the name a query uses, and the relation
-/// of the source it reads (design choice 12), which a host naming a table
+/// of the source it reads, which a host naming a table
 /// by a string gives as one part.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NamedTable {
     pub name: String,
     pub source: Relation,
-    /// The columns the schema keeps of the table (contract v28, T3.8), as a
+    /// The columns the schema keeps of the table (contract v28), as a
     /// schema built column by column names them: only these are read and
     /// described, as the reference reads only the columns a schema
     /// describes (`_copy_for_one_gather`). Left out, every column the
@@ -750,7 +748,7 @@ pub struct DescribedSource {
     /// A bytes attachment of a [`SourceDescription`] as JSON.
     pub description: AttachmentId,
     /// What a semantic model's conversion notes of the schema it gave
-    /// (contract v28, T3.27): each measure as the predictive query it is,
+    /// (contract v28): each measure as the predictive query it is,
     /// each time column taken in place of the view's own, each parameter
     /// read as its default, in order (`Schema.conversion_notes`). Given at
     /// describe only. Left out, none.
@@ -808,7 +806,7 @@ pub struct DescribedTable {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calculated_columns: Vec<crate::sql_column::CalculatedColumn>,
     pub name: String,
-    /// The relation of the source this table reads (design choice 12): its
+    /// The relation of the source this table reads: its
     /// own name, one part, unless the caller named it otherwise (decision
     /// E59).
     pub source: Relation,
@@ -820,8 +818,8 @@ pub struct DescribedTable {
     pub end_time_column: Option<String>,
     /// The column inference took as the time column, when the table's
     /// time column is now another or none: a lone stamp of the last edit a
-    /// link then refused (decision E55), or the column inference took where
-    /// the caller named another (decision E59). `None` when the time column
+    /// link then refused, or the column inference took where
+    /// the caller named another. `None` when the time column
     /// is inference's, or inference took none. The host's schema was
     /// ordered by it first, as the reference's was; `materialize` does not
     /// read it.
@@ -843,14 +841,14 @@ pub struct DescribedColumn {
     pub dtype: Dtype,
     /// What the column means in the schema as it stands: `ID` for a column
     /// the schema joins on, its primary key or a link's foreign key
-    /// (decision E55).
+    ///.
     pub stype: Stype,
     /// What the column meant before the schema's joining on it made it an
     /// identifier, given back when the schema stops joining on it; `None`
     /// when joining on it changed nothing, or it is not joined on. In a
     /// description `describe_source` answers, the core's; in `materialize`'s
     /// schema, what the host holds, from which the core marks the columns
-    /// joined on again (decision E55).
+    /// joined on again.
     pub stype_before_key: Option<Stype>,
     /// Whether the column may hold no value, as the catalog declares it:
     /// neither declared `NOT NULL` nor part of the declared primary key.
@@ -868,7 +866,7 @@ pub struct DescribedColumn {
     /// Set for a column of numbers the host provider handed over as their
     /// exact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):
     /// whether its catalog declares it a key. The schema reads such a column
-    /// by its role in the schema as it stands (T2.21): as its text
+    /// by its role in the schema as it stands: as its text
     /// (`received` `utf8`, `dtype` `string`) where the catalog declares it a
     /// key, or where the schema keys it or joins it and every column it
     /// joins to is such a column too; as a double (`float64`) otherwise.
@@ -892,10 +890,10 @@ pub enum ExactNumber {
 // --- edit_schema ------------------------------------------------------------------
 
 /// Check one edit to a schema and make it, as the reference client's
-/// setters check and make it (decision E67): the schema the host holds, as
+/// setters check and make it: the schema the host holds, as
 /// plain data, and the edit; the result is the schema with the edit made,
 /// or the refusal the reference gives at the assignment (contract v28,
-/// T3.16: the schema alone, with what the source said of each column on
+///: the schema alone, with what the source said of each column on
 /// the column, never a description the core answered earlier).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -939,7 +937,7 @@ pub struct SchemaEdited {
     pub declared: Option<ColumnRef>,
 }
 
-/// A schema as a host holds it, as plain data (contract v28, T3.16): its
+/// A schema as a host holds it, as plain data (contract v28): its
 /// tables, columns, meanings, keys, time columns and links as they stand,
 /// however the host came to hold them (described, built by hand, edited,
 /// copied or unpickled), and, on each column the source was asked of,
@@ -1043,7 +1041,7 @@ pub struct HeldColumn {
 }
 
 /// What the source said of one column ([`DescribedColumn`]'s facts), which
-/// a host keeps on the column and hands back whole (contract v28, T3.16).
+/// a host keeps on the column and hands back whole (contract v28).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SourceFacts {
@@ -1137,7 +1135,7 @@ pub enum SchemaEdit {
 /// (a key named by a number, a set of names, a relationship that is not
 /// one), which the core refuses as the reference refuses it.
 ///
-/// The conformance rule every host holds to (decision E101): the host's
+/// The conformance rule every host holds to: the host's
 /// null or none is `{"value": null}`; text is the value; a finite, ordered
 /// collection read once without error, every member non-null text, is a
 /// list of those texts; a collection with a null, non-text or nested
@@ -1152,7 +1150,7 @@ pub enum SchemaEdit {
 /// "<text>"}`, the text the host's language shows it as (in Python, its
 /// `repr`): the core takes it as `unreadable` and names it in its refusal
 /// (`given`), as the reference names it, a value of the caller's own call
-/// (KO2-86, T2.14b).
+///.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Given<T> {
@@ -1183,31 +1181,31 @@ impl<T> Given<T> {
 // --- materialize and predict --------------------------------------------------
 
 /// One candidate of a ranking as a host gives it (`Materialize.candidates`,
-/// T2.8), each in one of these forms:
+/// ), each in one of these forms:
 ///
 /// - `{"value": <scalar>}`: the host's value as the contract's scalar of
-///   its own type, a missing value `null`.
+/// its own type, a missing value `null`.
 /// - `{"integer": "<digits>"}`: an integer wider than an integer scalar
-///   holds, by its digits (`-` before a negative one).
+/// holds, by its digits (`-` before a negative one).
 /// - `{"decimal": "<digits>"}`: an exact decimal of any precision, by its
-///   fixed-point digits (`-12.50`), its scale the digits after the point.
+/// fixed-point digits (`-12.50`), its scale the digits after the point.
 /// - `{"spelled": "<text>"}`: a value of a type no scalar holds, by the
-///   text the reference writes into its question (in Python, `str` of it);
-///   it is no text candidate, and the core holds it equal to no other.
+/// text the reference writes into its question (in Python, `str` of it);
+/// it is no text candidate, and the core holds it equal to no other.
 /// - `{"typed": {"text": "<text>", "type": "<name>"}}`: a value of a type
-///   no scalar holds, written into its question by its text as `spelled`
-///   is, with the name of the kind of value it is (`date`, `datetime` for a
-///   timestamp with no zone, `datetime_zoned` for one with one, `time`).
-///   Two of one kind and one text are one candidate; a host whose language
-///   holds others equal (two zones of one instant) says so with `repeat`
-///   (T2.14b).
+/// no scalar holds, written into its question by its text as `spelled`
+/// is, with the name of the kind of value it is (`date`, `datetime` for a
+/// timestamp with no zone, `datetime_zoned` for one with one, `time`).
+/// Two of one kind and one text are one candidate; a host whose language
+/// holds others equal (two zones of one instant) says so with `repeat`
+///.
 /// - `repeat`: a value the host's own language holds equal to one given
-///   before it, left out as the reference's `dict.fromkeys` leaves it out.
-///   A host whose candidates are all scalars sends none, the core keeping
-///   each distinct value once by its own equality.
+/// before it, left out as the reference's `dict.fromkeys` leaves it out.
+/// A host whose candidates are all scalars sends none, the core keeping
+/// each distinct value once by its own equality.
 /// - `unreadable`: a value the host cannot look up by value (in Python,
-///   one it cannot hash), which names no row and which the core refuses by
-///   name, as the reference fails on it.
+/// one it cannot hash), which names no row and which the core refuses by
+/// name, as the reference fails on it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum GivenCandidate {
@@ -1250,14 +1248,14 @@ pub enum TypedKind {
 pub struct Materialize {
     pub provider: ProviderChoice,
     /// A bytes attachment of a [`HeldSchema`] as JSON: the schema to
-    /// sample, as the host holds it (contract v28, T3.16).
+    /// sample, as the host holds it (contract v28).
     pub schema: AttachmentId,
     /// The query text: a bytes attachment of a JSON string.
     pub query: AttachmentId,
     /// The entities to predict for: an Arrow attachment of one column.
     pub indices: Option<AttachmentId>,
     /// The rows a ranking (`RANK TOP k`) is over, as the caller named them
-    /// (contract v27, optional, T2.8): a bytes attachment of a JSON list of
+    /// (contract v27, optional): a bytes attachment of a JSON list of
     /// [`GivenCandidate`]s, each candidate as the host's value is written,
     /// so values of several types keep each its own. The core asks a
     /// ranking as one question per distinct candidate, writing each into
@@ -1271,32 +1269,32 @@ pub struct Materialize {
     pub seed: Option<Seed>,
     /// Whether the caller asked for an unseeded sample, a new one each
     /// call (`random_seed=None`), with `seed` left out; from contract v27
-    /// the core draws it under a seed of its own, new each call (T2.11).
+    /// the core draws it under a seed of its own, new each call.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unseeded: bool,
     /// Whether the caller anchored each entity at its own time
     /// (`anchor_time='entity'`), with `anchor_time` left out; from contract
-    /// v27 taken for a static query (T2.11).
+    /// v27 taken for a static query.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub anchor_entity: bool,
     /// A bytes attachment of a JSON object of the call's option values the
-    /// core reads (T1.28a), each as the caller gave it and the host's JSON
+    /// core reads, each as the caller gave it and the host's JSON
     /// writes it, a member only where the call names the option:
     /// `num_context_samples`, the context size, whose run mode the core
     /// chooses and bounds; `num_hops` and `num_neighbors`, whose hops it
     /// bounds before it refuses them by name; `prediction_statistic`, which
     /// it checks and records; `inference_config`, which it reads by the
-    /// engine's rules and writes into the payload (decision E45(a)); and
+    /// engine's rules and writes into the payload; and
     /// `random_seed`, in place of `seed` and `unseeded` where it is given
     /// (`null`, an unseeded sample); from contract v26, `rows_per_call`,
     /// the most rows one model call scores, which only lowers the profile's
-    /// (`main`'s multi-call `predict`, read from T2.8c); `top_k`, how
+    /// (`main`'s multi-call `predict`, read ); `top_k`, how
     /// many candidates a ranking keeps, in place of the query's `TOP k`,
-    /// read from T2.8; from contract v27, `lag_timesteps`, the past steps
-    /// of a temporal target added as features (T2.9), any value, which the
+    /// read; from contract v27, `lag_timesteps`, the past steps
+    /// of a temporal target added as features, any value, which the
     /// core refuses where the reference's engine refuses it, once the
     /// context is labelled; and from contract v27 the sampling options
-    /// (T2.11): `num_hops` and `num_neighbors`, the hops walked and each
+    ///: `num_hops` and `num_neighbors`, the hops walked and each
     /// one's size; `max_pq_iterations`; `use_prediction_time`;
     /// `return_embeddings`, which names `embeddings` among the payload's
     /// outputs; `exclude_cols_dict`, as given; and `context_anchor_time`,
@@ -1306,7 +1304,7 @@ pub struct Materialize {
     /// client takes, so the host checks none of them.
     /// Working v30's option encoding also preserves bare `NaN`, `Infinity`
     /// and `-Infinity` numeric tokens in this attachment only. The core
-    /// admits only a NaN `lag_timesteps` under KO3-44; other nonfinite
+    /// admits only a NaN `lag_timesteps` under; other nonfinite
     /// option values remain named refusals. Text tokens and ordinary
     /// message JSON retain their existing strict interpretation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1314,31 +1312,31 @@ pub struct Materialize {
     /// The names of the call's other sampling options, which this message
     /// carries no value of (none from contract v27: every sampling option
     /// travels in `values`): the core refuses any name it is given as
-    /// `INVALID_REQUEST` (decision E61). The host
+    /// `INVALID_REQUEST`. The host
     /// passes each the call gave, so it refuses none of its own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
     /// The most steps a forecast is asked as, one call each, which the host
     /// lets its caller set (the client's `decompose.MOST_PARTS`); 200 where
     /// it names none. A forecast of more is refused, `INVALID_REQUEST`, rule
-    /// `too_many_parts` (T1.36 fix 21).
+    /// `too_many_parts`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub most_parts: Option<u32>,
     /// The most entities one `materialize` gathers, across the calls it is
     /// asked in, which the host lets its caller set (`main`'s
     /// `MOST_ENTITIES`); 100,000 where it names none (design choice 1,
-    /// multi-call `predict`, read from T2.8c, which asks a request of more
+    /// multi-call `predict`, read which asks a request of more
     /// rows than one call scores in several calls; until then the core
     /// refuses more than one call's rows, a lower bound than either).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub most_entities: Option<u64>,
     /// The most model calls one request is asked in (`main`'s
-    /// `MOST_CALLS`); 100 where the host names none (read from T2.8c, as
+    /// `MOST_CALLS`); 100 where the host names none (read as
     /// `most_entities`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub most_calls: Option<u32>,
     /// The sampler state the materializer's last run left, which the host
-    /// hands back as it took it (decision E52); none for a materializer's
+    /// hands back as it took it; none for a materializer's
     /// first run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampler_state: Option<SamplerState>,
@@ -1350,7 +1348,7 @@ pub struct Materialize {
 pub const SAMPLER_STATE_VERSION: u32 = 1;
 
 /// What a materializer's runs have read of its source, so a later run
-/// skips a read the reference's sampler makes once (decision E52): the
+/// skips a read the reference's sampler makes once: the
 /// core holds no state across runs. A `materialize` run leaves it, done or
 /// failed, and the host takes it after the run ends (a `sampler_state`
 /// message), keeps it on its materializer as it is, opaque, and hands it
@@ -1425,7 +1423,7 @@ pub struct MemoBounds {
 /// An integer of any size, as signed hexadecimal text with no leading
 /// zeros (`0x0`, `0x2a`, `-0x400000000000000000`), so no language's integer
 /// parser meets a digit limit; how large a seed the core takes is the
-/// core's rule, not the decoder's (decision H7).
+/// core's rule, not the decoder's.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Seed {
@@ -1525,8 +1523,8 @@ pub struct Materialized {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub examples: Option<crate::examples::ExampleFacts>,
     /// What the core resolved of the query it gathered (contract v26,
-    /// T2.18), which a host reads instead of resolving the query itself:
-    /// the core resolves a query naming any column (KO2-36), which a host's
+    /// ), which a host reads instead of resolving the query itself:
+    /// the core resolves a query naming any column, which a host's
     /// own validator may not. Absent from a core that does not say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<QueryFacts>,
@@ -1550,7 +1548,7 @@ pub struct QueryFacts {
     /// How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.
     pub num_forecasts: u32,
     /// The query as the core writes it back, the reference's
-    /// `ValidatedPredictiveQuery.to_string()` (contract v28, T3.8): given
+    /// `ValidatedPredictiveQuery.to_string` (contract v28): given
     /// by `validate_query`; absent from `materialize`'s, whose state holds
     /// each question's text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1566,7 +1564,7 @@ pub struct QueryColumns {
 }
 
 /// The version of [`RequestState`]'s format this build writes and reads
-/// (decision H23); it is independent of the contract's.
+///; it is independent of the contract's.
 /// Version 2 (contract v26, design choice 1): the state of a request asked
 /// in several model calls ([`RequestState::batches`]).
 pub const REQUEST_STATE_VERSION: u32 = 2;
@@ -1588,7 +1586,7 @@ pub struct RequestState {
     /// The query text: a bytes attachment of a JSON string.
     pub query: AttachmentId,
     /// A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one
-    /// regression per step, the window moved a span along at each (T1.36
+    /// regression per step, the window moved a span along at each (
     /// fix 21): `payload` and `query` are step 1's, and this holds every
     /// later step's, in order, empty for a forecast of one step. Absent for
     /// any other request. `predict` sends each step's payload and gives the
@@ -1596,7 +1594,7 @@ pub struct RequestState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forecast: Option<Vec<ForecastStep>>,
     /// A request of more rows than one model call scores, asked in several
-    /// calls (`main`'s multi-call `predict`, design choice 1, T2.8c):
+    /// calls (`main`'s multi-call `predict`, design choice 1):
     /// `payload` is the first call's, and this holds every later call's, in
     /// order, each scoring the rows after the last; `predict` numbers each
     /// call's rows on from where the previous call's ended and gives the
@@ -1606,7 +1604,7 @@ pub struct RequestState {
     pub batches: Option<Vec<RequestBatch>>,
     /// A ranking (`RANK TOP k`), which the core asks as one binary question
     /// per distinct candidate, whether the entity reaches it in the window
-    /// (the client's `_per_candidate`, contract v27, optional, T2.8):
+    /// (the client's `_per_candidate`, contract v27, optional):
     /// `payload` and `query` are the first candidate's question, and this
     /// holds every later one's, in order. Absent for any other request.
     /// `predict` asks each and gives the answers back as one ranking.
@@ -1684,7 +1682,7 @@ pub struct ForecastStep {
     pub query: AttachmentId,
     /// The id this step's call carries in its `metadata.request_id`, which
     /// the host draws for each step as it draws [`Predict::request_id`] for
-    /// step 1's, one per call as the reference's client draws them (T1.36
+    /// step 1's, one per call as the reference's client draws them (
     /// fix 24). `materialize` writes none; `predict` refuses a later step
     /// without one (`INVALID_REQUEST`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1692,7 +1690,7 @@ pub struct ForecastStep {
 }
 
 /// A request the core did not materialize, as the host holds it
-/// ([`Predict::held`], T3.26): its public contents only, each payload as the
+/// ([`Predict::held`]): its public contents only, each payload as the
 /// request holds it and each question's text, with what the host was given
 /// of a ranking's candidates. The core rebuilds from it what a
 /// [`RequestState`] gives: a forecast's later steps numbered from 2, in
@@ -1780,10 +1778,8 @@ pub struct Predict {
     /// both, or neither, is refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<RequestState>,
-    /// A request the core did not materialize, as the host holds it (T3.26,
-    /// owner decision 2026-10-23): one an older client gathered, or this
-    /// one on its old route. The core rebuilds what it predicts from from
-    /// it alone, as the old client predicts what such a request holds.
+    /// Held data for saved or manually constructed requests without core state.
+    /// The core rebuilds the prediction request from these payloads alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub held: Option<HeldRequest>,
     /// The model id the request is sent to, as the wire names it.
@@ -1801,17 +1797,17 @@ pub struct Predict {
     /// The caller named no outputs: the core asks the task's default ones
     /// (a regression's `prediction`, a classification's `prediction` and
     /// `probabilities`), and gives no notice of one the answer leaves out,
-    /// which it gives only for outputs the caller named (T1.28b).
+    /// which it gives only for outputs the caller named.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub default_outputs: bool,
     /// The inference-config keys the caller set at `materialize`, rather
     /// than left to their defaults, as the host holds them: a key the model
     /// does not read among them is refused before the call is made, the
-    /// others' defaults left out of it silently (T1.28a).
+    /// others' defaults left out of it silently.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inference_asked: Vec<String>,
     /// The model endpoint the host's transport calls, where the core writes
-    /// its envelope and reads its answers (contract v28, T3.27, for T3.13):
+    /// its envelope and reads its answers (contract v28, for ):
     /// a Databricks Model Serving endpoint, by name, with the request size
     /// the caller allows it. Left out, the client's own endpoint, as
     /// before.
@@ -1834,12 +1830,12 @@ pub enum ModelEndpoint {
 }
 
 /// The prediction. Nothing inline grows with the result's width or the
-/// endpoint's answer (decision H5).
+/// endpoint's answer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predicted {
     /// An Arrow attachment, one row per answer, ordered by `row_index` as
-    /// the reference's result frame orders them (T1.28b), whose schema
+    /// the reference's result frame orders them, whose schema
     /// names its columns in order: `row_index`, `id`, `id_as_written` where
     /// the ids are not all integers or all text (utf8: the JSON text of the
     /// reference's item value, null where there was none), `forecast_step`
@@ -1853,16 +1849,16 @@ pub struct Predicted {
     /// (`sdm_request::predict::table`).
     ///
     /// Contract v26 fixes the columns ranking and forecasting add (design
-    /// choice 1; written from T2.8 and T2.9), after `probabilities` and
+    /// choice 1; written and ), after `probabilities` and
     /// before `answer_index`, each where an answer carries it: `scores`
     /// (list of float64, an item's scores in the endpoint's order),
     /// `rankings` (list of utf8, an item's rankings, each a mapping), and
     /// `quantiles` (a regression's quantiles, each named as the endpoint
-    /// named it, in the order written; from contract v27, T2.9, a
+    /// named it, in the order written; from contract v27, a
     /// mapping-valued field, laid out as the next paragraph says, an
     /// answer's `{}` the text `{}`, none null).
     ///
-    /// A mapping-valued field (T2.8, contract v27) is laid out as JSON
+    /// A mapping-valued field (contract v27) is laid out as JSON
     /// object text in a Utf8 column, and a list of mappings as a list of
     /// those texts: a JSON object when every key is text, otherwise (a key
     /// that is a number, a boolean or null) the JSON list of its `[key,
@@ -1870,7 +1866,7 @@ pub struct Predicted {
     /// from the answer as Python's `dict` reads it, keys equal as Python's
     /// are, by the one reader `sdm_wire::response::mapping`.
     ///
-    /// A ranking's result (T2.8, contract v27), one row per entity asked
+    /// A ranking's result (contract v27), one row per entity asked
     /// about, in place
     /// of `prediction` and `probabilities`: `rankings` (the candidates the
     /// row ranks, best first, at most `top_k`, each the JSON text of its
@@ -1883,7 +1879,7 @@ pub struct Predicted {
     ///
     /// Contract v27 adds, after those, `embeddings` (list of float64, an
     /// answer's embedding in the order written, null where it has none;
-    /// T2.11).
+    /// ).
     /// Native result tables also retain scalar `sdm.answer_type` and
     /// `sdm.text_ids` schema metadata for lossless generic result merging.
     /// Ranking tables need only `sdm.text_ids` because they hold no prediction column.
@@ -1899,9 +1895,9 @@ pub struct Predicted {
     /// caller named none.
     pub outputs: Vec<String>,
     /// A ranking's candidates no question was sent for, the context sampled
-    /// for each holding one answer only (T2.8): each its position among the
+    /// for each holding one answer only: each its position among the
     /// candidates `materialize` was given (of a request held, among the
-    /// candidates it holds, T3.26), in the order named. Empty for any other
+    /// candidates it holds), in the order named. Empty for any other
     /// result.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unscored_candidates: Vec<u32>,
@@ -2203,7 +2199,7 @@ pub struct Attachments {
 /// ([`STATE_PAYLOAD_SCHEMA`]); `sdm-wire`'s `tests/state_payload_schema.rs`
 /// holds the file to what the types generate, so the payload has one
 /// definition and a change to it fails the lock until the version moves
-/// (T1.28w, decision E74). What is fixed is closed (every object whose keys
+///. What is fixed is closed (every object whose keys
 /// the format names refuses a key it does not name) and what is open is the
 /// data (the tables named by the source, and each row's cells).
 /// `sdm-request`'s tests hold the payload its producer builds, and

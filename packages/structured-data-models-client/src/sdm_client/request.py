@@ -4,7 +4,7 @@
 
 r"""One request type, for every model.
 
-A :class:`Request` is the wire envelope minus the two things that belong to the
+A:class:`Request` is the wire envelope minus the two things that belong to the
 call rather than the question: which model answers it, and which output fields
 you want back. Both are arguments to
 :meth:`~sdm_client.SDMClient.predict`.
@@ -16,8 +16,8 @@ simply the one where the schema has one table and no relationships.
 Two builders produce it. This module holds the direct one:
 
 >>> request = Request(
-...     context=labelled_rows, predict=rows_to_score,
-...     target='churn', task='classification',
+... context=labelled_rows, predict=rows_to_score,
+... target='churn', task='classification',
 ... )
 
 The other is a predictive query, which arrives in a later phase.
@@ -87,7 +87,7 @@ class Task:
     r"""What is being asked.
 
     Attributes:
-        kind: One of :data:`TASK_KINDS`.
+        kind: One of:data:`TASK_KINDS`.
         target: The column being predicted.
         entity_table: The table whose rows are the entities, when the question
             is relational. ``None`` for a single-table question.
@@ -332,9 +332,9 @@ class Request:
     _decomposition: Decomposition | None = None
 
     # What a request materialized on the core keeps for predict on the core
-    # (``sdm_client._rust.results.CoreRequest``, T3.16): ``None`` for one
+    # (``sdm_client._rust.results.CoreRequest``): ``None`` for one
     # the core did not materialize, which predict on the core predicts from
-    # what it holds, as the old client does (T3.26).
+    # what it holds.
     _core: CoreRequest | None = None
     _sanitization_report: SanitizationReport
 
@@ -372,7 +372,7 @@ class Request:
                 rows whose answer you do not have, including rows the model
                 has never seen.
             target: The column being predicted.
-            task: One of :data:`TASK_KINDS`. Stated, never inferred from the
+            task: One of:data:`TASK_KINDS`. Stated, never inferred from the
                 target's cardinality. Guessing there is what turns a
                 two-class target into a multiclass one.
             related_tables: Refused. A relational request is gathered by
@@ -420,7 +420,7 @@ class Request:
     ) -> Request:
         r"""A request whose data has already been gathered.
 
-        The predictive-query path does its gathering in ``materialize()``, so
+        The predictive-query path does its gathering in ``materialize``, so
         what arrives here is one or more finished wire envelopes rather than
         frames to encode. More than one when the run exceeds the endpoint's
         per-call cap; the adapter sends each and the results are merged.
@@ -469,7 +469,7 @@ class Request:
 
     @property
     def _question(self) -> Question:
-        r"""What this request asks. See :class:`Question`."""
+        r"""What this request asks. See:class:`Question`."""
         target = self.task.target
         query = self.query
         return Question(
@@ -687,7 +687,7 @@ class Request:
         r"""Whether this request is known to ask about no rows at all.
 
         Distinct from ``predict_rows == 0``, and the distinction matters:
-        `predict()` answers a request with nothing in it without sending, so a
+        `predict` answers a request with nothing in it without sending, so a
         payload whose rows simply cannot be read must not be mistaken for one
         that is empty. An unreadable envelope is a request that should reach
         the endpoint and be refused, not one that quietly succeeds with an

@@ -26,7 +26,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 CASES = ROOT / 'contract/cases/s1'
-VECTORS = ROOT / 'contract/t213-option-vectors.json'
+VECTORS = ROOT / 'contract/option-vectors.json'
 EXPLAINED = ('explain.answered', 'explain.forecast', 'metadata.items-explained')
 UNEXPLAINED = ('explain.not-answered', 'metadata.items')
 WITH_METADATA = ('metadata.items', 'metadata.items-across-calls')
@@ -53,7 +53,7 @@ def vectors() -> dict[str, Any]:
 def core_run() -> dict[str, Any]:
     r"""python-core over the cases on DuckDB: each observation by case, or
     under ``''`` why the run failed whole."""
-    with tempfile.TemporaryDirectory(prefix='t216a-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='test_result_observation_') as tmp:
         given = Path(tmp) / 'cases'
         given.mkdir()
         for case_id in CASE_IDS:
@@ -130,7 +130,7 @@ def test_each_item_s_metadata_is_recorded(case_id: str) -> None:
 
 
 def test_the_observation_schema_takes_the_explanation() -> None:
-    validate = _module('t216a_run_python', RUNNER).validator('observation')
+    validate = _module('result_runner', RUNNER).validator('observation')
     line = copy.deepcopy(observed('explain.answered'))
     assert not list(validate.iter_errors(line))
     # Text only: a parsed value is not what the core gave.

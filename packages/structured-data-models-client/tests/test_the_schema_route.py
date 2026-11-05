@@ -289,7 +289,7 @@ SCHEMA_RULES = {
 def _said(shown: list[Any]) -> list[Any]:
     """The warnings a call said, without a ``ResourceWarning`` the
     collector raised meanwhile for another test's unclosed connection,
-    which ``simplefilter('always')`` lets in at any point (T1.23 fix 1)."""
+    which ``simplefilter('always')`` lets in at any point."""
     return [w for w in shown if not issubclass(w.category, ResourceWarning)]
 
 
@@ -316,7 +316,7 @@ def _before_key(schema: Schema) -> dict[tuple[str, str], str]:
 def _declared(schema: Schema) -> dict[tuple[str, str], bool]:
     """Each column's ``stype_declared``: a time column, or one inference
     took as it before the links refused it, reads declared on both routes
-    (subagent P3-2, T1.21d's review)."""
+    (subagent P3-2, review)."""
     return {
         (table, column): c.stype_declared
         for table, shaped in schema.tables.items()
@@ -875,7 +875,7 @@ def _named_on_the_core(
     connection: Any, tables: dict[str, str], fail_columns_of: str | None = None
 ) -> tuple[dict[str, Any], list[tuple[str, str]]]:
     """``Schema.from_source`` over ``tables`` named, on the core route
-    (T1.24), its provider failing the reading of ``fail_columns_of``'s
+    , its provider failing the reading of ``fail_columns_of``'s
     columns when named."""
     from unittest import mock
 

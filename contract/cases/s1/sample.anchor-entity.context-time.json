@@ -87,5 +87,5 @@
     "message": "Anchor time 'entity' needs to be shared for context and prediction examples"
   },
   "why": "anchor_time='entity' with a context timestamp: refused INVALID_REQUEST at materialize",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.anchor-entity.context-time using the shop fixture."
 }

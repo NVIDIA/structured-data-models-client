@@ -87,5 +87,5 @@
     "stage": "predict"
   },
   "why": "anchor_time='entity' where one user asked about has no signup time (user 0's set NULL): the reference sends a null anchor for user 0 and pulls none of its orders, and anchors user 1 at its signup",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.anchor-entity.null-time using the shop fixture."
 }

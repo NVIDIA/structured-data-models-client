@@ -85,8 +85,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "warns \"every context row has the same answer to ...\" and still sends"
+    "stage": "predict"
   },
   "why": "The label of every context row is the same; the warning must survive",
   "source": "plan (empty and all-null data)"

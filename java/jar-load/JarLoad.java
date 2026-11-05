@@ -14,7 +14,7 @@ import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.table.Table;
 
 /**
- * The JAR-load test (T3.11, locked check 14): the JAR and its runtime dependencies alone, on a JDK
+ * The JAR-load test (locked check 14): the JAR and its runtime dependencies alone, on a JDK
  * with no Rust toolchain beside it, load this platform's native from the JAR (never one named by
  * sdm.native.library) and answer a query's validation. Run in source-file mode:
  *

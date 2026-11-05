@@ -11,7 +11,7 @@
 //! never reading message text. Codes are promised, message text is not.
 //!
 //! Each code may carry only the kinds [`ErrorCode::kinds`] lists, so a
-//! host's mapping keys on the code alone (decision E22). Every construction
+//! host's mapping keys on the code alone. Every construction
 //! is held to that table: [`CoreError::new`] takes its code's kind;
 //! [`CoreError::provider`] and [`CoreError::transport`], whose kind comes
 //! from the host, give `INTERNAL_ERROR` for a kind outside the code's set;
@@ -19,8 +19,7 @@
 //! checks every pair where an error crosses the boundary
 //! ([`CoreError::holds_to_table`]).
 //!
-//! Every error and every warning says one [`Sentence`] of a closed list
-//! (invariant 8 of the Phase 3 structure design, T3.17): the core picks it,
+//! Every diagnostic uses one [`Sentence`] selected by the core,
 //! and each host fills its one shared template ([`crate::wording`]) with the
 //! values it names, as that host writes them. A sentence gives the public
 //! code ([`Sentence::code`]) and, where it has one, the rule a caller
@@ -90,7 +89,7 @@ impl ErrorKind {
 }
 
 /// The codes the core gives: one closed list, so each host's mapping
-/// matches every code with no catch-all arm (decision H6). Host and core
+/// matches every code with no catch-all arm. Host and core
 /// ship together, so the list is exhaustive; a new code is a contract
 /// version bump. PQL's own diagnostic codes stay strings inside
 /// `PqlDiagnostic`.
@@ -145,7 +144,7 @@ pub enum ErrorCode {
     /// A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.
     InvalidMessage,
     /// A model serving endpoint refused the request, with an HTTP status and
-    /// perhaps a code of its own (contract v28, T3.27): the host raises its
+    /// perhaps a code of its own (contract v28): the host raises its
     /// endpoint-refusal error with the status ([`REFUSED_STATUS`]) and the
     /// code ([`REFUSED_CODE`], none where there is none), as the old client
     /// raises `NimRequestError(status, code=...)`, the error's other fields
@@ -189,11 +188,11 @@ impl ErrorCode {
         ErrorCode::EndpointRefused,
     ];
 
-    /// The kinds an error of this code may carry (decision E22): one for
+    /// The kinds an error of this code may carry: one for
     /// every code but `PROVIDER_ERROR`, whose kind the host's provider
     /// chooses from a closed set.
     ///
-    /// `VALUE_OUT_OF_RANGE` stays `unsupported` (E13): the value is the
+    /// `VALUE_OUT_OF_RANGE` stays `unsupported`: the value is the
     /// source's own, valid there; what fails is that the type the core
     /// admits it as cannot hold it, which is the core's limit, not the
     /// source's failure.
@@ -289,7 +288,7 @@ impl Detail {
 #[serde(rename_all = "snake_case")]
 pub enum HeldState {
     /// The sampler state a materializer's last run left
-    /// (`Materialize.sampler_state`, decision E52).
+    /// (`Materialize.sampler_state`).
     SamplerState,
 }
 
@@ -301,11 +300,11 @@ pub struct CoreError {
     /// Stable across releases and languages.
     pub code: ErrorCode,
     /// What the error says, of [`ErrorCode`]'s sentences: the template each
-    /// host fills, read only for wording (T3.17).
+    /// host fills, read only for wording.
     pub sentence: Sentence,
     /// Where the error happened in a question asked in parts (a forecast's
     /// step, a ranking's candidate), a sentence of [`Code::Part`] said after
-    /// the error's own; none for any other error (T3.17 fix 2).
+    /// the error's own; none for any other error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part: Option<Sentence>,
     /// For a person to read; not promised, and never holding an input value.
@@ -322,14 +321,13 @@ pub struct CoreError {
     pub retryable: bool,
     /// The states the host handed this run that it must drop rather than
     /// hand back again: the core refused them, so a later run given them
-    /// would be refused the same way (decision E74). The host follows this
+    /// would be refused the same way. The host follows this
     /// alone, never reading which field an error names; empty for any
     /// other error.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub drop_held: Vec<HeldState>,
     /// What a request asked in several model calls had been answered when
-    /// a later call failed (design choice 1, `main`'s answered parts,
-    /// T2.8c): the error keeps what was paid for, so the rest can be asked
+    /// a later call failed: the error keeps what was paid for, so the rest can be asked
     /// again. Absent for any other error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answered: Option<AnsweredParts>,
@@ -390,7 +388,7 @@ impl CoreError {
     /// since drivers quote values in it.
     ///
     /// A kind `PROVIDER_ERROR` does not carry gives `INTERNAL_ERROR`
-    /// instead (decision E22).
+    /// instead.
     pub fn provider(error: &ProviderError) -> Self {
         if !ErrorCode::ProviderError.allows(error.kind) {
             return Self::outside_table(error.kind, ErrorCode::ProviderError);
@@ -409,7 +407,7 @@ impl CoreError {
 
     /// The error a model transport's failure becomes: its kind and
     /// retryability. A kind `TRANSPORT_ERROR` does not carry gives
-    /// `INTERNAL_ERROR` instead (decision E22).
+    /// `INTERNAL_ERROR` instead.
     pub fn transport(kind: ErrorKind, retryable: bool) -> Self {
         if !ErrorCode::TransportError.allows(kind) {
             return Self::outside_table(kind, ErrorCode::TransportError);
@@ -435,8 +433,8 @@ impl CoreError {
     }
 
     /// Whether this error, and every error in its cause chain, carries a
-    /// kind its code allows (decision E22) and a sentence of its code
-    /// (T3.17).
+    /// kind its code allows and a sentence of its code
+    ///.
     pub fn holds_to_table(&self) -> bool {
         self.code.allows(self.kind)
             && self.sentence.code() == Code::Error(self.code)
@@ -495,7 +493,7 @@ impl CoreError {
     }
 
     /// This error, telling the host to drop the held state `state` it
-    /// handed the run (decision E74).
+    /// handed the run.
     #[must_use]
     pub fn dropping(mut self, state: HeldState) -> Self {
         if !self.drop_held.contains(&state) {
@@ -540,7 +538,7 @@ pub struct CoreWarning {
     /// The sentence's [`WarningCode`], as the contract spells it.
     #[schemars(regex(pattern = r"^[A-Z][A-Z0-9_]*$"))]
     pub code: String,
-    /// What the warning says (T3.17).
+    /// What the warning says.
     pub sentence: Sentence,
     pub message: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -581,7 +579,7 @@ impl CoreWarning {
         self
     }
 
-    /// Whether the warning's code is its sentence's (T3.17).
+    /// Whether the warning's code is its sentence's.
     pub fn holds_to_table(&self) -> bool {
         matches!(self.sentence.code(), Code::Warning(code) if code.as_str() == self.code)
     }
@@ -590,7 +588,7 @@ impl CoreWarning {
 /// The code a sentence gives: an error's or a warning's; or none, for the
 /// sentence of the part of a question asked in parts an error happened in,
 /// said after the error's own of any code ([`CoreError::part`]), and for a
-/// note of a semantic model's conversion (`ops::ViewNote`, T3.27).
+/// note of a semantic model's conversion (`ops::ViewNote`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Code {
     Error(ErrorCode),
@@ -613,7 +611,7 @@ impl Code {
 macro_rules! warning_codes {
     ($($variant:ident = $name:literal,)*) => {
         /// The codes of the warnings the core gives: one closed list, each
-        /// spelled as it always has been on the wire (T3.17).
+        /// spelled as it always has been on the wire.
         #[derive(
             Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
             JsonSchema,

@@ -41,7 +41,7 @@ def _rows(stream: Any) -> list[dict[str, Any]]:
 
 def _table(stream: Any) -> Any:
     r"""An Arrow attachment the core gave, as a table, which keeps its
-    schema's metadata (T2.13: the result's explanation)."""
+    schema's metadata (the result's explanation)."""
     import pyarrow as pa
 
     reader = pa.RecordBatchReader._import_from_c_capsule(
@@ -51,8 +51,8 @@ def _table(stream: Any) -> Any:
 
 
 def _explanation(text: str | None, by_step: bool) -> Any:
-    r"""The result's explanation the core gives (T2.13), ``None`` where there
-    is none: a mapping as :func:`_mapping` reads one, or, for a forecast,
+    r"""The result's explanation the core gives, ``None`` where there
+    is none: a mapping as:func:`_mapping` reads one, or, for a forecast,
     each step's under ``by_forecast_step``, keyed by the step's number,
     which the core writes in decimal digits."""
     if text is None:
@@ -118,7 +118,7 @@ def _copied(value: Any) -> Any:
 def _refusal(refused: NimRequestError) -> NimRequestError:
     r"""The endpoint's refusal as this route raises it: exactly the old
     route's class, status, code, message and details, the endpoint's own
-    text and the client's explanation of it (decision E47), but a new
+    text and the client's explanation of it, but a new
     exception, so nothing of the transport's (its URL, a credential) is
     chained to it. Its details are copied without recursion, at any depth
     the transport read."""
@@ -167,7 +167,7 @@ def _id(row: dict[str, Any]) -> Any:
 
 def _adapter(client: SDMClient, model_id: str) -> Any:
     r"""The client's adapter of the model the core checked, which explains
-    the endpoint's refusals as on the old route (E47)."""
+    the endpoint's refusals as on the old route."""
     from sdm_client.client import _adapter_for
     from sdm_client.models import spec_for
 
@@ -184,8 +184,7 @@ def _state(request: Request) -> results.CoreRequest | None:
     holds the calls it names: one payload per call, for the request and
     each part. Else ``None``: a request the core did not materialize, or
     one whose payloads were changed since, predicted from what it holds
-    (:func:`_held`), as the old client predicts whatever payloads a request
-    holds (T3.26 fix 1, Claude r1 P2)."""
+    (func:`_held`)."""
     state = request._core
     if state is None:
         return None
@@ -200,7 +199,7 @@ def positions(request: Request) -> tuple[int, ...]:
     r"""Each question of a ranking by the position the core names its
     candidate by: among the candidates materialize was given, where the
     core wrote the request's state; else among those the request holds, in
-    order, as the core rebuilds them (T3.26)."""
+    order, as the core rebuilds them."""
     state = _state(request)
     if state is not None and state.ranking is not None:
         return state.ranking.positions
@@ -225,7 +224,7 @@ def _from_state(
     if state.batches is not None:
         # Each later call's payload, the rows the core gathered it to score,
         # and its own id, drawn as the adapter draws one for every call, in
-        # call order (T2.8c).
+        # call order.
         named['batches'] = []
         for at, (more, rows) in enumerate(
             zip((request.payloads or ())[1:], state.batches, strict=True),
@@ -269,7 +268,7 @@ def _from_state(
             attachments[at] = _payload(more)
             attachments[at + 1] = codec.attachment(asked)
             # Each step's call its own id, drawn as the adapter draws one
-            # for every call, in step order (T1.36 fix 24).
+            # for every call, in step order.
             named['forecast'].append(
                 {
                     'step': number,
@@ -283,10 +282,10 @@ def _from_state(
 
 def _held(request: Request) -> tuple[dict[str, Any], dict[int, Any]]:
     r"""``request``, which holds no state the core wrote, as ``predict``
-    names a request held (T3.26), and its attachments: what the old client
-    sends of it, its payloads in order and each question's text, and, for
+    names a request held, and its attachments: its payloads in order,
+    each question's text, and, for
     a ranking, the candidate each question asks after as the caller gave
-    it (:func:`materialize._candidates`), each later call's or part's with
+    it (func:`materialize._candidates`), each later call's or part's with
     the id drawn for it. A part of a forecast or a ranking is one call,
     which every client gathers it as (``refuse_a_part_that_would_take_
     several_calls``)."""
@@ -345,15 +344,14 @@ def predict(
     r"""The answer to ``request``, predicted on the core.
 
     A request the core materialized is predicted from the state the core
-    wrote (``Request._core``); any other, one an older client gathered or
-    this one gathered on its old route, holding no such state (T3.26,
-    owner decision 2026-10-23), from what it holds, as the old client
-    predicts it: the host hands the core the request's payloads, questions
-    and a ranking's candidates (:func:`_held`), and the core rebuilds the
+    wrote (``Request._core``).
+    Saved or manually constructed requests without core state use their
+    held data: the host hands the core the request's payloads, questions
+    and a ranking's candidates (func:`_held`), and the core rebuilds the
     rest.
 
     Raises:
-        StructuredDataError: the core's refusal, as :mod:`.errors` maps it
+        StructuredDataError: the core's refusal, as:mod:`.errors` maps it
             (the model and output checks, the context's, and what it does
             not predict yet, ``UNSUPPORTED_REQUEST`` naming the rule); a
             model given as neither a model handle nor an id; and the
@@ -364,9 +362,9 @@ def predict(
     from sdm_client.models import spec_for
 
     # A forecast or a ranking gathered in parts is held as one request per
-    # part (T1.36 fix 21, T2.8), which the core predicts in one run, part by
+    # part ( fix 21), which the core predicts in one run, part by
     # part; a request of more rows than one call scores, as each call's
-    # payload (T2.8c), which the core predicts in one run, call by call.
+    # payload, which the core predicts in one run, call by call.
     state = _state(request)
     rewritten = request._decomposition
     ranking = (
@@ -402,11 +400,11 @@ def predict(
         'model': model_id,
         'request_id': _request_id(),
         # The outputs the caller named, or that it named none (the core then
-        # asks the task's own, T1.28b).
+        # asks the task's own).
         'outputs': [] if outputs is None else list(outputs),
         # The inference options the caller set (a mapping, on this
         # route), which the core refuses where the model does not read
-        # them (T1.28a).
+        # them.
         'inference_asked': sorted(
             request.requested_inference.get('inference_config', {})
         ),
@@ -414,7 +412,7 @@ def predict(
     if outputs is None:
         operation['default_outputs'] = True
     # A serving endpoint the core speaks to: its envelope written and its
-    # answers read there (T3.13).
+    # answers read there.
     endpoint = getattr(client._transport, 'model_endpoint', None)
     if endpoint is not None:
         operation['model_endpoint'] = endpoint
@@ -449,7 +447,7 @@ def predict(
             answered, _table(finished.take(answered.result)), metadata, given
         )
     table = _table(finished.take(answered.result))
-    # The result's explanation, on the result's schema (T2.13).
+    # The result's explanation, on the result's schema.
     explained = (table.schema.metadata or {}).get(b'explanation')
     return _result(
         table,
@@ -474,7 +472,7 @@ def _result(
 ) -> PredictionResult:
     r"""The core's result rows as this client's result: each item's
     explanation and metadata, and the result's explanation, as the core
-    gives them (T2.13)."""
+    gives them."""
     from sdm_api.generated.tfm_api import PredictionItem
 
     from sdm_client._rust.result_items import read
@@ -557,7 +555,7 @@ def _ranked(
 
 def _carry_the_answers(error: Exception, by_step: bool) -> None:
     r"""The answers received before a call failed, as the core carried them
-    on its error (T2.8c, ``main``'s 1fc5a686), put in ``error.details`` as
+    on its error (``main``'s 1fc5a686), put in ``error.details`` as
     the client puts them: ``answered``, the answers received as one result,
     and, for a request asked in several calls, ``rows_answered``, the rows
     those calls score, beside the core's ``calls_answered``; for a
@@ -610,13 +608,13 @@ def sender(client: SDMClient, model_id: str) -> Any:
         transport_failed = False
         refused: NimRequestError | None = None
         try:
-            # The core's call, its bytes as written (register PD-2, T1.28a),
+            # The core's call, its bytes as written (register PD-2),
             # through the adapter that explains the endpoint's refusals; the
             # answer, the bytes the endpoint sent, is the core's to read
-            # (T2.14b).
+            # .
             return client._send_body(_adapter(client, model_id), body)
         except EndpointFailed:
-            # A serving endpoint's failure, which the core names (T3.13).
+            # A serving endpoint's failure, which the core names.
             raise
         except NimRequestError as refusal:
             refused = refusal
@@ -638,7 +636,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
             # SDK's ValueError for a failed OAuth refresh): the call failed,
             # and the calls before it were paid for, so the core is told,
             # carries their answers, and this raises it with them, as the
-            # reference's client does (T2.8c fix 1). An interrupt is no
+            # reference's client does. An interrupt is no
             # Exception, and cancels the run as before.
             unexpected = other
         if transport_failed:
@@ -648,7 +646,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
             # Built outside the handler, so nothing failing in the copy is
             # chained to the transport's exception. The core is told the
             # endpoint's status, so it ends the run carrying the answers of
-            # the calls before this one (T2.8c), which this raises on.
+            # the calls before this one, which this raises on.
             raised = _refusal(refused)
         if raised is not None:
             raise Refused(

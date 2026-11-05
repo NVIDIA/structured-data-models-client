@@ -1,5 +1,5 @@
 {
- "about": "Names and Python's repr of each, written by CPython 3.12's repr: the reference's warnings quote names so, and sdm-schema's assemble::quoted is held to it (tests/assemble.rs, T1.21d fix 1). A name with an unassigned code point is not listed: telling one apart takes the whole character database.",
+ "about": "Independent CPython 3.12 name-quoting expectations. Unassigned code points are excluded because their representation depends on the Unicode database.",
  "vectors": [
   {
    "name": "orders",

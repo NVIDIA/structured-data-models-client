@@ -105,6 +105,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "A forecast on the shop base on each warehouse leg (choice 1: \"a ranking and a forecast on each leg\"): every table read from the warehouse's catalog, three 14-day windows, the scripted endpoint answering with quantiles as a model does; one file for every leg (T3.4 brief, open question 1)",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "why": "A forecast on the shop base on each warehouse leg (choice 1: \"a ranking and a forecast on each leg\"): every table read from the warehouse's catalog, three 14-day windows, the scripted endpoint answering with quantiles as a model does; one file for every leg",
+  "source": "Correctness case warehouse.shop.forecast using the shop fixture."
 }

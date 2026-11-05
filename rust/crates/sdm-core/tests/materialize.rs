@@ -150,7 +150,7 @@ fn shop() -> SourceDescription {
     }
 }
 
-/// `description` as a host holds it, each column with its facts (T3.16).
+/// `description` as a host holds it, each column with its facts.
 fn held_of(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
     sdm_schema::held::held(
         description,
@@ -301,7 +301,7 @@ fn catalog(request: &DataRequest) -> Option<FetchResult> {
             ..
         } => Some(data(vec![
             // A host provider answers in the contract's catalog shape, in
-            // no dialect's (decision E54).
+            // no dialect's.
             (
                 catalog_columns::TABLE,
                 Arc::new(StringArray::from(Vec::<&str>::new())),
@@ -328,7 +328,7 @@ fn catalog(request: &DataRequest) -> Option<FetchResult> {
 
 /// The shop's tables as DuckDB's catalog and a preview answer them, under
 /// either naming ([`shop`], [`renamed`]): each run reads every table of a
-/// source as it stands (the owner's plan B, T3.4), its columns, keys and
+/// source as it stands, its columns, keys and
 /// first rows, before it samples.
 fn shop_source(request: &DataRequest) -> Option<FetchResult> {
     let table = |name: &str| {
@@ -421,7 +421,7 @@ fn shop_source(request: &DataRequest) -> Option<FetchResult> {
 }
 
 /// What [`catalog`] answers, but the indexes in DuckDB's own catalog
-/// shape, which a DuckDB plan expects and `sdm-data` reads (decision E54).
+/// shape, which a DuckDB plan expects and `sdm-data` reads.
 fn duckdb_catalog(request: &DataRequest) -> Option<FetchResult> {
     match request {
         DataRequest::Describe {
@@ -467,7 +467,7 @@ fn to_the_sample(run: &mut Run) -> (DataRequest, Vec<String>) {
 
 #[test]
 fn a_seed_of_2_to_the_70_is_past_every_range_a_provider_declares() {
-    // Contract v26 (design choice 1): every provider declares its largest
+    // Contract v26: every provider declares its largest
     // seed, a u64, with no "any seed" default, so a seed of 2**70 is past
     // the widest range one can declare, refused by RS-7's rule before the
     // sample, by name, never sampled under another seed.
@@ -539,7 +539,7 @@ fn the_core_refuses_a_seed_past_the_largest_duckdb_declares() {
         (1 << 31, true),
         (1 << 70, true),
         // Past what a seed's scalar carries, RS-7's refusal all the same
-        // (T1.36 fix 9).
+        //.
         (10_u128.pow(38), true),
         (u128::MAX, true),
     ] {
@@ -655,7 +655,7 @@ fn rule(err: &CoreError) -> String {
 
 #[test]
 fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
-    // An entity filter and an assumption are lifted (T2.13b): the run
+    // An entity filter and an assumption are lifted: the run
     // reaches its first read.
     for query in [
         "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'",
@@ -664,7 +664,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         let mut run = materialize(host(), &shop(), query, None).unwrap();
         assert!(matches!(run.next(), Ok(Step::Fetch { .. })), "{query}");
     }
-    // A table the entity table refers to is sampled from T2.11: the run
+    // A table the entity table refers to is sampled: the run
     // reaches its first read.
     let mut parent = shop();
     parent.tables[1].columns.push(column(
@@ -706,7 +706,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     // A key of several columns, of a table no link refers to: refused as
     // the reference's SQL samplers refuse every such table, before anything
     // is read, where the reference first reads the source's fold of it
-    // (KO2-68), an invalid request naming the table and its key's columns.
+    //, an invalid request naming the table and its key's columns.
     let mut composite = shop();
     composite.tables[0].primary_key = vec!["order_id".into(), "user_id".into()];
     let mut run = materialize(host(), &composite, QUERY, None).unwrap();
@@ -738,7 +738,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     let err = run.next().unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     // One a link refers to is the reference's refusal of a relationship
-    // that cannot join, before anything is read (decision E55).
+    // that cannot join, before anything is read.
     let mut composite = shop();
     composite.tables[1].primary_key = vec!["user_id".into(), "country".into()];
     let mut run = materialize(host(), &composite, QUERY, None).unwrap();
@@ -748,7 +748,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
 }
 
 /// The schema `materialize` is handed is held as the reference holds a
-/// schema it makes a request of (`Schema.check_consistent`, decision E55),
+/// schema it makes a request of (`Schema.check_consistent`),
 /// before anything is read: a meaning the column's values cannot carry is
 /// refused; the columns joined on are marked again from what the host
 /// holds, so a column the schema no longer joins on means again what it
@@ -828,7 +828,7 @@ fn indexes(on: &[(&str, &str)]) -> FetchResult {
     ])
 }
 
-/// The notices of what the request leaves out (T1.28a), which these
+/// The notices of what the request leaves out, which these
 /// sampler tests leave to the client's route tests: their sources leave
 /// tables unreached.
 const REQUEST_NOTICES: [&str; 5] = [
@@ -910,7 +910,7 @@ fn tables_to_the_result(run: &mut Run) -> Vec<(&'static str, String)> {
 }
 
 /// The name of a relation of one part, as every request of a host giving
-/// one part names its table (design choice 12).
+/// one part names its table.
 fn name(relation: &sdm_contract::data::Relation) -> String {
     relation
         .single()
@@ -1015,10 +1015,10 @@ fn try_steps_sampling(
 
 #[test]
 fn a_table_named_otherwise_is_read_by_its_source_name() {
-    // T1.24 (decision E61): a description may name a table otherwise than
+    //: a description may name a table otherwise than
     // its source does (contract version 12); every data request names the
     // source's table, as the reference's engine reads it, while the query
-    // names the schema's. Until T1.24 it was refused by name
+    // names the schema's. Until it was refused by name
     // (`table_source`).
     let mut run = materialize(host(), &renamed(), QUERY, None).unwrap();
     let (asked, warnings) = requests_to_the_sample(&mut run, &|| indexes(&[]));
@@ -1034,7 +1034,7 @@ fn a_table_named_otherwise_is_read_by_its_source_name() {
     // Orders' foreign key, which no index covers.
     assert_eq!(warnings, ["MISSING_INDICES"]);
     // Every request kind of the run to its result, each answered, names
-    // the source's table (T1.24 fix 1, review P3-1): the time bounds, the
+    // the source's table ( fix 1, review P3-1): the time bounds, the
     // sample, the labels' and the first hop's neighbors, and the lookup.
     let mut run = materialize(host(), &renamed(), QUERY, None).unwrap();
     let kinds = tables_to_the_result(&mut run);
@@ -1062,7 +1062,7 @@ fn a_table_named_otherwise_is_read_by_its_source_name() {
 
 #[test]
 fn the_options_the_host_passes_through_are_refused_by_name() {
-    // T1.24 (decision E61): the host's bridge refuses none of the call's
+    //: the host's bridge refuses none of the call's
     // options; the core refuses by name each it does not take, before
     // anything is fetched: the other options, the first in name order,
     // then an unseeded sample, a context size and an anchor at each
@@ -1078,7 +1078,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
             materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
         run.next()
     };
-    // With the call's option values (T1.28a): `values`, and the options
+    // With the call's option values: `values`, and the options
     // named.
     let valued = |values: &str, names: &[&str]| {
         let (mut operation, mut attachments) = materialize_start(host(), &shop(), QUERY, None);
@@ -1096,7 +1096,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         run.next()
     };
     // An unseeded sample and an anchor at each entity's own time are taken
-    // from T2.11: the run reaches its first read.
+    //: the run reaches its first read.
     assert!(matches!(
         with(&|m| m.unseeded = true),
         Ok(Step::Fetch { .. })
@@ -1105,7 +1105,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         with(&|m| m.anchor_entity = true),
         Ok(Step::Fetch { .. })
     ));
-    // From T1.28a the context size is the core's: bounded first, before
+    // the context size is the core's: bounded first, before
     // the options, as the client bounds it before anything else.
     for (asked, code) in [
         ("0", ErrorCode::InvalidRequest),
@@ -1140,7 +1140,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     assert_eq!(past.code, ErrorCode::UnsupportedRequest);
     assert_eq!(past.fields["field"], Detail::text("num_hops"));
     assert!(!past.fields.contains_key("rule"), "the bound, not the rule");
-    // The sampling options taken from T2.11 reach the first read.
+    // The sampling options taken reach the first read.
     for values in [
         r#"{"num_hops": 3}"#,
         r#"{"num_neighbors": [4, 0]}"#,
@@ -1164,8 +1164,8 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     let err = with(&|m| m.options = vec!["no_such_option".into()]).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     assert_eq!(err.fields["field"], Detail::text("options"));
-    // Every sampling option's value travels in `values` from T2.11 (with
-    // T2.8's top_k and T2.9's lag_timesteps): none is a name the host
+    // Every sampling option's value travels in `values` (with
+    // top_k and lag_timesteps): none is a name the host
     // passes.
     for name in [
         "lag_timesteps",
@@ -1195,7 +1195,7 @@ fn valued_run(values: &str) -> Run {
 
 #[test]
 fn the_sampling_options_the_engine_reads_late_are_refused_where_it_reads_them() {
-    // T2.11: the options the reference's engine reads after its sampler is
+    //: the options the reference's engine reads after its sampler is
     // built are refused after the index check and its warning, as there:
     // the context's anchor and max_pq_iterations with the task, the
     // excluded columns and a num_hops of none as the subgraph is sampled,
@@ -1321,7 +1321,7 @@ fn the_sampling_options_the_engine_reads_late_are_refused_where_it_reads_them() 
     }
 }
 
-// --- the times a source returns (T1.25) -------------------------------------
+// --- the times a source returns -------------------------------------
 
 /// The shop with orders' time column received as `received` (`dtype`), and
 /// a host provider declaring `text_times`.
@@ -1464,7 +1464,7 @@ fn sends(payload: &[u8], text: &str) -> bool {
 
 #[test]
 fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
-    // Until T1.25, materialize read a zone-less timestamp time column only
+    // Until, materialize read a zone-less timestamp time column only
     // (`time_type`); the reference's engine reads every column meaning a
     // timestamp to a zone-less UTC one as it fetches it.
     let day = 19_727; // 2024-01-05
@@ -1542,7 +1542,7 @@ fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() 
     let text = || shop_with_times(ColumnType::Utf8, Dtype::String);
     let days = |n: usize| Arc::new(StringArray::from(vec!["2024-01-05"; n])) as ArrayRef;
     // No reading declared, a value outside
-    // the core's list of formats (T1.25b), day and month values the fetch
+    // the core's list of formats, day and month values the fetch
     // puts in no order, and offsets mixed: each by its rule's name, before
     // any text is read as a time.
     for (provider, ts, wanted) in [
@@ -1597,7 +1597,7 @@ fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
     // A blank value holds no time: dropped and warned of, as the
     // reference's engine drops a value it reads as none, with how many of
     // how many and three examples. (A value naming no date, `2024-02-30`,
-    // is outside the core's list and refused, T1.25b.)
+    // is outside the core's list and refused,.)
     let mut run = materialize(
         host_reading(Some(TextTimes::ValueByValue)),
         &shop_with_times(ColumnType::Utf8, Dtype::String),
@@ -1625,7 +1625,7 @@ fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
     }
 }
 
-/// The shop's host provider, its sampling policies as given (T1.26a).
+/// The shop's host provider, its sampling policies as given.
 fn host_with(null_order: Option<NullOrder>, index_advice: Option<IndexAdvice>) -> ProviderChoice {
     let ProviderChoice::Host { mut capabilities } = host() else {
         unreachable!()
@@ -1759,7 +1759,7 @@ fn the_sampler_s_null_order_is_the_one_the_provider_declares() {
 fn a_provider_declaring_no_null_order_is_not_asked_for_an_order() {
     // Seeded fault, failing closed: a provider declaring no null order is
     // refused by name, never given DuckDB's, before anything is fetched
-    // (T1.26b, T1.26a's review P3); the same for DuckDB's rendering with
+    // (review P3); the same for DuckDB's rendering with
     // its declaration forgotten.
     let mut run = materialize(
         host_with(None, Some(IndexAdvice::SingleColumn)),
@@ -1877,7 +1877,7 @@ fn a_provider_without_index_advice_is_neither_asked_for_indexes_nor_warned() {
     assert_eq!(warnings, ["MISSING_INDICES"]);
     let shipped = statements(&shipped);
     // The index read comes once the tables are read as they stand (the
-    // owner's plan B, T3.4), before anything is sampled.
+    // owner's plan B), before anything is sampled.
     let at = shipped
         .iter()
         .position(|text| text.contains("duckdb_indexes()"))
@@ -1941,7 +1941,7 @@ fn an_index_the_reader_cannot_resolve_covers_nothing() {
     assert_eq!(warnings, ["MISSING_INDICES"]);
 }
 
-// --- the sampler state (T1.26b, decision E52) ---------------------------------
+// --- the sampler state ---------------------------------
 
 /// The sampler state a run left: its version, and its memo's bytes.
 type Left = (u32, Vec<u8>);
@@ -2153,7 +2153,7 @@ fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(field(&err), "sampler_state.version");
     // Each refusal of the state says, in so many words, to drop it
-    // (decision E74); the hosts follow that, never the field.
+    //; the hosts follow that, never the field.
     assert_eq!(err.drop_held, [HeldState::SamplerState]);
     // A memo that is not one: not JSON, of another shape, a field more or
     // retyped, a table's bounds twice, nested past the reader's depth, or
@@ -2206,7 +2206,7 @@ fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
 #[test]
 fn only_a_refusal_of_the_held_state_says_to_drop_it() {
     // A refusal of anything else of the start, with a sound state handed,
-    // leaves the state to the host (decision E74).
+    // leaves the state to the host.
     let mut first = handing_back(&shop(), None, &[], vec![Some(0), Some(1)]).unwrap();
     steps_to_the_result(&mut first, &|| indexes(&[]));
     let held = left(&mut first).unwrap();
@@ -2295,11 +2295,11 @@ fn the_coverage_warning_is_given_on_every_run_that_meets_it() {
     }
 }
 
-// --- the caller's inference options (T1.28a) ---------------------------------
+// --- the caller's inference options ---------------------------------
 
 #[test]
 fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
-    // E49's probe of the one JSON reader T1.28a adds: the caller's
+    // E49's probe of the one JSON reader adds: the caller's
     // inference options, read with the wire's bounded reader before the run
     // exists, so ten thousand nested levels are refused by name, never read
     // recursively, and one level under the bound is read (and refused for

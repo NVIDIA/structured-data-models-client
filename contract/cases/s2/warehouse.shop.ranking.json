@@ -116,6 +116,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "A ranking on the shop base on each warehouse leg (choice 1: \"a ranking and a forecast on each leg\"): every table read from the warehouse's catalog, one binary question per candidate, the candidates named in descending order and three of four kept, so the order the answers are put back in is the case's; one file for every leg (T3.4 brief, open question 1)",
-  "source": "written by T3.4's test author from the reference at 43e55f4f"
+  "why": "A ranking on the shop base on each warehouse leg (choice 1: \"a ranking and a forecast on each leg\"): every table read from the warehouse's catalog, one binary question per candidate, the candidates named in descending order and three of four kept, so the order the answers are put back in is the case's; one file for every leg",
+  "source": "Correctness case warehouse.shop.ranking using the shop fixture."
 }

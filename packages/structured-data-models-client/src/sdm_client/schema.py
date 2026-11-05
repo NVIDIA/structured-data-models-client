@@ -4,7 +4,7 @@
 
 r"""The tables a request is about, and what the model should make of them.
 
-A :class:`Schema` holds your tables, what each column means, and how the tables
+A:class:`Schema` holds your tables, what each column means, and how the tables
 relate. One table or many is the same object. A single-table model is the
 degenerate case of the same shape, not a second system, which is why this is
 not called a graph.
@@ -136,7 +136,7 @@ class Column:
     stype_declared: bool = field(init=False, default=False)
     _stype_before_key: str | None = field(init=False, default=None, repr=False)
     #: What the source said of the column, where the core described it
-    #: (``sdm_client._rust.results.SourceFacts``, T3.16): kept with the
+    #: (``sdm_client._rust.results.SourceFacts``): kept with the
     #: column, copied and pickled with it, and handed back whole to the
     #: core, which reads a column with none from the source. Out of repr
     #: and equality, so a column is what it says, however it was made.
@@ -171,7 +171,7 @@ class Column:
         Through the same adoption an assignment goes through: a column that
         means `timestamp` orders the table it belongs to, and restoring the
         meaning around that left a table saying it held a timestamp while
-        naming no time column. `check_consistent()` accepted that state, and
+        naming no time column. `check_consistent` accepted that state, and
         every temporal query then failed on.
         """
         if self._stype_before_key is None:
@@ -304,7 +304,7 @@ class Column:
         r"""Refuse a meaning the values cannot carry.
 
         The language already decides this, and used to decide it at
-        ``materialize()``, several cells after the assignment that caused it,
+        ``materialize``, several cells after the assignment that caused it,
         as a bare ``ValueError``. Asking the same question here changes only
         when the answer arrives. Nothing is refused that was going to be
         accepted.
@@ -770,9 +770,9 @@ class Table(_TableShape):
 class SourceTable(_TableShape):
     r"""One table that stays in its source: its columns, and its keys.
 
-    Built by :meth:`Schema.from_source`. It holds no rows: sampling reads them
+    Built by:meth:`Schema.from_source`. It holds no rows: sampling reads them
     from the source, a hop at a time, when a query is materialized. Keys, time
-    columns and semantic types are corrected exactly as on a :class:`Table`.
+    columns and semantic types are corrected exactly as on a:class:`Table`.
 
     Attributes:
         name: The name the schema knows this table by. A query names columns
@@ -790,7 +790,7 @@ class SourceTable(_TableShape):
     time_column: str | None = None
     end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used, as
-    #: :meth:`Schema.from_source` counted them in the source. Zero for a key
+    #::meth:`Schema.from_source` counted them in the source. Zero for a key
     #: the source enforces, and for a table with no key. ``None`` where
     #: nothing was counted: ``check_keys=False``, a semantic model's table,
     #: or a key named after the schema was built.
@@ -816,11 +816,11 @@ class SourceTable(_TableShape):
         A table in its source cannot be edited to suit a request, and some
         columns only mislead a model: a per-row UUID identifies a row and
         says nothing about it. A table of frames drops a column from its frame
-        before :meth:`Schema.from_data` instead.
+        before:meth:`Schema.from_data` instead.
         """
         if _edits_on_the_core(getattr(self, '_schema', None)):
             # A core-built schema's table: the core checks and makes the
-            # edit, and its answer is stored (T1.24b).
+            # edit, and its answer is stored.
             from sdm_client._rust import edits
 
             if edits.leave_out(self, column):
@@ -880,7 +880,7 @@ class RelationshipOrigin(NamedTuple):
 class Schema:
     r"""The tables a request is about.
 
-    Build one with :meth:`from_data`. Index it by table name, and index a table
+    Build one with:meth:`from_data`. Index it by table name, and index a table
     by column name:
 
     >>> schema = Schema.from_data({'users': users, 'orders': orders})
@@ -1093,7 +1093,7 @@ class Schema:
         show_columns: bool = True,
         height: int = 540,
     ) -> None:
-        """Display in a notebook or export .mmd/.html/.png/.svg.
+        """Display in a notebook or export.mmd/.html/.png/.svg.
 
         HTML and Mermaid stay offline. Explicit PNG/SVG and BytesIO exports
         send schema metadata (never rows) to https://mermaid.ink.
@@ -1105,16 +1105,16 @@ class Schema:
 
     @property
     def source(self) -> Source | None:
-        r"""Where the tables are, for a schema built with :meth:`from_source`.
+        r"""Where the tables are, for a schema built with:meth:`from_source`.
 
         ``None`` for a schema of frames. A schema has one source or none,
-        because sampling runs against one: see :meth:`from_source`.
+        because sampling runs against one: see:meth:`from_source`.
         """
         return self._source
 
     @property
     def conversion_notes(self) -> tuple[str, ...]:
-        r"""How :meth:`from_source` read a semantic model where nothing was
+        r"""How:meth:`from_source` read a semantic model where nothing was
         lost, for a person to read.
 
         For a Databricks metric view, one note each: the predictive query
@@ -1123,7 +1123,7 @@ class Schema:
         column taken in place of a date the view truncates, unless
         ``time_columns`` named another, and a parameter read as its default.
         Tables are named as the schema names them. What a model loses is
-        said in an :class:`SDMWarning` instead, and a time column taken in
+        said in an:class:`SDMWarning` instead, and a time column taken in
         place of a truncated date is said in the warning on how time columns
         were inferred as well, with the override that names another. Empty
         for every other schema.
@@ -1139,7 +1139,7 @@ class Schema:
         `Schema.from_data(relationships=[link])` checks that both columns exist
         and that their dtypes can join; `schema.relationships = [link]` is the
         same statement and checked nothing, so a link that one route refuses
-        the other accepted. `check_consistent()`, which a caller runs to
+        the other accepted. `check_consistent`, which a caller runs to
         ask exactly this, passed it.
         """
         if (
@@ -1149,7 +1149,7 @@ class Schema:
             and _edits_on_the_core(self)
         ):
             # A core-built schema: the core checks and makes the edit, and
-            # its answer is stored (T1.24b, decision E66(g)).
+            # its answer is stored.
             from sdm_client._rust import edits
 
             if edits.relationships(self, value):
@@ -1169,7 +1169,7 @@ class Schema:
         destructive one once key columns were re-derived: clearing the copy's
         relationships retyped a column of a schema that still had them.
 
-        The rows are still shared, as they are in `snapshot()`: they are the
+        The rows are still shared, as they are in `snapshot`: they are the
         data, and copying a warehouse extract is not what a caller asking for
         a copy of the schema is asking for.
         """
@@ -1196,7 +1196,7 @@ class Schema:
                 '_engine_tables': None,
                 '_conversion_notes': (),
                 # The core's description of the source an earlier client
-                # kept beside the schema (to T3.16): its columns now carry
+                # kept beside the schema: its columns now carry
                 # what the source said of them, and a column with none is
                 # read from the source again.
                 **{
@@ -1240,7 +1240,7 @@ class Schema:
     def snapshot(self) -> Schema:
         r"""This schema as it stands, so a later edit cannot reach back.
 
-        `materialize()` is the gathering step and what it returns is read as
+        `materialize` is the gathering step and what it returns is read as
         finished, but the request kept the caller's schema by reference and the
         adapter reads it again at send time. Editing a column's meaning
         after materializing changed what was sent, silently, and an agent
@@ -1369,10 +1369,10 @@ class Schema:
 
         >>> source = DatabricksSource(spark, catalog='main', schema='sales')
         >>> schema = Schema.from_source(
-        ...     source,
-        ...     {'customers': 'adventureworks_customers',
-        ...      'orders': 'adventureworks_orders'},
-        ...     time_columns={'orders': 'order_date'},
+        ... source,
+        ... {'customers': 'adventureworks_customers',
+        ... 'orders': 'adventureworks_orders'},
+        ... time_columns={'orders': 'order_date'},
         ... )
 
         Nothing is read into memory. Column types come from the source's
@@ -1393,7 +1393,7 @@ class Schema:
         refused beyond that; an inferred key is declined beyond it. The count
         is one statement for all the tables, a full scan of each, and it is
         skipped for a key the source enforces, such as a PostgreSQL or DuckDB
-        primary key. :attr:`SourceTable.duplicate_keys` holds what it found.
+        primary key.:attr:`SourceTable.duplicate_keys` holds what it found.
 
         A semantic model, such as a Databricks metric view or a Snowflake
         semantic view, is a source of its own, and already says how its
@@ -1409,7 +1409,7 @@ class Schema:
         ``relationships=[*Schema.from_source(model).relationships, extra]``.
         What the model has that a schema cannot hold is said in one
         :class:`SDMWarning`, and how it was read where nothing was lost, such
-        as the aggregation each measure is, is in :attr:`conversion_notes`.
+        as the aggregation each measure is, is in:attr:`conversion_notes`.
 
         Everything that differs between warehouses belongs to the source, so
         this reads the same whichever one the tables are in. A schema has
@@ -1431,11 +1431,11 @@ class Schema:
                 none.
             check_keys: Count each key's repeats and missing values in the
                 source. ``False`` skips the scan, and the checks with it, and
-                leaves :attr:`SourceTable.duplicate_keys` ``None``. The tables
+                leaves:attr:`SourceTable.duplicate_keys` ``None``. The tables
                 of a semantic model are never counted: the model derives them.
 
         Returns:
-            A schema of :class:`SourceTable`, bound to ``source``.
+            A schema of:class:`SourceTable`, bound to ``source``.
 
         Raises:
             StructuredDataError: If ``tables`` is empty, a name is not a
@@ -1688,7 +1688,7 @@ def names_a_query_cannot_say(schema: Schema) -> bool:
     r"""Whether a table of ``schema`` holds a column whose name the old
     validator's language cannot say: one holding a dot, a backtick or a
     line break. Only the core route keeps such a column, and only the core
-    resolves a query naming it (KO2-36, T2.18).
+    resolves a query naming it.
     """
     return any(
         _invalid_name_chars(name)
@@ -1817,7 +1817,7 @@ def _copy_column(column: Column) -> Column:
         '_stype_before_key',
     ):
         object.__setattr__(made, field_name, getattr(column, field_name))
-    # What the source said of it, frozen, so shared (T3.16); a column
+    # What the source said of it, frozen, so shared; a column
     # unpickled from before it had any holds none.
     object.__setattr__(made, '_source', getattr(column, '_source', None))
     return made
@@ -2255,7 +2255,7 @@ class _Links(list):
     def _resettle(self, links: list[Relationship]) -> None:
         if _edits_on_the_core(self._schema):
             # A core-built schema: the core checks and makes the edit, and
-            # its answer is stored in this list (T1.24b).
+            # its answer is stored in this list.
             from sdm_client._rust import edits
 
             if edits.relationships(self._schema, links, into=self):
@@ -2643,12 +2643,11 @@ def links_of(schema: Schema) -> list[list[dict[str, str]]]:
 
 def query_schema(schema: Schema) -> dict[str, Any]:
     r"""``schema`` as the contract's ``QuerySchema``, as the language's own
-    schema reads it, written with no object of the old PQL package (T3.16,
-    rule 11), the one translation :func:`to_schema_definition` builds the
+    schema reads it, written with no object of the old PQL package (rule 11), the one translation:func:`to_schema_definition` builds the
     language's objects from: each column of a
     data type and meaning a query can name, by the language's names; a
     single-column key, a composite one said and dropped
-    (:func:`say_a_composite_key_is_dropped`); each link
+    (func:`say_a_composite_key_is_dropped`); each link
     a group of its two ends, in order of table and column."""
     tables = []
     for name, table in schema.tables.items():

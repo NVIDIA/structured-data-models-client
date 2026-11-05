@@ -4,14 +4,14 @@
 
 r"""The live write guard: every live write, DDL included, goes only to
 the one test schema of its warehouse; anything else is refused before the
-driver sees it (KO3-51, the owner's rule).
+driver sees it (the owner's rule).
 
-    uninstall = install(from_environment())   # every driver, guarded
+    uninstall = install(from_environment) # every driver, guarded
     ...
-    uninstall()
+    uninstall
 
 One guard per dialect (``databricks``, ``snowflake``, and ``postgres`` for
-Lakebase), enforced in one place: :func:`install` wraps every entry point a
+Lakebase), enforced in one place::func:`install` wraps every entry point a
 statement reaches a server through, on the driver classes themselves
 (Snowflake's cursor base and connection, sync and async, and Snowpark's
 session, Databricks SQL's cursor, Spark's session, classic and Connect,
@@ -44,17 +44,17 @@ Reads (the forms the old client and the runner issue), anywhere:
 
 - ``SELECT`` and ``WITH`` queries holding no write verb, no ``INTO`` and
   no sequence (``NEXTVAL`` and the like), calling only the pure functions
-  of :data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``),
+  of:data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``),
   a keyword taking a ``(`` only where it cannot be a call, and casting
-  (``::`` or ``CAST``) only to a built-in type of :data:`CAST_TYPES`;
-  on Postgres also the core's seed-time read (T3.7), in a read only:
-  ``CROSS JOIN (SELECT ROW(t.*)::<schema>.<table> ...)``, the cast a row's
+  (``::`` or ``CAST``) only to a built-in type of:data:`CAST_TYPES`;
+  on Postgres also the core's seed-time read, in a read only:
+  ``CROSS JOIN (SELECT ROW(t.*)::<schema>.<table>...)``, the cast a row's
   to a table of the test schema, and ``CROSS JOIN LATERAL
   jsonb_populate_record(..., jsonb_build_object(...))``;
 - ``DESCRIBE TABLE [EXTENDED] <t>``, ``SHOW TABLES [LIKE <p>] [IN [SCHEMA]
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
-  SESSION SET <p> = <value>`` of :data:`SESSION_PARAMETERS`.
+  SESSION SET <p> = <value>`` of:data:`SESSION_PARAMETERS`.
 - Databricks ``DESCRIBE QUERY <read>`` only when ``<read>`` starts with
   ``SELECT`` or ``WITH`` and passes the same guarded-read validation.
 
@@ -64,11 +64,11 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
 
 - ``CREATE [OR REPLACE] TABLE <t> (<columns>)`` (Databricks: then
   ``TBLPROPERTIES ('...' = '...')``): each column ``<name> <type> [NOT
-  NULL]`` of a built-in type the loader writes (:data:`TYPES`; on Postgres
+  NULL]`` of a built-in type the loader writes (data:`TYPES`; on Postgres
   also a composite type in the test schema), or a key constraint whose
   ``REFERENCES`` is in the test schema; nothing else (no ``LIKE``,
   ``CHECK``, ``DEFAULT``, generated column, domain or other schema's type);
-- ``INSERT INTO <t> [(<names>)] VALUES | SELECT ...``, holding nothing a
+- ``INSERT INTO <t> [(<names>)] VALUES | SELECT...``, holding nothing a
   read may not;
 - ``DROP TABLE | VIEW [IF EXISTS] <t>``, Snowflake's ``DROP SEMANTIC VIEW``
   and Postgres' ``DROP TYPE`` too: one target, never ``CASCADE``;
@@ -83,7 +83,7 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
 One statement is admitted by where it is sent from, not by its form:
 Snowpark's own ``select system$cancel_all_queries(<session id>)``, only
 while that session's ``Session.close`` runs and only for its own id
-(:data:`SESSION_CLOSE`).
+(data:`SESSION_CLOSE`).
 
 Snowflake reads an unquoted name upper-cased and a quoted one exactly;
 Postgres an unquoted one lower-cased and a quoted one exactly; Unity
@@ -288,7 +288,7 @@ RESERVED = frozenset(
 AFTER_CLOSE = frozenset({'OVER', 'FILTER', 'REPEATABLE', 'WITHIN'})
 AFTER_BY = frozenset({'ORDER', 'GROUP', 'PARTITION'})
 AFTER_TABLE = frozenset({'TABLESAMPLE', 'SAMPLE'})
-#: The types a cast (``::`` or ``CAST(... AS ...)``) may name, by dialect:
+#: The types a cast (``::`` or ``CAST(... AS...)``) may name, by dialect:
 #: built-in types only (a domain's checks may call anything).
 CAST_TYPES = {
     'snowflake': frozenset(
@@ -588,10 +588,10 @@ class WriteGuard:
         r"""Refuses ``items`` holding one of ``words`` or a sequence's word,
         casting to a type not built in, or calling anything but
         :data:`FUNCTIONS` by a plain name; a keyword takes a ``(`` only
-        where it cannot be a call (:data:`RESERVED` and the words after it),
+        where it cannot be a call (data:`RESERVED` and the words after it),
         and an alias after ``AS`` its list of names. In a Postgres ``read``
         (a SELECT or WITH statement, never a write's), also the core's
-        seed-time shapes (:meth:`_seed_row`)."""
+        seed-time shapes (meth:`_seed_row`)."""
         # The word each open parenthesis follows, innermost last: inside a
         # cast, AS names its type.
         openers: list[str] = []
@@ -662,7 +662,7 @@ class WriteGuard:
                 )
                 or (
                     # The core's seed-time read on Postgres (sdm-data's
-                    # seed CTE): CROSS JOIN (SELECT ROW(t.*)::<table> ...),
+                    # seed CTE): CROSS JOIN (SELECT ROW(t.*)::<table>...),
                     # then CROSS JOIN LATERAL jsonb_populate_record(b.base,
                     # jsonb_build_object(...)).
                     seeds
@@ -686,13 +686,13 @@ class WriteGuard:
                 )
                 or (
                     # The old client's join onto a derived table:
-                    # JOIN (SELECT ...) ON ....
+                    # JOIN (SELECT...) ON....
                     word == 'JOIN'
                     and [_upper(t) for t in items[i + 2 : i + 3]] == ['SELECT']
                 )
                 or (
                     # The old client's sampled derived table:
-                    # FROM (SELECT ...) TABLESAMPLE (...).
+                    # FROM (SELECT...) TABLESAMPLE (...).
                     word == 'TABLESAMPLE'
                     and before == _CLOSE
                     and closed is not None
@@ -712,7 +712,7 @@ class WriteGuard:
     def _seed_row(self, items: list[Token], at: int, what: str) -> set[int]:
         r"""The row type a ``ROW(...)`` is cast to at ``at`` in the core's
         seed-time read: ``<schema>.<table>``, a table of the test schema
-        this guard saw made (:attr:`made`); refuses any other. Returns the
+        this guard saw made (attr:`made`); refuses any other. Returns the
         index of its tokens."""
         end = self._made(items, at)
         if end is None:
@@ -788,7 +788,7 @@ class WriteGuard:
 
     def _aliases_seed_row(self, items: list[Token], alias: Token) -> bool:
         r"""Whether ``alias`` names the core's seed row of a table this
-        guard saw made (see :meth:`_seed_base`)."""
+        guard saw made (see:meth:`_seed_base`)."""
         for j in range(len(items)):
             if items[j] != _OPEN or [
                 _upper(t) for t in items[j + 1 : j + 3]
@@ -862,7 +862,7 @@ class WriteGuard:
     # Statements.
 
     def check(self, sql: str) -> None:
-        r"""Refuses ``sql`` (:class:`WriteRefused`) unless it is one
+        r"""Refuses ``sql`` (class:`WriteRefused`) unless it is one
         statement of a form the module's text admits."""
         if not isinstance(sql, str):
             raise WriteRefused('a statement that is not text')
@@ -970,7 +970,7 @@ class WriteGuard:
             s.at += 1
             s.end()
         elif not replace and s.accept('VIEW'):
-            # The loader's setup only (:func:`setup`): a plain view in the
+            # The loader's setup only (func:`setup`): a plain view in the
             # test schema over a read.
             if not _SETUP.get():
                 s.refuse("a view outside the loader's setup")
@@ -1009,7 +1009,7 @@ class WriteGuard:
         self, items: list[Token], what: str, constraints: bool
     ) -> None:
         r"""A table's (or composite type's) columns, each ``<name> <type>
-        [NOT NULL]`` with a built-in type of :data:`TYPES` (on Postgres
+        [NOT NULL]`` with a built-in type of:data:`TYPES` (on Postgres
         also a composite type in the test schema), or, in a table, a key
         constraint (``[CONSTRAINT <name>] PRIMARY KEY | UNIQUE (<names>)``,
         ``FOREIGN KEY (<names>) REFERENCES <t> (<names>)``, ``<t>`` in the
@@ -1242,13 +1242,13 @@ _STATEMENT_KEYWORDS = (
 _SPARK_KEYWORDS = frozenset({'sqlQuery', 'args'})
 _MARK = '__sdm_write_guard__'
 _INSTALLED: list[tuple[type, str, Any]] = []
-#: Every refusal an installed entry point made since :func:`install`, its
+#: Every refusal an installed entry point made since:func:`install`, its
 #: message: a caller that catches one (the old client's call makes it the
 #: case's outcome) cannot hide it from the run, which fails the case.
 REFUSALS: list[str] = []
 
 
-#: Whether the contract loader's case setup is running (:func:`setup`):
+#: Whether the contract loader's case setup is running (func:`setup`):
 #: only then are its two setup forms admitted, a plain view in the test
 #: schema and, on Postgres, a temporary table.
 _SETUP: contextvars.ContextVar[bool] = contextvars.ContextVar(
@@ -1269,7 +1269,7 @@ def setup() -> Iterator[None]:
 
 
 #: Snowpark's ``Session.close``: while it runs, the one statement it sends
-#: to cancel its own session's queries is admitted (:func:`_closing`).
+#: to cancel its own session's queries is admitted (func:`_closing`).
 SESSION_CLOSE = ('snowflake.snowpark.session', 'Session', 'close')
 #: While a Snowpark session closes, the one statement it may send and the
 #: Snowflake connection it may send it on, or ``None``.
@@ -1331,7 +1331,7 @@ def _closing_admits(dialect: str, cursor: Any, text: str) -> bool:
 
 
 def _keeping(function: Any) -> Any:
-    r"""``function``, each refusal it raises kept in :data:`REFUSALS`."""
+    r"""``function``, each refusal it raises kept in:data:`REFUSALS`."""
 
     @functools.wraps(function)
     def kept(*arguments: Any, **keywords: Any) -> Any:
@@ -1345,7 +1345,7 @@ def _keeping(function: Any) -> Any:
     return kept
 
 
-#: What :func:`install` applies, by base class, for a subclass defined later.
+#: What:func:`install` applies, by base class, for a subclass defined later.
 _RULES: list[tuple[type, str, Callable[[Any], Any]]] = []
 _ABSENT = object()
 
@@ -1506,7 +1506,7 @@ def _wrap_one(cls: type, attribute: str, make: Callable[[Any], Any]) -> None:
 def _wrap(cls: type, attribute: str, make: Callable[[Any], Any]) -> None:
     r"""``attribute`` of ``cls`` and of each subclass resolving it to
     something else, replaced by ``make`` of what it resolved to; a
-    subclass defined later gets the same (:func:`_hook`)."""
+    subclass defined later gets the same (func:`_hook`)."""
     seen: set[type] = set()
     pending = [cls]
     while pending:
@@ -1551,9 +1551,9 @@ def _closed(dialect: str) -> Callable[[str], None]:
 
 
 def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
-    r"""Every driver entry point (:data:`ENTRY_POINTS`) checked by its
+    r"""Every driver entry point (data:`ENTRY_POINTS`) checked by its
     dialect's guard in ``guards`` (none, or one missing: every statement
-    of that dialect refused), every :data:`REFUSED` interface and every
+    of that dialect refused), every:data:`REFUSED` interface and every
     :data:`REFUSED_CLASSES` writer refused, for every driver importable
     here; returns what undoes it. A driver module that imports but lacks
     an entry point's class stops the install, as its entry points may
@@ -1641,7 +1641,7 @@ def _class(
 
 
 def uninstall() -> None:
-    r"""Undoes :func:`install`, the last change first."""
+    r"""Undoes:func:`install`, the last change first."""
     _RULES.clear()
     while _INSTALLED:
         cls, attribute, previous = _INSTALLED.pop()

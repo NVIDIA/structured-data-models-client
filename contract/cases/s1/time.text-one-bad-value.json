@@ -79,8 +79,7 @@
     "stage": "materialize",
     "error": "StructuredDataError",
     "code": "INTERNAL_ERROR",
-    "message": "invalid timestamp field format: \"not a date\"",
-    "today": "the preview still infers orders.ts as the time column"
+    "message": "invalid timestamp field format: \"not a date\""
   },
   "register": "One unreadable value fails the backend cast instead of being dropped or named",
   "why": "Inference over a preview against SQL over every row",

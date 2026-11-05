@@ -102,10 +102,9 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "The core accepts it: escapes.rs joins a pair into one character and reads a lone surrogate as U+FFFD, so rust-host succeeds; python-core refuses as the reference does, at the old materializer after the shadow check (register PQL-1, proposed)"
+    "code": "INVALID_REQUEST"
   },
   "register": "PQL-1",
   "why": "An escaped surrogate pair, \\ud83d\\ude00: the reference's unicode-escape codec leaves two lone surrogates, which validation takes and the old materializer refuses (UnicodeEncodeError, INVALID_REQUEST)",
-  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+  "source": "Correctness case s0.boundary.escape-surrogate-pair using the shop fixture."
 }

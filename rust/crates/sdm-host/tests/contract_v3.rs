@@ -2,11 +2,11 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Contract v3 through `HostRun` (T1.7b): input-sized fields travel as
-//! attachments, so the 64 KB cap bounds only a message's envelope
-//! (decision H5); every message the core writes arrives whole, an
-//! attachment carrying one whose encoding would pass the cap (H7); a
-//! provider's retryability reaches the error (H6); and the host's local zone
+//! Contract v3 through `HostRun`: input-sized fields travel as
+//! attachments, so the 64 KB cap bounds only a message's envelope;
+//! every message the core writes arrives whole, an
+//! attachment carrying one whose encoding would pass the cap; a
+//! provider's retryability reaches the error; and the host's local zone
 //! may be a POSIX `TZ` string.
 //!
 //! The fetch, result, error and warnings of exact sizes come from the
@@ -117,7 +117,7 @@ fn validate(model: Option<String>) -> Operation {
     })
 }
 
-/// A users table with `extra` numeric columns `c0`, `c1`, ... beside its key.
+/// A users table with `extra` numeric columns `c0`, `c1`,... beside its key.
 fn wide_schema(extra: usize) -> QuerySchema {
     let mut columns = vec![QueryColumn {
         name: "user_id".into(),
@@ -548,7 +548,7 @@ fn a_local_zone_may_be_an_iana_name_or_a_posix_tz_string() {
 #[test]
 fn a_start_from_another_contract_version_is_refused_for_its_version_first() {
     // Bad attachments (none of the two named) and a bad local zone too: the
-    // version is what the refusal names (decision H25).
+    // version is what the refusal names.
     let mut message = start_message(
         validate(None),
         Some(LocalZone::Posix("not a TZ string".into())),

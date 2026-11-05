@@ -4,7 +4,7 @@
 
 //! The data requests' own checks: every field is honored or the request is
 //! refused with a typed error naming the request and the field, never a
-//! value (design, "Data access"; decision H15).
+//! value (design, "Data access").
 
 #[allow(dead_code, reason = "the corpus serves several test files")]
 mod corpus;

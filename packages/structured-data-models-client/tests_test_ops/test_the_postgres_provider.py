@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The Python host's Postgres provider, through the core (T2.3).
+"""The Python host's Postgres provider, through the core.
 
-Written by T2.3's independent test author before the implementation, from
+Written by independent test author before the implementation, from
 the design's row ("dialect, psycopg provider (Arrow without pandas)", "key
 sets bound as the dialect binds them", "L4 goldens executed", choice 12's
 relation forms) and ``test_the_duckdb_provider.py``, whose vectors this
 reads: each fetch is planned by the core's data layer for Postgres
 (``{'provider': 'sql', 'dialect': 'postgres'}``, under the database's
-``public`` schema since T3.7), answered by the provider
+``public`` schema ), answered by the provider
 over a ``psycopg`` connection to a real Postgres, admitted by the core and
 echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
@@ -41,13 +41,13 @@ vectors name, loaded into a database of their own by the contract loader
 The provider is ``sdm_client._rust.providers.postgres.PostgresProvider``,
 built over a ``psycopg`` connection and called as the DuckDB provider is
 (``provider(step, keys)``): the one name this test assumes of the
-implementation (:data:`PROVIDER`).
+implementation (data:`PROVIDER`).
 
 Where ``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES``
 is not set, the tests that need one have nothing to hold and return without
-asserting, as T2.1a's Postgres tests do; with it set, a missing server
-fails (H26). Expected to fail
-until T2.3's implementation lands: no Postgres provider module, and the
+asserting, as Postgres tests do; with it set, a missing server
+fails. Expected to fail
+until implementation lands: no Postgres provider module, and the
 core reports no Postgres dialect.
 """
 
@@ -80,14 +80,15 @@ KINDS = json.loads(
 #: The provider under test, module and class.
 PROVIDER = ('sdm_client._rust.providers.postgres', 'PostgresProvider')
 #: Under the schema each test's database holds its tables in, ``public``,
-#: as every Postgres read names one (T3.7): the source's, or its session's
+#: as every Postgres read names one: the source's, or its session's
 #: current one, read once per run.
 POSTGRES = {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['public']}
 
 
 def _loader() -> Any:
     spec = importlib.util.spec_from_file_location(
-        't23_databases', ROOT / 'contract/runners/databases.py'
+        'test_the_postgres_provider_databases',
+        ROOT / 'contract/runners/databases.py',
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -441,7 +442,7 @@ def _seeds(kind: dict[str, Any], values: list[str]) -> pa.Table:
 
 
 def test_the_core_reports_a_postgres_provider() -> None:
-    # The staging rule's marker (T2.1a): the core legs run on Postgres
+    # The staging rule's marker: the core legs run on Postgres
     # exactly when the core reports it.
     from sdm_client import _native
 
@@ -489,7 +490,7 @@ def test_keys_that_collide_as_float64_bind_join_and_answer_exactly(
     for case in cases:
         exact = _seeds(case['type'], case['values'])
         data, seen = _keyed(vectors_db, case['request'], exact)
-        # The key set travels as the dialect's JSON text (T3.28): one
+        # The key set travels as the dialect's JSON text: one
         # cell, each key as the old client writes it, its value exact.
         [handed] = seen['keys'].values()
         assert (handed.num_rows, handed.num_columns) == (1, 1), case['column']
@@ -609,7 +610,7 @@ def test_the_reference_s_postgres_lookup_has_that_layout() -> None:
 
 def _as_the_reference_looks_up(fetch: dict[str, Any]) -> dict[str, Any]:
     r"""A lookup fetch of ``contract/request-kinds.json`` with its schema
-    and rows in :data:`REFERENCE_LOOKUP`'s layout: the batch, the row's
+    and rows in:data:`REFERENCE_LOOKUP`'s layout: the batch, the row's
     columns, ``__kumo_row__`` (1) and ``__kumo_matches__``."""
     before, after = REFERENCE_LOOKUP
     names = [name for name, _ in fetch['schema']]

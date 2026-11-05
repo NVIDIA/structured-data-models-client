@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The labels on the pure-Rust host (T1.27, decision E19): each baseline
+//! The labels on the pure-Rust host: each baseline
 //! case's context labels, as the core computes them over this host's
 //! fetches (the test-only `labels` operation, started in place of the
 //! case's `materialize`), are the reference's exactly, as its payload's
@@ -13,7 +13,7 @@
 //! core's example of that position: the entity, the anchor to the
 //! microsecond the payload writes, and the label, compared exactly. The
 //! reference leaves out of a static target's context the entities it is
-//! asked to predict for (T1.28a's rule): an example missing from its rows
+//! asked to predict for (rule): an example missing from its rows
 //! must be one of those, and the counts must agree with the payload's
 //! `num_context_examples`. The Python host is held to the same rows by
 //! `packages/structured-data-models-client/tests_test_ops/test_the_labels.py`.

@@ -4,12 +4,12 @@
 """The Python host of the Rust core: its codec, its facts and its error table.
 
 The codec reads every contract scalar exactly and a message the core sent
-whole as an attachment (decisions E4, H7, E23). The host facts name the
+whole as an attachment. The host facts name the
 zone lookup roots in ``zoneinfo``'s order with their versions, the
-platform's year padding (E23), and, where pandas bounds it, the range a
-date literal can be held in (T1.20). Every code the core has maps to one
+platform's year padding, and, where pandas bounds it, the range a
+date literal can be held in. Every code the core has maps to one
 ``StructuredDataError`` class, keyed on the code alone and reading no
-message text (H6, E22); warnings keep their order and their class.
+message text; warnings keep their order and their class.
 """
 
 from __future__ import annotations
@@ -301,7 +301,7 @@ def _pandas_holds_year_1() -> bool:
 def test_the_date_literal_range_is_pandas_own_where_pandas_bounds_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # T1.20 fix 1: pandas 2 holds a date only from Timestamp.min to
+    # fix 1: pandas 2 holds a date only from Timestamp.min to
     # Timestamp.max, so the host declares that range, in nanoseconds, and
     # the core refuses a literal outside it as the old validator does;
     # pandas 3 holds year 1, and the host declares none.
@@ -398,7 +398,7 @@ def _error(code: str, message: str, **more: Any) -> bytes:
 
 
 def test_an_endpoint_s_refusal_is_raised_as_the_old_client_raises_it() -> None:
-    # T3.27: as `NimRequestError(status, code=...)`, the status and the
+    #: as `NimRequestError(status, code=...)`, the status and the
     # endpoint's own code, or none, the rest of the fields its details.
     from sdm_client.errors import NimRequestError
 
@@ -455,7 +455,7 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
         assert len({str(error) for error in made}) == 1
         assert all(CANARY not in str(error) for error in made)
     # Nothing reads a message the core wrote: every error and warning says
-    # the core's sentence (T3.17).
+    # the core's sentence.
     tree = ast.parse(Path(errors.__file__).read_text(encoding='utf-8'))
     for function in tree.body:
         if not isinstance(function, ast.FunctionDef):
@@ -469,8 +469,8 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
 
 
 def test_a_batched_part_is_worded_by_its_part_s_kind() -> None:
-    # The core names the part's kind `part_kind` (T2.8 fix 4), and says the
-    # sentence of it (T3.17): `kind` is the error's own, which the details
+    # The core names the part's kind `part_kind`, and says the
+    # sentence of it: `kind` is the error's own, which the details
     # carry too.
     def said(part_kind: str) -> str:
         fields = {
@@ -497,7 +497,7 @@ def test_a_batched_part_is_worded_by_its_part_s_kind() -> None:
 
 def test_a_failed_call_s_counts_reach_the_caller_s_exception() -> None:
     # A ranking's questions answered before a call failed are counted, never
-    # kept (T2.8 fix 4): the count reaches whatever the transport raised,
+    # kept: the count reaches whatever the transport raised,
     # beside the details it holds, with no answers carried.
     from sdm_client._rust.run import _carried
 
@@ -620,9 +620,9 @@ def _shown(*given: dict[str, Any]) -> list[tuple[str, str]]:
 def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> (
     None
 ):
-    # T1.23 (E59): the core gives codes and fields, and this host words
+    #: the core gives codes and fields, and this host words
     # them, the reference's Python remedies included. The texts the core
-    # wrote itself before T1.23, word for word.
+    # wrote itself before, word for word.
     assert _shown(
         _warning(
             'link_cannot_join_types',
@@ -788,7 +788,7 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
 
 def test_a_remedy_names_a_table_as_python_writes_its_name() -> None:
     # The vectors CPython 3.12's repr wrote (tests/quoted.json, from
-    # T1.21d): each name a remedy holds is the literal Python reads back.
+    # ): each name a remedy holds is the literal Python reads back.
     vectors = json.loads(
         (Path(__file__).parent / 'quoted.json').read_text(encoding='utf-8')
     )['vectors']
@@ -809,7 +809,7 @@ def test_a_remedy_names_a_table_as_python_writes_its_name() -> None:
 def test_a_warning_its_fields_cannot_fill_names_the_core_s_defect() -> None:
     # A sentence named without the fields its template names is the core's
     # defect, said as one, never raised and never a sentence the core did
-    # not choose (T3.17).
+    # not choose.
     [(_, text)] = _shown(_warning('two_ways_to_a_table', source_table='a'))
     assert text == (
         "[TWO_WAYS_TO_A_TABLE] the core said 'two_ways_to_a_table' without "
@@ -833,7 +833,7 @@ def test_context_coverage_warning_names_limits_and_remedies() -> None:
 
 
 def test_a_day_first_date_literal_is_worded_as_pandas_words_it() -> None:
-    # T1.6b: date rule D4's warning, the format the core names, in the
+    #: date rule D4's warning, the format the core names, in the
     # words of the reference's `pd.to_datetime`, as a UserWarning.
     assert _shown(
         _warning(

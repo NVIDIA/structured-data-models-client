@@ -116,7 +116,7 @@ def test_the_lanes_are_e16_s_floor_and_newest() -> None:
         'aarch64-floor',
         'aarch64-newest',
     }
-    # The aarch64 lanes are the same two on an aarch64 machine (KO2-40).
+    # The aarch64 lanes are the same two on an aarch64 machine.
     for lane in (floor, newest):
         assert lane.machine is None
     assert smoke.LANES['aarch64-floor'] == dataclasses.replace(
@@ -454,10 +454,10 @@ def test_the_tests_run_with_nothing_of_the_caller_s_pytest(
     assert (tmp_path / 'guard' / 'smoke_guard.py').read_text() == smoke._GUARD
 
 
-# --- T1.20: the candidate's contract inputs, the checkpoint's judges ----------
+# ---: the candidate's contract inputs, the checkpoint's judges ----------
 
 BINDING_TESTS = 'rust/bindings/sdm-py/tests'
-#: The contract inputs ``suite()`` takes from the inputs tree, at their
+#: The contract inputs ``suite`` takes from the inputs tree, at their
 #: repository paths: the contract's sources and the native module's stub.
 #: The message builder is not one: it decodes what the tests judge.
 INPUTS = (
@@ -465,7 +465,7 @@ INPUTS = (
     'rust/crates/sdm-contract/src/error.rs',
     'packages/structured-data-models-client/src/sdm_client/_native.pyi',
 )
-#: The binding's test files ``suite()`` takes from its own checkout as they
+#: The binding's test files ``suite`` takes from its own checkout as they
 #: are: every file of the tests directory but ``messages.py``, which it
 #: takes from its own checkout too, its ``CONTRACT`` line set to the
 #: inputs' version.
@@ -759,7 +759,7 @@ def test_the_container_mounts_the_inputs_read_only(
     assert '--inputs' not in inside
 
 
-# --- T1.20: the inputs tree is the commit's, clean -----------------------------
+# ---: the inputs tree is the commit's, clean -----------------------------
 
 #: The paths of the inputs tree the smoke takes: the sibling distributions
 #: and the contract inputs.
@@ -968,7 +968,7 @@ def test_without_a_commit_the_inputs_are_not_held(
     assert built == ['smoke']
 
 
-# --- T1.20: an ignored file never reaches a wheel or the suite ----------------
+# ---: an ignored file never reaches a wheel or the suite ----------------
 
 #: A file the commit holds although an ignore pattern matches it (added
 #: with ``--force``): the export takes it, as the commit holds it.
@@ -1066,7 +1066,7 @@ def _committed(repo: pathlib.Path, commit: str, path: str) -> bytes:
 def _held_as_committed(
     tree: pathlib.Path, repo: pathlib.Path, commit: str
 ) -> set[str]:
-    """Asserts `tree` holds every file `commit` holds under :data:`TAKEN`
+    """Asserts `tree` holds every file `commit` holds under:data:`TAKEN`
     and nothing `commit` does not hold, each file as `commit` holds it.
     Returns `tree`'s files."""
     files = {

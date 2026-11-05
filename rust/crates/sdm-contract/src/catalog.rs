@@ -2,13 +2,13 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The catalog's answers as the core reads them, in no dialect's shape
-//! (decision E54).
+//! The catalog's answers as the core reads them, in no dialect's shape.
+//!
 //!
 //! A `describe` request is answered in the shape its plan expects: a SQL
 //! dialect's own catalog's, or, for a host provider, the contract's
 //! (`data::catalog_columns`). The data layer reads either into a
-//! [`CatalogAnswer`] after the core has admitted it (decision H16, check
+//! [`CatalogAnswer`] after the core has admitted it (check
 //! (b)), so the core and `sdm-schema` read a column's name, type,
 //! nullability and key flag, a key's kind and columns, a foreign key's
 //! column pairs and an index's columns, resolved or not, and never a
@@ -64,8 +64,7 @@ impl CatalogAnswer {
     }
 }
 
-/// A semantic model's definition as its warehouse describes it (T3.27,
-/// design S5), read as the old client reads it: a Databricks metric view's
+/// A semantic model's warehouse definition: a Databricks metric view's
 /// `DESCRIBE TABLE EXTENDED` (`DB/metric_view.py:1389-1475`), a Snowflake
 /// semantic view's YAML alone. A relation that is no semantic model of the
 /// dialect's kind, or gives no definition, is refused by the dialect's
@@ -121,7 +120,7 @@ pub struct CatalogColumn {
     /// `REAL`, `FLOA` or `DOUB` a float), whatever its values, and a column
     /// holding none reads as integers by its driver whatever it declares.
     /// `None` where the values' type is the column's (another declaration,
-    /// an `INTERVAL` by the owner's KO2-62, every other source).
+    /// an `INTERVAL` by the owner's, every other source).
     pub dtype: Option<Dtype>,
 }
 
@@ -155,7 +154,7 @@ pub struct CatalogKey {
     /// Whether the source holds its rows to the key: a primary or unique
     /// key DuckDB, SQLite or Postgres declares is enforced; one Databricks
     /// declares is informational, never enforced, so its rows may repeat a
-    /// value (contract v28, T3.4). Only an enforced key lets a check of
+    /// value (contract v28). Only an enforced key lets a check of
     /// the key's rows, or a lookup's removal of repeated rows, be skipped,
     /// as the reference's engine reads its `_unique_constraints`.
     pub enforced: bool,

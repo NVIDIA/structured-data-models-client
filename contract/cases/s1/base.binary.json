@@ -83,8 +83,7 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "task binary_classification, classes ['false', 'true'], positive class 'true'; result prediction bool"
+    "stage": "predict"
   },
   "why": "Covers client.predict/binary/duckdb and a boolean label",
   "source": "scope-python.yaml paths"

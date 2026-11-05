@@ -44,10 +44,10 @@ def _json_type(value: Any) -> str:
 
 def masked(parsed: Any, paths: Paths | None = None) -> Any:
     r"""A parsed prediction payload with the value at each of ``paths``
-    (by default :data:`RANDOM_PATHS`) replaced by its JSON type, as
+    (by default:data:`RANDOM_PATHS`) replaced by its JSON type, as
     conservation compares it. The same rule holds the core's call (the payload it writes for the
     endpoint, ``core.predicted.body``) across the core runners and to its
-    pin (T1.11d): one value, ``metadata.request_id``, under E35, approved by
+    pin: one value, ``metadata.request_id``, under E35, approved by
     the owner on 2026-10-10."""
     parsed = copy.deepcopy(parsed)
     for path in RANDOM_PATHS if paths is None else paths:
@@ -98,7 +98,7 @@ def complete(observation: dict[str, Any]) -> list[str]:
     problems = [f'could not record: {what}' for what in capture['incomplete']]
     if logged is None:
         # Every line has its log: DuckDB's own, or off DuckDB the driver's
-        # statement log (T2.1a fix 4); a capture held to none is incomplete.
+        # statement log; a capture held to none is incomplete.
         problems.append('an observation without its query log')
         return problems
     if len(capture['statements']) != logged['statements']:
@@ -252,7 +252,7 @@ def check_files(
     r""":func:`check` over two observation files, and each captured
     case's summary line, reading one pair of observations at a time: a
     family's runs reach hundreds of megabytes, which parsed whole took
-    gigabytes (T1.32e's time and feature family: 6.6 GB on Linux)."""
+    gigabytes (time and feature family: 6.6 GB on Linux)."""
     on_index, off_index = _index(on), _index(off)
     off_at = dict(off_index)
     summaries: list[str] = []
@@ -275,7 +275,7 @@ def check_files(
     return problems, summaries
 
 
-# --- the warehouse captures (Phase 3, design choice 2) ------------------------------
+# --- the warehouse captures ------------------------------
 
 
 #: Where the captures are committed: a protected path (contract/protected-

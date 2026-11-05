@@ -82,9 +82,8 @@
   },
   "expect": {
     "outcome": "success",
-    "stage": "predict",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: a regression, each context row labelled with the count of its orders priced between 18 and 21 in the window (contract/t210-target-vectors.json holds the labels); the scripted endpoint answers it through predict"
+    "stage": "predict"
   },
   "why": "A filter inside the target's aggregation joining two comparisons by AND (the core's rule target_filter)",
-  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+  "source": "Correctness case target.filter.and using the shop fixture."
 }

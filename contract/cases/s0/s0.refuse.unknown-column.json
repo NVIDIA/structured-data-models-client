@@ -105,5 +105,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "The first refused S0 query: a column the table does not have, refused by validation before any data is read",
-  "source": "phase-1b-inventory.yaml refuse.unknown-column, on the shop base"
+  "source": "Correctness case s0.refuse.unknown-column using the shop fixture."
 }

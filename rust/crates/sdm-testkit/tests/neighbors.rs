@@ -2,8 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L1 vectors for the core's two `neighbors` reads on DuckDB (T1.26b,
-//! register ORD-2, decision F2): `neighbors.json`, recorded from the
+//! L1 vectors for the core's two `neighbors` reads on DuckDB (
+//! register ORD-2): `neighbors.json`, recorded from the
 //! reference's SQL sampler (`_by_fkey`, `_by_time`) by
 //! `neighbors_record.py` (a protected path, never recorded again to pass a
 //! dependency bump, F4), holds the rows each read returned for its seeds;

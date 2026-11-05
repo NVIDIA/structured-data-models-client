@@ -2,7 +2,7 @@
 -- All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- The provider conformance kit's fixture dataset (T2.5, T2.6): built in
+-- The provider conformance kit's fixture dataset: built in
 -- DuckDB from this file and, for SQLite and Postgres, loaded from DuckDB by
 -- the one contract loader (contract/runners/databases.py), so every provider
 -- reads the same rows. expected.json beside it holds the kit's cases and
@@ -47,7 +47,7 @@ INSERT INTO orders VALUES
     (17, 1, 3, 0.5),
     (18, 4, 2, 7.25);
 
--- Round 1's regressions (T2.5). zeros holds a DOUBLE key as -0.0 and 0.0,
+-- Round 1's regressions. zeros holds a DOUBLE key as -0.0 and 0.0,
 -- one value to every SQL engine, so its key counts one distinct value and
 -- the value repeats. wide holds ten rows of 2,048 characters, so a page of
 -- even one row is past a fallback's 1,000 bytes.

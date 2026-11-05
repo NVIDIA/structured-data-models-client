@@ -663,7 +663,7 @@ def test_the_host_drops_a_state_on_the_core_s_word_not_the_field_it_names(
 
 
 def test_a_zoned_time_column_one_answer_holds_no_value_of_still_joins() -> None:
-    """T2.2 fix 6 (round 1, Claude P1-2): a TIMESTAMPTZ column that one
+    """fix 6: a TIMESTAMPTZ column that one
     of a table's answers holds no value of (the referrers' last logins,
     read by their own lookup) keeps its unit there as in the others, so
     the answers join and ``materialize`` succeeds, as on the old route; a

@@ -86,9 +86,8 @@
     "outcome": "refusal",
     "stage": "materialize",
     "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"201 candidates means 201 calls ... past the 200\" (decompose.MOST_PARTS), before anything is gathered"
+    "code": "INVALID_REQUEST"
   },
   "why": "A ranking over more candidates than MOST_PARTS (200), refused before anything is gathered",
-  "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
+  "source": "Correctness case rank.most-parts using the shop fixture."
 }

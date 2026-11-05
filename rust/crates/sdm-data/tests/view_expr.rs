@@ -2,12 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The view expressions' checks (T3.5, old-behaviour rows 61 to 68) against
+//! The view expressions' checks (old-behaviour rows 61 to 68) against
 //! `contract/view-expr-vectors.json`: every call the old client's own tests
 //! made of `RE/view_expr.py` and of the Snowflake qualifier helpers of
 //! `RE/graph.py`, with its answer, and each word of the old word tables
 //! (the dialects' allow-lists, keywords, type names, session words) put to
-//! the same checks, and from T3.5 fix 1 each separator Python reads as
+//! the same checks, and fix 1 each separator Python reads as
 //! white space (U+001C to U+001F) in both dialects and both trust settings,
 //! and tokens of up to a megabyte, recorded by recipe. Here each answer is
 //! held to whether the old client
@@ -197,7 +197,7 @@ fn recipe(recipe: &Json, count: usize) -> String {
     format!("{}{}{}", part(0), part(1).repeat(count), part(3))
 }
 
-/// Codex review 1, P1-3, and Claude review 1, P1-1: a long token is read,
+/// a long token is read,
 /// never a panic, and answered as the old client answered it, accepted
 /// where it accepted it.
 #[test]

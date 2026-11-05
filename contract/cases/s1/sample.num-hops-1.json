@@ -91,5 +91,5 @@
     "stage": "predict"
   },
   "why": "num_hops=1 over users, orders and lines: the sampler stops at orders, so lines (two hops out) is left out of the request with a warning",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "source": "Correctness case sample.num-hops-1 using the shop fixture."
 }

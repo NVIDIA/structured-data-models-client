@@ -183,7 +183,7 @@ def test_an_infinite_constant_against_a_decimal_is_answered_by_the_reference(
     r"""Since main's eb6c68eb (the reference at 6298913c) the reference reads
     the decimal as float64 and materializes the condition: every label is
     the finite value compared with the infinity, as Python compares them.
-    With exact decimals (T2.0c, KO2-35 and KO2-50) the core answers it too:
+    With exact decimals (and ) the core answers it too:
     a constant past the column's digits orders by its sign, so its payload,
     the labels included, is the reference's."""
     observed = _current(
@@ -250,7 +250,7 @@ def test_a_finite_constant_past_the_decimal_is_answered_by_the_reference(
     INVALID_REQUEST, as the core does; since main's eb6c68eb (6298913c) the
     reference reads the decimal as float64 and materializes it, every label
     false (no value of the column is past 1e308). With exact decimals
-    (T2.0c, KO2-50) the core answers it too, the constant past the column's
+     the core answers it too, the constant past the column's
     digits ordering by its sign: the reference's payload."""
     observed = _current(
         *_decimal(38, 0),
@@ -401,7 +401,7 @@ def _cast_failures() -> list[Any]:
 
 
 @pytest.mark.parametrize(('setup', 'query', 'kwargs'), _cast_failures())
-def test_a_time_of_day_the_time_bounds_cast_fails_on_stays_dt12_s_shape(
+def test_time_of_day_cast_failure_preserves_the_refusal_shape(
     monkeypatch: pytest.MonkeyPatch,
     setup: tuple[str, ...],
     query: str,

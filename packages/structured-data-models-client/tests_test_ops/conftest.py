@@ -5,7 +5,7 @@
 
 Only a ``test-ops`` build of ``sdm_client._native`` has them, and the wheel
 that ships has not, so these run in ``native-test-ops``'s environment
-and the ``test`` job does not collect them (decision E23). On any other
+and the ``test`` job does not collect them. On any other
 build they fail, never skip.
 """
 
