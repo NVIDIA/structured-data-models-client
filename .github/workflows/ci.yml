@@ -9,63 +9,748 @@
 # bindings are pinned by SHA-256 in PROVENANCE.json either way, and a drifted
 # copy fails the build it ships in.
 name: CI
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only && 'Targeted Arm PQL acceptance (not full CI)' || 'CI' }}
 
+# Run on pull requests, integration pushes and explicit manual dispatch.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - rust-core
+  workflow_dispatch:
+    inputs:
+      pql_runtime_only:
+        description: 'Only native Arm PQL floor/newest evidence; not full CI'
+        type: boolean
+        default: false
+      fresh:
+        description: 'Resolve fresh dependencies: cargo update before Rust builds'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+  # For the images CI pulls from ghcr.io with GITHUB_TOKEN (E131).
+  packages: read
+  # The Java comparison job downloads artifacts through the Actions API.
+  actions: read
 
+# Superseded runs on the same ref need not consume another build slot.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only && '-pql-runtime' || '' }}
   cancel-in-progress: true
 
+env:
+  # Trusted manual runs warm their own branch; integration pushes warm shared bases.
+  # GitHub scopes caches by branch, so a sibling integration cache is not a fallback.
+  SAVE_CACHES: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(fromJSON('["main", "rust-core"]'), github.ref_name)) }}
+  SAVE_PIP_CACHES: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(fromJSON('["main", "rust-core"]'), github.ref_name)) }}
+  # Manual runs can check the latest compatible Rust dependencies.
+  FRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh }}
+  # The process's time zone, named for every job (M5): a test that sets
+  # only DuckDB's session zone, or reads the process's, reads this one,
+  # never the runner image's default, which may change under it.
+  TZ: UTC
+  # The images CI pulls, each named here once and pinned by digest (E131),
+  # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
+  # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
+  # Each a private copy, on this repository's GitHub Packages, of the
+  # upstream image by the same digest (E131): anonymous pulls from public
+  # registries failed for their limits.
+  # The PostgreSQL server for test and engine: Docker's official image
+  # for postgres:17. A service container's image cannot read env, so the
+  # configuration job exposes it to service definitions.
+  POSTGRES_IMAGE: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+  # The manylinux2014 image both wheel builds run in (PyPA's, published on quay.io).
+  MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
+  BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
+
 jobs:
-  lint:
+  compatibility-contract:
+    name: Compatibility contract (no native build or endpoint)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    env:
+      SDM_API_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - run: pip install pytest
+      - name: Enforce maintained repository size and fixture consumers
+        run: python scripts/rust_core/repository_size.py --base "$SDM_API_BASE"
+      - name: Compare Java APIs and enforce capability coverage
+        run: |
+          python scripts/check_java_api.py --base "$SDM_API_BASE"
+          python scripts/snapshot_java_api.py --out java/target/public-api.json
+          python tests/compatibility/ledger.py --base "$SDM_API_BASE" --java-inventory java/target/public-api.json
+          python -m pytest tests/compatibility/test_ledger.py tests/compatibility/test_api_outcomes.py tests/compatibility/test_java_api.py tests/compatibility/test_junit_results.py tests/compatibility/test_live_api.py -q
+
+  in-process:
+    name: In-process models (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [configuration, native-wheel]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      - name: Install the built client and CPU models
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install ./packages/structured-data-models-api \
+            './packages/structured-data-models-connectors[sqlite,duckdb,test]' \
+            "$(ls native/*.whl)[test,in-process]"
+          python -c 'import sdm, torch; from sdm_client import _native'
+          python -m pip check
+      - name: Public predictions and sessions through Rust
+        run: |
+          python -m pytest packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py \
+            packages/structured-data-models-client/tests/test_every_backend_answers_alike.py \
+            -q -m 'not live_nim'
+          python tests/compatibility/api_contracts.py --gate in-process --run --out in-process-api.json
+
+  # Shared matrix and service image configuration.
+  configuration:
+    name: CI configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      postgres-image: ${{ env.POSTGRES_IMAGE }}
+      pythons: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: version
+        run: |
+          python3 - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          version = ET.parse('java/pom.xml').getroot().findtext('{http://maven.apache.org/POM/4.0.0}version')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'value={version}\n')
+          PY
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - run: pip install --upgrade pip 'ruff==0.16.*'
       - run: ruff check .
       - run: ruff format --check .
 
   hygiene:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - run: python scripts/check_repo_hygiene.py all
 
-  typecheck:
+  # The Rust core (CONTRIBUTING.md). Each
+  # job installs the toolchain rust/rust-toolchain.toml pins, and caches the
+  # build keyed on Cargo.lock. Third-party actions are pinned by commit, as
+  # the organisation's allow list requires.
+  rust-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    defaults:
+      run:
+        working-directory: rust
+    env:
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - run: cargo fmt --all --check
+      # sdm-testkit builds the bundled DuckDB, so its clippy runs in rust-test,
+      # which builds it anyway (H3); the L0 self-tests' clippy fixture needs
+      # only jiff, and stays here.
+      - run: cargo clippy --workspace --exclude sdm-testkit --all-targets --locked -- -D warnings
+      # The binding with its test-only operations, as its tests build it.
+      - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
+      # Dependency boundaries, source ownership, lint bans and host protocol.
+      - name: L0 graph, bans and scans
+        run: |
+          python3 scripts/rust_core/dependency_policy.py
+          python3 scripts/rust_core/architecture_policy.py
+        working-directory: .
+      # Each guard passes on the tree and fails on a fixture seeded with the
+      # fault it exists for, and clippy refuses each banned item in a fixture
+      # crate under rust/clippy.toml.
+      - name: L0 self-tests
+        run: python3 scripts/rust_core/policy_selftest.py
+        working-directory: .
+      # Keep the current generated schema and reject unversioned shape changes.
+      # Git preserves prior schemas; this checkout needs only the current one.
+      - run: cargo test -p sdm-contract --locked --test schema_lock
+      - run: python3 scripts/rust_core/contract_lock.py --base "$SDM_SCHEMA_BASE"
+        working-directory: .
+        env:
+          SDM_SCHEMA_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+      # The client wheel's notices for the Rust crates it links, regenerated
+      # from Cargo.lock and compared with the committed file.
+      - run: python3 scripts/rust_core/rust_notices.py --check
+        working-directory: .
+      - run: python3 scripts/mermaid_notices.py --check
+        working-directory: .
+      - name: uv.lock is current
+        run: |
+          RUSTUP_TOOLCHAIN=$(sed -n 's/^channel *= *"\(.*\)"$/\1/p' rust/rust-toolchain.toml) \
+            pipx run uv==0.13.1 lock --check
+        working-directory: .
+
+  rust-deny:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
+        with:
+          tool: cargo-deny
+      - if: env.FRESH == 'true'
+        run: cargo update
+      - run: cargo deny --locked check
+
+  rust-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    defaults:
+      run:
+        working-directory: rust
+    # Line tables only for the workspace's own crates (dependencies build
+    # with none, rust/Cargo.toml): a panic and its backtrace still name each
+    # file and line, and the test binaries take far less of the runner's
+    # disk. The test profile inherits dev's; stated for both all the same.
+    # Native Postgres tests require the real service; focused replay tests run in the Rust suite.
+    services:
+      postgres: &postgres-service
+        # POSTGRES_IMAGE, supplied by the configuration job, pulled from ghcr.io
+        # as this workflow, which needs packages: read.
+        image: ${{ needs.configuration.outputs.postgres-image }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_DB: sdm_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      # Every branch, for the gate's checkpoint (the merge base with the
+      # phase branch) and its worktree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Free runner disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - id: duckdb-extensions
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.duckdb/extensions/v1.5.6
+          key: duckdb-extensions-v1.5.6-icu-json-${{ runner.os }}-${{ runner.arch }}
+      # The test kit's clippy, here on the DuckDB build this job makes (H3).
+      - if: env.FRESH == 'true'
+        run: cargo update
+      - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - run: pip install duckdb==1.5.6 pyarrow==25.0.1 pyyaml jsonschema
+      - run: cargo test --workspace --locked
+        env:
+          SDM_PYTHON: python
+      - name: Required Rust type and provider test identities
+        working-directory: .
+        run: python tests/compatibility/api_contracts.py --language rust --gate native --run --out "$RUNNER_TEMP/rust-contract-results.json"
+      # Fresh dependency tests deliberately changed the lock, not the
+      # committed source the following observations and gate must judge.
+      # Preserve that experiment before restoring only its known change.
+      - name: Preserve fresh Cargo evidence and restore the committed lock
+        if: ${{ !cancelled() && env.FRESH == 'true' }}
+        working-directory: .
+        run: |
+          evidence="${RUNNER_TEMP:?}/fresh-cargo-lock"
+          mkdir -p "$evidence"
+          git rev-parse HEAD 'HEAD^{tree}' > "$evidence/source.txt"
+          git status --porcelain --untracked-files=no > "$evidence/status-before.txt"
+          git diff --binary HEAD > "$evidence/diff-before.patch"
+          git show HEAD:rust/Cargo.lock > "$evidence/committed-Cargo.lock"
+          cp rust/Cargo.lock "$evidence/fresh-Cargo.lock"
+          (cd "$evidence" && sha256sum committed-Cargo.lock fresh-Cargo.lock > lock-sha256.txt)
+          status=$(cat "$evidence/status-before.txt")
+          if { [ -n "$status" ] && [ "$status" != ' M rust/Cargo.lock' ]; } ||
+             ! git diff --cached --quiet ||
+             [ -n "$(git diff --summary HEAD -- rust/Cargo.lock)" ]; then
+            cat "$evidence/status-before.txt"
+            echo 'unexpected tracked changes after fresh Cargo; no source restored' >&2
+            exit 1
+          fi
+          git restore --source=HEAD --worktree -- rust/Cargo.lock
+          git status --porcelain --untracked-files=no > "$evidence/status-after.txt"
+          if [ -s "$evidence/status-after.txt" ]; then
+            cat "$evidence/status-after.txt"
+            git diff --binary HEAD > "$evidence/diff-after.patch"
+            echo 'unexpected tracked changes after restoring only Cargo.lock' >&2
+            exit 1
+          fi
+          cmp rust/Cargo.lock "$evidence/committed-Cargo.lock"
+      - name: Preserve fresh Cargo dependency provenance
+        if: ${{ !cancelled() && env.FRESH == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fresh-cargo-lock-rust-test
+          path: ${{ runner.temp }}/fresh-cargo-lock
+          if-no-files-found: error
+      - name: The native test host has no Python runtime dependency
+        run: |
+          cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt
+          ! grep -w pyo3 ../testkit-tree.txt
+      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.duckdb/extensions/v1.5.6
+          key: ${{ steps.duckdb-extensions.outputs.cache-primary-key }}
+
+  # The client wheel, which carries the core as sdm_client._native (design,
+  # "Packaging"). maturin, at the version native_wheel.py pins, builds it in
+  # a manylinux2014 container run with docker rather than through an
+  # action: the x86_64 cp310-abi3 wheel that ships. native_wheel.py records
+  # the build's target flags and fails on target-cpu, and reads the wheel
+  # with auditwheel show. Every job that installs the client takes it from
+  # this job's artifact, and this job builds and uploads nothing else, so
+  # those jobs wait for the shipped wheel only (CI1): the test-only build
+  # and the binding's tests run beside it, in native-test-ops and binding.
+  native-wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    env:
+      NATIVE_ARGS: --out native
+      JAVA_NATIVE: shipped
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      # The image, pulled with retries and, from ghcr.io, logged in (E131).
+      - &manylinux-pull
+        name: Pull the manylinux2014 image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$MANYLINUX"
+      # As the runner's user, so the cache can read rust/target afterwards,
+      # in a home the runner made, so that user can write it, holding the
+      # runner's crate registry, which the cache restores. NATIVE_ARGS says
+      # which build: native-test-ops runs this same step for its own.
+      - &manylinux-build
+        name: Build the wheel in manylinux2014
+        run: |
+          home="$RUNNER_TEMP/manylinux-home"
+          mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$home/.cargo/registry" "$home/.cargo/git"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
+            -e NATIVE_ARGS -e JAVA_NATIVE \
+            -v "$home:/tmp/home" -v "$PWD:/io" -w /io \
+            -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
+            -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
+            "$MANYLINUX" bash -euo pipefail -c '
+              # rustup-init 1.29.0 for the architecture the image runs on,
+              # checked against its published SHA-256.
+              arch=$(uname -m)
+              case "$arch" in
+                x86_64) sum=4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10 ;;
+                aarch64) sum=9732d6c5e2a098d3521fca8145d826ae0aaa067ef2385ead08e6feac88fa5792 ;;
+                *) echo "no rustup-init checksum for $arch" >&2; exit 1 ;;
+              esac
+              curl --proto "=https" --tlsv1.2 -sSf -o /tmp/home/rustup-init \
+                "https://static.rust-lang.org/rustup/archive/1.29.0/$arch-unknown-linux-gnu/rustup-init"
+              echo "$sum  /tmp/home/rustup-init" | sha256sum -c -
+              chmod +x /tmp/home/rustup-init
+              /tmp/home/rustup-init -y --profile minimal --default-toolchain none --no-modify-path
+              export PATH="$CARGO_HOME/bin:$PATH"
+              (cd rust && rustup toolchain install)
+              /opt/python/cp312-cp312/bin/python -m venv /tmp/home/maturin
+              /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
+              export PATH="/tmp/home/maturin/bin:$PATH"
+              python scripts/rust_core/native_wheel.py $NATIVE_ARGS --manylinux
+              case "${JAVA_NATIVE:-}" in
+                shipped) (cd rust && cargo build --release --locked -p sdm-jni) ;;
+                test-ops) (cd rust && cargo build --release --locked -p sdm-jni --features test-ops) ;;
+              esac
+            '
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-wheel
+          path: native/
+      - name: The Java binding, by platform
+        run: |
+          mkdir -p java-natives/linux-x86_64
+          cp rust/target/release/libsdm_jni.so java-natives/linux-x86_64/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-linux-x86_64
+          path: java-natives/
+
+  # The binding with its test-only operations, built beside native-wheel by
+  # the same step and tested at the E16 floor: every file of the binding's
+  # tests, and the Python host's tests that need those operations, which
+  # the test job does not collect (E23). Its wheel is its own artifact,
+  # which wheel-smoke installs in its clean containers and no job that
+  # builds or ships takes (E23).
+  native-test-ops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    services:
+      postgres: *postgres-service
+    env:
+      NATIVE_ARGS: --out native-test-ops --test-ops
+      JAVA_NATIVE: test-ops
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - *manylinux-pull
+      - *manylinux-build
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.10'
+      - uses: ./.github/actions/python-cache
+      - name: The binding's tests on the test-ops build
+        run: |
+          python -m venv /tmp/test-ops
+          /tmp/test-ops/bin/pip install --quiet pytest $BINDING_FLOOR \
+            ./packages/structured-data-models-api  \
+            './packages/structured-data-models-connectors[sqlite,postgres]' \
+            "$(ls native-test-ops/*.whl)"
+          /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
+            -p no:cacheprovider --native-build test-ops
+          /tmp/test-ops/bin/python -m pytest packages/structured-data-models-client/tests_test_ops -q \
+            -p no:cacheprovider
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-test-ops-native
+          path: rust/target/release/libsdm_jni.so
+
+  native-wheel-aarch64:
+    name: native-wheel (aarch64, ${{ matrix.build }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    needs: configuration
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only && '[{"build":"shipped","args":"--out native","artifact":"native-wheel-aarch64","java":""}]' || '[{"build":"shipped","args":"--out native","artifact":"native-wheel-aarch64","java":"shipped"},{"build":"test-ops","args":"--out native --test-ops","artifact":"native-wheel-test-ops-aarch64","java":""}]') }}
+    env:
+      MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_aarch64:2026.09.14-1@sha256:d4c40df238d6ec0ee91213f4797ad26f05d7d82947bcb61c40d1fdc13d0e16d5
+      NATIVE_ARGS: ${{ matrix.args }}
+      JAVA_NATIVE: ${{ matrix.java }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: ${{ matrix.build }}
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - *manylinux-pull
+      - *manylinux-build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.artifact }}
+          path: native/
+      - name: The Java binding, by platform
+        if: matrix.java == 'shipped'
+        run: |
+          mkdir -p java-natives/linux-aarch64
+          cp rust/target/release/libsdm_jni.so java-natives/linux-aarch64/
+      - if: matrix.java == 'shipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-linux-aarch64
+          path: java-natives/
+
+  # The binding's tests on the wheel that ships, at the E16 floor: the file
+  # any build passes.
+  native-wheel-desktop:
+    name: native-wheel (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-aarch64
+            runner: macos-15
+          - platform: macos-x86_64
+            runner: macos-15-intel
+          - platform: windows-x86_64
+            runner: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_JOBS: '2'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: python-${{ matrix.platform }}
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - name: Build the production client wheel
+        run: |
+          python -m pip install maturin==1.15.0
+          python scripts/rust_core/native_wheel.py --out native
+      - name: Install and exercise the wheel
+        run: |
+          python -m pip install ./packages/structured-data-models-api \
+            './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks,s3]' \
+            "$(ls native/*.whl)[test]"
+          python -m pip check
+          python - <<'PY'
+          import importlib
+          for module in ('psycopg', 'snowflake.connector', 'databricks.sql', 'databricks.sdk', 's3fs'):
+              importlib.import_module(module)
+              print(f'optional driver imported: {module}')
+          PY
+          python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q --native-build production
+          python tests/compatibility/api_contracts.py --run --group direct-dtypes-options \
+            --group results-merge --group sessions --out desktop-api-results.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-wheel-${{ matrix.platform }}
+          path: native/
+          if-no-files-found: error
+
+  binding:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.10'
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      - name: The binding's tests on the shipped build
+        run: |
+          python -m venv /tmp/production
+          /tmp/production/bin/pip install --quiet pytest $BINDING_FLOOR \
+            ./packages/structured-data-models-api  \
+            "$(ls native/*.whl)"
+          /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
+            -p no:cacheprovider --native-build production
+
+  wheel-smoke:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: wheel-smoke (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [native-wheel, native-test-ops]
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [floor, newest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      # The lane's image, as wheel_smoke.py names it, pulled with retries
+      # and, from ghcr.io, logged in (E131): the two lanes start together,
+      # and a registry that refuses a pull for its rate often takes it a
+      # minute later. The run below then finds it pulled.
+      - name: Pull the lane's image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$(python3 scripts/rust_core/wheel_smoke.py image ${{ matrix.lane }})"
+      - name: The lane's clean container
+        run: |
+          python3 scripts/rust_core/wheel_smoke.py --lane ${{ matrix.lane }} --container \
+            --wheel "$(ls native/*.whl)" --test-ops-wheel "$(ls native-test-ops/*.whl)" \
+            --out wheel-smoke
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheel-smoke-${{ matrix.lane }}
+          path: wheel-smoke/
+
+  wheel-smoke-aarch64:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: wheel-smoke (${{ matrix.lane }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    needs: [native-wheel, native-wheel-aarch64]
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [aarch64-floor, aarch64-newest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native-x86_64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-aarch64
+          path: native
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops-aarch64
+          path: native-test-ops
+      - name: The shipped wheel set
+        run: python3 scripts/rust_core/native_wheel.py --check-set native-x86_64 native
+      - name: Pull the lane's image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$(python3 scripts/rust_core/wheel_smoke.py image ${{ matrix.lane }})"
+      - name: The lane's clean container
+        run: |
+          python3 scripts/rust_core/wheel_smoke.py --lane ${{ matrix.lane }} --container \
+            --wheel "$(ls native/*.whl)" --test-ops-wheel "$(ls native-test-ops/*.whl)" \
+            --out wheel-smoke
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheel-smoke-${{ matrix.lane }}
+          path: wheel-smoke/
+
+  typecheck:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
       # The engine needs its runtime dependencies present to be checked at all,
       # and a toolchain to install. It ships py.typed exactly like the other
       # four, so leaving it out would make the gate narrower than the promise.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # The image's compilers and CMake are that toolchain; the runner image
+      # carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       - run: pip install --upgrade pip mypy
+      # The client from the native wheel; its stub, _native.pyi, ships in it.
       - run: |
-          pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
-            -e './packages/structured-data-models-client' \
-            -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
-            -e './packages/structured-data-models-relational-engine'
+          pip install -e './packages/structured-data-models-api'  \
+            "$(ls native/*.whl)" \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks]'
+
       # Every session a source takes too, so each driver's types are its own
       # rather than Any. pyspark-client is pyspark's Python without its jars.
       - run: pip install snowflake-snowpark-python pyspark-client
       - run: |
-          mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src packages/structured-data-models-client/src \
-            packages/structured-data-models-connectors/src packages/structured-data-models-relational-engine/src
+          mypy packages/structured-data-models-api/src  packages/structured-data-models-client/src \
+            packages/structured-data-models-connectors/src
       # What a caller's type checker infers for a source, and what it refuses.
       - run: mypy packages/structured-data-models-connectors/tests/typing/check_sources.py
 
@@ -73,64 +758,464 @@ jobs:
   # internal pipeline runs one of them, so a defect specific to any other
   # reached a release through a promise nothing checked.
   test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [configuration, native-wheel]
     strategy:
       fail-fast: false
+      # Exercise every supported Python version.
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ${{ fromJSON(needs.configuration.outputs.pythons || '["3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_DB: sdm_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
+      postgres: *postgres-service
     env:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      # pip's downloads and built wheels, keyed on the week and on every
+      # distribution's manifest and restored from the newest of this job's
+      # otherwise; trusted manual runs can also warm their own branch.
+      # pip still resolves each requirement against the index, so the cache
+      # only saves downloads and changes no version (CI1).
+      - id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: pip-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ github.job }}-${{ matrix.python-version }}-${{ steps.week.outputs.week }}-${{ hashFiles('packages/*/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-${{ github.job }}-${{ matrix.python-version }}-
       # databricks, snowflake and s3 are here for their drivers, not for a
       # server: those tests mock the connection. Without the driver, importing
       # the backend raises and every test covering it skips. snowflake was
       # missing here, which is how a driver release that refused every
-      # ordinary connection keyword reached main reading as a pass.
-      - run: |
-          pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
-          pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
-            -e './packages/structured-data-models-client[test]' \
+      # ordinary connection keyword reached main reading as a pass. The
+      # client is the native wheel's, the one abi3 build every interpreter
+      # here installs; its test extra carries pytest-xdist, and
+      # pytest-timeout==2.4.0 is for the run's --timeout.
+      - env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0 "tomli; python_version < '3.11'"
+          pip install -e './packages/structured-data-models-api[test]'  \
+            "$(ls native/*.whl)[test,relational]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       - run: |
-          python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+          python -m pytest packages/structured-data-models-api/tests  \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
-            -m 'not live_nim and not live_warehouse'
+            -m 'not live_nim and not live_warehouse and not tooling' \
+            -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+      - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: ${{ steps.pip-cache.outputs.cache-primary-key }}
 
-  engine:
+  contract-python-pandas3:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (pandas3, duckdb)
     runs-on: ubuntu-latest
-    # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
-    # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
-    # missing DSN or driver into a failure, where a skip would read as a pass.
-    services:
-      postgres:
-        image: postgres:17
+    timeout-minutes: 60
+    needs: [configuration, native-wheel, native-test-ops]
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+    steps:
+      - &contract-checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every branch, for the gate's checkpoint and its worktree.
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - &contract-wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      - &contract-install
+        name: Install the cell
+        run: |
+          printf '%s\n' $CELL_PINS \
+            'duckdb==1.5.6; python_version < "3.11"' \
+            'duckdb==2.0.0; python_version >= "3.11"' > "$RUNNER_TEMP/cell.txt"
+          pip install --upgrade pip
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
+            ./packages/structured-data-models-api  \
+            './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
+             "$(ls native/*.whl)[test]"
+      - &contract-kit-wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - &contract-kit-python
+        name: The test-ops build, for the provider kit
+        run: |
+          python -m venv --system-site-packages "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
+          "$RUNNER_TEMP/kit/bin/python" -I -c 'import sdm_client._native as n; assert n.TEST_OPS'
+          echo "SDM_KIT_PYTHON=$RUNNER_TEMP/kit/bin/python" >> "$GITHUB_ENV"
+      - name: The runner's controls and the route tests
+        run: python -m pytest contract/tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+      # Observe the installed native client in each supported dependency cell.
+      - &contract-gate
+        name: Native Python observations
         env:
-          POSTGRES_DB: sdm_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
+          PYTHON: python
+        run: |
+          set -o pipefail
+          mkdir -p gate-observations
+          status=0
+          python -I contract/runners/run_python.py --mode python-core \
+            --out gate-observations/python-core.jsonl contract/cases || exit 1
+          python contract/runners/check_observations.py --cases contract/cases \
+            --expect contract/expected/duckdb-python.json --cell "$CELL" --commit "$GITHUB_SHA" \
+            --native-sha256 "$(python -I -c 'import hashlib, pathlib, sdm_client._native as n; print(hashlib.sha256(pathlib.Path(n.__file__).read_bytes()).hexdigest())')" \
+            gate-observations/python-core.jsonl || status=$?
+          exit $status
+      # Preserve observations for SQL golden checks.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core
+          path: gate-observations/python-core.jsonl
+          if-no-files-found: error
+
+  # Run tooling-marked tests once, separately from the Python version matrix.
+  # Architecture and repository-tool tests share the normal maintained runtime.
+  tooling-root:
+    name: tooling (root)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [configuration, native-wheel]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    services:
+      postgres: *postgres-service
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      # Install the maintained packages and native wheel test extra.
+      - run: |
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0
+          pip install -e './packages/structured-data-models-api'  \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
+            pyyaml jsonschema
+          pip install "$(ls native/*.whl)[test]"
+          echo "SDM_TEST_CORE_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+      # SDM_TEST_CORE_PYTHON: the interpreter holding the candidate's
+      # client, which the handoff's tests run the cases on
+      # (tests/test_t30_process.py).
+      - name: The checking tools' tests in tests/
+        run: python -m pytest tests -q -m tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+
+  contract-python-dbr17-pandas2:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (dbr17-pandas2, duckdb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [configuration, native-wheel]
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      - *contract-gate
+
+  contract-python-floor-pandas2-2:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (floor-pandas2.2, duckdb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [configuration, native-wheel]
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.10'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      - *contract-gate
+
+  # Run the native client on each database and supported dependency stack.
+  # The provider's executed SQL observations also feed the golden checks.
+  contract-python-pandas3-sqlite:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (pandas3, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [configuration, native-wheel, native-test-ops]
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      # Exercise the installed native provider and preserve SQL observations.
+      - &contract-database
+        name: Native Python observations on the selected database
+        run: |
+          set -euo pipefail
+          out=database-observations
+          mkdir -p "$out"
+          python -I -c 'import os, sys, sdm_client._native as n; sys.exit(os.environ["DATABASE"] not in n.PROVIDERS)'
+          python -I contract/runners/run_python.py --mode python-core --database "$DATABASE" \
+            --out "$out/python-core.jsonl" contract/cases
+          python contract/runners/check_observations.py --cases contract/cases --database "$DATABASE" \
+            --expect "contract/expected/$DATABASE-python.json" --cell "$CELL" --commit "$GITHUB_SHA" \
+            --native-sha256 "$(python -I -c 'import hashlib, pathlib, sdm_client._native as n; print(hashlib.sha256(pathlib.Path(n.__file__).read_bytes()).hexdigest())')" \
+            "$out/python-core.jsonl"
+      - *contract-kit-wheel
+      - *contract-kit-python
+      - &contract-kit
+        name: The provider kit on this database's Python provider
+        run: python -m pytest contract/tests/test_provider_conformance.py -q -k "$DATABASE"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core-sqlite
+          path: database-observations/python-core.jsonl
+          if-no-files-found: error
+
+  contract-python-pandas3-postgres:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (pandas3, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [configuration, native-wheel, native-test-ops]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      # Fails, never stands down, when the service is not there (H26).
+      - &contract-postgres-required
+        name: The Postgres service, and the contract loader on it
+        run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
+      - &contract-postgres-vectors
+        name: Postgres regression, exact-key and numeric-spelling checks
+        run: python -m pytest contract/tests/test_postgres_source_contracts.py contract/tests/test_exact_numeric_keys.py packages/structured-data-models-client/tests/test_postgres_keyless_order.py -q -m "not live_nim"
+      - name: Postgres JSON regression checks
+        run: python -m pytest contract/tests/test_temporal_candidates_json_values.py -k json -q
+      - *contract-kit-wheel
+      - *contract-kit-python
+      - *contract-kit
+      - *contract-database
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core-postgres
+          path: database-observations/python-core.jsonl
+          if-no-files-found: error
+
+  contract-python-dbr17-pandas2-sqlite:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (dbr17-pandas2, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [configuration, native-wheel]
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      - *contract-database
+
+  contract-python-dbr17-pandas2-postgres:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (dbr17-pandas2, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [configuration, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      - *contract-postgres-required
+      - *contract-postgres-vectors
+      - *contract-database
+
+  contract-python-floor-pandas2-2-sqlite:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (floor-pandas2.2, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [configuration, native-wheel]
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.10'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      - *contract-database
+
+  contract-python-floor-pandas2-2-postgres:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: contract-python (floor-pandas2.2, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [configuration, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.10'
+      - uses: ./.github/actions/python-cache
+      - *contract-wheel
+      - *contract-install
+      - *contract-postgres-required
+      - *contract-postgres-vectors
+      - *contract-database
+
+  # Check the SQL actually executed by the Python providers against the native goldens.
+  l4-goldens:
+    name: l4-goldens (${{ matrix.database }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - configuration
+      - contract-python-pandas3
+      - contract-python-pandas3-sqlite
+      - contract-python-pandas3-postgres
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: duckdb
+            observations: observations-python-core
+          - database: sqlite
+            observations: observations-python-core-sqlite
+          - database: postgres
+            observations: observations-python-core-postgres
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ matrix.observations }}
+          path: l4
+      - name: The goldens, and the run held to them
+        env:
+          SDM_L4_OBSERVATIONS: ${{ github.workspace }}/l4/python-core.jsonl
+        run: cargo test -p sdm-data --locked --test ${{ matrix.database }}_goldens
+
+  l5-conversion:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: l5-conversion (${{ matrix.cell }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [configuration, native-test-ops]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cell: floor-pandas2.2
+            python: '3.10'
+            pins: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
+          - cell: dbr17-pandas2
+            python: '3.12'
+            pins: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+          - cell: ref-pandas3
+            python: '3.12'
+            pins: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+    services:
+      postgres: *postgres-service
     env:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
@@ -138,95 +1223,67 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.12'
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
-      # ruff is here for the root suite, not for linting: the test that
-      # checks the engine ignore-list note shells out to it and skips
-      # without it, which would make that check vacuous here.
-      # The Databricks and Snowflake drivers are for the offline tests of those
-      # backends, which skip whole modules without them; pyyaml reads the
-      # semantic-view fixtures, and `explain` carries the SDK the explanation
-      # tests fake around.
-      - run: |
-          pip install --upgrade pip 'ruff==0.16.*'
-          pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
-            -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
-            pyyaml
-          pip install -e './packages/structured-data-models-relational-engine[test,explain]'
-      # The same marker filter as the internal pipeline. The live NIM and live
-      # warehouse tests need credentials this job does not have, so they are
-      # deselected by name rather than left to skip. A skip that remains is a
-      # test that checked its own environment and stood down, and is reported.
-      - run: |
-          cd packages/structured-data-models-relational-engine
-          python -m pytest tests -q -m 'not live_nim and not live_warehouse'
-      # The client's suite again, with an engine present and the models able to
-      # run in process. The test job installs neither, so every client test
-      # that needs one skips there and runs nowhere. PyTorch comes from its CPU
-      # index, since the default one resolves to a far larger CUDA build.
-      - run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e './packages/structured-data-models-client[test,in-process]'
-          python -m pytest packages/structured-data-models-client/tests -q \
-            -m 'not live_nim and not live_warehouse'
-      # And the root suite, which holds the relational wire snapshots. They
-      # only exercise anything with an engine installed, so running them in
-      # the test job would prove nothing.
-      - run: python -m pytest tests -q
+          python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - name: L5's conversion and presentation tables
+        env:
+          PINS: ${{ matrix.pins }}
+        run: |
+          printf '%s\n' $PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          python -m venv /tmp/l5
+          /tmp/l5/bin/pip install --quiet -c "$RUNNER_TEMP/cell.txt" $PINS duckdb==1.5.6 pytz pytest \
+            ./packages/structured-data-models-api  \
+            './packages/structured-data-models-connectors[sqlite,postgres]' \
+            "$(ls native-test-ops/*.whl)"
+          /tmp/l5/bin/python -m pytest packages/structured-data-models-client/tests_test_ops/test_result_conversion.py \
+            -q -s -p no:cacheprovider
 
   build:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      - uses: ./.github/actions/python-cache
+      # The image's compilers and CMake, which a source build uses; the
+      # runner image carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       - run: pip install --upgrade pip build
       # Each distribution builds in an isolated environment holding only the
       # build backend. That catches what no test can, because it fails before a
       # test could run: a version resolved by importing the package root cannot
-      # produce a wheel at all.
+      # produce a wheel at all. The client is the exception: it carries the
+      # core, so it is the wheel native-wheel built, taken as it is.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
       - run: |
-          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors structured-data-models-relational-engine; do
+          for package in structured-data-models-api structured-data-models-connectors; do
             echo "building $package"
             ( cd "packages/$package" && python -m build --wheel --outdir "$GITHUB_WORKSPACE/dist" . )
           done
+          cp native/*.whl dist/
       # Every distribution carries the one version they are released together
       # at, read from what was just built rather than written here.
       - run: |
-          python - <<'EOF'
-          import pathlib, re, sys
-          names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
-          versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
-          print('\n'.join(names))
-          if len(names) != 5:
-              sys.exit(f'expected 5 wheels, built {len(names)}')
-          if len({n.split('-')[0] for n in names}) != 5:
-              sys.exit('expected one wheel per distribution')
-          if len(versions) != 1:
-              sys.exit(f'distributions disagree on the version: {sorted(versions)}')
-          pathlib.Path('dist/VERSION').write_text(versions.pop())
-          EOF
-      # Building each one proves nothing about installing them together. A pin
-      # only one distribution carries makes the set unsatisfiable, and the
-      # resolver is the only thing that says so. Every one is named by file:
-      # once a version is on PyPI, `--find-links` with `==$VERSION` resolves
-      # the published release as readily as the wheel built here. The
-      # pure-Python wheels are named in full; the engine's tag is the runner's,
-      # and the check above leaves exactly one.
+          python scripts/check_wheel_provenance.py --write-version dist/VERSION dist/*.whl
       - run: |
           VERSION=$(cat dist/VERSION)
-          pip install --dry-run \
-            "dist/structured_data_models_client-$VERSION-py3-none-any.whl[relational,sqlite,duckdb]" \
-            dist/structured_data_models_{api,pql,connectors}-$VERSION-py3-none-any.whl \
-            dist/structured_data_models_relational_engine-$VERSION-*.whl
+          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
+          pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
+            "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
       # and twine refuses anything that is not a distribution.
       - run: pip install --upgrade twine && twine check dist/*.whl
-      # The engine wheel built here is tagged linux_x86_64 and installs on no
-      # other platform. The ones to install are engine-wheels' below.
-      - run: rm dist/structured_data_models_relational_engine-*.whl
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheels
@@ -235,134 +1292,39 @@ jobs:
   # The engine's wheels, from the same `[tool.cibuildwheel]` table the release
   # reads. One runner per platform and architecture, so every wheel is
   # smoke-tested on the machine it targets.
-  engine-wheels:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: linux-x86_64
-            runner: ubuntu-24.04
-            archs: CIBW_ARCHS_LINUX=x86_64
-          - name: linux-aarch64
-            runner: ubuntu-24.04-arm
-            archs: CIBW_ARCHS_LINUX=aarch64
-          - name: macos-arm64
-            runner: macos-15
-            archs: CIBW_ARCHS_MACOS=arm64
-          # macos-13 was retired in December 2025. x86_64 macOS ends with the
-          # macOS 15 image in autumn 2027, and this row ends with it.
-          - name: macos-x86_64
-            runner: macos-15-intel
-            archs: CIBW_ARCHS_MACOS=x86_64
-          - name: windows-amd64
-            runner: windows-2022
-            archs: CIBW_ARCHS_WINDOWS=AMD64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The engine pins its siblings by exact version. Its `before-test`
-      # installs these by file before the engine, so the smoke test never
-      # takes the published release of the same version instead.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: wheels
-          path: _sibling_wheels
-      - name: Build only this row's architecture
-        shell: bash
-        run: echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
-
-      - uses: pypa/cibuildwheel@b9e566a2b284570af229f6c2a33673410d0389a3 # v4.3.4
-        with:
-          package-dir: packages/structured-data-models-relational-engine
-          output-dir: wheelhouse
-
-      # A wheel built by the wrong compiler passes every other check here, so
-      # the evidence has to come from the wheel. MinGW's runtime travelling
-      # inside one means CMake found GCC where MSVC was intended. Every wheel
-      # is read, and an empty wheelhouse fails rather than reporting nothing
-      # found.
-      - name: No MinGW runtime rode along in a Windows wheel
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          wheels=(wheelhouse/*.whl)
-          if [ ${#wheels[@]} -eq 0 ]; then
-            echo "::error::the Windows row produced no wheel to check"
-            exit 1
-          fi
-          for wheel in "${wheels[@]}"; do
-            names=$(unzip -Z1 "$wheel")
-            if printf '%s\n' "$names" \
-              | grep -qiE "lib(gcc_s_seh-1|stdc\+\+-6|winpthread-1)[^/]*\.dll"; then
-              echo "::error::$(basename "$wheel") was built with MinGW, not MSVC"
-              printf '%s\n' "$names" | grep -iE "\.dll$"
-              exit 1
-            fi
-          done
-          echo "${#wheels[@]} Windows wheels, no MinGW runtime in any of them"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: engine-wheels-${{ matrix.name }}
-          path: wheelhouse/
-
-  # The suite has only ever run against the source tree. What users install is
-  # a wheel, and the difference is where packaging bugs live: a module left out
-  # of `packages.find`, a `py.typed` that never shipped. This runs from a
-  # directory where the source tree is not importable.
   installed-wheel:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wheels
           path: dist
-      - run: |
+      -
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
-          pip install \
-            "dist/structured_data_models_client-$VERSION-py3-none-any.whl[sqlite,duckdb]" \
-            dist/structured_data_models_{api,pql,connectors}-$VERSION-py3-none-any.whl
+          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
+          pip install --find-links "$GITHUB_WORKSPACE/dist" \
+            "structured-data-models-client[test,relational,sqlite,duckdb,snowflake,databricks-serving]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
+          python "$GITHUB_WORKSPACE/scripts/check_wheel_provenance.py" --installed "$GITHUB_WORKSPACE"/dist/*.whl
           python - <<'EOF'
-          import json, os, pathlib
-          from importlib.metadata import distribution
-          from urllib.parse import urlparse
-          from urllib.request import url2pathname
-          import predictive_query, sdm_api, sdm_client, sdm_connectors
+          import pathlib
+          import sdm_api, sdm_client, sdm_connectors
 
-          # The same version on PyPI resolves as readily as the wheel built
-          # here, and then this job tests the published release instead.
-          built = pathlib.Path(os.environ['GITHUB_WORKSPACE'], 'dist').resolve()
-          for name in (
-              'structured-data-models-client',
-              'structured-data-models-api',
-              'structured-data-models-pql',
-              'structured-data-models-connectors',
-          ):
-              recorded = distribution(name).read_text('direct_url.json')
-              url = json.loads(recorded or '{}').get('url', '')
-              parsed = urlparse(url)
-              source = (
-                  pathlib.Path(url2pathname(parsed.path)).resolve().parent
-                  if parsed.scheme == 'file'
-                  else None
-              )
-              assert source == built, (
-                  f'{name} was installed from {url or "an index"}, '
-                  f'not from the wheel built here'
-              )
-
-          for module in (sdm_api, sdm_client, sdm_connectors, predictive_query):
+          for module in (sdm_api, sdm_client, sdm_connectors):
               location = pathlib.Path(module.__file__).resolve()
               assert 'site-packages' in location.parts, (
                   f'{module.__name__} was imported from {location}, not from '
@@ -373,10 +1335,125 @@ jobs:
                   f'{module.__name__} ships no py.typed in the built wheel, so '
                   f'a downstream type checker ignores its annotations entirely'
               )
-          print('four distributions imported from site-packages, all typed')
+          print('three distributions imported from site-packages, all typed')
+
+          # The core is in the installed client, not merely in the checkout;
+          # found without importing it, which only a core route does.
+          import importlib.util
+          spec = importlib.util.find_spec('sdm_client._native')
+          assert spec and 'site-packages' in spec.origin, spec
+          print(f'the core ships in the client: {pathlib.Path(spec.origin).name}')
           EOF
       - working-directory: /tmp
         run: |
+          python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
+            -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+
+      - name: Required Python API cases and collected result identities
+        run: |
+          set -o pipefail
+          python tests/compatibility/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json" \
+            2>&1 | tee "$RUNNER_TEMP/python-api.log"
+      - name: Retain required API accounting and diagnostics on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installed-wheel-api-results
+          path: |
+            ${{ runner.temp }}/python-api-results.json
+            ${{ runner.temp }}/python-api.log
+          if-no-files-found: warn
+
+  # Installed-client and binding checks across supported native runtimes.
+  runtime-install:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    name: runtime-install (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 14.3's release notes list no PyYAML, so none is preinstalled.
+          - runtime: dbr14.3
+            python: '3.10'
+            preinstalled: numpy==1.23.5 pandas==1.5.3 pyarrow==8.0.0
+          - runtime: dbr15.4
+            python: '3.11'
+            preinstalled: numpy==1.23.5 pandas==1.5.3 pyarrow==14.0.1 PyYAML==6.0
+          # 16.4 ships pandas 1.5.3, which Databricks built for Python 3.12:
+          # PyPI has no wheel of it for 3.12, and its source does not build
+          # there, so this cell starts with no pandas and the install line
+          # must bring one at the floor, rather than a stand-in version.
+          - runtime: dbr16.4
+            python: '3.12'
+            preinstalled: numpy==1.26.4 pyarrow==15.0.2 PyYAML==6.0.1
+          - runtime: dbr17.3
+            python: '3.12'
+            preinstalled: numpy==2.1.3 pandas==2.2.3 pyarrow==19.0.1 PyYAML==6.0.2
+          - runtime: serverless5
+            python: '3.12'
+            preinstalled: numpy==2.1.3 pandas==2.2.3 pyarrow==21.0.0 PyYAML==6.0.2
+          - runtime: serverless6
+            python: '3.12'
+            preinstalled: numpy==2.3.4 pandas==2.3.3 pyarrow==21.0.0 PyYAML==6.0.3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: dist
+      - name: The runtime's own packages
+        env:
+          PREINSTALLED: ${{ matrix.preinstalled }}
+        run: |
+          python -m venv /tmp/runtime
+          /tmp/runtime/bin/pip install --quiet --only-binary=:all: $PREINSTALLED
+          /tmp/runtime/bin/pip freeze --all
+      - name: The documented install line, the runtime's NumPy kept, and pip check
+        id: install
+        run: |
+          . /tmp/runtime/bin/activate
+          keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          pandas_before=$(python -c 'import importlib.metadata as m; print(m.version("pandas"))' 2>/dev/null || echo none)
+          # The candidate's wheels stand in for the published ones of the
+          # same version: installed first, without their dependencies, so
+          # the line finds them satisfied and resolves everything else.
+          pip install --quiet --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
+          pip install --only-binary=:all: "structured-data-models-client[relational,databricks,databricks-serving]" $keep_numpy
+          now="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          if [ "$now" != "$keep_numpy" ]; then
+            echo "the install moved the runtime's NumPy: $keep_numpy, now $now" >&2
+            exit 1
+          fi
+          pip check
+          pandas_after=$(python -c 'import importlib.metadata as m; print(m.version("pandas"))')
+          echo "pandas: the runtime's $pandas_before, after the install $pandas_after"
+          python -c 'import importlib.metadata as m; print("after the install:", ", ".join(f"{n} {m.version(n)}" for n in ("numpy", "pandas", "pyarrow", "PyYAML")))'
+          if [ "$(printf '%s\n' 2.2.2 "$pandas_after" | sort -V | head -n 1)" != 2.2.2 ]; then
+            echo "the install left pandas $pandas_after, below the client's floor 2.2.2" >&2
+            exit 1
+          fi
+          # Still the candidate's wheels, as pip recorded their install.
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
+          pip freeze --all
+      - name: The binding's and the client's tests in the runtime
+        run: |
+          . /tmp/runtime/bin/activate
+          # What the client's tests read their tables through, as
+          # installed-wheel has it, NumPy kept.
+          keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          pip install --quiet --only-binary=:all: pytest requests-mock jsonschema \
+            "structured-data-models-client[sqlite,duckdb,snowflake]" $keep_numpy
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
+          python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
+            -p no:cacheprovider --native-build production
+          cd /tmp
           python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
             -m 'not live_nim and not live_warehouse' -p no:cacheprovider
 
@@ -384,13 +1461,16 @@ jobs:
   # own supply chain, covering every connector extra that resolves without a
   # native toolchain.
   sbom:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - uses: ./.github/actions/python-cache
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wheels
@@ -398,12 +1478,454 @@ jobs:
       - run: |
           pip install --upgrade pip cyclonedx-bom
           VERSION=$(cat dist/VERSION)
-          pip install \
-            "dist/structured_data_models_client-$VERSION-py3-none-any.whl[sqlite,duckdb,postgres,databricks,snowflake,s3]" \
-            dist/structured_data_models_{api,pql,connectors}-$VERSION-py3-none-any.whl
+          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
+          pip install --find-links "$GITHUB_WORKSPACE/dist" \
+            "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: dist/sbom.cyclonedx.json
+
+  # Build macOS JNI libraries on native runners; Linux JNI builds accompany wheels.
+  java-native:
+    name: java-native (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    needs: configuration
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-aarch64
+            runner: macos-15
+          # x86_64 macOS ends with the macOS 15 image in autumn 2027, as the
+          # engine wheels' row does.
+          - platform: macos-x86_64
+            runner: macos-15-intel
+          - platform: windows-x86_64
+            runner: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_JOBS: '2'
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: java-${{ matrix.platform }}
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - name: Build sdm-jni
+        working-directory: rust
+        run: cargo build --release --locked -p sdm-jni
+      - name: The Java binding, by platform
+        run: |
+          mkdir -p "java-natives/${{ matrix.platform }}"
+          library=libsdm_jni.dylib
+          if [ "$RUNNER_OS" = Windows ]; then library=sdm_jni.dll; fi
+          cp "rust/target/release/$library" "java-natives/${{ matrix.platform }}/"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-${{ matrix.platform }}
+          path: java-natives/
+
+  # The one JAR, with every platform's native (the all-natives profile
+  # refuses a JAR missing one), and its runtime dependencies beside it.
+  java-jar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [configuration, native-wheel, native-wheel-aarch64, java-native]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    env:
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: java-native-*
+          path: java/target/natives
+          merge-multiple: true
+      - name: Build the JAR
+        run: mvn -B -f java/pom.xml -Pall-natives -DskipTests package
+      - name: The JAR holds every platform's native
+        run: |
+          listed=$(unzip -Z1 java/target/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar)
+          for native in linux-x86_64/libsdm_jni.so linux-aarch64/libsdm_jni.so \
+                        macos-aarch64/libsdm_jni.dylib macos-x86_64/libsdm_jni.dylib \
+                        windows-x86_64/sdm_jni.dll; do
+            grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
+              || { echo "::error::the JAR holds no $native"; exit 1; }
+          done
+      - name: The JAR's artifact
+        run: |
+          mkdir -p java-jar
+          cp java/target/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar java/jar-load/JarLoad.java java-jar/
+          cp -R java/target/lib java-jar/lib
+          cp -R java/target/jdbc java-jar/jdbc
+          cp java/pom.xml java-jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.pom
+          python3 - <<'PYCODE'
+          import hashlib, json, os, pathlib
+          root = pathlib.Path('java-jar')
+          files = sorted([*root.glob('*.jar'), *root.glob('*.pom')])
+          record = {'commit': os.environ['GITHUB_SHA'], 'files': {
+              path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in files}}
+          (root / 'java-artifacts.json').write_text(json.dumps(record, indent=2) + '\n')
+          PYCODE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-jar
+          path: java-jar/
+
+  java-test:
+    name: java-test (${{ matrix.jdk }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [configuration, native-test-ops]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    services:
+      postgres: *postgres-service
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+    env:
+      SDM_REQUIRE_JAVA: '1'
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      # Packaged as the JAR packages its natives, so the tests' own JVMs
+      # load it as a user's would.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-test-ops-native
+          path: java/target/natives/linux-x86_64
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - name: Run Java tests and verify the maintained API ledger
+        run: python tests/compatibility/check_junit.py --run
+      - name: Test the JUnit result checker
+        run: |
+          pip install --quiet pytest
+          python -m pytest -q tests/compatibility/test_junit_results.py
+
+  java-load:
+    name: java-load (${{ matrix.jdk }}, ${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    needs: [configuration, java-jar]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - jdk: '17'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+            image: mcr.microsoft.com/openjdk/jdk:17-ubuntu@sha256:fadd15520f396beb223d4d2951fff9199b019f1b1304edfb9feca603f0f3f7ee
+          - jdk: '21'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+            image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
+          # The same image index: the runner pulls its arm64 image.
+          - jdk: '17'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            image: mcr.microsoft.com/openjdk/jdk:17-ubuntu@sha256:fadd15520f396beb223d4d2951fff9199b019f1b1304edfb9feca603f0f3f7ee
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
+          - jdk: '17'
+            platform: macos-arm64
+            runner: macos-15
+            image: ''
+          - jdk: '21'
+            platform: macos-arm64
+            runner: macos-15
+            image: ''
+          - jdk: '17'
+            platform: macos-x86_64
+            runner: macos-15-intel
+            image: ''
+          - jdk: '21'
+            platform: macos-x86_64
+            runner: macos-15-intel
+            image: ''
+          - jdk: '17'
+            platform: windows-x86_64
+            runner: windows-latest
+            image: ''
+          - jdk: '21'
+            platform: windows-x86_64
+            runner: windows-latest
+            image: ''
+    env:
+      FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - if: runner.os != 'Linux'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - name: The JAR loads
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ] && command -v rustc >/dev/null; then
+            echo "::error::a Rust toolchain is in the container"; exit 1
+          fi
+          java -version
+          separator=:
+          if [ "$RUNNER_OS" = Windows ]; then separator=';'; fi
+          java $FLAGS -cp "jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar${separator}jar/lib/*" jar/JarLoad.java
+
+  # Public parser assertions and packaged-native loading on every supported platform.
+  # Recorded cases remain diagnostic; JUnit assertions decide correctness.
+  java:
+    name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, s0)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    needs: [configuration, java-jar]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - jdk: '17'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+          - jdk: '21'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - jdk: '21'
+            platform: macos-arm64
+            runner: macos-15
+          - jdk: '21'
+            platform: macos-x86_64
+            runner: macos-15-intel
+    env:
+      FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+          # The pinned action's REST client retries failed network requests
+          # up to five times, without retrying the Java steps below.
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      - name: The S0 cases on the Java host
+        run: |
+          pip install pytest pyyaml jsonschema
+          python contract/runners/run_java.py --jar jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar \
+            --classpath jar/lib --out java.jsonl contract/cases/s0
+      - name: Java parser behavior on this platform
+        run: |
+          unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
+          mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
+            -Dtest=PredictiveQueryTest test
+      - name: The Java host's acceptance tests
+        env:
+          SDM_JAVA_JAR: jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar
+          SDM_JAVA_JAR_PLATFORMS: linux-x86_64,linux-aarch64,macos-arm64,macos-x86_64
+        run: python -m pytest -q -p no:cacheprovider contract/tests/test_java_packaging.py
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-java-${{ matrix.jdk }}-${{ matrix.platform }}
+          path: java.jsonl
+          if-no-files-found: warn
+
+  java-db:
+    name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, ${{ matrix.database }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    needs: [configuration, java-jar, native-wheel, native-wheel-aarch64, native-test-ops]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
+    services:
+      postgres: *postgres-service
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+        platform: [linux-x86_64]
+        runner: [ubuntu-latest]
+        wheel: [native-wheel]
+        database: [duckdb, sqlite, postgres]
+        include:
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: duckdb
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: sqlite
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: postgres
+    env:
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: ${{ matrix.database }}
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ matrix.wheel }}
+          path: native
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/python-cache
+      # The reference cell's data-library pins, DuckDB 2 and
+      # the drivers the contract loader writes SQLite and Postgres with:
+      # what the runner's capture and the loader read with, never what the
+      # Java host reads with (its JDBC drivers, in the JAR's artifact).
+      - name: Install the runner's environment
+        run: |
+          printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
+          pip install --upgrade pip
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==2.0.0 pyyaml jsonschema pytest \
+            ./packages/structured-data-models-api  \
+            './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' "$(ls native/*.whl)"
+      - name: Java JDBC behavior on this platform
+        env:
+          SDM_REQUIRE_POSTGRES: '1'
+        run: |
+          unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
+          mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
+            -Dtest=SchemaTest,PredictTest,PostgresReadTest,PostgresKeylessOrderTest test
+      - name: The S1 cases on the Java host
+        run: |
+          python contract/runners/run_java.py --database "$DATABASE" \
+            --jar jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar --classpath jar/lib --drivers jar/jdbc \
+            --out java.jsonl contract/cases/s1
+      - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
+        name: L5 for Java and the drivers' parity with Python's, on the service
+        env:
+          SDM_REQUIRE_POSTGRES: '1'
+          SDM_REQUIRE_JAVA: '1'
+          # Absolute: the step runs pytest from the package's directory.
+          SDM_JAVA_JAR: ${{ github.workspace }}/jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar
+        run: |
+          python -m venv --system-site-packages "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
+          cd packages/structured-data-models-client
+          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_java_results.py tests_test_ops/test_driver_parity.py
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-java-${{ matrix.jdk }}-${{ matrix.platform }}-${{ matrix.database }}
+          path: java.jsonl
+          if-no-files-found: warn
+
+  pql-runtime-aarch64:
+    name: targeted PQL (${{ matrix.lane }}, aarch64)
+    if: github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only
+    needs: native-wheel-aarch64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: floor
+            python: '3.10'
+            pins: 'numpy==1.23.5 pandas==2.2.2 pyarrow==14.0.1'
+          - lane: newest
+            python: '3.14'
+            pins: 'numpy==2.5.4 pandas==3.1.0 pyarrow==26.0.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/python-cache
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-aarch64
+          path: native
+      - name: Install the shipped wheel and concrete runtime
+        env:
+          PQL_RUNTIME_PINS: ${{ matrix.pins }}
+        run: |
+          read -ra pins <<< "$PQL_RUNTIME_PINS"
+          python -m pip install --only-binary=:all: "${pins[@]}" pytest pytz \
+            ./packages/structured-data-models-api  native/*.whl
+      - name: Installed native PQL behavior
+        run: |
+          wheels=(native/*.whl)
+          test "${#wheels[@]}" -eq 1
+          python scripts/rust_core/pql_runtime.py --wheel "${wheels[0]}" \
+            --out "$RUNNER_TEMP/pql-runtime"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: pql-runtime-aarch64-${{ matrix.lane }}
+          path: ${{ runner.temp }}/pql-runtime/
+          if-no-files-found: error

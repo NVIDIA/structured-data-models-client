@@ -3,12 +3,26 @@
 Kept in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) shape, and
 versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
-these packages. All five distributions share one version and one entry.
+these packages. The three Python distributions and Java library share one version.
 
 ## Unreleased
 
+Release candidate versions are `2.0.0rc1` for Python and Java and `2.0.0-rc.1` for Rust.
+The public API snapshot records this version update; publication remains pending.
+
 ### Added
 
+- Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned
+  RelBench datasets with verified caches, offline mode and declared schema metadata.
+- Python and Java requests and fitted handles expose immutable sanitization reports for in-memory relational preparation, with per-table row exclusions and explicit unavailable/not-applicable states.
+
+- Every `sdm_connectors` source says its kind and its namespace in one way:
+  `Source.kind` (`'databricks-sql'` for a SQL warehouse connection,
+  `'databricks-spark'` for a notebook's Spark session,
+  `'databricks-metric-view'` or `'snowflake-semantic-view'` for a semantic
+  model, else the backend) and `Source.namespace_parts()` (the namespace's
+  parts, outermost first, `None` where the connection's current one is
+  meant).
 - `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
   Python process with structured-data-models, through the same calls as a NIM:
   predictions, fitted sessions, rankings, forecasts and explanations. It loads each model
@@ -16,94 +30,52 @@ these packages. All five distributions share one version and one entry.
   is prepared as it is for a NIM and the model run on it directly, the context
   fitted as the NIM fits it. A request the model cannot answer is refused with
   a `StructuredDataError` whose code says why. Install it with the
-  `in-process` extra. In-process explanations are written against the released
-  sdm 0.2.1 API: the converter reads a table's numerical columns from
-  `TableTensor.columns` by stype, not the newer `numerical_columns` property.
-  Revisit when the pinned sdm moves past 0.2.1.
+  `in-process` extra.
 - A Snowflake session the client opens names itself to Snowflake as
   `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
   named any other way is kept: an `application` argument, one in the
   `connections.toml` profile, `SF_PARTNER`, or the connector's own detection
   of Streamlit and notebooks. A connection or Snowpark session you open
   yourself is used as it is.
-- A Databricks get-started notebook for the tabular model,
-  `examples/databricks/kumo_tabular_quickstart.ipynb`, which deploys it to a
-  serving endpoint and fills in a column of the AdventureWorks products table.
-- The relational engine publishes wheels for macOS (Apple silicon and Intel)
-  and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
-  x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
-  installs on a laptop rather than on Linux only. The engine ships no source
-  distribution, so those wheels remain the full set of platforms it supports:
-  `structured-data-models-client` itself is pure Python and stays broader.
-- `kumo-tabular` accepts `explanation` in `outputs`.
-- `result.explanations` holds a prediction's explanations in two parts,
-  `gradients` and `columns`. `result.explanations.gradients` maps each
-  explained row's key to its explanation: the row's `id`, `(id,
-  forecast_step)` on a forecast, or `row_index` when the request has no entity
-  id. Each entry is a plain dict of `outputs` and, on `kumo-tabular`, the
-  row's own columns under `instance`, or, on `kumo-relational`, every table,
-  the entity's own included, under `related`, whose rows always carry their
-  values as sent; `keys` is present when the table's key column is one the
-  model receives, i.e. a column a relationship joins on; otherwise rows are
-  identified by their values. It is kept out of `result.to_pandas()`;
-  `result.explanations.gradients.to_pandas()` flattens it into one line per
-  row, output and column, with each row's `hop` from the entity.
-- `result.explanations.columns` is a column analysis the client computes from
-  the labelled context rows: each column split into cohorts, each cohort's
-  share and mean outcome, and a score per column, normalized to sum to 1.
-  `result.explanations.columns.to_pandas()` gives one line per table, hop,
-  column, cohort and class. `predict()` computes it on each call that asks for
-  explanations; a session computes it once at `fit()`, after `holdout` is
-  taken out, and attaches it to every answer when `fit()` asked for
-  `'explanation'`, otherwise only to a prediction whose query begins
-  `EXPLAIN`. It is `None` when explanations were not asked for.
-- The `EXPLAIN` query prefix: `EXPLAIN PREDICT …` adds `'explanation'` to the
-  call's outputs. A ranking refuses it; a forecast explains each step.
+- The client now contains the Rust core instead of depending on separate
+  relational-engine and Python PQL packages.
+  Python wheels and the Java JAR target Linux x86-64/ARM64, macOS
+  x86-64/ARM64 and Windows x86-64.
+  Native Windows ARM64 is deferred pending upstream Arrow dependencies.
+
+- Both models support gradient explanation collections when the model runtime supports them.
+  Python exposes `result.explanations` and its pandas view; Java exposes `explanations()` and its Arrow view.
+  `EXPLAIN PREDICT` requests explanations, including each forecast step; client-assembled rankings refuse them.
+  Python also accepts manually supplied `PredictionResult(explanations=...)` mappings.
 
 ### Changed
 
-- The refusal of a request over a Databricks serving endpoint's 16 MB limit
-  now asks for fewer context rows or fewer rows to score, covering both
-  directly supplied rows and requests built through predictive queries.
-- Every engine wheel is built on a machine of its own, native rather than
-  emulated, and each is smoke-tested on the architecture it targets. The
-  release no longer builds aarch64 under QEMU, which also takes a privileged
-  container image out of the release path.
-- A request's inference options are written in the types the contract
-  gives them before it is sent: `use_prediction_time` spelled `'no'` is sent
-  as `false`, a NumPy boolean or integer is sent as the value it holds, and a
-  value that cannot be read as its type, such as a `run_mode` that is not
-  text, is refused with `INVALID_REQUEST` before sending, where a NIM
-  answered `422 VALIDATION_FAILED`.
-- A `kumo-relational` explanation is no longer refused above the 1,000-row
-  context budget. That limit belonged to an earlier deployment; the Kumo
-  Relational SDM NIM explains under either budget.
-- An explanation covers every scored row, on both models. A `kumo-tabular`
-  explanation over more than one row and a `kumo-relational` one over more
-  than one entity are no longer refused before sending. This needs a NIM newer
-  than the shipping releases (Relational 1.1.0, Tabular 1.0.0), which refuse
-  `explanation`. The first release that serves it will be named here when it
-  is cut.
+- Sampled Tabular context uses stable Rust index ordering, including duplicate labels and mixed numeric labels.
+  Equal labels retain sampled order; mixed numbers compare by their represented values.
+  Context order and predictions can differ from platform-specific NumPy ordering; sampled membership and warehouse sampling are unchanged.
 
-### Deprecated
+- Requests, sampling and result assembly run through Rust for both languages.
+  Local Python model execution uses the same prepared requests and responses.
+- Ordinary inference options are validated in Rust before local or remote model
+  execution, including fitted sessions, for both Python and Java.
+  NumPy scalar options are accepted at Python request admission.
 
-- `result.explanation` and `PredictionResult(explanation=...)` are deprecated
-  in favour of `result.explanations` and `explanations=`, warn with
-  `DeprecationWarning`. To upgrade, read a row's
-  explanation as `result.explanations.gradients[key]`, under the key naming that row in
-  `result.to_pandas()`. `result.explanation` returns the first record's raw
-  explanation only; the `{'by_forecast_step': ...}` it held for a forecast is
-  gone.
+- Gradient explanations have no separate one-row or 1,000-context-row client restriction.
+  Endpoint capabilities and ordinary request limits still apply.
+  The singular raw `result.explanation` view remains supported.
 
 ### Fixed
+
+- Explicit empty outputs remain invalid with `EXPLAIN`; unsupported local-runtime outputs are refused before model weights load.
+- Gradient identities and merging run in Rust, with generated transport keys distinguished from genuine source keys.
+  Merged explanations and predictions now use matching row indices, including repeated result parts.
 
 - A predictive query longer than 1,024 characters is answered. A relational
   request carries the query in `metadata.source_query` for logging, which the
   contract caps at 1,024 characters, so a NIM refused a longer one with
   `VALIDATION_FAILED`. The logged copy is now cut to fit.
-- DuckDB 2.0 no longer warns on every read. The relational engine and
-  `read_table` read a DuckDB result through a relation rather than the DB-API
-  cursor, which 2.0 warns makes an extra copy of the rows.
+- `read_table` reads DuckDB results through a relation, avoiding the extra
+  copy and warning introduced by the DuckDB 2.0 DB-API cursor.
 - A relational prediction over a graph without a time column works on pandas
   3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
   take even an empty date offset from it.

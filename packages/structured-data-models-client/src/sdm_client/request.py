@@ -4,7 +4,7 @@
 
 r"""One request type, for every model.
 
-A :class:`Request` is the wire envelope minus the two things that belong to the
+A:class:`Request` is the wire envelope minus the two things that belong to the
 call rather than the question: which model answers it, and which output fields
 you want back. Both are arguments to
 :meth:`~sdm_client.SDMClient.predict`.
@@ -16,8 +16,8 @@ simply the one where the schema has one table and no relationships.
 Two builders produce it. This module holds the direct one:
 
 >>> request = Request(
-...     context=labelled_rows, predict=rows_to_score,
-...     target='churn', task='classification',
+... context=labelled_rows, predict=rows_to_score,
+... target='churn', task='classification',
 ... )
 
 The other is a predictive query, which arrives in a later phase.
@@ -36,16 +36,20 @@ import sys
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
+from sdm_client.sanitization import SanitizationReport
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
+
+if TYPE_CHECKING:
+    from sdm_client._rust.results import CoreRequest
 
 # Task kinds the contract carries. A model narrows this further: a tabular
 # model takes only the coarse 'classification', and its adapter says so.
@@ -83,7 +87,7 @@ class Task:
     r"""What is being asked.
 
     Attributes:
-        kind: One of :data:`TASK_KINDS`.
+        kind: One of:data:`TASK_KINDS`.
         target: The column being predicted.
         entity_table: The table whose rows are the entities, when the question
             is relational. ``None`` for a single-table question.
@@ -310,6 +314,12 @@ class Request:
             from one, and ``None`` when it was built from frames.
     """
 
+    if TYPE_CHECKING:
+        # Both constructors populate these fields; the frame constructor delegates.
+        schema: Schema
+        entity_table: str | None
+        requested_inference: dict[str, Any]
+
     query: str | None = None
 
     # How this question was rewritten, when it had to be: the kind of question
@@ -320,9 +330,26 @@ class Request:
     # it is how the client puts the parts' answers together, not something a
     # caller reads: `parts` and `asked` say what a caller needs to see.
     _decomposition: Decomposition | None = None
-    # The gathered labelled context as it was before the rows answering the
-    # scored ones were dropped from each payload; what column analysis reads.
-    _labelled_context: dict[str, Any] | None = None
+
+    # What a request materialized on the core keeps for predict on the core
+    # (``sdm_client._rust.results.CoreRequest``): ``None`` for one
+    # the core did not materialize, which predict on the core predicts from
+    # what it holds.
+    _core: CoreRequest | None = None
+    _sanitization_report: SanitizationReport
+
+    @property
+    def sanitization_report(self) -> SanitizationReport:
+        """Row exclusions recorded during preparation, independent of prediction."""
+        return getattr(
+            self,
+            '_sanitization_report',
+            SanitizationReport(
+                'not_applicable'
+                if getattr(self, '_context', None) is not None
+                else 'unavailable'
+            ),
+        )
 
     def __init__(
         self,
@@ -345,7 +372,7 @@ class Request:
                 rows whose answer you do not have, including rows the model
                 has never seen.
             target: The column being predicted.
-            task: One of :data:`TASK_KINDS`. Stated, never inferred from the
+            task: One of:data:`TASK_KINDS`. Stated, never inferred from the
                 target's cardinality. Guessing there is what turns a
                 two-class target into a multiclass one.
             related_tables: Refused. A relational request is gathered by
@@ -364,122 +391,20 @@ class Request:
                 from ``context``, or ``predict`` carries the target column.
             UnsupportedRequestError: If ``related_tables`` is given.
         """
-        context = _require_frame(context, 'context')
-        predict = _require_frame(predict, 'predict')
-        related = {
-            name: _require_frame(frame, f'related_tables[{name!r}]')
-            for name, frame in (related_tables or {}).items()
-        }
-        _refuse_tables_no_model_can_be_given(related)
+        from sdm_client._rust.direct import construct
 
-        if task not in TASK_KINDS:
-            raise StructuredDataError(
-                f'task must be one of {list(TASK_KINDS)}, got {task!r}',
-                code='INVALID_REQUEST',
-            )
-        if target in context.columns and _has_container_cells(context[target]):
-            # Said here because this is the only place that knows which column
-            # is the target. SDM's own `Task.classification` covers "binary,
-            # multi-class, or multi-label", but the wire does not: `CellValue`
-            # is documented as excluding array-valued prediction scalars on
-            # purpose, so a multi-label answer has no shape to come back in.
-            raise StructuredDataError(
-                f'{target!r} holds a list per row, which is a multi-label '
-                f'target. These models predict one value per row, and the '
-                f'contract has no form for a set of labels, so this cannot be '
-                f'asked or answered',
-                code='UNSUPPORTED_REQUEST',
-            )
-        if len(context) == 0:
-            # A zero-row `predict` is legal. The contract sets no minimum on
-            # rows, and an empty batch inside a loop is a reasonable no-op.
-            # A zero-row context is not: a model that predicts from labelled
-            # examples cannot be given none, and the endpoint answers a 500.
-            raise StructuredDataError(
-                'context has no rows, so there is nothing for the model to '
-                'learn the answer from',
-                code='INVALID_REQUEST',
-            )
-        if target not in context.columns:
-            raise StructuredDataError(
-                f'context has no target column {target!r}; it has '
-                f'{sorted(map(str, context.columns))}',
-                code='INVALID_REQUEST',
-            )
-        if target in predict.columns:
-            raise StructuredDataError(
-                f'predict carries the target column {target!r}. Those are the '
-                f'rows whose answer is being asked for, so the column has to '
-                f'be absent; drop it with predict.drop(columns=[{target!r}])',
-                code='INVALID_REQUEST',
-            )
-        if context[target].notna().sum() == 0:
-            raise StructuredDataError(
-                'context must contain at least one row with a known target',
-                code='INVALID_REQUEST',
-            )
-
-        missing = [
-            column
-            for column in predict.columns
-            if column not in context.columns
-        ]
-        if missing:
-            raise StructuredDataError(
-                f'predict has column(s) {missing} that context does not; the '
-                f'model is shown context first, so it cannot score a feature '
-                f'it has never been given',
-                code='INVALID_REQUEST',
-            )
-
-        if schema is None:
-            schema = Schema.from_data(
-                {entity_table: context, **related},
-                relationships=None if related else (),
-            )
-
-        _check_scored_values_mean_what_the_schema_says(
-            predict, schema, entity_table
+        construct(
+            self,
+            context,
+            predict,
+            target=target,
+            task=task,
+            related_tables=related_tables,
+            schema=schema,
+            entity_table=entity_table,
+            inference=inference,
+            task_options=task_options,
         )
-
-        # And the other direction: a feature the model was shown has to be
-        # supplied for the rows being scored. The endpoint rejects a predict
-        # half that is missing one, so name it here instead. A primary key is
-        # identity rather than a feature, so scoring rows may omit it.
-        identity = set(_as_key_tuple(schema[entity_table].primary_key))
-        absent = [
-            column
-            for column in context.columns
-            if column != target
-            and column not in identity
-            and column not in predict.columns
-        ]
-        if absent:
-            raise StructuredDataError(
-                f'predict is missing column(s) {absent} that context carries. '
-                f'Every feature the model is shown has to be supplied for the '
-                f'rows being scored; drop them from context, or supply them',
-                code='INVALID_REQUEST',
-            )
-
-        _judge_a_context_that_teaches_nothing(target, context[target], task)
-
-        self.schema = schema
-        self.task = Task(
-            kind=task,
-            target=Target(
-                column_name=target,
-                dtype=schema[entity_table][target].dtype,
-                table_name=entity_table,
-            ),
-            entity_table=entity_table if related else None,
-            options=dict(task_options or {}),
-        )
-        self._context = Split(instance_table=context, related_tables=related)
-        self._predict = Split(instance_table=predict, related_tables=related)
-        self.inference = dict(inference or {})
-        self.requested_inference = dict(inference or {})
-        self.entity_table = entity_table
 
     @classmethod
     def materialized(
@@ -495,7 +420,7 @@ class Request:
     ) -> Request:
         r"""A request whose data has already been gathered.
 
-        The predictive-query path does its gathering in ``materialize()``, so
+        The predictive-query path does its gathering in ``materialize``, so
         what arrives here is one or more finished wire envelopes rather than
         frames to encode. More than one when the run exceeds the endpoint's
         per-call cap; the adapter sends each and the results are merged.
@@ -544,7 +469,7 @@ class Request:
 
     @property
     def _question(self) -> Question:
-        r"""What this request asks. See :class:`Question`."""
+        r"""What this request asks. See:class:`Question`."""
         target = self.task.target
         query = self.query
         return Question(
@@ -615,7 +540,9 @@ class Request:
         """
         payloads = self.payloads
         if payloads:
-            return _split_from(payloads, half)
+            from sdm_client._rust.splits import read
+
+            return read(payloads, half)
         held = getattr(self, f'_{half}', None)
         return held if held is not None else Split(pd.DataFrame())
 
@@ -760,7 +687,7 @@ class Request:
         r"""Whether this request is known to ask about no rows at all.
 
         Distinct from ``predict_rows == 0``, and the distinction matters:
-        `predict()` answers a request with nothing in it without sending, so a
+        `predict` answers a request with nothing in it without sending, so a
         payload whose rows simply cannot be read must not be mistaken for one
         that is empty. An unreadable envelope is a request that should reach
         the endpoint and be refused, not one that quietly succeeds with an

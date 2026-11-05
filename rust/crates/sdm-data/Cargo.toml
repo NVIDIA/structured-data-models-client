@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-data"
+description = "The data layer: SQL rendering, provider strategy and the DuckDB dialect"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+fancy-regex.workspace = true
+arrow-array.workspace = true
+arrow-cast.workspace = true
+arrow-select.workspace = true
+arrow-schema.workspace = true
+sdm-contract = { path = "../sdm-contract" }
+# The request as the contract writes it, which names a key set's table
+# (sqlite.rs, `seeds_for`); already shipped through sdm-contract.
+serde_json.workspace = true
+
+[lints]
+workspace = true

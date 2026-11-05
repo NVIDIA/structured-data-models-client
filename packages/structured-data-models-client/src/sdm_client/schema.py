@@ -4,7 +4,7 @@
 
 r"""The tables a request is about, and what the model should make of them.
 
-A :class:`Schema` holds your tables, what each column means, and how the tables
+A:class:`Schema` holds your tables, what each column means, and how the tables
 relate. One table or many is the same object. A single-table model is the
 degenerate case of the same shape, not a second system, which is why this is
 not called a graph.
@@ -33,22 +33,28 @@ Nothing here contacts a model. Inference reads your frames locally.
 
 from __future__ import annotations
 
+import functools
+import io
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
-from predictive_query.time_columns import (
-    TimeColumnChoice,
-    choose_time_column,
-    taken_unchecked,
-)
 
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
+from sdm_client.inference import InferenceConfig
+from sdm_client.reports import (
+    ColumnMetadata,
+    LinkMetadata,
+    LinkReport,
+    MetadataReport,
+    TableMetadata,
+)
 from sdm_client.wire import (
     UNTYPED,
     infer_tfm_dtype,
@@ -57,6 +63,10 @@ from sdm_client.wire import (
 
 if TYPE_CHECKING:
     from sdm_connectors import Source
+
+    from sdm_client._rust.results import SourceFacts
+    from sdm_client.relational_task import RelationalTask
+    from sdm_client.request import Request
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -125,9 +135,14 @@ class Column:
     untyped: bool = field(init=False, default=False)
     stype_declared: bool = field(init=False, default=False)
     _stype_before_key: str | None = field(init=False, default=None, repr=False)
-
-    def __post_init__(self) -> None:
-        self._check_stype(self.stype)
+    #: What the source said of the column, where the core described it
+    #: (``sdm_client._rust.results.SourceFacts``): kept with the
+    #: column, copied and pickled with it, and handed back whole to the
+    #: core, which reads a column with none from the source. Out of repr
+    #: and equality, so a column is what it says, however it was made.
+    _source: SourceFacts | None = field(
+        init=False, default=None, repr=False, compare=False
+    )
 
     def _mark_as_key(self) -> None:
         r"""Type this column as an identifier because the schema joins on it.
@@ -156,7 +171,7 @@ class Column:
         Through the same adoption an assignment goes through: a column that
         means `timestamp` orders the table it belongs to, and restoring the
         meaning around that left a table saying it held a timestamp while
-        naming no time column. `check_consistent()` accepted that state, and
+        naming no time column. `check_consistent` accepted that state, and
         every temporal query then failed on.
         """
         if self._stype_before_key is None:
@@ -186,8 +201,11 @@ class Column:
                 code='INVALID_REQUEST',
             )
         if key == 'stype':
-            self._check_stype(value)
-            self._check_supports_dtype(value, getattr(self, 'dtype', None))
+            from sdm_client._rust import edits
+
+            if edits.column(self, value):
+                return
+            edits.check_column(self, value, validate_stype=True)
             if hasattr(self, 'stype'):
                 object.__setattr__(self, 'stype_declared', True)
         if key == 'dtype' and getattr(self, 'untyped', False):
@@ -269,7 +287,9 @@ class Column:
         """
         if self.dtype is None or self.stype is None:
             return
-        self._check_supports_dtype(self.stype, self.dtype)
+        from sdm_client._rust import edits
+
+        edits.check_column(self, self.stype, validate_stype=False)
 
     @staticmethod
     def _check_stype(value: Any) -> None:
@@ -284,7 +304,7 @@ class Column:
         r"""Refuse a meaning the values cannot carry.
 
         The language already decides this, and used to decide it at
-        ``materialize()``, several cells after the assignment that caused it,
+        ``materialize``, several cells after the assignment that caused it,
         as a bare ``ValueError``. Asking the same question here changes only
         when the answer arrives. Nothing is refused that was going to be
         accepted.
@@ -319,7 +339,30 @@ class _TableShape:
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None
     time_column: str | None
+    end_time_column: str | None
     duplicate_keys: int | None
+
+    def metadata_report(self) -> TableMetadata:
+        """Snapshot existing metadata without reading table rows."""
+        key = self.primary_key
+        return TableMetadata(
+            self.name,
+            tuple(
+                ColumnMetadata(c.name, c.dtype, c.stype)
+                for c in self.columns.values()
+            ),
+            ()
+            if key is None
+            else (key,)
+            if isinstance(key, str)
+            else tuple(key),
+            self.time_column,
+            getattr(self, 'end_time_column', None),
+        )
+
+    def print_metadata(self) -> None:
+        """Print existing table metadata locally."""
+        self.metadata_report().print()
 
     def _own_columns(self) -> None:
         r"""Point every column at this table, and take a copy of any that is
@@ -370,6 +413,10 @@ class _TableShape:
             and _as_key_tuple(self.primary_key)
             == _as_key_tuple(other.primary_key)
             and self.time_column == other.time_column
+            and getattr(self, 'end_time_column', None)
+            == getattr(other, 'end_time_column', None)
+            and getattr(self, '_calculated_columns', ())
+            == getattr(other, '_calculated_columns', ())
             and getattr(self, 'source_name', None)
             == getattr(other, 'source_name', None)
         )
@@ -394,7 +441,15 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
+        if key in ('primary_key', 'time_column', 'end_time_column'):
+            from sdm_client._rust import edits
+
+            if edits.table(self, key, value):
+                return
+        if (
+            key in ('primary_key', 'time_column', 'end_time_column')
+            and 'columns' in self.__dict__
+        ):
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
             # `__post_init__` (which runs after the fields are assigned), so
@@ -673,6 +728,7 @@ class Table(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used.
     #: Inference tolerates a few, deliberately; this is what it tolerated.
     #: Not an init argument: the generated ``__init__`` assigns fields in
@@ -714,9 +770,9 @@ class Table(_TableShape):
 class SourceTable(_TableShape):
     r"""One table that stays in its source: its columns, and its keys.
 
-    Built by :meth:`Schema.from_source`. It holds no rows: sampling reads them
+    Built by:meth:`Schema.from_source`. It holds no rows: sampling reads them
     from the source, a hop at a time, when a query is materialized. Keys, time
-    columns and semantic types are corrected exactly as on a :class:`Table`.
+    columns and semantic types are corrected exactly as on a:class:`Table`.
 
     Attributes:
         name: The name the schema knows this table by. A query names columns
@@ -732,8 +788,9 @@ class SourceTable(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    end_time_column: str | None = None
     #: How many rows repeat a primary key value another row already used, as
-    #: :meth:`Schema.from_source` counted them in the source. Zero for a key
+    #::meth:`Schema.from_source` counted them in the source. Zero for a key
     #: the source enforces, and for a table with no key. ``None`` where
     #: nothing was counted: ``check_keys=False``, a semantic model's table,
     #: or a key named after the schema was built.
@@ -759,8 +816,15 @@ class SourceTable(_TableShape):
         A table in its source cannot be edited to suit a request, and some
         columns only mislead a model: a per-row UUID identifies a row and
         says nothing about it. A table of frames drops a column from its frame
-        before :meth:`Schema.from_data` instead.
+        before:meth:`Schema.from_data` instead.
         """
+        if _edits_on_the_core(getattr(self, '_schema', None)):
+            # A core-built schema's table: the core checks and makes the
+            # edit, and its answer is stored.
+            from sdm_client._rust import edits
+
+            if edits.leave_out(self, column):
+                return
         self._check_column(column)
         role = (
             'primary key'
@@ -806,10 +870,17 @@ class Relationship:
         )
 
 
+class RelationshipOrigin(NamedTuple):
+    """An existing relationship and its engine-recorded origin."""
+
+    relationship: Relationship
+    origin: str
+
+
 class Schema:
     r"""The tables a request is about.
 
-    Build one with :meth:`from_data`. Index it by table name, and index a table
+    Build one with:meth:`from_data`. Index it by table name, and index a table
     by column name:
 
     >>> schema = Schema.from_data({'users': users, 'orders': orders})
@@ -841,11 +912,9 @@ class Schema:
         left typed ``numerical`` would otherwise pass this and be sent as a
         float.
         """
-        self._mark_key_columns()
-        for table in self.tables.values():
-            for column in table.columns.values():
-                column.check_consistent()
-        self._check_relationships(self.relationships)
+        from sdm_client._rust import edits
+
+        edits.check_schema(self)
 
     def __init__(
         self,
@@ -863,24 +932,189 @@ class Schema:
         self._tables = {
             name: _copy_table(table) for name, table in tables.items()
         }
+        # Declared source metadata is editable without pretending a catalog
+        # described it. Only actual frame tables carry frame observations.
+        origin = (
+            'frames'
+            if source is None
+            and all(isinstance(table, Table) for table in self._tables.values())
+            else 'declared'
+        )
+        object.__setattr__(self, '_core_origin', origin)
+        for table in self._tables.values():
+            object.__setattr__(table, '_core_origin', origin)
+            object.__setattr__(table, '_schema', self)
+        # Fresh declarations are distinguishable from older records whose
+        # inference history was never recorded. Missing choices stay inferable.
+        self._inference: dict[str, Any] | None = {
+            'unknown_tables': [],
+            'key_declared': [
+                name
+                for name, table in self._tables.items()
+                if table.primary_key
+            ],
+            'time_declared': [
+                name
+                for name, table in self._tables.items()
+                if table.time_column is not None
+            ],
+            'times': {},
+            'links': [],
+        }
+        object.__setattr__(self, 'relationships', _Links([], self))
         self.relationships = relationships
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
         self._conversion_notes: tuple[str, ...] = ()
 
+    def materialize_examples(
+        self,
+        task: RelationalTask,
+        context: Any,
+        predict: Any,
+        *,
+        num_neighbors: Sequence[int] | None = None,
+        rows_per_call: int | None = None,
+        random_seed: int = 42,
+        inference: Mapping[str, Any] | InferenceConfig | None = None,
+    ) -> Request:
+        """Gather a Relational request from supplied labels and entity IDs.
+
+        Use RelationalTask for task meaning and DataFrame/Arrow example tables.
+        Context has ENTITY, TARGET and optional ANCHOR_TIMESTAMP; predictions
+        omit TARGET. Rust validates and snapshots every input before returning.
+        """
+        from sdm_client._rust.examples import materialize
+
+        return materialize(
+            self,
+            task,
+            context,
+            predict,
+            num_neighbors=num_neighbors,
+            rows_per_call=rows_per_call,
+            random_seed=random_seed,
+            inference=inference,
+        )
+
+    def with_source(self, source: Source) -> Schema:
+        """Return this schema using a replacement caller-owned database source.
+
+        Backend, namespace, source kind and semantic-model settings must match.
+        Rust checks the replacement tables and column types without reinference
+        or a full key-uniqueness scan. Neither connection is closed or changed.
+        Existing queries and requests retain their original source.
+        """
+        from sdm_client._rust.rebind import rebind
+
+        return rebind(self, source)
+
+    def with_sql_column(self, table: str, name: str, expression: str) -> Schema:
+        """Return a schema with a provider-dialect SQL column over physical source columns.
+
+        The source evaluates caller-supplied SQL under its existing credentials.
+        Existing columns cannot be overwritten. No warehouse table is modified.
+        In-memory inputs should calculate their columns before schema admission.
+        """
+        from sdm_client._rust.sql_column import add
+
+        return add(self, table, name, expression)
+
+    def infer_metadata(self) -> Schema:
+        """Return a schema with missing, non-disabled key/time choices inferred."""
+        from sdm_client._rust.refine import infer
+
+        return infer(self, False)
+
+    def infer_links(self) -> Schema:
+        """Return a schema with unambiguous missing relationships inferred."""
+        from sdm_client._rust.refine import infer
+
+        return infer(self, True)
+
+    def without_table(self, name: str) -> Schema:
+        """Return a schema without a table and all its incident relationships."""
+        from sdm_client._rust.refine import changed
+        from sdm_client.errors import StructuredDataError
+
+        if not isinstance(name, str):
+            raise StructuredDataError(
+                'table name must be a string', code='INVALID_REQUEST'
+            )
+        return changed(self, {'edit': 'remove_table', 'table': name})
+
+    def with_relationship(self, relationship: Relationship) -> Schema:
+        """Add a relationship atomically; identical additions are idempotent."""
+        from sdm_client._rust.refine import link_edit
+
+        return link_edit(self, relationship, False)
+
+    def without_relationship(self, relationship: Relationship) -> Schema:
+        """Remove an existing relationship atomically."""
+        from sdm_client._rust.refine import link_edit
+
+        return link_edit(self, relationship, True)
+
+    @property
+    def link_origins(self) -> tuple[RelationshipOrigin, ...]:
+        """Ordered engine provenance; historical records are explicitly unknown."""
+        state = getattr(self, '_inference', None) or {}
+        origins = {}
+        for record in state.get('links', ()):
+            foreign, primary = record['link']
+            link = Relationship(
+                foreign['table'],
+                foreign['column'],
+                primary['table'],
+                primary['column'],
+            )
+            origins[link] = record['origin']
+        return tuple(
+            RelationshipOrigin(link, origins.get(link, 'unknown'))
+            for link in self.relationships
+        )
+
+    def to_mermaid(self, show_columns: bool = True) -> str:
+        """Return an offline schema diagram from metadata, without reading rows."""
+        from sdm_client._visualization import mermaid
+
+        return mermaid(self, show_columns)
+
+    def to_html(self, show_columns: bool = True) -> str:
+        """Return self-contained offline HTML with the bundled Mermaid renderer."""
+        from sdm_client._visualization import document
+
+        return document(self.to_mermaid(show_columns))
+
+    def visualize(
+        self,
+        path: Path | str | io.BytesIO | None = None,
+        show_columns: bool = True,
+        height: int = 540,
+    ) -> None:
+        """Display in a notebook or export.mmd/.html/.png/.svg.
+
+        HTML and Mermaid stay offline. Explicit PNG/SVG and BytesIO exports
+        send schema metadata (never rows) to https://mermaid.ink.
+        BytesIO receives PNG and stays open. Other environments print Mermaid.
+        """
+        from sdm_client._visualization import visualize
+
+        visualize(self, path, show_columns, height)
+
     @property
     def source(self) -> Source | None:
-        r"""Where the tables are, for a schema built with :meth:`from_source`.
+        r"""Where the tables are, for a schema built with:meth:`from_source`.
 
         ``None`` for a schema of frames. A schema has one source or none,
-        because sampling runs against one: see :meth:`from_source`.
+        because sampling runs against one: see:meth:`from_source`.
         """
         return self._source
 
     @property
     def conversion_notes(self) -> tuple[str, ...]:
-        r"""How :meth:`from_source` read a semantic model where nothing was
+        r"""How:meth:`from_source` read a semantic model where nothing was
         lost, for a person to read.
 
         For a Databricks metric view, one note each: the predictive query
@@ -889,7 +1123,7 @@ class Schema:
         column taken in place of a date the view truncates, unless
         ``time_columns`` named another, and a parameter read as its default.
         Tables are named as the schema names them. What a model loses is
-        said in an :class:`SDMWarning` instead, and a time column taken in
+        said in an:class:`SDMWarning` instead, and a time column taken in
         place of a truncated date is said in the warning on how time columns
         were inferred as well, with the override that names another. Empty
         for every other schema.
@@ -905,9 +1139,21 @@ class Schema:
         `Schema.from_data(relationships=[link])` checks that both columns exist
         and that their dtypes can join; `schema.relationships = [link]` is the
         same statement and checked nothing, so a link that one route refuses
-        the other accepted. `check_consistent()`, which a caller runs to
+        the other accepted. `check_consistent`, which a caller runs to
         ask exactly this, passed it.
         """
+        if (
+            key == 'relationships'
+            # An edit of a schema that stands: building one is no edit.
+            and 'relationships' in vars(self)
+            and _edits_on_the_core(self)
+        ):
+            # A core-built schema: the core checks and makes the edit, and
+            # its answer is stored.
+            from sdm_client._rust import edits
+
+            if edits.relationships(self, value):
+                return
         if key == 'relationships' and hasattr(self, '_tables'):
             value = _Links(self._settle(value), self)
             object.__setattr__(self, key, value)
@@ -923,7 +1169,7 @@ class Schema:
         destructive one once key columns were re-derived: clearing the copy's
         relationships retyped a column of a schema that still had them.
 
-        The rows are still shared, as they are in `snapshot()`: they are the
+        The rows are still shared, as they are in `snapshot`: they are the
         data, and copying a warehouse extract is not what a caller asking for
         a copy of the schema is asking for.
         """
@@ -949,12 +1195,21 @@ class Schema:
                 '_source': None,
                 '_engine_tables': None,
                 '_conversion_notes': (),
-                **state,
+                # The core's description of the source an earlier client
+                # kept beside the schema: its columns now carry
+                # what the source said of them, and a column with none is
+                # read from the source again.
+                **{
+                    key: value
+                    for key, value in state.items()
+                    if key != '_core_description'
+                },
             },
         )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             self.relationships = list(state.get('relationships') or ())
+        object.__setattr__(self, '_inference', state.get('_inference'))
 
     def _settle(self, links: Sequence[Relationship]) -> list[Relationship]:
         r"""The relationships as this schema will hold them, having said so.
@@ -985,7 +1240,7 @@ class Schema:
     def snapshot(self) -> Schema:
         r"""This schema as it stands, so a later edit cannot reach back.
 
-        `materialize()` is the gathering step and what it returns is read as
+        `materialize` is the gathering step and what it returns is read as
         finished, but the request kept the caller's schema by reference and the
         adapter reads it again at send time. Editing a column's meaning
         after materializing changed what was sent, silently, and an agent
@@ -996,11 +1251,35 @@ class Schema:
         question to guard against an edit nobody makes to a frame would cost
         more than the defect. What is copied is everything a schema *says*.
         """
+        if _edits_on_the_core(self):
+            copied = Schema.__new__(Schema)
+            object.__setattr__(copied, '_source', self._source)
+            object.__setattr__(
+                copied, '_core_origin', getattr(self, '_core_origin', None)
+            )
+            tables = {
+                name: _copy_table(table) for name, table in self._tables.items()
+            }
+            object.__setattr__(copied, '_tables', tables)
+            for table in tables.values():
+                object.__setattr__(table, '_schema', copied)
+            object.__setattr__(
+                copied, 'relationships', _Links(self.relationships, copied)
+            )
+            import copy
+
+            copied._inference = copy.deepcopy(getattr(self, '_inference', None))
+            copied._engine_tables = self._engine_tables
+            copied._conversion_notes = self._conversion_notes
+            return copied
         copied = Schema(
             {name: _copy_table(table) for name, table in self._tables.items()},
             list(self.relationships),
             source=self._source,
         )
+        import copy
+
+        copied._inference = copy.deepcopy(getattr(self, '_inference', None))
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
@@ -1047,53 +1326,33 @@ class Schema:
         relationship is told it cannot join, while a caller who never asked
         for it is not refused for a guess this made on their behalf.
         """
-        if not tables:
-            raise StructuredDataError(
-                'a schema needs at least one table', code='INVALID_REQUEST'
-            )
+        from sdm_client._rust.frame_schema import from_data
 
-        built: dict[str, Table] = {}
-        chose: dict[str, TimeColumnChoice | None] = {}
-        for name, frame in tables.items():
-            if not isinstance(name, str) or not name:
-                raise StructuredDataError(
-                    f'table names must be non-empty strings; got {name!r}',
-                    code='INVALID_REQUEST',
-                )
-            if not isinstance(frame, pd.DataFrame):
-                raise StructuredDataError(
-                    f'table {name!r} must be a pandas DataFrame, got '
-                    f'{type(frame).__name__}',
-                    code='INVALID_REQUEST',
-                )
-            built[name], chose[name] = _infer_table_and_time_column(name, frame)
+        return from_data(
+            cls,
+            tables,
+            primary_keys=primary_keys,
+            time_columns=time_columns,
+            relationships=relationships,
+        )
 
-        _apply_keys_and_times(built, primary_keys, time_columns)
-        if relationships is None:
-            inferred = _joinable_inferred_links(
-                built, _infer_relationships(built)
-            )
-        else:
-            inferred = _checked_links(built, relationships)
+    @classmethod
+    def from_relbench(
+        cls,
+        name: str,
+        *,
+        cache_dir: str | Path | None = None,
+        offline: bool = False,
+    ) -> Schema:
+        """Load a pinned RelBench dataset with its declared keys, times and links.
 
-        _settle_edit_stamps(built, chose, time_columns, inferred)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', SDMWarning)
-            schema = cls(built, inferred)
-        schema._mark_key_columns()
-        dates = {
-            name: named
-            for name, table in built.items()
-            if (named := _warn_dates_stored_as_text(table)) is not None
-        }
-        if relationships is None:
-            spoken_for = _warn_repeats_cost_the_table_its_key(built)
-            _warn_table_cannot_be_linked_to(built, dates, spoken_for)
-            _warn_one_key_name_keys_several_tables(built)
-        _warn_stype_was_decided_by_the_rows_read(built)
-        _warn_how_time_columns_were_inferred(schema, chose, time_columns)
-        _warn_two_ways_to_reach_one_table(built, schema.relationships)
-        return schema
+        Downloads are cached and SHA-256 verified on every use.
+        ``offline=True`` requires a complete valid cache and never uses HTTP.
+        The default cache is ``~/.cache/sdm/relbench``.
+        """
+        from sdm_client._relbench import load
+
+        return load(cls, name, cache_dir=cache_dir, offline=offline)
 
     @classmethod
     def from_source(
@@ -1110,17 +1369,17 @@ class Schema:
 
         >>> source = DatabricksSource(spark, catalog='main', schema='sales')
         >>> schema = Schema.from_source(
-        ...     source,
-        ...     {'customers': 'adventureworks_customers',
-        ...      'orders': 'adventureworks_orders'},
-        ...     time_columns={'orders': 'order_date'},
+        ... source,
+        ... {'customers': 'adventureworks_customers',
+        ... 'orders': 'adventureworks_orders'},
+        ... time_columns={'orders': 'order_date'},
         ... )
 
         Nothing is read into memory. Column types come from the source's
         catalog and semantic types from a preview of at most 1,000 rows. Keys
         and relationships come from the constraints the catalog declares, and
         where it declares none, from names, by the same rule as
-        :meth:`from_data`. When a query is materialized, the engine samples
+        :meth:`from_data`. When a query is materialized, Rust plans sampling of
         the tables with SQL, a hop at a time, and only the rows it samples
         leave the source.
 
@@ -1134,7 +1393,7 @@ class Schema:
         refused beyond that; an inferred key is declined beyond it. The count
         is one statement for all the tables, a full scan of each, and it is
         skipped for a key the source enforces, such as a PostgreSQL or DuckDB
-        primary key. :attr:`SourceTable.duplicate_keys` holds what it found.
+        primary key.:attr:`SourceTable.duplicate_keys` holds what it found.
 
         A semantic model, such as a Databricks metric view or a Snowflake
         semantic view, is a source of its own, and already says how its
@@ -1150,7 +1409,7 @@ class Schema:
         ``relationships=[*Schema.from_source(model).relationships, extra]``.
         What the model has that a schema cannot hold is said in one
         :class:`SDMWarning`, and how it was read where nothing was lost, such
-        as the aggregation each measure is, is in :attr:`conversion_notes`.
+        as the aggregation each measure is, is in:attr:`conversion_notes`.
 
         Everything that differs between warehouses belongs to the source, so
         this reads the same whichever one the tables are in. A schema has
@@ -1172,11 +1431,11 @@ class Schema:
                 none.
             check_keys: Count each key's repeats and missing values in the
                 source. ``False`` skips the scan, and the checks with it, and
-                leaves :attr:`SourceTable.duplicate_keys` ``None``. The tables
+                leaves:attr:`SourceTable.duplicate_keys` ``None``. The tables
                 of a semantic model are never counted: the model derives them.
 
         Returns:
-            A schema of :class:`SourceTable`, bound to ``source``.
+            A schema of:class:`SourceTable`, bound to ``source``.
 
         Raises:
             StructuredDataError: If ``tables`` is empty, a name is not a
@@ -1184,122 +1443,49 @@ class Schema:
                 table, an override names something that does not exist, or a
                 declared or named key repeats a value in more than 1% of rows
                 or a named key has no value in some row.
-            MissingExtraError: If the relational engine, which reads the
-                source, is not installed.
-            GraphConstructionError: The relational engine's, if the
-                warehouse fails while a semantic model is read, with the
-                driver's error as its ``__cause__``.
-            EmptyTableError: The relational engine's, a ``RuntimeError``, if
-                a semantic model's source table holds no rows.
         """
-        from sdm_client.materializers.sources import (
-            EngineTables,
-            engine_graph,
-            is_semantic_model,
-            semantic_model_graph,
-        )
+        from sdm_client._rust.schema import from_source
 
         _require_a_source(source)
         if tables is not None:
             _require_table_names(tables)
+        return from_source(
+            cls,
+            source,
+            tables,
+            primary_keys=primary_keys,
+            time_columns=time_columns,
+            relationships=relationships,
+            check_keys=check_keys,
+        )
 
-        read = EngineTables()
-        engine_tables: dict[str, Any] | None = None
-        chose: dict[str, TimeColumnChoice | None] = {}
-        notes: tuple[str, ...] = ()
-        if is_semantic_model(source):
-            graph = semantic_model_graph(source)
-            read.keep({name: graph[name] for name in graph.tables})
-            offered = list(graph.tables)
-            chosen = (
-                dict(tables)
-                if tables is not None
-                else {name: name for name in offered}
-            )
-            absent = sorted(set(chosen.values()) - set(offered))
-            if absent:
-                raise StructuredDataError(
-                    f'{absent} are not tables of {source!r}; it has '
-                    f'{sorted(offered)}',
-                    code='INVALID_REQUEST',
+    def metadata_report(self) -> MetadataReport:
+        """Snapshot existing table descriptors without inference or source reads."""
+        return MetadataReport(
+            tuple(t.metadata_report() for t in self.tables.values())
+        )
+
+    def link_report(self) -> LinkReport:
+        """Snapshot existing directed relationships."""
+        return LinkReport(
+            tuple(
+                LinkMetadata(
+                    r.source_table,
+                    r.source_column,
+                    r.target_table,
+                    r.target_column,
                 )
-            as_named = {model: name for name, model in chosen.items()}
-            built = {
-                name: _describe_source_table(graph[model], model, name=name)
-                for name, model in chosen.items()
-            }
-            chose = {
-                name: graph[model].time_column_choice
-                for name, model in chosen.items()
-            }
-            declared = _model_links(graph, built, as_named)
-        else:
-            graph = engine_graph(source, tables, infer_metadata=True)
-            chosen = (
-                dict(tables)
-                if tables is not None
-                else {name: name for name in graph.tables}
+                for r in self.relationships
             )
-            read.keep({named: graph[name] for name, named in chosen.items()})
-            built = {
-                name: _describe_source_table(graph[name], named)
-                for name, named in chosen.items()
-            }
-            chose = {name: graph[name].time_column_choice for name in chosen}
-            declared = _declared_links(graph, chosen, built)
-            if relationships is None:
-                _key_by_the_referenced_column(built, declared)
-            engine_tables = {name: graph[name] for name in chosen}
+        )
 
-        found = {
-            name: _as_key_tuple(table.primary_key)
-            for name, table in built.items()
-        }
-        _apply_keys_and_times(built, primary_keys, time_columns)
-        if is_semantic_model(source):
-            notes = _schema_notes(graph.conversion_notes, built, as_named)
-        if check_keys and engine_tables is not None:
-            # Before relationships are inferred: a declined key is one no
-            # relationship can point at.
-            _check_source_keys(
-                source,
-                built,
-                engine_tables,
-                found,
-                set(primary_keys or ()),
-                infer_links=relationships is None,
-            )
-        else:
-            for table in built.values():
-                object.__setattr__(table, 'duplicate_keys', None)
-        if relationships is None:
-            covered = {
-                (link.source_table, link.source_column) for link in declared
-            }
-            # A semantic model's joins are all the links it means.
-            by_name = (
-                []
-                if is_semantic_model(source)
-                else [
-                    link
-                    for link in _infer_relationships(built)
-                    if (link.source_table, link.source_column) not in covered
-                ]
-            )
-            links = _joinable_inferred_links(built, declared + by_name)
-        else:
-            links = _checked_links(built, relationships)
+    def print_metadata(self) -> None:
+        """Print existing schema metadata locally."""
+        self.metadata_report().print()
 
-        _settle_edit_stamps(built, chose, time_columns, links)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', SDMWarning)
-            schema = cls(built, links, source=source)
-        schema._engine_tables = read
-        schema._conversion_notes = notes
-        schema._mark_key_columns()
-        _warn_how_time_columns_were_inferred(schema, chose, time_columns)
-        _warn_two_ways_to_reach_one_table(built, schema.relationships)
-        return schema
+    def print_links(self) -> None:
+        """Print existing schema relationships locally."""
+        self.link_report().print()
 
     @property
     def tables(self) -> dict[str, Table | SourceTable]:
@@ -1398,113 +1584,6 @@ def _require_table(tables: Mapping[str, _T], name: str) -> _T:
     return tables[name]
 
 
-def _schema_notes(
-    notes: Sequence[Any],
-    built: Mapping[str, _TableShape],
-    as_named: Mapping[str, str],
-) -> tuple[str, ...]:
-    r"""A semantic model's conversion notes as text, naming its tables as
-    the schema names them.
-
-    A note about a table the schema leaves out, or about a time column its
-    table no longer has, says nothing the schema holds, so it is left out.
-
-    Args:
-        notes: The engine's notes on how it read the model.
-        built: The schema's tables, by name.
-        as_named: The schema's name for each of the model's tables it holds.
-    """
-    from sdm_relational_engine.rfm.view_conversion import (
-        MeasureNote,
-        TimeColumnNote,
-    )
-
-    said: list[str] = []
-    for note in notes:
-        if isinstance(note, MeasureNote | TimeColumnNote):
-            name = as_named.get(note.table)
-            if name is None or (
-                isinstance(note, TimeColumnNote)
-                and built[name].time_column != note.column
-            ):
-                continue
-            note = replace(note, table=name)
-        said.append(str(note))
-    return tuple(said)
-
-
-def _apply_keys_and_times(
-    built: Mapping[str, _TableShape],
-    primary_keys: Mapping[str, str | Sequence[str]] | None,
-    time_columns: Mapping[str, str | None] | None,
-) -> None:
-    for name, key in (primary_keys or {}).items():
-        table = _require_table(built, name)
-        # Read once, and the names are what is passed on. Reading it here
-        # to check the columns exist and then handing the original along
-        # emptied a key that can only be read once, exactly as the setter
-        # used to before it read once itself.
-        names = _as_key_tuple(key)
-        for column in names:
-            _require_column(built, name, column)
-        table.primary_key = key if isinstance(key, str) else names
-    for name, named in (time_columns or {}).items():
-        _require_table(built, name).time_column = (
-            None if named is None else _require_column(built, name, named)
-        )
-
-
-def _joinable_inferred_links(
-    built: Mapping[str, _TableShape], inferred: Sequence[Relationship]
-) -> list[Relationship]:
-    r"""The inferred links that can join, having said which could not.
-
-    An inferred relationship is held to the same contract as an explicit one,
-    and dropped rather than refused when it fails: a caller who never asked
-    for it is not refused for a guess made on their behalf.
-    """
-    unjoinable = [link for link in inferred if not _is_joinable(built, link)]
-    _warn_of_a_link_that_cannot_join(built, unjoinable)
-    return [link for link in inferred if _is_joinable(built, link)]
-
-
-def _key_by_the_referenced_column(
-    built: Mapping[str, SourceTable], declared: Sequence[Relationship]
-) -> None:
-    r"""Key a keyless table by the column declared foreign keys refer to.
-
-    A catalog lets a foreign key refer only to a primary key or a unique
-    column, so that column identifies a row, as a lone unique column does when
-    the engine infers a key. Before the keys are checked, so this one is too.
-    Foreign keys naming different columns of one table leave it keyless.
-    """
-    referenced: dict[str, set[str]] = {}
-    for link in declared:
-        referenced.setdefault(link.target_table, set()).add(link.target_column)
-    for name, columns in referenced.items():
-        if built[name].primary_key is None and len(columns) == 1:
-            built[name].primary_key = next(iter(columns))
-
-
-def _checked_links(
-    built: Mapping[str, _TableShape], relationships: Sequence[Relationship]
-) -> list[Relationship]:
-    links = list(relationships)
-    for link in links:
-        if not isinstance(link, Relationship):
-            raise StructuredDataError(
-                f'a relationship must be a Relationship, got '
-                f'{type(link).__name__}: {link!r}. Build one with '
-                f'Relationship(source_table, source_column, '
-                f'target_table, target_column)',
-                code='INVALID_REQUEST',
-            )
-        _require_column(built, link.source_table, link.source_column)
-        _require_column(built, link.target_table, link.target_column)
-        _require_joinable(built, link)
-    return links
-
-
 #: How a message names each source's engine.
 _BACKEND_NAMES = {
     'databricks': 'Databricks',
@@ -1518,127 +1597,6 @@ _SKIP_THE_CHECK = (
     'Name another key with primary_keys=, or pass check_keys=False to skip '
     '(one full scan per table).'
 )
-
-
-def _check_source_keys(
-    source: Any,
-    built: Mapping[str, SourceTable],
-    engine_tables: Mapping[str, Any],
-    found: Mapping[str, tuple[str, ...]],
-    stated: AbstractSet[str],
-    *,
-    infer_links: bool,
-) -> None:
-    r"""Hold the keys of tables in a source to the rules a key of frames
-    meets, counting the rows where they are.
-
-    A stated key, from ``primary_keys=`` or the catalog, warns at up to 1% of
-    rows repeating a value and is refused above that. A key the engine
-    inferred is kept up to the same 1% and declined beyond it, as inference
-    over frames declines it. A key the source enforces is not counted.
-
-    Args:
-        source: The source the tables are in.
-        built: The tables, keyed as they will be.
-        engine_tables: The engine's reading of each table, by schema name.
-        found: The key each table had before ``primary_keys=`` was applied.
-        stated: The tables whose key ``primary_keys=`` named.
-        infer_links: Whether relationships will be inferred, which is when a
-            declined key is worth a word.
-    """
-    from sdm_relational_engine.rfm.base import count_keys
-
-    for table in built.values():
-        object.__setattr__(table, 'duplicate_keys', 0)
-    keyed = {
-        name: _as_key_tuple(table.primary_key)
-        for name, table in built.items()
-        if table.primary_key is not None
-    }
-    if not keyed:
-        return
-    counts = dict(
-        zip(
-            keyed,
-            count_keys([(engine_tables[name], keyed[name]) for name in keyed]),
-            strict=True,
-        )
-    )
-    backend = _BACKEND_NAMES.get(source.backend, source.backend)
-    declined: dict[str, Any] = {}
-    for name, names in keyed.items():
-        count = counts[name]
-        rows, distinct = count.rows, count.distinct
-        if rows is None or distinct is None:
-            continue
-        table = built[name]
-        declared = (
-            name not in stated
-            and names == found[name]
-            and engine_tables[name]._declares_key(names)
-        )
-        repeats = count.repeats
-        if name not in stated and not declared:
-            # Inferred, so declined as inference over a frame declines it.
-            if distinct < rows * _KEY_UNIQUENESS:
-                declined[name] = count
-                table.primary_key = None
-                continue
-        elif count.nulls and name in stated:
-            empty = names if len(names) == 1 else None
-            missing = _a_key_missing_values(name, names, count.nulls, empty)
-            raise StructuredDataError(
-                f'{missing}. {_SKIP_THE_CHECK}', code='INVALID_REQUEST'
-            )
-        elif _too_many_repeats(repeats, rows):
-            found_out = _not_unique_enough(
-                name, names, repeats, rows, count.example
-            )
-            unenforced = (
-                f'{backend} does not enforce declared keys. '
-                if declared and not count.enforced
-                else ''
-            )
-            raise StructuredDataError(
-                f'{found_out}. {unenforced}{_SKIP_THE_CHECK}',
-                code='INVALID_REQUEST',
-            )
-        if count.nulls:
-            _warn_a_key_has_no_value(name, '.'.join(names), count.nulls)
-        if repeats:
-            _warn_a_key_repeats(
-                name, names, repeats, count.example, _NAME_ANOTHER_KEY
-            )
-        object.__setattr__(table, 'duplicate_keys', repeats)
-
-    if not infer_links or not declined:
-        return
-    named_elsewhere = _tables_naming_each_column(built)
-    keyed_by = {
-        table.primary_key
-        for table in built.values()
-        if isinstance(table.primary_key, str)
-    }
-    for name, count in declined.items():
-        column = keyed[name][0]
-        rows, distinct = count.rows or 0, count.distinct or 0
-        if (
-            len(keyed[name]) > 1
-            or column in keyed_by
-            or not named_elsewhere.get(column, set()) - {name}
-            or distinct < rows * _NEARLY_A_KEY
-            or not count.repeats
-        ):
-            continue
-        _warn_a_key_was_declined(
-            name,
-            column,
-            count.repeats,
-            rows,
-            count.example,
-            f'Keep one row per {column!r} in the source, or name a column '
-            f'that does identify a row with primary_keys={{{name!r}: ...}}.',
-        )
 
 
 def _require_table_names(tables: Mapping[str, str]) -> None:
@@ -1726,144 +1684,17 @@ def _invalid_name_chars(name: str) -> list[str]:
     return [char for char in _INVALID_NAME_CHARS if char in name]
 
 
-def _describe_source_table(
-    engine_table: Any, source_name: str, *, name: str | None = None
-) -> SourceTable:
-    r"""A table in place, described from what the engine read of it.
-
-    A column whose values have no scalar form on the wire, such as a list,
-    binary or a duration, is left out and named, rather than refusing the
-    whole table:
-    the caller cannot change a warehouse table's columns to suit a request, and
-    the engine then leaves it unread as well. So is a column whose name a
-    predictive query cannot say, such as a metric view's dimension `a.b`.
+def names_a_query_cannot_say(schema: Schema) -> bool:
+    r"""Whether a table of ``schema`` holds a column whose name the old
+    validator's language cannot say: one holding a dot, a backtick or a
+    line break. Only the core route keeps such a column, and only the core
+    resolves a query naming it.
     """
-    from sdm_client.materializers.sources import wire_dtype
-
-    columns: dict[str, Column] = {}
-    unreadable: list[str] = []
-    unnamable: list[str] = []
-    for engine_column in engine_table.columns:
-        if _invalid_name_chars(engine_column.name):
-            unnamable.append(repr(engine_column.name))
-            continue
-        dtype = wire_dtype(engine_column.dtype)
-        stype = str(getattr(engine_column.stype, 'value', engine_column.stype))
-        if dtype is None or stype not in SEMANTIC_TYPES:
-            unreadable.append(f'{engine_column.name} ({engine_column.dtype})')
-            continue
-        columns[engine_column.name] = Column(engine_column.name, dtype, stype)
-    if unreadable:
-        warnings.warn(
-            f'{name or engine_table.name} leaves out {", ".join(unreadable)}: a '
-            f'request carries one scalar value per cell, and these hold none',
-            category=SDMWarning,
-            stacklevel=caller_stacklevel(),
-        )
-    if unnamable:
-        warnings.warn(
-            f'{name or engine_table.name} leaves out {", ".join(unnamable)}: '
-            f'a predictive query cannot name a column holding a dot, a '
-            f'backtick or a line break',
-            category=SDMWarning,
-            stacklevel=caller_stacklevel(),
-        )
-    table = SourceTable(
-        name=name or engine_table.name,
-        source_name=source_name,
-        columns=columns,
+    return any(
+        _invalid_name_chars(name)
+        for table in schema.tables.values()
+        for name in table.columns
     )
-    keys = tuple(engine_table.primary_key_columns or ())
-    if keys and all(key in columns for key in keys):
-        table.primary_key = keys[0] if len(keys) == 1 else keys
-    time = engine_table.time_column
-    if time is not None and time.name in columns and time.name not in keys:
-        table.time_column = time.name
-    return table
-
-
-def _model_links(
-    graph: Any, built: Mapping[str, SourceTable], as_named: Mapping[str, str]
-) -> list[Relationship]:
-    r"""The relationships a semantic model's joins make, as the schema says
-    them.
-
-    Each join links the many side's key to the one side's, which the model
-    makes that table's primary key. A join to a table the schema did not take
-    links nothing.
-    """
-    links = []
-    for edge in graph.edges:
-        source_name = as_named.get(edge.src_table)
-        target_name = as_named.get(edge.dst_table)
-        if source_name is None or target_name is None:
-            continue
-        target = built[target_name]
-        source = built[source_name]
-        key = target.primary_key
-        if not isinstance(key, str) or edge.fkey not in source.columns:
-            continue
-        links.append(
-            Relationship(
-                source_table=source_name,
-                source_column=edge.fkey,
-                target_table=target_name,
-                target_column=key,
-            )
-        )
-    return links
-
-
-def _declared_links(
-    graph: Any, tables: Mapping[str, str], built: Mapping[str, SourceTable]
-) -> list[Relationship]:
-    r"""The foreign keys the source's catalog declares between these tables.
-
-    A constraint naming a table outside the schema links nothing here, and
-    one naming a column the schema left out is skipped with it.
-    """
-    # `dst_table` is qualified the way `source_name` is, not the way the caller
-    # named the table.
-    by_source_name = {graph[name].source_name: name for name in tables}
-    links = []
-    for name in tables:
-        for key in graph[name].source_foreign_keys:
-            target = _table_named(by_source_name, key.dst_table)
-            if target is None:
-                continue
-            if key.name not in built[name].columns:
-                continue
-            if key.primary_key not in built[target].columns:
-                continue
-            links.append(
-                Relationship(
-                    source_table=name,
-                    source_column=key.name,
-                    target_table=target,
-                    target_column=key.primary_key,
-                )
-            )
-    return links
-
-
-def _table_named(
-    by_source_name: Mapping[str, str], dst_table: str
-) -> str | None:
-    r"""The table a foreign key's target names, matched exactly if it can be.
-
-    SQLite and Databricks fold names to lower case, so a case-insensitive match
-    still counts, but only when one table answers to it. PostgreSQL and
-    Snowflake can hold both `"Parent"` and `parent`, and guessing between them
-    would attach the key to the wrong one.
-    """
-    if dst_table in by_source_name:
-        return by_source_name[dst_table]
-    folded = [
-        name
-        for source_name, name in by_source_name.items()
-        if source_name.lower() == dst_table.lower()
-    ]
-    return folded[0] if len(folded) == 1 else None
 
 
 def _require_column(
@@ -1876,6 +1707,30 @@ def _require_column(
             code='INVALID_REQUEST',
         )
     return column
+
+
+def _edits_on_the_core(schema: Any) -> bool:
+    """Frame provenance or retained catalog facts select shared edit policy.
+
+    Frame origin is independent of catalog facts: it must never make a frame
+    column appear described by a warehouse provider.
+    """
+    if schema is not None and vars(schema).get('_core_origin') in (
+        'frames',
+        'declared',
+    ):
+        return True
+    return _described_on_the_core(schema)
+
+
+def _described_on_the_core(schema: Any) -> bool:
+    """Whether columns retain actual catalog provenance from core description."""
+    tables = vars(schema).get('_tables') if schema is not None else None
+    return any(
+        column._source is not None
+        for table in (tables or {}).values()
+        for column in table.columns.values()
+    )
 
 
 def _as_key_tuple(key: Any) -> tuple[str, ...]:
@@ -1909,67 +1764,6 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _infer_table(name: str, frame: pd.DataFrame) -> Table:
-    r"""Describe a frame as a table; see
-    :func:`_infer_table_and_time_column`.
-    """
-    return _infer_table_and_time_column(name, frame)[0]
-
-
-def _infer_table_and_time_column(
-    name: str, frame: pd.DataFrame
-) -> tuple[Table, TimeColumnChoice]:
-    r"""Describe a frame as a table, inferring the types, key and time column,
-    and return with it how the time column was chosen.
-
-    The cells are checked before any column is described. Typing a column asks
-    for its distinct values, and a list cell makes that raise `unhashable
-    type: 'list'` from inside pandas, naming nothing the caller wrote.
-    `Table.__post_init__` asks the same question again for a table built by
-    hand, which is the route that has not passed through here.
-    """
-    if frame.columns.has_duplicates:
-        duplicates = sorted(
-            {str(c) for c in frame.columns[frame.columns.duplicated()]}
-        )
-        raise StructuredDataError(
-            f'table {name!r} has duplicate column name(s) {duplicates}',
-            code='INVALID_REQUEST',
-        )
-    non_strings = [c for c in frame.columns if not isinstance(c, str)]
-    if non_strings:
-        raise StructuredDataError(
-            f'table {name!r} column names must be strings; got {non_strings}',
-            code='INVALID_REQUEST',
-        )
-    for column in frame.columns:
-        require_scalar_cells(frame[column], f'{name}.{column}')
-
-    columns = {
-        column: _column(frame[column], column) for column in frame.columns
-    }
-    table = Table(name=name, data=frame, columns=columns)
-    inferred = _infer_primary_key(frame, columns)
-    if inferred is not None and frame[inferred].isna().any():
-        # Tolerated here and refused on assignment, the same way a nearly
-        # unique column is: inference is a guess and a caller's key is an
-        # assertion. Refusing would break `Schema.from_data` on frames that
-        # worked before, including any relationship pointing at this table,
-        # but the engine drops these rows without a word, so the guess is
-        # said out loud.
-        _warn_a_key_has_no_value(
-            name, inferred, int(frame[inferred].isna().sum())
-        )
-        object.__setattr__(table, 'primary_key', inferred)
-        table._adopt_key(inferred)
-        return table, _infer_time_column(table, frame)
-    # Assigning the key is what marks its column, counts what the uniqueness
-    # threshold tolerated and says so; doing any of it a second time here would
-    # report the same duplicate twice, from inside this module.
-    table.primary_key = inferred
-    return table, _infer_time_column(table, frame)
-
-
 def _copy_table(table: _T) -> _T:
     r"""The same table again, field for field, judging nothing.
 
@@ -1983,7 +1777,7 @@ def _copy_table(table: _T) -> _T:
     """
     copied = type(table).__new__(type(table))
     object.__setattr__(copied, 'name', table.name)
-    for held in ('data', 'source_name'):
+    for held in ('data', 'source_name', '_calculated_columns'):
         if hasattr(table, held):
             object.__setattr__(copied, held, getattr(table, held))
     object.__setattr__(
@@ -1991,8 +1785,15 @@ def _copy_table(table: _T) -> _T:
         'columns',
         {name: _copy_column(column) for name, column in table.columns.items()},
     )
-    for carried in ('primary_key', 'time_column', 'duplicate_keys'):
-        object.__setattr__(copied, carried, getattr(table, carried))
+    if getattr(table, '_core_origin', None) == 'frames':
+        object.__setattr__(copied, '_core_origin', 'frames')
+    for carried in (
+        'primary_key',
+        'time_column',
+        'end_time_column',
+        'duplicate_keys',
+    ):
+        object.__setattr__(copied, carried, getattr(table, carried, None))
     for column in copied.columns.values():
         object.__setattr__(column, '_table', copied)
     return copied
@@ -2016,6 +1817,9 @@ def _copy_column(column: Column) -> Column:
         '_stype_before_key',
     ):
         object.__setattr__(made, field_name, getattr(column, field_name))
+    # What the source said of it, frozen, so shared; a column
+    # unpickled from before it had any holds none.
+    object.__setattr__(made, '_source', getattr(column, '_source', None))
     return made
 
 
@@ -2061,42 +1865,6 @@ def _stype_of(series: pd.Series, inferred: str | None = None) -> str:
     return 'categorical' if distinct <= _MAX_CATEGORICAL_CARDINALITY else 'text'
 
 
-def _infer_primary_key(
-    frame: pd.DataFrame, columns: Mapping[str, Column]
-) -> str | None:
-    r"""The column that identifies a row, if one is obvious.
-
-    Requires a key-shaped name, values that can identify a row, and near-total
-    uniqueness. Uniqueness alone would nominate any high-cardinality
-    measurement, and a name alone would nominate a foreign key.
-
-    **Uniqueness here is a property of the frame, not of the table it came
-    from.** A foreign key drawn sparsely enough looks exactly like a key: take
-    200 rows of a fact table whose real key is `(order, line)` and `order`
-    will very likely hold 200 distinct values, because two rows of the same
-    order are unlikely to be drawn together. Nothing in the frame distinguishes
-    that from a genuine key, so a frame that is a sample can nominate a foreign
-    key and no amount of checking here will notice. Declare the key when the
-    frame is a sample; inference is for the case where the frame is the table.
-    """
-    if len(frame) == 0:
-        return None
-    for name, column in columns.items():
-        lowered = name.lower()
-        if not lowered.endswith(_KEY_SUFFIXES):
-            continue
-        if not supports_dtype('ID', column.dtype):
-            # A key-shaped name on values that cannot identify a row, such as a
-            # bool
-            # column called `id`, say. Nominating it would refuse the frame at
-            # construction for a key nobody asked for.
-            continue
-        distinct = frame[name].nunique(dropna=True)
-        if distinct >= len(frame) * _KEY_UNIQUENESS:
-            return name
-    return None
-
-
 #: Above this share of rows being distinct, a string column's value count is
 #: bounded by the frame rather than by the column, so it says nothing about
 #: how many values the column really holds.
@@ -2106,79 +1874,6 @@ _UNSATURATED = 0.5
 #: the frame to be what decides: two values in four rows are unsaturated by
 #: the measure above and are still nowhere near becoming sixty-five.
 _WITHIN_REACH = 0.5
-
-
-def _warn_stype_was_decided_by_the_rows_read(
-    tables: Mapping[str, Table],
-) -> None:
-    r"""Say when `categorical` was decided by the size of the frame.
-
-    A string column is called `categorical` when it holds few enough distinct
-    values and `text` otherwise, and the count is taken from the frame handed
-    in. For a column whose values repeat that is the same answer at any size:
-    `state` holds 27 values in ten thousand rows and in a hundred thousand.
-    For one that does not, the count is not a property of the column at all.
-    It is a property of how many rows were read, and reading more rows moves
-    it. So a request written against `df.head(100)` and then pointed at the
-    table describes a column two different ways, with nothing in between to
-    say the description changed.
-
-    Which is worth saying only where it can happen, and that takes both of two
-    measures. The first is whether the values have run out: a column whose
-    distinct count tracks its row count has not shown how many values it has,
-    only how many rows were looked at. The second is whether there is anything
-    within reach. Two values in four rows have not saturated either, and are
-    nowhere near becoming sixty-five, so saying so is noise on every small
-    frame. Nearness to the threshold alone is not the signal, because 53
-    distinct in 100 rows is not near 64 by any measure and still flips.
-
-    This is the same property the primary-key inference documents about
-    uniqueness, and it has the same remedy, which is to say what the column is
-    when the frame is a sample.
-
-    The count decides the meaning for strings only, which is what this is
-    about: a bool is categorical by its type rather than by how many values it
-    holds. That makes the dtype check a precondition rather than a filter
-    today, since the only other categorical dtype is bool and two values never
-    come within reach of the limit. It is stated so that a dtype added to the
-    categorical side later does not inherit a message about a count that did
-    not decide it.
-
-    The share is measured against the rows that hold a value, because that is
-    what the distinct count was taken from. A column of forty values among a
-    hundred and sixty nulls has saturated nothing, and dividing by the height
-    of the frame said it had.
-    """
-    for name, table in tables.items():
-        frame = table.data
-        if frame is None or len(frame) == 0:
-            continue
-        for column, meta in table.columns.items():
-            if meta.stype_declared or meta.stype != 'categorical':
-                continue
-            if meta.dtype != 'string' or column not in frame:
-                continue
-            distinct = frame[column].nunique(dropna=True)
-            present = int(frame[column].count())
-            if distinct < present * _UNSATURATED:
-                continue
-            if distinct < _MAX_CATEGORICAL_CARDINALITY * _WITHIN_REACH:
-                continue
-            warnings.warn(
-                f'{name}.{column} holds {distinct} distinct values in the '
-                f'{present} rows that have one, so the rows ran out before '
-                f'the values did and the count is a measure of the frame '
-                f'rather than of the column. It is read as categorical here '
-                f'because {distinct} is at most '
-                f'{_MAX_CATEGORICAL_CARDINALITY}; on more rows the same '
-                f'column could pass that and be read as text, which the '
-                f'models treat differently. If this frame is a sample, say '
-                f'what the column is with '
-                f"schema[{name!r}][{column!r}].stype = 'categorical' (or "
-                f"'text'), so that it does not change under a larger one.",
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
-            )
 
 
 def _warn_dates_stored_as_text(table: Table) -> str | None:
@@ -2231,129 +1926,6 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
         )
         return name
     return None
-
-
-def _infer_time_column(table: Table, frame: pd.DataFrame) -> TimeColumnChoice:
-    r"""Set the time column, and return how it was chosen.
-
-    The rule is the one the engine applies to a source, so a frame and the
-    same rows in a warehouse infer the same column.
-    """
-    stamps = [
-        name
-        for name, column in table.columns.items()
-        if column.stype == 'timestamp' and name != table.primary_key
-    ]
-    choice = choose_time_column(frame, stamps)
-    table.time_column = choice.column
-    return choice
-
-
-def _settle_edit_stamps(
-    built: Mapping[str, _TableShape],
-    chose: dict[str, TimeColumnChoice | None],
-    time_columns: Mapping[str, str | None] | None,
-    links: Sequence[Relationship],
-) -> None:
-    r"""Take or refuse a lone edit stamp by whether another table links to
-    the table it is in.
-
-    A table something links to is an entity and refuses the stamp of its
-    last edit; one nothing links to is a log and takes it. Decided on the
-    schema's final links, the one fact both paths share by now: the two
-    guess keys differently, so a log's `update_id` is a key from a frame
-    and none from a source, and a rule on the key made them disagree.
-    """
-    linked = {link.target_table for link in links}
-    for name, choice in chose.items():
-        if choice is None or name in (time_columns or {}):
-            continue
-        table = built[name]
-        settled = choice.for_links(name in linked)
-        if settled != choice:
-            chose[name] = settled
-            table.time_column = settled.column
-
-
-def _warn_how_time_columns_were_inferred(
-    schema: Schema,
-    chose: Mapping[str, TimeColumnChoice | None],
-    given: Mapping[str, str | None] | None,
-) -> None:
-    """Say, in one warning, which time columns inference took or refused on
-    a guess, and the override that settles each.
-
-    A guess about a column's name or values decides what the model may know
-    at the moment it answers, so it is said out loud: a column taken as the
-    earliest of several, a stamp of the last edit taken as the only timestamp
-    left, one taken although the rows read hold one value or mostly none,
-    because the query over the whole table failed, and, for a table left
-    without a time column, each timestamp refused and why. That table fails its first windowed query, and the refusal
-    cannot say which of its columns inference passed over.
-
-    Only where something could be windowed: a lone table is asked
-    single-table questions, which have no window. A table whose time column
-    the caller named is not mentioned.
-    """
-    tables = schema.tables
-    if len(tables) < 2 and not schema.relationships:
-        return
-    lines: list[str] = []
-    for name, table in sorted(tables.items()):
-        choice = chose.get(name)
-        if choice is None or name in (given or {}):
-            continue
-        column = table.time_column
-        if column is not None and column == choice.column:
-            if choice.instead_of:
-                one = len(choice.instead_of) == 1
-                lines.append(
-                    f'{name}.{column} was taken as the time column rather '
-                    f'than {_and_list(choice.instead_of)}, which '
-                    f'{"truncates or casts" if one else "truncate or cast"} '
-                    f'it, since it says when a row happened more precisely. '
-                    f'If a question should count by '
-                    f'{"it" if one else "one of those"}, name it: '
-                    f'time_columns={{{name!r}: {choice.instead_of[0]!r}}}.'
-                )
-            if choice.how == 'earliest':
-                others = [other for other in choice.among if other != column]
-                lines.append(
-                    f'{name}.{column} was taken as the time column because '
-                    f'its values start earliest of {_and_list(choice.among)}. '
-                    f'If another says when a row became true, name it: '
-                    f'time_columns={{{name!r}: {others[0]!r}}}. If none does, '
-                    f'clear it: time_columns={{{name!r}: None}}.'
-                )
-            elif choice.how == 'edit_stamp':
-                lines.append(
-                    f'{name}.{column} was taken as the time column although '
-                    f'it looks like when a row was last changed, because the '
-                    f'table has no other timestamp and no table links to it, '
-                    f'so it reads as a log of changes. If it does not say when a row '
-                    f'became true, clear it: time_columns={{{name!r}: None}}.'
-                )
-            lines.extend(
-                taken_unchecked(name, doubt, f'time_columns={{{name!r}: None}}')
-                for doubt in choice.unconfirmed
-                if doubt.column == column
-            )
-        elif column is None:
-            lines.extend(
-                f'{name}.{rejected.column} was not taken as the time column '
-                f'because {rejected.why}. If it does say when a row became '
-                f'true, name it: '
-                f'time_columns={{{name!r}: {rejected.column!r}}}.'
-                for rejected in choice.rejected
-                if rejected.column in table.columns
-            )
-    if lines:
-        warnings.warn(
-            'Some time columns were inferred, or refused, on a guess about '
-            'what a column holds:\n' + '\n'.join(f'- {line}' for line in lines),
-            category=SDMWarning,
-            stacklevel=caller_stacklevel(),
-        )
 
 
 def _warn_table_cannot_be_linked_to(
@@ -2681,6 +2253,13 @@ class _Links(list):
         object.__setattr__(self, '_schema', schema)
 
     def _resettle(self, links: list[Relationship]) -> None:
+        if _edits_on_the_core(self._schema):
+            # A core-built schema: the core checks and makes the edit, and
+            # its answer is stored in this list.
+            from sdm_client._rust import edits
+
+            if edits.relationships(self._schema, links, into=self):
+                return
         settled = self._schema._settle(links)
         super().clear()
         super().extend(settled)
@@ -2802,96 +2381,6 @@ def _and_list(names: Sequence[str]) -> str:
     return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
 
 
-def _infer_relationships(
-    tables: Mapping[str, _TableShape],
-) -> list[Relationship]:
-    r"""Link a column to another table's primary key of the same name.
-
-    Deliberately conservative: only an exact name match against a declared
-    primary key counts. A wrong link changes what the model is shown, and is
-    harder to notice than a missing one, which simply narrows the question.
-
-    Which is why a name more than one table is keyed by links nothing. `ID` on
-    four tables identifies a row in each of them and names a parent in none, so
-    choosing one would be a guess in the direction this is supposed to avoid.
-    Value overlap cannot break the tie either: a
-    fabricated edge has been measured joining 97% of rows and a real one 91%,
-    so no threshold separates them.
-    """
-    ambiguous: set[str] = set()
-    keys: dict[str, str] = {}
-    for name, table in tables.items():
-        key = table.primary_key
-        if not isinstance(key, str):
-            continue
-        if key in keys:
-            ambiguous.add(key)
-        keys[key] = name
-
-    links = []
-    for name, table in tables.items():
-        for column in table.columns:
-            target = keys.get(column)
-            if target is None or target == name or column in ambiguous:
-                continue
-            links.append(
-                Relationship(
-                    source_table=name,
-                    source_column=column,
-                    target_table=target,
-                    target_column=column,
-                )
-            )
-    return links
-
-
-def _warn_of_a_link_that_cannot_join(
-    tables: Mapping[str, _TableShape], dropped: Sequence[Relationship]
-) -> None:
-    """Say why an inferred or declared link could not join.
-
-    Dropping it is right: joining `int64` to `string` matches nothing, and an
-    edge that matches nothing is worse than no edge. But it was dropped in
-    silence, and the table then either goes unsent or the query is refused for
-    a foreign key that looks as though it should exist.
-    """
-    for link in dropped:
-        source = tables[link.source_table].columns[link.source_column]
-        target_table = tables[link.target_table]
-        target = target_table.columns[link.target_column]
-        key = _as_key_tuple(target_table.primary_key)
-        if key != (link.target_column,):
-            # A declared foreign key may name a unique column that is not the
-            # key, which is no fault of the dtypes.
-            has = (
-                f'the primary key of {link.target_table!r} is '
-                f'{_and_list(list(key))}'
-                if key
-                else f'{link.target_table!r} has no primary key'
-            )
-            warnings.warn(
-                f'{link.source_table}.{link.source_column} refers to '
-                f'{link.target_table}.{link.target_column}, but {has}. A '
-                f'relationship joins to a primary key, so none was made from '
-                f'it. Pass '
-                f'primary_keys={{{link.target_table!r}: '
-                f'{link.target_column!r}}} if {link.target_column!r} '
-                f'identifies a row of {link.target_table!r}.',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
-            )
-            continue
-        warnings.warn(
-            f'{link.source_table}.{link.source_column} names the key of '
-            f'{link.target_table!r} and holds {source.dtype!r} where that key '
-            f'holds {target.dtype!r}, which cannot match, so no relationship '
-            f'was made from it. Store the two as one type if they are the same '
-            f'identifier.',
-            category=SDMWarning,
-            stacklevel=caller_stacklevel(),
-        )
-
-
 def _require_joinable(
     tables: Mapping[str, _TableShape], link: Relationship
 ) -> None:
@@ -2942,20 +2431,26 @@ def _join_family(dtype: str) -> str:
 
 
 def supports_dtype(stype: str, dtype: str) -> bool:
-    r"""Whether a column of ``dtype`` can mean ``stype``.
+    r"""Check known semantic/storage pairs against the shared Rust type policy.
 
-    Answered by the language rather than by a second table kept here, so the
-    two cannot drift. An unrecognised pair is allowed through: this is a guard
-    against a known-wrong combination, not a whitelist.
+    Unknown names pass through for the operation that validates them.
     """
-    from predictive_query.schema.typing import Dtype, Stype
-
-    try:
-        return Stype(stype).supports_dtype(
-            Dtype(_WIRE_TO_PQL_DTYPE.get(dtype, dtype))
-        )
-    except ValueError:
+    named = language_dtype(dtype)
+    if stype not in STYPES or named not in DTYPES:
         return True
+    return (stype, named) in _meanings(_the_core())
+
+
+def _the_core() -> Any:
+    from sdm_client import _native
+
+    return _native
+
+
+@functools.cache
+def _meanings(native: Any) -> frozenset[tuple[str, str]]:
+    r"""The core's table of each meaning a data type carries."""
+    return frozenset((stype, dtype) for stype, dtype in native.MEANINGS)
 
 
 class _KeyQuality(NamedTuple):
@@ -2969,14 +2464,6 @@ class _KeyQuality(NamedTuple):
     duplicates: int
     nulls: int
     example: Any
-
-
-def _is_joinable(tables: Mapping[str, _TableShape], link: Relationship) -> bool:
-    try:
-        _require_joinable(tables, link)
-    except StructuredDataError:
-        return False
-    return True
 
 
 def _the_key_of(table: str, names: Sequence[str]) -> str:
@@ -3040,20 +2527,6 @@ def _warn_a_key_repeats(
     )
 
 
-def _warn_a_key_has_no_value(table: str, column: str, missing: int) -> None:
-    r"""Said of a key that was inferred rather than stated, which a null in
-    it does not cost: inference is a guess, and refusing would break tables
-    that worked before.
-    """
-    warnings.warn(
-        f'{table}.{column} identifies a row, but {missing:,} row(s) have no '
-        f'value for it. Those rows cannot be scored and the model will not '
-        f'see them; fill or drop them, or name a different primary key.',
-        category=SDMWarning,
-        stacklevel=caller_stacklevel(),
-    )
-
-
 def _warn_a_key_was_declined(
     table: str,
     column: str,
@@ -3098,90 +2571,120 @@ def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:
     return _KeyQuality(duplicates, nulls, example)
 
 
-def to_schema_definition(schema: Schema) -> Any:
-    r"""This schema as the language's own schema definition.
-
-    The language resolves a query against names and types with no rows
-    attached, which is what this hands it. Built here rather than in the query
-    module so that a schema has exactly one translation into what PQL reads.
-
-    `TableDefinition.pkey` is a single column name, so the language has no
-    form for a composite key and cannot be given one. It is dropped rather
-    than refused, because the engine does support one and the request that
-    follows carries it. What the drop costs is that the language resolves the
-    query against a table it believes has no identity, so a question that
-    needs one is answered as though the table had none, which is why it is
-    said rather than done quietly.
-    """
-    from predictive_query.schema.definition import (
-        ColumnKey,
-        ColumnKeyGroup,
-        SchemaDefinition,
+def say_a_composite_key_is_dropped(name: str, key: Sequence[str]) -> None:
+    r"""Say that table ``name``'s composite ``key`` is not one a query can
+    name, so the query is resolved as though it had none: one place, for
+    the language's schema definition and the core's query schema alike."""
+    warnings.warn(
+        f'table {name!r} has the composite primary key '
+        f'{list(key)}, and a predictive query can only name a single '
+        f'key column, so this query is resolved against {name!r} as '
+        f'though it had no key. The request still carries the '
+        f'composite key; only the query does not see it. Name a '
+        f'single column as the primary key if the query needs to '
+        f'identify a row of {name!r}.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
     )
-    from predictive_query.schema.table import Column as PQLColumn
-    from predictive_query.schema.table import TableDefinition
-    from predictive_query.schema.typing import Dtype, Stype
 
-    tables = {}
+
+#: The data types and meanings the contract's ``QuerySchema`` names, as it
+#: spells them (``sdm_contract::ops::Dtype`` and ``Stype``, the language's
+#: own): a column of another is not one a query can name, and is left out
+#: of the query's schema, as the language's own schema leaves it out.
+DTYPES = frozenset(
+    {
+        'bool',
+        'int',
+        'byte',
+        'int16',
+        'int32',
+        'int64',
+        'float',
+        'float32',
+        'float64',
+        'string',
+        'binary',
+        'date',
+        'time',
+        'timedelta',
+        'floatlist',
+        'intlist',
+        'stringlist',
+        'unsupported',
+    }
+)
+STYPES = frozenset(
+    {
+        'numerical',
+        'categorical',
+        'multicategorical',
+        'ID',
+        'text',
+        'timestamp',
+        'sequence',
+        'image',
+        'unsupported',
+    }
+)
+
+
+def links_of(schema: Schema) -> list[list[dict[str, str]]]:
+    r"""``schema``'s relationships as the contract writes links, each
+    ``[foreign key, referenced key]``."""
+    return [
+        [
+            {'table': link.source_table, 'column': link.source_column},
+            {'table': link.target_table, 'column': link.target_column},
+        ]
+        for link in schema.relationships
+    ]
+
+
+def query_schema(schema: Schema) -> dict[str, Any]:
+    r"""``schema`` as the contract's ``QuerySchema``, as the language's own
+    schema reads it, written with no object of the old PQL package (rule 11), the one translation:func:`to_schema_definition` builds the
+    language's objects from: each column of a
+    data type and meaning a query can name, by the language's names; a
+    single-column key, a composite one said and dropped
+    (func:`say_a_composite_key_is_dropped`); each link
+    a group of its two ends, in order of table and column."""
+    tables = []
     for name, table in schema.tables.items():
         columns = []
         for column in table.columns.values():
-            try:
-                dtype = Dtype(
-                    _WIRE_TO_PQL_DTYPE.get(column.dtype, column.dtype)
-                )
-                stype = Stype(column.stype)
-            except ValueError:
+            dtype = language_dtype(column.dtype)
+            stype = str(column.stype)
+            if dtype not in DTYPES or stype not in STYPES:
                 continue
             columns.append(
-                PQLColumn(name=column.name, stype=stype, dtype=dtype)
+                {'name': column.name, 'dtype': dtype, 'stype': stype}
             )
         key = table.primary_key
         if key is not None and not isinstance(key, str):
-            warnings.warn(
-                f'table {name!r} has the composite primary key '
-                f'{list(key)}, and a predictive query can only name a single '
-                f'key column, so this query is resolved against {name!r} as '
-                f'though it had no key. The request still carries the '
-                f'composite key; only the query does not see it. Name a '
-                f'single column as the primary key if the query needs to '
-                f'identify a row of {name!r}.',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
-            )
-        tables[name] = TableDefinition(
-            cols=columns,
-            pkey=key if isinstance(key, str) else None,
-            time_col=table.time_column,
+            say_a_composite_key_is_dropped(name, key)
+        tables.append(
+            {
+                'name': name,
+                'columns': columns,
+                # An empty name is none, as the language's table reads it.
+                'primary_key': key if isinstance(key, str) and key else None,
+                'time_column': table.time_column or None,
+                'end_time_column': getattr(table, 'end_time_column', None),
+            }
         )
-
-    groups = [
-        ColumnKeyGroup(
-            # The group is documented as sorted and deduped, and a ColumnKey
-            # has no ordering of its own, so sort on what it holds.
-            columns=tuple(
-                sorted(
-                    (
-                        ColumnKey(link.source_table, link.source_column),
-                        ColumnKey(link.target_table, link.target_column),
-                    ),
-                    key=lambda key: (key.table_name, key.col_name),
-                )
-            )
-        )
-        for link in schema.relationships
+    links = [
+        sorted(link, key=lambda end: (end['table'], end['column']))
+        for link in links_of(schema)
     ]
-    return SchemaDefinition(tables=tables, col_groups=groups)
+    return {'tables': tables, 'links': links}
 
 
-# The wire spells a few types differently from the language.
-_WIRE_TO_PQL_DTYPE = {
-    'int64': 'int',
-    'int32': 'int',
-    'float64': 'float',
-    'float32': 'float',
-    'timestamp[us]': 'time',
-    'timestamp[ns]': 'time',
-    'timestamp[ms]': 'time',
-    'timestamp[s]': 'time',
-}
+def language_dtype(dtype: str) -> str:
+    """Resolve a host dtype spelling through the shared Rust type table."""
+    return _native_dtype_names(_the_core()).get(dtype, dtype)
+
+
+@functools.cache
+def _native_dtype_names(native: Any) -> dict[str, str]:
+    return dict(native.DTYPE_NAMES)

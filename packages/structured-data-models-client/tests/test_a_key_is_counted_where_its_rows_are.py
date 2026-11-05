@@ -30,7 +30,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
@@ -85,6 +84,16 @@ def _repeating(*ids: str) -> pd.DataFrame:
 def _missing_one() -> pd.DataFrame:
     row = pd.DataFrame({'user_id': [None], 'age': [40], 'country': ['US']})
     return pd.concat([USERS, row], ignore_index=True)
+
+
+#: The code the core's route puts before a warning's words (decisions
+#: E41(i), E59(d)); the two routes are compared on the words after it.
+CORE_CODE = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
+
+
+def _bare(message: object) -> str:
+    r"""A warning's words, without the core route's leading ``[CODE] ``."""
+    return CORE_CODE.sub('', str(message))
 
 
 Build = Callable[..., Any]
@@ -240,7 +249,7 @@ class _Outcome:
                 self.repeats = schema['users'].duplicate_keys
         self.said = sorted(
             {
-                _plain(str(warning.message))
+                _plain(_bare(warning.message))
                 for warning in caught
                 if re.search(
                     r'identifies a row|named like a key|no value',

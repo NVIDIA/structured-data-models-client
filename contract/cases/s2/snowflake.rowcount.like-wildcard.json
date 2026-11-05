@@ -1,0 +1,66 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.rowcount.like-wildcard",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "client.predict/regression/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int8/primary-key",
+    "int8/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users RENAME TO user_s",
+      "ALTER TABLE orders RENAME TO order_s",
+      "CREATE TABLE \"USERXS\" AS SELECT * FROM user_s WHERE user_id < 3",
+      "CREATE TABLE \"ORDERXS\" AS SELECT * FROM order_s WHERE order_id < 20"
+    ],
+    "from_source": {
+      "tables": {
+        "users": "user_s",
+        "orders": "order_s"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "Snowflake table names containing LIKE wildcard characters alongside similarly named tables with different row counts; count the exact requested table.",
+  "source": "Correctness case snowflake.rowcount.like-wildcard using the shop fixture."
+}

@@ -18,9 +18,7 @@ import sys
 from typing import Any
 
 import pandas as pd
-from sdm_client import PredictiveQuery, Request, Schema
-from sdm_client.adapters.relational import RelationalAdapter
-from sdm_client.adapters.tabular import TabularAdapter
+from sdm_client import PredictiveQuery, Request, Schema, SDMClient
 
 SNAPSHOT = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -62,25 +60,64 @@ def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
     return recorded
 
 
-def _output_sets(
-    adapter: Any, request: Any
-) -> list[tuple[str, tuple[str, ...]]]:
-    r"""The output fields worth recording for one request.
-
-    Both the adapter's defaults and an explicit narrow ask, because the two
-    answer differently and only the first is what a caller receives.
-    """
-    default = tuple(adapter.default_output(request))
+def _output_sets(request: Request):
     sets = [('', ('prediction',))]
-    if default != ('prediction',):
-        sets.append(('#default-outputs', default))
+    if request.task.kind != 'regression':
+        sets.append(('#default-outputs', None))
     return sets
+
+
+def _capture(request: Request, model: str, outputs):
+    """Record actual transport bytes; return a minimal valid scripted answer."""
+
+    class Transport:
+        url = 'http://snapshot.invalid'
+
+        def __init__(self):
+            self.calls = []
+
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(_normalize(payload))
+            table = payload['predict']['instance_table']
+            context = payload['context']['instance_table']
+            target = payload['task']['target']['column_name']
+            value = context['rows'][0][context['columns'].index(target)]
+            predictions = []
+            for i, row in enumerate(table['rows']):
+                item = {'row_index': i, 'prediction': value}
+                if model == 'kumo-relational':
+                    item['id'] = str(row[table['columns'].index('instance_id')])
+                if 'probabilities' in payload['output']['fields']:
+                    item['probabilities'] = {str(value): 1.0}
+                predictions.append(item)
+            return json.dumps(
+                {
+                    'id': 'snapshot',
+                    'model': model,
+                    'metadata': {},
+                    'predictions': predictions,
+                }
+            ).encode()
+
+        def predict(self, payload):
+            return json.loads(self.predict_body(json.dumps(payload).encode()))
+
+        def close(self):
+            pass
+
+    transport = Transport()
+    with SDMClient(url=transport.url) as client:
+        client._transport.close()
+        client._transport = transport
+        result = client.predict(request, model=model, outputs=outputs)
+    assert len(result) == request.predict_rows
+    return transport.calls
 
 
 def _tabular_cases() -> dict[str, list[dict[str, Any]]]:
     people = _people()
     unlabelled = people.head(3).drop(columns=['churn'])
-    adapter = TabularAdapter()
     cases = {
         'tabular/direct-classification': Request(
             context=people,
@@ -116,11 +153,10 @@ def _tabular_cases() -> dict[str, list[dict[str, Any]]]:
     }
     recorded: dict[str, list[dict[str, Any]]] = {}
     for name, request in cases.items():
-        for label, outputs in _output_sets(adapter, request):
-            recorded[f'{name}{label}'] = [
-                _normalize(payload)
-                for payload in adapter.prediction_plan(request, outputs)
-            ]
+        for label, outputs in _output_sets(request):
+            recorded[f'{name}{label}'] = _capture(
+                request, 'kumo-tabular', outputs
+            )
     return recorded
 
 
@@ -130,28 +166,17 @@ def _relational_cases() -> dict[str, list[dict[str, Any]]]:
         'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH people.user_id',
         schema,
     ).materialize(indices=[0, 1, 2])
-    adapter = RelationalAdapter()
     recorded: dict[str, list[dict[str, Any]]] = {}
-    for label, outputs in _output_sets(adapter, request):
-        recorded[f'relational/pql-count-aggregation{label}'] = [
-            _normalize(payload)
-            for payload in adapter.prediction_plan(request, outputs)
-        ]
+    for label, outputs in _output_sets(request):
+        recorded[f'relational/pql-count-aggregation{label}'] = _capture(
+            request, 'kumo-relational', outputs
+        )
     return recorded
-
-
-def _relational_available() -> bool:
-    try:
-        import sdm_relational_engine  # noqa: F401
-    except ImportError:  # pragma: no cover - the extra is not installed
-        return False
-    return True
 
 
 def collect() -> dict[str, Any]:
     recorded: dict[str, Any] = dict(_tabular_cases())
-    if _relational_available():
-        recorded.update(_relational_cases())
+    recorded.update(_relational_cases())
     return recorded
 
 
@@ -175,11 +200,7 @@ def main() -> int:
 
     recorded = json.loads(SNAPSHOT.read_text())
 
-    expected = {
-        name
-        for name in recorded
-        if not name.startswith('relational/') or _relational_available()
-    }
+    expected = set(recorded)
 
     if set(current) != expected:
         for name in sorted(expected - set(current)):

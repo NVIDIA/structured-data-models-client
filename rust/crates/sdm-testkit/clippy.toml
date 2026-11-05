@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Clippy's configuration for sdm-testkit alone. The dev-only test host reads
+# case files, runs DuckDB and writes observations, so the workspace's bans on
+# I/O, clocks and the environment (../../clippy.toml) are not its rules;
+# clippy reads the nearest file, so this one keeps only the version.
+msrv = "1.97"

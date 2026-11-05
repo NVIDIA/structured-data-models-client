@@ -9,55 +9,76 @@ predict for. That is always an explicit argument because a query can only
 enumerate rows that are already in the tables:
 
 >>> query = PredictiveQuery(
-...     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
-...     {'users': users_df, 'orders': orders_df},
+... 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+... {'users': users_df, 'orders': orders_df},
 ... )
 >>> request = query.materialize(indices=[1, 2, 3])
 
 :meth:`~PredictiveQuery.materialize` is the gathering step, and it is explicit
 because it is the expensive one: it parses the query, finds labelled examples
 in history, samples the neighbourhood of each entity, and encodes the result.
-Nothing is sent. What comes back is a :class:`~sdm_client.Request` gathered
+Nothing is sent. What comes back is a:class:`~sdm_client.Request` gathered
 for one model. Which one follows the schema's shape unless ``model`` says
 otherwise, and the model asked to answer it has to be that same one.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 from numbers import Integral
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import pandas as pd
-from predictive_query import RELATIONAL, TABULAR
 
+from sdm_client.base import PROFILE_MODELS
 from sdm_client.decompose import (
+    FORECAST,
+    RANKING,
     Decomposition,
-    about_the_part,
-    parts_of,
-    refuse_a_part_that_would_take_several_calls,
+    _decimal_as_typed,
+    said_as_parts_are,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
-from sdm_client.materializers.relational import (
-    refuse_more_entities_than_fit_in_memory,
-    rows_one_call_scores,
-    rows_per_call_asked_for,
-)
+from sdm_client.materializers import RelationalMaterializer
 from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
 
+#: Query validation profiles understood by the shared Rust core.
+RELATIONAL = 'RELATIONAL'
+TABULAR = 'TABULAR'
+
 if TYPE_CHECKING:
-    from predictive_query import Profile, ValidatedPredictiveQuery
+    from sdm_client._rust.results import CoreParts, CoreQuery
+
+
+def _refuse_the_task(task: str, why: str) -> NoReturn:
+    r"""The refusal of ``task=`` on a call whose query settles its kind."""
+    raise StructuredDataError(
+        f'task={task!r} settles what a single-table question is '
+        f'asking, which is the only route that has to decide. '
+        f'{why.capitalize()} resolves to its own kind, so state it in '
+        f'the query rather than beside it',
+        code='INVALID_REQUEST',
+        details={'task': repr(task)},
+    )
+
+
+def _alone(asked: Any) -> bool:
+    r"""Whether ``asked`` is a query only the core resolves, read
+    on the core route only, where the bridge is imported."""
+    from sdm_client._rust.results import CoreQuery
+
+    return isinstance(asked, CoreQuery)
 
 
 class PredictiveQuery:
     r"""A question expressed in PQL and answered from the tables in its schema.
 
-    The query is resolved and validated when :meth:`materialize` builds a
+    The query is resolved and validated when:meth:`materialize` builds a
     request.
 
     Args:
@@ -81,8 +102,41 @@ class PredictiveQuery:
         self.schema = (
             data if isinstance(data, Schema) else Schema.from_data(dict(data))
         )
-        self._tabular_materializer = TabularMaterializer(self.schema)
         self._relational_materializer = RelationalMaterializer(self.schema)
+
+    def labels(
+        self,
+        size: int,
+        *,
+        anchor_time: pd.Timestamp | str | None = None,
+        random_seed: int | None = 42,
+        max_iterations: int = 10,
+    ) -> pd.DataFrame:
+        """Compute historical ground truth without calling a model.
+
+        Returns ENTITY, ANCHOR_TIMESTAMP and TARGET columns, with at most
+        ``size`` rows. Rust evaluates the query using at most
+        ``size * max_iterations`` candidate examples. Link targets contain
+        lists of identifiers. Forecasts select one entity and return one
+        scalar target per successive anchor, capped by ``size``.
+
+        ``anchor_time='entity'`` uses each entity's timestamp for static
+        targets. A missing anchor uses historical bounds and the full
+        forecast horizon. No eligible entity is an error; eligible entities
+        with no qualifying labels produce a typed empty DataFrame.
+        Decimal categories use strings if numeric conversion would merge
+        distinct classes; zero-row output cannot observe those collisions.
+        """
+        from sdm_client._rust.labels import extract
+
+        return extract(
+            self._relational_materializer,
+            self.text,
+            size,
+            anchor_time,
+            random_seed,
+            max_iterations,
+        )
 
     def materialize(
         self,
@@ -116,7 +170,7 @@ class PredictiveQuery:
             indices: Keys of rows already present in the tables. Mutually
                 exclusive with ``predict``. On the relational route, more than
                 the endpoint scores in one call are gathered as several calls,
-                and :meth:`~sdm_client.SDMClient.predict` answers them as one.
+                and:meth:`~sdm_client.SDMClient.predict` answers them as one.
                 A question asked in parts, a ranking or a forecast, is one
                 call per part and is refused rather than batched.
             predict: Rows supplied directly for scoring. Supported for
@@ -127,7 +181,7 @@ class PredictiveQuery:
                 eligible row up to that cap, and a relational one uses up to
                 1,000.
             model: The model this request is being gathered for, as a handle
-                such as ``KumoRelational()`` or a model id. Defaults to the
+                such as ``KumoRelational`` or a model id. Defaults to the
                 schema's shape.
             candidates: The rows a ranking is over. A ranking is answered as
                 one question per candidate, so the set has to be named rather
@@ -147,7 +201,7 @@ class PredictiveQuery:
                 knows of.
 
         Returns:
-            A :class:`~sdm_client.Request` carrying the data.
+            A:class:`~sdm_client.Request` carrying the data.
 
         Raises:
             UnknownModelError: If ``model`` is an id the contract does not
@@ -190,66 +244,39 @@ class PredictiveQuery:
             predict=predict,
             num_context_samples=num_context_samples,
             options=options,
+            bounded_by_the_core=relational,
         )
-
-        # Resolved once, and against the profile this request is for, because
-        # whether it is asked as several questions is a property of the query
-        # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
-        rewritten = parts_of(
-            asked,
-            self.text,
-            list(candidates) if candidates is not None else None,
-            options,
-            self.schema,
-        )
-        if task is not None and (relational or rewritten is not None):
-            why = (
-                'a decomposed question'
-                if rewritten is not None
-                else 'a relational query'
-            )
-            raise StructuredDataError(
-                f'task={task!r} settles what a single-table question is '
-                f'asking, which is the only route that has to decide. '
-                f'{why.capitalize()} resolves to its own kind, so state it in '
-                f'the query rather than beside it',
-                code='INVALID_REQUEST',
-                details={'task': repr(task)},
-            )
-
-        if rewritten is not None:
-            return self._in_parts(
-                rewritten,
+        if relational:
+            # The call's own checks first, as for any relational query.
+            if task is not None:
+                _refuse_the_task(task, 'a relational query')
+            assert indices is not None
+            return self._on_the_core(
+                asked,
                 indices=indices,
-                predict=predict,
                 num_context_samples=num_context_samples,
-                model=model,
-                **options,
+                candidates=candidates,
+                options=options,
             )
-
-        if predict is not None:
-            return self._tabular_materializer.table(
-                query=asked,
-                predict=predict,
-                task=task,
-            )
-
-        assert indices is not None
         if not relational:
-            return self._tabular_materializer.indices(
-                query=asked,
+            if candidates is not None:
+                raise StructuredDataError(
+                    f'candidates are the rows a ranking is over, and {self.text!r} does '
+                    'not rank anything. Ask it without candidates, or rank with '
+                    '"RANK TOP k", which is the question they are for',
+                    code='INVALID_REQUEST',
+                )
+            from sdm_client._rust.tabular_materialize import materialize
+
+            return materialize(
+                self.schema,
+                asked,
                 indices=indices,
+                predict=predict,
                 num_context_samples=num_context_samples,
                 task=task,
             )
-
-        return self._relational_materializer.materialize(
-            query=asked,
-            indices=indices,
-            num_context_samples=num_context_samples,
-            options=options,
-        )
 
     @staticmethod
     def _validate_materialize_args(
@@ -262,6 +289,7 @@ class PredictiveQuery:
         predict: pd.DataFrame | None,
         num_context_samples: int | None,
         options: dict[str, Any] | None,
+        bounded_by_the_core: bool = False,
     ) -> None:
         r"""Refuse a call that cannot be gathered, in an order that advises.
 
@@ -383,7 +411,7 @@ class PredictiveQuery:
                     f'{num_context_samples!r}',
                     code='INVALID_REQUEST',
                 )
-            if num_context_samples < 1:
+            if num_context_samples < 1 and not bounded_by_the_core:
                 raise StructuredDataError(
                     'num_context_samples must be at least 1; a model predicts '
                     f'from labelled examples, and {num_context_samples} '
@@ -391,73 +419,230 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
 
-    def _in_parts(self, rewritten: Decomposition, **how: Any) -> Request:
-        r"""Gather the questions this one is asked as, and keep them together.
+    def _on_the_core(
+        self,
+        asked: CoreQuery,
+        *,
+        indices: Sequence[Any],
+        num_context_samples: int | None,
+        candidates: Sequence[Any] | None,
+        options: dict[str, Any],
+    ) -> Request:
+        r"""A query gathered on the core, which asks a forecast as one
+        regression per step and a ranking as one binary
+        question per candidate, kept together as:meth:`_in_parts`
+        keeps the parts it gathers. The core's refusals are said as this
+        client says them of any query (func:`decompose.said_as_parts_are`):
+        of the step or the candidate they happened in, which the core names,
+        and, for a query only the core resolves that the core does
+        not resolve either, with the old validator's diagnostics."""
+        given = None if candidates is None else list(candidates)
 
-        Each is gathered like any other query, because each needs the context
-        its own labels come from: what was true in the second window is not
-        what was true in the first, and whether an entity reached one
-        candidate is not whether it reached another.
+        def candidate(fields: dict[str, Any]) -> Any:
+            # A candidate the core names by its position among those given.
+            assert given is not None
+            return given[fields['candidate']]
 
-        A part is one call, which is what makes the fan-out countable, so a
-        question over more entities than one call scores is refused here
-        rather than gathered as parts that each batch.
-        """
+        from sdm_client._rust import errors
+
+        try:
+            # What only this client holds, which the core's sentences name:
+            # the question as written, and a candidate as given, its type's
+            # name and its value written as the column's type.
+            with errors.holding(
+                query=lambda fields: self.text,
+                candidate=candidate,
+                part_candidate=lambda fields: given[
+                    fields['ranking_candidate']
+                ],
+                candidate_type=lambda fields: type(candidate(fields)).__name__,
+                written=lambda fields: _decimal_as_typed(
+                    candidate(fields), fields.get('dtype')
+                ),
+            ):
+                whole = self._relational_materializer.materialize(
+                    query=asked,
+                    indices=indices,
+                    num_context_samples=num_context_samples,
+                    options=options,
+                    candidates=given,
+                )
+        except MissingExtraError:
+            raise
+        except StructuredDataError as error:
+            details = getattr(error, 'details', None) or {}
+            if (
+                _alone(asked)
+                and asked.refusal is not None
+                and error.code == 'INVALID_REQUEST'
+                and details.get('rule') is None
+                and details.get('field') == 'query'
+            ):
+                # The core does not resolve it either: the old validator's
+                # diagnostics say why, a mistyped column's among them.
+                raise asked.refusal from error
+            # The core's own words, its part's included: raised as the core
+            # raised them, with no cause chained, the details as the old
+            # route's.
+            said_as_parts_are(error, given)
+            raise
+        parts = None if whole._core is None else whole._core.parts
+        if parts is None:
+            return whole
+        if parts.kind == 'ranking':
+            assert given is not None
+            return self._kept_as_parts(whole, parts, given, indices)
+        return self._kept_as_steps(
+            whole, parts, Decomposition(FORECAST, ()), indices
+        )
+
+    def _kept_as_parts(
+        self,
+        whole: Request,
+        parts: CoreParts,
+        given: list[Any],
+        indices: Sequence[Any],
+    ) -> Request:
+        r"""A ranking the core gathered as one question per candidate, kept
+        together as:meth:`_in_parts` keeps the parts it gathers: one
+        request per candidate, with its question's payload and query, each
+        about the candidate as the caller gave it."""
         import copy
 
-        how = {name: value for name, value in how.items() if value is not None}
-        asked = 0 if how.get('indices') is None else len(how['indices'])
-        refuse_a_part_that_would_take_several_calls(
-            rewritten, asked, rows_one_call_scores(rows_per_call_asked_for(how))
-        )
-        refuse_more_entities_than_fit_in_memory(asked, len(rewritten.parts))
-        # How many candidates to keep belongs to the whole ranking. Each part
-        # is one yes-or-no question, and a task that ranks nothing is refused
-        # by the endpoint for carrying an option it cannot act on.
-        how.pop('top_k', None)
+        from sdm_client._rust.results import CoreRanking, CoreRequest
+
+        version = whole._core.version
         gathered = []
-        for text, step in rewritten.parts:
-            try:
-                gathered.append(
-                    PredictiveQuery(text, self.schema).materialize(**how)
-                )
-            except MissingExtraError:
-                raise
-            except StructuredDataError as error:
-                raise about_the_part(error, rewritten, step) from error
-        # A copy, because the carrier cannot be one of the things it carries:
-        # asking it would ask the first part, which would ask the first part.
-        whole = copy.copy(gathered[0])
-        whole._parts = tuple(gathered)
-        whole._decomposition = rewritten
-        whole._asked = self.text
-        return whole
-
-    def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
-        r"""Parse and validate the query."""
-        from predictive_query import validate
-
-        from sdm_client.schema import to_schema_definition
-
-        resolved, response = validate(
-            self.text, to_schema_definition(self.schema), profile
+        for position, named, payload, query in [
+            (parts.position, parts.name, whole.payloads[0], parts.query),
+            *(
+                (part.position, part.name, part.payload, part.query)
+                for part in parts.later
+            ),
+        ]:
+            part = Request.materialized(
+                payloads=(payload,),
+                windowed=whole._windowed,
+                schema=self.schema.snapshot(),
+                query=query,
+                indices=list(indices),
+                entity_table=whole.entity_table,
+                requested_inference=whole.requested_inference,
+            )
+            part._sanitization_report = whole.sanitization_report
+            part._core = CoreRequest(version=version)
+            gathered.append((part, query, position, named))
+        carrier = copy.copy(gathered[0][0])
+        carrier._parts = tuple(part for part, *_ in gathered)
+        carrier._decomposition = Decomposition(
+            RANKING,
+            tuple(
+                (query, given[position]) for _, query, position, _ in gathered
+            ),
+            parts.top_k,
         )
-        if resolved is None or not response.ok:
-            reasons = (
-                '; '.join(
-                    _without_the_validator_trace(error.message)
-                    for error in response.errors
-                )
-                or 'the query did not resolve'
+        # What predict on the core reads of the ranking: how many candidates
+        # a row keeps, and each question's candidate by its position among
+        # those given and by its name in the result.
+        carrier._core = CoreRequest(
+            version=version,
+            ranking=CoreRanking(
+                top_k=parts.top_k,
+                positions=tuple(position for _, _, position, _ in gathered),
+                values=tuple(str(named) for *_, named in gathered),
+            ),
+        )
+        carrier._asked = self.text
+        return carrier
+
+    def _kept_as_steps(
+        self,
+        whole: Request,
+        parts: CoreParts,
+        rewritten: Decomposition,
+        indices: Sequence[Any],
+    ) -> Request:
+        r"""A forecast the core gathered in steps, kept together as
+        :meth:`_in_parts` keeps the parts it gathers: one request per step,
+        with the step's payload and query."""
+        import copy
+
+        from sdm_client._rust.results import CoreRequest
+
+        version = whole._core.version
+        gathered = []
+        for step, payload, query in [
+            (parts.position, whole.payloads[0], parts.query),
+            *(
+                (part.position, part.payload, part.query)
+                for part in parts.later
+            ),
+        ]:
+            part = Request.materialized(
+                payloads=(payload,),
+                windowed=whole._windowed,
+                schema=self.schema.snapshot(),
+                query=query,
+                indices=list(indices),
+                entity_table=whole.entity_table,
+                requested_inference=whole.requested_inference,
             )
-            raise StructuredDataError(
-                f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
-                f'{self._why_the_target_is_text(reasons, profile)}'
-                f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
-                code='INVALID_REQUEST',
+            part._sanitization_report = whole.sanitization_report
+            part._core = CoreRequest(version=version)
+            gathered.append((part, query, step))
+        carrier = copy.copy(gathered[0][0])
+        carrier._parts = tuple(part for part, _, _ in gathered)
+        carrier._decomposition = dataclasses.replace(
+            rewritten,
+            parts=tuple((query, step) for _, query, step in gathered),
+        )
+        carrier._asked = self.text
+        return carrier
+
+    def _resolve(self, profile: str) -> CoreQuery:
+        """Validate and resolve the query with the shared Rust implementation."""
+        from sdm_client._rust import errors, s0
+        from sdm_client._rust.results import CoreQuery
+        from sdm_client._rust.spec import query_schema
+
+        accepted, messages, held, resolved = s0.validate(
+            self.text, query_schema(self.schema), profile
+        )
+        if not accepted:
+            raise self._refusal(messages, profile)
+        errors.warn_held(held)
+        return CoreQuery(
+            text=str(
+                (None if resolved is None else resolved.text) or self.text
+            ),
+            num_forecasts=None if resolved is None else resolved.num_forecasts,
+            refusal=None,
+            columns=None if resolved is None else resolved.columns,
+        )
+
+    def _refusal(
+        self, messages: list[str], profile: str
+    ) -> StructuredDataError:
+        r"""The refusal of a query the language does not accept.
+
+        The hints below recognise the refusal by the old validator's wording.
+        On the core route the messages are the core's diagnostics, whose
+        wording is not promised, so a hint may not appear there; S0 parity is
+        the validity and the code, never the text.
+        """
+        reasons = (
+            '; '.join(
+                _without_the_validator_trace(message) for message in messages
             )
-        return resolved
+            or 'the query did not resolve'
+        )
+        return StructuredDataError(
+            f'{self.text!r} is not a query {PROFILE_MODELS[profile]} '
+            f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
+            f'{self._why_the_target_is_text(reasons, profile)}'
+            f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
+            code='INVALID_REQUEST',
+        )
 
     def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
         r"""Say how to resolve an ambiguous link, in the words of this object.
@@ -507,7 +692,7 @@ class PredictiveQuery:
             f'== {target!r} and link.source_column in {rest!r})].'
         )
 
-    def _why_the_target_is_text(self, reasons: str, profile: Profile) -> str:
+    def _why_the_target_is_text(self, reasons: str, profile: str) -> str:
         r"""Say why a target is `text`, when that is what refused the query.
 
         Inference types a string column by how many distinct values it holds,
@@ -554,7 +739,7 @@ class PredictiveQuery:
         if ceiling is not None and distinct is not None and distinct > ceiling:
             return (
                 f'{said}. Typing it categorical would not help here, though: '
-                f'{profile.capabilities.model} classifies at most {ceiling} '
+                f'{PROFILE_MODELS[profile]} classifies at most {ceiling} '
                 f'classes and this column holds {distinct:,}, so the send '
                 f'would be refused. Predict a column with fewer classes, or '
                 f'group these into that many first'

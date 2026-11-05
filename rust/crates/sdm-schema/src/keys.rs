@@ -1,0 +1,421 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Validate keys using whole-table counts.
+//! Named keys containing nulls are refused.
+//! Named or declared keys with more than 1% repeated values are refused;
+//! inferred keys below 99% distinctness are declined.
+//! Kept keys with missing or repeated values produce diagnostics.
+//! Counts and example repeated values come from typed data requests.
+
+use std::collections::BTreeSet;
+
+use arrow_array::RecordBatch;
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
+
+use crate::infer::InferredTable;
+use crate::values;
+
+/// The share of a key's rows that must hold a distinct value for an
+/// inferred key to be kept, and above whose complement a named or declared
+/// key's repeats are refused (`_KEY_UNIQUENESS`).
+pub const KEY_UNIQUENESS: f64 = 0.99;
+/// Under this share of distinct values a declined key's repeats are the
+/// ordinary many-to-one shape, not a key that missed (`_NEARLY_A_KEY`).
+pub const NEARLY_A_KEY: f64 = 0.9;
+
+/// One key's count over every row (the reference's `KeyCount`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Counted {
+    pub rows: u64,
+    /// The distinct values among the rows holding every part of the key.
+    pub distinct: u64,
+    /// The rows missing any part of it.
+    pub missing: u64,
+    /// A value more than one row holds, one scalar per column of the key,
+    /// when the source was asked for one.
+    pub example: Option<Vec<Scalar>>,
+}
+
+impl Counted {
+    /// The rows holding a key value another row holds already.
+    pub fn repeats(&self) -> u64 {
+        self.rows
+            .saturating_sub(self.missing)
+            .saturating_sub(self.distinct)
+    }
+}
+
+/// What holding the keys to the rules gave: the warnings, in the
+/// reference's order, and each table's count of repeated keys, in table
+/// order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Held {
+    pub warnings: Vec<CoreWarning>,
+    pub duplicates: Vec<u64>,
+}
+
+/// The value of the one-row answer to a `repeated_key` request, one scalar
+/// per column of the key, in order: none when it holds no row, a column's
+/// null where its type has no scalar form.
+pub fn example(batches: &[RecordBatch]) -> Option<Vec<Scalar>> {
+    let batch = batches.iter().find(|b| b.num_rows() > 0)?;
+    Some(
+        batch
+            .columns()
+            .iter()
+            .map(|column| values::scalar(column.as_ref(), 0).unwrap_or(Scalar::Null))
+            .collect(),
+    )
+}
+
+fn number(n: u64) -> Detail {
+    Detail::Scalar(Scalar::UInt64(n))
+}
+
+/// A repeated value as a field: a key of one column's scalar, a key of
+/// several's list of them, in the key's order (the reference shows a
+/// tuple); null where none was read.
+fn shown(example: &Option<Vec<Scalar>>) -> Detail {
+    match example.as_deref() {
+        Some([one]) => Detail::Scalar(one.clone()),
+        Some(parts) if !parts.is_empty() => Detail::List(parts.to_vec()),
+        _ => Detail::Scalar(Scalar::Null),
+    }
+}
+
+/// A key's columns as fields: `column` for a key of one, `columns`, a list
+/// of them in order, for a key of several.
+fn named(key: &[String]) -> (&'static str, Detail) {
+    match key {
+        [one] => ("column", Detail::text(one)),
+        several => (
+            "columns",
+            Detail::List(several.iter().map(|c| Scalar::Utf8(c.clone())).collect()),
+        ),
+    }
+}
+
+fn warning(sentence: Sentence, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
+    CoreWarning::new(sentence, message).with_fields(fields)
+}
+
+/// The sentence of `one` for a key of one column, else `several`'s.
+fn by_columns(key: &[String], one: Sentence, several: Sentence) -> Sentence {
+    if key.len() == 1 { one } else { several }
+}
+
+/// Holds each table's key to the reference's rules, in table order,
+/// `counted` each counted table's position and count (a key the source
+/// enforces, unique and never null, is not counted, as the reference
+/// counts none), `stated` the tables whose key `primary_keys` named, and
+/// `infer_links` whether the links are inferred, which is when a declined
+/// key is worth a word. A key is declared when the catalog declares it a
+/// primary or unique key of its one column and the caller did not name it.
+/// Refusals are `INVALID_REQUEST`, naming the field, table and column and
+/// the counts, never a value but the repeated example the reference shows.
+pub fn hold(
+    tables: &mut [InferredTable],
+    counted: &[(usize, Counted)],
+    stated: &BTreeSet<String>,
+    infer_links: bool,
+) -> Result<Held, CoreError> {
+    let mut duplicates = vec![0; tables.len()];
+    let mut warnings = Vec::new();
+    let mut declined: Vec<(usize, String, &Counted)> = Vec::new();
+    for (at, count) in counted {
+        let table = &mut tables[*at];
+        if table.primary_key.is_empty() {
+            continue;
+        }
+        let key = table.primary_key.clone();
+        let repeats = count.repeats();
+        let is_stated = stated.contains(&table.name);
+        // A key of several columns is only ever named, never declared:
+        // the catalog's is read as no key (`crate::infer::preview`).
+        let declared =
+            !is_stated && matches!(key.as_slice(), [one] if table.declared.contains(one));
+        let name = table.name.clone();
+        let refused = |sentence: Sentence, message: &'static str| {
+            let (field, columns) = named(&key);
+            CoreError::new(sentence, message)
+                .with_field(
+                    "field",
+                    Detail::text(if is_stated { "primary_keys" } else { "keys" }),
+                )
+                .with_field("table", Detail::text(&name))
+                .with_field(field, columns)
+                .with_field("rows", number(count.rows))
+        };
+        if !is_stated && !declared {
+            // Inferred: declined as inference over a frame declines it.
+            if (count.distinct as f64) < count.rows as f64 * KEY_UNIQUENESS {
+                table.primary_key = Vec::new();
+                declined.push((*at, key[0].clone(), count));
+                continue;
+            }
+        } else if count.missing > 0 && is_stated {
+            return Err(refused(
+                by_columns(
+                    &key,
+                    Sentence::KeyMissingValuesColumn,
+                    Sentence::KeyMissingValuesColumns,
+                ),
+                "a primary key named has rows with no value, so those rows cannot be identified",
+            )
+            .with_field("missing", number(count.missing)));
+        } else if repeats as f64 > count.rows as f64 * (1.0 - KEY_UNIQUENESS) {
+            // Unique where the catalog declares a key over some of its
+            // columns (the reference's `_enforces_key`).
+            let enforced = table
+                .unique
+                .iter()
+                .any(|set| !set.is_empty() && set.iter().all(|c| key.contains(c)));
+            let unenforced = declared && !enforced;
+            let sentence = if unenforced {
+                // The source declares the key and does not hold its rows to
+                // it, which the reference says of the source by name.
+                Sentence::KeyNotUniqueUnenforced
+            } else {
+                by_columns(
+                    &key,
+                    Sentence::KeyNotUniqueColumn,
+                    Sentence::KeyNotUniqueColumns,
+                )
+            };
+            let mut refusal = refused(
+                sentence,
+                "a primary key is not unique enough to identify a row",
+            );
+            if unenforced {
+                refusal = refusal.with_field("variant", Detail::text("declared_unenforced"));
+            }
+            return Err(refusal
+                .with_field("repeats", number(repeats))
+                .with_field("example", shown(&count.example)));
+        }
+        if count.missing > 0 {
+            warnings.push(warning(
+                by_columns(
+                    &key,
+                    Sentence::KeyNoValueColumn,
+                    Sentence::KeyNoValueColumns,
+                ),
+                "a key has rows with no value for it",
+                vec![
+                    ("table", Detail::text(&table.name)),
+                    named(&key),
+                    ("missing", number(count.missing)),
+                ],
+            ));
+        }
+        if repeats > 0 {
+            warnings.push(warning(
+                by_columns(
+                    &key,
+                    Sentence::KeyRepeatsColumn,
+                    Sentence::KeyRepeatsColumns,
+                ),
+                "a key identifies a row more than once",
+                vec![
+                    ("table", Detail::text(&table.name)),
+                    named(&key),
+                    ("repeats", number(repeats)),
+                    ("example", shown(&count.example)),
+                ],
+            ));
+        }
+        duplicates[*at] = repeats;
+    }
+    if infer_links && !declined.is_empty() {
+        let keyed_by: BTreeSet<&String> = tables
+            .iter()
+            .filter_map(|t| match t.primary_key.as_slice() {
+                [one] => Some(one),
+                _ => None,
+            })
+            .collect();
+        for (at, column, count) in &declined {
+            let elsewhere = tables
+                .iter()
+                .enumerate()
+                .any(|(i, t)| i != *at && t.column(column).is_some());
+            if keyed_by.contains(column)
+                || !elsewhere
+                || (count.distinct as f64) < count.rows as f64 * NEARLY_A_KEY
+                || count.repeats() == 0
+            {
+                continue;
+            }
+            warnings.push(warning(
+                Sentence::KeyDeclined,
+                "a column named like a key repeats, so its table gets no key",
+                vec![
+                    ("table", Detail::text(&tables[*at].name)),
+                    ("column", Detail::text(column)),
+                    ("repeats", number(count.repeats())),
+                    ("rows", number(count.rows)),
+                    ("example", shown(&count.example)),
+                ],
+            ));
+        }
+    }
+    Ok(Held {
+        warnings,
+        duplicates,
+    })
+}
+
+/// Validate fresh frame key observations with the same explicit-key rules as schema assembly.
+/// The caller applies this only after structural key checks and before storing an edited schema.
+pub fn hold_frame(
+    table: &mut sdm_contract::ops::DescribedTable,
+    count: &sdm_contract::frames::FrameKeyCount,
+) -> Result<Vec<CoreWarning>, CoreError> {
+    let name = &table.name;
+    if count.missing > count.rows || count.distinct > count.rows - count.missing {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "frame key counts exceed their population",
+        ));
+    }
+    if count.missing > 0 && table.primary_key.len() > 1 {
+        if count.missing_columns.is_empty()
+            || count
+                .missing_columns
+                .iter()
+                .any(|c| !table.primary_key.contains(c))
+        {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "frame key missing-column observations disagree with the key",
+            ));
+        }
+        return Err(CoreError::new(
+            Sentence::FrameKeyMissingParts,
+            "frame key contains missing parts",
+        )
+        .with_field("table", Detail::text(name))
+        .with_field(
+            "columns",
+            Detail::List(
+                table
+                    .primary_key
+                    .iter()
+                    .cloned()
+                    .map(sdm_contract::Scalar::Utf8)
+                    .collect(),
+            ),
+        )
+        .with_field(
+            "parts",
+            Detail::List(
+                count
+                    .missing_columns
+                    .iter()
+                    .cloned()
+                    .map(sdm_contract::Scalar::Utf8)
+                    .collect(),
+            ),
+        )
+        .with_field(
+            "missing",
+            Detail::Scalar(sdm_contract::Scalar::UInt64(count.missing)),
+        ));
+    }
+    let inferred = crate::infer::InferredTable {
+        name: name.clone(),
+        source: table.source.clone(),
+        columns: vec![],
+        left_out: vec![],
+        unread_times: vec![],
+        day_first: vec![],
+        tied_keys: vec![],
+        primary_key: table.primary_key.clone(),
+        time: Default::default(),
+        time_column: table.time_column.clone(),
+        unique: vec![],
+        declared: Default::default(),
+    };
+    let checked = hold(
+        &mut [inferred],
+        &[(
+            0,
+            Counted {
+                rows: count.rows,
+                distinct: count.distinct,
+                missing: count.missing,
+                example: count.example.clone(),
+            },
+        )],
+        &std::collections::BTreeSet::from([name.clone()]),
+        false,
+    )?;
+    table.duplicate_keys = Some(sdm_contract::Scalar::UInt64(
+        count.rows - count.missing - count.distinct,
+    ));
+    Ok(checked.warnings)
+}
+
+/// Observe whole Arrow frame keys without deciding uniqueness policy.
+/// Null in any component makes the row missing; compound identities retain exact values.
+pub fn count_frame(
+    schema: &arrow_schema::Schema,
+    batches: &[RecordBatch],
+    names: &[String],
+) -> Result<sdm_contract::frames::FrameKeyCount, CoreError> {
+    if batches
+        .iter()
+        .any(|batch| batch.schema().as_ref() != schema)
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "frame key Arrow schemas do not align",
+        ));
+    }
+    let rows = batches.iter().map(RecordBatch::num_rows).sum::<usize>();
+    let columns = names
+        .iter()
+        .map(|name| {
+            let index = schema.index_of(name).map_err(|_| {
+                CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "frame edit key is absent from Arrow data",
+                )
+            })?;
+            crate::direct::key_values(batches, index, schema.field(index))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if names.is_empty() || columns.iter().any(|values| values.len() != rows) {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "frame key observations do not align",
+        ));
+    }
+    let mut distinct = BTreeSet::new();
+    let mut missing = 0;
+    for row in 0..rows {
+        let key = columns
+            .iter()
+            .map(|column| column[row].as_ref())
+            .collect::<Option<Vec<_>>>();
+        if let Some(key) = key {
+            distinct.insert(key);
+        } else {
+            missing += 1;
+        }
+    }
+    Ok(sdm_contract::frames::FrameKeyCount {
+        rows: rows as u64,
+        distinct: distinct.len() as u64,
+        missing,
+        missing_columns: names
+            .iter()
+            .zip(&columns)
+            .filter(|(_, values)| values.iter().any(Option::is_none))
+            .map(|(name, _)| name.clone())
+            .collect(),
+        example: None,
+    })
+}

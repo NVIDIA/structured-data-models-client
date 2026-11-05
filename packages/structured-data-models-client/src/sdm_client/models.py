@@ -32,7 +32,6 @@ deployment can answer would be worse than letting the other say no.
 
 from __future__ import annotations
 
-from predictive_query import RELATIONAL, TABULAR
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
@@ -51,16 +50,8 @@ from sdm_client.errors import StructuredDataError, UnknownModelError
 # that names the limit. See the architecture note on inference knobs:
 # `run_mode` is derived from these rather than being set.
 #
-# `predict_rows_max` and `predict_rows_temporal_link_prediction` restate the
-# engine's own `_MAX_PRED_SIZE`, which defaults to the first and holds the
-# second for `TaskType.TEMPORAL_LINK_PREDICTION`
-# (sdm_relational_engine/rfm/rfm.py). The duplication predates this client,
-# and it is load-bearing: this value is what the client asks the engine to
-# batch at, so a drift would gather batches the endpoint refuses, or ask for
-# smaller ones than it would take, and the engine's own refusal names a
-# `batch_size=` argument this client's callers have not got. Change them
-# together; `test_the_two_ceilings_are_the_engine_s_own` fails if they move
-# apart.
+# Prediction row limits also bound the batches requested from the Rust core.
+# Keep endpoint limits and batching consistent so each batch is accepted.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'context_rows_max': 10_000,
@@ -92,7 +83,7 @@ TABULAR_LIMITS = {
 
 KUMO_TABULAR = ModelSpec(
     model_id=TFM_MODEL_KUMO_TABULAR,
-    profile=TABULAR,
+    profile='TABULAR',
     runtime=RuntimeContract(
         # The endpoint takes the coarse kind only and decides binary versus
         # multiclass itself, so this client never narrows it here.
@@ -101,12 +92,13 @@ KUMO_TABULAR = ModelSpec(
             {'prediction', 'probabilities', 'quantiles', 'explanation'}
         ),
         limits=TABULAR_LIMITS,
+        explanation_formats=('sdm_gradient_v1',),
     ),
 )
 
 KUMO_RELATIONAL = ModelSpec(
     model_id=TFM_MODEL_KUMO_RELATIONAL,
-    profile=RELATIONAL,
+    profile='RELATIONAL',
     runtime=RuntimeContract(
         tasks=frozenset(
             {
@@ -132,7 +124,7 @@ KUMO_RELATIONAL = ModelSpec(
         # Empty because nothing here takes a format argument: the contract's
         # `OutputSpec` is only `{fields: [...]}`, and the endpoint names the
         # shape it returns. Two names declared here appeared in no response.
-        explanation_formats=(),
+        explanation_formats=('sdm_gradient_v1',),
         limits=RELATIONAL_LIMITS,
         unread_feature_stypes=frozenset({'text'}),
         # Inference-config keys this client forwards, rather than keys the

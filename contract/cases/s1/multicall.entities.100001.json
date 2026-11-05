@@ -1,0 +1,78 @@
+{
+  "format": "sdm-case/1",
+  "id": "multicall.entities.100001",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE users (user_id BIGINT PRIMARY KEY, score DOUBLE)",
+      "INSERT INTO users SELECT i::BIGINT, (i % 7)::DOUBLE FROM range(100101) t(i)"
+    ],
+    "pql": "PREDICT users.score FOR EACH users.user_id",
+    "materialize": {
+      "indices": []
+    }
+  },
+  "until": "materialize",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [],
+      "anchor_time": null,
+      "seed": null
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "100,001 entities is past the 100,000 one materialize() will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time"
+  },
+  "why": "100,001 entities, one past the 100,000 one materialize() gathers: refused UNSUPPORTED_REQUEST from the count, before anything is read; user_id is declared the key, as the core and the reference read it either way, so the loader indexes it on SQLite and Postgres and a lookup there is not a scan of 100,101 rows",
+  "source": "Correctness case multicall.entities.100001 using the shop fixture.",
+  "input_factory": "entity_limit_100001"
+}

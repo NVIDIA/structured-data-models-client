@@ -6,20 +6,13 @@
 
 from __future__ import annotations
 
-import warnings
-
 import pandas as pd
 import pytest
 from sdm_api.generated.tfm_api import PredictionItem
-from test_relational_explanations import (
-    FORECAST,
-    RelationalEndpoint,
-    relational_asked,
-)
+from test_adapter_and_result import envelope as public_envelope
+from test_entity_id_parity import StubTransport, predict_response
 
-from sdm_client import KumoRelational, PredictionResult, Request, SDMClient
-from sdm_client.adapters.tabular import TabularAdapter
-from sdm_client.core.backend import NimBackend
+from sdm_client import PredictionResult, Request
 from sdm_client.errors import StructuredDataError
 
 
@@ -43,7 +36,7 @@ def request_for(task: str = 'classification', **kwargs) -> Request:
 
 
 def envelope(task: str = 'classification', outputs=('prediction',)) -> dict:
-    return next(TabularAdapter().prediction_plan(request_for(task), outputs))
+    return public_envelope(request_for(task), outputs)
 
 
 def test_the_envelope_carries_every_section_the_contract_requires():
@@ -114,7 +107,7 @@ def test_a_text_column_is_sent_as_categorical_because_tabular_cannot_read_text()
     request = _text_request()
     assert request.schema['instance']['code'].stype == 'text'
     with pytest.warns(UserWarning, match='cannot read a text column'):
-        body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+        body = public_envelope(request)
     columns = body['schema']['instance_table']['columns']
     assert columns['code']['stype'] == 'categorical'
     assert columns['code']['dtype'] == 'string'
@@ -125,7 +118,7 @@ def test_the_warning_names_every_rewritten_column_once():
     request = _text_request()
     request.schema['instance']['region'].stype = 'text'
     with pytest.warns(UserWarning) as caught:
-        next(TabularAdapter().prediction_plan(request, ('prediction',)))
+        public_envelope(request)
     messages = [
         str(w.message) for w in caught if 'cannot read a text' in str(w.message)
     ]
@@ -138,47 +131,65 @@ def test_the_task_kind_is_sent_as_given_and_never_narrowed():
 
 
 def test_a_session_pins_the_context_and_scoring_sends_only_the_rows():
-    adapter = TabularAdapter()
-    request = request_for()
-    pinned = adapter.session_plan(request, ('prediction',))
-    assert set(pinned) == {'model', 'task', 'schema', 'context', 'metadata'}
-    assert 'predict' not in pinned
+    from sdm_client import SDMClient
 
-    scoring = next(adapter.session_prediction_plan(request, ('prediction',)))
+    request = request_for()
+    transport = StubTransport(
+        {
+            'id': 'answer',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [
+                {'row_index': i, 'prediction': 0} for i in range(2)
+            ],
+        }
+    )
+
+    class SessionTransport(StubTransport):
+        def close(self):
+            pass
+
+    transport = SessionTransport(transport.response)
+    with SDMClient(url='http://localhost:8000') as client:
+        client._transport.close()
+        client._transport = transport
+        with client.fit(request, model='kumo-tabular') as fitted:
+            fitted.predict(request)
+    pinned = transport.created
+    assert set(pinned) == {'model', 'task', 'schema', 'context', 'metadata'}
+    (scoring,) = transport.scored
     assert set(scoring) == {'predict', 'output', 'metadata'}
-    assert 'context' not in scoring
 
 
 @pytest.mark.parametrize('task', ['classification', 'regression'])
-@pytest.mark.parametrize('with_pinned_schema', [False, True])
-def test_session_scoring_does_not_encode_the_context(
-    monkeypatch, task, with_pinned_schema
-):
-    from sdm_client.adapters import tabular
+def test_session_scoring_does_not_encode_the_context(monkeypatch, task):
+    from sdm_client import SDMClient
+    from sdm_client._rust import sessions
 
-    adapter = TabularAdapter()
-    request = request_for(task, inference={'num_context_samples': 500})
-    outputs = ('prediction',)
-    full = next(adapter.prediction_plan(request, outputs))
-    pinned = adapter.session_plan(request, outputs)
-    expected = {key: full[key] for key in ('predict', 'output', 'inference')}
-    encode = tabular.encode_table
-    encoded_rows = []
+    request = request_for(task)
+    response = {
+        'id': 'answer',
+        'model': 'kumo-tabular',
+        'metadata': {},
+        'predictions': [{'row_index': i, 'prediction': 0} for i in range(2)],
+    }
+    transport = StubTransport(response)
+    with SDMClient(url='http://localhost:8000') as client:
+        client._transport.close()
+        client._transport = transport
+        with client.fit(request, model='kumo-tabular') as fitted:
+            encode = sessions.encode_table
+            encoded = []
 
-    def encode_scoring_rows(frame, dtypes):
-        assert frame is not request.context.instance_table
-        encoded_rows.append(len(frame))
-        return encode(frame, dtypes)
+            def scoring_only(frame, columns, half):
+                assert half != 'context'
+                encoded.append(half)
+                return encode(frame, columns, half)
 
-    monkeypatch.setattr(tabular, 'encode_table', encode_scoring_rows)
-    actual = next(
-        adapter.session_prediction_plan(
-            request, outputs, pinned if with_pinned_schema else None
-        )
-    )
-    assert encoded_rows == [len(request.predict.instance_table)]
-    assert actual.pop('metadata')['request_id'].startswith('sdm-')
-    assert actual == expected
+            monkeypatch.setattr(sessions, 'encode_table', scoring_only)
+            fitted.predict(request)
+    assert encoded
+    assert all('context' not in payload for payload in transport.scored)
 
 
 def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
@@ -188,7 +199,7 @@ def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
 def test_inference_knobs_travel_only_when_given():
     assert 'inference' not in envelope()
     request = request_for(inference={'num_context_samples': 500})
-    body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    body = public_envelope(request)
     assert body['inference'] == {'num_context_samples': 500}
 
 
@@ -252,47 +263,8 @@ def test_the_entity_key_is_carried_when_the_model_has_one():
 
 def test_an_explanation_is_absent_rather_than_a_different_return_type():
     result = result_with({'row_index': 0, 'prediction': 1})
-    assert result.explanations.gradients == {}
+    assert result.explanation is None
     assert isinstance(result.to_pandas(), pd.DataFrame)
-
-
-_RAW = {'format': 'sdm_gradient_v1', 'details': {'outputs': []}}
-
-
-def test_the_deprecated_explanation_is_the_first_records_raw_one():
-    """result.explanation warns and returns the first explained record's raw dict."""
-    result = result_with(
-        {'row_index': 0, 'prediction': 1},
-        {'row_index': 1, 'prediction': 0, 'explanation': _RAW},
-        {'row_index': 2, 'prediction': 1, 'explanation': {'format': 'x'}},
-    )
-    with pytest.warns(
-        DeprecationWarning, match=r'use result\.explanations.*2\.0\.0'
-    ):
-        assert result.explanation == _RAW
-
-
-def test_the_deprecated_explanation_is_none_and_still_warns_when_none_came():
-    """result.explanation warns and returns None when no record is explained."""
-    result = result_with({'row_index': 0, 'prediction': 1})
-    with pytest.warns(
-        DeprecationWarning, match=r'result\.explanation is deprecated'
-    ):
-        assert result.explanation is None
-
-
-def test_the_deprecated_explanation_keyword_is_accepted_and_read_back():
-    """explanation= warns, is what result.explanation returns, and leaves explanations alone."""
-    with pytest.warns(DeprecationWarning, match=r'pass explanations=.*2\.0\.0'):
-        result = PredictionResult(
-            model='kumo-tabular',
-            request_id='r-1',
-            items=[PredictionItem.from_dict({'row_index': 0, 'prediction': 1})],
-            explanation=_RAW,
-        )
-    with pytest.warns(DeprecationWarning):
-        assert result.explanation == _RAW
-    assert result.explanations.gradients == {}
 
 
 def test_quantiles_are_spread_under_a_readable_prefix():
@@ -326,16 +298,16 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
     """A body that does not match the contract is still this client's failure."""
     from sdm_client.errors import StructuredDataError
 
-    adapter = TabularAdapter()
     with pytest.raises(StructuredDataError) as error:
-        adapter.normalize(
+        predict_response(
             {'model': 'kumo-tabular', 'predictions': [], 'metadata': {}},
             ('prediction',),
+            request_for(),
         )
     assert error.value.code == 'INVALID_RESPONSE'
 
     with pytest.raises(StructuredDataError):
-        adapter.normalize(
+        predict_response(
             {
                 'id': 'r',
                 'model': 'kumo-tabular',
@@ -343,90 +315,119 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
                 'metadata': {},
             },
             ('prediction',),
+            request_for(),
         )
 
 
-@pytest.fixture
-def forecast_through_the_client(monkeypatch, gradient_explanation):
-    """Ask a two-step forecast through ``predict()``; what it warns.
+def forecast_through_the_client(explanations, requested):
+    """Materialize a real forecast and send it through the public client."""
+    import json
+    import warnings
 
-    Takes the step positions answered without an explanation and the
-    outputs asked for. Built by the real ``materialize()``, gathering stood
-    in for, so what is proved is the wiring.
-    """
+    from test_materialize_options import _materialize
+    from test_tabular_direct_core import Endpoint, client
 
-    def ask(bare: frozenset[int], requested: list[str]) -> list[str]:
-        client = SDMClient(url='http://localhost:8000')
-        client._backend = NimBackend(
-            RelationalEndpoint(gradient_explanation, bare)
+    request = _materialize(
+        indices=[0],
+        query=('EXPLAIN ' if requested is None else '')
+        + f'PREDICT COUNT(orders.*, 0, 30, days) FORECAST {len(explanations)} TIMEFRAMES FOR EACH users.user_id',
+    )
+
+    class ForecastEndpoint(Endpoint):
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(payload)
+            table = payload['predict']['instance_table']
+            instance_id = table['rows'][0][
+                table['columns'].index('instance_id')
+            ]
+            return json.dumps(
+                {
+                    'id': 'answer',
+                    'model': 'kumo-relational',
+                    'metadata': {},
+                    'predictions': [
+                        {
+                            'row_index': 0,
+                            'id': str(instance_id),
+                            'prediction': 1.0,
+                            'explanation': explanations[len(self.calls) - 1],
+                        }
+                    ],
+                }
+            ).encode()
+
+    endpoint = ForecastEndpoint()
+    with (
+        warnings.catch_warnings(record=True) as caught,
+        client(endpoint) as model_client,
+    ):
+        warnings.simplefilter('always')
+        result = model_client.predict(
+            request, model='kumo-relational', outputs=requested
         )
-        request = relational_asked(
-            monkeypatch, FORECAST.removeprefix('EXPLAIN '), kind='regression'
-        )
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter('always')
-            client.predict(request, model=KumoRelational(), outputs=requested)
-        return [str(item.message) for item in caught]
-
-    return ask
+    assert len(endpoint.calls) == len(explanations)
+    assert len(result) == len(explanations)
+    return [str(item.message) for item in caught]
 
 
-def test_a_forecast_step_that_carries_no_explanation_is_named(
-    forecast_through_the_client,
-):
+def test_a_forecast_step_that_carries_no_explanation_is_named():
     """Each step is explained on its own, so asking only whether the merged
     answer carries an explanation sees the step that did and says nothing
-    about the one that did not.
-
-    Assumptions:
-    - Two steps asked for an explanation; the second comes back without.
-    """
+    about the one that did not."""
     said = forecast_through_the_client(
-        frozenset({1}), ['prediction', 'explanation']
+        [{'cohorts': ['a']}, None], ['prediction', 'explanation']
     )
 
     assert any('step 2 carries none' in message for message in said)
 
 
-def test_a_forecast_whose_steps_all_explain_is_not_reported(
-    forecast_through_the_client,
-):
-    """No step is named when every step comes back explained.
-
-    Assumptions:
-    - Two steps asked for an explanation; both come back with one.
-    """
+def test_a_forecast_whose_steps_all_explain_is_not_reported():
     said = forecast_through_the_client(
-        frozenset(), ['prediction', 'explanation']
+        [{'cohorts': ['a']}, {'cohorts': ['b']}], ['prediction', 'explanation']
     )
 
     assert not any('carries none' in message for message in said)
 
 
-def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported(
-    forecast_through_the_client,
-):
-    """Nothing is said about explanations that were not asked for.
-
-    Assumptions:
-    - Two steps asked for the prediction only; the endpoint explains the
-      first anyway and not the second.
-    """
-    said = forecast_through_the_client(frozenset({1}), ['prediction'])
+def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported():
+    said = forecast_through_the_client(
+        [{'cohorts': ['a']}, None], ['prediction']
+    )
 
     assert said == []
 
 
-def test_a_forecast_carrying_no_explanation_at_all_still_says_so(
-    forecast_through_the_client,
-):
-    """A forecast asked for an explanation that no step carries says so.
-
-    Assumptions:
-    - Two steps asked for an explanation; neither comes back with one.
-    """
+def test_a_forecast_carrying_no_explanation_at_all_still_says_so():
     said = forecast_through_the_client(
-        frozenset({0, 1}), ['prediction', 'explanation']
+        [None, None], ['prediction', 'explanation']
     )
 
     assert any('explanation' in message for message in said)
+
+
+def test_explain_default_outputs_names_missing_structured_gradient_step(
+    gradient_explanation,
+):
+    held = gradient_explanation(
+        outputs=[{'kind': 'prediction', 'statistic': 'mean'}],
+        row=0,
+        columns=[],
+        gradients=[[]],
+    )
+    said = forecast_through_the_client([held, None], None)
+    assert any('step 2 carries none' in message for message in said)
+
+
+def test_raw_explanation_constructor_remains_supported_without_expired_deprecation():
+    import warnings
+
+    raw = {'format': 'custom', 'details': {'note': 'opaque'}}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = PredictionResult(
+            model='kumo-tabular', request_id='r', items=[], explanation=raw
+        )
+        assert result.explanation is raw
+    assert not caught
+    assert not result.explanations.gradients

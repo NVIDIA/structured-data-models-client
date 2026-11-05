@@ -6,7 +6,7 @@ explanation.
 ```python
 result = client.predict(request, model=KumoRelational())
 result.to_pandas()  # always a frame
-result.explanations  # .gradients and .columns, empty unless you asked for them
+result.explanations.gradients  # empty unless the model returned structured gradients
 result.metadata  # whatever the endpoint reported
 ```
 
@@ -118,217 +118,95 @@ joined = to_score.reset_index(names='row_index').merge(answers, on='row_index')
 | `scores`, `embeddings` | one column holding a list |
 | `rankings` | one column holding a list of dicts |
 
-## Explanations
+## Reading an explanation
 
-Ask for one by adding `'explanation'` to `outputs`. There is no row limit:
-every scored row is explained. A NIM and a client opened with
-`SDMClient.in_process()` both serve it, with the same request and the same
-`result.explanations`.
+Request `outputs=["prediction", "explanation"]` or prefix PQL with `EXPLAIN PREDICT`.
+For a model that returns `sdm_gradient_v1`, `result.explanations.gradients` maps each prediction to its validated gradients; `result.explanations.gradients.to_pandas()` gives one row per gradient.
+Java exposes `result.explanations().gradients().entries()` and `toArrow(allocator)`; callers close the returned Arrow root before closing their allocator.
 
-```python
-result = client.predict(request, model=KumoRelational(),
-                        outputs=['prediction', 'probabilities', 'explanation'])
-```
+Keys are entity IDs when they identify rows uniquely, otherwise `row_index`; forecasts add the forecast step to each key.
 
-In the query, `EXPLAIN PREDICT …` adds `'explanation'` to the outputs the
-call would ask for anyway; passing both is allowed and redundant. A ranking refuses it, since it is
-assembled client-side from per-candidate classifications; a forecast explains
-each step.
-
-`result.explanations` has two parts:
-
-- `gradients`: one entry per scored row, returned by the endpoint. Described
-  from [Keys](#keys) to [As one table](#as-one-table).
-- `columns`: per-column cohort statistics over the labelled context, computed
-  by the client. See [Column explanations](#column-explanations).
-
-### Keys
-
-`result.explanations.gradients` maps a row's key to that row's explanation. It
-is kept out of `result.to_pandas()`. `result.explanation` is deprecated, see
-`result.explanations.gradients`; there is no `{'by_forecast_step': ...}`.
-
-The key is whatever identifies the row in `to_pandas()`, by the same rule on
-both models:
-
-| Request | Key | Example |
-|---|---|---|
-| has an entity id, none repeated | the row's `id`, the same value as in `to_pandas()['id']` | `result.explanations.gradients['user_5']` |
-| forecast | `(id, forecast_step)`, or `(row_index, forecast_step)` when ids repeat | `result.explanations.gradients[('user_5', 3)]` |
-| no id column, or its ids repeat | `row_index` | `result.explanations.gradients[0]` |
-
-### One entry
-
-Each entry is a plain nested dict:
-
-```python
-{
-  'outputs':  [...],                        # the explained scores, in order
-  'instance': {                             # kumo-tabular only
-      'columns':   [...],                   # model's preprocessed numerical columns
-      'gradients': [[...], ...],            # [output][column]
-  },
-  'related': {                              # kumo-relational only: every table,
-                                            # the entity's own included
-      '<table>': {
-          'keys':      [...],               # each row's key; only when a relationship joins on the key column
-          'rows':      [{...}, ...],        # each row's values as sent to the model
-          'columns':   [...],               # model's preprocessed numerical columns
-          'gradients': [[[...], ...], ...], # [output][row][column], rows aligned with keys and rows
-      },
-  },
-}
-```
-
-`outputs` is copied from the endpoint:
-
-- classification gives every class probability in declared order, such as
-  `{'kind': 'probability', 'class': 'yes'}`;
-- regression gives the returned prediction,
-  `{'kind': 'prediction', 'statistic': 'mean'}` (or `'median'`), plus each
-  returned quantile when `quantiles` is requested.
-
-A gradient is the change in that output score per unit change in that
-preprocessed column. It is a diagnostic, not a causal effect or a
-feature-importance ranking.
-
-`columns` are the model's preprocessed numerical columns, not the columns you
-sent. Categoricals and datetimes may appear as derived numeric columns, and a
-table without numerical features has an empty `columns`.
-
-### Which tables get gradients
-
-| Model | Tables with gradients |
+| Prediction rows | Explanation key |
 |---|---|
-| kumo-tabular | the one table: each predicted row's own columns |
-| kumo-relational | the predicted entity's own table, plus every related table in the subgraph the client gathered for that entity (all tables reached within the hop limit, up to 6) |
+| Unique entity IDs | `id` |
+| Missing or repeated IDs | `row_index` |
+| Forecast | `(id, forecast_step)`, or `(row_index, forecast_step)` when needed |
+Merging results preserves every explanation, including repeated IDs and repeated merges.
+For explained results, unambiguous row indices are preserved; collisions across parts receive consistent new indices in both the predictions and explanations, without changing input results.
+Related rows and hop distances refer to the exact sampled request, without additional warehouse reads.
+Gradient columns describe the model's **preprocessed numerical features**, including derived datetime features; they are not causal effects or general feature importance.
+Java Arrow views retain ordinary string/integer key types; mixed or wider keys use lossless JSON text with explicit schema metadata.
 
-A `kumo-tabular` entry has no `related` key: its one table is the `instance`.
-A `kumo-relational` entry has no `instance` key: the entity's own table is one
-of the tables under `related`, at hop 0.
+`EXPLAIN` changes requested outputs, not a fitted session's question identity.
+The endpoint must support gradients; client-assembled candidate rankings remain unsupported.
+An explicitly empty `outputs=[]` is invalid even with `EXPLAIN`.
+There is no separate client explanation row/context limit; deployment limits still apply.
+Unknown explanation formats remain available through the raw accessors below.
 
-Only the rows being predicted and their related rows get gradients. The
-context rows, the labelled examples the model compares against, get none.
+### Entry contents
 
-Gradients are per row, not per path. A row reached through several paths, for
-example a product bought in two of the user's orders, appears once. Its
-gradient is its total effect through all of them, and the model gives no split
-by path.
+Each entry has `outputs`, naming the explained scores in order.
+Tabular entries contain `instance`, with `columns` and `gradients[output][column]`.
+Relational entries contain `related`, mapping table names to `rows`, `columns` and `gradients[output][row][column]`.
+Related rows contain the values sent to the model; meaningful source keys appear in `keys`, while generated transport keys stay hidden.
+The entity's own table is included; the synthetic question row is not.
+Context examples receive no gradients.
+A sampled row reached through multiple paths has one gradient per output/column, not one per path.
 
-### Related rows
+The flat view includes `table`, `hop`, `key`, `row`, `output`, `column` and `gradient`, alongside the prediction identity.
+`hop` is zero for the entity's own row and absent for an unreachable related row.
+`output` matches the prediction frame's column spelling, such as `probability_yes` or `quantile_0.1`.
 
-A related table's rows always carry `rows`, each row's values as sent to the
-model. `keys` is present when the table's key column is one the model receives,
-i.e. a column a relationship joins on; otherwise rows are identified by their
-values.
-Keyed or keyless changes only how a row is labelled; both get gradients in the
-same way.
+### Constructing results in Python
 
-### Examples
+`PredictionResult(..., explanations=mapping)` also accepts manually supplied per-row entries.
+Merging validates their association with the prediction rows in Rust and refuses entries that cannot be matched.
+Repeated IDs and forecast steps remain distinct through result merging.
+Java retains its existing result-construction visibility; results produced by Java calls use the same Rust identity rules.
 
-Values are illustrative. `kumo-tabular`, request with an id column:
+### Raw explanations and other formats
+
+`result.explanation` remains the raw endpoint payload.
+`result.explanation_view` provides an immutable snapshot of that payload, or `None` when there is no explanation.
+The view exposes `raw`, nested `details`, `summary`, `warnings`, `cohorts` and `subgraphs`.
+Missing fields are `None`; malformed requested fields raise `StructuredDataError` with code `INVALID_REQUEST` and a field path.
+Unknown fields remain available through `raw`.
 
 ```python
-result.explanations.gradients['cust_17']
-# {'outputs': [{'kind': 'probability', 'class': 'no'},
-#              {'kind': 'probability', 'class': 'yes'}],
-#  'instance': {'columns': ['age', 'balance'],
-#               'gradients': [[0.01, -0.03], [-0.01, 0.03]]}}
+view = result.explanation_view
+if view is not None:
+    view.print()
+    importance = view.feature_importance(normalize=True)
+    if importance is not None:
+        print(importance.to_pandas())
 ```
 
-`kumo-relational`, user 5 with one order and two login events. `users` carries
-`keys` because `user_id` is the join column; `orders` and `events` are
-identified by their values. All are part of the same entry:
+Feature importance is available for `kumo_rfm_v2_1` subgraph cell attribution.
+It sums signed scores by table and column, skipping missing/null scores and rejecting nonnumeric or nonfinite scores.
+Normalization divides aggregated scores by their total absolute magnitude: `-2, 6` becomes `-0.25, 0.75`.
+Zero totals remain zero.
+An absent or unsupported attribution returns `None`, while an explicitly empty attribution returns an empty report.
+The view reads no prediction rows and makes no warehouse, model or summary-generation calls.
+Only an explicit feature-importance request invokes local Rust numerical processing.
 
-```python
-result.explanations.gradients['user_5']
-# {'outputs': [{'kind': 'probability', 'class': 'no'},
-#              {'kind': 'probability', 'class': 'yes'}],
-#  'related': {
-#      'users':  {'keys': ['user_5'],
-#                 'rows': [{'user_id': 'user_5', 'tenure_days': 410}],
-#                 'columns': ['tenure_days'],
-#                 'gradients': [[[-0.05]], [[0.05]]]},
-#      'orders': {'rows': [{'user_id': 'user_5', 'order_id': 'order_9003', 'amount': 12.0}],
-#                 'columns': ['amount'],
-#                 'gradients': [[[-0.02]], [[0.02]]]},
-#      'events': {'rows': [{'user_id': 'user_5', 'kind': 'login', 'at': '2026-10-01T09:00:00'},
-#                          {'user_id': 'user_5', 'kind': 'login', 'at': '2026-10-03T18:20:00'}],
-#                 'columns': ['kind_login', 'at_dayofweek'],    # model-derived names, illustrative
-#                 'gradients': [[[0.01, 0.00], [0.02, -0.01]],
-#                               [[-0.01, 0.00], [-0.02, 0.01]]]}}}
-```
+Java offers `result.explanationView()`, nullable accessors with the same meaning, `toText()` and `featureImportance(boolean normalize)` returning immutable records.
+Python text, print and pandas views are local presentation helpers.
 
-### As one table
+## Schema metadata reports
 
-`result.explanations.gradients.to_pandas()` gives one line per (row, output, column),
-across all entities:
+`schema.metadata_report()` and `schema.link_report()` snapshot the schema's existing table descriptors and directed relationships.
+Individual tables expose `table.metadata_report()`.
+Reports provide immutable records, `to_text()`, `to_pandas()` and `print()`; `schema.print_metadata()` and `schema.print_links()` are shortcuts.
+They do not read source rows, infer new metadata or change the schema.
+Java provides corresponding `metadataReport()`, `linkReport()` and `toText()` methods with immutable records.
 
-```
-id      table     hop  key         row  output           column       gradient
-user_5  users     0    user_5      0    probability_yes  tenure_days   0.05
-user_5  orders    1    None        0    probability_yes  amount        0.02
-user_5  products  2    prod_77     0    probability_yes  price         0.004
-user_5  events    1    None        1    probability_yes  kind_login   -0.02
-```
+### Context column associations
 
-- `table` is the table's name. On `kumo-relational` the entity's own table
-  (`users` here) is hop 0. On `kumo-tabular` the one table is shown as
-  `instance`, at hop 0.
-- `hop` is how many links the row is from the entity, 0 for the entity's own
-  table. The client works it out from the relationships and foreign-key
-  values it sent. It is `None` for a row no relationship reaches.
-- `key` is the row's entry in `keys`, or `None` when the table has no `keys`.
-  On a `kumo-tabular` `instance` line it is the row's `id`, or `None` when the
-  request has no entity key. `row` is the row's position in that entity's
-  `related[table]['rows']`, and 0 on a `kumo-tabular` `instance` line.
-- `output` names the score by the column of `result.to_pandas()` that holds
-  it: `probability_yes`, `prediction`, `quantile_0.1`.
-
-### Column explanations
-
-`result.explanations.columns` shows, for each column, how the outcome differs
-across groups of the labelled context rows. The client computes it from the
-labelled rows it sends; the endpoint is not asked for it. It is `None` when
-explanations were not asked for.
-
-When it is computed:
-
-- `predict()`: on each call that asks for explanations, from that request's
-  labelled rows. A forecast has one analysis, over every step's labelled rows
-  together, each with that step's outcome.
-- a session: once, at `fit()`, from the pinned labelled rows after `holdout`
-  is taken out. The same analysis is attached to every answer when `fit()`
-  asked for `'explanation'`, otherwise only to a prediction whose query begins
-  `EXPLAIN`.
-
-Each column is split into cohorts: numerical values into up to 10 quantile
-bins, categories into one cohort each (the tenth onward merged into
-`OTHER(*)`, missing values under `N/A`), timestamps into ranges of time before
-the anchor. Each cohort has its `share` of the entities and its `mean`
-outcome: the rate of each class for classification (classes by frequency, at
-most 30), the plain mean for regression. A column's `score` is how much its
-cohort means spread, weighted by share and averaged over classes; scores sum
-to 1 across columns.
-
-| Model | Columns analysed |
-|---|---|
-| kumo-tabular | every column of the one table except the target, the primary key and timestamps (there is no anchor), reported under table `instance_table` |
-| kumo-relational | every column of each related table except keys, per hop the table is reached at, plus `COUNT(*)`, the number of that table's rows linked to the entity. The entity's own table is not analysed. |
-
-On `kumo-relational` an entity's related rows at one hop are averaged first,
-then entities are grouped into cohorts.
-
-`result.explanations.columns.to_pandas()` gives one line per (table, hop,
-column, cohort, class), highest `score` first. Values are illustrative, and
-the `no` lines are left out:
-
-```
-table   hop  column    stype      cohort       class  share  mean  score
-orders  1    COUNT(*)  None       [0 - 0]      yes    0.30   0.12  0.41
-orders  1    COUNT(*)  None       (0 - 3]      yes    0.45   0.38  0.41
-orders  1    COUNT(*)  None       (3 - 18+]    yes    0.25   0.71  0.41
-orders  1    amount    numerical  [3 - 12]     yes    0.50   0.22  0.27
-```
-
-`class` is `None` for regression. `stype` is `None` on a `COUNT(*)` line.
+When explanation output is requested, `result.explanations.columns` describes how context feature cohorts relate to observed targets.
+These are associations, not causal effects or model gradients.
+Use `.to_pandas()` in Python, or `result.explanations().columns().toArrow(allocator)` in Java.
+Java callers close the Arrow root before its allocator.
+The table contains table, hop, column, semantic type, cohort, class, share, mean and normalized score.
+An empty labelled context produces an empty table; unsupported tasks or unavailable statistics produce no column analysis and a warning, while prediction remains usable.
+Fitted models analyze the context after holdout and reuse it, including when EXPLAIN is requested only on a later prediction.
+Merging results with different analyses requires an explicit `columns=` override (the corresponding Java overload), so an unrelated request's analysis is never silently chosen.

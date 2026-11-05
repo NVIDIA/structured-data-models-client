@@ -105,8 +105,6 @@ THREE = Relationship('E', 'a_id', 'A', 'a_id')
 @pytest.mark.parametrize('child', ['B.b_amt', 'D.d_amt'])
 def test_any_child_of_a_parent_can_be_aggregated(order, child):
     """Which one worked used to be decided by declaration order, silently."""
-    pytest.importorskip('sdm_relational_engine')
-
     request = materialize(
         f'PREDICT SUM({child}, 0, 30, days) FOR EACH A.a_id',
         ['A', 'B', 'D'],
@@ -117,8 +115,6 @@ def test_any_child_of_a_parent_can_be_aggregated(order, child):
 
 @pytest.mark.parametrize('child', ['B.b_amt', 'D.d_amt', 'E.e_amt'])
 def test_three_children_all_work(child):
-    pytest.importorskip('sdm_relational_engine')
-
     request = materialize(
         f'PREDICT SUM({child}, 0, 30, days) FOR EACH A.a_id',
         ['A', 'B', 'D', 'E'],
@@ -191,19 +187,18 @@ def test_two_keys_in_separate_groups_are_both_seen():
             primary_keys={'users': 'user_id', 'messages': 'm_id'},
             time_columns={'messages': 'when'},
         )
-    from sdm_client.schema import to_schema_definition
-
-    groups = [
-        {(c.table_name, c.col_name) for c in group.columns}
-        for group in to_schema_definition(schema).col_groups
-    ]
-    holding = [g for g in groups if ('users', 'user_id') in g]
-    assert len(holding) == 2, groups
+    assert len(schema.relationships) == 2
+    with pytest.raises(StructuredDataError) as raised:
+        PredictiveQuery(
+            'PREDICT SUM(messages.amt, 0, 30, days) FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[1, 2], model=KumoRelational())
+    assert 'is not unique' in str(raised.value)
+    assert 'messages.sender_id' in str(raised.value)
+    assert 'messages.recipient_id' in str(raised.value)
 
 
 def test_one_key_from_one_table_is_not_ambiguous():
-    pytest.importorskip('sdm_relational_engine')
-
     request = materialize(
         'PREDICT SUM(B.b_amt, 0, 30, days) FOR EACH A.a_id', ['A', 'B'], [ONE]
     )
@@ -220,8 +215,6 @@ CHAIN = [
 
 
 def test_each_single_hop_of_a_chain_works():
-    pytest.importorskip('sdm_relational_engine')
-
     assert (
         materialize(
             'PREDICT SUM(B.b_amt, 0, 30, days) FOR EACH A.a_id',
@@ -258,8 +251,6 @@ def test_two_hops_are_refused_by_naming_the_route():
 
 def test_the_remedy_the_refusal_names_actually_works():
     """The one thing that makes naming the route worth doing."""
-    pytest.importorskip('sdm_relational_engine')
-
     assert (
         materialize(
             'PREDICT SUM(C.c_amt, 0, 30, days) FOR EACH B.b_id',
@@ -343,27 +334,53 @@ def test_two_children_of_one_parent_are_not_routed_through_it():
 
 def test_the_route_is_only_offered_upward():
     """Directly, on the helper, over the three shapes at once."""
-    from sdm_client.schema import to_schema_definition
-
+    tables = {name: frames()[name] for name in ('A', 'B', 'C', 'D')}
+    tables['A'] = tables['A'].assign(a_when=DAYS[: len(tables['A'])])
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_data(
-            {name: frames()[name] for name in ('A', 'B', 'C', 'D')},
+            tables,
             relationships=[ONE, TWO, Relationship('C', 'b_id', 'B', 'b_id')],
             primary_keys={'A': 'a_id', 'B': 'b_id', 'C': 'c_id', 'D': 'd_id'},
-            time_columns={'B': 'b_when', 'C': 'c_when', 'D': 'd_when'},
+            time_columns={
+                'A': 'a_when',
+                'B': 'b_when',
+                'C': 'c_when',
+                'D': 'd_when',
+            },
         )
 
-    from predictive_query.validator.join_validator import JoinValidator
-
-    route = JoinValidator(to_schema_definition(schema))._route_between
-
-    assert route('C', 'A') == ['C', 'B', 'A']
-    assert route('B', 'A') == ['B', 'A']
-    assert route('A', 'C') == []
-    assert route('A', 'B') == []
-    assert route('C', 'D') == []
-    assert route('D', 'C') == []
+    for child, parent, value, key, route in [
+        ('C', 'A', 'c_amt', 'a_id', 'C -> B -> A'),
+        ('A', 'C', 'a_val', 'c_id', None),
+        ('A', 'B', 'a_val', 'b_id', None),
+        ('C', 'D', 'c_amt', 'd_id', None),
+        ('D', 'C', 'd_amt', 'c_id', None),
+    ]:
+        with pytest.raises(StructuredDataError) as raised:
+            PredictiveQuery(
+                f'PREDICT SUM({child}.{value}, 0, 30, days) '
+                f'FOR EACH {parent}.{key}',
+                schema,
+            ).materialize(indices=[1, 2], model=KumoRelational())
+        message = str(raised.value)
+        if route:
+            assert route in message
+        else:
+            assert (
+                f'There is no foreign key from table {child} to table {parent}'
+                in message
+            )
+            assert 'reaches' not in message
+    assert (
+        PredictiveQuery(
+            'PREDICT SUM(B.b_amt, 0, 30, days) FOR EACH A.a_id',
+            schema,
+        )
+        .materialize(indices=[1, 2], model=KumoRelational())
+        .predict_rows
+        == 2
+    )
 
 
 def test_a_one_to_one_link_names_no_direction():
@@ -371,10 +388,6 @@ def test_a_one_to_one_link_names_no_direction():
     primary keys and neither table is the parent. Picking one would make the
     direction depend on set order, which is the same coin-flip that made a
     child's aggregation depend on declaration order."""
-    from predictive_query.validator.join_validator import JoinValidator
-
-    from sdm_client.schema import to_schema_definition
-
     users = pd.DataFrame(
         {'user_id': range(100), 'seg': [i % 3 for i in range(100)]}
     )
@@ -404,12 +417,43 @@ def test_a_one_to_one_link_names_no_direction():
             },
             time_columns={'events': 'when'},
         )
-    route = JoinValidator(to_schema_definition(schema))._route_between
-
-    assert route('profiles', 'users') == []
-    assert route('users', 'profiles') == []
-    assert route('profiles', 'events') == []
-    assert route('events', 'users') == ['events', 'users']
+    # Query validation can describe this schema, but materialization refuses
+    # a primary key used as a foreign key instead of inventing a direction.
+    for text in [
+        'PREDICT SUM(events.amt, 0, 30, days) FOR EACH profiles.user_id',
+        'PREDICT SUM(events.amt, 0, 30, days) FOR EACH users.user_id',
+    ]:
+        with pytest.raises(StructuredDataError) as raised:
+            PredictiveQuery(text, schema).materialize(
+                indices=[1, 2],
+                model=KumoRelational(),
+            )
+        message = str(raised.value)
+        assert raised.value.code == 'INVALID_REQUEST'
+        if 'profiles.user_id' in text:
+            assert (
+                'There is no foreign key from table events to table profiles'
+                in message
+            )
+        else:
+            assert (
+                "Cannot treat the primary key of table 'profiles' as a foreign key"
+                in message
+            )
+        assert 'reaches' not in message
+    # Following the materialization remedy makes the ordinary join usable.
+    schema.relationships = [
+        Relationship('events', 'user_id', 'users', 'user_id')
+    ]
+    assert (
+        PredictiveQuery(
+            'PREDICT SUM(events.amt, 0, 30, days) FOR EACH users.user_id',
+            schema,
+        )
+        .materialize(indices=[1, 2], model=KumoRelational())
+        .predict_rows
+        == 2
+    )
 
 
 def test_a_column_two_hops_away_gets_a_column_repair():

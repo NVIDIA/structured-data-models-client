@@ -567,7 +567,6 @@ def test_no_example_trains_anything(path):
 
 @pytest.fixture
 def schema():
-    pytest.importorskip('sdm_relational_engine')
     pd = pytest.importorskip('pandas')
     from sdm_client import Relationship, Schema
 
@@ -600,7 +599,6 @@ def schema():
 
 @pytest.fixture
 def schema_with_text():
-    pytest.importorskip('sdm_relational_engine')
     pd = pytest.importorskip('pandas')
     from sdm_client import Relationship, Schema
 
@@ -1401,7 +1399,6 @@ def test_a_warehouse_reads_the_same_whole_numbers_as_a_category():
     regression of a warehouse and get a multiclass question.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
 
     from sdm_client import Relationship, Schema
     from sdm_connectors import DuckDBSource
@@ -1731,28 +1728,6 @@ BY_CAPABILITY = {
 
 
 @pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
-def test_a_clause_refused_on_one_table_is_the_tabular_profiles_doing(clause):
-    """The sentence under that table: all seven are the profile refusing.
-
-    The reference used to call three of them the grammar's, whatever the
-    model, which the relational reference contradicts by teaching them. Asked
-    of the profiles rather than of a query, because a query on a single table
-    is refused for several reasons at once and the message names one.
-    """
-    from predictive_query.profiles import RELATIONAL, TABULAR
-
-    capability = BY_CAPABILITY[clause]
-    assert getattr(TABULAR.capabilities, capability) is False, (
-        f'the tabular profile allows {capability}, and the reference says '
-        f'{clause} is refused on one table'
-    )
-    assert getattr(RELATIONAL.capabilities, capability) is True, (
-        f'the relational profile refuses {capability} too, and the reference '
-        f'says the relational model takes all seven'
-    )
-
-
-@pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
 def test_a_clause_the_tabular_reference_calls_refused_is(clause, one_table):
     from sdm_client import KumoTabular, PredictiveQuery
     from sdm_client.errors import StructuredDataError
@@ -1954,7 +1929,6 @@ def test_a_source_reads_the_catalogs_own_keys():
     duckdb = pytest.importorskip('duckdb')
     # Schema.from_source needs the engine, which is the extra this very
     # reference says the connector alone does not bring.
-    pytest.importorskip('sdm_relational_engine')
     from sdm_client import Schema
     from sdm_connectors import DuckDBSource
 
@@ -1981,49 +1955,55 @@ def test_a_source_reads_the_catalogs_own_keys():
     )
 
 
-def test_describing_a_source_reads_a_thousand_rows_of_it():
+def test_describing_a_source_reads_a_thousand_rows_of_it(monkeypatch):
     """What the reference says leaves the warehouse before any prediction.
 
-    Counted by giving the source more rows than the sample takes and asking
-    what was read: a table left in place is not a table nothing is read from.
+    Observe the real provider's preview replies while the public call runs:
+    the default core need not retain the legacy engine's pandas sample cache.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
     from sdm_client import Schema
+    from sdm_client._rust import providers
     from sdm_connectors import DuckDBSource
-    from sdm_relational_engine.rfm.base.table import Table
 
-    connection = duckdb.connect()
-    connection.execute(
-        'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
-    )
-    schema = Schema.from_source(
-        DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
-    )
-    assert Table._NUM_SAMPLE_ROWS == 1000, (
-        f'the sample is {Table._NUM_SAMPLE_ROWS} rows and both files say a '
-        f'thousand'
-    )
-    sampled = schema._engine_tables._tables['t']._source_sample_df
-    read = len(sampled)
-    assert read == 1000, (
-        f'describing a 5,000-row source read {read} rows, and the reference '
-        f'says up to a thousand of each leave the warehouse'
-    )
+    samples = {}
 
-    connection.execute(
-        'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
-    )
-    smaller = Schema.from_source(
-        DuckDBSource(connection),
-        {'small': 'small'},
-        primary_keys={'small': 'id'},
-    )
-    whole = len(smaller._engine_tables._tables['small']._source_sample_df)
-    assert whole == 12, (
-        f'a 12-row source gave {whole} rows, and the reference says all of a '
-        f'table that small is what leaves'
-    )
+    class ObservingDuckDBProvider(providers.DuckDBProvider):
+        def __call__(self, step, keys=None):
+            result = super().__call__(step, keys)
+            request = step['request']
+            if request['request'] == 'preview':
+                table = tuple(request['table']['source'])
+                samples.setdefault(table, []).append(result.num_rows)
+            return result
+
+    monkeypatch.setattr(providers, 'DuckDBProvider', ObservingDuckDBProvider)
+    with duckdb.connect() as connection:
+        connection.execute(
+            'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
+        )
+        schema = Schema.from_source(
+            DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
+        )
+        assert set(schema.tables) == {'t'}
+        assert samples == {('t',): [1000]}, (
+            f'describing a 5,000-row source read previews {samples}, and the '
+            'reference says up to a thousand of each leave the warehouse'
+        )
+
+        connection.execute(
+            'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
+        )
+        smaller = Schema.from_source(
+            DuckDBSource(connection),
+            {'small': 'small'},
+            primary_keys={'small': 'id'},
+        )
+        assert set(smaller.tables) == {'small'}
+        assert samples == {('t',): [1000], ('small',): [12]}, (
+            f'the preview reads were {samples}, and the reference says all '
+            'of the 12-row source leaves'
+        )
 
 
 def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
@@ -2033,7 +2013,6 @@ def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
     the reference tells a reader to pass ``read_only=True``.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
 
     from sdm_client import Schema
     from sdm_client.errors import StructuredDataError
@@ -2220,7 +2199,6 @@ def test_the_tabular_examples_print_what_the_skill_shows(name):
     ],
 )
 def test_the_relational_examples_print_what_the_skill_shows(name):
-    pytest.importorskip('sdm_relational_engine')
     pytest.importorskip('duckdb')
     assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
 
@@ -2320,16 +2298,16 @@ def test_the_limits_table_is_the_shipped_limits():
 
 
 def spelled_in_the_grammar(token: str) -> set[str]:
-    """Every operator ``token`` covers, as the grammar spells it."""
-    import predictive_query
-
-    body = (
-        Path(predictive_query.__file__).parent / 'grammar' / 'PQLGrammar.g4'
-    ).read_text(encoding='utf-8')
-    at = body.index(f'{token}:')
-    block = body[at : body.index(';', at)]
+    """Read the operator inventory from the maintained Rust lexer."""
+    source = SKILLS.parent / 'rust/crates/sdm-pql/src/lexer.rs'
+    name = {'AGGR': 'AGGRS', 'REL_OP': 'REL_OPS'}[token]
+    body = source.read_text(encoding='utf-8')
+    block = re.search(rf'const {name}: &\[&str\] = &\[(.*?)\];', body, re.S)
+    assert block is not None, f'Rust lexer has no {name} inventory'
     return {
-        name for name in re.findall(r"'([^']+)'", block) if name == name.upper()
+        spelling
+        for spelling in re.findall(r'"([^"]+)"', block.group(1))
+        if spelling == spelling.upper()
     }
 
 
@@ -2493,10 +2471,10 @@ def test_the_relational_endpoint_explains_every_entity(target, schema):
     # `resolve` asks about users 1 and 2.
     asked = [1, 2]
     assert sorted(int(one) for one in result.to_pandas()['id']) == asked
-    assert sorted(int(key) for key in result.explanations) == asked, (
-        f'{target} explained {sorted(result.explanations)}, asked {asked}'
+    assert sorted(int(key) for key in result.explanations.gradients) == asked, (
+        f'{target} explained {sorted(result.explanations.gradients)}, asked {asked}'
     )
-    for key, entry in result.explanations.items():
+    for key, entry in result.explanations.gradients.items():
         assert set(entry) == {'outputs', 'related'}, (
             f'{target} gave {key} the blocks {sorted(entry)}'
         )

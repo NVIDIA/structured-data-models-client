@@ -407,11 +407,10 @@ def test_an_ordinary_key_is_still_nominated():
 
 
 def _table(frame: pd.DataFrame):
-    from sdm_client.schema import _infer_table
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        return _infer_table('t', frame)
+        return Schema.from_data({'t': frame}, relationships=[])['t']
 
 
 def test_a_single_null_key_is_refused_rather_than_passing_silently():

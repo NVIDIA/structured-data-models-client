@@ -39,10 +39,6 @@ requires_relational = pytest.mark.skipif(
     not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
 )
 
-pytest.importorskip(
-    'sdm_relational_engine', reason='needs the [relational] extra'
-)
-
 
 N_USERS = 40
 
@@ -207,7 +203,7 @@ def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
         list(rows[i % len(rows)]) for i in range(cap + 1)
     ]
     with pytest.raises(StructuredDataError) as refused:
-        client._backend.transport.predict(payload)
+        client._transport.predict(payload)
     assert str(cap) in str(refused.value)
 
 

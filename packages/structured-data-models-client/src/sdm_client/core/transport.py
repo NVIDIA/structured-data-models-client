@@ -35,7 +35,7 @@ _DEFAULT_BACKOFF_FACTOR = 0.5
 #: the same on every attempt, so a server fault reproduces, and the caller
 #: mistakes this endpoint reports as a 500 are reclassified from the body as
 #: the caller's after three more uploads of the whole gathered context.
-_RETRY_STATUS = (429, 502, 503, 504)
+_RETRY_STATUS = (408, 429, 502, 503, 504)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512
 _LOCAL_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
@@ -60,12 +60,6 @@ def redact_url(url: str | None) -> str | None:
     a repr it goes through here first, so the credential does not travel
     with the diagnosis into a log aggregator or a bug report.
 
-    Mirrors ``sdm_relational_engine.client.client.redact_url``, which guards
-    the same credential on the Kumo Relational path. The two cannot share one
-    implementation:
-    this package must not import the optional driver, and the package both
-    depend on is a SQL-connector package with no URL handling. Keep them in
-    step.
     """
     if not url:
         return url
@@ -83,7 +77,7 @@ def redact_url(url: str | None) -> str | None:
 def scrub_userinfo(text: str) -> str:
     r"""Remove any ``user:secret@`` credential from free text.
 
-    The counterpart to :func:`redact_url` for strings that merely *contain* a
+    The counterpart to:func:`redact_url` for strings that merely *contain* a
     URL rather than being one, chiefly the ``requests`` exception messages
     quoted into transport errors, which echo back whatever URL was requested.
     """
@@ -364,18 +358,22 @@ def _decoded_object(content: bytes, url: str) -> dict[str, Any]:
     r"""``content`` as the JSON object it is supposed to be.
 
     In one place because it was in two, and one checked only that it was JSON:
-    a 200 carrying an array escaped `models()` as a bare ``AttributeError``.
+    a 200 carrying an array escaped `models` as a bare ``AttributeError``.
     A deeply nested body raises `RecursionError`, a `RuntimeError`, which would
     otherwise escape the contract these errors state.
     """
     try:
         body = json.loads(content or b'{}')
     except (ValueError, RecursionError) as error:
-        raise StructuredDataError(
+        failed = StructuredDataError(
             f'{redact_url(url)} did not return JSON',
             code='TRANSPORT_ERROR',
             details={'url': redact_url(url)},
-        ) from error
+        )
+        # Nested past what this interpreter's reader reads: said so, for the
+        # core route (StructuredDataError._response_too_deep).
+        failed._response_too_deep = isinstance(error, RecursionError)
+        raise failed from error
     if not isinstance(body, dict):
         raise StructuredDataError(
             f'Expected a JSON object from {redact_url(url)}, got '
@@ -477,14 +475,37 @@ def _build_session(
     return session
 
 
+class EndpointFailed(Exception):  # noqa: N818 - says what happened
+    r"""An endpoint's failure with no answer to hand over, as its SDK
+    reported it, raised by a transport whose answers the core reads (a
+    Databricks serving endpoint's ``predict_body``): the status the
+    error's class gives, its message and its code, which the core reads for
+    codes only and never repeats, and the class's name. The core names the
+    refusal; this carries nothing else of the error, and is never shown."""
+
+    def __init__(
+        self,
+        status: int,
+        detail: str,
+        provider_code: str | None,
+        provider_error: str,
+    ) -> None:
+        super().__init__()
+        self.status = status
+        self.detail = detail
+        self.provider_code = provider_code
+        self.provider_error = provider_error
+
+
 class WireTransport(Protocol):
     r"""What a client needs from whatever carries its requests.
 
-    A NIM reached over HTTP is one; a Databricks Model Serving endpoint is
-    another. The client asks only this of either.
+    A NIM reached over HTTP, a Databricks serving endpoint and a local Python
+    model runtime each implement this boundary. Rust owns request preparation
+    and result assembly for all three.
     """
 
-    #: Whether the endpoint can pin a context. A client refuses ``fit()`` up
+    #: Whether the endpoint can pin a context. A client refuses ``fit`` up
     #: front when it cannot, rather than preparing a session to be told so.
     serves_sessions: bool
 
@@ -512,7 +533,7 @@ class Transport:
     r"""The HTTP wire layer to one Universal TFM NIM.
 
     Owns a pooled ``requests.Session`` with retry/backoff on the transient
-    failures :data:`_RETRY_STATUS` names. Not part of the public API surface;
+    failures:data:`_RETRY_STATUS` names. Not part of the public API surface;
     a ``SDMClient`` holds one of these.
 
     ``timeout`` bounds each individual attempt, not the call as a whole: a
@@ -680,6 +701,28 @@ class Transport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post(_PREDICTIONS_PATH, payload)
 
+    def predict_body(self, body: bytes) -> bytes:
+        r"""Sends a prediction call already written as UTF-8 JSON, the bytes
+        as they are, and gives back the endpoint's answer as the bytes it
+        sent: the core's call on its route, whose size limit counts the
+        bytes it wrote, which are the bytes sent (register PD-2),
+        and whose answer the core reads itself. A refusal by its
+        status is raised as:meth:`predict` raises it. The old route's calls
+        go through:meth:`predict`. An answer:meth:`predict` would refuse
+        as not a JSON object is refused as it refuses it; one nested past
+        this interpreter's reader is handed over as sent, for the core to
+        refuse as too deep (B-22); an empty one is given as
+        ``{}``, as:meth:`predict` reads it.
+        """
+        url = self._url + _PREDICTIONS_PATH
+        content = self._post_raw(_PREDICTIONS_PATH, body) or b'{}'
+        try:
+            _decoded_object(content, url)
+        except StructuredDataError as failed:
+            if not failed._response_too_deep:
+                raise
+        return content
+
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Pins a context server-side; ``payload`` carries the context-only
         sections of a prediction request.
@@ -721,7 +764,6 @@ class Transport:
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_open()
-        url = self._url + path
         # Encode before sending, so a value with no JSON form is named here
         # rather than raising a TypeError from inside `requests` that mentions
         # neither this client nor the offending key.
@@ -739,14 +781,24 @@ class Transport:
                 f'{error}',
                 code='INVALID_REQUEST',
             ) from error
+        # Encoded here rather than handed over as `str`: requests gives a str
+        # body to httplib, which encodes latin-1, so this is only safe today
+        # because `json.dumps` defaults to `ensure_ascii=True`. Not a default
+        # worth depending on.
+        return self._post_body(path, body.encode('utf-8'))
+
+    def _post_body(self, path: str, body: bytes) -> dict[str, Any]:
+        return _decoded_object(self._post_raw(path, body), self._url + path)
+
+    def _post_raw(self, path: str, body: bytes) -> bytes:
+        r"""Posts ``body`` and gives back the answer's bytes, a status of
+        400 or more raised as the endpoint's refusal."""
+        self._require_open()
+        url = self._url + path
         try:
             with self._session.post(
                 url,
-                # Encoded here rather than handed over as `str`: requests
-                # gives a str body to httplib, which encodes latin-1, so this
-                # is only safe today because `json.dumps` defaults to
-                # `ensure_ascii=True`. Not a default worth depending on.
-                data=body.encode('utf-8'),
+                data=body,
                 headers={'Content-Type': 'application/json'},
                 timeout=self._timeout,
                 verify=self._verify_ssl,
@@ -758,7 +810,7 @@ class Transport:
             raise _failed_to_reach(error, url, self._timeout) from error
         if status_code >= 400:
             raise _to_nim_error(status_code, content)
-        return _decoded_object(content, url)
+        return content
 
 
 #: Deeper than any real request and far below the interpreter's own limit,

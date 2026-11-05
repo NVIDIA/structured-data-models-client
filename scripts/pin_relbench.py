@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-r"""Pin the RelBench datasets ``Graph.from_relbench`` loads.
+r"""Pin the RelBench datasets ``Schema.from_relbench`` loads.
 
 RelBench 3 moved its data from a download server with a published hash file
 to Hugging Face dataset repositories, which carry no hash file and are read at
@@ -49,8 +49,8 @@ _NEXT_LINK = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
 
 OUTPUT = (
     Path(__file__).resolve().parents[1]
-    / 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/assets'
-    / 'relbench_registry.json'
+    / 'packages/structured-data-models-client/src/sdm_client/assets/relbench'
+    / 'registry.json'
 )
 
 

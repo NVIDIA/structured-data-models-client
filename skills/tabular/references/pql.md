@@ -12,8 +12,8 @@ and the refusals say so.
 [ EXPLAIN ] PREDICT <table>.<column> FOR <table>.<key> IN (...)
 ```
 
-`EXPLAIN PREDICT …` means the same as `outputs=['explanation']`; passing both
-is allowed and redundant.
+`EXPLAIN PREDICT …` adds `'explanation'` to the ordinary requested outputs.
+Explicitly including that output too is allowed; `outputs=[]` remains invalid.
 
 `FOR` needs a selector. `FOR customers.customer_id` on its own is refused:
 *"When using "FOR" in foundation model queries, you must specify one or

@@ -1,0 +1,3484 @@
+{
+ "format": "sdm-time-ranges/1",
+ "tzdata": "2026c",
+ "vectors": [
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T19:28:45.224192000",
+    "offset": -1820
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T04:00:54.775807000",
+    "offset": 0
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T23:42:23.145224192",
+    "offset": -1820
+   },
+   "pandas": {
+    "local": "1677-09-20T23:42:23.145224",
+    "offset": -1820
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T23:47:16.854775807",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "2262-04-11T23:47:16.854775",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T23:29:40.000000000",
+    "offset": -1820
+   },
+   "pandas": {
+    "local": "0001-01-01T00:00:00",
+    "offset": -1820
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T22:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-30T22:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T23:59:59.999999000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T23:59:59.999999",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Africa/Casablanca",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "1970-01-01T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Africa/Casablanca",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135594980000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Africa/Casablanca",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402214400000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Africa/Casablanca",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402300799999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Africa/Casablanca",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372035034775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Africa/Casablanca",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372036854775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T12:53:09.224192000",
+    "offset": -25556
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-09T21:00:54.775807000",
+    "offset": -25200
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T17:06:47.145224192",
+    "offset": -25556
+   },
+   "pandas": {
+    "local": "1677-09-20T17:06:47.145224",
+    "offset": -25556
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T17:47:16.854775807",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "2262-04-11T17:47:16.854775",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T16:54:04.000000000",
+    "offset": -25556
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T15:00:00.000000000",
+    "offset": -25200
+   },
+   "pandas": {
+    "local": "9999-12-30T15:00:00",
+    "offset": -25200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-30T17:00:00.000000000",
+    "offset": -25200
+   },
+   "pandas": {
+    "local": "9999-12-30T17:00:00",
+    "offset": -25200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T16:59:59.999999000",
+    "offset": -25200
+   },
+   "pandas": {
+    "local": "9999-12-31T16:59:59.999999",
+    "offset": -25200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Ciudad_Juarez",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T18:00:00.000000000",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "1969-12-31T18:00:00",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Ciudad_Juarez",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135571244000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Ciudad_Juarez",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402239600000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Ciudad_Juarez",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402325999999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Ciudad_Juarez",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372011298775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Ciudad_Juarez",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372062054775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T12:06:07.224192000",
+    "offset": -28378
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-09T20:00:54.775807000",
+    "offset": -28800
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T16:19:45.145224192",
+    "offset": -28378
+   },
+   "pandas": {
+    "local": "1677-09-20T16:19:45.145224",
+    "offset": -28378
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T16:47:16.854775807",
+    "offset": -25200
+   },
+   "pandas": {
+    "local": "2262-04-11T16:47:16.854775",
+    "offset": -25200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T16:07:02.000000000",
+    "offset": -28378
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T14:00:00.000000000",
+    "offset": -28800
+   },
+   "pandas": {
+    "local": "9999-12-30T14:00:00",
+    "offset": -28800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-30T16:00:00.000000000",
+    "offset": -28800
+   },
+   "pandas": {
+    "local": "9999-12-30T16:00:00",
+    "offset": -28800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T15:59:59.999999000",
+    "offset": -28800
+   },
+   "pandas": {
+    "local": "9999-12-31T15:59:59.999999",
+    "offset": -28800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Los_Angeles",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T16:00:00.000000000",
+    "offset": -28800
+   },
+   "pandas": {
+    "local": "1969-12-31T16:00:00",
+    "offset": -28800
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Los_Angeles",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135568422000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Los_Angeles",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402243200000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Los_Angeles",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402329599999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Los_Angeles",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372008476775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Los_Angeles",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372065654775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T13:22:29.224192000",
+    "offset": -23796
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-09T22:00:54.775807000",
+    "offset": -21600
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T17:36:07.145224192",
+    "offset": -23796
+   },
+   "pandas": {
+    "local": "1677-09-20T17:36:07.145224",
+    "offset": -23796
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T17:47:16.854775807",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "2262-04-11T17:47:16.854775",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T17:23:24.000000000",
+    "offset": -23796
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T16:00:00.000000000",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "9999-12-30T16:00:00",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-30T18:00:00.000000000",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "9999-12-30T18:00:00",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T17:59:59.999999000",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "9999-12-31T17:59:59.999999",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Mexico_City",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T18:00:00.000000000",
+    "offset": -21600
+   },
+   "pandas": {
+    "local": "1969-12-31T18:00:00",
+    "offset": -21600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Mexico_City",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135573004000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Mexico_City",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402236000000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Mexico_City",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402322399999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Mexico_City",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372013058775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Mexico_City",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372058454775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T15:03:03.224192000",
+    "offset": -17762
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-09T23:00:54.775807000",
+    "offset": -18000
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T19:16:41.145224192",
+    "offset": -17762
+   },
+   "pandas": {
+    "local": "1677-09-20T19:16:41.145224",
+    "offset": -17762
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T19:47:16.854775807",
+    "offset": -14400
+   },
+   "pandas": {
+    "local": "2262-04-11T19:47:16.854775",
+    "offset": -14400
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T19:03:58.000000000",
+    "offset": -17762
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T17:00:00.000000000",
+    "offset": -18000
+   },
+   "pandas": {
+    "local": "9999-12-30T17:00:00",
+    "offset": -18000
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-30T19:00:00.000000000",
+    "offset": -18000
+   },
+   "pandas": {
+    "local": "9999-12-30T19:00:00",
+    "offset": -18000
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T18:59:59.999999000",
+    "offset": -18000
+   },
+   "pandas": {
+    "local": "9999-12-31T18:59:59.999999",
+    "offset": -18000
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/New_York",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T19:00:00.000000000",
+    "offset": -18000
+   },
+   "pandas": {
+    "local": "1969-12-31T19:00:00",
+    "offset": -18000
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "America/New_York",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135579038000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/New_York",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402232400000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/New_York",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402318799999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/New_York",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372019092775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/New_York",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372054854775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T15:16:20.224192000",
+    "offset": -16965
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T01:00:54.775807000",
+    "offset": -10800
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T19:29:58.145224192",
+    "offset": -16965
+   },
+   "pandas": {
+    "local": "1677-09-20T19:29:58.145224",
+    "offset": -16965
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T19:47:16.854775807",
+    "offset": -14400
+   },
+   "pandas": {
+    "local": "2262-04-11T19:47:16.854775",
+    "offset": -14400
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T19:17:15.000000000",
+    "offset": -16965
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T19:00:00.000000000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "9999-12-30T19:00:00",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-30T21:00:00.000000000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "9999-12-30T21:00:00",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T20:59:59.999999000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "9999-12-31T20:59:59.999999",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Santiago",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T21:00:00.000000000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "1969-12-31T21:00:00",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Santiago",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135579835000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Santiago",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402225200000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Santiago",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402311599999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Santiago",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372019889775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Santiago",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372047654775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T16:52:37.224192000",
+    "offset": -11188
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T01:00:54.775807000",
+    "offset": -10800
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T21:06:15.145224192",
+    "offset": -11188
+   },
+   "pandas": {
+    "local": "1677-09-20T21:06:15.145224",
+    "offset": -11188
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T20:47:16.854775807",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "2262-04-11T20:47:16.854775",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T20:53:32.000000000",
+    "offset": -11188
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T19:00:00.000000000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "9999-12-30T19:00:00",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-30T21:00:00.000000000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "9999-12-30T21:00:00",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T20:59:59.999999000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "9999-12-31T20:59:59.999999",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "America/Sao_Paulo",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T21:00:00.000000000",
+    "offset": -10800
+   },
+   "pandas": {
+    "local": "1969-12-31T21:00:00",
+    "offset": -10800
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Sao_Paulo",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135585612000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Sao_Paulo",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402225200000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Sao_Paulo",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402311599999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Sao_Paulo",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372025666775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "America/Sao_Paulo",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372047654775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-22T01:52:33.224192000",
+    "offset": 21208
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T09:30:54.775807000",
+    "offset": 19800
+   },
+   "pandas": {
+    "error": "OutOfBoundsDatetime"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T06:06:11.145224192",
+    "offset": 21208
+   },
+   "pandas": {
+    "local": "1677-09-21T06:06:11.145224",
+    "offset": 21208
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T05:17:16.854775807",
+    "offset": 19800
+   },
+   "pandas": {
+    "local": "2262-04-12T05:17:16.854775",
+    "offset": 19800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T05:53:28.000000000",
+    "offset": 21208
+   },
+   "pandas": {
+    "local": "0001-01-01T05:30:00",
+    "offset": 21208
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T03:30:00.000000000",
+    "offset": 19800
+   },
+   "pandas": {
+    "local": "9999-12-31T03:30:00",
+    "offset": 19800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T05:30:00.000000000",
+    "offset": 19800
+   },
+   "pandas": {
+    "local": "9999-12-31T05:30:00",
+    "offset": 19800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T05:29:59.999999000",
+    "offset": 19800
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Kolkata",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T05:30:00.000000000",
+    "offset": 19800
+   },
+   "pandas": {
+    "local": "1970-01-01T05:30:00",
+    "offset": 19800
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Kolkata",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135618008000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Kolkata",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402194600000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Kolkata",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402280999999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Kolkata",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372058062775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Kolkata",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372017054775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T23:24:49.224192000",
+    "offset": 12344
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T07:30:54.775807000",
+    "offset": 12600
+   },
+   "pandas": {
+    "error": "OutOfBoundsDatetime"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T03:38:27.145224192",
+    "offset": 12344
+   },
+   "pandas": {
+    "local": "1677-09-21T03:38:27.145224",
+    "offset": 12344
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T03:17:16.854775807",
+    "offset": 12600
+   },
+   "pandas": {
+    "local": "2262-04-12T03:17:16.854775",
+    "offset": 12600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T03:25:44.000000000",
+    "offset": 12344
+   },
+   "pandas": {
+    "local": "0001-01-01T03:30:00",
+    "offset": 12344
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T01:30:00.000000000",
+    "offset": 12600
+   },
+   "pandas": {
+    "local": "9999-12-31T01:30:00",
+    "offset": 12600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T03:30:00.000000000",
+    "offset": 12600
+   },
+   "pandas": {
+    "local": "9999-12-31T03:30:00",
+    "offset": 12600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T03:29:59.999999000",
+    "offset": 12600
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tehran",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T03:30:00.000000000",
+    "offset": 12600
+   },
+   "pandas": {
+    "local": "1970-01-01T03:30:00",
+    "offset": 12600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tehran",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135609144000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tehran",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402201800000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tehran",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402288199999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tehran",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372049198775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tehran",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372024254775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-22T05:18:04.224192000",
+    "offset": 33539
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T13:00:54.775807000",
+    "offset": 32400
+   },
+   "pandas": {
+    "error": "OutOfBoundsDatetime"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T09:31:42.145224192",
+    "offset": 33539
+   },
+   "pandas": {
+    "local": "1677-09-21T09:31:42.145224",
+    "offset": 33539
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T08:47:16.854775807",
+    "offset": 32400
+   },
+   "pandas": {
+    "local": "2262-04-12T08:47:16.854775",
+    "offset": 32400
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T09:18:59.000000000",
+    "offset": 33539
+   },
+   "pandas": {
+    "local": "0001-01-01T09:00:00",
+    "offset": 33539
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T07:00:00.000000000",
+    "offset": 32400
+   },
+   "pandas": {
+    "local": "9999-12-31T07:00:00",
+    "offset": 32400
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T09:00:00.000000000",
+    "offset": 32400
+   },
+   "pandas": {
+    "local": "9999-12-31T09:00:00",
+    "offset": 32400
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T08:59:59.999999000",
+    "offset": 32400
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Asia/Tokyo",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T09:00:00.000000000",
+    "offset": 32400
+   },
+   "pandas": {
+    "local": "1970-01-01T09:00:00",
+    "offset": 32400
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tokyo",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135630339000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tokyo",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402182000000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tokyo",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402268399999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tokyo",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372070393775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Asia/Tokyo",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372004454775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-22T06:35:25.224192000",
+    "offset": 38180
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T15:00:54.775807000",
+    "offset": 39600
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T10:49:03.145224192",
+    "offset": 38180
+   },
+   "pandas": {
+    "local": "1677-09-21T10:49:03.145224",
+    "offset": 38180
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T10:17:16.854775807",
+    "offset": 37800
+   },
+   "pandas": {
+    "local": "2262-04-12T10:17:16.854775",
+    "offset": 37800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T10:36:20.000000000",
+    "offset": 38180
+   },
+   "pandas": {
+    "local": "0001-01-01T11:00:00",
+    "offset": 38180
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T09:00:00.000000000",
+    "offset": 39600
+   },
+   "pandas": {
+    "local": "9999-12-31T09:00:00",
+    "offset": 39600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T11:00:00.000000000",
+    "offset": 39600
+   },
+   "pandas": {
+    "local": "9999-12-31T11:00:00",
+    "offset": 39600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T10:59:59.999999000",
+    "offset": 39600
+   },
+   "pandas": {
+    "error": "OverflowError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Australia/Lord_Howe",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T10:00:00.000000000",
+    "offset": 36000
+   },
+   "pandas": {
+    "local": "1970-01-01T10:00:00",
+    "offset": 36000
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Australia/Lord_Howe",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135634980000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Australia/Lord_Howe",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402174800000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Australia/Lord_Howe",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402261199999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Australia/Lord_Howe",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372075034775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Australia/Lord_Howe",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223371997254775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T20:52:33.224192000",
+    "offset": 3208
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T05:00:54.775807000",
+    "offset": 3600
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T01:06:11.145224192",
+    "offset": 3208
+   },
+   "pandas": {
+    "local": "1677-09-21T01:06:11.145224",
+    "offset": 3208
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T01:47:16.854775807",
+    "offset": 7200
+   },
+   "pandas": {
+    "local": "2262-04-12T01:47:16.854775",
+    "offset": 7200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T00:53:28.000000000",
+    "offset": 3208
+   },
+   "pandas": {
+    "local": "0001-01-01T01:00:00",
+    "offset": 3208
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T23:00:00.000000000",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "9999-12-30T23:00:00",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T01:00:00.000000000",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "9999-12-31T01:00:00",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T00:59:59.999999000",
+    "offset": 3600
+   },
+   "pandas": {
+    "error": "OverflowError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Berlin",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T01:00:00.000000000",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "1970-01-01T01:00:00",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Berlin",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135600008000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Berlin",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402210800000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Berlin",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402297199999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Berlin",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372040062775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Berlin",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372033254775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T19:33:44.224192000",
+    "offset": -1521
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T04:00:54.775807000",
+    "offset": 0
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-20T23:47:22.145224192",
+    "offset": -1521
+   },
+   "pandas": {
+    "local": "1677-09-20T23:47:22.145224",
+    "offset": -1521
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T00:47:16.854775807",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "2262-04-12T00:47:16.854775",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T23:34:39.000000000",
+    "offset": -1521
+   },
+   "pandas": {
+    "local": "0001-01-01T00:00:00",
+    "offset": -1521
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T22:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-30T22:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T23:59:59.999999000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T23:59:59.999999",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Dublin",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T01:00:00.000000000",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "1970-01-01T01:00:00",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Dublin",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135595279000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Dublin",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402214400000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Dublin",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402300799999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Dublin",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372035333775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Dublin",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372036854775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T22:01:09.224192000",
+    "offset": 7324
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T06:00:54.775807000",
+    "offset": 7200
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T02:14:47.145224192",
+    "offset": 7324
+   },
+   "pandas": {
+    "local": "1677-09-21T02:14:47.145224",
+    "offset": 7324
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T02:47:16.854775807",
+    "offset": 10800
+   },
+   "pandas": {
+    "local": "2262-04-12T02:47:16.854775",
+    "offset": 10800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T02:02:04.000000000",
+    "offset": 7324
+   },
+   "pandas": {
+    "local": "0001-01-01T02:00:00",
+    "offset": 7324
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T00:00:00.000000000",
+    "offset": 7200
+   },
+   "pandas": {
+    "local": "9999-12-31T00:00:00",
+    "offset": 7200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T02:00:00.000000000",
+    "offset": 7200
+   },
+   "pandas": {
+    "local": "9999-12-31T02:00:00",
+    "offset": 7200
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T01:59:59.999999000",
+    "offset": 7200
+   },
+   "pandas": {
+    "error": "OverflowError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/Kyiv",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T03:00:00.000000000",
+    "offset": 10800
+   },
+   "pandas": {
+    "local": "1970-01-01T03:00:00",
+    "offset": 10800
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Kyiv",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135604124000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Kyiv",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402207200000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Kyiv",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402293599999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Kyiv",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372044178775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/Kyiv",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372029654775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T19:57:50.224192000",
+    "offset": -75
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T04:00:54.775807000",
+    "offset": 0
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T00:11:28.145224192",
+    "offset": -75
+   },
+   "pandas": {
+    "local": "1677-09-21T00:11:28.145224",
+    "offset": -75
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T00:47:16.854775807",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "2262-04-12T00:47:16.854775",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0000-12-31T23:58:45.000000000",
+    "offset": -75
+   },
+   "pandas": {
+    "local": "0001-01-01T00:00:00",
+    "offset": -75
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T22:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-30T22:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T23:59:59.999999000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T23:59:59.999999",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Europe/London",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T01:00:00.000000000",
+    "offset": 3600
+   },
+   "pandas": {
+    "local": "1970-01-01T01:00:00",
+    "offset": 3600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/London",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135596725000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/London",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402214400000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/London",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402300799999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/London",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372036779775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Europe/London",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372036854775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-22T08:32:09.224192000",
+    "offset": 45184
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T17:00:54.775807000",
+    "offset": 46800
+   },
+   "pandas": {
+    "error": "OutOfBoundsDatetime"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T12:45:47.145224192",
+    "offset": 45184
+   },
+   "pandas": {
+    "local": "1677-09-21T12:45:47.145224",
+    "offset": 45184
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T12:47:16.854775807",
+    "offset": 46800
+   },
+   "pandas": {
+    "local": "2262-04-12T12:47:16.854775",
+    "offset": 46800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T12:33:04.000000000",
+    "offset": 45184
+   },
+   "pandas": {
+    "local": "0001-01-01T13:00:00",
+    "offset": 45184
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T11:00:00.000000000",
+    "offset": 46800
+   },
+   "pandas": {
+    "local": "9999-12-31T11:00:00",
+    "offset": 46800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T13:00:00.000000000",
+    "offset": 46800
+   },
+   "pandas": {
+    "local": "9999-12-31T13:00:00",
+    "offset": 46800
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T12:59:59.999999000",
+    "offset": 46800
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Apia",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1969-12-31T13:00:00.000000000",
+    "offset": -39600
+   },
+   "pandas": {
+    "local": "1969-12-31T13:00:00",
+    "offset": -39600
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Apia",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135641984000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Apia",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402167600000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Apia",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402253999999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Apia",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372082038775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Apia",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223371990054775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-22T08:12:53.224192000",
+    "offset": 44028
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T17:45:54.775807000",
+    "offset": 49500
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T12:26:31.145224192",
+    "offset": 44028
+   },
+   "pandas": {
+    "local": "1677-09-21T12:26:31.145224",
+    "offset": 44028
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-12T12:32:16.854775807",
+    "offset": 45900
+   },
+   "pandas": {
+    "local": "2262-04-12T12:32:16.854775",
+    "offset": 45900
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T12:13:48.000000000",
+    "offset": 44028
+   },
+   "pandas": {
+    "local": "0001-01-01T13:45:00",
+    "offset": 44028
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-31T11:45:00.000000000",
+    "offset": 49500
+   },
+   "pandas": {
+    "local": "9999-12-31T11:45:00",
+    "offset": 49500
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T13:45:00.000000000",
+    "offset": 49500
+   },
+   "pandas": {
+    "local": "9999-12-31T13:45:00",
+    "offset": 49500
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "+010000-01-01T13:44:59.999999000",
+    "offset": 49500
+   },
+   "pandas": {
+    "error": "OverflowError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "Pacific/Chatham",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T12:45:00.000000000",
+    "offset": 45900
+   },
+   "pandas": {
+    "local": "1970-01-01T12:45:00",
+    "offset": 45900
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Chatham",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135640828000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Chatham",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402164900000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Chatham",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402251299999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Chatham",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372080882775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "Pacific/Chatham",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223371987354775807000"
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "int64 microseconds, least",
+   "instant": "-9223372036854775808000",
+   "want": {
+    "local": "-290308-12-21T19:59:05.224192000",
+    "offset": 0
+   },
+   "pandas": {
+    "error": "ValueError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "int64 microseconds, greatest",
+   "instant": "9223372036854775807000",
+   "want": {
+    "local": "+294247-01-10T04:00:54.775807000",
+    "offset": 0
+   },
+   "pandas": {
+    "error": "NotImplementedError"
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "int64 nanoseconds, least",
+   "instant": "-9223372036854775808",
+   "want": {
+    "local": "1677-09-21T00:12:43.145224192",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "1677-09-21T00:12:43.145224",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "int64 nanoseconds, greatest",
+   "instant": "9223372036854775807",
+   "want": {
+    "local": "2262-04-11T23:47:16.854775807",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "2262-04-11T23:47:16.854775",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "0001-01-01T00:00Z",
+   "instant": "-62135596800000000000",
+   "want": {
+    "local": "0001-01-01T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "0001-01-01T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "9999-12-30T22:00Z",
+   "instant": "253402207200000000000",
+   "want": {
+    "local": "9999-12-30T22:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-30T22:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "9999-12-31T00:00Z",
+   "instant": "253402214400000000000",
+   "want": {
+    "local": "9999-12-31T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "9999-12-31T23:59:59.999999Z",
+   "instant": "253402300799999999000",
+   "want": {
+    "local": "9999-12-31T23:59:59.999999000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "9999-12-31T23:59:59.999999",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "to_local",
+   "zone": "UTC",
+   "label": "1970-01-01T00:00Z",
+   "instant": "0",
+   "want": {
+    "local": "1970-01-01T00:00:00.000000000",
+    "offset": 0
+   },
+   "pandas": {
+    "local": "1970-01-01T00:00:00",
+    "offset": 0
+   }
+  },
+  {
+   "kind": "localize",
+   "zone": "UTC",
+   "wall": [
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "-62135596800000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "UTC",
+   "wall": [
+    9999,
+    12,
+    31,
+    0,
+    0,
+    0,
+    0
+   ],
+   "want": "253402214400000000000"
+  },
+  {
+   "kind": "localize",
+   "zone": "UTC",
+   "wall": [
+    9999,
+    12,
+    31,
+    23,
+    59,
+    59,
+    999999000
+   ],
+   "want": "253402300799999999000"
+  },
+  {
+   "kind": "localize",
+   "zone": "UTC",
+   "wall": [
+    -290308,
+    12,
+    21,
+    19,
+    59,
+    5,
+    224192000
+   ],
+   "want": "-9223372036854775808000"
+  },
+  {
+   "kind": "localize",
+   "zone": "UTC",
+   "wall": [
+    294247,
+    1,
+    10,
+    4,
+    0,
+    54,
+    775807000
+   ],
+   "want": "9223372036854775807000"
+  }
+ ]
+}

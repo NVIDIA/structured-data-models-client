@@ -8,4 +8,4 @@ r"""The release, on its own so a backend can read it.
 the version cannot import it from the package root without a cycle.
 """
 
-__version__ = '1.0.0'
+__version__ = '2.0.0rc1'

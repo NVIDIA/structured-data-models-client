@@ -272,7 +272,7 @@ def test_a_payload_nested_too_deeply_is_refused_not_raised_raw():
 
     with SDMClient(url='https://example.invalid') as client:
         with pytest.raises(StructuredDataError) as error:
-            client._backend.transport._post('/v1/predictions', payload)
+            client._transport._post('/v1/predictions', payload)
     assert error.value.code == 'INVALID_REQUEST'
     assert 'nests more than' in str(error.value)
 
@@ -284,7 +284,7 @@ def test_an_adapter_that_adds_nothing_does_not_become_its_own_cause():
     so this was the common case, and anything walking the cause chain for
     logging loops on it.
     """
-    from sdm_client.core.backend import NimBackend
+    from sdm_client import SDMClient
     from sdm_client.errors import StructuredDataError
 
     class Unchanged:
@@ -299,14 +299,15 @@ def test_an_adapter_that_adds_nothing_does_not_become_its_own_cause():
         def predict(self, payload):
             raise StructuredDataError('boom', code='INVALID_REQUEST')
 
-    backend = NimBackend(Refusing())
+    client = SDMClient(url='https://example.invalid')
+    client._transport = Refusing()
 
     with pytest.raises(StructuredDataError) as error:
-        backend.predict(Unchanged(), {}, ())
+        client._send(Unchanged(), {})
     assert error.value.__cause__ is not error.value
 
     with pytest.raises(StructuredDataError) as error:
-        backend.predict(Explains(), {}, ())
+        client._send(Explains(), {})
     assert error.value.__cause__ is not error.value
     assert isinstance(error.value.__cause__, StructuredDataError)
 
@@ -319,7 +320,7 @@ def test_a_payload_that_refers_back_to_itself_is_refused():
     cyclic['self'] = cyclic
     with SDMClient(url='https://example.invalid') as client:
         with pytest.raises(StructuredDataError) as error:
-            client._backend.transport._post('/v1/predictions', cyclic)
+            client._transport._post('/v1/predictions', cyclic)
     assert 'refers back to itself' in str(error.value)
 
 
@@ -374,9 +375,7 @@ def test_a_non_ascii_body_is_encoded_here_not_by_requests():
                 'https://example.invalid/v1/predictions',
                 json={'id': 'x', 'model': 'kumo-relational', 'predictions': []},
             )
-            client._backend.transport._post(
-                '/v1/predictions', {'note': 'naïve café'}
-            )
+            client._transport._post('/v1/predictions', {'note': 'naïve café'})
             assert isinstance(mock.last_request.body, bytes)
 
 

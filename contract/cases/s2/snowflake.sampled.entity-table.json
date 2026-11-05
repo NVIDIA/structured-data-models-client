@@ -1,0 +1,57 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.sampled.entity-table",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/all-tables/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "client.predict/binary/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int16/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 50)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(1500) t(i)",
+      "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1500)::BIGINT AS user_id, (10 + (i % 100) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i % 420)::INTEGER) AS ts FROM range(6000) t(i)"
+    ],
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-01-01",
+      "max_pq_iterations": 1
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "Snowflake entity-table sampling. Compare source membership and sample size, rather than exact sampled identities, because warehouse sampling is not seeded.",
+  "source": "Correctness case snowflake.sampled.entity-table using the shop fixture."
+}

@@ -1,0 +1,847 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Operation dispatch: a typed operation to the body of its run.
+
+use std::sync::Arc;
+
+use sdm_contract::ops::{
+    GivenCandidate, HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
+    RequestState, SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceSpec,
+};
+use sdm_contract::run::StartRun;
+use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, HeldState, HostFacts, Scalar, Sentence};
+use sdm_engine::time::Zones;
+
+use crate::attached::{check_attachments, take_json, take_json_if};
+use crate::compose::CompositionRoot;
+use crate::profiles::Profile;
+use crate::run::{Attachment, Attachments, Run, internal};
+
+/// Refuses a start from a host speaking another contract version, before
+/// anything else of the message is read: host and core ship
+/// together, and no other version's fields mean anything here.
+pub fn check_contract(contract: u32) -> Result<(), CoreError> {
+    if contract == CONTRACT_VERSION {
+        return Ok(());
+    }
+    Err(CoreError::protocol(
+        Sentence::InvalidMessage,
+        format!(
+            "the host speaks contract version {contract}, and this core version {CONTRACT_VERSION}"
+        ),
+    )
+    .with_field("contract", Detail::Scalar(Scalar::UInt32(contract))))
+}
+
+/// The run of `start`'s operation, with the attachments the start names
+/// and the zones of the host's facts: the run resolves zone
+/// names through `zones` and nothing else. A contract version other than
+/// this build's, host facts the contract does not allow, attachments other
+/// than the ones the operation names, or a provider the root's data layer
+/// cannot serve, are refused before any run exists. Input-sized fields are
+/// read from their attachments here.
+pub fn start(
+    root: &CompositionRoot,
+    start: StartRun,
+    attachments: Attachments,
+    zones: Arc<dyn Zones>,
+) -> Result<Run, CoreError> {
+    check_contract(start.contract)?;
+    // The clock is an instant in UTC, spelled as the contract spells it.
+    if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
+        return Err(CoreError::new(
+            Sentence::HostClockNotUtc,
+            "the host's clock must be a ts scalar in UTC",
+        )
+        .with_field("field", Detail::text("facts.now")));
+    }
+    check_attachments(&start.operation.attachments(), &attachments)?;
+    let mut attachments = attachments;
+    let facts = start.facts;
+    Ok(match start.operation {
+        Operation::AnalyzeColumns(request) => {
+            Run::new(move |asker| async move { crate::columns::run(&asker, request, attachments) })
+        }
+        Operation::LabelsFrames(request) => Run::new(move |asker| async move {
+            crate::materialize::frames::labels(asker, request, attachments, facts, zones).await
+        }),
+        Operation::MaterializeExamples(request) => {
+            crate::materialize::examples::start(root, request, attachments, facts)?
+        }
+        Operation::RebindSource(request) => {
+            crate::rebind::start(root, request, attachments, facts)?
+        }
+        Operation::AddSqlColumn(request) => {
+            crate::sql_column::start(root, request, attachments, facts)?
+        }
+        Operation::LabelsSource(request) => {
+            crate::materialize::label_query::source(root, request, attachments, facts, zones)?
+        }
+        Operation::PrepareTimeSeries(request) => {
+            let input: sdm_contract::frames::TimeSeriesOptions =
+                take_json(&mut attachments, request.input)?;
+            let Some(Attachment::Arrow(table)) = attachments.remove(&request.table) else {
+                return Err(internal("time-series input is not Arrow"));
+            };
+            Run::new(move |asker| async move { crate::timeseries::prepare(&asker, input, table) })
+        }
+        Operation::FeatureImportance(request) => {
+            let input: sdm_contract::result::FeatureImportanceInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::result::feature_importance(&input)?)
+            })
+        }
+        Operation::PlanResultMerge(request) => {
+            let input: sdm_contract::result::PlanResultMerge =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::result::plan(&input.parts)?)
+            })
+        }
+        Operation::ReadResultItems(request) => {
+            Run::new(move |asker| async move { crate::result::items(&asker, request, attachments) })
+        }
+        Operation::ReadRequestSplit(request) => {
+            Run::new(move |asker| async move { crate::split::read(&asker, request, attachments) })
+        }
+        Operation::MergeResults(request) => {
+            Run::new(move |asker| async move { crate::result::merge(&asker, request, attachments) })
+        }
+        Operation::TabularArrow(request) => Run::new(move |asker| async move {
+            crate::tabular_arrow::run(asker, request, attachments, facts, zones).await
+        }),
+        Operation::FrameSession(input) => Run::new(move |asker| async move {
+            crate::frame_session::run(asker, input, attachments).await
+        }),
+        Operation::DescribeFrameTables(input) => Run::new(move |asker| async move {
+            crate::frame_schema::describe(&asker, input, attachments)
+        }),
+        Operation::PrepareFrameGraph(input) => Run::new(move |asker| async move {
+            crate::materialize::frames::prepare(&asker, input, attachments, &facts)
+        }),
+        Operation::MaterializeFrames(input) => Run::new(move |asker| async move {
+            crate::materialize::frames::materialize(asker, input, attachments, facts, zones).await
+        }),
+        Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {
+            crate::session::count_overlap(&asker, request, attachments)
+        }),
+        Operation::SendTabularSession(request) => Run::new(move |asker| async move {
+            crate::session::send(&asker, request, attachments).await
+        }),
+        Operation::PrepareTabularScore(request) => Run::new(move |asker| async move {
+            crate::session::prepare_score(&asker, request, attachments)
+        }),
+        Operation::CheckTabularSessionReply(request) => Run::new(move |asker| async move {
+            crate::session::check_reply(&asker, request, attachments)
+        }),
+        Operation::CheckTabularSessionQuestion(request) => Run::new(move |asker| async move {
+            crate::session::check_question(&asker, request, attachments)
+        }),
+        Operation::AcceptTabularSession(request) => {
+            Run::new(
+                move |asker| async move { crate::session::accept(&asker, request, attachments) },
+            )
+        }
+        Operation::PrepareTabularFit(request) => Run::new(move |asker| async move {
+            crate::session::prepare_fit(&asker, request, attachments)
+        }),
+        Operation::CloseTabularSession(request) => Run::new(move |asker| async move {
+            crate::session::close(&asker, request, attachments).await
+        }),
+        Operation::EncodeTabularTable(request) => Run::new(move |asker| async move {
+            crate::direct::encode_table(&asker, request, attachments)
+        }),
+        Operation::EncodeDirectColumn(request) => Run::new(move |asker| async move {
+            crate::direct::encode_column(&asker, request, attachments)
+        }),
+        Operation::InferDirectColumn(request) => Run::new(move |asker| async move {
+            crate::direct::infer_column(&asker, request, attachments)
+        }),
+        Operation::InferDirectTimeStart(request) => Run::new(move |asker| async move {
+            crate::direct::infer_time_start(&asker, request, attachments)
+        }),
+        Operation::ResolveDirectDtype(request) => {
+            let input: sdm_contract::direct::dtype::DtypeResolutionObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::resolve_dtype(input)?)
+            })
+        }
+        Operation::ResolveObservedTabular(request) => {
+            let input: sdm_contract::direct::ObservedTabularInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::resolve_observed(&asker, input) })
+        }
+        Operation::InspectObservedKeys(request) => Run::new(move |asker| async move {
+            crate::direct::inspect_observed_keys(&asker, request, attachments)
+        }),
+        Operation::AssembleFrameSchema(request) => {
+            let input: sdm_contract::frames::AssembleFrameSchema =
+                take_json(&mut attachments, request.input)?;
+            Run::new(
+                move |asker| async move { crate::direct::assemble_frame_schema(&asker, input) },
+            )
+        }
+        Operation::ObserveDirectSchema(request) => {
+            let input: sdm_contract::direct::schema::SchemaObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                let (result, warnings) = sdm_schema::direct::observed::observe(input)?;
+                for warning in warnings {
+                    asker.warn(warning);
+                }
+                crate::direct::value(&asker, &result)
+            })
+        }
+        Operation::CheckDirectPreparation(request) => {
+            let input: sdm_contract::direct::schema::PreparationObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::check_preparation(&asker, input) })
+        }
+        Operation::ObserveDirectDtype(request) => {
+            let input: sdm_contract::direct::dtype::DtypeObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_schema::direct::dtype::observe(input)?)
+            })
+        }
+        Operation::ObserveDirectOutputs(request) => {
+            let input: sdm_contract::direct::native_response::NativeOutputQuery =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::native_outputs(&asker, input) })
+        }
+        Operation::RestoreDirectResponse(request) => {
+            let input: sdm_contract::direct::native_response::RestorationObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::restore(input),
+                )
+            })
+        }
+        Operation::CheckDirectResponseField(request) => {
+            let input: sdm_contract::direct::native_response::NativeResponseField =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::check(input)?,
+                )
+            })
+        }
+        Operation::LayoutNativeDirect(request) => {
+            let input: sdm_contract::direct::native_response::NativeLayoutInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::layout(input)?,
+                )
+            })
+        }
+        Operation::CheckColumn(request) => {
+            let input: sdm_contract::ops::CheckColumn = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_schema::edit::check_column(&input, &crate::edit::supports)?;
+                crate::direct::value(&asker, &true)
+            })
+        }
+        Operation::CheckDirectOption(request) => {
+            let input: sdm_contract::direct::DirectOptionObservation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_request::tabular::check_option(&input)?;
+                crate::direct::value(&asker, &true)
+            })
+        }
+        Operation::CheckDirectCell(request) => {
+            let input: sdm_contract::direct::cell::DirectCellInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::cell::check(input)?)
+            })
+        }
+        Operation::ExpandTabularKeys(request) => {
+            let input: sdm_contract::tabular::ExpandTabularKeys =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::expand(input))
+            })
+        }
+        Operation::FilterTabularRows(request) => {
+            let input: sdm_contract::tabular::FilterTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::filter(input)?)
+            })
+        }
+        Operation::DecideTabularContext(request) => {
+            let input: sdm_contract::tabular::DecideTabularContext =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::decide(input))
+            })
+        }
+        Operation::SampleTabularRows(request) => {
+            let input: sdm_contract::tabular::SampleTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::sample(input))
+            })
+        }
+        Operation::ObserveTabularMembership(request) => {
+            let input: sdm_contract::tabular::ObserveTabularMembership =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::membership(input))
+            })
+        }
+        Operation::DecideTabularTask(request) => {
+            let input: sdm_contract::tabular::DecideTabularTask =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::decide_materialized_task(input),
+                )
+            })
+        }
+        Operation::OrderSampledTabularRows(request) => {
+            let input: sdm_contract::tabular::OrderSampledTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::order(input)?)
+            })
+        }
+        Operation::SelectTabularRows(request) => {
+            let input: sdm_contract::tabular::SelectTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::select(input)?)
+            })
+        }
+        Operation::CheckTabularCap(request) => {
+            let input: sdm_contract::tabular::CheckTabularCap =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::check_materialized_cap(input))
+            })
+        }
+        Operation::CheckDirectShape(request) => {
+            let input: sdm_contract::direct::DirectShape =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_request::direct::shape(&input)?;
+                crate::direct::value(&asker, &input)
+            })
+        }
+        Operation::PrepareDirect(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::prepare(&asker, request, attachments) },
+            )
+        }
+        Operation::BindDirect(request) => {
+            let mut input: sdm_contract::direct::DirectCallFacts =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                input.outputs = crate::pql::explanation_outputs(
+                    input.query.as_deref().unwrap_or(""),
+                    &input.kind,
+                    input.outputs,
+                );
+                crate::direct::value(&asker, &sdm_request::direct::bind(input)?)
+            })
+        }
+        Operation::InspectDirectPair(request) => Run::new(move |asker| async move {
+            crate::direct::inspect_pair(&asker, request, attachments)
+        }),
+        Operation::ResolveTabular(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::resolve(&asker, request, attachments) },
+            )
+        }
+        Operation::EncodeTabular(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::encode(&asker, request, attachments) },
+            )
+        }
+        Operation::DecodeDirectResponse(request) => Run::new(move |asker| async move {
+            crate::direct::decode_response(&asker, request, attachments)
+        }),
+        Operation::LayoutDirect(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::layout(&asker, request, attachments) },
+            )
+        }
+        Operation::CheckDirectRows(request) => {
+            let input: sdm_contract::direct::DirectRowsInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::check_rows(
+                        input.scope,
+                        input.rows,
+                        crate::pql::float_text,
+                    )?,
+                )
+            })
+        }
+        Operation::InterpretDirectJson(request) => {
+            let input: sdm_contract::direct::DirectJsonInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::interpret_json(input.checked, input.json)?,
+                )
+            })
+        }
+        Operation::SelectDirectMember(request) => {
+            let input: sdm_contract::direct::DirectMemberInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::select_member(
+                        input.interpreted,
+                        input.literal,
+                    )?,
+                )
+            })
+        }
+        Operation::AttributeDirectRow(request) => {
+            let input: sdm_contract::direct::DirectAttributionInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::attribute(
+                        input.selected,
+                        input.string,
+                        crate::pql::float_text,
+                    )?,
+                )
+            })
+        }
+        Operation::ValidateQuery(request) => {
+            let query: String = take_json(&mut attachments, request.query)?;
+            let schema: QuerySchema = take_json(&mut attachments, request.schema)?;
+            let zones = Arc::clone(&zones);
+            Run::new(move |asker| async move {
+                let profile = Profile::resolve(&request.profile);
+                let (validation, warnings) =
+                    crate::pql::validate_warned(&query, &schema, &profile, &facts, &*zones);
+                // D4's warning, on the run's warnings channel, given also
+                // when the run then ends with an error (U1).
+                for warning in warnings {
+                    asker.warn(warning);
+                }
+                Ok(OperationResult::ValidateQuery(validation?))
+            })
+        }
+        Operation::DescribeSource(request) => {
+            let source: SourceSpec = take_json(&mut attachments, request.source)?;
+            let access = root.data_access(&request.provider)?;
+            let check_keys = request.check_keys;
+            let zones = Arc::clone(&zones);
+            Run::with_data(access, move |asker| async move {
+                // A semantic model is read through its own definition, which
+                // names its base tables: no session read settles them.
+                if asker.data().is_some_and(|data| data.view().is_some()) {
+                    let reader = crate::describe::text_reader(&facts)?;
+                    return crate::view::describe_source(asker, source, &reader).await;
+                }
+                let asker = crate::describe::settled(asker).await?;
+                crate::describe::run(asker, source, check_keys, facts, zones).await
+            })
+        }
+        Operation::EditSchema(request) => {
+            let held: HeldSchema = take_json(&mut attachments, request.schema)?;
+            let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
+            let context = request
+                .context
+                .map(|id| take_json(&mut attachments, id))
+                .transpose()?;
+            let frame = request
+                .frame
+                .map(|id| match attachments.remove(&id) {
+                    Some(Attachment::Arrow(data)) => Ok(data),
+                    _ => Err(internal("frame edit attachment is not Arrow")),
+                })
+                .transpose()?;
+            Run::new(move |asker| crate::edit::run(asker, held, edit, context, frame))
+        }
+        operation @ Operation::Materialize(_) => materialize(
+            root,
+            operation,
+            attachments,
+            facts,
+            Arc::clone(&zones),
+            #[cfg(feature = "test-ops")]
+            false,
+        )?,
+        Operation::Predict(request) => {
+            if request.direct.is_some() {
+                return Ok(Run::new(move |asker| {
+                    crate::direct::predict(asker, request, attachments)
+                }));
+            }
+            // What predict asks: the state `materialize` answered, or a
+            // request the core did not materialize, rebuilt from what the
+            // host holds of it.
+            let asked = match (request.state, request.held) {
+                (Some(state), None) => from_state(state, &request.request_id, &mut attachments)?,
+                (None, Some(held)) => {
+                    crate::held::rebuilt(held, &request.request_id, &mut attachments)?
+                }
+                _ => {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "a predict names other than one of a request state and a held request",
+                    ));
+                }
+            };
+            let inputs = crate::predict::Inputs {
+                supports_sessions: request.supports_sessions,
+                payload: asked.payload,
+                query: asked.query,
+                model: request.model,
+                request_id: request.request_id,
+                outputs: request.outputs,
+                default_outputs: request.default_outputs,
+                inference_asked: request.inference_asked,
+                forecast: asked.forecast,
+                ranking: asked.ranking,
+                batches: asked.batches,
+                endpoint: request.model_endpoint,
+            };
+            Run::new(move |asker| crate::predict::run(asker, inputs))
+        }
+        #[cfg(feature = "test-ops")]
+        Operation::Test(operation) => {
+            crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
+        }
+    })
+}
+
+/// What `state`, the request state `materialize` answered, asks of
+/// `predict`, its attachments taken from `attachments`; the first call
+/// carries `request_id`. A version other than this build's is refused by
+/// name before anything of the state is read.
+fn from_state(
+    request_state: RequestState,
+    request_id: &str,
+    attachments: &mut Attachments,
+) -> Result<crate::predict::Asked, CoreError> {
+    if request_state.version != REQUEST_STATE_VERSION {
+        return Err(CoreError::new(
+            Sentence::StateVersion,
+            "the request state is of a version this core does not read",
+        )
+        .with_field("field", Detail::text("state.version"))
+        .with_field(
+            "version",
+            Detail::Scalar(Scalar::UInt32(request_state.version)),
+        )
+        .with_field(
+            "reads",
+            Detail::Scalar(Scalar::UInt32(REQUEST_STATE_VERSION)),
+        ));
+    }
+    let Some(Attachment::Bytes(payload)) = attachments.remove(&request_state.payload) else {
+        return Err(internal("the payload is not the bytes named"));
+    };
+    // The query rides with the state: the constant-context notice names the
+    // target from it where the wire calls it TARGET.
+    let query: String = take_json(attachments, request_state.query)?;
+    // A forecast's later steps, each as the first is.
+    let forecast = match &request_state.forecast {
+        None => None,
+        Some(steps) => {
+            let mut later = Vec::with_capacity(steps.len());
+            for step in steps {
+                let Some(Attachment::Bytes(payload)) = attachments.remove(&step.payload) else {
+                    return Err(internal("the payload is not the bytes named"));
+                };
+                let query: String = take_json(attachments, step.query)?;
+                // Each step's call carries its own id.
+                let Some(request_id) = step.request_id.clone() else {
+                    return Err(CoreError::new(
+                        Sentence::StateUnread,
+                        "a forecast's later step names no request id",
+                    )
+                    .with_field("field", Detail::text("state.forecast.request_id")));
+                };
+                later.push((step.step, payload, query, request_id));
+            }
+            Some(later)
+        }
+    };
+    // A ranking's later questions, each as the first is: the first
+    // asks after the first candidate given, at position 0.
+    let ranking = match &request_state.ranking {
+        None => None,
+        Some(ranking) => {
+            // Each candidate named by its position, the first's the state's
+            // own, every later one's past the one before: a state that
+            // names them otherwise would give the answers back under other
+            // candidates' names.
+            let positions = std::iter::once(ranking.candidate)
+                .chain(ranking.parts.iter().map(|part| part.candidate));
+            if !positions.clone().zip(positions.skip(1)).all(|(a, b)| a < b) {
+                return Err(CoreError::new(
+                    Sentence::StateUnread,
+                    "a ranking's questions do not name its candidates in the order given",
+                )
+                .with_field("field", Detail::text("state.ranking.candidate")));
+            }
+            let mut questions = vec![(
+                ranking.candidate,
+                ranking.value.clone(),
+                payload.clone(),
+                query.clone(),
+                request_id.to_owned(),
+            )];
+            for part in &ranking.parts {
+                let Some(Attachment::Bytes(payload)) = attachments.remove(&part.payload) else {
+                    return Err(internal("the payload is not the bytes named"));
+                };
+                let query: String = take_json(attachments, part.query)?;
+                let Some(request_id) = part.request_id.clone() else {
+                    return Err(CoreError::new(
+                        Sentence::StateUnread,
+                        "a ranking's later question names no request id",
+                    )
+                    .with_field("field", Detail::text("state.ranking.request_id")));
+                };
+                questions.push((
+                    part.candidate,
+                    part.value.clone(),
+                    payload,
+                    query,
+                    request_id,
+                ));
+            }
+            Some((questions, ranking.top_k))
+        }
+    };
+    // A request asked in several model calls (`main`'s multi-call
+    // `predict`): each later call's payload and the id it carries, which
+    // the host draws for each call as for a forecast's step.
+    let batches = match &request_state.batches {
+        None => None,
+        Some(batches) => {
+            if request_state.forecast.is_some() {
+                return Err(CoreError::new(
+                    Sentence::StateUnread,
+                    "a forecast's request is one call per step, never batched",
+                )
+                .with_field("field", Detail::text("state.batches")));
+            }
+            let mut later = Vec::with_capacity(batches.len());
+            for batch in batches {
+                let Some(Attachment::Bytes(payload)) = attachments.remove(&batch.payload) else {
+                    return Err(internal("the payload is not the bytes named"));
+                };
+                let Some(request_id) = batch.request_id.clone() else {
+                    return Err(CoreError::new(
+                        Sentence::StateUnread,
+                        "a later call of a request names no request id",
+                    )
+                    .with_field("field", Detail::text("state.batches.request_id")));
+                };
+                later.push(crate::predict::LaterCall {
+                    payload,
+                    request_id,
+                });
+            }
+            Some(later)
+        }
+    };
+    Ok(crate::predict::Asked {
+        payload,
+        query,
+        forecast,
+        ranking,
+        batches,
+    })
+}
+
+/// A `materialize` run of `request`, with the attachments it names; with
+/// `labels_only`, the test-only `labels` operation's, which finishes with
+/// the context's labels.
+pub(crate) fn materialize(
+    root: &CompositionRoot,
+    operation: Operation,
+    mut attachments: Attachments,
+    facts: HostFacts,
+    zones: Arc<dyn Zones>,
+    #[cfg(feature = "test-ops")] labels_only: bool,
+) -> Result<Run, CoreError> {
+    match operation {
+        Operation::Materialize(request) => {
+            // The schema as the host holds it, as plain data: read
+            // at the run's start, where a column with no facts is read from
+            // the source (`crate::discover`).
+            let held: HeldSchema = take_json(&mut attachments, request.schema)?;
+            let query: String = take_json(&mut attachments, request.query)?;
+            let indices = match request.indices {
+                Some(id) => match attachments.remove(&id) {
+                    Some(Attachment::Arrow(data)) => Some(data),
+                    _ => return Err(internal("the indices are not the Arrow data named")),
+                },
+                None => None,
+            };
+            let candidates: Option<Vec<GivenCandidate>> =
+                take_json_if(&mut attachments, request.candidates)?;
+            // The decoder takes a seed of any size and sign; which seeds a
+            // run takes is the core's rule: not a negative
+            // one, and none past the largest the provider declares (RS-7),
+            // which the core reads when it plans the sample
+            // (`DataAccess::plan`).
+            if request.seed.as_ref().is_some_and(|seed| seed.is_negative()) {
+                return Err(CoreError::new(
+                    Sentence::SeedNegative,
+                    "a sampling seed cannot be negative",
+                )
+                .with_field("field", Detail::text("seed"))
+                .with_field("reason", Detail::text("negative"))
+                .with_field(
+                    "given",
+                    Detail::text(crate::materialize::seed_text(request.seed.as_ref())),
+                ));
+            }
+            // The sampler state's version first, by name, before anything of
+            // the state is read, as a request state's; then
+            // its memo, which a run reads only if it was made under this
+            // provider and description. Each refusal of the
+            // state tells the host to drop it, so its next
+            // run starts afresh rather than being refused the same way.
+            let memo = match &request.sampler_state {
+                None => None,
+                Some(state) => {
+                    if state.version != SAMPLER_STATE_VERSION {
+                        return Err(CoreError::new(
+                            Sentence::SamplerStateVersion,
+                            "the sampler state is of a version this core does not read",
+                        )
+                        .with_field("field", Detail::text("sampler_state.version"))
+                        .with_field("version", Detail::Scalar(Scalar::UInt32(state.version)))
+                        .dropping(HeldState::SamplerState));
+                    }
+                    let memo: SamplerMemo =
+                        take_json(&mut attachments, state.memo).map_err(|e| {
+                            e.with_field("field", Detail::text("sampler_state"))
+                                .dropping(HeldState::SamplerState)
+                        })?;
+                    crate::materialize::check_memo(&memo)
+                        .map_err(|e| e.dropping(HeldState::SamplerState))?;
+                    Some(memo)
+                }
+            };
+            // The call's option values, as the host attached them: read with
+            // the wire's bounded reader, so text nested past its depth is
+            // refused by name, never read recursively.
+            let values = match request.values {
+                None => None,
+                Some(id) => {
+                    let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
+                        return Err(internal("the call's values are not the bytes named"));
+                    };
+                    Some(sdm_wire::json::read_options(&bytes).map_err(|e| {
+                        CoreError::new(
+                            Sentence::OptionValuesUnread,
+                            "the call's option values are not JSON this core reads",
+                        )
+                        .with_field("field", Detail::text("values"))
+                        .with_field("category", Detail::text(e.category))
+                    })?)
+                }
+            };
+            let access = root.data_access(&request.provider)?;
+            let provider = request.provider;
+            // The run's inputs, once the schema is read (below) and its
+            // fingerprint taken: the memo is read only if it was made under
+            // this provider and schema.
+            let inputs =
+                move |description, source: String, pending, types| crate::materialize::Inputs {
+                    frames: None,
+                    memo: memo.filter(|memo| memo.source == source),
+                    source,
+                    description,
+                    pending,
+                    types,
+                    query,
+                    indices,
+                    candidates,
+                    anchor_time: request.anchor_time,
+                    seed: request.seed,
+                    unseeded: request.unseeded,
+                    anchor_entity: request.anchor_entity,
+                    values,
+                    options: request.options,
+                    most_parts: request.most_parts,
+                    most_entities: request.most_entities,
+                    most_calls: request.most_calls,
+                    facts,
+                    zones: Arc::clone(&zones),
+                    #[cfg(feature = "test-ops")]
+                    labels_only,
+                };
+            Ok(Run::with_data(access, move |asker| async move {
+                // A source's tables (a SQL provider's) are read as they stand
+                // at each run, their location, columns and types, once the
+                // request's inputs are checked (`describe::initialize`), and
+                // nothing of them is remembered between runs (the owner's
+                // plan B); a host provider's columns with no facts are
+                // read from it then. Until then the schema is read as the
+                // caller holds it, a column with no facts by its data type,
+                // as an edit reads it.
+                let source_tables = asker
+                    .data()
+                    .is_some_and(crate::compose::DataAccess::reads_a_source);
+                let lacking = !sdm_schema::held::lacking_facts(&held).is_empty();
+                let read = sdm_schema::held::read(
+                    held.clone(),
+                    &std::collections::BTreeMap::new(),
+                    lacking,
+                )?;
+                // The schema as the caller holds it first, as the reference's
+                // `check_consistent` reads it; then as its engine reads the
+                // source ( review round 1), where its facts are held.
+                crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
+                sdm_schema::assemble::check_links(&read.description, &read.types)?;
+                let description = read.by_the_source();
+                let source = crate::materialize::fingerprint(&provider, &description)?;
+                // Each table read as the columns its description holds,
+                // until its catalog read says which it holds.
+                for table in &description.tables {
+                    asker.guard_held(
+                        &table.source,
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.clone())
+                            .collect(),
+                    );
+                }
+                crate::materialize::run(
+                    asker,
+                    inputs(
+                        description,
+                        source,
+                        (source_tables || lacking).then_some(held),
+                        read.types,
+                    ),
+                )
+                .await
+            }))
+        }
+        _ => Err(internal("a materialize run of another operation")),
+    }
+}

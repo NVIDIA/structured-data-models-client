@@ -1,0 +1,86 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.uint64-above-int64-max",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "uint64/primary-key",
+    "uint64/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT",
+      "ALTER TABLE orders ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        9223372036854775808,
+        9223372036854775809
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "utf8",
+          "v": "9223372036854775808"
+        },
+        {
+          "t": "utf8",
+          "v": "9223372036854775809"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "The first attempt accepted these and sent them as text where today refuses; the spike must match or register",
+  "source": "probe#9; dtypes:key:uint64_past_int64"
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+     All rights reserved.
+     SPDX-License-Identifier: Apache-2.0 -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.nvidia.sdm.tests</groupId><artifactId>parity-connect-runtime</artifactId><version>1</version>
+  <!-- Test launcher only: no dependency is added to the published client. -->
+  <dependencies>
+    <dependency><groupId>com.databricks</groupId><artifactId>databricks-connect_2.13</artifactId><version>17.3.11</version></dependency>
+  </dependencies>
+</project>

@@ -96,7 +96,6 @@ def test_nothing_is_dropped_on_the_caller_s_behalf():
 
 
 def test_the_refusal_names_something_a_schema_holder_can_do():
-    pytest.importorskip('sdm_relational_engine')
 
     schema = schema_reaching_by(['SOLDTOPARTY', 'SHIPTOPARTY'])
 
@@ -116,7 +115,6 @@ def test_the_refusal_names_something_a_schema_holder_can_do():
 
 def test_following_the_advice_makes_the_query_resolve():
     """The whole point: the instruction has to work."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = schema_reaching_by(['SOLDTOPARTY', 'SHIPTOPARTY'])
     schema.relationships = [
@@ -194,7 +192,6 @@ def two_ambiguous_pairs() -> Schema:
 def test_the_advice_names_the_pair_the_query_crossed():
     """Two pairs are ambiguous. Advising the first one found sends a caller to
     edit a relationship their query never touched."""
-    pytest.importorskip('sdm_relational_engine')
 
     with pytest.raises(StructuredDataError) as refused:
         with warnings.catch_warnings():

@@ -205,7 +205,6 @@ def test_a_foreign_key_list_distinct_still_works(query):
     of candidates is the refusal working: before, it built a request the
     endpoint answered with `422 UNSUPPORTED_TASK`.
     """
-    pytest.importorskip('sdm_relational_engine')
 
     if 'RANK' in query:
         with pytest.raises(StructuredDataError) as refused:
@@ -264,7 +263,6 @@ def test_a_static_list_distinct_is_refused_not_asserted(query):
 def test_the_advice_the_static_refusal_gives_works_when_time_exists():
     """The whole point of changing the wording: adding a time range is a query
     that answers."""
-    pytest.importorskip('sdm_relational_engine')
 
     assert (
         answer(
@@ -273,24 +271,6 @@ def test_the_advice_the_static_refusal_gives_works_when_time_exists():
             KumoRelational(),
         )
         == 'regression'
-    )
-
-
-def test_training_mode_still_names_the_static_aggregation_it_has():
-    """The sentence is true when a model is being trained, and only the
-    foundation model refuses it."""
-    from predictive_query.profiles import Mode
-    from predictive_query.validator.time_range_validator import (
-        TimeRangeValidator,
-    )
-
-    assert (
-        'LIST_DISTINCT combined with RANK'
-        in TimeRangeValidator(None, Mode.TRAINING)._static_advice()
-    )
-    assert (
-        'no static aggregation at all'
-        in TimeRangeValidator(None, Mode.INFERENCE)._static_advice()
     )
 
 
@@ -324,7 +304,6 @@ def test_a_named_aggregation_is_pointed_at_the_entity_table():
 
 
 def test_the_advice_that_message_gives_is_a_query_that_answers():
-    pytest.importorskip('sdm_relational_engine')
 
     assert (
         answer(
@@ -334,23 +313,6 @@ def test_the_advice_that_message_gives_is_a_query_that_answers():
         )
         == 'regression'
     )
-
-
-def test_training_mode_keeps_the_static_rewrite_it_can_use():
-    from predictive_query.profiles import Mode
-    from predictive_query.validator.time_range_validator import (
-        TimeRangeValidator,
-    )
-
-    training = TimeRangeValidator(None, Mode.TRAINING)
-    assert 'PREDICT ratings.STARS' in training._instead_of_aggregating(
-        'ratings.STARS'
-    )
-    inference = TimeRangeValidator(None, Mode.INFERENCE)
-    assert 'PREDICT ratings.STARS' not in inference._instead_of_aggregating(
-        'ratings.STARS'
-    )
-    assert 'wildcard' in training._instead_of_aggregating('ratings.*')
 
 
 # --- every reason at once, not one per round -------------------------------

@@ -20,6 +20,7 @@ a session answers, and the code a refusal carries.
 from __future__ import annotations
 
 import copy
+import json
 import os
 
 import numpy as np
@@ -184,31 +185,63 @@ def test_a_key_of_several_columns_answers_under_its_values(client_for):
         ({'inference_config': None}, 'INVALID_REQUEST'),
     ],
 )
+@pytest.mark.parametrize('operation', ['predict', 'fit', 'session_predict'])
 def test_an_inference_option_is_read_as_the_type_it_is(
-    client_for, inference, code
+    client_for, inference, code, operation, monkeypatch
 ):
     """A boolean spelled ``'no'`` asks for nothing, and a value that cannot
     be read as its type is refused before it is sent."""
     request = asked('churn', 'classification', inference=inference)
     with client_for('kumo-tabular') as client:
+        sent = []
+        for name in (
+            'predict',
+            'predict_body',
+            'create_session',
+            'session_predict',
+        ):
+            original = getattr(client._transport, name, None)
+            if original is None:
+                continue
+
+            def observed(*args, _name=name, _original=original, **kwargs):
+                sent.append(_name)
+                return _original(*args, **kwargs)
+
+            monkeypatch.setattr(client._transport, name, observed)
+
+        def run():
+            if operation == 'predict':
+                return client.predict(request, model=KumoTabular())
+            fit_request = (
+                request
+                if operation == 'fit'
+                else asked('churn', 'classification')
+            )
+            with client.fit(fit_request, model=KumoTabular()) as fitted:
+                return fitted.predict(request)
+
         if code is None:
-            assert len(client.predict(request, model=KumoTabular()).items) == 15
+            assert len(run().items) == 15
             return
         with pytest.raises(StructuredDataError) as refused:
-            client.predict(request, model=KumoTabular())
+            run()
 
     assert refused.value.code == code
+    assert sent == (
+        ['create_session'] if operation == 'session_predict' else []
+    )
 
 
 def test_a_fault_in_the_client_is_raised_as_itself(client_for, monkeypatch):
     """What the client makes of an answer is the same code on both backends,
     so a fault in it is raised as it is, not reported as the model's."""
-    from sdm_client.adapters.tabular import TabularAdapter
+    from sdm_client.result import PredictionResult
 
     def broken(*args, **kwargs):
         raise RuntimeError('broken')
 
-    monkeypatch.setattr(TabularAdapter, 'answered', broken)
+    monkeypatch.setattr(PredictionResult, '__init__', broken)
     with client_for('kumo-tabular') as client:
         with pytest.raises(RuntimeError, match='broken'):
             client.predict(
@@ -216,20 +249,28 @@ def test_a_fault_in_the_client_is_raised_as_itself(client_for, monkeypatch):
             )
 
 
-def test_a_long_question_is_sent_within_the_contract_and_answered(client_for):
-    from sdm_client.adapters.relational import RelationalAdapter
+def test_a_long_question_is_sent_within_the_contract_and_answered(
+    client_for, monkeypatch
+):
 
     query = f'{COUNT} WHERE ' + ' OR '.join(
         f'users.age > {i}' for i in range(60)
     )
     request = PredictiveQuery(query, graph()).materialize(indices=[0, 1])
     logged = request.payloads[0]['metadata']['source_query']
-    sent = RelationalAdapter().prediction_plan(request, ('prediction',))
+    sent = []
     assert len(logged) > 1024
-    assert [p['metadata']['source_query'] for p in sent] == [logged[:1024]]
     with client_for('kumo-relational') as client:
+        original = client._send_body
+
+        def observed(adapter, body):
+            sent.append(json.loads(body))
+            return original(adapter, body)
+
+        monkeypatch.setattr(client, '_send_body', observed)
         answer = client.predict(request, model=KumoRelational())
 
+    assert [p['metadata']['source_query'] for p in sent] == [logged[:1024]]
     assert [item.id for item in answer.items] == [0, 1]
 
 

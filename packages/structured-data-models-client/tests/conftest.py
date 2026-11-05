@@ -10,13 +10,19 @@ that nothing is downloaded and no GPU is needed.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pytest
 
 from sdm_client import Request
+
+# Installed-wheel tests run outside the checkout, including in isolated Python.
+# Make repository fixture decoders available without adding package source roots.
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 
 @pytest.fixture(scope='module')
@@ -34,7 +40,6 @@ def tabular(sdm):
 
 @pytest.fixture(scope='module')
 def relational(sdm):
-    pytest.importorskip('sdm_relational_engine', reason='needs [relational]')
     import torch
 
     torch.manual_seed(0)
@@ -174,16 +179,3 @@ def hand_built_result() -> Callable[..., Any]:
         )
 
     return build
-
-
-@pytest.fixture
-def failing_analysis(monkeypatch) -> str:
-    """Make every column analysis the client starts raise; returns the error
-    text it raises with."""
-    error = 'analysis broke'
-
-    def broken(*args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError(error)
-
-    monkeypatch.setattr('sdm_client.client.ColumnExplanations', broken)
-    return error

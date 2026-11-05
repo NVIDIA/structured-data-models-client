@@ -37,14 +37,23 @@ with SDMClient(url='http://localhost:8000') as client:
 | Context rows | 10,000 |
 
 Anything outside that list belongs to the relational model. Asking for
-`rankings` or a forecast here is refused before a request is sent. An
-`explanation` covers every scored row: see [Explanations](#explanations).
+`rankings` or a forecast here is refused before a request
+is sent.
 
 Outputs narrow again by task, and that narrowing happens at the endpoint rather
 than in the client: `probabilities` on a classification, `quantiles` on a
 regression, and asking for the wrong one comes back as
 `422 UNSUPPORTED_OUTPUT`. `quantiles` gives a column per decile,
 `quantile_0.1` through `quantile_0.9`, beside the point prediction.
+
+Gradient-capable models also accept `outputs=['prediction', 'explanation']` or `EXPLAIN PREDICT`.
+Read per-row gradients with `result.explanations.gradients.to_pandas()`; these describe preprocessed numerical features, not causal effects.
+Each entry has `outputs` and `instance`, with numerical `columns` and `gradients[output][column]`; there are no related tables.
+Keys are unique entity IDs, or `row_index` when IDs are missing or repeated.
+The client imposes no separate explanation row limit; the endpoint must support gradients.
+The optional Python model runtime also supports them.
+`EXPLAIN` adds explanation output without dropping ordinary outputs; `outputs=[]` remains invalid.
+See [the result contract](../../docs/reference/prediction-output.md).
 
 ## The whole interface
 
@@ -196,33 +205,6 @@ one: `FittedModel(...)` raises and names `fit()`.
 A session pins the context into one process's memory on the endpoint, so a
 deployment behind several replicas needs requests for one session to reach the
 same one.
-
-## Explanations
-
-Add `'explanation'` to `outputs` and every scored row is explained. There is no
-row limit. The explanations are kept out of `to_pandas()`, on
-`result.explanations.gradients`, a mapping from each row's key to its explanation: the
-row's `id` when the request has one, otherwise its `row_index`. A NIM and
-`SDMClient.in_process()` both serve it, with the same `result.explanations`.
-`EXPLAIN PREDICT …` means the same as `outputs=['explanation']`; passing both
-is allowed and redundant.
-
-```python
-entry = result.explanations.gradients[0]  # the row scored at row_index 0
-entry['outputs']                     # the explained scores, in order
-entry['instance']['columns']         # the model's preprocessed numerical columns
-entry['instance']['gradients']       # [output][column]
-result.explanations.gradients.to_pandas()  # one line per (row, output, column)
-result.explanations.columns.to_pandas()    # per-column cohorts of the labelled rows
-```
-
-An entry here has no `related` key: this model reads one table. `columns` are
-the columns as the model sees them, not as you sent them. Categoricals and
-datetimes may appear as derived columns, and a table without numerical
-features gives an empty list. A gradient is the change in that output score
-per unit change in that column: a diagnostic, not a causal effect or a
-feature-importance ranking. The whole shape is under Explanations in
-[`docs/reference/prediction-output.md`](../../docs/reference/prediction-output.md).
 
 ## When it refuses
 

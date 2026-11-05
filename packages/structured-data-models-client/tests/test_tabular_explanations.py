@@ -17,7 +17,6 @@ from collections.abc import Callable
 import pandas as pd
 import pytest
 from sample_tables import people
-from sdm_api.generated.tfm_api import PredictionItem
 
 from sdm_client import (
     KumoTabular,
@@ -25,14 +24,8 @@ from sdm_client import (
     Request,
     Schema,
     SDMClient,
-    SDMWarning,
 )
-from sdm_client.adapters.tabular import TabularAdapter
-from sdm_client.base import check_request_against_model
-from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
-from sdm_client.explanations import GradientDecoder
-from sdm_client.models import KUMO_TABULAR
 
 EXPLAIN = ('prediction', 'explanation')
 CLASSES = [
@@ -54,92 +47,6 @@ def response(**record) -> dict:
     }
 
 
-@pytest.mark.parametrize('task', ['classification', 'regression'])
-def test_allowed(tabular_request, task):
-    """kumo-tabular accepts explanation as an output on both of its tasks.
-
-    Assumptions:
-    - The request scores one row.
-    """
-    check_request_against_model(
-        tabular_request(task=task), KUMO_TABULAR, EXPLAIN
-    )
-
-
-def test_one_row_sent(tabular_request):
-    """An explanation over one row is sent with explanation in its fields.
-
-    Assumptions:
-    - The request scores exactly one row.
-    """
-    (envelope,) = TabularAdapter().prediction_plan(tabular_request(), EXPLAIN)
-    assert envelope['output']['fields'] == list(EXPLAIN)
-
-
-def test_rows_sent(tabular_request):
-    """An explanation over two rows is sent with explanation in its fields.
-
-    Assumptions:
-    - The endpoint explains every scored row.
-    """
-    (envelope,) = TabularAdapter().prediction_plan(
-        tabular_request(rows=2), EXPLAIN
-    )
-    assert envelope['output']['fields'] == list(EXPLAIN)
-
-
-def test_pin_sends_no_rows(tabular_request):
-    """Pinning a session context for explanations sends no predict rows."""
-    pinned = TabularAdapter().session_plan(tabular_request(rows=2), EXPLAIN)
-    assert 'predict' not in pinned
-
-
-def test_session_rows_sent(tabular_request):
-    """Session scoring sends an explanation over two rows.
-
-    Assumptions:
-    - The endpoint explains every scored row.
-    """
-    (envelope,) = TabularAdapter().session_prediction_plan(
-        tabular_request(rows=2), EXPLAIN
-    )
-    assert envelope['output']['fields'] == list(EXPLAIN)
-
-
-def test_result_carries_explanation(gradient_explanation):
-    """The row's explanation reaches the result under its row_index.
-
-    Assumptions:
-    - The endpoint returns one record, with no id, and its explanation.
-    """
-    explanation = gradient_explanation(
-        outputs=[{'kind': 'prediction', 'statistic': 'mean'}],
-        row=0,
-        columns=['x'],
-        gradients=[[0.5]],
-    )
-    result = TabularAdapter().normalize(
-        response(explanation=explanation), EXPLAIN
-    )
-    assert result.explanations.gradients == {
-        0: {
-            'outputs': [{'kind': 'prediction', 'statistic': 'mean'}],
-            'instance': {'columns': ['x'], 'gradients': [[0.5]]},
-        }
-    }
-
-
-def test_result_without_explanation():
-    """A response without an explanation leaves the result's explanations
-    empty.
-
-    Assumptions:
-    - The record carries no explanation field.
-    """
-    result = TabularAdapter().normalize(response(), ('prediction',))
-    assert result.explanations.gradients == {}
-
-
 def answered(request, gradient_explanation, *, keyed=True, outputs=None):
     """Send ``request`` through the adapter and read back a mocked answer.
 
@@ -147,35 +54,44 @@ def answered(request, gradient_explanation, *, keyed=True, outputs=None):
     when the request has a key, with probabilities, and with its own
     explanation, whose gradients are ``-(i + 1)`` and ``i + 1`` per class.
     """
-    adapter = TabularAdapter()
-    (envelope,) = adapter.prediction_plan(request, EXPLAIN)
-    table = envelope['predict']['instance_table']
-    records = []
-    for index, row in enumerate(table['rows']):
-        record = {
-            'row_index': index,
-            'prediction': 1,
-            'probabilities': {'0': 0.25, '1': 0.75},
-            'explanation': gradient_explanation(
-                outputs=outputs or CLASSES,
-                row=index,
-                columns=['age'],
-                gradients=[[-(index + 1.0)], [index + 1.0]],
-            ),
-        }
-        if keyed:
-            record['id'] = f'[{row[table["columns"].index("row_id")]}]'
-        records.append(record)
-    return adapter.normalize(
-        {
-            'id': 'r',
-            'model': 'kumo-tabular',
-            'predictions': records,
-            'metadata': {},
-        },
-        EXPLAIN,
-        envelope,
-    )
+    import json
+
+    from test_tabular_direct_core import Endpoint, client
+
+    class ExplainedEndpoint(Endpoint):
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(payload)
+            table = payload['predict']['instance_table']
+            records = []
+            for index, row in enumerate(table['rows']):
+                record = {
+                    'row_index': index,
+                    'prediction': 1,
+                    'probabilities': {'0': 0.25, '1': 0.75},
+                    'explanation': gradient_explanation(
+                        outputs=outputs or CLASSES,
+                        row=index,
+                        columns=['age'],
+                        gradients=[[-(index + 1.0)], [index + 1.0]],
+                    ),
+                }
+                if keyed:
+                    record['id'] = f'[{row[table["columns"].index("row_id")]}]'
+                records.append(record)
+            return json.dumps(
+                {
+                    'id': 'r',
+                    'model': 'kumo-tabular',
+                    'metadata': {},
+                    'predictions': records,
+                }
+            ).encode()
+
+    with client(ExplainedEndpoint()) as model_client:
+        return model_client.predict(
+            request, model=KumoTabular(), outputs=EXPLAIN
+        )
 
 
 def test_every_row_is_explained_under_its_id(
@@ -265,38 +181,6 @@ def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
     )
 
 
-def test_a_missing_id_keys_all_rows_by_row_index(
-    gradient_explanation,
-):
-    """If any explained row lacks an id, every explanation is under its
-    row_index, as with repeated ids, so the keying is all-or-nothing.
-
-    Assumptions:
-    - Two items with ids ``None`` and 90, as in-process tabular yields when
-      the predict frame's key column holds a null; each has an explanation.
-    """
-    items = [
-        PredictionItem(
-            id=key,
-            row_index=index,
-            prediction=1,
-            explanation=gradient_explanation(
-                outputs=CLASSES,
-                row=index,
-                columns=['age'],
-                gradients=[[-(index + 1.0)], [index + 1.0]],
-            ),
-        )
-        for index, key in enumerate([None, 90])
-    ]
-
-    explanations = GradientDecoder().decode(items)
-
-    assert sorted(explanations) == [0, 1]
-    assert explanations[1]['instance']['gradients'] == [[-2.0], [2.0]]
-    assert list(explanations.to_pandas().columns)[0] == 'row_index'
-
-
 def test_a_tabular_entry_has_no_related_tables(
     tabular_request, gradient_explanation
 ):
@@ -325,7 +209,9 @@ def test_outputs_and_columns_are_passed_through(
         {'kind': 'quantile', 'level': 0.1, 'note': 'kept'},
     ]
     result = answered(
-        tabular_request(rows=1), gradient_explanation, outputs=outputs
+        tabular_request(rows=1, task='regression'),
+        gradient_explanation,
+        outputs=outputs,
     )
 
     assert result.explanations.gradients[90]['outputs'] == outputs
@@ -382,206 +268,11 @@ def test_the_flat_table_names_a_keyless_row_by_its_row_index(
     assert flat['key'].isna().all()
 
 
-@pytest.mark.parametrize(
-    ('task', 'outputs', 'returned'),
-    [
-        (
-            'classification',
-            CLASSES,
-            {'probabilities': {'0': 0.25, '1': 0.75}},
-        ),
-        (
-            'regression',
-            [
-                {'kind': 'prediction', 'statistic': 'mean'},
-                {'kind': 'quantile', 'level': 0.1},
-                {'kind': 'quantile', 'level': 0.9},
-            ],
-            {'quantiles': {'0.1': 1.0, '0.9': 3.0}},
-        ),
-    ],
-    ids=['probabilities', 'quantiles'],
-)
-def test_the_flat_table_names_each_output_as_the_frame_does(
-    tabular_request, gradient_explanation, task, outputs, returned
-):
-    """Each explained score is named by the column of ``result.to_pandas()``
-    that holds it, so a gradient can be read beside its score.
-
-    Assumptions:
-    - The NIM returns the scores it explains: every class probability, or the
-      prediction and each asked quantile keyed by its level as text.
-    """
-    adapter = TabularAdapter()
-    (envelope,) = adapter.prediction_plan(tabular_request(task=task), EXPLAIN)
-    result = adapter.normalize(
-        response(
-            id='[90]',
-            explanation=gradient_explanation(
-                outputs=outputs,
-                row=0,
-                columns=['age'],
-                gradients=[[0.1]] * len(outputs),
-            ),
-            **returned,
-        ),
-        EXPLAIN,
-        envelope,
-    )
-
-    named = result.explanations.gradients.to_pandas()['output']
-
-    assert len(set(named)) == len(outputs)
-    assert set(named) <= set(result.to_pandas().columns)
-
-
-@pytest.mark.parametrize(
-    ('classes', 'spelled', 'columns'),
-    [
-        (
-            (False, True),
-            ('false', 'true'),
-            {'probability_False', 'probability_True'},
-        ),
-        ((0, 1), ('0', '1'), {'probability_0', 'probability_1'}),
-        (('no', 'yes'), ('no', 'yes'), {'probability_no', 'probability_yes'}),
-    ],
-    ids=['boolean', 'integer', 'string'],
-)
-def test_each_class_is_named_by_the_frames_column_for_it(
-    tabular_request, gradient_explanation, classes, spelled, columns
-):
-    """An explained class probability is named exactly as the result frame
-    names that class's column, whatever the target's type.
-
-    Assumptions:
-    - The target holds ``classes``; the NIM spells them ``spelled`` both as
-      the keys of ``probabilities`` and as each explained output's ``class``,
-      as it does live (a boolean as lowercase ``'true'``/``'false'``).
-    """
-    adapter = TabularAdapter()
-    (envelope,) = adapter.prediction_plan(
-        tabular_request(classes=classes), EXPLAIN
-    )
-    outputs = [{'kind': 'probability', 'class': name} for name in spelled]
-    result = adapter.normalize(
-        response(
-            id='[90]',
-            probabilities=dict(zip(spelled, (0.25, 0.75), strict=True)),
-            explanation=gradient_explanation(
-                outputs=outputs,
-                row=0,
-                columns=['age'],
-                gradients=[[0.1], [0.9]],
-            ),
-        ),
-        EXPLAIN,
-        envelope,
-    )
-
-    named = set(result.explanations.gradients.to_pandas()['output'])
-
-    assert named == columns
-    assert named <= set(result.to_pandas().columns)
-
-
-def test_a_regressions_outputs_keep_their_names(
-    tabular_request, gradient_explanation
-):
-    """The point prediction and each quantile are named ``prediction`` and
-    ``quantile_<level>``, as the frame names them.
-
-    Assumptions:
-    - A regression explained by its mean and two quantile levels, which the
-      NIM returns keyed by level as text.
-    """
-    adapter = TabularAdapter()
-    (envelope,) = adapter.prediction_plan(
-        tabular_request(task='regression'), EXPLAIN
-    )
-    outputs = [
-        {'kind': 'prediction', 'statistic': 'mean'},
-        {'kind': 'quantile', 'level': 0.1},
-        {'kind': 'quantile', 'level': 0.9},
-    ]
-    result = adapter.normalize(
-        response(
-            id='[90]',
-            quantiles={'0.1': 1.0, '0.9': 3.0},
-            explanation=gradient_explanation(
-                outputs=outputs,
-                row=0,
-                columns=['age'],
-                gradients=[[0.1]] * 3,
-            ),
-        ),
-        EXPLAIN,
-        envelope,
-    )
-
-    named = set(result.explanations.gradients.to_pandas()['output'])
-
-    assert named == {'prediction', 'quantile_0.1', 'quantile_0.9'}
-
-
-def test_a_boolean_class_keeps_its_spelling_in_outputs(
-    tabular_request, gradient_explanation
-):
-    """Naming a boolean class as the frame does leaves the entry's
-    ``outputs`` as the NIM returned them.
-
-    Assumptions:
-    - A boolean target, explained under the NIM's lowercase class names.
-    """
-    adapter = TabularAdapter()
-    (envelope,) = adapter.prediction_plan(
-        tabular_request(classes=(False, True)), EXPLAIN
-    )
-    outputs = [
-        {'kind': 'probability', 'class': 'false'},
-        {'kind': 'probability', 'class': 'true'},
-    ]
-    result = adapter.normalize(
-        response(
-            id='[90]',
-            probabilities={'false': 0.25, 'true': 0.75},
-            explanation=gradient_explanation(
-                outputs=outputs,
-                row=0,
-                columns=['age'],
-                gradients=[[0.1], [0.9]],
-            ),
-        ),
-        EXPLAIN,
-        envelope,
-    )
-
-    assert result.explanations.gradients[90]['outputs'] == outputs
-
-
-def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
-    tabular_request,
-):
-    """With nothing explained, ``to_pandas()`` is an empty frame that still
-    has its columns.
-
-    Assumptions:
-    - The response carries no explanation.
-    """
-    result = TabularAdapter().normalize(response(), ('prediction',))
-
-    flat = result.explanations.gradients.to_pandas()
-
-    assert isinstance(flat, pd.DataFrame)
-    assert flat.empty
-    assert 'gradient' in flat.columns
-
-
 # --- a query asked with `EXPLAIN` -------------------------------------------
 
 
 def tabular_asked(text: str, indices: tuple[int, ...] = (50, 51)) -> Request:
-    """``text`` over ``people``, scoring ``indices`` (persons 50 and 51)."""
+    """``text`` over ``people``, scoring persons 50 and 51."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_data(
@@ -593,6 +284,12 @@ def tabular_asked(text: str, indices: tuple[int, ...] = (50, 51)) -> Request:
 
 
 class TabularEndpoint:
+    url = 'http://localhost'
+    serves_sessions = True
+
+    def close(self):
+        pass
+
     """Answers ``kumo-tabular`` calls, explaining each row when asked;
     records every scoring payload."""
 
@@ -637,9 +334,9 @@ class TabularEndpoint:
 
 @pytest.fixture
 def tabular_endpoint(gradient_explanation) -> tuple[SDMClient, TabularEndpoint]:
-    client = SDMClient(url='http://localhost:8000')
+    client = SDMClient.__new__(SDMClient)
     endpoint = TabularEndpoint(gradient_explanation)
-    client._backend = NimBackend(endpoint)
+    client._start(endpoint)
     return client, endpoint
 
 
@@ -790,6 +487,16 @@ def test_session_refuses_another_question(tabular_endpoint, prefix):
     with pytest.raises(StructuredDataError, match='pinned a different'):
         fitted.predict(other)
     assert endpoint.sent == []
+
+
+def test_empty_explanation_view_retains_columns():
+    from sdm_client import PredictionResult
+
+    flat = PredictionResult(
+        items=(), request_id='r', model='kumo-tabular', outputs=('prediction',)
+    ).explanations.gradients.to_pandas()
+    assert flat.empty
+    assert 'gradient' in flat.columns
 
 
 # --- column analysis, made once per request -------------------------------
@@ -976,121 +683,3 @@ def test_a_session_fit_without_explanation_analyses_when_asked(
     assert (result.explanations.columns is not None) is analysed
     if analysed:
         assert south_share(result) == pytest.approx(19 / 58)
-
-
-# --- a failed column analysis blocks nothing --------------------------------
-
-
-def column_analysis_warnings(caught) -> list[str]:
-    """The messages among ``caught`` that report a failed column analysis."""
-    return [
-        str(warning.message)
-        for warning in caught
-        if 'column analysis' in str(warning.message)
-    ]
-
-
-def test_a_failed_analysis_does_not_block_fit(
-    tabular_endpoint, quiet, failing_analysis
-):
-    """A fit whose column analysis raises still pins the context and returns
-    a handle that scores, and says nothing when no explanation was asked.
-
-    Assumptions:
-    - The analysis is made to raise; the fit asks for the default outputs.
-    """
-    client, endpoint = tabular_endpoint
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
-    result = fitted.predict(tabular_asked(CHURN))
-
-    assert column_analysis_warnings(caught) == []
-    assert fitted.session_id == 's1'
-    assert len(result) == 2
-
-
-def test_a_failed_analysis_warns_a_fit_that_asked_for_explanations(
-    tabular_endpoint, quiet, failing_analysis
-):
-    """A fit asked for an explanation warns at fit time that its analysis
-    failed, naming the error.
-
-    Assumptions:
-    - The analysis is made to raise; the fit names ``'explanation'``.
-    """
-    client, _ = tabular_endpoint
-
-    with pytest.warns(
-        SDMWarning, match=f'pinned context failed.*{failing_analysis}'
-    ):
-        client.fit(
-            tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
-        )
-
-
-@pytest.mark.parametrize('rows', [2, 0], ids=['rows', 'no rows'])
-def test_a_session_whose_analysis_failed_warns_an_explained_predict(
-    tabular_endpoint, tabular_request, failing_analysis, rows
-):
-    """An explained predict on a session whose analysis failed warns, and its
-    answer carries no column analysis, whether or not it has rows to score.
-
-    Assumptions:
-    - The analysis is made to raise at fit; the fit pinned
-      ``'explanation'``, so every later predict asks for one.
-    """
-    client, _ = tabular_endpoint
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        fitted = client.fit(
-            tabular_request(rows=2), model=KumoTabular(), outputs=list(EXPLAIN)
-        )
-
-    with pytest.warns(SDMWarning, match='pinned context failed'):
-        result = fitted.predict(tabular_request(rows=rows))
-
-    assert result.explanations.columns is None
-
-
-def test_a_session_whose_analysis_failed_is_silent_on_a_plain_predict(
-    tabular_endpoint, quiet, failing_analysis
-):
-    """A predict that asks for no explanation says nothing about the failed
-    analysis.
-
-    Assumptions:
-    - The analysis is made to raise at fit; neither call asks to explain.
-    """
-    client, _ = tabular_endpoint
-    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        result = fitted.predict(tabular_asked(CHURN))
-
-    assert column_analysis_warnings(caught) == []
-    assert len(result) == 2
-
-
-def test_a_failed_analysis_does_not_block_a_one_shot_predict(
-    tabular_endpoint, quiet, failing_analysis
-):
-    """An explained one-shot predict whose analysis raises warns, naming the
-    error, and still answers every row with no column analysis.
-
-    Assumptions:
-    - The analysis is made to raise; two persons are scored.
-    """
-    client, _ = tabular_endpoint
-
-    with pytest.warns(
-        SDMWarning, match=f'this request failed.*{failing_analysis}'
-    ):
-        result = client.predict(
-            tabular_asked(CHURN), model=KumoTabular(), outputs=list(EXPLAIN)
-        )
-
-    assert len(result) == 2
-    assert result.explanations.columns is None

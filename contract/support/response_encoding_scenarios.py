@@ -1,0 +1,277 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""HTTP and serving-response scenarios for supported encodings and malformed bytes."""
+
+from __future__ import annotations
+
+import codecs
+import importlib.util
+import io
+import json
+import sys
+import warnings
+from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / 'contract/encoding-vectors.json'
+
+
+def _marked(mark: bytes, codec: str) -> Callable[[str], bytes]:
+    r"""The text in ``codec`` after ``mark``, so the byte order is the one
+    named, not this machine's."""
+    return lambda text: mark + text.encode(codec)
+
+
+def _odd(text: str) -> bytes:
+    r"""UTF-16 with no mark, one byte short: no UTF-16 decodes it."""
+    return text.encode('utf-16-le')[:-1]
+
+
+def _invalid(text: str) -> bytes:
+    r"""UTF-8 with a byte no UTF-8 holds inside a text."""
+    return text.encode().replace(b'"r1"', b'"r\xff"', 1)
+
+
+#: Where a lone-surrogate form puts its surrogates: the answer's id (the
+#: result's ``request_id``) holds a high one, and its metadata a low one.
+LONE_ID = 'x\ud800y'
+LONE_NOTE = 'a\udc00b'
+
+
+def _lone(text: str) -> str:
+    r"""The answer's id and metadata each holding a lone surrogate, written
+    as itself, not escaped."""
+    return text.replace('"r1"', f'"{LONE_ID}"', 1).replace(
+        '"metadata": {}', f'"metadata": {{"note": "{LONE_NOTE}"}}', 1
+    )
+
+
+def _lone_escaped(text: str) -> str:
+    r"""The same surrogates written as JSON escapes (``\ud800``)."""
+    return text.replace('"r1"', '"x\\ud800y"', 1).replace(
+        '"metadata": {}', '"metadata": {"note": "a\\udc00b"}', 1
+    )
+
+
+def _lone_in(mark: bytes, codec: str) -> Callable[[str], bytes]:
+    r"""The lone surrogates written as themselves in ``codec`` after
+    ``mark``, as Python's reader decodes them (``surrogatepass``)."""
+    return lambda text: mark + _lone(text).encode(codec, 'surrogatepass')
+
+
+#: How each form writes the answer's JSON text, by name.
+FORMS: dict[str, Callable[[str], bytes]] = {
+    'utf-8': lambda text: text.encode('utf-8'),
+    'utf-8-sig': lambda text: text.encode('utf-8-sig'),
+    'utf-16-le-bom': _marked(codecs.BOM_UTF16_LE, 'utf-16-le'),
+    'utf-16-be-bom': _marked(codecs.BOM_UTF16_BE, 'utf-16-be'),
+    'utf-16-le': lambda text: text.encode('utf-16-le'),
+    'utf-16-be': lambda text: text.encode('utf-16-be'),
+    'utf-32-le-bom': _marked(codecs.BOM_UTF32_LE, 'utf-32-le'),
+    'utf-32-be-bom': _marked(codecs.BOM_UTF32_BE, 'utf-32-be'),
+    'utf-32-le': lambda text: text.encode('utf-32-le'),
+    'utf-32-be': lambda text: text.encode('utf-32-be'),
+    'malformed-utf-16-odd': _odd,
+    'malformed-utf-8-invalid': _invalid,
+    'lone-surrogate-escaped': lambda text: _lone_escaped(text).encode(),
+    'lone-surrogate-utf-8': _lone_in(b'', 'utf-8'),
+    'lone-surrogate-utf-16': _lone_in(codecs.BOM_UTF16_LE, 'utf-16-le'),
+    'lone-surrogate-utf-32': _lone_in(codecs.BOM_UTF32_LE, 'utf-32-le'),
+}
+#: The Databricks serving answers, by name: the scripted rule's answer as
+#: the served model writes it in ``response_json``, and that answer with
+#: lone surrogates written as themselves and as escapes.
+SERVING = {
+    'plain': lambda text: text,
+    'lone-surrogate': _lone,
+    'lone-surrogate-escaped': _lone_escaped,
+}
+#: The forms whose lone surrogates the core reads as U+FFFD where the
+#: reference keeps them (B-24, the owner's rule of 2026-10-21),
+#: by the name the vectors give them.
+REPLACED = (
+    'lone-surrogate-escaped',
+    'lone-surrogate-utf-8',
+    'lone-surrogate-utf-16',
+    'lone-surrogate-utf-32',
+    'serving-lone-surrogate',
+    'serving-lone-surrogate-escaped',
+)
+#: The queries, by name: shop's regression (its predictions
+#: numbers) and classification (its predictions classes).
+QUERY_NAMES = ('windowed', 'condition')
+
+
+def _module(name: str, path: Path) -> ModuleType:
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def runner() -> ModuleType:
+    return _module(
+        'response_encoding_scenarios_run_python',
+        ROOT / 'contract/runners/run_python.py',
+    )
+
+
+def host() -> ModuleType:
+    r"""host-facts recorder, whose shop, queries and endpoint
+    these scenarios reuse."""
+    return _module(
+        'request_state_scenarios',
+        ROOT / 'contract/support/request_state_scenarios.py',
+    )
+
+
+def _without(value: Any, url: str) -> Any:
+    r"""``value`` with the served URL, whose port changes each run, as
+    ``<endpoint>``."""
+    if isinstance(value, str):
+        return value.replace(url, '<endpoint>')
+    if isinstance(value, dict):
+        return {k: _without(v, url) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_without(v, url) for v in value]
+    return value
+
+
+def _predicted(request: Any, form: str) -> dict[str, Any]:
+    r"""The request predicted against the endpoint answering in ``form``:
+    the result's columns and values, or the refusal."""
+    from sdm_client import KumoRelational, SDMClient
+
+    observed: dict[str, Any] = {
+        'columns': None,
+        'values': None,
+        'request_id': None,
+        'metadata': None,
+    }
+    with (
+        host().endpoint().serve(encode=FORMS[form]) as (url, received),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter('ignore')
+        try:
+            with SDMClient(url) as client:
+                result = client.predict(request, model=KumoRelational())
+            frame = result.to_pandas()
+            observed['columns'] = [str(c) for c in frame.columns]
+            observed['values'] = host().as_json(frame.to_dict(orient='list'))
+            observed['request_id'] = result.request_id
+            observed['metadata'] = host().as_json(result.metadata)
+            observed['refusal'] = None
+        except Exception as error:  # noqa: BLE001 - recorded
+            observed['refusal'] = _without(host()._refusal(error), url)
+        observed['calls'] = len(received.requests)
+    return observed
+
+
+class _Endpoints:
+    r"""The part of the Databricks SDK's ``serving_endpoints`` the client's
+    serving transport calls: each query answered by the scripted rule, its
+    answer's text written by ``write``."""
+
+    def __init__(self, write: Callable[[str], str]) -> None:
+        self._write = write
+        self.calls = 0
+
+    def query(self, *, name: str, dataframe_records: Any) -> Any:
+        self.calls += 1
+        body = dataframe_records[0]['request_json'].encode()
+        module = host().endpoint()
+        status, reply = module.answer('POST', module.PREDICTIONS, body)
+        assert status == 200, reply
+        return {
+            'predictions': [{'response_json': self._write(json.dumps(reply))}]
+        }
+
+
+class _ApiClient:
+    r"""The part of the Databricks SDK's ``api_client`` the core route's
+    serving transport calls: the envelope the core wrote, answered
+    as ``endpoints`` answers a query, its reply's bytes as the SDK's raw
+    answer gives them."""
+
+    def __init__(self, endpoints: _Endpoints) -> None:
+        self._endpoints = endpoints
+
+    def do(self, method: str, path: str, **named: Any) -> Any:
+        sent = named['data']
+        sent = sent.read() if hasattr(sent, 'read') else sent
+        records = json.loads(sent)['dataframe_records']
+        reply = self._endpoints.query(name=path, dataframe_records=records)
+        return {'contents': io.BytesIO(json.dumps(reply).encode())}
+
+
+class _Workspace:
+    def __init__(self, write: Callable[[str], str]) -> None:
+        self.serving_endpoints = _Endpoints(write)
+        self.api_client = _ApiClient(self.serving_endpoints)
+
+
+def _served(request: Any, form: str) -> dict[str, Any]:
+    r"""The request predicted by a Databricks serving client whose served
+    model writes its answer in ``form``."""
+    from sdm_client import KumoRelational, SDMClient
+
+    workspace = _Workspace(SERVING[form])
+    observed: dict[str, Any] = {
+        'columns': None,
+        'values': None,
+        'request_id': None,
+        'metadata': None,
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        try:
+            with SDMClient.for_databricks_serving(
+                'scripted-serving', workspace_client=workspace
+            ) as client:
+                result = client.predict(request, model=KumoRelational())
+            frame = result.to_pandas()
+            observed['columns'] = [str(c) for c in frame.columns]
+            observed['values'] = host().as_json(frame.to_dict(orient='list'))
+            observed['request_id'] = result.request_id
+            observed['metadata'] = host().as_json(result.metadata)
+            observed['refusal'] = None
+        except Exception as error:  # noqa: BLE001 - recorded
+            observed['refusal'] = host()._refusal(error)
+    observed['calls'] = workspace.serving_endpoints.calls
+    return observed
+
+
+def answers() -> dict[str, Any]:
+    r"""Each query's answer in each form, by ``<query>.<form>``."""
+    connection = host()._connection()
+    try:
+        schema = host()._schema(connection)
+        out = {}
+        for query in QUERY_NAMES:
+            request = host()._materialize(schema, host().QUERIES[query])
+            for form in FORMS:
+                out[f'{query}.{form}'] = _predicted(request, form)
+            for form in SERVING:
+                out[f'{query}.serving-{form}'] = _served(request, form)
+        return out
+    finally:
+        connection.close()
+
+
+def observe() -> dict[str, Any]:
+    """Exercise response encodings through the installed client."""
+    return {'answers': answers()}
+
+
+def load() -> dict[str, Any]:
+    r"""The vector file, as committed."""
+    return json.loads(OUT.read_text(encoding='utf-8'))

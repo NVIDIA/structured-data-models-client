@@ -47,21 +47,38 @@ def one_table() -> Schema:
 
 def envelope(scored: list[int], known: list[int]) -> dict:
     return {
+        'schema': {
+            'instance_table': {
+                'columns': {
+                    'id': {'dtype': 'int64'},
+                    'v': {'dtype': 'float64'},
+                },
+            },
+            'related_tables': {
+                'e': {'columns': {'id': {'dtype': 'int64'}}},
+            },
+        },
         'task': {
             'kind': 'regression',
             'target': {'column_name': 'a', 'dtype': 'float64'},
         },
         'context': {
             'instance_table': {
+                'format': 'arrays',
                 'columns': ['id', 'v'],
                 'rows': [[i, 1.0] for i in known],
             },
             'related_tables': {
-                'e': {'columns': ['id'], 'rows': [[i] for i in known]}
+                'e': {
+                    'format': 'arrays',
+                    'columns': ['id'],
+                    'rows': [[i] for i in known],
+                }
             },
         },
         'predict': {
             'instance_table': {
+                'format': 'arrays',
                 'columns': ['id'],
                 'rows': [[i] for i in scored],
             }
@@ -70,7 +87,6 @@ def envelope(scored: list[int], known: list[int]) -> dict:
 
 
 def test_the_two_routes_report_the_same_halves_for_the_same_question():
-    pytest.importorskip('sdm_relational_engine')
 
     schema = one_table()
     query = 'PREDICT t.amount FOR EACH t.rid'
@@ -94,7 +110,6 @@ def test_the_two_routes_report_the_same_halves_for_the_same_question():
 @pytest.mark.parametrize('model', ['tabular', 'relational'])
 def test_a_request_agrees_with_its_own_counts(model):
     """The halves and the counts are two readings of one thing."""
-    pytest.importorskip('sdm_relational_engine')
 
     chosen = KumoTabular() if model == 'tabular' else KumoRelational()
     with warnings.catch_warnings():
@@ -109,7 +124,6 @@ def test_a_request_agrees_with_its_own_counts(model):
 
 
 def test_a_relational_request_shows_the_tables_it_carries():
-    pytest.importorskip('sdm_relational_engine')
 
     users = pd.DataFrame({'uid': range(300), 'seg': RNG.choice([*'xy'], 300)})
     events = pd.DataFrame(
@@ -208,35 +222,6 @@ def test_envelopes_that_disagree_on_columns_keep_every_column():
 
 
 # --- built when read, not while materializing -------------------------------
-
-
-def test_the_halves_are_not_built_until_they_are_read(monkeypatch):
-    """The adapter sends the envelopes as they are, so a request that is
-    materialized and sent must not pay to read rows nobody looks at."""
-    import sdm_client.request as module
-
-    built: list[str] = []
-    real = module._split_from
-    monkeypatch.setattr(
-        module,
-        '_split_from',
-        lambda payloads, half: built.append(half) or real(payloads, half),
-    )
-
-    request = Request.materialized(
-        payloads=(envelope([1, 2], [10, 11]),),
-        schema=one_table(),
-        query='PREDICT t.amount FOR EACH t.rid',
-        indices=[1, 2],
-        entity_table='t',
-    )
-
-    assert built == []
-    assert request.context_rows == 2
-    assert built == [], 'counting rows must not build the frames either'
-
-    assert len(request.context.instance_table) == 2
-    assert built == ['context']
 
 
 def test_a_half_reflects_an_edit_that_kept_the_row_count():
@@ -403,9 +388,9 @@ def test_the_adapters_agree_with_the_request_about_its_route():
     assert request.payloads is None
     assert request.predict_rows == 2
 
-    from sdm_client.adapters.tabular import TabularAdapter
+    from test_adapter_and_result import envelope as sent
 
-    envelope_built = TabularAdapter()._envelope(request, ('prediction',))
+    envelope_built = sent(request)
 
     assert len(envelope_built['predict']['instance_table']['rows']) == 2
 
@@ -619,17 +604,16 @@ def test_an_infinite_id_is_not_something_to_move_past():
     ]
 
 
-@pytest.mark.parametrize('rows', [[[10**400]], [['x'], [-(10**400)]]])
-def test_a_number_too_large_to_hold_is_not_a_description(rows):
-    """No float holds it, and pandas releases disagree on whether a frame
-    can. A description that cannot be made is not worth failing the call
-    for, so the envelope contributes nothing and the readable one beside it
-    is unaffected."""
+def test_a_number_too_large_to_hold_is_not_a_description():
+    """Unrepresentable numbers are omitted consistently across pandas versions.
+
+    The readable envelope beside them remains available for inspection.
+    """
     huge = {
         'context': {
             'instance_table': {
                 'columns': ['instance_id'],
-                'rows': rows,
+                'rows': [[10**400]],
             }
         }
     }

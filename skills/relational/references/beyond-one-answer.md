@@ -112,33 +112,19 @@ Neither can be fitted into a session. Each part needs the context its own
 labels come from, so a ranking and a forecast are asked with `predict()` and
 `fit()` refuses them.
 
-An explanation is asked for as an output, `outputs=[..., 'explanation']`, never
-an `explain=` argument, and read from `result.explanations`. It covers every
-scored row, with no row limit. `EXPLAIN PREDICT …` means the same as that
-output; passing both is allowed and redundant. On a forecast each step is
-explained; a ranking refuses it, since a ranking is assembled from
-per-candidate classifications and has no explanation of its own. `result.explanations.gradients` maps each row's key to its
-explanation, the same key that identifies the row in `to_pandas()`: the
-entity's `id`, or `(id, forecast_step)` on a forecast, since a forecast is
-keyed by the pair. It is kept out of `to_pandas()` itself.
+An explanation is requested with `outputs=[..., 'explanation']` or `EXPLAIN PREDICT`, not an `explain=` argument.
+For `sdm_gradient_v1`, read each prediction through `result.explanations.gradients` and its numerical gradients through `to_pandas()`.
+The model must support that output; client-assembled rankings refuse it locally.
+`result.explanation` remains the singular raw compatibility view, including unknown formats.
 
-An entry holds `outputs`, the explained scores in order, and `related`, one
-block per table the client gathered for that entity. The entity's own row is
-one of those blocks, under its table's name, such as `related['users']`, at
-hop 0.
-A block always carries `rows`, each row's values as sent, with `columns` and
-`gradients` as `[output][row][column]`, aligned with those rows. `keys` is
-present when the table's key column is one the model receives, i.e. a column a
-relationship joins on; otherwise rows are identified by their values.
+Each entry contains `outputs` and `related`, one block per sampled table, including the entity's own table at hop zero.
+Blocks carry submitted `rows`, model-derived numerical `columns` and `gradients[output][row][column]`.
+Source keys can identify related rows; synthetic transport keys are not user keys.
+Only scored rows and their sampled related rows receive gradients, not the labelled context examples.
+A gradient measures sensitivity to a preprocessed feature, not a causal effect.
 
-`columns` are the model's preprocessed numerical columns: categoricals and
-datetimes may appear as derived columns, and a table without numerical
-features gives an empty list. The context rows get no gradients. A row reached
-through several paths appears once, with its total effect through all of them.
-`result.explanations.gradients.to_pandas()` flattens every entry into one line per (row,
-output, column), with `hop`, how many links the row is from the entity. The
-entity's own table is hop 0.
-
-A ranking refuses an explanation locally, and the shipping endpoint refuses it
-everywhere else, so treat `result.explanations.gradients` as possibly empty.
-`SDMClient.in_process()` serves it outside a ranking.
+Unique prediction IDs key the collection; missing/repeated IDs use `row_index`.
+Forecast keys include the step, and merging preserves distinct rows and steps.
+`result.explanations.gradients.to_pandas()` flattens entries with table, hop, related-row identity, output and column.
+`EXPLAIN` ranking is rejected before gathering; explanations requested later through `outputs` are checked before prediction.
+See [the result contract](../../../docs/reference/prediction-output.md).

@@ -1,0 +1,873 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""Public relational predictions against local HTTP model fixtures.
+Fixed expectations cover attribution, numeric edge cases, response errors,
+request state, embeddings, transport privacy and UTF-8 request limits.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import socket
+import sys
+import threading
+import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+import duckdb
+import pandas as pd
+import pytest
+from sdm_connectors import DuckDBSource
+
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Request,
+    Schema,
+    SDMClient,
+    StructuredDataError,
+)
+from sdm_client._rust.results import CoreRequest
+from sdm_client.errors import NimRequestError
+
+ROOT = Path(__file__).resolve().parents[3]
+QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
+# The credential the echoing endpoint's URL carries, put together at run
+# time as main's adbe935b does, so no credential-shaped literal is left in
+# the tree for a secret scanner to report.
+_USER, _PASSWORD = 'sdm', 'SECRETPW-77'
+
+
+def _endpoint() -> Any:
+    name = 'scripted_endpoint'
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(
+        name, ROOT / 'tests/support/scripted_endpoint.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _shop() -> list[str]:
+    return json.loads((Path(__file__).parent / 'data/shop.json').read_text())[
+        'statements'
+    ]
+
+
+def _materialized(indices: list[int] | None = None) -> Request:
+    r"""base.regression's request, materialized on the core, for
+    ``indices`` (its own, ``[0, 1]``, by default)."""
+
+    connection = duckdb.connect()
+    for statement in _shop():
+        connection.execute(statement)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1] if indices is None else indices,
+            anchor_time=pd.Timestamp('2024-03-01'),
+        )
+
+    return request
+
+
+@contextmanager
+def _answering(status: int, body: bytes) -> Iterator[tuple[str, list[bytes]]]:
+    r"""An endpoint answering every request with ``status`` and ``body``:
+    its URL, and the bodies it received."""
+    received: list[bytes] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802 - http.server's name
+            length = int(self.headers.get('Content-Length') or 0)
+            received.append(self.rfile.read(length))
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f'http://127.0.0.1:{server.server_address[1]}', received
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def _predict(url: str, request: Request, **arguments: Any) -> Any:
+    with SDMClient(url, max_retries=0) as client:
+        return client.predict(request, model=KumoRelational(), **arguments)
+
+
+def _outcome(request: Request, url: str, **arguments: Any) -> Any:
+    try:
+        return _predict(url, request, **arguments)
+    except StructuredDataError as error:
+        return error
+
+
+def test_public_prediction_preserves_payload_and_result() -> None:
+    request = _materialized()
+    assert request._core == CoreRequest(version=2)
+    with _endpoint().serve() as (url, received):
+        result = _predict(url, request)
+    pd.testing.assert_frame_equal(
+        result.to_pandas(),
+        pd.DataFrame(
+            [
+                {'row_index': 0, 'id': 0, 'prediction': 1.0},
+                {'row_index': 1, 'id': 1, 'prediction': 1.0},
+            ]
+        ),
+    )
+    assert (
+        result.model,
+        result.request_id,
+        result.metadata,
+        result.outputs,
+    ) == ('kumo-relational', 'r1', {}, ('prediction',))
+    assert [
+        (item.id, item.row_index, item.prediction) for item in result.items
+    ] == [(0, 0, 1.0), (1, 1, 1.0)]
+    [(_, _, body)] = received.requests
+    sent = json.loads(body)
+    assert sent['metadata']['request_id'].startswith('sdm-')
+    for key in ('context', 'predict', 'schema', 'task'):
+        assert sent[key] == request.payloads[0][key]
+
+
+def test_another_request_state_version_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized()
+    # Version 1, the state contract v25 wrote: not the current version.
+    request._core = CoreRequest(version=1)
+
+    with _endpoint().serve() as (url, received):
+        with pytest.raises(StructuredDataError) as refused:
+            _predict(url, request)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['field'] == 'state.version'
+    assert refused.value.details['version'] == 1
+    assert received.requests == []
+
+
+def test_request_without_native_state_predicts_from_its_contents() -> None:
+    request = _materialized()
+    request._core = None
+    with _endpoint().serve() as (url, received):
+        result = _predict(url, request)
+    pd.testing.assert_frame_equal(
+        result.to_pandas(),
+        pd.DataFrame(
+            [
+                {'row_index': 0, 'id': 0, 'prediction': 1.0},
+                {'row_index': 1, 'id': 1, 'prediction': 1.0},
+            ]
+        ),
+    )
+    assert result.outputs == ('prediction',)
+    assert len(received.requests) == 1
+    assert request._core is None
+
+
+def test_output_selection_and_missing_output_notices() -> None:
+    request = _materialized()
+    with _endpoint().serve() as (url, received):
+        for outputs in (
+            ['prediction'],
+            ['prediction', 'quantiles'],
+            ['prediction', 'prediction'],
+            [],
+            ['bogus'],
+        ):
+            before = len(received.requests)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter('always')
+                result = _outcome(request, url, outputs=outputs)
+            if outputs in ([], ['bogus']):
+                assert isinstance(result, StructuredDataError)
+                assert result.code == (
+                    'INVALID_REQUEST'
+                    if outputs == []
+                    else 'UNSUPPORTED_REQUEST'
+                )
+                assert len(received.requests) == before
+            else:
+                assert not isinstance(result, Exception), result
+                assert result.to_pandas()['prediction'].tolist() == [1.0, 1.0]
+                assert result.outputs == tuple(outputs)
+            notices = [
+                w for w in caught if type(w.message).__name__ == 'SDMWarning'
+            ]
+            assert len(notices) == (1 if 'quantiles' in outputs else 0)
+            if notices:
+                assert 'quantiles' in str(notices[0].message)
+
+
+def test_an_endpoint_s_refusal_is_shown_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The endpoint's own text, its code, detail, title and other fields and
+    # the client's diagnosis of it, without a chained internal exception.
+    request = _materialized()
+    for status, answer in (
+        (422, {'code': 'UNSUPPORTED_FEATURE', 'detail': 'column x is 5'}),
+        (
+            500,
+            {
+                'code': 'INTERNAL_ERROR',
+                'detail': 'failed to collect any context examples for 7',
+                'extra': 'value 7',
+            },
+        ),
+        (400, {'title': 'bad request for 7', 'endpoint_code': 'E9'}),
+    ):
+        with _answering(status, json.dumps(answer).encode()) as (url, _):
+            core = _outcome(request, url)
+        assert isinstance(core, NimRequestError)
+        assert core.status_code == status
+        expected_code = (
+            'INVALID_REQUEST' if status == 500 else answer.get('code')
+        )
+        assert core.code == expected_code
+        expected_details = {
+            k: v
+            for k, v in answer.items()
+            if k not in ('code', 'detail', 'title')
+        }
+        if status == 500:
+            expected_details.update(
+                endpoint_code='INTERNAL_ERROR', diagnosis='EMPTY_CONTEXT'
+            )
+            assert (
+                core.message == 'failed to collect any context examples for 7'
+            )
+        else:
+            assert core.message == answer.get('detail', answer.get('title'))
+        assert core.details == expected_details
+        assert core.__cause__ is None and core.__context__ is None
+
+
+def test_an_endpoint_that_cannot_be_reached_is_a_transport_error_with_no_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized()
+    with socket.socket() as closed:
+        closed.bind(('127.0.0.1', 0))
+        port = closed.getsockname()[1]
+    url = f'http://127.0.0.1:{port}'
+    core = _outcome(request, url)
+    assert isinstance(core, StructuredDataError)
+    assert core.code == 'TRANSPORT_ERROR'
+    assert core.details['kind'] == 'model_endpoint'
+    assert core.__cause__ is None and core.__suppress_context__
+
+
+def test_an_answer_that_is_not_this_request_s_is_an_invalid_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized()
+    for answered in (
+        # A row that was not asked about.
+        {
+            'id': 'r1',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {'id': '112', 'row_index': 0, 'prediction': 1.0},
+                {'id': '113', 'row_index': 5, 'prediction': 1.0},
+            ],
+        },
+        # An answer under another row's instance id.
+        {
+            'id': 'r1',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {'id': '113', 'row_index': 0, 'prediction': 1.0},
+                {'id': '112', 'row_index': 1, 'prediction': 1.0},
+            ],
+        },
+        # Not the contract's: no metadata.
+        {'id': 'r1', 'model': 'kumo-relational', 'predictions': []},
+    ):
+        with _answering(200, json.dumps(answered).encode()) as (url, _):
+            core = _outcome(request, url)
+        assert isinstance(core, StructuredDataError), answered
+        assert core.code == 'INVALID_RESPONSE'
+
+
+def test_distinct_answers_out_of_order_land_on_their_own_entities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Entities that are not their rows' positions, answered in reverse
+    # order with a distinct prediction each: a swapped column or a misplaced
+    # prediction differs from the old route ( review round 1, F4).
+    request = _materialized(indices=[5, 2, 7])
+    [rows] = [request.payloads[0]['predict']['instance_table']['rows']]
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r7',
+        'model': 'kumo-relational',
+        'metadata': {'n': 12345678901234567890, 'tiny': 1e-05},
+        'predictions': [
+            {
+                'id': str(instance),
+                'row_index': index,
+                'prediction': 10.5 * (index + 1),
+            }
+            for index, instance in reversed(list(enumerate(instances)))
+        ],
+    }
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        core = _outcome(request, url)
+    assert not isinstance(core, Exception), core
+    # The items keep the endpoint's order, as the old route's (the core's
+    # rows are ordered by row_index, with each answer's place).
+    assert (core.request_id, core.metadata) == ('r7', answer['metadata'])
+    frame = core.to_pandas()
+    assert frame['id'].tolist() == [5, 2, 7]
+    assert frame['prediction'].tolist() == [10.5, 21.0, 31.5]
+    assert [
+        (item.id, item.row_index, item.prediction) for item in core.items
+    ] == [(7, 2, 31.5), (2, 1, 21.0), (5, 0, 10.5)]
+
+
+@pytest.mark.parametrize(
+    'outputs', [['quantiles'], ['prediction', 'quantiles']]
+)
+def test_quantiles_with_no_prediction_are_the_old_route_s_on_the_core(
+    monkeypatch: pytest.MonkeyPatch, outputs: list[str]
+) -> None:
+    #: a model asked for quantiles may leave the prediction out (the
+    # reference's _report_absent says kumo-relational does when both are
+    # asked): each item's quantiles are kept as keyed, no prediction column
+    # is made up, and a prediction the caller named and the answer left out
+    # is said as the old route says it.
+    request = _materialized()
+    rows = request.payloads[0]['predict']['instance_table']['rows']
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r9',
+        'model': 'kumo-relational',
+        'metadata': {},
+        'predictions': [
+            {
+                'id': str(instances[index]),
+                'row_index': index,
+                'quantiles': {'0.1': 1.0 + index, '0.5': 2.5, '0.90': 4.0},
+            }
+            for index in (1, 0)
+        ],
+    }
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        with warnings.catch_warnings(record=True) as core_said:
+            warnings.simplefilter('always')
+
+            core = _predict(url, request, outputs=outputs)
+
+    assert list(core.to_pandas().columns) == [
+        'row_index',
+        'id',
+        'quantile_0.1',
+        'quantile_0.5',
+        'quantile_0.90',
+    ]
+    assert [item.prediction for item in core.items] == [None, None]
+    assert core.absent(outputs) == (
+        ('prediction',) if 'prediction' in outputs else ()
+    )
+    assert [item.row_index for item in core.items] == [1, 0]
+    assert [item.quantiles for item in core.items] == [
+        item['quantiles'] for item in answer['predictions']
+    ]
+    pd.testing.assert_frame_equal(
+        core.to_pandas(),
+        pd.DataFrame(
+            [
+                {
+                    'row_index': i,
+                    'id': i,
+                    'quantile_0.1': 1.0 + i,
+                    'quantile_0.5': 2.5,
+                    'quantile_0.90': 4.0,
+                }
+                for i in (0, 1)
+            ]
+        ),
+    )
+    for notice in core_said:
+        assert type(notice.message).__name__ == 'SDMWarning'
+        assert 'prediction' in str(notice.message)
+    assert len(core_said) == (1 if 'prediction' in outputs else 0)
+
+
+def test_an_overflowing_prediction_is_the_old_route_s_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # by the owner's decision of 2026-10-12, the core reads a
+    # token past a double's range as the infinity the old route reads
+    # (B-4).
+    request = _materialized()
+    for token in ('1e400', '-1e400', 'NaN', 'Infinity', '-Infinity'):
+        answer = (
+            '{"id": "r1", "model": "kumo-relational", "metadata": {}, '
+            '"predictions": [{"id": "112", "row_index": 0, "prediction": '
+            + token
+            + '}, {"id": "113", "row_index": 1, "prediction": 1.0}]}'
+        )
+        with _answering(200, answer.encode()) as (url, _):
+            core = _outcome(request, url)
+        assert not isinstance(core, Exception), (token, core)
+        expected = pd.DataFrame(
+            {
+                'row_index': [0, 1],
+                'id': [0, 1],
+                'prediction': [json.loads(token), 1.0],
+            }
+        )
+        pd.testing.assert_frame_equal(core.to_pandas(), expected)
+
+
+def test_an_answer_too_deep_for_python_s_reader_is_too_deep_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Before Python 3.12, json.loads raises RecursionError past about 1,000
+    # levels, which the transport reports as TRANSPORT_ERROR; on the core
+    # route the core is told the answer is too deep, so it is refused
+    # INVALID_RESPONSE on every interpreter (B-22, fix
+    # round 2). Seeded here on any interpreter by a reader that refuses
+    # deep text as 3.10's and 3.11's do.
+    from sdm_client.core import transport
+
+    request = _materialized()
+    real = transport.json.loads
+
+    def loads(text: Any, *args: Any, **kwargs: Any) -> Any:
+        raw = text if isinstance(text, (bytes, bytearray)) else text.encode()
+        if raw.count(b'{') > 900:
+            raise RecursionError('maximum recursion depth exceeded')
+        return real(text, *args, **kwargs)
+
+    deep = '{"d": ' * 5000 + '0' + '}' * 5000
+    answer = (
+        '{"id": "r1", "model": "kumo-relational", "metadata": '
+        + deep
+        + ', "predictions": [{"id": "112", "row_index": 0, "prediction": '
+        '1.0}, {"id": "113", "row_index": 1, "prediction": 1.0}]}'
+    )
+    monkeypatch.setattr(transport.json, 'loads', loads)
+    with _answering(200, answer.encode()) as (url, _):
+        core = _outcome(request, url)
+    assert isinstance(core, StructuredDataError), core
+    assert core.code == 'INVALID_RESPONSE'
+    assert (core.details['field'], core.details['reason']) == (
+        'response',
+        'too_deep',
+    )
+
+
+def test_a_lone_surrogate_in_an_answer_is_u_fffd_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Native JSON decoding replaces an isolated surrogate with U+FFFD.
+    request = _materialized()
+    answer = (
+        '{"id": "r1", "model": "kumo-relational", "metadata": {"note": '
+        '"\\ud800"}, "predictions": [{"id": "112", "row_index": 0, '
+        '"prediction": 1.0}, {"id": "113", "row_index": 1, '
+        '"prediction": 1.0}]}'
+    )
+    with _answering(200, answer.encode()) as (url, _):
+        result = _predict(url, request)
+    assert result.metadata == {'note': '\ufffd'}
+    pd.testing.assert_frame_equal(
+        result.to_pandas(),
+        pd.DataFrame(
+            [
+                {'row_index': 0, 'id': 0, 'prediction': 1.0},
+                {'row_index': 1, 'id': 1, 'prediction': 1.0},
+            ]
+        ),
+    )
+
+
+def test_a_failed_transport_is_named_for_what_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A 200 whose body is not JSON: the reference's TRANSPORT_ERROR, said
+    # as a transport failure, not as an endpoint never reached.
+    request = _materialized()
+    with _answering(200, b'<html>' + b'x' * 10 + b'</html>') as (url, _):
+        core = _outcome(request, url)
+    assert isinstance(core, StructuredDataError)
+    assert core.code == 'TRANSPORT_ERROR'
+    assert 'its answer could not be read' in str(core)
+
+
+def test_a_non_finite_number_anywhere_in_the_answer_is_the_old_route_s(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # One policy over the whole answer, as the Rust host's (sdm-core's
+    # tests/predict.rs, the same tokens in the metadata): the
+    # value is passed on, as on the old route (B-4).
+    request = _materialized()
+    for token in ('1e400', '-1e400', 'Infinity', '-Infinity', 'NaN'):
+        answer = (
+            '{"id": "r1", "model": "kumo-relational", "metadata": {"x": [1, '
+            '{"y": ' + token + '}]}, "predictions": [{"id": "112", '
+            '"row_index": 0, "prediction": 1.0}, {"id": "113", '
+            '"row_index": 1, "prediction": 1.0}]}'
+        )
+        with _answering(200, answer.encode()) as (url, _):
+            core = _outcome(request, url)
+        assert not isinstance(core, Exception), token
+        assert json.dumps(core.metadata) == json.dumps(
+            json.loads(answer)['metadata']
+        ), token
+
+
+def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Python's reader takes nesting the core refuses: the host writes it
+    # without recursion, and the core refuses it as too deep. 126 arrays in
+    # the metadata nest 128 deep in all, the deepest the core reads. Past
+    # that the core refuses it INVALID_RESPONSE, reason too_deep, on every
+    # interpreter (B-22, approved by the owner), also where
+    # Python's own reader cannot take it (about a thousand levels on 3.10
+    # and 3.11) and the old route's transport fails, TRANSPORT_ERROR;
+    # either way nothing raises a bare RecursionError.
+    request = _materialized()
+    for depth in (126, 300, 960, 5000):
+        answer = (
+            '{"id": "r1", "model": "kumo-relational", "metadata": {"x": '
+            + '[' * depth
+            + '0'
+            + ']' * depth
+            + '}, "predictions": [{"id": "112", "row_index": 0, '
+            '"prediction": 1.0}, {"id": "113", "row_index": 1, '
+            '"prediction": 1.0}]}'
+        )
+        with _answering(200, answer.encode()) as (url, _):
+            core = _outcome(request, url)
+        if depth == 126:
+            assert len(core) == 2
+            continue
+        assert isinstance(core, StructuredDataError), depth
+        assert core.code == 'INVALID_RESPONSE', (depth, core.code)
+        assert core.details['reason'] == 'too_deep', depth
+
+
+def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized()
+    request.payloads[0]['context']['instance_table']['rows'][0][-1] = float(
+        'nan'
+    )
+    with _endpoint().serve() as (url, received):
+        core = _outcome(request, url)
+    assert isinstance(core, StructuredDataError)
+    assert core.code == 'INVALID_REQUEST'
+    assert core.__cause__ is None and core.__context__ is None
+    assert received.requests == []
+
+
+def _same(left: Any, right: Any) -> bool:
+    r"""Whether two decoded JSON values are equal, compared without
+    recursion, at any depth."""
+    stack = [(left, right)]
+    while stack:
+        a, b = stack.pop()
+        if isinstance(a, dict) and isinstance(b, dict):
+            if list(a) != list(b):
+                return False
+            stack += [(a[k], b[k]) for k in a]
+        elif isinstance(a, list) and isinstance(b, list):
+            if len(a) != len(b):
+                return False
+            stack += list(zip(a, b, strict=True))
+        elif type(a) is not type(b) or a != b:
+            return False
+    return True
+
+
+def test_a_refusal_with_deeply_nested_details_is_shown_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Details the transport read at a depth a recursive copy cannot take
+    # ( review round 3): the old route's class, status, code and
+    # details, and nothing chained.
+    request = _materialized()
+    for depth in (600, 900):
+        body = (
+            '{"code": "BAD_REQUEST", "detail": "not served", "extra": '
+            + '[' * depth
+            + '0'
+            + ']' * depth
+            + '}'
+        )
+        with _answering(422, body.encode()) as (url, _):
+            core = _outcome(request, url)
+        assert isinstance(core, NimRequestError), depth
+        assert (core.status_code, core.code, core.message) == (
+            422,
+            'BAD_REQUEST',
+            'not served',
+        )
+        nested: Any = 0
+        for _ in range(depth):
+            nested = [nested]
+        assert _same(core.details, {'extra': nested}), depth
+        assert core.__cause__ is None and core.__context__ is None
+
+
+@contextmanager
+def _echoing_our_credential() -> Iterator[str]:
+    r"""An endpoint refusing with 401 whose detail and other fields echo
+    the Authorization header it was sent and the URL's credential, beside
+    a sentinel of its own; its URL carries the credential."""
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802 - http.server's name
+            self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            sent = self.headers.get('Authorization', '')
+            body = json.dumps(
+                {
+                    'code': {'h': sent},
+                    'detail': f'credential {sent} refused (ENDPOINT-ONLY-7c2)',
+                    'seen': {'user': f'{_USER}:{_PASSWORD}', 'header': [sent]},
+                }
+            ).encode()
+            self.send_response(401)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield (
+            f'http://{_USER}:{_PASSWORD}@127.0.0.1:{server.server_address[1]}'
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # E47: the refusal exactly as the old route shows it, an echo of our
+    # credential in the endpoint's own text included (a scrub of such
+    # echoes was tried in fix rounds 3 and 4 and removed); nothing of the
+    # transport's, and so nothing of the URL, is chained to it.
+    request = _materialized()
+    with _echoing_our_credential() as url:
+        core = _outcome(request, url)
+    assert isinstance(core, NimRequestError) and core.status_code == 401
+    import base64
+
+    credential = (
+        'Basic ' + base64.b64encode(f'{_USER}:{_PASSWORD}'.encode()).decode()
+    )
+    assert core.code == {'h': credential}
+    assert (
+        core.message == f'credential {credential} refused (ENDPOINT-ONLY-7c2)'
+    )
+    assert core.details == {
+        'seen': {'user': f'{_USER}:{_PASSWORD}', 'header': [credential]}
+    }
+    assert 'ENDPOINT-ONLY-7c2' in str(core)
+    assert core.__cause__ is None and core.__context__ is None
+
+
+def _emoji_request(
+    monkeypatch: pytest.MonkeyPatch, emoji: int, ascii: int = 0
+) -> Request:
+    r"""base.regression's request on the core, one user holding a note of
+    ``emoji`` four-byte characters and one order a note of ``ascii``
+    one-byte ones."""
+
+    connection = duckdb.connect()
+    for statement in [
+        *_shop(),
+        'CREATE OR REPLACE TABLE users AS SELECT *, CASE user_id WHEN 5 '
+        f"THEN repeat('\U0001f600', {emoji}) ELSE '' END AS note FROM users",
+        # Order 57 (user 1's, 2024-02-03) is read by the asked entity alone,
+        # after every context's anchor: its note is sent once.
+        'CREATE OR REPLACE TABLE orders AS SELECT *, CASE order_id WHEN 57 '
+        f"THEN repeat('a', {ascii}) ELSE '' END AS note FROM orders",
+    ]:
+        connection.execute(statement)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+        )
+
+    return request
+
+
+def _sent(
+    monkeypatch: pytest.MonkeyPatch, request: Request
+) -> tuple[list[bytes], list[bytes], Any]:
+    r"""The calls the core wrote, the bodies the endpoint received, and the
+    refusal raised (the endpoint refuses every call)."""
+    written: list[bytes] = []
+    send = SDMClient._send_body
+
+    def recording(self: Any, adapter: Any, body: bytes) -> Any:
+        written.append(bytes(body))
+        return send(self, adapter, body)
+
+    monkeypatch.setattr(SDMClient, '_send_body', recording)
+
+    with _answering(400, b'{"code": "RECORDED"}') as (url, received):
+        with pytest.raises(StructuredDataError) as refused:
+            _predict(url, request)
+
+    return written, received, refused.value
+
+
+def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register PD-2: the HTTP transport sends the
+    # core's call as the core wrote it, so the bytes the endpoint receives
+    # are the bytes the core counted against the limit, characters past
+    # ASCII as their own bytes, never json.dumps' escapes. At the limit's
+    # edge the call is sent, at most the limit; one character past it,
+    # nothing is sent. Since the reference's 26ecdd28 the call
+    # leaves out the engine's inference config, which the payload holds,
+    # so the payload is the larger and meets the limit first: the edge is
+    # the payload's, which materialize names in its refusal, and one past
+    # it materialize refuses (the call's own refusal, past the limit with
+    # the payload within it, is sdm-core's
+    # a_call_past_the_limit_is_refused_before_it_is_sent).
+    limit = 30 * 1024 * 1024
+    lengths = []
+    for emoji, ascii in ((0, 0), (1, 0), (0, 1)):
+        written, received, _ = _sent(
+            monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
+        )
+        assert written == received
+        lengths.append(len(received[0]))
+    base, wide, narrow = (
+        lengths[0],
+        lengths[1] - lengths[0],
+        lengths[2] - lengths[0],
+    )
+    assert wide % 4 == 0 and narrow == 1
+    emoji = (limit - base) // wide
+    ascii = (limit - base - emoji * wide) // narrow
+    # The call's edge is past the payload's: materialize refuses it, naming
+    # the payload's size, and the payload's edge is that much nearer.
+    with pytest.raises(StructuredDataError) as over:
+        _emoji_request(monkeypatch, emoji, ascii)
+    details = over.value.details
+    assert over.value.code == 'INVALID_REQUEST'
+    assert details['field'] == 'payload' and details['limit'] == limit
+    excess = details['bytes'] - limit
+    assert 0 < excess < wide * 64
+    room = emoji * wide + ascii * narrow - excess
+    emoji = room // wide
+    ascii = (room - emoji * wide) // narrow
+    written, received, refused = _sent(
+        monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
+    )
+    assert refused.code == 'RECORDED'
+    assert written == received
+    assert len(received[0]) == base + emoji * wide + ascii * narrow <= limit
+    assert b'\\ud83d' not in received[0]
+    assert '\U0001f600'.encode() in received[0]
+    with pytest.raises(StructuredDataError) as past:
+        _emoji_request(monkeypatch, emoji, ascii + 1)
+    assert past.value.code == 'INVALID_REQUEST'
+    assert past.value.details['field'] == 'payload'
+    assert past.value.details['bytes'] == limit + 1
+
+
+def test_embeddings_are_the_old_route_s_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    #: an answer's embeddings, asked for among the outputs, read as
+    # the client's bindings read them and given back as the old route
+    # gives them: one list per row, the items holding each as a tuple.
+    request = _materialized()
+    [rows] = [request.payloads[0]['predict']['instance_table']['rows']]
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r9',
+        'model': 'kumo-relational',
+        'metadata': {},
+        'predictions': [
+            {
+                'id': str(instance),
+                'row_index': index,
+                'prediction': 1.5 + index,
+                'embeddings': [0.25 * index, '-1.5', 3],
+            }
+            for index, instance in enumerate(instances)
+        ],
+    }
+    outputs = ['prediction', 'embeddings']
+    with _answering(200, json.dumps(answer).encode()) as (url, received):
+        core = _outcome(request, url, outputs=outputs)
+    assert not isinstance(core, Exception), core
+    assert [
+        (item.id, item.row_index, item.prediction, item.embeddings)
+        for item in core.items
+    ] == [(0, 0, 1.5, (0.0, -1.5, 3.0)), (1, 1, 2.5, (0.25, -1.5, 3.0))]
+    pd.testing.assert_frame_equal(
+        core.to_pandas(),
+        pd.DataFrame(
+            [
+                {
+                    'row_index': i,
+                    'id': i,
+                    'prediction': 1.5 + i,
+                    'embeddings': [0.25 * i, -1.5, 3.0],
+                }
+                for i in (0, 1)
+            ]
+        ),
+    )
+    assert json.loads(received[0])['output']['fields'] == outputs
+    # Not an array of numbers: the response is not the contract's, on both.
+    answer['predictions'][0]['embeddings'] = 'x'
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        core = _outcome(request, url, outputs=outputs)
+    assert isinstance(core, StructuredDataError)
+    assert core.code == 'INVALID_RESPONSE'

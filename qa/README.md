@@ -80,22 +80,8 @@ anything that comes back red is something that used to be broken.
 
 ## Release shape
 
-Not a probe suite, but a check that the thing users install is the thing that was
-tested. Run after building, from a venv with no source tree on `sys.path`:
-
-```bash
-pip install build
-for pkg in structured-data-models-api structured-data-models-pql structured-data-models-connectors structured-data-models-client; do
-  python -m build --wheel --sdist -o dist/ packages/$pkg
-done
-python -m build --wheel -o dist/ packages/structured-data-models-relational-engine   # native, wheel only
-
-python -m venv /tmp/relenv
-/tmp/relenv/bin/pip install --find-links dist/ 'structured-data-models-client'
-```
-
-What this checks: all five distributions build; a base install pulls `structured-data-models-api`, `structured-data-models-pql`, pandas, numpy, requests, urllib3 and the ANTLR
-runtime and nothing else; `sdm_relational_engine` is **not** importable, and the
-relational path raises `MissingExtraError` naming the extra to install;
-`[relational]`, `[duckdb]` and `[s3]` each resolve on their own; and what is
-installed is what the wheels carry, not what the working tree holds.
+Use the build and clean-install checks in [CONTRIBUTING.md](../CONTRIBUTING.md).
+The maintained distributions are the API, connectors and native client wheel; Java ships a JAR.
+Build the Python client with `scripts/rust_core/native_wheel.py` and verify installation with `scripts/rust_core/wheel_smoke.py`.
+Run installed-client checks from an isolated environment so the source tree cannot hide missing wheel contents.
+Database drivers remain optional extras; the shared Rust core is included in the client itself.

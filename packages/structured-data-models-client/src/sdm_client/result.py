@@ -11,15 +11,7 @@ union. Here an explanation is an output field like any other:
 >>> result = client.predict(request, model=KumoRelational(),
 ...                         outputs=['prediction', 'explanation'])
 >>> result.to_pandas()       # always a frame
->>> result.explanations.gradients      # {} unless you asked for them
->>> result.explanations.gradients['user_5']          # one row's explanation
->>> result.explanations.gradients[('user_5', 3)]     # a forecast's, at step 3
->>> result.explanations.gradients.to_pandas()        # every gradient
->>> result.explanations.columns.to_pandas()  # cohorts per column
-
-Each explained row is under the key that names it in ``to_pandas()``: its
-``id``, ``(id, forecast_step)`` for a forecast, and its ``row_index`` when the
-request has no entity key.
+>>> result.explanation       # None unless you asked for it
 
 The frame's shape depends on the **task**, not the model. Classification and
 multiclass both give one row per entity. Multiclass carries a probability per
@@ -37,19 +29,18 @@ it is there, otherwise on** ``row_index``, **and never on row order.**
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
-from sdm_client.errors import StructuredDataError
 from sdm_client.explanations import (
     ColumnExplanations,
     Explanations,
     GradientExplanations,
 )
+from sdm_client.reports import ExplanationView
 
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
@@ -94,19 +85,11 @@ class PredictionResult:
         request_id: str,
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
+        explanation: dict[str, Any] | None = None,
         explanations: Explanations | Mapping[Any, dict[str, Any]] | None = None,
         outputs: Sequence[str] = (),
         unscored_candidates: Sequence[Any] = (),
-        explanation: dict[str, Any] | None = None,
     ) -> None:
-        if explanation is not None:
-            warnings.warn(
-                'PredictionResult(explanation=...) is deprecated; pass '
-                'explanations=. It will be removed in 2.0.0',
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        self._explanation = explanation
         self.model = model
         self.request_id = request_id
         self.items = tuple(items)
@@ -119,14 +102,16 @@ class PredictionResult:
         # about. Set where a forecast is assembled, for the same reason.
         self._names_its_step = False
         self.metadata = dict(metadata or {})
-        if isinstance(explanations, Explanations):
-            self._explanations = explanations
-        elif isinstance(explanations, GradientExplanations):
-            self._explanations = Explanations(explanations)
-        else:
-            self._explanations = Explanations(
-                GradientExplanations(explanations)
+        self._explanation = explanation
+        self.explanations = (
+            explanations
+            if isinstance(explanations, Explanations)
+            else Explanations(
+                explanations
+                if isinstance(explanations, GradientExplanations)
+                else GradientExplanations(explanations)
             )
+        )
         self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
@@ -158,7 +143,10 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return bool(self._explanations.gradients)
+            return (
+                bool(self.explanations.gradients)
+                or self._explanation is not None
+            )
         if name not in _ITEM_FIELDS:
             return True
         return any(
@@ -167,34 +155,20 @@ class PredictionResult:
         )
 
     @property
-    def explanations(self) -> Explanations:
-        r"""The explanations: ``.gradients`` and ``.columns``.
+    def explanation(self) -> dict[str, Any] | None:
+        r"""The explanation, when asked for and the model produced one.
 
-        ``gradients`` holds each explained row's explanation under the key
-        ``to_pandas()`` names the row by: its ``id``, ``(id, forecast_step)``
-        for a forecast, and ``row_index`` when the request has no entity key.
-        Kept out of the frame, because an entry is nested and the frame is
-        flat. ``gradients.to_pandas()`` flattens them.
-
-        ``gradients`` is empty and ``columns`` is ``None`` when not
-        asked for, rather than a different return type.
+        ``None`` otherwise, rather than a different return type.
         """
-        return self._explanations
+        return self._explanation
 
     @property
-    def explanation(self) -> dict[str, Any] | None:
-        r"""Deprecated: the first record's raw explanation; use ``explanations``."""
-        warnings.warn(
-            'result.explanation is deprecated; use '
-            'result.explanations.gradients[key]. It will be removed in 2.0.0',
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        if self._explanation is not None:
-            return self._explanation
-        return next(
-            (item.explanation for item in self.items if item.explanation),
-            None,
+    def explanation_view(self) -> ExplanationView | None:
+        """An immutable local view, without reading prediction rows."""
+        return (
+            None
+            if self._explanation is None
+            else ExplanationView(self._explanation)
         )
 
     @property
@@ -303,75 +277,22 @@ class PredictionResult:
         A request larger than the endpoint's per-call cap is split by the
         adapter, and each call answers about its own rows. Keeping only the
         last answer would silently drop every earlier batch, so the parts are
-        concatenated here. ``columns`` is the request's column analysis,
-        computed before any call was sent.
+        concatenated here.
+
+        The native route keeps a stable union of unscored candidates, removing
+        duplicates within and across parts. NaNs remain distinct under IEEE
+        equality. Aware datetimes compare by UTC instant, distinguishing DST
+        folds; dates and naive datetimes remain separate. Result items, metadata
+        values and explanation owners are retained.
 
         Raises:
             StructuredDataError: If ``parts`` is empty, which would mean a
                 request was sent with nothing to score, or if the parts do
                 not describe one request.
         """
-        if not parts:
-            raise StructuredDataError(
-                'no parts to merge', code='INTERNAL_ERROR'
-            )
-        if len(parts) == 1:
-            if columns is not None:
-                parts[0]._explanations.columns = columns
-            return parts[0]
-        first = parts[0]
-        models = {part.model for part in parts}
-        if len(models) > 1:
-            raise StructuredDataError(
-                f'cannot merge results from different models: {sorted(models)}',
-                code='INTERNAL_ERROR',
-            )
-        items = [item for part in parts for item in part.items]
-        metadata = dict(first.metadata)
-        metadata['batches'] = len(parts)
-        # Each call has its own id in the endpoint's logs, and only the first
-        # would otherwise survive. That is the one you do not have when a
-        # later batch is the one that misbehaved.
-        metadata['batch_request_ids'] = [part.request_id for part in parts]
-        explanations = Explanations(
-            GradientExplanations._merged(
-                [part.explanations.gradients for part in parts],
-                [part.items for part in parts],
-            ),
-            columns,
-        )
-        # Every part answers one slice of the same request, so they were asked
-        # for the same fields. If they were not, the merged result cannot
-        # honestly claim either set, and an empty one would take its shape from
-        # whichever part happened to be first.
-        shapes = {part.outputs for part in parts}
-        if len(shapes) > 1:
-            raise StructuredDataError(
-                f'these parts were asked for different outputs '
-                f'({sorted(shapes)}), so they are not slices of one request',
-                code='INTERNAL_ERROR',
-            )
-        # Named when any part left it out. Which rows ranked without it is
-        # not recorded, so the union is the most that can be said.
-        unscored: list[Any] = []
-        for part in parts:
-            unscored += [
-                candidate
-                for candidate in part.unscored_candidates
-                if candidate not in unscored
-            ]
-        merged = cls(
-            model=first.model,
-            request_id=first.request_id,
-            items=items,
-            metadata=metadata,
-            explanations=explanations,
-            outputs=first.outputs,
-            unscored_candidates=unscored,
-        )
-        merged._names_its_rows = all(part._names_its_rows for part in parts)
-        merged._names_its_step = any(part._names_its_step for part in parts)
-        return merged
+        from sdm_client._rust.result_merge import merge
+
+        return merge(cls, parts, columns=columns)
 
     def __len__(self) -> int:
         return len(self.items)
@@ -380,7 +301,7 @@ class PredictionResult:
         return iter(self.items)
 
     def __repr__(self) -> str:
-        explained = ', explained' if self._explanations.gradients else ''
+        explained = ', explained' if self._explanation is not None else ''
         left_out = len(self._unscored_candidates)
         unscored = (
             f', {left_out} candidate{"s" if left_out > 1 else ""} unscored'

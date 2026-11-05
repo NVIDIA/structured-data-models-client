@@ -21,11 +21,10 @@ import sys
 import threading
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from dataclasses import asdict, dataclass
+from typing import Any
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.explanations import GradientConverter
 from sdm_client.in_process.answers import (
     QUANTILE_LEVELS,
     class_order,
@@ -35,12 +34,9 @@ from sdm_client.in_process.answers import (
     regressed,
 )
 from sdm_client.in_process.columns import Context
+from sdm_client.in_process.gradients import GradientConverter
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
-
-if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
-    from sdm_client.base import ModelAdapter
-    from sdm_client.result import PredictionResult
 
 #: How the hosted deployments fit a context.
 _SEED = 42
@@ -133,18 +129,13 @@ class InProcessBackend:
 
     def predict(
         self,
-        adapter: ModelAdapter,
         payload: dict[str, Any],
-        outputs: tuple[str, ...],
-    ) -> PredictionResult:
+    ) -> dict[str, Any]:
         with self._running():
-            task = payload['task']
-            # Refused before the model is loaded: a first load is a download.
-            fields = _fields(
-                self._reader(payload['model']), task['kind'], payload
-            )
+            self._preflight(payload)
             served, model = self._serving(payload['model'])
-            _check_loaded_for(served, model, task['kind'])
+            task = payload['task']
+            fields = _fields(served, model, task['kind'], payload)
             context = served.context(payload)
             query = served.query(context, payload, payload['schema'])
             fitted = _fit(model, context)
@@ -162,23 +153,14 @@ class InProcessBackend:
                 items = _explained(
                     items, fitted, query, context, task['kind'], payload, fields
                 )
-        return adapter.answered(
-            items,
-            outputs,
-            payload,
-            model=served.model_id,
-            request_id=_request_id(payload),
-        )
+        return _response(items, served.model_id, payload)
 
-    def create_session(
-        self, adapter: ModelAdapter, payload: dict[str, Any]
-    ) -> str:
+    def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Fit the context once, to be scored against until released."""
         with self._running():
-            kind = payload['task']['kind']
-            _fields(self._reader(payload['model']), kind, payload)
+            self._preflight(payload)
             served, model = self._serving(payload['model'])
-            _check_loaded_for(served, model, kind)
+            _fields(served, model, payload['task']['kind'], payload)
             context = served.context(payload)
             fitted = _fit(model, context)
             session_id = uuid.uuid4().hex
@@ -191,16 +173,13 @@ class InProcessBackend:
                     context=context.fitted(),
                     fitted=fitted,
                 )
-            return session_id
+            return {'id': session_id, 'model': served.model_id}
 
     def session_predict(
         self,
-        adapter: ModelAdapter,
         session_id: str,
         payload: dict[str, Any],
-        outputs: tuple[str, ...],
-        pinned: Mapping[str, Any],
-    ) -> PredictionResult:
+    ) -> dict[str, Any]:
         with self._running():
             with self._state:
                 session = self._sessions.get(session_id)
@@ -210,8 +189,7 @@ class InProcessBackend:
                     code='SESSION_NOT_FOUND',
                 )
             served, task = session.served, session.task
-            fields = _fields(served, task['kind'], payload)
-            _check_loaded_for(served, session.fitted, task['kind'])
+            fields = _fields(served, session.fitted, task['kind'], payload)
             served.check_inference(
                 payload.get('inference') or {}, task, settled=True
             )
@@ -236,13 +214,7 @@ class InProcessBackend:
                     payload,
                     fields,
                 )
-        return adapter.answered(
-            items,
-            outputs,
-            {**pinned, **payload},
-            model=served.model_id,
-            request_id=_request_id(payload),
-        )
+        return _response(items, served.model_id, payload)
 
     def delete_session(self, session_id: str) -> None:
         r"""Release a session. Releasing one that is gone is not an error."""
@@ -250,19 +222,11 @@ class InProcessBackend:
             self._require_open()
             self._sessions.pop(session_id, None)
 
-    def _reader(self, model_id: str) -> Tabular | Relational:
-        r"""What reads requests for ``model_id``, known without loading it."""
-        served = _SERVED.get(model_id)
-        if served is None:
-            raise self._not_served(model_id)
-        return served
-
-    def _not_served(self, model_id: str) -> StructuredDataError:
-        return StructuredDataError(
-            f'{model_id} is not served by this client, which was opened '
-            f'with {self.list_models()} only',
-            code='INVALID_CONFIGURATION',
-        )
+    def _preflight(self, payload: Mapping[str, Any]) -> None:
+        """Reject unsupported local-runtime outputs before downloading weights."""
+        served = _SERVED.get(payload['model'])
+        if served is not None:
+            _fields(served, None, payload['task']['kind'], payload)
 
     def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
@@ -281,7 +245,11 @@ class InProcessBackend:
                 self._require_open()
                 self._models[model_id] = model
         if model is None or served is None:
-            raise self._not_served(model_id)
+            raise StructuredDataError(
+                f'{model_id} is not served by this client, which was opened '
+                f'with {self.list_models()} only',
+                code='INVALID_CONFIGURATION',
+            )
         if model.training:
             raise StructuredDataError(
                 f'the {served.model_id} model is in training mode, and scores '
@@ -387,24 +355,20 @@ def _request_id(payload: Mapping[str, Any]) -> str:
     return str((payload.get('metadata') or {}).get('request_id') or '')
 
 
-def _check_task(served: Tabular | Relational, kind: str) -> None:
-    r"""Refuse a task this model does not answer."""
+def _check_task(served: Tabular | Relational, model: Any, kind: str) -> None:
+    r"""Refuse a task this model does not answer, or was loaded without.
+
+    A model can be loaded for classification or regression alone, which a
+    NIM's never is, so that is asked of the model rather than of its kind.
+    """
     if kind not in served.outputs:
         raise StructuredDataError(
             f'{served.model_id} does not answer {kind!r}; it answers '
             f'{sorted(served.outputs)}',
             code='UNSUPPORTED_TASK',
         )
-
-
-def _check_loaded_for(
-    served: Tabular | Relational, model: Any, kind: str
-) -> None:
-    r"""Refuse a task this model was loaded without.
-
-    A model can be loaded for classification or regression alone, which a
-    NIM's never is, so that is asked of the model rather than of its kind.
-    """
+    if model is None:
+        return
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)
     if needed not in loaded:
@@ -418,12 +382,13 @@ def _check_loaded_for(
 
 def _fields(
     served: Tabular | Relational,
+    model: Any,
     kind: str,
     payload: Mapping[str, Any],
 ) -> list[str]:
     r"""The fields asked for, refused where this model does not produce
-    them for this task. Needs no loaded model, so it runs before one is."""
-    _check_task(served, kind)
+    them for this task."""
+    _check_task(served, model, kind)
     output = payload.get('output') or {}
     fields = list(output.get('fields') or ['prediction'])
     unsupported = [name for name in fields if name not in served.outputs[kind]]
@@ -494,14 +459,12 @@ def _fit(model: Any, context: Context) -> Any:
 
 
 def _run(fitted: Any, query: tuple[Any, Any]) -> Any:
+    x, related = query
     device = _placement(fitted)
     with _autocast(device):
-        return fitted.predict(*_placed(query, device))
-
-
-def _placed(query: tuple[Any, Any], device: Any) -> tuple[Any, Any]:
-    x, related = query
-    return x.to(device), None if related is None else related.to(device)
+        return fitted.predict(
+            x.to(device), None if related is None else related.to(device)
+        )
 
 
 def _placement(model: Any) -> Any:
@@ -534,6 +497,18 @@ def _items(
     if task['kind'] != 'regression':
         return classified(answer, context.encoded, context.labels, ids, fields)
     return regressed(answer, ids, fields, _statistic(payload), _levels(payload))
+
+
+def _response(
+    items: list[Any], model: str, payload: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Return model answers under wire IDs; Rust restores public keys once."""
+    return {
+        'id': _request_id(payload),
+        'model': model,
+        'predictions': [asdict(item) for item in items],
+        'metadata': {},
+    }
 
 
 def _explained(
@@ -621,3 +596,8 @@ class _Reported:
             columns={'numerical': [str(i) for i in range(scores.shape[-1])]},
             numerical=scores,
         )
+
+
+def _placed(query: tuple[Any, Any], device: Any) -> tuple[Any, Any]:
+    x, related = query
+    return x.to(device), None if related is None else related.to(device)

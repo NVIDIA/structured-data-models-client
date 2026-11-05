@@ -1,0 +1,1108 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Regenerate and verify only the current protocol and PQL schemas.
+//! `SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated`
+//! updates each current file and lock. `contract_lock.py --prune-unlocked`
+//! removes superseded generated files after validation against the target.
+//! Shape changes require version bumps; Git retains historical snapshots.
+//! Every attachment field remains accounted for by the checks below.
+
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads and, with SDM_CONTRACT_WRITE, rewrites the committed schema and lock"
+)]
+
+use std::path::{Path, PathBuf};
+
+use sdm_contract::{
+    CONTRACT_VERSION, VALIDATED_QUERY_VERSION, schema_json, validated_query_schema_json,
+};
+use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
+
+/// One versioned schema and its lock.
+struct Format {
+    /// The schema file's name before `-<version>.json`.
+    prefix: &'static str,
+    lock: &'static str,
+    version: u32,
+    generate: fn() -> String,
+}
+
+const CONTRACT: Format = Format {
+    prefix: "sdm-contract",
+    lock: "contract.lock",
+    version: CONTRACT_VERSION,
+    generate: schema_json,
+};
+
+const VALIDATED_QUERY: Format = Format {
+    prefix: "pql-validated-query",
+    lock: "validated-query.lock",
+    version: VALIDATED_QUERY_VERSION,
+    generate: validated_query_schema_json,
+};
+
+const FORMATS: [Format; 2] = [CONTRACT, VALIDATED_QUERY];
+
+fn schema_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("schema")
+}
+
+impl Format {
+    fn schema_file(&self, version: u32) -> String {
+        format!("{}-{version}.json", self.prefix)
+    }
+}
+
+/// Keywords whose value is documentation only.
+const ANNOTATIONS: [&str; 3] = ["description", "title", "examples"];
+/// Keywords whose value maps names to schemas: the names are not keywords.
+const NAMED: [&str; 5] = [
+    "properties",
+    "patternProperties",
+    "$defs",
+    "definitions",
+    "dependentSchemas",
+];
+/// Keywords whose value is data, not a schema.
+const DATA: [&str; 3] = ["enum", "const", "default"];
+
+/// The schema `node` without its annotation keywords.
+fn project(node: Value) -> Value {
+    match node {
+        Value::Object(map) => {
+            let mut out = Map::new();
+            for (key, value) in map {
+                if ANNOTATIONS.contains(&key.as_str()) {
+                    continue;
+                }
+                let value = match value {
+                    Value::Object(named) if NAMED.contains(&key.as_str()) => Value::Object(
+                        named
+                            .into_iter()
+                            .map(|(name, schema)| (name, project(schema)))
+                            .collect(),
+                    ),
+                    value if DATA.contains(&key.as_str()) => value,
+                    value => project(value),
+                };
+                out.insert(key, value);
+            }
+            Value::Object(out)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(project).collect()),
+        other => other,
+    }
+}
+
+/// Sorts every object's keys, as Python's `sort_keys` does.
+fn sorted(node: Value) -> Value {
+    match node {
+        Value::Object(map) => {
+            let mut map: Map<String, Value> =
+                map.into_iter().map(|(k, v)| (k, sorted(v))).collect();
+            map.sort_keys();
+            Value::Object(map)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(sorted).collect()),
+        other => other,
+    }
+}
+
+/// The lock hash of a schema's text.
+fn sha256(text: &str) -> String {
+    let schema: Value = serde_json::from_str(text).expect("a schema is JSON");
+    let canonical = serde_json::to_string(&sorted(project(schema))).expect("JSON serializes");
+    let digest = Sha256::digest(canonical.as_bytes());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The lock's entries: `(version, sha256, file)`, in file order.
+fn parse_lock(text: &str) -> Result<Vec<(u32, String, String)>, String> {
+    let mut entries = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let [version, hash, file] = parts[..] else {
+            return Err(format!("not a lock entry: {line:?}"));
+        };
+        let version: u32 = version
+            .parse()
+            .map_err(|_| format!("not a version: {version:?}"))?;
+        let hash = hash
+            .strip_prefix("sha256:")
+            .ok_or_else(|| format!("not a sha256: {hash:?}"))?;
+        if entries.iter().any(|(v, _, _)| *v == version) {
+            return Err(format!("version {version} is locked twice"));
+        }
+        entries.push((version, hash.to_owned(), file.to_owned()));
+    }
+    Ok(entries)
+}
+
+/// Checks that `version` of `format` is locked to `schema`.
+fn verify(format: &Format, schema: &str, lock: &str, version: u32) -> Result<(), String> {
+    let entries = parse_lock(lock)?;
+    let Some((_, hash, file)) = entries.iter().find(|(v, _, _)| *v == version) else {
+        return Err(format!(
+            "{} version {version} has no lock entry; a schema change needs a version bump and a new entry",
+            format.prefix
+        ));
+    };
+    if *file != format.schema_file(version) {
+        return Err(format!("version {version} is locked to {file}"));
+    }
+    if *hash != sha256(schema) {
+        return Err(format!(
+            "the schema of {} version {version} differs from its lock entry; \
+             bump the version and add an entry instead of changing a locked version",
+            format.prefix
+        ));
+    }
+    Ok(())
+}
+
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// Write the current generated schema and its single lock entry.
+fn write(format: &Format, generated: &str) {
+    let entry = format!(
+        "# Current {} schema; regenerate with schema_lock.rs.\n{} sha256:{} {}\n",
+        format.prefix,
+        format.version,
+        sha256(generated),
+        format.schema_file(format.version)
+    );
+    std::fs::write(schema_dir().join(format.lock), entry).unwrap();
+    std::fs::write(
+        schema_dir().join(format.schema_file(format.version)),
+        generated,
+    )
+    .unwrap();
+}
+
+#[test]
+fn the_committed_schemas_are_the_generated_ones() {
+    for format in &FORMATS {
+        let generated = (format.generate)();
+        if std::env::var_os("SDM_CONTRACT_WRITE").is_some() {
+            write(format, &generated);
+        }
+        let path = schema_dir().join(format.schema_file(format.version));
+        // JSON object member order is not schema shape. Fresh generator
+        // dependencies may change it; arrays and every value still match.
+        assert_eq!(
+            serde_json::from_str::<Value>(&read(&path)).expect("the committed schema is JSON"),
+            serde_json::from_str::<Value>(&generated).expect("the generated schema is JSON"),
+            "{} differs from the schema the types generate; regenerate it with \
+             SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn only_the_current_version_is_locked_and_matches_its_schema() {
+    for format in &FORMATS {
+        let lock = read(&schema_dir().join(format.lock));
+        let entries = parse_lock(&lock).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, format.version);
+        for (version, _, file) in &entries {
+            let schema = read(&schema_dir().join(file));
+            verify(format, &schema, &lock, *version).unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_schema_change_without_a_version_bump_fails() {
+    for (format, word) in [(&CONTRACT, "\"step\""), (&VALIDATED_QUERY, "\"entity\"")] {
+        let lock = read(&schema_dir().join(format.lock));
+        let generated = (format.generate)();
+        let changed = generated.replace(word, "\"renamed\"");
+        assert_ne!(changed, generated);
+        let err = verify(format, &changed, &lock, format.version).unwrap_err();
+        assert!(err.contains("bump the version"), "{err}");
+        // A bump with no entry fails too.
+        let err = verify(format, &changed, &lock, format.version + 1).unwrap_err();
+        assert!(err.contains("no lock entry"), "{err}");
+    }
+}
+
+#[test]
+fn a_malformed_or_doubled_lock_fails() {
+    assert!(parse_lock("1 abc sdm-contract-1.json").is_err());
+    assert!(
+        parse_lock("1 sha256:ab sdm-contract-1.json\n1 sha256:cd sdm-contract-1.json").is_err()
+    );
+    assert!(parse_lock("one sha256:ab sdm-contract-1.json").is_err());
+}
+
+#[test]
+fn a_doc_comment_change_keeps_the_hash_and_a_property_named_description_does_not() {
+    let schema = r##"{
+        "$defs": {
+            "Note": {
+                "description": "A note, as a doc comment describes it.",
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string", "title": "Description"},
+                    "title": {"type": "string"}
+                },
+                "required": ["description", "title"],
+                "examples": [{"description": "x", "title": "y"}]
+            }
+        },
+        "oneOf": [{"$ref": "#/$defs/Note", "description": "one"}],
+        "enum": [{"description": "data, not an annotation"}]
+    }"##;
+    let locked = sha256(schema);
+    // Doc comments, titles and examples: the same hash.
+    for edited in [
+        schema.replace("A note, as a doc comment describes it.", "Reworded."),
+        schema.replace(r#""title": "Description""#, r#""title": "Renamed""#),
+        schema.replace(r#""description": "one""#, r#""description": "two""#),
+        schema.replace(
+            r#""examples": [{"description": "x", "title": "y"}]"#,
+            r#""examples": []"#,
+        ),
+    ] {
+        assert_ne!(edited, schema);
+        assert_eq!(sha256(&edited), locked, "{edited}");
+    }
+    // A property called `description` or `title`, and data in `enum`, are
+    // shape: a new hash.
+    for edited in [
+        schema.replace(
+            r#""description": {"type": "string""#,
+            r#""summary": {"type": "string""#,
+        ),
+        schema.replace(
+            r#""title": {"type": "string"}"#,
+            r#""label": {"type": "string"}"#,
+        ),
+        schema.replace(r#""required": ["description""#, r#""required": ["summary""#),
+        schema.replace("data, not an annotation", "other data"),
+    ] {
+        assert_ne!(edited, schema);
+        assert_ne!(sha256(&edited), locked, "{edited}");
+    }
+    // And on the real schema: a doc comment's text is not hashed.
+    let generated = schema_json();
+    let reworded = generated.replacen("\"description\": \"", "\"description\": \"Reworded. ", 1);
+    assert_ne!(reworded, generated);
+    assert_eq!(sha256(&reworded), sha256(&generated));
+}
+
+// --- The attachments the control messages name -----------------------
+
+/// Whether `node` refers to an attachment id: directly; as one of a
+/// union's members; as a list's items, a tuple's members or a map's values;
+/// or through a definition that is not a struct of its own (a newtype or
+/// an alias of one), followed in `root`'s `$defs` to a bounded depth.
+fn names_attachment(root: &Value, node: &Value, depth: usize) -> bool {
+    if depth > 16 {
+        return false;
+    }
+    let follow = |sub: &Value| names_attachment(root, sub, depth + 1);
+    if let Some(target) = node.get("$ref").and_then(Value::as_str) {
+        if target == "#/$defs/AttachmentId" {
+            return true;
+        }
+        let definition = target
+            .strip_prefix("#/$defs/")
+            .and_then(|name| root["$defs"].get(name));
+        if let Some(definition) = definition
+            && definition.get("properties").is_none()
+            && definition.get("oneOf").is_none()
+            && follow(definition)
+        {
+            return true;
+        }
+    }
+    ["anyOf", "oneOf", "prefixItems"].iter().any(|key| {
+        node.get(*key)
+            .and_then(Value::as_array)
+            .is_some_and(|members| members.iter().any(follow))
+    }) || ["items", "additionalProperties"]
+        .iter()
+        .any(|key| node.get(*key).is_some_and(follow))
+}
+
+/// Every field of a control message that names an attachment, as
+/// `<definition>[/<tag>].<field>`, the tag being the variant's constant.
+fn attachment_fields(root: &Value, node: &Value, at: &str, found: &mut Vec<String>) {
+    match node {
+        Value::Object(map) => {
+            if let Some(Value::Object(properties)) = map.get("properties") {
+                let tag = properties
+                    .values()
+                    .find_map(|p| p.get("const").and_then(Value::as_str));
+                for (name, property) in properties {
+                    if names_attachment(root, property, 0) {
+                        found.push(match tag {
+                            Some(tag) => format!("{at}/{tag}.{name}"),
+                            None => format!("{at}.{name}"),
+                        });
+                    }
+                }
+            }
+            for (key, value) in map {
+                if key != "$defs" {
+                    attachment_fields(root, value, at, found);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                attachment_fields(root, item, at, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The attachment fields of `schema` the classification below does not
+/// account for, and the classified ones it no longer has.
+fn unaccounted(schema: &Value) -> Result<(), String> {
+    let mut found = Vec::new();
+    attachment_fields(schema, schema, "ControlMessage", &mut found);
+    for (name, definition) in schema["$defs"].as_object().ok_or("no $defs")? {
+        if name != "Attachments" {
+            attachment_fields(schema, definition, name, &mut found);
+        }
+    }
+    let listed: Vec<&str> = schema["$defs"]["Attachments"]["properties"]
+        .as_object()
+        .ok_or("no attachments listed")?
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let mut known: Vec<&str> = OTHER.iter().map(|(field, _)| *field).collect();
+    for &(field, attachment) in JSON {
+        if !listed.contains(&attachment) {
+            return Err(format!("{field}'s JSON ({attachment}) is not in the lock"));
+        }
+        known.push(field);
+    }
+    // Several typed direct results share one physical DirectValue.value slot.
+    // Compare the distinct locked shapes, not the number of field mappings.
+    let accounted: std::collections::BTreeSet<_> =
+        JSON.iter().map(|(_, attachment)| *attachment).collect();
+    if listed.len() != accounted.len() {
+        return Err("the lock lists an attachment no field names".into());
+    }
+    for field in &found {
+        if !known.contains(&field.as_str()) {
+            return Err(format!(
+                "{field} names an attachment the lock does not account for"
+            ));
+        }
+    }
+    for field in known {
+        if !found.iter().any(|f| f == field) {
+            return Err(format!("{field} is accounted for and not in the schema"));
+        }
+    }
+    Ok(())
+}
+
+/// The fields whose attachment is JSON of the contract's, with the entry of
+/// `$defs/Attachments` that locks it.
+const JSON: &[(&str, &str)] = &[
+    ("OperationResult/direct_value.value", "column_analysis"),
+    ("Operation/add_sql_column.input", "sql_column_input"),
+    ("Operation/add_sql_column.schema", "Materialize.schema"),
+    ("Operation/rebind_source.schema", "Materialize.schema"),
+    ("Operation/materialize_examples.input", "example_input"),
+    (
+        "Operation/materialize_examples.inference",
+        "Materialize.values",
+    ),
+    ("ExampleSource/sql.schema", "Materialize.schema"),
+    ("Operation/labels_frames.input", "Labels.input"),
+    ("Operation/labels_source.input", "Labels.input"),
+    ("Operation/labels_source.schema", "Materialize.schema"),
+    ("Operation/read_result_items.input", "ReadResultItems.input"),
+    ("Operation/merge_results.input", "MergeResults.input"),
+    ("Operation/describe_frame_tables.names", "FrameTables.names"),
+    ("Operation/prepare_frame_graph.names", "FrameTables.names"),
+    ("Operation/prepare_frame_graph.schema", "Materialize.schema"),
+    (
+        "Operation/materialize_frames.input",
+        "MaterializeFrames.input",
+    ),
+    ("Operation/materialize_frames.values", "Materialize.values"),
+    (
+        "Operation/assemble_frame_schema.input",
+        "AssembleFrameSchema.input",
+    ),
+    ("Operation/fit.input", "FrameSession.input"),
+    ("Operation/predict.input", "FrameSession.input"),
+    ("Operation/close.input", "FrameSession.input"),
+    ("OperationResult/direct_value.value", "FrameSession.state"),
+    ("Operation/describe.input", "tabular_arrow_description"),
+    ("Operation/prepare.input", "tabular_arrow_request"),
+    ("Operation/predict.input", "tabular_arrow_prediction"),
+    ("Operation/materialize.input", "tabular_arrow_materialize"),
+    (
+        "Operation/materialize_predict.input",
+        "tabular_arrow_materialize",
+    ),
+    ("Operation/fit.input", "tabular_arrow_fit"),
+    ("Operation/score.input", "tabular_arrow_score"),
+    ("Operation/close.input", "tabular_arrow_session"),
+    (
+        "Operation/prepare_tabular_fit.holdout",
+        "DirectValue.session_keys",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.pinned_keys",
+        "DirectValue.session_keys",
+    ),
+    (
+        "Operation/encode_tabular_table.input",
+        "EncodeTabularTable.input",
+    ),
+    (
+        "Operation/prepare_tabular_fit.input",
+        "PrepareTabularFit.input",
+    ),
+    (
+        "Operation/accept_tabular_session.input",
+        "AcceptTabularSession.input",
+    ),
+    (
+        "Operation/check_tabular_session_question.input",
+        "CheckTabularSessionQuestion.input",
+    ),
+    (
+        "Operation/check_tabular_session_reply.input",
+        "CheckTabularSessionReply.input",
+    ),
+    (
+        "Operation/prepare_tabular_score.input",
+        "PrepareTabularScore.input",
+    ),
+    (
+        "Operation/send_tabular_session.input",
+        "SendTabularSession.input",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.input",
+        "CountTabularSessionOverlap.input",
+    ),
+    (
+        "Operation/close_tabular_session.input",
+        "CloseTabularSession.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.encoded_table",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_overlap",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_id_selection",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_question_difference",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_reply",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepared_score",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepared_fit",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.session_state",
+    ),
+    ("OperationResult/direct_value.value", "TabularSession.state"),
+    (
+        "TabularSessionState.pinned_keys",
+        "DirectValue.session_keys",
+    ),
+    ("PreparedTabularFit.pinned_keys", "DirectValue.session_keys"),
+    ("PrepareTabularFit.holdout", "DirectValue.session_keys"),
+    (
+        "Operation/select_tabular_rows.input",
+        "SelectTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.select_tabular_rows",
+    ),
+    ("Operation/check_tabular_cap.input", "CheckTabularCap.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.check_tabular_cap",
+    ),
+    (
+        "Operation/observe_tabular_membership.input",
+        "ObserveTabularMembership.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.observe_tabular_membership",
+    ),
+    (
+        "Operation/decide_tabular_task.input",
+        "DecideTabularTask.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.decide_tabular_task",
+    ),
+    (
+        "Operation/order_sampled_tabular_rows.input",
+        "OrderSampledTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.order_sampled_tabular_rows",
+    ),
+    (
+        "Operation/expand_tabular_keys.input",
+        "ExpandTabularKeys.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.expand_tabular_keys",
+    ),
+    (
+        "Operation/filter_tabular_rows.input",
+        "FilterTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.filter_tabular_rows",
+    ),
+    (
+        "Operation/decide_tabular_context.input",
+        "DecideTabularContext.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.decide_tabular_context",
+    ),
+    (
+        "Operation/sample_tabular_rows.input",
+        "SampleTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.sample_tabular_rows",
+    ),
+    ("OperationResult/direct_value.value", "DirectValue.meaning"),
+    (
+        "Operation/observe_direct_outputs.input",
+        "ObserveDirectOutputs.input",
+    ),
+    (
+        "Operation/restore_direct_response.input",
+        "RestoreDirectResponse.input",
+    ),
+    (
+        "Operation/check_direct_response_field.input",
+        "CheckDirectResponseField.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_response_field",
+    ),
+    (
+        "OperationResult/prepared_direct_call.value",
+        "PreparedDirectCall.value",
+    ),
+    (
+        "Operation/layout_native_direct.input",
+        "LayoutNativeDirect.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.native_layout",
+    ),
+    (
+        "Operation/prepare_time_series.input",
+        "PrepareTimeSeries.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.prepare_time_series",
+    ),
+    (
+        "Operation/feature_importance.input",
+        "FeatureImportance.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.feature_importance",
+    ),
+    ("Operation/plan_result_merge.input", "PlanResultMerge.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.plan_result_merge",
+    ),
+    ("Operation/check_column.input", "CheckColumn.input"),
+    ("Operation/check_direct_cell.input", "CheckDirectCell.input"),
+    (
+        "Operation/check_direct_option.input",
+        "CheckDirectOption.input",
+    ),
+    (
+        "Operation/observe_direct_dtype.input",
+        "ObserveDirectDtype.input",
+    ),
+    (
+        "Operation/observe_direct_schema.input",
+        "ObserveDirectSchema.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.observed_schema",
+    ),
+    (
+        "Operation/check_direct_preparation.input",
+        "CheckDirectPreparation.input",
+    ),
+    (
+        "Operation/resolve_direct_dtype.input",
+        "ResolveDirectDtype.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_resolution",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_declarations",
+    ),
+    (
+        "Operation/resolve_observed_tabular.input",
+        "ResolveObservedTabular.input",
+    ),
+    (
+        "Operation/inspect_observed_keys.input",
+        "InspectObservedKeys.input",
+    ),
+    (
+        "Operation/encode_direct_column.input",
+        "EncodeDirectColumn.input",
+    ),
+    (
+        "Operation/infer_direct_column.input",
+        "InferDirectColumn.input",
+    ),
+    (
+        "Operation/infer_direct_time_start.input",
+        "InferDirectTimeStart.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.time_start",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.encoded_column",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_finding",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_cell",
+    ),
+    (
+        "Operation/check_direct_shape.input",
+        "CheckDirectShape.input",
+    ),
+    ("Operation/prepare_direct.input", "PrepareDirect.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.description",
+    ),
+    ("Operation/bind_direct.input", "BindDirect.input"),
+    ("OperationResult/direct_value.value", "DirectValue.bound"),
+    (
+        "Operation/inspect_direct_pair.input",
+        "InspectDirectPair.input",
+    ),
+    ("Operation/resolve_tabular.input", "ResolveTabular.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.resolved_tabular",
+    ),
+    ("Operation/encode_tabular.input", "EncodeTabular.input"),
+    ("OperationResult/direct_value.value", "DirectValue.encoded"),
+    ("DirectModelInput.input", "Predict.direct.input"),
+    (
+        "OperationResult/decoded_direct_response.value",
+        "DecodedDirectResponse.value",
+    ),
+    ("DirectResponseData.rows", "DirectResponseData.rows"),
+    ("Operation/check_direct_rows.input", "CheckDirectRows.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_rows",
+    ),
+    (
+        "Operation/interpret_direct_json.input",
+        "InterpretDirectJson.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.interpreted",
+    ),
+    (
+        "Operation/select_direct_member.input",
+        "SelectDirectMember.input",
+    ),
+    ("OperationResult/direct_value.value", "DirectValue.member"),
+    (
+        "Operation/attribute_direct_row.input",
+        "AttributeDirectRow.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.attributed",
+    ),
+    (
+        "Operation/decode_direct_response.input",
+        "DecodeDirectResponse.input",
+    ),
+    ("Operation/layout_direct.input", "LayoutDirect.input"),
+    ("Operation/validate_query.query", "ValidateQuery.query"),
+    ("Operation/validate_query.schema", "ValidateQuery.schema"),
+    ("Operation/describe_source.source", "DescribeSource.source"),
+    ("Operation/edit_schema.schema", "EditSchema.schema"),
+    ("Operation/edit_schema.edit", "EditSchema.edit"),
+    ("Operation/edit_schema.context", "EditSchema.context"),
+    ("OperationResult/edit_schema.schema", "SchemaEdited.schema"),
+    ("Operation/materialize.schema", "Materialize.schema"),
+    ("Operation/materialize.query", "Materialize.query"),
+    ("Operation/materialize.values", "Materialize.values"),
+    ("Operation/materialize.candidates", "Materialize.candidates"),
+    ("RequestState.payload", "RequestState.payload"),
+    ("RequestState.query", "RequestState.query"),
+    ("ForecastStep.payload", "ForecastStep.payload"),
+    ("ForecastStep.query", "ForecastStep.query"),
+    ("RequestBatch.payload", "RequestBatch.payload"),
+    ("RankingPart.payload", "RankingPart.payload"),
+    ("RankingPart.query", "RankingPart.query"),
+    ("HeldRequest.payload", "HeldRequest.payload"),
+    ("HeldRequest.query", "HeldRequest.query"),
+    ("HeldCall.payload", "HeldCall.payload"),
+    ("HeldPart.payload", "HeldPart.payload"),
+    ("HeldPart.query", "HeldPart.query"),
+    ("HeldRanking.candidates", "HeldRanking.candidates"),
+    (
+        "OperationResult/describe_source.description",
+        "DescribedSource.description",
+    ),
+    ("OperationResult/predict.metadata", "Predicted.metadata"),
+    ("SamplerState.memo", "SamplerState.memo"),
+];
+
+/// The other fields naming an attachment, and why the lock needs no entry.
+const OTHER: &[(&str, &str)] = &[
+    (
+        "Operation/materialize_examples.context",
+        "Arrow examples with their schema",
+    ),
+    (
+        "Operation/materialize_examples.predict",
+        "Arrow examples with their schema",
+    ),
+    ("ExampleSource/frames.graph", "the prepared frame graph"),
+    (
+        "Operation/read_result_items.table",
+        "normalized Arrow result",
+    ),
+    ("ResultItemSegment.table", "semantic Arrow items"),
+    (
+        "Operation/merge_results.tables",
+        "normalized Arrow result tables",
+    ),
+    ("Operation/edit_schema.frame", "Arrow, with its schema"),
+    (
+        "Operation/read_request_split.payloads",
+        "encoded endpoint payloads inspected without modification",
+    ),
+    (
+        "OperationResult/request_split.instance",
+        "inspected instance Arrow table",
+    ),
+    ("RelatedTable.data", "inspected related Arrow table"),
+    (
+        "Operation/analyze_columns.payloads",
+        "encoded endpoint payloads inspected for context analysis",
+    ),
+    ("Operation/fit.payloads", "encoded endpoint payloads"),
+    ("Operation/predict.payloads", "encoded endpoint payloads"),
+    ("Operation/predict.pinned", "encoded pinned context"),
+    ("Operation/describe_frame_tables.tables", "Arrow tables"),
+    ("Operation/prepare_frame_graph.tables", "Arrow tables"),
+    (
+        "Operation/materialize_frames.graph",
+        "retained native graph owner",
+    ),
+    ("Operation/materialize_frames.indices", "Arrow keys"),
+    (
+        "OperationResult/prepared_frame_graph.graph",
+        "retained native graph owner",
+    ),
+    ("Operation/describe.table", "Arrow table"),
+    ("Operation/prepare.context", "Arrow table"),
+    ("Operation/prepare.predict", "Arrow table"),
+    ("Operation/predict.context", "Arrow table"),
+    ("Operation/predict.predict", "Arrow table"),
+    ("Operation/materialize.table", "Arrow table"),
+    ("Operation/materialize_predict.table", "Arrow table"),
+    ("Operation/materialize_predict.predict", "Arrow table"),
+    ("Operation/labels_frames.graph", "native frame graph"),
+    ("OperationResult/labels.data", "Arrow table"),
+    ("Operation/prepare_time_series.table", "Arrow table"),
+    ("TimeSeriesPrepared.entity", "Arrow table"),
+    ("TimeSeriesPrepared.target", "Arrow table"),
+    ("Operation/fit.context", "Arrow table"),
+    ("Operation/fit.predict", "Arrow table"),
+    ("Operation/score.predict", "Arrow table"),
+    (
+        "Operation/prepare_tabular_fit.context",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "Operation/accept_tabular_session.observed",
+        "the endpoint's actual sent document",
+    ),
+    (
+        "Operation/prepare_tabular_score.predict",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "Operation/count_tabular_session_overlap.predict",
+        "the endpoint's encoded key table bytes",
+    ),
+    (
+        "Operation/send_tabular_session.payload",
+        "the endpoint's bytes",
+    ),
+    (
+        "Operation/encode_tabular_table.values",
+        "Arrow, with its schema",
+    ),
+    ("EncodedTabularTable.table", "the endpoint's bytes"),
+    (
+        "PrepareTabularFit.context",
+        "the endpoint's encoded table bytes",
+    ),
+    (
+        "AcceptTabularSession.observed",
+        "the endpoint's actual sent document",
+    ),
+    (
+        "CountTabularSessionOverlap.predict",
+        "the endpoint's encoded key table bytes",
+    ),
+    (
+        "PrepareTabularScore.predict",
+        "the endpoint's encoded table bytes",
+    ),
+    ("PreparedTabularFit.payload", "the endpoint's bytes"),
+    ("PreparedTabularScore.payload", "the endpoint's bytes"),
+    ("PreparedTabularScore.layout", "the endpoint's layout bytes"),
+    ("SendTabularSession.payload", "the endpoint's bytes"),
+    ("SessionTransportReply.response", "the endpoint's bytes"),
+    ("NativeDirectCall.payload", "the endpoint's bytes"),
+    ("EncodedDirectBody.payload", "the endpoint's bytes"),
+    ("DirectDecodeInput.payload", "the endpoint's bytes"),
+    ("DirectDecodeInput.response", "the endpoint's bytes"),
+    ("DirectResponseData.payload", "the endpoint's bytes"),
+    ("DirectResponseData.response", "the endpoint's bytes"),
+    ("DirectModelInput.payload", "the endpoint's bytes"),
+    (
+        "Operation/decode_direct_response.payload",
+        "the endpoint's bytes",
+    ),
+    (
+        "Operation/decode_direct_response.response",
+        "the endpoint's bytes",
+    ),
+    ("Operation/layout_direct.payload", "the endpoint's bytes"),
+    ("Operation/layout_direct.response", "the endpoint's bytes"),
+    (
+        "Operation/inspect_observed_keys.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/inspect_observed_keys.predict",
+        "Arrow, with its schema",
+    ),
+    ("Operation/prepare_direct.context", "Arrow, with its schema"),
+    ("Operation/prepare_direct.predict", "Arrow, with its schema"),
+    (
+        "Operation/inspect_direct_pair.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/inspect_direct_pair.predict",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/resolve_tabular.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/resolve_tabular.predict",
+        "Arrow, with its schema",
+    ),
+    ("Operation/encode_tabular.context", "Arrow, with its schema"),
+    ("Operation/encode_tabular.predict", "Arrow, with its schema"),
+    (
+        "Operation/encode_direct_column.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/infer_direct_column.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/infer_direct_time_start.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "ControlMessage/attached.attachment",
+        "a control message: the root schema",
+    ),
+    ("ControlMessage/call_model.body", "the endpoint's bytes"),
+    ("ModelOutcome/response.body", "the endpoint's bytes"),
+    ("ModelAnswer.detail", "the endpoint's or its SDK's text"),
+    ("SqlParam/text.attachment", "Arrow, with its schema"),
+    ("Operation/materialize.indices", "Arrow, with its schema"),
+    ("FetchOutcome/data.data", "Arrow, with its schema"),
+    ("KeySet.attachment", "Arrow, with its schema"),
+    ("OperationResult/predict.result", "Arrow, with its schema"),
+    ("AnsweredParts.result", "Arrow, with its schema"),
+];
+
+fn generated() -> Value {
+    serde_json::from_str(&schema_json()).expect("the schema is JSON")
+}
+
+#[test]
+fn the_lock_accounts_for_every_attachment_a_message_names() {
+    assert_eq!(unaccounted(&generated()), Ok(()));
+    // Seeded: a field naming a new attachment, unaccounted for, fails; so
+    // does an attachment the lock lists that no field names, and a JSON
+    // attachment the lock lost.
+    let mut added = generated();
+    added["$defs"]["SourceSpec"]["properties"]["extra"] =
+        serde_json::json!({"$ref": "#/$defs/AttachmentId"});
+    let err = unaccounted(&added).unwrap_err();
+    assert!(err.contains("SourceSpec.extra"), "{err}");
+    // So does one inside a map's values, a tuple's members, a list of
+    // optional ids, or a newtype over an id (subagent P3-1, fix round 1).
+    let attachment = serde_json::json!({"$ref": "#/$defs/AttachmentId"});
+    for shape in [
+        serde_json::json!({"type": "object", "additionalProperties": attachment}),
+        serde_json::json!({"type": "array", "prefixItems": [attachment, {"type": "integer"}]}),
+        serde_json::json!({"type": "array", "items": {"anyOf": [attachment, {"type": "null"}]}}),
+        serde_json::json!({"$ref": "#/$defs/Wrapped"}),
+    ] {
+        let mut added = generated();
+        added["$defs"]["Wrapped"] = attachment.clone();
+        added["$defs"]["SourceSpec"]["properties"]["extra"] = shape.clone();
+        let err = unaccounted(&added).unwrap_err();
+        assert!(err.contains("SourceSpec.extra"), "{shape}: {err}");
+    }
+    let mut listed = generated();
+    listed["$defs"]["Attachments"]["properties"]["Spare.json"] = serde_json::json!({});
+    assert!(unaccounted(&listed).unwrap_err().contains("no field names"));
+    let mut lost = generated();
+    lost["$defs"]["Attachments"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("DescribeSource.source");
+    assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+    // A shared result slot still locks every individual JSON shape.
+    let mut lost = generated();
+    lost["$defs"]["Attachments"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("DirectValue.checked_response_field");
+    assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+    // Nor may the shared physical slot disappear while its shapes remain.
+    let mut lost = generated();
+    let variants = lost["$defs"]["OperationResult"]["oneOf"]
+        .as_array_mut()
+        .unwrap();
+    let direct = variants
+        .iter_mut()
+        .find(|variant| variant["properties"]["op"]["const"] == "direct_value")
+        .unwrap();
+    direct["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("value");
+    assert!(
+        unaccounted(&lost)
+            .unwrap_err()
+            .contains("not in the schema")
+    );
+}
+
+#[test]
+fn a_field_added_to_an_attachment_fails_the_lock() {
+    let lock = read(&schema_dir().join(CONTRACT.lock));
+    let text = schema_json();
+    verify(&CONTRACT, &text, &lock, CONTRACT.version).unwrap();
+    // The JSON each locked attachment holds, and the definitions it is
+    // made of: a field added to any of them is a new shape.
+    for definition in [
+        "SourceSpec",
+        "SourceDescription",
+        "DescribedTable",
+        "DescribedColumn",
+        "QuerySchema",
+        "QueryTable",
+        "QueryColumn",
+        "ColumnRef",
+        "StatePayload",
+        "EndpointMetadata",
+    ] {
+        let mut schema = generated();
+        let node = &mut schema["$defs"][definition];
+        assert!(node.is_object(), "{definition} is not in the schema");
+        node["properties"]["added"] = serde_json::json!({"type": "string"});
+        let changed = serde_json::to_string_pretty(&schema).unwrap();
+        let err = verify(&CONTRACT, &changed, &lock, CONTRACT.version).unwrap_err();
+        assert!(err.contains("bump the version"), "{definition}: {err}");
+    }
+    // A new request state format is a new shape too.
+    let mut schema = generated();
+    schema["$defs"]["StatePayload"]["x-request-state-version"] =
+        serde_json::json!(sdm_contract::ops::REQUEST_STATE_VERSION + 1);
+    let changed = serde_json::to_string_pretty(&schema).unwrap();
+    assert!(verify(&CONTRACT, &changed, &lock, CONTRACT.version).is_err());
+}

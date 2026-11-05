@@ -43,6 +43,7 @@ SPDX_SUFFIXES = {
     '.in',
     '.py',
     '.pyi',
+    '.rs',
     '.sh',
     '.toml',
     '.yaml',
@@ -108,7 +109,8 @@ INTERNAL_PATTERNS = (
     # as structured-data-models-nim, and is still refused.
     re.compile(
         r'\bstructured-data-models-'
-        r'(?!(?:client|api|pql|connectors|relational-engine)(?![\w-]))\w',
+        r'(?!(?:client|api|pql|connectors|relational-engine)'
+        r'(?=$|[^\w-]|-(?:\d|\$?\{)))\w',
         re.IGNORECASE,
     ),
 )
@@ -126,6 +128,9 @@ INTERNAL_ALLOWLIST = {
 
 SHIPPED_SUFFIXES = {
     '.py',
+    # The Rust core ships inside the client wheel, so its sources are read
+    # like any other.
+    '.rs',
     '.md',
     '.toml',
     '.cfg',

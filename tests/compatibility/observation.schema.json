@@ -1,0 +1,268 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "case": {
+      "type": "string",
+      "minLength": 1
+    },
+    "connector": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "language": {
+      "enum": [
+        "python",
+        "java"
+      ]
+    },
+    "phase": {
+      "const": "candidate"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "refused",
+        "failed",
+        "incomplete"
+      ]
+    },
+    "execution": {
+      "enum": [
+        "local",
+        "live"
+      ]
+    },
+    "fixture_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "package_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "native_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "commit",
+        "package_hash"
+      ]
+    },
+    "source_snapshot": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "endpoint": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "live",
+                "stub"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "transport": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "model",
+            "transport"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "semantic": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema": {
+              "type": "object"
+            },
+            "request": {},
+            "results": {
+              "type": "array"
+            },
+            "lifecycle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "result_details": {
+              "type": "array"
+            },
+            "transport": {
+              "type": "array"
+            },
+            "holdout_keys": {
+              "type": "array"
+            },
+            "wire_calls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operation",
+                  "payload"
+                ],
+                "properties": {
+                  "operation": {
+                    "enum": [
+                      "predict",
+                      "fit",
+                      "score",
+                      "close"
+                    ]
+                  },
+                  "payload": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "response_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "session_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "schema",
+            "request",
+            "results",
+            "lifecycle"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "stage": {
+              "type": "string",
+              "minLength": 1
+            },
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "rule": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "stage",
+            "code",
+            "rule"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reader": {
+      "type": "object"
+    },
+    "raw_results": {
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "case",
+    "connector",
+    "model",
+    "language",
+    "phase",
+    "status",
+    "execution",
+    "fixture_hash",
+    "artifact",
+    "source_snapshot",
+    "endpoint",
+    "semantic",
+    "error"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdm-parity-observation-v1"
+}

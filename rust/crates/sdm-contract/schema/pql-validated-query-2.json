@@ -1,0 +1,713 @@
+{
+  "$id": "sdm-pql-validated-query/2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ValidatedQuery",
+  "description": "A query PQL accepted.",
+  "type": "object",
+  "properties": {
+    "entity": {
+      "description": "What the query predicts for: the entity column, or a filter over it.",
+      "$ref": "#/$defs/PqlNode"
+    },
+    "target": {
+      "description": "What the query predicts, joined to the entity's table.",
+      "$ref": "#/$defs/PqlNode"
+    },
+    "assuming": {
+      "description": "The `ASSUMING` condition.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PqlNode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "entity_ids": {
+      "description": "The condition naming the entities of `FOR t.c = 1` or\n`FOR t.c IN (1, 2)`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PqlNode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "problem_type": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProblemType"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "top_k": {
+      "description": "`RANK TOP k`: k's decimal digits, as large as the query wrote it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "num_forecasts": {
+      "description": "How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "entity_clause": {
+      "$ref": "#/$defs/EntityClause"
+    },
+    "mode": {
+      "description": "Whether the query defines a task to train on or asks a model.",
+      "$ref": "#/$defs/QueryMode"
+    },
+    "evaluate": {
+      "description": "The query started with `EVALUATE`.",
+      "type": "boolean"
+    },
+    "explain": {
+      "description": "The query started with `EXPLAIN`.",
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "entity",
+    "target",
+    "num_forecasts",
+    "entity_clause",
+    "mode",
+    "evaluate",
+    "explain"
+  ],
+  "$defs": {
+    "PqlNode": {
+      "description": "One node of a validated query.",
+      "type": "object",
+      "properties": {
+        "dtype": {
+          "description": "The data type validation inferred, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stype": {
+          "description": "The semantic type validation inferred, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stype"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "range": {
+          "description": "The time window of this node and its children, merged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Window"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "span": {
+          "description": "Where the node is in the query text.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/NodeKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ]
+    },
+    "NodeType": {
+      "description": "A node's data type: a value's, or an array's of that element type.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "type": "string",
+              "const": "value"
+            },
+            "dtype": {
+              "$ref": "#/$defs/Dtype"
+            }
+          },
+          "required": [
+            "shape",
+            "dtype"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "type": "string",
+              "const": "array"
+            },
+            "dtype": {
+              "$ref": "#/$defs/Dtype"
+            }
+          },
+          "required": [
+            "shape",
+            "dtype"
+          ]
+        }
+      ]
+    },
+    "Dtype": {
+      "description": "PQL's data types.",
+      "type": "string",
+      "enum": [
+        "bool",
+        "int",
+        "byte",
+        "int16",
+        "int32",
+        "int64",
+        "float",
+        "float32",
+        "float64",
+        "string",
+        "binary",
+        "date",
+        "time",
+        "timedelta",
+        "floatlist",
+        "intlist",
+        "stringlist",
+        "unsupported"
+      ]
+    },
+    "Stype": {
+      "description": "PQL's semantic types.",
+      "type": "string",
+      "enum": [
+        "numerical",
+        "categorical",
+        "multicategorical",
+        "ID",
+        "text",
+        "timestamp",
+        "sequence",
+        "image",
+        "unsupported"
+      ]
+    },
+    "Window": {
+      "description": "A time window: `start` to `end` units from the anchor time; no `start`\nis `-INF`.",
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "end": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "unit": {
+          "$ref": "#/$defs/TimeUnit"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "end",
+        "unit"
+      ]
+    },
+    "TimeUnit": {
+      "type": "string",
+      "enum": [
+        "seconds",
+        "minutes",
+        "hours",
+        "days",
+        "weeks",
+        "months"
+      ]
+    },
+    "Span": {
+      "description": "Where in the query text a diagnostic or node is, as PQL counts it: rows\nfrom 1, columns from 0 in code points, from the first character of the\nfirst token to the first character of the last.",
+      "type": "object",
+      "properties": {
+        "start_row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "start_col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end_row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "end_col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start_row",
+        "start_col",
+        "end_row",
+        "end_col"
+      ]
+    },
+    "NodeKind": {
+      "description": "What a node is.",
+      "oneOf": [
+        {
+          "description": "A column, or a table's wildcard column `*`.",
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/ColumnRef"
+            },
+            "node": {
+              "type": "string",
+              "const": "column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "literal": {
+              "$ref": "#/$defs/PqlLiteral"
+            },
+            "node": {
+              "type": "string",
+              "const": "constant"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "literal"
+          ]
+        },
+        {
+          "description": "`target op value`.",
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "op": {
+              "$ref": "#/$defs/ConditionOp"
+            },
+            "value": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "from_like": {
+              "description": "The query wrote the operator as `LIKE` or `NOT LIKE`.",
+              "type": "boolean"
+            },
+            "node": {
+              "type": "string",
+              "const": "condition"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "target",
+            "op",
+            "value",
+            "from_like"
+          ]
+        },
+        {
+          "description": "`left AND right`, `left OR right` or `NOT left`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "$ref": "#/$defs/LogicalOp"
+            },
+            "left": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "right": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PqlNode"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node": {
+              "type": "string",
+              "const": "logical"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "op",
+            "left"
+          ]
+        },
+        {
+          "description": "`target WHERE condition`.",
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "condition": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "node": {
+              "type": "string",
+              "const": "filter"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "target",
+            "condition"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aggregation": {
+              "$ref": "#/$defs/Aggregation"
+            },
+            "target": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "window": {
+              "description": "The window the query wrote, in the unit validation left it in.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Window"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group_by": {
+              "description": "The column the aggregation groups by, joined to the entity.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColumnRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "time_column": {
+              "description": "The time column of the aggregated table, for a windowed\naggregation.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColumnRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node": {
+              "type": "string",
+              "const": "aggregation"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "aggregation",
+            "target"
+          ]
+        },
+        {
+          "description": "`target`, reached from the entity's table through a foreign key.",
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/PqlNode"
+            },
+            "lhs_key": {
+              "$ref": "#/$defs/ColumnRef"
+            },
+            "rhs_key": {
+              "$ref": "#/$defs/ColumnRef"
+            },
+            "node": {
+              "type": "string",
+              "const": "join"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "target",
+            "lhs_key",
+            "rhs_key"
+          ]
+        }
+      ]
+    },
+    "ColumnRef": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
+    },
+    "PqlLiteral": {
+      "description": "What a constant stands for.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "description": "An integer's decimal digits, exactly, without leading zeros.",
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "int"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "description": "A float as the query wrote it.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "float"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "description": "A string, its escapes read.",
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "description": "A date literal as the query wrote it, the date and time it reads as,\n`YYYY-MM-DDTHH:MM:SS`, and the UTC offset in seconds when the literal\ngives one.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "offset": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            },
+            "type": {
+              "type": "string",
+              "const": "time"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text",
+            "value"
+          ]
+        },
+        {
+          "description": "An array's elements, each a constant node.",
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PqlNode"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "array"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        }
+      ]
+    },
+    "ConditionOp": {
+      "type": "string",
+      "enum": [
+        "eq",
+        "ne",
+        "lt",
+        "le",
+        "gt",
+        "ge",
+        "in",
+        "is_in",
+        "starts_with",
+        "ends_with",
+        "contains",
+        "not_contains"
+      ]
+    },
+    "LogicalOp": {
+      "type": "string",
+      "enum": [
+        "and",
+        "or",
+        "not"
+      ]
+    },
+    "Aggregation": {
+      "type": "string",
+      "enum": [
+        "sum",
+        "avg",
+        "min",
+        "max",
+        "count",
+        "count_distinct",
+        "first",
+        "last",
+        "list_distinct"
+      ]
+    },
+    "ProblemType": {
+      "type": "string",
+      "enum": [
+        "rank",
+        "classify",
+        "forecast"
+      ]
+    },
+    "EntityClause": {
+      "description": "`FOR EACH`, or `FOR` with the entities named.",
+      "type": "string",
+      "enum": [
+        "for_each",
+        "for"
+      ]
+    },
+    "QueryMode": {
+      "type": "string",
+      "enum": [
+        "training",
+        "inference"
+      ]
+    }
+  }
+}

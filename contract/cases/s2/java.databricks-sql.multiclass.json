@@ -1,0 +1,75 @@
+{
+  "format": "sdm-case/1",
+  "id": "java.databricks-sql.multiclass",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql"
+  ],
+  "paths": [
+    "source.open/explicit/databricks-sql",
+    "schema.from-source/tables/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "client.predict/multiclass/databricks-sql"
+  ],
+  "routes": [
+    "schema.from-source/tables/databricks-sql",
+    "schema.from-source/catalog-keys/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "query.materialize/indices-regression/databricks-sql",
+    "query.materialize/indices-link-prediction/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "query.materialize/indices-forecast/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "client.predict/multiclass/databricks-sql",
+    "client.predict/regression/databricks-sql",
+    "client.predict/link-prediction/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "client.predict/forecast/databricks-sql"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "utf8/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      },
+      "primary_keys": {
+        "users": "user_id",
+        "orders": "order_id"
+      },
+      "time_columns": {
+        "orders": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "orders",
+          "source_column": "user_id",
+          "target_table": "users",
+          "target_column": "user_id"
+        }
+      ]
+    },
+    "pql": "PREDICT users.country FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "Java multiclass prediction over a Databricks SQL connection with explicit tables, keys, time column and relationship.",
+  "source": "Correctness case java.databricks-sql.multiclass using the shop fixture."
+}

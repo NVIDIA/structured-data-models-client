@@ -137,6 +137,8 @@ def test_an_unknown_semantic_type_is_refused_when_it_is_set():
     ('tables', 'fragment'),
     [
         ({}, 'at least one table'),
+        ({'': pd.DataFrame({'x': [1]})}, 'non-empty strings'),
+        ({3: pd.DataFrame({'x': [1]})}, 'non-empty strings'),
         ({'t': [1, 2, 3]}, 'must be a pandas DataFrame'),
     ],
 )
@@ -211,7 +213,6 @@ def test_the_relational_path_asks_before_building_a_request():
     while gathering. A single table now takes the tabular one, which asks
     while building the envelope; that case is covered below.
     """
-    pytest.importorskip('sdm_relational_engine')
 
     users = pd.DataFrame({'user_id': [1, 2, 3], 'seg': [*'abc']})
     orders = pd.DataFrame({'order_id': [1, 2, 3], 'user_id': [1, 2, 3]})
@@ -239,9 +240,8 @@ def test_a_single_table_request_is_still_checked_before_the_wire():
     matters. The test above used to cover this case and passed only because
     of the older routing.
     """
-    pytest.importorskip('sdm_relational_engine')
 
-    from sdm_client.adapters.tabular import TabularAdapter
+    from test_adapter_and_result import envelope as public_envelope
 
     schema = Schema.from_data(
         {'users': pd.DataFrame({'user_id': [1, 2], 'age': [20.0, 30.0]})},
@@ -255,7 +255,7 @@ def test_a_single_table_request_is_still_checked_before_the_wire():
     ).materialize(indices=[1])
 
     with pytest.raises(StructuredDataError) as error:
-        next(TabularAdapter().prediction_plan(request, ('prediction',)))
+        public_envelope(request)
     assert error.value.code == 'INVALID_REQUEST'
 
 
@@ -278,8 +278,9 @@ def test_re_declaring_storage_and_meaning_together_is_allowed():
 def test_the_tabular_path_refuses_a_contradictory_column_too():
     """Both request paths start from a schema and both must ask the same
     question; putting the check on the relational one alone left this open."""
+    from test_adapter_and_result import envelope as public_envelope
+
     from sdm_client import Request
-    from sdm_client.adapters.tabular import TabularAdapter
 
     context = pd.DataFrame({'x': [1, 2, 3], 'y': [0, 1, 0]})
     predict = pd.DataFrame({'x': [4]})
@@ -295,13 +296,14 @@ def test_the_tabular_path_refuses_a_contradictory_column_too():
     )
 
     with pytest.raises(StructuredDataError) as error:
-        next(TabularAdapter().prediction_plan(request, ('prediction',)))
+        public_envelope(request)
     assert error.value.code == 'INVALID_REQUEST'
 
 
 def test_the_tabular_path_accepts_a_column_re_declared_in_full():
+    from test_adapter_and_result import envelope as public_envelope
+
     from sdm_client import Request
-    from sdm_client.adapters.tabular import TabularAdapter
 
     context = pd.DataFrame({'x': [1, 2, 3], 'y': [0, 1, 0]})
     predict = pd.DataFrame({'x': [4]})
@@ -316,7 +318,7 @@ def test_the_tabular_path_accepts_a_column_re_declared_in_full():
         task='classification',
         schema=schema,
     )
-    body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    body = public_envelope(request)
 
     assert body['schema']['instance_table']['columns']['x'] == {
         'dtype': 'string',

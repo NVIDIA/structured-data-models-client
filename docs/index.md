@@ -12,3 +12,6 @@ One Python client for NVIDIA's structured-data foundation models.
 - **[Stability](reference/stability.md):** public APIs, versioning and
   deprecation
 - **[Limits](reference/limits.md):** endpoint and client limits
+
+For maintainers: [change guide](development/change-guide.md), [engine boundaries and diagrams](development/engine-boundaries.md), and [validation evidence](development/validation.md).
+Date handling is specified in [date and timestamp rules](reference/date-rules.md).

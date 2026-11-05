@@ -2,22 +2,17 @@
 
 | Command | You get |
 |---|---|
-| `pip install structured-data-models-client` | The client, the language, and the tabular model. Runs anywhere. |
-| `pip install 'structured-data-models-client[relational]'` | Adds the relational model and native engine. Wheels only, for **Linux, macOS and Windows on CPython 3.10 through 3.14**. See [prerequisites](prerequisites.md). |
+| `pip install structured-data-models-client` | The client and shared Rust core for both models. |
+| `pip install 'structured-data-models-client[relational]'` | Compatibility extra; both models are already included. See [prerequisites](prerequisites.md). |
 | `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]`. |
-| `pip install 'structured-data-models-client[all]'` | The relational model and every warehouse backend. |
+| `pip install 'structured-data-models-client[all]'` | Both models and every warehouse backend. |
 | `pip install 'structured-data-models-client[databricks-serving]'` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
 | `pip install 'structured-data-models-client[in-process]'` | Runs the models in this Python process with structured-data-models, through `SDMClient.in_process`. Brings PyTorch. The relational model also needs `[relational]`, which gathers its requests. **Python 3.11 or later**: on 3.10 the extra installs nothing, and `in_process()` says why. Not in `[all]`, for the same reason as `[databricks-serving]`. |
 
-**What you install is not what you import.** The five distributions are
-`structured-data-models-client`, `-api`, `-pql`, `-connectors` and
-`-relational-engine`; the modules they install are `sdm_client`, `sdm_api`,
-`predictive_query`, `sdm_connectors` and `sdm_relational_engine`. Only the
-first of each pair is ever typed at a prompt.
-
-**Dependency weight determines what ships in the base wheel.** The relational
-model does heavy client-side work: graph building, native sampling and query
-resolution. It is an opt-in extra, as are warehouse drivers.
+**Install distribution names; import module names.**
+The three maintained distributions and their imports are listed below.
+The client wheel includes the shared Rust core for PQL, sampling and prediction preparation.
+Warehouse drivers remain optional extras.
 
 ## On Databricks
 
@@ -62,15 +57,12 @@ A connection or Spark session you open yourself and pass to a source is used as 
 
 ## Packages
 
-Five distributions, released together on one version.
+Three distributions, released together on one version.
 
 | Distribution | Import | What it is |
 |---|---|---|
 | `structured-data-models-client` | `sdm_client` | The public API |
 | `structured-data-models-api` | `sdm_api` | The Universal TFM wire types. **No third-party dependencies** |
-| `structured-data-models-pql` | `predictive_query` | The Predictive Query Language |
 | `structured-data-models-connectors` | `sdm_connectors` | Reading tables from sqlite, duckdb, PostgreSQL, Snowflake, Databricks, S3 |
-| `structured-data-models-relational-engine` | `sdm_relational_engine` | The relational driver (native) |
 
-`structured-data-models-pql` is an internal dependency of `structured-data-models-client`, not a supported API, and its `predictive_query` package can change in any release.
-Write PQL with `sdm_client.PredictiveQuery`.
+Write PQL with `sdm_client.PredictiveQuery`; its implementation is part of the Rust core.

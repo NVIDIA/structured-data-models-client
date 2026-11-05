@@ -1,0 +1,236 @@
+#!/usr/bin/env python
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Column name vectors: independent inputs and current-client test helpers."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import sys
+import warnings
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / 'contract/column-name-vectors.json'
+FORMAT = 'sdm-column-name-vectors/1'
+DATABASES = ('duckdb', 'sqlite', 'postgres')
+CHARACTERS = {
+    'dot': '.',
+    'backtick': '`',
+    'line-feed': '\n',
+    'carriage-return': '\r',
+}
+#: The roles recorded. ``filter`` (a column of orders filtering the
+#: target's aggregation) needs the core's ``target_filter`` rule lifted,
+#: so ``contract/tests/test_t210_targets.py`` holds it, not tests.
+ROLES = ('feature', 'target', 'entity', 'filter', 'aggregation')
+TWIN = 'a_b'
+
+
+def name_of(character: str) -> str:
+    r"""The column's name holding ``character``."""
+    return f'a{character}b'
+
+
+def spelled(name: str) -> str:
+    r"""``name`` as a query names it: bare where the grammar's identifier
+    spells it, else backtick-quoted, a backtick inside doubled."""
+    if name == TWIN:
+        return name
+    return '`' + name.replace('`', '``') + '`'
+
+
+def _quoted(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def scenario(role: str, name: str) -> dict[str, Any]:
+    r"""The DuckDB statements after the ``shop`` base, the query and
+    ``materialize``'s keywords of ``role`` with its column named ``name``."""
+    column, query = _quoted(name), spelled(name)
+    summed = {'indices': [0, 1], 'anchor_time': '2024-03-01'}
+    if role == 'feature':
+        return {
+            'setup': [
+                'CREATE OR REPLACE TABLE users AS SELECT *, '
+                f'(user_id % 3)::INTEGER AS {column} FROM users'
+            ],
+            'pql': 'PREDICT SUM(orders.price, 0, 30, days) '
+            'FOR EACH users.user_id',
+            'materialize': summed,
+        }
+    if role == 'target':
+        return {
+            'setup': [
+                'CREATE OR REPLACE TABLE users AS SELECT *, '
+                f"['p', 'q', 'r'][1 + user_id // 3] AS {column} FROM users"
+            ],
+            'pql': f'PREDICT users.{query} FOR EACH users.user_id',
+            'materialize': {'indices': [0, 1]},
+        }
+    if role == 'entity':
+        return {
+            'setup': [
+                'DROP TABLE orders',
+                'DROP TABLE users',
+                f'CREATE TABLE users ({column} BIGINT PRIMARY KEY, '
+                'age INTEGER, country VARCHAR)',
+                'CREATE TABLE orders (order_id BIGINT PRIMARY KEY, '
+                f'user_id BIGINT REFERENCES users ({column}), price DOUBLE, '
+                'ts TIMESTAMP)',
+                "INSERT INTO users SELECT i, 20 + i, ['US', 'DE', 'IN']"
+                '[1 + i % 3] FROM range(8) t(i)',
+                'INSERT INTO orders SELECT i, i % 8, 10 + i * 1.5, '
+                "TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) "
+                'FROM range(80) t(i)',
+            ],
+            'pql': f'PREDICT SUM(orders.price, 0, 30, days) '
+            f'FOR EACH users.{query}',
+            'materialize': summed,
+        }
+    if role == 'filter':
+        return {
+            'setup': [
+                'CREATE OR REPLACE TABLE orders AS SELECT *, '
+                f'(order_id % 3)::INTEGER AS {column} FROM orders'
+            ],
+            'pql': f'PREDICT COUNT(orders.* WHERE orders.{query} = 1, '
+            '0, 30, days) FOR EACH users.user_id',
+            'materialize': summed,
+        }
+    if role == 'aggregation':
+        return {
+            'setup': [
+                'CREATE OR REPLACE TABLE orders AS SELECT *, '
+                f'(price * 2)::DOUBLE AS {column} FROM orders'
+            ],
+            'pql': f'PREDICT SUM(orders.{query}, 0, 30, days) '
+            'FOR EACH users.user_id',
+            'materialize': summed,
+        }
+    raise ValueError(f'no role {role!r}')
+
+
+def vectors() -> list[dict[str, Any]]:
+    r"""Every vector and every twin, in a fixed order: by database, then
+    role, the twin first, then each character."""
+    out = []
+    for database in DATABASES:
+        for role in ROLES:
+            out.append(
+                {
+                    'id': f'twin.{role}@{database}',
+                    'database': database,
+                    'role': role,
+                    'character': None,
+                    'name': TWIN,
+                    **scenario(role, TWIN),
+                }
+            )
+            for label, character in CHARACTERS.items():
+                name = name_of(character)
+                out.append(
+                    {
+                        'id': f'{label}.{role}@{database}',
+                        'database': database,
+                        'role': role,
+                        'character': label,
+                        'name': name,
+                        'twin': f'twin.{role}@{database}',
+                        **scenario(role, name),
+                    }
+                )
+    return out
+
+
+def _runner() -> Any:
+    if 'run_python' not in sys.modules:
+        path = ROOT / 'contract/runners/run_python.py'
+        spec = importlib.util.spec_from_file_location('run_python', path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules['run_python'] = module
+        spec.loader.exec_module(module)
+    return sys.modules['run_python']
+
+
+def _plain(value: Any) -> Any:
+    r"""A payload as JSON reads it back: its numbers and texts, nothing of
+    the Python objects that carried them."""
+    return json.loads(json.dumps(value, default=str))
+
+
+def _payloads(payloads: Any) -> list[Any]:
+    bodies = _plain(list(payloads))
+    for body in bodies:
+        (body.get('metadata') or {}).pop('request_id', None)
+    return bodies
+
+
+def digest(payloads: list[Any] | None) -> str | None:
+    r"""The SHA-256 of the payloads as canonical JSON (sorted keys, no
+    spaces); null with none."""
+    if payloads is None:
+        return None
+    text = json.dumps(payloads, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def run(vector: dict[str, Any]) -> dict[str, Any]:
+    r"""One vector through the public calls on its database, on whatever
+    route the environment gives: its outcome, public schema, SDMWarnings
+    per call and payloads."""
+    from sdm_client import PredictiveQuery, Schema, SDMWarning
+
+    runner = _runner()
+    case = {
+        'id': vector['id'],
+        'input': {'base': 'shop', 'setup': vector['setup']},
+    }
+    connection, cleanup, _ = runner._open(
+        case, runner.load_bases(), vector['database']
+    )
+    answer: dict[str, Any] = {'schema': None, 'payloads': None}
+    told: dict[str, int] = {}
+    stage = 'from_source'
+    try:
+        source = runner._source(vector['database'], connection)
+        with warnings.catch_warnings(record=True) as seen:
+            warnings.simplefilter('always')
+            try:
+                try:
+                    schema = Schema.from_source(source)
+                finally:
+                    told[stage] = sum(
+                        issubclass(w.category, SDMWarning) for w in seen
+                    )
+                answer['schema'] = _plain(runner._schema_projection(schema))
+                stage = 'materialize'
+                del seen[:]
+                query = PredictiveQuery(vector['pql'], schema)
+                try:
+                    request = query.materialize(
+                        **runner._materialize_arguments(vector['materialize'])
+                    )
+                finally:
+                    told[stage] = sum(
+                        issubclass(w.category, SDMWarning) for w in seen
+                    )
+                answer['outcome'] = {'result': 'success', 'stage': stage}
+                answer['payloads'] = _payloads(request.payloads)
+            except Exception as error:  # noqa: BLE001 - the call's outcome
+                answer['outcome'] = {
+                    'result': 'refusal',
+                    'stage': stage,
+                    'error': type(error).__name__,
+                    'code': getattr(error, 'code', None),
+                }
+    finally:
+        cleanup()
+    answer['sdm_warnings'] = told
+    return answer

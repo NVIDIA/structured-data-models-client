@@ -6,11 +6,9 @@
 # independently released distribution lives under packages/ with its own
 # pyproject.toml:
 #
-#   packages/structured-data-models-client            - the public client SDK (pure python)
+#   packages/structured-data-models-client            - the public client SDK (Python + Rust)
 #   packages/structured-data-models-api               - Universal TFM wire types (pure python)
-#   packages/structured-data-models-pql               - the Predictive Query Language (pure python)
 #   packages/structured-data-models-connectors        - shared data-source connectors (pure python)
-#   packages/structured-data-models-relational-engine - the relational driver (native build)
 #
 # This file carries only shared tooling configuration. Each package's
 # [tool.ruff] extends this file, so the lint baseline below applies to every
@@ -27,14 +25,12 @@ version = "0"
 requires-python = ">=3.10"
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/structured-data-models-client", "packages/structured-data-models-api", "packages/structured-data-models-connectors"]
 
 [tool.uv.sources]
 structured-data-models-api = { workspace = true }
-structured-data-models-pql = { workspace = true }
 structured-data-models-client = { workspace = true }
 structured-data-models-connectors = { workspace = true }
-structured-data-models-relational-engine = { workspace = true }
 
 [tool.ruff]
 line-length = 80
@@ -47,9 +43,11 @@ target-version = "py310"
 # its shape, and formatting it as a module rewrites the thing being
 # illustrated.
 extend-exclude = [
-    "packages/structured-data-models-pql/src/predictive_query/grammar",
     "packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py",
     "*.md",
+    # A frozen copy, byte for byte, of a notebook main deleted, kept as the
+    # contract test's fixture: fixture data, never edited.
+    "contract/fixtures/adventureworks/notebook-fa0637d4.ipynb",
 ]
 
 [tool.ruff.lint]
@@ -83,9 +81,6 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
 exclude = [
-    # ANTLR's output, regenerated from the grammar rather than edited. Excluded
-    # from ruff for the same reason; the two lists move together.
-    "packages/structured-data-models-pql/src/predictive_query/grammar/",
 ]
 
 # --- Baseline recorded 2026-09-17 -------------------------------------------
@@ -113,30 +108,10 @@ module = [
     "sdm_client.wire.dtypes",                #  3
     "sdm_client.core.warnings",              #  1
     "sdm_client.adapters.relational",        #  1
-    "predictive_query.validator.join_validator",  # 4
     "sdm_connectors.sql",                    #  1
     "sdm_connectors.reader",                 #  1
     # --- relational engine: 62 errors across 21 modules --------------------
-    "sdm_relational_engine.rfm.base.table",          # 12
-    "sdm_relational_engine.rfm.graph",               # 10
-    "sdm_relational_engine.rfm.rfm",                 #  9
-    "sdm_relational_engine.rfm.backend.sqlite.sampler",     # 2
-    "sdm_relational_engine.rfm.backend.snow.sampler",       # 2
-    "sdm_relational_engine.rfm.backend.duckdb.table",       # 1
-    "sdm_relational_engine.rfm.backend.duckdb.sampler",     # 2
-    "sdm_relational_engine.rfm.backend.databricks.sampler", # 2
-    "sdm_relational_engine.client.client",           #  2
-    "sdm_relational_engine.client.rfm",              #  1
-    "sdm_relational_engine.rfm.backend.sqlite.table",    # 1
-    "sdm_relational_engine.rfm.backend.snow.table",      # 1
-    "sdm_relational_engine.rfm.backend.local.table",     # 1
-    "sdm_relational_engine.rfm.backend.local.sampler",   # 1
-    "sdm_relational_engine.rfm.backend.databricks.table",# 1
     # --- arrived with the engine cleanup on main, 2026-09-21 ----------
-    "sdm_relational_engine.client.engine_access",    #  2
-    "sdm_relational_engine.client.state",            #  1
-    "sdm_relational_engine.rfm.inference.payload",   #  1
-    "sdm_relational_engine.rfm.inference.task",      #  1
 ]
 ignore_errors = true
 
@@ -148,10 +123,6 @@ ignore_errors = true
 # check running in these modules, rather than exempting them wholesale.
 [[tool.mypy.overrides]]
 module = [
-    "predictive_query.schema.typing",
-    "predictive_query.schema.json_serde",
-    "predictive_query.ast.date_offset_range",
-    "predictive_query.query",
     "sdm_client.core.transport",
 ]
 disable_error_code = ["unused-ignore"]
@@ -162,14 +133,11 @@ disable_error_code = ["unused-ignore"]
 # because line coverage counts an `if` as covered when only one side ever runs.
 #
 # What it found when it was first turned on, and what the number is for:
-# `predictive_query.rewriting`: 401 statements, exported from that package's
 # `__all__`, reached by no test and imported by nothing in this repository.
 [tool.coverage.run]
 branch = true
-source_pkgs = ["sdm_api", "sdm_client", "sdm_connectors", "predictive_query"]
+source_pkgs = ["sdm_api", "sdm_client", "sdm_connectors"]
 omit = [
-    # ANTLR's output. Excluded from ruff and mypy for the same reason.
-    "*/predictive_query/grammar/*",
 ]
 
 [tool.coverage.report]
@@ -185,9 +153,11 @@ exclude_also = [
 # from the repository root neither warns about unknown marks nor silently
 # selects a test that opens a socket.
 [tool.pytest.ini_options]
+tmp_path_retention_policy = "failed"
 markers = [
     "live_nim: needs a running NIM",
     "live_warehouse: needs a real Snowflake or Databricks warehouse",
     "socket: binds a local socket; deselect where that is not permitted",
     "gpu: needs a CUDA GPU",
+    "tooling: repository-tool tests run once in dedicated CI jobs, outside the Python version matrix",
 ]

@@ -1,0 +1,2834 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! A materialized request sent to the model, and its answer laid out.
+//!
+//! The client's predict-side rules, in the reference's order (the
+//! design's "Host-held semantics" rows it moved):
+//!
+//! - [`prepare`] is `SDMClient._prepare`: the model the request is sent to
+//! (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
+//! asked for (the task's default ones when the caller named none, an
+//! empty list refused `INVALID_REQUEST`) and `check_request_against_model`
+//! (the request's shape, its task's kind, each output and the context's
+//! size against what the model serves);
+//! - [`nothing_to_score`] is `Request.nothing_to_score`: a request with no
+//! row to score is answered without a call (`_empty_answer`, [`empty`]);
+//! - [`preflight`] is the relational adapter's `_preflight`: an empty
+//! context, more classes than the model takes and a classification whose
+//! context has one answer refused, a regression's constant context given
+//! as a notice, and an explanation's row count and run mode;
+//! - [`body`] is `prediction_plan`'s call of one payload: the payload with
+//! the model named, the outputs asked for (a regression's with its
+//! statistic), the request's id in its metadata, and only the inference
+//! options the model reads (`_inference`);
+//! - [`layout`] is `normalize` and `_named_entities`, with the answer's
+//! classes given back as the target's own type (`as_declared_target`):
+//! each answer checked against the row it claims and given back under the
+//! entity it is about, read back as the key's dtype (`as_declared`), or,
+//! where the payload names no entity, given back as written, as a
+//! [`Part`];
+//! - [`merge`] is `PredictionResult.merge`, the parts of one request put
+//! together, and [`absent`] is `_report_absent`'s finding, the outputs the
+//! caller named that no answer carries;
+//! - [`table`] lays a part out as the result: one row per answer, ordered
+//! by `row_index` as `PredictionResult.to_pandas` orders them.
+//!
+//! What the result does not carry yet is refused by name, never dropped
+//! (`UNSUPPORTED_REQUEST`, B-4): the tabular model on this relational
+//! entrypoint. Scores, rankings and embeddings are carried by the shared layout. an item's `explanation` and
+//! `metadata` are carried (each item's, and the result's explanation,
+//! [`Part::explanation`]), and a regression's `quantiles`.
+
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
+use arrow_array::builder::{Float64Builder, ListBuilder, MapBuilder, MapFieldNames, StringBuilder};
+use arrow_array::{
+    Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
+};
+use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+use sdm_wire::json::{Value, is_integer_token};
+use sdm_wire::response::{PredictionResponse, Refused, integer_text, numeric_text};
+
+/// The model this build sends a relational request to.
+pub const RELATIONAL: &str = "kumo-relational";
+
+/// The other model the contract carries, which takes no relational request.
+pub const TABULAR: &str = "kumo-tabular";
+
+/// The output a regression asks for when the caller names none.
+pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
+
+/// The outputs a classification asks for when the caller names none.
+pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
+
+/// The task kinds whose call this build writes.
+const CALLED: [&str; 5] = [
+    "forecasting",
+    "regression",
+    "binary_classification",
+    "multiclass_classification",
+    "temporal_link_prediction",
+];
+
+/// The statistic a regression's point prediction reports unless one was
+/// chosen.
+pub const DEFAULT_STATISTIC: &str = "median";
+
+/// The inference-config keys the client forwards to `kumo-relational`
+/// (`KUMO_RELATIONAL.runtime.inference_options`); the engine's others are
+/// left out of the call.
+pub const INFERENCE_OPTIONS: [&str; 6] = [
+    "kind",
+    "num_estimators",
+    "column_shuffle",
+    "category_shuffle",
+    "hop_shuffle",
+    "class_shuffle",
+];
+
+/// The most classes `kumo-relational` classifies (`classes_max`).
+pub const CLASSES_MAX: usize = 10;
+
+/// The most context rows `kumo-relational` reads (`context_rows_max`).
+pub const CONTEXT_ROWS_MAX: usize = 10_000;
+
+/// The context the mode that explains takes at most (`context_rows_fast`).
+pub const CONTEXT_ROWS_FAST: usize = 1_000;
+
+/// What the wire calls the target column whatever the question was.
+const WIRE_TARGET: &str = "TARGET";
+
+/// What the wire calls the column holding the entity a row is about, by
+/// its prefix.
+const ENTITY_REF: &str = "__kumo_entity_ref";
+
+/// What the wire calls the column a row is answered under.
+const INSTANCE_ID: &str = "instance_id";
+
+/// The shapes a request may need of a model (`SHAPE_CAPABILITIES`), in the
+/// reference's order.
+const SHAPES: [&str; 6] = [
+    "relationships",
+    "multiple_tables",
+    "link_prediction",
+    "forecasting",
+    "static",
+    "temporal",
+];
+
+/// What the client knows a model serves (`ModelSpec`): its id, the shapes
+/// its profile takes, its task kinds and its outputs, the explanation
+/// shapes it names, and whether its endpoint pins sessions
+/// (`runtime.explanation_formats`, `runtime.sessions`).
+struct Spec {
+    id: &'static str,
+    shapes: &'static [&'static str],
+    tasks: &'static [&'static str],
+    outputs: &'static [&'static str],
+    explanation_formats: &'static [&'static str],
+    sessions: bool,
+}
+
+/// The models the contract carries, in this build's order.
+const MODELS: [&Spec; 2] = [&KUMO_RELATIONAL, &KUMO_TABULAR];
+
+/// What one model supports, as the client describes it to a caller
+/// (`ModelCapabilities`, `capabilities`): the client side, never the
+/// endpoint's own answer, so its `source` is `sdk`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Capabilities {
+    pub model: &'static str,
+    /// Its task kinds, sorted.
+    pub tasks: Vec<&'static str>,
+    /// Its outputs, sorted.
+    pub outputs: Vec<&'static str>,
+    /// Every model takes one table.
+    pub single_table: bool,
+    /// Whether its profile takes several tables.
+    pub multiple_tables: bool,
+    /// Whether its profile takes relationships.
+    pub relationships: bool,
+    pub explanation_formats: Vec<&'static str>,
+    pub sessions: bool,
+}
+
+/// Every model's [`Capabilities`], in this build's order of them.
+pub fn capabilities() -> Vec<Capabilities> {
+    MODELS
+        .iter()
+        .map(|spec| Capabilities {
+            model: spec.id,
+            tasks: sorted(spec.tasks),
+            outputs: sorted(spec.outputs),
+            single_table: true,
+            multiple_tables: spec.shapes.contains(&"multiple_tables"),
+            relationships: spec.shapes.contains(&"relationships"),
+            explanation_formats: spec.explanation_formats.to_vec(),
+            sessions: spec.sessions,
+        })
+        .collect()
+}
+
+/// `KUMO_RELATIONAL`: every shape (the relational profile), its six task
+/// kinds and seven outputs, each list sorted.
+const KUMO_RELATIONAL: Spec = Spec {
+    id: RELATIONAL,
+    shapes: &SHAPES,
+    tasks: &[
+        "binary_classification",
+        "classification",
+        "forecasting",
+        "multiclass_classification",
+        "regression",
+        "temporal_link_prediction",
+    ],
+    outputs: &[
+        "embeddings",
+        "explanation",
+        "prediction",
+        "probabilities",
+        "quantiles",
+        "rankings",
+        "scores",
+    ],
+    explanation_formats: &[crate::gradients::FORMAT],
+    sessions: true,
+};
+
+/// `KUMO_TABULAR`: one table, static, no link or forecast.
+const KUMO_TABULAR: Spec = Spec {
+    id: TABULAR,
+    shapes: &["static"],
+    tasks: &["classification", "regression"],
+    outputs: &["explanation", "prediction", "probabilities", "quantiles"],
+    explanation_formats: &[crate::gradients::FORMAT],
+    sessions: true,
+};
+
+/// The refusal of a `predict` input that takes a rule this build does not
+/// port yet, naming the rule, never a value.
+pub fn not_yet(rule: &'static str) -> CoreError {
+    CoreError::new(
+        Sentence::NotYetPredict,
+        "predicting this request takes a rule this core does not hold yet",
+    )
+    .with_field("operation", Detail::text("predict"))
+    .with_field("rule", Detail::text(rule))
+}
+
+/// The model cannot answer the request, as the client refuses it before
+/// anything is sent (`UnsupportedRequestError`): the model named, never a
+/// value of the request.
+fn unsupported(sentence: Sentence, model: &str, message: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("model", Detail::text(model))
+}
+
+/// `values` in order, as the reference's refusals list them (`sorted`).
+fn sorted<'a>(values: &[&'a str]) -> Vec<&'a str> {
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    sorted
+}
+
+fn texts<'a>(values: impl IntoIterator<Item = &'a str>) -> Detail {
+    Detail::List(
+        values
+            .into_iter()
+            .map(|v| Scalar::Utf8(v.to_owned()))
+            .collect(),
+    )
+}
+
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
+}
+
+/// A request state's payload this build cannot read as one: the field and
+/// why, never a value.
+fn bad_payload(reason: &'static str) -> CoreError {
+    CoreError::new(
+        Sentence::StateUnread,
+        "the request state's payload is not one materialize writes",
+    )
+    .with_field("field", Detail::text("state.payload"))
+    .with_field("reason", Detail::text(reason))
+}
+
+/// The endpoint's answer, not one the contract describes or not the
+/// answer to this request: the field and why, never a value.
+pub fn bad_response(field: &'static str, reason: &'static str) -> CoreError {
+    let sentence = match (field, reason) {
+        ("prediction.explanation", "not_a_mapping") => Sentence::ExplanationNotAMapping,
+        ("prediction.metadata", "not_a_mapping") => Sentence::MetadataNotAMapping,
+        _ => Sentence::ResponseUnread,
+    };
+    CoreError::new(
+        sentence,
+        "the model endpoint's answer is not one this request can read",
+    )
+    .with_field("field", Detail::text(field))
+    .with_field("reason", Detail::text(reason))
+}
+
+/// A response the wire's reader refused, as the error it ends the run with.
+pub fn refused(refused: Refused) -> CoreError {
+    bad_response(refused.field, refused.reason)
+}
+
+/// The task's kind as the payload writes it.
+fn kind_of(payload: &Value) -> Result<&str, CoreError> {
+    let Value::Object(_) = payload else {
+        return Err(bad_payload("not_an_object"));
+    };
+    match payload.get("task").and_then(|task| task.get("kind")) {
+        Some(Value::Text(kind)) => Ok(kind),
+        _ => Err(bad_payload("task")),
+    }
+}
+
+/// The task's kind, when it is one whose call this build writes.
+fn called(payload: &Value) -> Result<&str, CoreError> {
+    let kind = kind_of(payload)?;
+    if CALLED.contains(&kind) {
+        Ok(kind)
+    } else {
+        Err(not_yet("problem_type"))
+    }
+}
+
+fn classifies(kind: &str) -> bool {
+    kind.contains("classification")
+}
+
+/// One half's instance table: its column names and its rows.
+fn instance_table<'a>(payload: &'a Value, half: &str) -> Option<(Vec<&'a str>, &'a [Value])> {
+    let table = payload.get(half)?.get("instance_table")?;
+    let Some(Value::Array(columns)) = table.get("columns") else {
+        return None;
+    };
+    let Some(Value::Array(rows)) = table.get("rows") else {
+        return None;
+    };
+    let names: Vec<&str> = columns.iter().filter_map(Value::as_text).collect();
+    (names.len() == columns.len()).then_some((names, rows.as_slice()))
+}
+
+/// The rows of one half, counted as `Request._rows` counts them: none
+/// where the half cannot be read.
+fn rows_of(payload: &Value, half: &str) -> usize {
+    instance_table(payload, half).map_or(0, |(_, rows)| rows.len())
+}
+
+/// The rows one call scores (`_envelope_rows(payload, 'predict')`): its
+/// predict half's rows, none where the half cannot be read.
+pub fn predict_rows(payload: &Value) -> Option<usize> {
+    instance_table(payload, "predict").map(|(_, rows)| rows.len())
+}
+
+/// Where each call's rows are numbered from, for a request sent in several
+/// calls (`_numbered_across_calls`, `main`'s 1fc5a686): the endpoint numbers
+/// every call's rows from zero, so each call's are numbered on from where
+/// the previous call's ended, each call counted before the first is sent.
+/// A call before the last whose rows cannot be counted leaves the calls
+/// after it unnumberable, `INTERNAL_ERROR`, as the client refuses it.
+pub fn call_starts(payloads: &[Value]) -> Result<Vec<usize>, CoreError> {
+    let counted: Vec<Option<usize>> = payloads.iter().map(predict_rows).collect();
+    if counted
+        .iter()
+        .take(counted.len().saturating_sub(1))
+        .any(Option::is_none)
+    {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a call of a request sent in several calls has rows that cannot be counted",
+        ));
+    }
+    let mut starts = Vec::with_capacity(counted.len());
+    let mut start = 0usize;
+    for rows in counted {
+        starts.push(start);
+        start = start.saturating_add(rows.unwrap_or(0));
+    }
+    Ok(starts)
+}
+
+/// `part` with each row numbered `start` places further on
+/// (`_numbered_from`).
+pub fn numbered_from(mut part: Part, start: usize) -> Result<Part, CoreError> {
+    let start =
+        i64::try_from(start).map_err(|_| bad_response("prediction.row_index", "out_of_range"))?;
+    if start != 0 {
+        for row in &mut part.rows {
+            row.row_index = row
+                .row_index
+                .checked_add(start)
+                .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
+        }
+    }
+    Ok(part)
+}
+
+/// The outputs asked of `payload` sent to `model`, as the client's
+/// `_prepare` resolves and checks them: the model the contract carries
+/// (`UNKNOWN_MODEL` otherwise), the outputs the caller named or, when it
+/// named none (`defaulted`), the task's default ones, an empty list refused
+/// (`INVALID_REQUEST`, field `outputs`), then `check_request_against_model`
+/// in its order: the shapes the model's profile does not take, a task kind
+/// it does not serve, an output it does not produce and a context past what
+/// it reads, each `UNSUPPORTED_REQUEST` naming the model.
+///
+/// A request sent in several calls (`main`'s multi-call `predict`) is
+/// checked as one: its kind and shapes are its first call's, as the
+/// client's request takes its task from its first payload, and its context
+/// is held to the most rows any one call sends (`_context_rows_per_call`),
+/// since the endpoint's cap is per call.
+pub fn prepare(
+    payloads: &[Value],
+    model: &str,
+    asked: &[String],
+    defaulted: bool,
+) -> Result<Vec<String>, CoreError> {
+    let Some(payload) = payloads.first() else {
+        return Err(CoreError::new(Sentence::Internal, "a request of no call"));
+    };
+    let spec = match model {
+        RELATIONAL => &KUMO_RELATIONAL,
+        TABULAR => &KUMO_TABULAR,
+        _ => {
+            return Err(CoreError::new(
+                Sentence::UnknownModel,
+                "the model named is not one the contract carries",
+            )
+            .with_field("field", Detail::text("model")));
+        }
+    };
+    let kind = kind_of(payload)?;
+    let outputs: Vec<String> = if defaulted {
+        default_outputs(kind)
+            .iter()
+            .map(|f| (*f).to_owned())
+            .collect()
+    } else {
+        asked.to_vec()
+    };
+    if outputs.is_empty() {
+        return Err(CoreError::new(
+            Sentence::OutputsNone,
+            "outputs must name at least one field",
+        )
+        .with_field("field", Detail::text("outputs")));
+    }
+
+    // The shapes the request needs (`required_capabilities`), from the
+    // payload: its links, its tables, its kind and its anchor.
+    let schema = payload.get("schema");
+    let linked = matches!(
+        schema.and_then(|s| s.get("relationships")),
+        Some(Value::Array(links)) if !links.is_empty()
+    );
+    let tables = 1 + match schema.and_then(|s| s.get("related_tables")) {
+        Some(Value::Object(related)) => related.len(),
+        _ => 0,
+    };
+    // Temporal as the reference's `required_capabilities` reads it: the
+    // task's options naming an anchor time column, or a forecast or a link
+    // prediction (where the shapes a refusal names became visible).
+    let anchored = payload
+        .get("task")
+        .and_then(|task| task.get("options"))
+        .and_then(|options| options.get("anchor_time_column"))
+        .is_some_and(|column| match column {
+            Value::Null | Value::Bool(false) => false,
+            Value::Text(text) => !text.is_empty(),
+            Value::Number(token) => token.parse::<f64>().is_ok_and(|n| n != 0.0),
+            Value::Array(items) => !items.is_empty(),
+            Value::Object(members) => !members.is_empty(),
+            Value::Bool(true) => true,
+        });
+    check_shapes(spec, kind, anchored, linked, tables)?;
+    check_task_outputs(spec, kind, &outputs, true)?;
+    let rows = payloads
+        .iter()
+        .map(|p| rows_of(p, "context"))
+        .max()
+        .unwrap_or(0);
+    check_capacity(spec, rows, false)?;
+    if spec.id == TABULAR {
+        // The tabular model takes no relational request this build sends.
+        return Err(not_yet("model"));
+    }
+    Ok(outputs)
+}
+
+/// The outputs a task asks for when the caller names none (the adapter's
+/// `_DEFAULT_OUTPUTS`): asking for everything would make a regression ask
+/// for probabilities, which the endpoint refuses.
+pub fn default_outputs(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "classification" | "binary_classification" | "multiclass_classification" => {
+            &CLASSIFICATION_FIELDS
+        }
+        "temporal_link_prediction" => &["rankings"],
+        _ => &REGRESSION_FIELDS,
+    }
+}
+
+/// Whether the payload asks about no row at all (`Request.nothing_to_score`):
+/// its predict half's rows a list, and empty. One that cannot be read is
+/// not empty, and goes on to be refused where it is read.
+pub fn nothing_to_score(payload: &Value) -> bool {
+    instance_table(payload, "predict").is_some_and(|(_, rows)| rows.is_empty())
+}
+
+/// A notice the run gives: its sentence and fields, worded by the host: a
+/// regression whose every context row has the same answer (the adapter's
+/// `_check_target_varies`), an output the caller named that the answer
+/// left out (`_report_absent`), a forecast whose steps were explained but
+/// not every one (`_warn_of_steps_that_carry_no_explanation`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Notice {
+    pub sentence: Sentence,
+    pub message: &'static str,
+    pub fields: Vec<(&'static str, Detail)>,
+}
+
+/// A JSON value as a member of a set, as Python's `set` holds the values the
+/// wire's rows read as: a number by its value (`1` and `1.0` one member, a
+/// NaN its own), text, a boolean, null.
+fn member(value: &Value) -> String {
+    match value {
+        Value::Number(token) => match token.parse::<f64>() {
+            // 0.0 and -0.0 are one member, as Python's set holds them.
+            Ok(n) => format!("n{:016x}", (n + 0.0).to_bits()),
+            Err(_) => format!("t{token}"),
+        },
+        Value::Text(text) => format!("s{text}"),
+        Value::Bool(b) => format!("b{b}"),
+        Value::Null => "z".to_owned(),
+        other => format!("j{}", String::from_utf8_lossy(&other.to_bytes())),
+    }
+}
+
+/// The context's target column, its values by row, where the context holds
+/// the target and at least one row.
+fn target_values<'a>(payload: &'a Value, column: Option<&str>) -> Option<Vec<&'a Value>> {
+    let (names, rows) = instance_table(payload, "context")?;
+    let column = column?;
+    let at = names.iter().position(|n| *n == column)?;
+    if rows.is_empty() {
+        return None;
+    }
+    Some(
+        rows.iter()
+            .filter_map(|row| match row {
+                Value::Array(cells) => cells.get(at),
+                _ => None,
+            })
+            .collect(),
+    )
+}
+
+/// The adapter's checks of what the call sends, before it is sent
+/// (`_preflight`), in its order: a context with no rows, a classification
+/// target with more classes than the model takes, a context whose every
+/// answered row has the same answer (a classification refused, a regression
+/// noted, [`CONTEXT_CONSTANT`]), then, when an explanation is asked for,
+/// the rows scored (exactly one) and the run mode (the one the smaller
+/// context selects). `query` is the question's text, which names the
+/// target where the wire calls it `TARGET`.
+pub fn preflight(
+    payloads: &[Value],
+    outputs: &[String],
+    query: &str,
+    model: &str,
+) -> Result<Vec<Notice>, CoreError> {
+    preflight_halves(payloads, outputs, query, model, true, true)
+}
+
+/// Validate only the halves sent by a session operation.
+/// Ordinary prediction uses both halves through `preflight` unchanged.
+pub fn preflight_halves(
+    payloads: &[Value],
+    _outputs: &[String],
+    query: &str,
+    model: &str,
+    sends_context: bool,
+    _sends_predict: bool,
+) -> Result<Vec<Notice>, CoreError> {
+    let mut notices = Vec::new();
+    if sends_context {
+        for payload in payloads {
+            if let Some((_, rows)) = instance_table(payload, "context")
+                && rows.is_empty()
+            {
+                return Err(unsupported(
+                    Sentence::NoContextRows,
+                    model,
+                    "no context rows are left",
+                )
+                .with_field("context_rows", count(0)));
+            }
+        }
+        for payload in payloads {
+            let kind = kind_of(payload)?;
+            if !classifies(kind) {
+                continue;
+            }
+            let column = payload
+                .get("task")
+                .and_then(|t| t.get("target"))
+                .and_then(|t| t.get("column_name"))
+                .and_then(Value::as_text);
+            if let Some(values) = target_values(payload, column) {
+                let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
+                if labels.len() > CLASSES_MAX {
+                    return Err(unsupported(
+                        Sentence::TooManyClasses,
+                        model,
+                        "the target has more classes than the model takes",
+                    )
+                    .with_field("classes", count(labels.len()))
+                    .with_field("limit", count(CLASSES_MAX)));
+                }
+            }
+        }
+        for payload in payloads {
+            let kind = kind_of(payload)?;
+            if !classifies(kind) && kind != "regression" {
+                continue;
+            }
+            let column = payload
+                .get("task")
+                .and_then(|t| t.get("target"))
+                .and_then(|t| t.get("column_name"))
+                .and_then(Value::as_text);
+            let Some(values) = target_values(payload, column) else {
+                continue;
+            };
+            let answered: BTreeSet<String> = values
+                .iter()
+                .filter(|v| !matches!(v, Value::Null))
+                .map(|v| member(v))
+                .collect();
+            if answered.len() != 1 {
+                continue;
+            }
+            let column = column.unwrap_or_default();
+            let constant = constant_context(column, query);
+            if classifies(kind) {
+                // Named as the notice names the target, for the host's words
+                // (the adapter's `_how_to_name_the_target`).
+                let sentence = match constant.sentence {
+                    Sentence::ContextConstantColumn => Sentence::OneClassColumn,
+                    Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
+                    Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
+                    _ => Sentence::OneClassAnswer,
+                };
+                let mut error =
+                    unsupported(sentence, model, "every context row has the same answer")
+                        .with_field("field", Detail::text("context"))
+                        .with_field("reason", Detail::text("one_class"));
+                for (name, value) in constant.fields {
+                    error = error.with_field(name, value);
+                }
+                return Err(error.with_field("classes_in_context", count(1)));
+            }
+            notices.push(constant);
+            break;
+        }
+    }
+    Ok(notices)
+}
+
+/// The constant-context notice, with how the host names the target
+/// (`_how_to_name_the_target`): the target column when the wire names it
+/// so (`variant` `column`), else the column the question predicts when its
+/// text names one as `PREDICT table.column` (`predicted`), else the
+/// question itself (`question`).
+fn constant_context(column: &str, query: &str) -> Notice {
+    let mut fields = vec![("target", Detail::text(column))];
+    let (variant, sentence) = if column != WIRE_TARGET {
+        ("column", Sentence::ContextConstantColumn)
+    } else if let Some(predicted) = predicted_column(query) {
+        fields.push(("predicted", Detail::text(predicted)));
+        ("predicted", Sentence::ContextConstantPredicted)
+    } else if query.is_empty() {
+        ("answer", Sentence::ContextConstantAnswer)
+    } else {
+        fields.push(("question", Detail::text(query)));
+        ("question", Sentence::ContextConstantQuestion)
+    };
+    fields.push(("variant", Detail::text(variant)));
+    Notice {
+        sentence,
+        message: "every context row has the same answer",
+        fields,
+    }
+}
+
+/// `table.column` when the question opens `PREDICT table.column` followed
+/// by white space (the adapter's `_A_PREDICTED_COLUMN`: leading white
+/// space, the keyword in any case, then two identifiers, each an ASCII
+/// letter or an underscore followed by letters, digits and underscores).
+fn predicted_column(query: &str) -> Option<&str> {
+    let rest = query.trim_start();
+    let keyword = rest.get(..7)?;
+    if !keyword.eq_ignore_ascii_case("predict") {
+        return None;
+    }
+    let after = &rest[7..];
+    let spaced = after.trim_start();
+    if spaced.len() == after.len() {
+        return None;
+    }
+    let ident = |s: &str| -> usize {
+        let mut chars = s.char_indices();
+        match chars.next() {
+            Some((_, c)) if c == '_' || c.is_ascii_alphabetic() => {}
+            _ => return 0,
+        }
+        s.char_indices()
+            .find(|(_, c)| !(*c == '_' || c.is_alphanumeric()))
+            .map_or(s.len(), |(at, _)| at)
+    };
+    let table = ident(spaced);
+    if table == 0 || !spaced[table..].starts_with('.') {
+        return None;
+    }
+    let column = ident(&spaced[table + 1..]);
+    if column == 0 {
+        return None;
+    }
+    let end = table + 1 + column;
+    spaced[end..]
+        .chars()
+        .next()
+        .filter(|c| c.is_whitespace())
+        .map(|_| &spaced[..end])
+}
+
+/// The call one gathered payload makes of `model`, with `request_id`,
+/// asking `outputs`; `asked` names the inference options the caller set,
+/// the only ones sent, of which one the model does not read is refused
+/// before the call, as the adapter refuses it (`_inference`):
+/// `UNSUPPORTED_REQUEST` naming the model and those options.
+pub fn body(
+    payload: &Value,
+    model: &str,
+    request_id: &str,
+    outputs: &[String],
+    asked: &[String],
+) -> Result<Value, CoreError> {
+    let kind = called(payload)?;
+    let mut envelope = payload.clone();
+    envelope.remove("client_generated_keys");
+    envelope.remove("client_analysis_delta");
+    envelope.set("model", Value::text(model));
+
+    // The outputs, and a regression's statistic: the one the payload
+    // carries, the median unless one was chosen (`_output_for`).
+    let fields = Value::Array(outputs.iter().map(|f| Value::text(f)).collect());
+    if kind != "regression" {
+        envelope.set(
+            "output",
+            Value::Object(vec![("fields".to_owned(), fields.clone())]),
+        );
+    }
+    let chosen = match payload.get("output") {
+        None | Some(Value::Null) => None,
+        // As the adapter's `_output_for` reads it, `chosen or 'median'`:
+        // a statistic the payload holds is sent as it is, whatever its
+        // type, where Python reads it as true (refused
+        // by name when not text, `prediction_statistic`).
+        Some(output @ Value::Object(_)) => output
+            .get("prediction_statistic")
+            .filter(|chosen| is_chosen(chosen))
+            .cloned(),
+        Some(_) => return Err(bad_payload("output")),
+    };
+    if kind == "regression" {
+        envelope.set(
+            "output",
+            Value::Object(vec![
+                ("fields".to_owned(), fields),
+                (
+                    "prediction_statistic".to_owned(),
+                    chosen.unwrap_or_else(|| Value::text(DEFAULT_STATISTIC)),
+                ),
+            ]),
+        );
+    }
+
+    // The payload's own metadata, copied, with the call's id.
+    let mut metadata = match payload.get("metadata") {
+        None | Some(Value::Null) => Value::Object(vec![]),
+        Some(object @ Value::Object(_)) => object.clone(),
+        Some(_) => return Err(bad_payload("metadata")),
+    };
+    metadata.set("request_id", Value::text(request_id));
+    // This diagnostic field has a 1024-character server limit. Keep the
+    // original query in the request; shorten only the transmitted copy.
+    if let Some(Value::Text(query)) = metadata.get("source_query") {
+        let shortened: String = query.chars().take(1024).collect();
+        metadata.set("source_query", Value::text(&shortened));
+    }
+    envelope.set("metadata", metadata);
+
+    // Only the inference options the caller set, which the model reads: one
+    // the caller set and the model does not read is refused, and the
+    // engine's defaults are left out, the config itself when the caller set
+    // none (the reference's 26ecdd28: a deployment applies its own defaults
+    // to a request that carries none, and the SDM backends refuse any
+    // non-empty `inference_config`).
+    crate::inference::envelope(&mut envelope)?;
+    match envelope.get("inference") {
+        Some(Value::Object(_)) => {
+            if let Some(Value::Object(config)) = envelope
+                .get("inference")
+                .and_then(|i| i.get("inference_config"))
+            {
+                let mut refused: Vec<&String> = config
+                    .iter()
+                    .map(|(name, _)| name)
+                    .filter(|name| !INFERENCE_OPTIONS.contains(&name.as_str()))
+                    .filter(|name| asked.contains(name))
+                    .collect();
+                refused.sort();
+                if !refused.is_empty() {
+                    // The option field and what to change, for the host's
+                    // words: drop the options, and choose a
+                    // regression's statistic where `output_type` is one.
+                    let mut forwarded = INFERENCE_OPTIONS;
+                    forwarded.sort_unstable();
+                    let remedy = if refused.iter().any(|n| *n == "output_type") {
+                        "drop_or_statistic"
+                    } else {
+                        "drop"
+                    };
+                    return Err(CoreError::new(
+                        if remedy == "drop" {
+                            Sentence::OptionsUnread
+                        } else {
+                            Sentence::OptionsUnreadStatistic
+                        },
+                        "the model does not read an inference option the call set",
+                    )
+                    .with_field("field", Detail::text("inference_config"))
+                    .with_field("remedy", Detail::text(remedy))
+                    .with_field("model", Detail::text(model))
+                    .with_field("unsupported", texts(refused.iter().map(|n| n.as_str())))
+                    .with_field("forwarded", texts(forwarded)));
+                }
+                let sent: Vec<(String, Value)> = config
+                    .iter()
+                    .filter(|(name, _)| asked.contains(name))
+                    .filter(|(name, _)| INFERENCE_OPTIONS.contains(&name.as_str()))
+                    .cloned()
+                    .collect();
+                let mut inference = envelope.get("inference").cloned().unwrap_or(Value::Null);
+                if sent.is_empty() {
+                    inference.remove("inference_config");
+                } else {
+                    inference.set("inference_config", Value::Object(sent));
+                }
+                envelope.set("inference", inference);
+            }
+        }
+        _ => envelope.remove("inference"),
+    }
+    Ok(envelope)
+}
+
+/// Whether a statistic the payload holds is one `_output_for` takes as
+/// chosen (`chosen or 'median'`): not null, `false`, a zero, empty text, an
+/// empty list or an empty object.
+fn is_chosen(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(token) => !token.parse::<f64>().is_ok_and(|n| n == 0.0),
+        Value::Text(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(members) => !members.is_empty(),
+    }
+}
+
+/// The bytes of the call `body` writes, as the host sends them, unchanged:
+/// refused past the endpoint's limit (`PAYLOAD_BYTES`), counted on these
+/// bytes, the envelope included, which are the bytes sent (register PD-2,
+/// fix round 1), before the model is called.
+pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
+    let bytes = call.to_bytes();
+    if bytes.len() > crate::payload::PAYLOAD_BYTES {
+        return Err(CoreError::new(
+            Sentence::CallPastEndpoint,
+            "the call is larger than the endpoint takes",
+        )
+        .with_field("field", Detail::text("call"))
+        .with_field("bytes", Detail::Scalar(Scalar::UInt64(bytes.len() as u64)))
+        .with_field(
+            "limit",
+            Detail::Scalar(Scalar::UInt64(crate::payload::PAYLOAD_BYTES as u64)),
+        ));
+    }
+    Ok(bytes)
+}
+
+/// The entity a row is about, as the result gives it: as the reference's
+/// `as_declared` reads its value back as the key's dtype, or as written
+/// where it does not read or no dtype is known.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Entity {
+    Integer(i64),
+    Text(String),
+    /// A null entity, or an answer that names no id.
+    None,
+    /// A float key's entity, read as a double.
+    Float(f64),
+    /// Any other value, as written: a boolean, an integer past int64, a
+    /// float where no float is declared, an array or an object.
+    Written(Value),
+}
+
+/// An answer's prediction as the result gives it: a regression's as an
+/// integer or a double, as written (a JSON `null` as `None`), a class as
+/// its target's type.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Answer {
+    None,
+    Float(f64),
+    Bool(bool),
+    Int(i64),
+    Text(String),
+    /// A class's prediction written as a non-finite number, which the
+    /// reference's `as_declared` leaves as it is: no value of the target's
+    /// type, the item's own the number.
+    NonFinite(f64),
+    /// A class's prediction that does not read as the target's type, which
+    /// `as_declared` leaves as it is: the item's own value, as
+    /// written.
+    Written(Value),
+}
+
+/// The type a part's predictions are given back as: a regression's
+/// number (`Float`), or a class as its target's type, a float target's as
+/// a double (`FloatClass`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnswerType {
+    Float,
+    FloatClass,
+    Bool,
+    Int,
+    Text,
+}
+
+/// One answer laid out.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row {
+    pub row_index: i64,
+    /// The answer's native forecast step, validated against its task horizon;
+    /// legacy answers without entity references may also carry one.
+    pub forecast_step: Option<i64>,
+    /// The answer's place in the endpoint's order (across a merge's parts,
+    /// the parts in order), which the result's items keep.
+    pub answer_index: i64,
+    pub id: Entity,
+    pub prediction: Answer,
+    /// Each class's probability, keyed by the class as the target column
+    /// spells it, in the order the answer wrote them.
+    pub probabilities: Option<Vec<(String, f64)>>,
+    /// The item's scores and rankings, each a mapping as a JSON object, in
+    /// the order written.
+    pub scores: Option<Vec<f64>>,
+    pub rankings: Option<Vec<Value>>,
+    /// The item's explanation, a mapping as `sdm_wire::response::mapping`
+    /// lays one out.
+    pub explanation: Option<Value>,
+    pub gradient: Option<Value>,
+    pub gradient_position: Option<i64>,
+    /// The item's own metadata, a mapping as the explanation.
+    pub metadata: Option<Value>,
+    /// Each quantile's value, keyed as the answer wrote it, in the order
+    /// written, a mapping as the explanation.
+    pub quantiles: Option<Value>,
+    /// The answer's embedding, in the order written.
+    pub embeddings: Option<Vec<f64>>,
+}
+
+/// The answer to one call, or the parts of one request put together.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Part {
+    pub columns: Option<String>,
+    pub model: String,
+    pub request_id: String,
+    /// The endpoint's `metadata` object.
+    pub metadata: Value,
+    /// The answers, in the endpoint's order.
+    pub rows: Vec<Row>,
+    pub answers: AnswerType,
+    /// Whether an entity's key is text (else an integer), for the result's
+    /// `id` column where no answer's entity gives its type.
+    pub text_ids: bool,
+    /// The result's explanation (`PredictionResult.explanation`):
+    /// the first answer's in the endpoint's order that holds a mapping not
+    /// empty (`normalize`), the first part's that has one across a merge's
+    /// parts, and for a forecast `{"by_forecast_step": {"<step>":
+    /// explanation,...}}`, each step that has one in step order, keyed by
+    /// the step's number in decimal digits, as JSON keys a mapping
+    /// (`_by_step`); none where no answer explains.
+    pub explanation: Option<Value>,
+}
+
+/// Whether a mapping as `sdm_wire::response::mapping` lays one out is one
+/// Python takes as true: not empty.
+fn holds(mapping: &Value) -> bool {
+    match mapping {
+        Value::Object(members) => !members.is_empty(),
+        Value::Array(pairs) => !pairs.is_empty(),
+        _ => true,
+    }
+}
+
+/// The answer to a request with no rows, made without a call
+/// (`_empty_answer`): no rows, no request id, empty metadata.
+pub fn empty(model: &str, payload: &Value) -> Part {
+    Part {
+        columns: None,
+        model: model.to_owned(),
+        request_id: String::new(),
+        metadata: Value::Object(vec![]),
+        rows: vec![],
+        answers: answer_type(payload).unwrap_or(AnswerType::Float),
+        text_ids: entity_dtype(payload).as_deref() == Some("string"),
+        explanation: None,
+    }
+}
+
+/// The target's dtype as the payload's task names it.
+fn target_dtype(payload: &Value) -> Option<&str> {
+    payload.get("task")?.get("target")?.get("dtype")?.as_text()
+}
+
+/// How a payload's answers are given back (`as_declared_target`): a
+/// regression's as doubles, a classification's as its target's dtype, a
+/// boolean, an integer, a double or, for any other dtype, the class's
+/// text.
+fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
+    let kind = called(payload)?;
+    if kind == "temporal_link_prediction" {
+        // Link rankings and any optional prediction retain the server's values.
+        return Ok(AnswerType::Text);
+    }
+    if !classifies(kind) {
+        return Ok(AnswerType::Float);
+    }
+    Ok(classification_answer_type(payload))
+}
+
+/// Shared declared-target conversion, after the caller validates its task.
+pub(crate) fn classification_answer_type(payload: &Value) -> AnswerType {
+    match target_dtype(payload) {
+        Some(d) if d.starts_with("bool") => AnswerType::Bool,
+        Some(d) if d.starts_with("int") => AnswerType::Int,
+        Some(d) if d.starts_with("float") => AnswerType::FloatClass,
+        _ => AnswerType::Text,
+    }
+}
+
+/// The spellings a declared boolean is read back from (`_as_bool`).
+const TRUE: [&str; 3] = ["true", "t", "1"];
+const FALSE: [&str; 3] = ["false", "f", "0"];
+
+/// A class read back as the target's boolean (`_as_bool`): a boolean, text
+/// that spells one (trimmed, any case), or the integer 0 or 1.
+fn as_bool(value: &Value) -> Option<bool> {
+    match value {
+        Value::Bool(b) => Some(*b),
+        Value::Text(text) => {
+            let text = text.trim().to_lowercase();
+            if TRUE.contains(&text.as_str()) {
+                Some(true)
+            } else if FALSE.contains(&text.as_str()) {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        Value::Number(token) if is_integer_token(token) => match token.parse::<i64>() {
+            Ok(0) => Some(false),
+            Ok(1) => Some(true),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A class read back as the target's integer (`as_declared`'s `int`): text
+/// of an integer (trimmed), an integer, or a float that is whole.
+fn as_int(value: &Value) -> Option<i64> {
+    match value {
+        Value::Text(text) => text.trim().parse::<i64>().ok(),
+        Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
+        Value::Number(token) => {
+            let float: f64 = token.parse().ok()?;
+            (float.is_finite() && float.fract() == 0.0 && float.abs() < 9.2e18)
+                .then_some(float as i64)
+        }
+        _ => None,
+    }
+}
+
+/// A class read back as the target's double (`as_declared`'s `float`):
+/// text of a number (trimmed; an infinity or a NaN by name), or a number,
+/// an integer past a double's range not one.
+fn as_float(value: &Value) -> Option<f64> {
+    match value {
+        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        Value::Number(token) => token
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite() || !is_integer_token(token)),
+        _ => None,
+    }
+}
+
+/// One answer's prediction as the result gives it.
+fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, CoreError> {
+    let Some(value) = prediction else {
+        return Ok(Answer::None);
+    };
+    match answers {
+        // A regression's prediction is a number: a token past a double's
+        // range, a `NaN` and
+        // an infinity read as the reference reads them; an integer past
+        // int64, text, a boolean, an array or an object refused.
+        AnswerType::Float => match value {
+            // An integer is kept as the integer it is (the reference's
+            // reader gives a Python int); one past int64 is refused.
+            Value::Number(token) if is_integer_token(token) => token
+                .parse::<i64>()
+                .map(Answer::Int)
+                .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
+            Value::Number(token) => token
+                .parse::<f64>()
+                .map(Answer::Float)
+                .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
+            _ => Err(bad_response("prediction.prediction", "not_a_number")),
+        },
+        // A float target's class is read back as a double, a non-finite one
+        // too, which the target's type holds.
+        AnswerType::FloatClass => Ok(as_float(value).map_or_else(|| written(value), Answer::Float)),
+        // A class written as a non-finite number is passed through as the
+        // reference passes it: no target's
+        // type holds it, so `as_declared` leaves it as it is.
+        _ if non_finite(value).is_some() => {
+            Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
+        }
+        AnswerType::Bool => Ok(as_bool(value).map_or_else(|| written(value), Answer::Bool)),
+        AnswerType::Int => Ok(as_int(value).map_or_else(|| written(value), Answer::Int)),
+        AnswerType::Text => Ok(match value {
+            Value::Text(text) => Answer::Text(text.clone()),
+            other => written(other),
+        }),
+    }
+}
+
+/// A class's prediction as written, where it does not read as the target's
+/// type (`as_declared` leaving it as it is): a null, which an item's
+/// reader takes as none, none.
+fn written(value: &Value) -> Answer {
+    match value {
+        Value::Null => Answer::None,
+        other => Answer::Written(other.clone()),
+    }
+}
+
+/// The number a token stands for when it is not finite: `NaN`,
+/// `Infinity`, `-Infinity`, or a float token past a double's range.
+fn non_finite(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(token) if !is_integer_token(token) => {
+            token.parse::<f64>().ok().filter(|v| !v.is_finite())
+        }
+        _ => None,
+    }
+}
+
+/// The probabilities keyed by each class as the target column spells it
+/// (`_as_the_column_spells_them`), left as written where reading them back
+/// would make two classes one; a float target's class as `float_text`
+/// spells the double it reads as.
+pub(crate) fn spelled(
+    probabilities: &[(String, f64)],
+    answers: AnswerType,
+    float_text: fn(f64) -> String,
+) -> Vec<(String, f64)> {
+    let respelled: Vec<(String, f64)> = probabilities
+        .iter()
+        .map(|(class, p)| {
+            let as_written = Value::Text(class.clone());
+            let key = match answers {
+                AnswerType::Bool => as_bool(&as_written).map(|b| {
+                    if b {
+                        "True".to_owned()
+                    } else {
+                        "False".to_owned()
+                    }
+                }),
+                AnswerType::Int => as_int(&as_written).map(|n| n.to_string()),
+                AnswerType::FloatClass => as_float(&as_written).map(float_text),
+                _ => None,
+            };
+            (key.unwrap_or_else(|| class.clone()), *p)
+        })
+        .collect();
+    let distinct: BTreeSet<&str> = respelled.iter().map(|(k, _)| k.as_str()).collect();
+    if distinct.len() == probabilities.len() {
+        respelled
+    } else {
+        probabilities.to_vec()
+    }
+}
+
+/// The answer to one payload laid out (`normalize`, `_named_entities`,
+/// `as_declared_target`), its prediction given back as [`answer_of`] reads
+/// it. Where the payload's predicted instance table has a column named with
+/// the entity-reference prefix (the first such, by position), each answer
+/// is checked against the row it claims before it is given the entity of
+/// that row, read as [`entity`] reads it (in range, once per row or native forecast step,
+/// under the requested instance id, with every requested row/step answered).
+/// Where it has none, each answer is given back as written, as the
+/// reference gives it: its id the instance id it was answered under, as
+/// text, and no row checked (a `row_index` or forecast step past int64,
+/// which the result's columns do not hold, refused as `INVALID_RESPONSE`,
+/// B-86). On both paths its probabilities are keyed as
+/// [`spelled`] keys them, a float target's class by `float_text`.
+pub fn layout(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+) -> Result<Part, CoreError> {
+    layout_with_answers(payload, response, float_text, answer_type(payload)?)
+}
+
+/// Shared row presentation after route-specific task validation.
+pub(crate) fn layout_with_answers(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+    answers: AnswerType,
+) -> Result<Part, CoreError> {
+    let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
+    let horizon = forecast_horizon(payload)?;
+    let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
+        Some(reference) => {
+            let dtype = key_dtype(payload, names[reference]);
+            let text_ids = dtype.as_deref() == Some("string");
+            (
+                named(
+                    response,
+                    &names,
+                    rows,
+                    reference,
+                    dtype.as_deref(),
+                    float_text,
+                    horizon,
+                )?,
+                text_ids,
+            )
+        }
+        None if horizon.is_some() => return Err(bad_payload("predict.entity_reference")),
+        None => (as_written(response)?, true),
+    };
+
+    let mut decoder = crate::gradients::Decoder::new(payload).with_answers(answers, float_text);
+    let mut laid = Vec::with_capacity(placed.len());
+    for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
+        if let Some(field) = item.carried.first() {
+            return Err(not_yet("response_field").with_field("field", Detail::text(*field)));
+        }
+        laid.push(Row {
+            row_index,
+            forecast_step,
+            answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
+            id,
+            prediction: answer_of(item.prediction.as_ref(), answers)?,
+            probabilities: item
+                .probabilities
+                .as_ref()
+                .map(|given| spelled(given, answers, float_text)),
+            scores: item.scores.clone(),
+            rankings: item.rankings.clone(),
+            explanation: item.explanation.clone(),
+            gradient: decoder.decode(item.explanation.as_ref(), row_index)?,
+            gradient_position: None,
+            metadata: item.metadata.clone(),
+            quantiles: item.quantiles.clone(),
+            embeddings: item.embeddings.clone(),
+        });
+    }
+    // Native forecast responses may arrive in any order. Keep the endpoint's
+    // answer_index as provenance while presenting rows in supplied-row/step order.
+    if horizon.is_some() {
+        laid.sort_by_key(|row| (row.row_index, row.forecast_step));
+    }
+    let explanation = response
+        .predictions
+        .iter()
+        .filter_map(|item| item.explanation.as_ref())
+        .find(|e| holds(e))
+        .cloned();
+    Ok(Part {
+        columns: None,
+        model: response.model.clone(),
+        request_id: response.id.clone(),
+        metadata: response.metadata.clone(),
+        rows: laid,
+        answers,
+        text_ids,
+        explanation,
+    })
+}
+
+/// Native forecasting uses one scalar history and a positive fixed horizon.
+/// The model's response must answer every requested row/step pair exactly once.
+fn forecast_horizon(payload: &Value) -> Result<Option<u32>, CoreError> {
+    if kind_of(payload)? != "forecasting" {
+        return Ok(None);
+    }
+    let count = match payload
+        .get("task")
+        .and_then(|task| task.get("num_forecasts"))
+    {
+        None => 1,
+        Some(Value::Number(token)) if is_integer_token(token) => token
+            .parse::<u32>()
+            .ok()
+            .filter(|count| *count > 0)
+            .ok_or_else(|| bad_payload("task.num_forecasts"))?,
+        _ => return Err(bad_payload("task.num_forecasts")),
+    };
+    Ok(Some(count))
+}
+
+/// Each answer's row, entity and forecast step, where the payload names
+/// its entities in the column at `reference` (`_named_entities`).
+fn named(
+    response: &PredictionResponse,
+    names: &[&str],
+    rows: &[Value],
+    reference: usize,
+    dtype: Option<&str>,
+    float_text: fn(f64) -> String,
+    horizon: Option<u32>,
+) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
+    let instance = names.iter().position(|n| *n == INSTANCE_ID);
+    let cell = |row: &Value, at: usize| -> Result<Value, CoreError> {
+        match row {
+            Value::Array(cells) => cells.get(at).cloned().ok_or_else(|| bad_payload("predict")),
+            _ => Err(bad_payload("predict")),
+        }
+    };
+    let entities = rows
+        .iter()
+        .map(|row| Ok(entity(&cell(row, reference)?, dtype)))
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    let instances = match instance {
+        Some(at) => Some(
+            rows.iter()
+                .map(|row| Ok(instance_text(&cell(row, at)?, float_text)))
+                .collect::<Result<Vec<_>, CoreError>>()?,
+        ),
+        None => None,
+    };
+
+    if horizon.is_some() && instances.is_none() {
+        return Err(bad_payload("predict.instance_id"));
+    }
+    let mut answered = vec![false; entities.len()];
+    let mut forecast_pairs = BTreeSet::new();
+    let mut named = Vec::with_capacity(response.predictions.len());
+    for item in &response.predictions {
+        let index = usize::try_from(item.row_index)
+            .ok()
+            .filter(|i| *i < entities.len())
+            .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
+        let forecast_step = match horizon {
+            Some(count) => {
+                let step = item
+                    .forecast_step
+                    .ok_or_else(|| bad_response("prediction.forecast_step", "missing"))?;
+                let step = u32::try_from(step)
+                    .ok()
+                    .filter(|step| *step > 0 && *step <= count)
+                    .ok_or_else(|| bad_response("prediction.forecast_step", "out_of_range"))?;
+                if !forecast_pairs.insert((index, step)) {
+                    return Err(bad_response("prediction.forecast_step", "repeated"));
+                }
+                Some(i64::from(step))
+            }
+            None => {
+                if item.forecast_step.is_some() {
+                    return Err(bad_response("prediction.forecast_step", "not_a_forecast"));
+                }
+                if answered[index] {
+                    return Err(bad_response("prediction.row_index", "repeated"));
+                }
+                None
+            }
+        };
+        answered[index] = true;
+        if let Some(instances) = &instances {
+            let Some(id) = &item.id else {
+                return Err(bad_response("prediction.id", "missing"));
+            };
+            if instances[index].as_deref() != Some(id.as_str()) {
+                return Err(bad_response("prediction.id", "not_the_row_s"));
+            }
+        }
+        named.push((
+            i64::try_from(index).unwrap_or(i64::MAX),
+            entities[index].clone(),
+            forecast_step,
+        ));
+    }
+    if answered.iter().any(|a| !a) {
+        return Err(bad_response("prediction.row_index", "unanswered"));
+    }
+    if let Some(count) = horizon {
+        // Compare the complete grid size without allocating an untrusted horizon.
+        let expected = entities
+            .len()
+            .checked_mul(usize::try_from(count).map_err(|_| bad_payload("task.num_forecasts"))?)
+            .ok_or_else(|| bad_payload("task.num_forecasts"))?;
+        if forecast_pairs.len() != expected {
+            return Err(bad_response("prediction.forecast_step", "unanswered"));
+        }
+    }
+    Ok(named)
+}
+
+/// Each answer's row, id and forecast step as the endpoint wrote them,
+/// where the payload names no entity (`_named_entities` with no reference
+/// column): no row is checked, and the id is the instance id the answer
+/// names, as text, or none.
+fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
+    response
+        .predictions
+        .iter()
+        .map(|item| {
+            let row_index = i64::try_from(item.row_index)
+                .map_err(|_| bad_response("prediction.row_index", "out_of_range"))?;
+            let forecast_step = item
+                .forecast_step
+                .map(i64::try_from)
+                .transpose()
+                .map_err(|_| bad_response("prediction.forecast_step", "out_of_range"))?;
+            let id = item.id.clone().map_or(Entity::None, Entity::Text);
+            Ok((row_index, id, forecast_step))
+        })
+        .collect()
+}
+
+/// The answers of one request sent in several calls, put together
+/// (`PredictionResult.merge`): none refused (`INTERNAL_ERROR`, as the
+/// reference's merge refuses nothing to merge), one as it is; several, each
+/// answering its own rows, are one: every part's answers in order, the
+/// first part's model and request id, its metadata with `batches` (how many
+/// parts) and `batch_request_ids` (each part's id), parts of different
+/// models refused (`INTERNAL_ERROR`).
+pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
+    let descriptors = parts
+        .iter()
+        .map(|part| sdm_contract::result::MergeDescriptor {
+            manual_gradients: vec![],
+            columns: part.columns.clone(),
+            model: part.model.clone(),
+            request_id: part.request_id.clone(),
+            outputs: vec![],
+            has_explanation: part.explanation.as_ref().is_some_and(crate::result::truth),
+            names_rows: true,
+            names_step: part.rows.iter().any(|row| row.forecast_step.is_some()),
+            candidates: vec![],
+            gradient_rows: crate::gradients::records(&part.rows),
+        })
+        .collect::<Vec<_>>();
+    let plan = crate::result::plan(&descriptors)?;
+    merge_planned(parts, &plan)
+}
+
+/// Assemble owned rows after the common metadata policy has selected owners.
+pub fn merge_planned(
+    parts: Vec<Part>,
+    plan: &sdm_contract::result::ResultMergePlan,
+) -> Result<Part, CoreError> {
+    let mut parts = parts.into_iter();
+    let Some(mut first) = parts.next() else {
+        return Err(CoreError::new(Sentence::Internal, "no parts to merge"));
+    };
+    first.columns = plan.columns.clone();
+    if plan.single {
+        return Ok(first);
+    }
+    first.metadata.set(
+        "batches",
+        Value::int(i64::try_from(plan.batches).unwrap_or(i64::MAX)),
+    );
+    first.metadata.set(
+        "batch_request_ids",
+        Value::texts(plan.batch_request_ids.iter().map(String::as_str)),
+    );
+    if plan.explanation_part != Some(0) {
+        first.explanation = None;
+    }
+    for (at, part) in parts.enumerate() {
+        first.rows.extend(part.rows);
+        if plan.explanation_part == Some(at + 1) {
+            first.explanation = part.explanation;
+        }
+    }
+    let gradient_positions = plan
+        .gradients
+        .as_ref()
+        .map(|c| {
+            c.rows
+                .iter()
+                .map(|r| (r.answer_index, r.row_index))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
+    for (at, row) in first.rows.iter_mut().enumerate() {
+        row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
+        row.gradient_position = gradient_positions.get(&row.answer_index).copied();
+        if let Some(position) = row.gradient_position {
+            row.row_index = position;
+        }
+    }
+    Ok(first)
+}
+
+/// A forecast's answers put together, each step's answer to its own
+/// regression (`_by_step`, fix 21): every step's answers in step
+/// order, each in the endpoint's order and carrying its step, the first
+/// step's model, request id and answer type, and no metadata (the
+/// client's merged result names none); no step refused (`INTERNAL_ERROR`).
+pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
+    let mut steps = steps.into_iter();
+    let Some((step, first)) = steps.next() else {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a forecast with no step to put together",
+        ));
+    };
+    let columns = first.columns.clone();
+    let mut rows = Vec::new();
+    let mut explained = Vec::new();
+    let (model, request_id, answers, text_ids) =
+        (first.model, first.request_id, first.answers, first.text_ids);
+    for (step, part, explanation) in std::iter::once((step, first.rows, first.explanation))
+        .chain(steps.map(|(s, p)| (s, p.rows, p.explanation)))
+    {
+        rows.extend(part.into_iter().map(|row| Row {
+            forecast_step: Some(i64::from(step)),
+            ..row
+        }));
+        if let Some(explanation) = explanation {
+            explained.push((step.to_string(), explanation));
+        }
+    }
+    for (at, row) in rows.iter_mut().enumerate() {
+        row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
+    }
+    Ok(Part {
+        columns,
+        model,
+        request_id,
+        metadata: Value::Object(vec![]),
+        rows,
+        answers,
+        text_ids,
+        explanation: (!explained.is_empty()).then(|| {
+            Value::Object(vec![(
+                "by_forecast_step".to_owned(),
+                Value::Object(explained),
+            )])
+        }),
+    })
+}
+
+/// The outputs the caller named that the answer does not carry
+/// (`PredictionResult.absent`), each once, in the order named: none for an
+/// answer with no rows; `prediction` when no answer holds one,
+/// `probabilities`, `quantiles` or `embeddings` when none holds any,
+/// `explanation` when the result has none ([`Part::explanation`]), and the
+/// fields this build refuses an answer for carrying always; a name the
+/// result does not know is taken as carried.
+pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
+    if part.rows.is_empty() {
+        return vec![];
+    }
+    let mut seen = BTreeSet::new();
+    named
+        .iter()
+        .filter(|name| seen.insert(name.as_str()))
+        .filter(|name| match name.as_str() {
+            "prediction" => part.rows.iter().all(|r| r.prediction == Answer::None),
+            "probabilities" => part
+                .rows
+                .iter()
+                .all(|r| r.probabilities.as_ref().is_none_or(Vec::is_empty)),
+            "scores" => part
+                .rows
+                .iter()
+                .all(|r| r.scores.as_ref().is_none_or(Vec::is_empty)),
+            "rankings" => part
+                .rows
+                .iter()
+                .all(|r| r.rankings.as_ref().is_none_or(Vec::is_empty)),
+            "quantiles" => part.rows.iter().all(|r| {
+                r.quantiles
+                    .as_ref()
+                    .is_none_or(|q| matches!(q, Value::Object(m) if m.is_empty()))
+            }),
+            "explanation" => part.explanation.is_none(),
+            "embeddings" => part
+                .rows
+                .iter()
+                .all(|r| r.embeddings.as_ref().is_none_or(Vec::is_empty)),
+            _ => false,
+        })
+        .cloned()
+        .collect()
+}
+
+/// The outputs [`absent`] looks for, in the order [`left_out`] names them.
+pub const LOOKED_FOR: [&str; 7] = [
+    "prediction",
+    "probabilities",
+    "scores",
+    "rankings",
+    "quantiles",
+    "explanation",
+    "embeddings",
+];
+
+/// Every output of [`LOOKED_FOR`] the answer does not carry, as [`absent`]
+/// reads each: what the result says it left out, for a host to read a
+/// caller's `absent(...)` off rather than keep a copy of the rule (
+/// fix 1).
+pub fn left_out(part: &Part) -> Vec<String> {
+    absent(part, &LOOKED_FOR.map(String::from))
+}
+
+/// The notice of the outputs [`absent`] found, naming the model asked.
+pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
+    Notice {
+        sentence: Sentence::OutputsAbsent,
+        message: "the answer left out outputs the request asked for",
+        fields: vec![
+            ("model", Detail::text(model)),
+            ("absent", texts(absent.iter().map(String::as_str))),
+        ],
+    }
+}
+
+/// A forecast's steps the caller asked to be explained (an `explanation`
+/// among the outputs it named) that came back with none, while another
+/// step came back with one (`_warn_of_steps_that_carry_no_explanation`):
+/// the notice naming the model, how many steps were explained of how many,
+/// and the steps with none, in step order; `None` where every step or none
+/// was explained, or none was asked for.
+pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) -> Option<Notice> {
+    if !named.iter().any(|n| n == "explanation") {
+        return None;
+    }
+    let missing: Vec<u32> = steps
+        .iter()
+        .filter(|(_, part)| part.explanation.is_none())
+        .map(|(step, _)| *step)
+        .collect();
+    if missing.is_empty() || missing.len() == steps.len() {
+        return None;
+    }
+    Some(Notice {
+        sentence: Sentence::StepsUnexplained,
+        message: "a forecast's steps were explained, but not every one",
+        fields: vec![
+            ("model", Detail::text(model)),
+            ("explained", count(steps.len() - missing.len())),
+            ("steps", count(steps.len())),
+            (
+                "missing",
+                Detail::List(missing.into_iter().map(Scalar::UInt32).collect()),
+            ),
+        ],
+    })
+}
+
+/// The result of a part: one row per answer, ordered by `row_index` (as
+/// `PredictionResult.to_pandas` orders them; the order is stable among
+/// equal ones, which a merge of parts holds), with `row_index` (int64),
+/// `id` (int64 where every id is an integer, utf8 where every one is text,
+/// the part's key type deciding where none is either; a missing one null;
+/// where they are mixed, or one is of another type, utf8 with
+/// `id_as_written`, each id as the JSON text of the reference's item value,
+/// or null), `forecast_step` when any answer given as written carries one
+/// (int64, null where it has none), `prediction` when any answer holds one (a regression's as pandas infers it: int64 where
+/// every answer is an integer, else float64, an integer as its double; a
+/// class as bool, int64 or utf8; a missing one as null, a NaN as NaN; with
+/// `prediction_as_answered`, each answer's prediction as the JSON text of
+/// the reference's item value, or null, where the column changed one: an
+/// integer widened, a class written as a non-finite number) and
+/// `probabilities` when any answer holds them (a map of each class, as its
+/// column spells it, to its probability, in the order written),
+/// `quantiles`, `explanation` and `metadata` when any answer carries one
+/// (utf8, the JSON text of each answer's mapping, null where it had none;
+/// and ), and last
+/// `answer_index` (int64, the answer's place in the endpoint's order, which
+/// the result's items keep, as the reference's do). The result's own
+/// explanation ([`Part::explanation`]), where it has one, is the JSON text
+/// on the schema's metadata under `explanation`.
+pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
+    let mut rows: Vec<&Row> = part.rows.iter().collect();
+    rows.sort_by_key(|r| r.row_index);
+    let row_index: ArrayRef = Arc::new(Int64Array::from_iter_values(
+        rows.iter().map(|r| r.row_index),
+    ));
+    let ids: Vec<&Entity> = rows.iter().map(|r| &r.id).collect();
+    let (id_fields, id_columns) = id_columns(&ids, part.text_ids);
+    let mut fields = vec![Field::new("row_index", DataType::Int64, false)];
+    fields.extend(id_fields);
+    let mut columns = vec![row_index];
+    columns.extend(id_columns);
+    if rows.iter().any(|r| r.forecast_step.is_some()) {
+        fields.push(Field::new("forecast_step", DataType::Int64, true));
+        columns.push(Arc::new(Int64Array::from_iter(
+            rows.iter().map(|r| r.forecast_step),
+        )));
+    }
+    if rows.iter().any(|r| r.prediction != Answer::None) {
+        // Classes given back as written, not of the target's type, all of
+        // one kind with the rest: the column as pandas infers it
+        // from the values, as the reference's frame holds them.
+        let as_written = as_written_column(&rows);
+        let (data_type, column): (DataType, ArrayRef) = match (&as_written, part.answers) {
+            (Some((data_type, column)), _) => (data_type.clone(), Arc::clone(column)),
+            (None, answers) => match answers {
+                // A regression's column as pandas infers it from the answers:
+                // int64 where every answer is an integer, else float64, an
+                // integer as the double it reads as; a missing one is null.
+                AnswerType::Float if regression_integers(&rows) => (
+                    DataType::Int64,
+                    Arc::new(Int64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Int(n) => Some(n),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Float => (
+                    DataType::Float64,
+                    Arc::new(Float64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Float(v) => Some(v),
+                            #[allow(
+                                clippy::cast_precision_loss,
+                                reason = "as the reference's frame reads an integer among floats"
+                            )]
+                            Answer::Int(n) => Some(n as f64),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                // A float target's classes as doubles.
+                AnswerType::FloatClass => (
+                    DataType::Float64,
+                    Arc::new(Float64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Float(v) => Some(v),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Bool => (
+                    DataType::Boolean,
+                    Arc::new(BooleanArray::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Bool(b) => Some(b),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Int => (
+                    DataType::Int64,
+                    Arc::new(Int64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Int(n) => Some(n),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Text => (
+                    DataType::Utf8,
+                    Arc::new(StringArray::from_iter(rows.iter().map(
+                        |r| match &r.prediction {
+                            Answer::Text(t) => Some(t.clone()),
+                            _ => None,
+                        },
+                    ))),
+                ),
+            },
+        };
+        let integer = |answer: &Answer| match answer {
+            Answer::Int(_) => true,
+            Answer::Written(Value::Number(token)) => is_integer_token(token),
+            _ => false,
+        };
+        let widened = (data_type == DataType::Float64
+            && rows.iter().any(|r| integer(&r.prediction)))
+            || rows
+                .iter()
+                .any(|r| matches!(r.prediction, Answer::NonFinite(_)))
+            || (as_written.is_none()
+                && rows
+                    .iter()
+                    .any(|r| matches!(r.prediction, Answer::Written(_))));
+        fields.push(Field::new("prediction", data_type, true));
+        columns.push(column);
+        // Where the column does not hold each answer as the reference's
+        // items do (a regression's integer widened to a double; a class
+        // written as a non-finite number, which no target's type holds),
+        // each answer's prediction as the JSON text of the item's value,
+        // null where it had none.
+        if widened {
+            fields.push(Field::new("prediction_as_answered", DataType::Utf8, true));
+            columns.push(Arc::new(StringArray::from_iter(
+                rows.iter().map(|r| as_answered(&r.prediction)),
+            )));
+        }
+    }
+    if rows.iter().any(|r| r.probabilities.is_some()) {
+        let names = MapFieldNames {
+            entry: "entries".to_owned(),
+            key: "class".to_owned(),
+            value: "probability".to_owned(),
+        };
+        let mut builder = MapBuilder::new(Some(names), StringBuilder::new(), Float64Builder::new());
+        for row in &rows {
+            // An empty mapping is one, as the reference's item holds `{}`.
+            match &row.probabilities {
+                Some(given) => {
+                    for (class, p) in given {
+                        builder.keys().append_value(class);
+                        builder.values().append_value(*p);
+                    }
+                    builder.append(true).map_err(|_| internal_layout())?;
+                }
+                _ => builder.append(false).map_err(|_| internal_layout())?,
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new(
+            "probabilities",
+            column.data_type().clone(),
+            true,
+        ));
+        columns.push(Arc::new(column));
+    }
+    // An item's scores and rankings, each where an answer carries
+    // them: a list of doubles, and a list of each mapping's JSON text.
+    if rows.iter().any(|r| r.scores.is_some()) {
+        let mut builder = ListBuilder::new(Float64Builder::new());
+        for row in &rows {
+            match &row.scores {
+                Some(scores) => {
+                    builder.values().append_slice(scores);
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new("scores", column.data_type().clone(), true));
+        columns.push(Arc::new(column));
+    }
+    if rows.iter().any(|r| r.rankings.is_some()) {
+        let mut builder = ListBuilder::new(StringBuilder::new());
+        for row in &rows {
+            match &row.rankings {
+                Some(rankings) => {
+                    for mapping in rankings {
+                        builder
+                            .values()
+                            .append_value(String::from_utf8_lossy(&mapping.to_bytes()));
+                    }
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new("rankings", column.data_type().clone(), true));
+        columns.push(Arc::new(column));
+    }
+    // Each answer's quantiles, explanation and own metadata,
+    // where any answer carries one: the JSON text of the mapping, null where
+    // it had none.
+    for (name, of) in [
+        (
+            "quantiles",
+            (|r: &Row| r.quantiles.as_ref()) as fn(&Row) -> Option<&Value>,
+        ),
+        ("explanation", |r: &Row| r.explanation.as_ref()),
+        ("metadata", |r: &Row| r.metadata.as_ref()),
+    ] {
+        if rows.iter().any(|r| of(r).is_some()) {
+            fields.push(Field::new(name, DataType::Utf8, true));
+            columns.push(Arc::new(StringArray::from_iter(rows.iter().map(|r| {
+                of(r).map(|v| String::from_utf8_lossy(&v.to_bytes()).into_owned())
+            }))));
+        }
+    }
+    // Each answer's embedding, a list of float64, null where it has none
+    // (`_SEQUENCE_FIELDS`).
+    if rows.iter().any(|r| r.embeddings.is_some()) {
+        let mut builder = ListBuilder::new(Float64Builder::new());
+        for row in &rows {
+            match &row.embeddings {
+                Some(given) => {
+                    builder.values().append_slice(given);
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new("embeddings", column.data_type().clone(), true));
+        columns.push(Arc::new(column));
+    }
+    fields.push(Field::new("answer_index", DataType::Int64, false));
+    columns.push(Arc::new(Int64Array::from_iter_values(
+        rows.iter().map(|r| r.answer_index),
+    )));
+    // The result's explanation, as the JSON text of
+    // [`Part::explanation`], on the schema's metadata under `explanation`.
+    let schema = Schema::new(fields);
+    let mut metadata = schema.metadata().clone();
+    metadata.insert(
+        "sdm.answer_type".to_owned(),
+        match part.answers {
+            AnswerType::Float => "Float",
+            AnswerType::FloatClass => "FloatClass",
+            AnswerType::Bool => "Bool",
+            AnswerType::Int => "Int",
+            AnswerType::Text => "Text",
+        }
+        .to_owned(),
+    );
+    metadata.insert("sdm.text_ids".to_owned(), part.text_ids.to_string());
+    if let Some(explanation) = &part.explanation {
+        metadata.insert(
+            "explanation".to_owned(),
+            String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
+        );
+    }
+    if let Some(collection) = crate::gradients::collection(crate::gradients::records(&part.rows))? {
+        metadata.insert(
+            "sdm.gradients".into(),
+            serde_json::to_string(&collection).map_err(|_| internal_layout())?,
+        );
+    }
+    if let Some(columns) = &part.columns {
+        metadata.insert("sdm.columns".into(), columns.clone());
+    }
+    let schema = schema.with_metadata(metadata);
+    RecordBatch::try_new(Arc::new(schema), columns).map_err(|_| internal_layout())
+}
+
+/// The result's `id` column, and `id_as_written` where it is needed, of
+/// `ids` in the result's order: int64 where every id is an integer, utf8
+/// where every one is text, `text_ids` (the key's type) deciding where none
+/// is either; a missing one null; where they are mixed, or one is of
+/// another type, utf8 with `id_as_written`, each id as the JSON text of the
+/// reference's item value, or null.
+pub(crate) fn id_columns(ids: &[&Entity], text_ids: bool) -> (Vec<Field>, Vec<ArrayRef>) {
+    let integers = ids
+        .iter()
+        .all(|r| matches!(**r, Entity::Integer(_) | Entity::None));
+    let texts = ids
+        .iter()
+        .all(|r| matches!(**r, Entity::Text(_) | Entity::None));
+    let (id_type, column): (DataType, ArrayRef) = if integers && !(texts && text_ids) {
+        (
+            DataType::Int64,
+            Arc::new(Int64Array::from_iter(ids.iter().map(|r| match &**r {
+                Entity::Integer(n) => Some(*n),
+                _ => None,
+            }))),
+        )
+    } else {
+        (
+            DataType::Utf8,
+            Arc::new(StringArray::from_iter(ids.iter().map(|r| match &**r {
+                Entity::Integer(n) => Some(n.to_string()),
+                Entity::Text(text) => Some(text.clone()),
+                other => id_as_written(other),
+            }))),
+        )
+    };
+    let mut fields = vec![Field::new("id", id_type, true)];
+    let mut columns = vec![column];
+    // Where the ids are neither all integers nor all text (a null aside),
+    // or one is of another type, each id as the JSON text of the
+    // reference's item value, null where it had none.
+    if !integers && !texts {
+        fields.push(Field::new("id_as_written", DataType::Utf8, true));
+        columns.push(Arc::new(StringArray::from_iter(
+            ids.iter().map(|r| id_as_written(r)),
+        )));
+    }
+    (fields, columns)
+}
+
+/// The prediction column where an answer was given back as written, not
+/// of the target's type, and every answer is of one kind with it, as
+/// pandas infers the reference's frame's column from the items' values: a
+/// boolean column, an int64 column of integers, a float64 column of
+/// numbers (an integer as its double), or a text column; a missing one
+/// null. None where no answer was given back so, or the answers are of
+/// several kinds, the column then the target's type's, with each answer's
+/// JSON text beside it.
+fn as_written_column(rows: &[&Row]) -> Option<(DataType, ArrayRef)> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Kind {
+        Bool,
+        Int,
+        Float,
+        Text,
+    }
+    if !rows
+        .iter()
+        .any(|r| matches!(r.prediction, Answer::Written(_)))
+    {
+        return None;
+    }
+    let kind_of = |answer: &Answer| -> Option<Option<Kind>> {
+        Some(match answer {
+            Answer::None => None,
+            Answer::Bool(_) | Answer::Written(Value::Bool(_)) => Some(Kind::Bool),
+            Answer::Int(_) => Some(Kind::Int),
+            Answer::Written(Value::Number(token)) if is_integer_token(token) => {
+                token.parse::<i64>().ok()?;
+                Some(Kind::Int)
+            }
+            Answer::Float(_) | Answer::NonFinite(_) | Answer::Written(Value::Number(_)) => {
+                Some(Kind::Float)
+            }
+            Answer::Text(_) | Answer::Written(Value::Text(_)) => Some(Kind::Text),
+            Answer::Written(_) => return None,
+        })
+    };
+    let mut kinds = BTreeSet::new();
+    for row in rows {
+        if let Some(kind) = kind_of(&row.prediction)? {
+            kinds.insert(kind as u8);
+        }
+    }
+    let kind = match kinds.into_iter().collect::<Vec<_>>().as_slice() {
+        [one] => *one,
+        [a, b] if *a == Kind::Int as u8 && *b == Kind::Float as u8 => Kind::Float as u8,
+        _ => return None,
+    };
+    let float = |answer: &Answer| -> Option<f64> {
+        match answer {
+            Answer::Float(v) | Answer::NonFinite(v) => Some(*v),
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "an integer widened as the frame widens it"
+            )]
+            Answer::Int(n) => Some(*n as f64),
+            Answer::Written(Value::Number(token)) => token.parse().ok(),
+            _ => None,
+        }
+    };
+    Some(if kind == Kind::Bool as u8 {
+        (
+            DataType::Boolean,
+            Arc::new(BooleanArray::from_iter(rows.iter().map(
+                |r| match &r.prediction {
+                    Answer::Bool(b) | Answer::Written(Value::Bool(b)) => Some(*b),
+                    _ => None,
+                },
+            ))),
+        )
+    } else if kind == Kind::Int as u8 {
+        (
+            DataType::Int64,
+            Arc::new(Int64Array::from_iter(rows.iter().map(
+                |r| match &r.prediction {
+                    Answer::Int(n) => Some(*n),
+                    Answer::Written(Value::Number(token)) => token.parse().ok(),
+                    _ => None,
+                },
+            ))),
+        )
+    } else if kind == Kind::Float as u8 {
+        (
+            DataType::Float64,
+            Arc::new(Float64Array::from_iter(
+                rows.iter().map(|r| float(&r.prediction)),
+            )),
+        )
+    } else {
+        (
+            DataType::Utf8,
+            Arc::new(StringArray::from_iter(rows.iter().map(
+                |r| match &r.prediction {
+                    Answer::Text(t) | Answer::Written(Value::Text(t)) => Some(t.clone()),
+                    _ => None,
+                },
+            ))),
+        )
+    })
+}
+
+/// An answer's prediction as the JSON text of the reference's item value,
+/// a non-finite number as the token Python's reader takes; `None` where it
+/// had none.
+fn as_answered(answer: &Answer) -> Option<String> {
+    match answer {
+        Answer::None => None,
+        Answer::Float(v) | Answer::NonFinite(v) => float_text(*v),
+        Answer::Int(n) => Some(n.to_string()),
+        Answer::Bool(b) => Some(b.to_string()),
+        Answer::Text(text) => {
+            Some(String::from_utf8_lossy(&Value::text(text).to_bytes()).into_owned())
+        }
+        Answer::Written(value) => Some(String::from_utf8_lossy(&value.to_bytes()).into_owned()),
+    }
+}
+
+/// A double as JSON text, a non-finite one as the token Python's reader
+/// takes.
+fn float_text(v: f64) -> Option<String> {
+    if v.is_nan() {
+        Some("NaN".to_owned())
+    } else if v.is_infinite() {
+        Some(if v > 0.0 { "Infinity" } else { "-Infinity" }.to_owned())
+    } else {
+        Value::float(v).map(|f| String::from_utf8_lossy(&f.to_bytes()).into_owned())
+    }
+}
+
+/// An entity as the JSON text of the reference's item value, a non-finite
+/// float as the token Python's reader takes; `None` where it had none.
+fn id_as_written(id: &Entity) -> Option<String> {
+    match id {
+        Entity::None => None,
+        Entity::Integer(n) => Some(n.to_string()),
+        Entity::Float(v) => float_text(*v),
+        Entity::Text(text) => {
+            Some(String::from_utf8_lossy(&Value::text(text).to_bytes()).into_owned())
+        }
+        Entity::Written(value) => Some(String::from_utf8_lossy(&value.to_bytes()).into_owned()),
+    }
+}
+
+/// Whether every answer of a regression holds an integer, none missing:
+/// the column pandas infers as int64.
+fn regression_integers(rows: &[&Row]) -> bool {
+    rows.iter().all(|r| matches!(r.prediction, Answer::Int(_)))
+}
+
+fn internal_layout() -> CoreError {
+    CoreError::new(Sentence::Internal, "the result does not lay out")
+}
+
+/// The dtype of the column the entity reference stands for: the column
+/// of the table the reference's relationship points at, when it points at
+/// one column.
+fn key_dtype(payload: &Value, reference: &str) -> Option<String> {
+    let schema = payload.get("schema")?;
+    let Some(Value::Array(links)) = schema.get("relationships") else {
+        return None;
+    };
+    let link = links.iter().find(|link| {
+        matches!(link.get("source_columns"), Some(Value::Array(c))
+            if c.len() == 1 && c[0].as_text() == Some(reference))
+    })?;
+    let target = link.get("target_table")?.as_text()?;
+    let Some(Value::Array(columns)) = link.get("target_columns") else {
+        return None;
+    };
+    let [column] = columns.as_slice() else {
+        return None;
+    };
+    schema
+        .get("related_tables")?
+        .get(target)?
+        .get("columns")?
+        .get(column.as_text()?)?
+        .get("dtype")?
+        .as_text()
+        .map(str::to_owned)
+}
+
+/// The dtype of the payload's entity key, as [`key_dtype`] finds it.
+fn entity_dtype(payload: &Value) -> Option<String> {
+    let (names, _) = instance_table(payload, "predict")?;
+    let reference = names.iter().find(|n| n.starts_with(ENTITY_REF))?;
+    key_dtype(payload, reference)
+}
+
+/// The entity of a row: its reference's value read back as the key's
+/// dtype, as the reference's `as_declared` reads it, or as written where it
+/// does not read or no dtype is known: a null as none; a declared boolean
+/// from a boolean, the text spelling one or the integer 0 or 1
+/// ([`as_bool`]); a declared integer (any other boolean as written) from an
+/// integer, a whole float, or text Python's `int` reads ([`integer_text`]);
+/// a declared float from a number not past a double's range, or text
+/// Python's `float` reads ([`numeric_text`]); any other dtype as written.
+pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
+    let read = match (dtype, value) {
+        (None, _) | (_, Value::Null) => None,
+        (Some(d), _) if d.starts_with("bool") => {
+            as_bool(value).map(|b| Entity::Written(Value::Bool(b)))
+        }
+        (_, Value::Bool(_)) => None,
+        (Some(d), _) if d.starts_with("int") => match value {
+            Value::Text(text) => integer_text(text).map(|digits| integer(&digits)),
+            Value::Number(token) if is_integer_token(token) => Some(integer(token)),
+            Value::Number(token) => token
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite() && v.fract() == 0.0)
+                .map(|v| integer(&format!("{v:.0}"))),
+            _ => None,
+        },
+        (Some(d), _) if d.starts_with("float") => match value {
+            Value::Text(text) => numeric_text(text).map(Entity::Float),
+            Value::Number(token) => token
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .map(Entity::Float),
+            _ => None,
+        },
+        _ => None,
+    };
+    read.unwrap_or_else(|| match value {
+        Value::Null => Entity::None,
+        Value::Text(text) => Entity::Text(text.clone()),
+        Value::Number(token) if is_integer_token(token) => integer(token),
+        other => Entity::Written(other.clone()),
+    })
+}
+
+/// An integer's digits as an entity: an int64, or past it as written.
+fn integer(digits: &str) -> Entity {
+    digits.parse::<i64>().map_or_else(
+        |_| Entity::Written(Value::Number(digits.to_owned())),
+        Entity::Integer,
+    )
+}
+
+/// A row's instance id as the reference compares it with the id an answer
+/// names (`str(instances[index])`): an integer's digits (`-0` as
+/// `0`), the text, a float as the parser's `float_text` writes it, a
+/// boolean as `True` or `False` and a null as `None`; none for a list or an
+/// object, which no id an answer names matches.
+fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String> {
+    Some(match value {
+        Value::Text(text) => text.clone(),
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::Number(token) if is_integer_token(token) => {
+            let digits = token.strip_prefix('-').unwrap_or(token);
+            if digits.bytes().all(|b| b == b'0') {
+                "0".to_owned()
+            } else {
+                token.clone()
+            }
+        }
+        Value::Number(token) => float_text(token.parse::<f64>().unwrap_or(f64::NAN)),
+        Value::Array(_) | Value::Object(_) => return None,
+    })
+}
+
+// Direct frames and gathered payloads share model policy over neutral facts.
+fn check_shapes(
+    spec: &Spec,
+    kind: &str,
+    anchored: bool,
+    linked: bool,
+    tables: usize,
+) -> Result<(), CoreError> {
+    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
+    let needed = |shape: &str| match shape {
+        "relationships" => linked,
+        "multiple_tables" => tables > 1,
+        "link_prediction" => kind == "temporal_link_prediction",
+        "forecasting" => kind == "forecasting",
+        "temporal" => temporal,
+        "static" => !temporal,
+        _ => false,
+    };
+    let mut lacking: Vec<&str> = SHAPES
+        .into_iter()
+        .filter(|shape| needed(shape) && !spec.shapes.contains(shape))
+        .collect();
+    lacking.sort_unstable();
+    if !lacking.is_empty() {
+        return Err(unsupported(
+            Sentence::ModelLacksShape,
+            spec.id,
+            "the model cannot answer a request of this shape",
+        )
+        .with_field("unsupported", texts(lacking)));
+    }
+    Ok(())
+}
+fn check_task_outputs(
+    spec: &Spec,
+    kind: &str,
+    outputs: &[String],
+    deduplicate: bool,
+) -> Result<(), CoreError> {
+    if !spec.tasks.contains(&kind) {
+        return Err(unsupported(
+            Sentence::ModelLacksTask,
+            spec.id,
+            "the model does not serve the task's kind",
+        )
+        .with_field("task", Detail::text(kind))
+        .with_field("supported", texts(sorted(spec.tasks))));
+    }
+    let mut unknown: Vec<&str> = outputs
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !spec.outputs.contains(name))
+        .collect();
+    if !unknown.is_empty() {
+        unknown.sort_unstable();
+        if deduplicate {
+            unknown.dedup();
+        }
+        return Err(unsupported(
+            Sentence::ModelLacksOutputs,
+            spec.id,
+            "the model does not produce an output asked for",
+        )
+        .with_field("unsupported_outputs", texts(unknown))
+        .with_field("supported_outputs", texts(sorted(spec.outputs))));
+    }
+    Ok(())
+}
+fn check_capacity(spec: &Spec, rows: usize, direct: bool) -> Result<(), CoreError> {
+    if (direct || spec.id == RELATIONAL) && rows > CONTEXT_ROWS_MAX {
+        return Err(unsupported(
+            if direct {
+                Sentence::DirectContextLimit
+            } else {
+                Sentence::ContextPastModel
+            },
+            spec.id,
+            "the request's context is larger than the model reads",
+        )
+        .with_field("context_rows", count(rows))
+        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
+    }
+    Ok(())
+}
+
+/// Model preflight for live direct request facts, before conversion or empty handling.
+pub fn bind_direct(
+    input: sdm_contract::direct::DirectCallFacts,
+) -> Result<sdm_contract::direct::BoundDirectCall, CoreError> {
+    let facts = input.clone();
+    let spec = MODELS
+        .iter()
+        .find(|spec| spec.id == input.model)
+        .ok_or_else(|| {
+            let mut known: Vec<_> = MODELS.iter().map(|spec| spec.id).collect();
+            known.sort_unstable();
+            CoreError::new(Sentence::DirectUnknownModel, "the model is unknown")
+                .with_field("model", Detail::text(&input.model))
+                .with_field("known_models", texts(known))
+        })?;
+    let named = input.outputs.is_some();
+    let outputs: Vec<String> = input.outputs.unwrap_or_else(|| {
+        default_outputs(&input.kind)
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect()
+    });
+    if outputs.is_empty() {
+        return Err(CoreError::new(
+            Sentence::OutputsNone,
+            "outputs must name at least one field",
+        ));
+    }
+    check_shapes(
+        spec,
+        &input.kind,
+        input.anchored,
+        input.relationships,
+        input.tables,
+    )?;
+    check_task_outputs(spec, &input.kind, &outputs, false)?;
+    check_capacity(spec, input.context_rows, true)?;
+    Ok(sdm_contract::direct::BoundDirectCall {
+        facts,
+        model: input.model,
+        outputs,
+        named,
+        kind: input.kind,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transmitted_query_respects_character_limit_without_mutating_request() {
+        let query = "é".repeat(1100);
+        let mut payload = sdm_wire::json::read(br#"{"task":{"kind":"regression"}}"#).unwrap();
+        payload.set(
+            "metadata",
+            Value::Object(vec![("source_query".to_owned(), Value::text(&query))]),
+        );
+        let call = body(
+            &payload,
+            RELATIONAL,
+            "request",
+            &["prediction".to_owned()],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            call.get("metadata")
+                .unwrap()
+                .get("source_query")
+                .unwrap()
+                .as_text(),
+            Some("é".repeat(1024).as_str())
+        );
+        assert_eq!(
+            payload
+                .get("metadata")
+                .unwrap()
+                .get("source_query")
+                .unwrap()
+                .as_text(),
+            Some(query.as_str())
+        );
+    }
+
+    #[test]
+    fn direct_tabular_support_does_not_expand_gathered_body_tasks() {
+        let payload = sdm_wire::json::read(br#"{"task":{"kind":"classification"}}"#).unwrap();
+        let error = body(&payload, RELATIONAL, "request", &[], &[]).unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(error.fields["rule"], Detail::text("problem_type"));
+    }
+    use sdm_contract::ErrorCode;
+
+    #[test]
+    fn every_model_is_described_as_the_client_describes_it() {
+        let all = capabilities();
+        let models: Vec<_> = all.iter().map(|c| c.model).collect();
+        assert_eq!(models, [RELATIONAL, TABULAR]);
+        let relational = &all[0];
+        assert_eq!(
+            relational.tasks,
+            [
+                "binary_classification",
+                "classification",
+                "forecasting",
+                "multiclass_classification",
+                "regression",
+                "temporal_link_prediction",
+            ]
+        );
+        assert!(relational.single_table && relational.multiple_tables && relational.relationships);
+        assert!(relational.sessions);
+        assert_eq!(relational.explanation_formats, [crate::gradients::FORMAT]);
+        let tabular = &all[1];
+        assert_eq!(tabular.tasks, ["classification", "regression"]);
+        assert_eq!(
+            tabular.outputs,
+            ["explanation", "prediction", "probabilities", "quantiles"]
+        );
+        assert!(tabular.single_table && !tabular.multiple_tables && !tabular.relationships);
+        for each in &all {
+            let mut sorted = each.outputs.clone();
+            sorted.sort_unstable();
+            assert_eq!(each.outputs, sorted);
+        }
+    }
+
+    #[test]
+    fn the_predicted_column_is_read_as_the_adapter_reads_it() {
+        assert_eq!(
+            predicted_column("PREDICT users.age FOR EACH users.id"),
+            Some("users.age")
+        );
+        assert_eq!(predicted_column("  predict u.a\tFOR"), Some("u.a"));
+        assert_eq!(
+            predicted_column("PREDICT COUNT(orders.*, 0, 1, days) > 0 FOR"),
+            None
+        );
+        assert_eq!(predicted_column("PREDICT users.age"), None);
+        assert_eq!(predicted_column("PREDICTusers.age FOR"), None);
+        assert_eq!(predicted_column("PREDICT 1a.b FOR"), None);
+    }
+
+    #[test]
+    fn an_entity_is_read_back_as_as_declared_reads_it() {
+        let number = |t: &str| Value::Number(t.to_owned());
+        let text = |t: &str| Value::Text(t.to_owned());
+        let int = Some("int64");
+        assert_eq!(entity(&number("7"), int), Entity::Integer(7));
+        assert_eq!(entity(&text(" +0_07 "), int), Entity::Integer(7));
+        assert_eq!(entity(&text("\u{665}"), int), Entity::Integer(5));
+        assert_eq!(entity(&number("5.0"), int), Entity::Integer(5));
+        assert_eq!(entity(&number("5.5"), int), Entity::Written(number("5.5")));
+        assert_eq!(entity(&text("abc"), int), Entity::Text("abc".into()));
+        assert_eq!(
+            entity(&Value::Bool(true), int),
+            Entity::Written(Value::Bool(true))
+        );
+        assert_eq!(entity(&Value::Null, int), Entity::None);
+        assert_eq!(
+            entity(&text("1180591620717411303424"), int),
+            Entity::Written(number("1180591620717411303424"))
+        );
+        assert_eq!(entity(&number("7"), Some("float64")), Entity::Float(7.0));
+        assert_eq!(
+            entity(&text("1"), Some("bool")),
+            Entity::Written(Value::Bool(true))
+        );
+        // No dtype known, or a text key: as written.
+        assert_eq!(entity(&text("7"), None), Entity::Text("7".into()));
+        assert_eq!(entity(&number("7"), Some("string")), Entity::Integer(7));
+    }
+
+    #[test]
+    fn a_float_target_s_class_reads_back_as_a_double() {
+        let number = |t: &str| Value::Number(t.to_owned());
+        let text = |t: &str| Value::Text(t.to_owned());
+        assert_eq!(as_float(&text(" 3.0 ")), Some(3.0));
+        assert_eq!(
+            as_float(&text("0.10000000149011612")),
+            Some(f64::from(0.1_f32))
+        );
+        assert_eq!(as_float(&text("-inf")), Some(f64::NEG_INFINITY));
+        assert!(as_float(&text("NaN")).is_some_and(f64::is_nan));
+        assert_eq!(as_float(&number("3")), Some(3.0));
+        assert_eq!(as_float(&number("1e400")), Some(f64::INFINITY));
+        // Text that is no number, a boolean, and an integer past a double's
+        // range are not a double.
+        assert_eq!(as_float(&text("three")), None);
+        assert_eq!(as_float(&Value::Bool(true)), None);
+        assert_eq!(as_float(&number(&"9".repeat(400))), None);
+        assert_eq!(
+            answer_of(Some(&text("3.0")), AnswerType::FloatClass),
+            Ok(Answer::Float(3.0))
+        );
+        // One that does not read is given back as written.
+        assert_eq!(
+            answer_of(Some(&text("three")), AnswerType::FloatClass),
+            Ok(Answer::Written(text("three")))
+        );
+    }
+
+    #[test]
+    fn a_float_target_s_probabilities_are_keyed_as_its_classes_are_spelled() {
+        let spell = |x: f64| format!("<{x}>");
+        let given = vec![("3".to_owned(), 0.5), ("x".to_owned(), 0.5)];
+        assert_eq!(
+            spelled(&given, AnswerType::FloatClass, spell),
+            vec![("<3>".to_owned(), 0.5), ("x".to_owned(), 0.5)]
+        );
+        // Two keys that read as one double are left as written.
+        let same = vec![("3".to_owned(), 0.5), ("3.0".to_owned(), 0.5)];
+        assert_eq!(spelled(&same, AnswerType::FloatClass, spell), same);
+    }
+
+    /// A temporal link prediction's answer, as the endpoint writes one: each
+    /// item ranks candidates under `rankings`, a list of objects, which the
+    /// reference's bindings read (`_mapping_tuple`) and its result keeps as
+    /// a list in one row (`PredictionResult.to_pandas`, `row['rankings']`).
+    /// Result conversion carries ranking mappings unchanged and restores only
+    /// the scored entity identity through the shared result path.
+    #[test]
+    fn a_link_predictions_rankings_are_preserved() {
+        let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
+        let answer = read(
+            r#"{"id": "r1", "model": "kumo-relational", "metadata": {},
+                "predictions": [
+                  {"row_index": 0, "id": "0", "prediction": null,
+                   "rankings": [{"item": 3, "score": 0.9}, {"item": 1, "score": 0.4}]},
+                  {"row_index": 1, "id": "1",
+                   "rankings": [{"item": 2, "score": 0.7}]}]}"#,
+        );
+        let response = PredictionResponse::read(&answer).unwrap();
+        assert_eq!(response.predictions.len(), 2);
+        let written: Vec<usize> = response
+            .predictions
+            .iter()
+            .map(|item| item.rankings.as_ref().map_or(0, Vec::len))
+            .collect();
+        assert_eq!(written, [2, 1]);
+        let payload = |kind: &str| {
+            read(&format!(
+                r#"{{"task": {{"kind": "{kind}", "target": {{"dtype": "float64"}}}},
+                    "predict": {{"instance_table": {{"columns": ["instance_id"],
+                                                    "rows": [[0], [1]]}}}}}}"#
+            ))
+        };
+        let spell = |x: f64| x.to_string();
+        let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap();
+        assert_eq!(linked.rows[0].rankings, response.predictions[0].rankings);
+        assert_eq!(linked.rows[1].rankings, response.predictions[1].rankings);
+        assert_eq!(linked.rows[0].prediction, Answer::None);
+        let asked = layout(&payload("regression"), &response, spell).unwrap();
+        assert_eq!(asked.rows.len(), 2);
+        assert_eq!(asked.rows[0].rankings, response.predictions[0].rankings);
+        assert_eq!(asked.rows[1].rankings, response.predictions[1].rankings);
+        assert_eq!(asked.rows[0].prediction, Answer::None);
+    }
+
+    /// fix 1: every output the result looks for that
+    /// the answer left out, in the order [`LOOKED_FOR`] names them, as
+    /// [`absent`] reads each, for a host to read off the result rather
+    /// than keep a copy of the rule: an empty quantiles mapping on every
+    /// row is left out; an answer of no rows leaves out nothing.
+    #[test]
+    fn every_output_an_answer_leaves_out_is_read_once_for_the_hosts() {
+        let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
+        let payload = read(
+            r#"{"task": {"kind": "regression", "target": {"dtype": "float64"}},
+                "predict": {"instance_table": {"columns": ["instance_id"],
+                                              "rows": [[0], [1]]}}}"#,
+        );
+        let spell = |x: f64| x.to_string();
+        let answer = read(
+            r#"{"id": "r1", "model": "kumo-relational", "metadata": {},
+                "predictions": [
+                  {"row_index": 0, "id": "0", "prediction": 1.0, "quantiles": {}},
+                  {"row_index": 1, "id": "1", "prediction": 2.0, "quantiles": {}}]}"#,
+        );
+        let part = layout(&payload, &PredictionResponse::read(&answer).unwrap(), spell).unwrap();
+        assert_eq!(
+            left_out(&part),
+            [
+                "probabilities",
+                "scores",
+                "rankings",
+                "quantiles",
+                "explanation",
+                "embeddings"
+            ]
+        );
+        let named: Vec<String> = ["quantiles", "prediction", "quantiles", "no_such_output"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(absent(&part, &named), ["quantiles"]);
+        let none =
+            read(r#"{"id": "r1", "model": "kumo-relational", "metadata": {}, "predictions": []}"#);
+        let empty = read(
+            r#"{"task": {"kind": "regression", "target": {"dtype": "float64"}},
+                "predict": {"instance_table": {"columns": ["instance_id"], "rows": []}}}"#,
+        );
+        let part = layout(&empty, &PredictionResponse::read(&none).unwrap(), spell).unwrap();
+        assert!(left_out(&part).is_empty());
+    }
+    fn supplied_forecast_payload(rows: usize, horizon: Option<u32>) -> Value {
+        let mut task = serde_json::json!({"kind":"forecasting", "target":{"dtype":"float64"},
+            "anchor_time_column":"anchor", "step_size":86400000000000_i64});
+        if let Some(horizon) = horizon {
+            task["num_forecasts"] = horizon.into();
+        }
+        let predict: Vec<_> = (0..rows)
+            .map(|i| {
+                serde_json::json!([
+                    6 + i,
+                    3,
+                    if i == 0 {
+                        "2024-01-07T00:00:00Z"
+                    } else {
+                        "2024-01-09T00:00:00Z"
+                    }
+                ])
+            })
+            .collect();
+        sdm_wire::json::read(serde_json::json!({"task":task,
+            "predict":{"instance_table":{"columns":["instance_id","__kumo_entity_ref_0","anchor"],"rows":predict}}
+        }).to_string().as_bytes()).unwrap()
+    }
+
+    fn supplied_forecast_response(pairs: &[(usize, u32)]) -> PredictionResponse {
+        let items: Vec<_> = pairs.iter().map(|(row,step)| serde_json::json!({
+            "id":(6+row).to_string(),"row_index":row,"forecast_step":step,"prediction":row*10+*step as usize
+        })).collect();
+        PredictionResponse::read(&sdm_wire::json::read(serde_json::json!({
+            "id":"forecast-test","model":"kumo-relational","metadata":{"task_kind":"forecasting"},"predictions":items
+        }).to_string().as_bytes()).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn supplied_forecast_places_complete_grid_without_shifting_anchors() {
+        let payload = supplied_forecast_payload(2, Some(3));
+        let original = payload.clone();
+        let response =
+            supplied_forecast_response(&[(1, 3), (0, 2), (1, 1), (0, 1), (0, 3), (1, 2)]);
+        let part = layout(&payload, &response, |v| v.to_string()).unwrap();
+        assert_eq!(
+            part.rows
+                .iter()
+                .map(|r| (r.row_index, r.forecast_step))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, Some(1)),
+                (0, Some(2)),
+                (0, Some(3)),
+                (1, Some(1)),
+                (1, Some(2)),
+                (1, Some(3))
+            ]
+        );
+        for row in &part.rows {
+            assert_eq!(row.id, Entity::Integer(3));
+            assert_eq!(
+                row.prediction,
+                Answer::Int(row.row_index * 10 + row.forecast_step.unwrap())
+            );
+        }
+        assert_eq!(
+            part.rows.iter().map(|r| r.answer_index).collect::<Vec<_>>(),
+            vec![3, 1, 4, 2, 5, 0]
+        );
+        let numbered = numbered_from(part, 4).unwrap();
+        assert_eq!(
+            numbered
+                .rows
+                .iter()
+                .map(|r| r.row_index)
+                .collect::<Vec<_>>(),
+            vec![4, 4, 4, 5, 5, 5]
+        );
+        // Original anchors stay keyed by prediction row, not by forecast step.
+        assert_eq!(payload, original);
+        let sent = body(&payload, RELATIONAL, "request", &["prediction".into()], &[]).unwrap();
+        assert_eq!(sent.get("predict"), payload.get("predict"));
+        assert_eq!(sent.get("task"), payload.get("task"));
+    }
+
+    #[test]
+    fn supplied_forecast_refuses_missing_repeated_or_misaligned_steps() {
+        let payload = supplied_forecast_payload(2, Some(3));
+        let valid = supplied_forecast_response(&[(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]);
+        for (mutation, reason) in [
+            (0, "missing"),
+            (1, "out_of_range"),
+            (2, "out_of_range"),
+            (3, "repeated"),
+            (4, "not_the_row_s"),
+            (5, "out_of_range"),
+            (6, "unanswered"),
+            (7, "unanswered"),
+            (8, "missing"),
+        ] {
+            let mut response = valid.clone();
+            match mutation {
+                0 => response.predictions[0].forecast_step = None,
+                1 => response.predictions[0].forecast_step = Some(0),
+                2 => response.predictions[0].forecast_step = Some(4),
+                3 => response.predictions[0].forecast_step = Some(2),
+                4 => response.predictions[0].id = Some("7".into()),
+                5 => response.predictions[0].row_index = 2,
+                6 => {
+                    response.predictions.pop();
+                }
+                7 => response.predictions.retain(|item| item.row_index == 0),
+                _ => response.predictions[0].id = None,
+            }
+            let error = layout(&payload, &response, |v| v.to_string()).unwrap_err();
+            assert_eq!(
+                error.code,
+                ErrorCode::InvalidResponse,
+                "mutation {mutation}"
+            );
+            assert_eq!(
+                error.fields["reason"],
+                Detail::text(reason),
+                "mutation {mutation}"
+            );
+        }
+    }
+
+    #[test]
+    fn supplied_forecast_single_step_and_multiple_native_calls_align() {
+        let zero = supplied_forecast_payload(1, Some(0));
+        assert!(
+            layout(&zero, &supplied_forecast_response(&[(0, 1)]), |v| v
+                .to_string())
+            .is_err()
+        );
+        let omitted = supplied_forecast_payload(1, None);
+        assert_eq!(
+            layout(&omitted, &supplied_forecast_response(&[(0, 1)]), |v| v
+                .to_string())
+            .unwrap()
+            .rows[0]
+                .forecast_step,
+            Some(1)
+        );
+        assert!(
+            layout(&omitted, &supplied_forecast_response(&[(0, 2)]), |v| v
+                .to_string())
+            .is_err()
+        );
+        let payload = supplied_forecast_payload(1, Some(3));
+        let response = supplied_forecast_response(&[(0, 3), (0, 1), (0, 2)]);
+        let parts = (0..2)
+            .map(|start| {
+                numbered_from(
+                    layout(&payload, &response, |v| v.to_string()).unwrap(),
+                    start,
+                )
+                .unwrap()
+            })
+            .collect();
+        let merged = merge(parts).unwrap();
+        assert_eq!(
+            merged
+                .rows
+                .iter()
+                .map(|r| (r.row_index, r.forecast_step))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, Some(1)),
+                (0, Some(2)),
+                (0, Some(3)),
+                (1, Some(1)),
+                (1, Some(2)),
+                (1, Some(3))
+            ]
+        );
+        let mut ordinary = payload;
+        ordinary.set(
+            "task",
+            Value::Object(vec![("kind".into(), Value::text("regression"))]),
+        );
+        let error = layout(&ordinary, &response, |v| v.to_string()).unwrap_err();
+        assert_eq!(error.fields["reason"], Detail::text("not_a_forecast"));
+    }
+}

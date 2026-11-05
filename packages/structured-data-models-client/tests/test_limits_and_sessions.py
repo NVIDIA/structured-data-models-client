@@ -14,36 +14,44 @@ from __future__ import annotations
 import warnings
 
 import pytest
+from test_a_session_can_hold_back_what_it_will_score import pin
+from test_limits_and_absent_outputs import sent
 
 from sdm_client import Schema, UnsupportedRequestError
-from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.errors import StructuredDataError
-from sdm_client.materializers.relational import RelationalMaterializer
 from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 
 
 def payload(*, predict_rows: int, context_rows: int) -> dict:
-    return {
-        'task': {'kind': 'regression', 'target': {'column_name': 't'}},
-        'schema': {'instance_table': {'columns': {}}},
-        'context': {
-            'instance_table': {'rows': [[i] for i in range(context_rows)]}
-        },
-        'predict': {
-            'instance_table': {'rows': [[i] for i in range(predict_rows)]}
-        },
-    }
+    from test_limits_and_absent_outputs import gathered
+
+    request = gathered(
+        context_rows=min(context_rows, 10000),
+        run_mode='fast',
+        predict_rows=predict_rows,
+    )
+    body = request.payloads[0]
+    if context_rows > 10000:
+        rows = body['context']['instance_table']['rows']
+        rows.extend([list(rows[-1]) for _ in range(context_rows - len(rows))])
+    return body
 
 
-class _Gathered:
-    """The shape a materialized request presents to an adapter."""
+def _Gathered(*payloads):
+    import pandas as pd
 
-    query: str | None = None
+    from sdm_client import Request
 
-    def __init__(self, *payloads: dict) -> None:
-        self.payloads = tuple(payloads)
-        self.requested_inference: dict = {}
-        self.inference: dict = {}
+    return Request.materialized(
+        payloads=tuple(payloads),
+        schema=Schema.from_data(
+            {'users': pd.DataFrame({'uid': range(20), 'label': range(20)})},
+            primary_keys={'users': 'uid'},
+        ),
+        query='PREDICT users.label FOR EACH users.uid',
+        indices=None,
+        entity_table='users',
+    )
 
 
 def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
@@ -63,54 +71,40 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
 
 @pytest.mark.parametrize('bad', ['2', True])
 def test_num_hops_must_be_a_whole_number(bad):
-    materializer = RelationalMaterializer(Schema({}))
+    from test_frame_sessions_core import query
+
+    from sdm_client import KumoRelational
+
     with pytest.raises(StructuredDataError) as error:
-        materializer._check_shape({'num_hops': bad}, RELATIONAL_LIMITS)
+        query().materialize(indices=[1], model=KumoRelational(), num_hops=bad)
     assert 'num_hops must be a whole number' in str(error.value)
     assert error.value.code == 'INVALID_REQUEST'
 
 
-def test_explains_large_context():
-    """An explanation over a 5,000-row context is sent.
-
-    Assumptions:
-    - The payload scores one entity.
-    - The SDM NIM has no 1,000-row explanation limit.
-    """
-    request = _Gathered(payload(predict_rows=1, context_rows=5_000))
-    plans = list(
-        RelationalAdapter().prediction_plan(
-            request, ('prediction', 'explanation')
-        )
+@pytest.mark.parametrize(
+    ('predict_rows', 'context_rows'), [(4, 100), (1, 5000)]
+)
+def test_explanations_have_no_separate_row_or_context_limit(
+    predict_rows, context_rows
+):
+    request = _Gathered(
+        payload(predict_rows=predict_rows, context_rows=context_rows)
     )
+    plans = list(sent(request, ('prediction', 'explanation')))
     assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
-def test_an_explanation_over_a_small_context_is_sent():
-    """An explanation over a 500-row context is sent in one call.
-
-    Assumptions:
-    - The payload scores one entity.
-    """
+def test_an_explanation_within_both_limits_is_allowed():
     request = _Gathered(payload(predict_rows=1, context_rows=500))
-    plans = list(
-        RelationalAdapter().prediction_plan(
-            request, ('prediction', 'explanation')
-        )
-    )
+    plans = list(sent(request, ('prediction', 'explanation')))
     assert len(plans) == 1
     assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
-def test_a_prediction_of_many_rows_over_a_large_context_is_one_call():
-    """An ordinary batch of 500 rows over a 5,000-row context is sent as it
-    was gathered, in one call.
-
-    Assumptions:
-    - The request was gathered as one payload, within every per-call cap.
-    """
+def test_a_prediction_without_an_explanation_is_not_held_to_those_limits():
+    """Both caps are explanation-only; an ordinary batch is unaffected."""
     request = _Gathered(payload(predict_rows=500, context_rows=5_000))
-    plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    plans = list(sent(request, ('prediction',)))
     assert len(plans) == 1
 
 
@@ -126,7 +120,7 @@ def test_a_relational_request_that_was_never_gathered_says_how_to_build_one():
         task='regression',
     )
     with pytest.raises(UnsupportedRequestError) as error:
-        list(RelationalAdapter().prediction_plan(direct, ('prediction',)))
+        list(sent(direct, ('prediction',)))
     assert 'materialize' in str(error.value)
 
 
@@ -136,43 +130,27 @@ def test_a_session_cannot_pin_more_than_one_gathered_context():
         payload(predict_rows=2, context_rows=10),
         payload(predict_rows=2, context_rows=10),
     )
-    with pytest.raises(UnsupportedRequestError) as error:
-        RelationalAdapter().session_plan(request, ('prediction',))
+    with pytest.raises(StructuredDataError) as error:
+        pin(request, 'kumo-relational')
+    assert error.value.code == 'INVALID_REQUEST'
     assert 'session pins one context' in str(error.value)
 
 
-def test_a_single_batch_session_pins_the_context_and_not_the_rows():
-    request = _Gathered(payload(predict_rows=2, context_rows=10))
-    pinned = RelationalAdapter().session_plan(request, ('prediction',))
-    assert 'context' in pinned
-    assert 'predict' not in pinned
-
-    scoring = list(
-        RelationalAdapter().session_prediction_plan(request, ('prediction',))
-    )
-    assert 'predict' in scoring[0]
-    assert 'context' not in scoring[0]
-
-
 def test_the_default_outputs_follow_the_relational_task_kind():
-    adapter = RelationalAdapter()
+    from test_limits_and_absent_outputs import gathered
 
-    class _Task:
-        def __init__(self, kind):
-            self.kind = kind
-
-    class _Request:
-        def __init__(self, kind):
-            self.task = _Task(kind)
-
-    assert adapter.default_output(_Request('regression')) == ('prediction',)
-    assert adapter.default_output(_Request('binary_classification')) == (
-        'prediction',
-        'probabilities',
-    )
-    assert adapter.default_output(_Request('temporal_link_prediction')) == (
-        'rankings',
-    )
+    for classification, expected in [
+        (False, ['prediction']),
+        (True, ['prediction', 'probabilities']),
+    ]:
+        request = gathered(
+            context_rows=50,
+            run_mode='fast',
+            classification=classification,
+            target=[0, 1] * 25 if classification else None,
+        )
+        (body,) = sent(request, None)
+        assert body['output']['fields'] == expected
 
 
 def test_the_relational_model_declares_the_deployment_it_was_read_from():
@@ -197,7 +175,7 @@ def test_an_inference_option_the_caller_set_is_named_rather_than_dropped():
         'inference_config': {'output_type': 'quantiles', 'num_estimators': 1}
     }
     with pytest.raises(UnsupportedRequestError) as error:
-        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+        list(sent(request, ('prediction',)))
     assert 'output_type' in str(error.value)
     assert 'prediction_statistic=' in str(error.value)
 
@@ -213,7 +191,7 @@ def test_the_engine_s_statistic_travels_on_the_output_instead():
             'num_estimators': 1,
         }
     }
-    (plan,) = RelationalAdapter().prediction_plan(request, ('prediction',))
+    (plan,) = sent(request, ('prediction',))
     assert 'inference_config' not in plan['inference']
     assert plan['output']['prediction_statistic'] == 'median'
 
@@ -239,9 +217,11 @@ def test_the_preflight_runs_through_a_real_materialized_request():
     assert request.payloads
     assert request.query.startswith('PREDICT')
 
-    plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    plans = list(sent(request, ('prediction',)))
     assert len(plans) == 1
     assert plans[0]['model'] == 'kumo-relational'
+
+    assert sent(request, ('prediction', 'explanation'))
 
 
 def gathered_in_calls(*, calls: int, context_rows: int):
@@ -266,16 +246,15 @@ def gathered_in_calls(*, calls: int, context_rows: int):
 def test_the_context_cap_is_held_to_each_call_and_not_their_sum(over):
     """Both sides of the cap, because only the allowed one was covered: a
     per-call count that always read nought would have passed that alone."""
-    from sdm_client.base import check_request_against_model
 
     cap = RELATIONAL_LIMITS['context_rows_max']
     each = cap + 1 if over else cap // 2 + 1
     request = gathered_in_calls(calls=2, context_rows=each)
     if not over:
-        check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
+        sent(request)
         return
     with pytest.raises(StructuredDataError) as refused:
-        check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
+        sent(request)
     assert f'{each:,} context rows' in str(refused.value)
 
 
@@ -303,19 +282,25 @@ def test_a_request_built_from_frames_still_describes_itself():
     assert '2 context rows, 1 to score' in repr(request)
 
 
-def correlated_payload(*, rows: int, kind: str = 'regression') -> dict:
-    """A batch shaped the way the engine gathers one, with both id columns."""
-    return {
-        'task': {'kind': kind, 'target': {'column_name': 't'}},
-        'schema': {'instance_table': {'columns': {}}},
-        'context': {'instance_table': {'rows': [[i] for i in range(10)]}},
-        'predict': {
-            'instance_table': {
-                'columns': ['instance_id', '__kumo_entity_ref_0'],
-                'rows': [[200 + i, 10 + i] for i in range(rows)],
-            }
+def correlated_payload(*, rows: int, kind: str = 'regression'):
+    import pandas as pd
+
+    from sdm_client import KumoRelational, PredictiveQuery
+
+    schema = Schema.from_data(
+        {
+            'users': pd.DataFrame(
+                {'uid': range(10, 40), 'value': [float(i) for i in range(30)]}
+            )
         },
-    }
+        primary_keys={'users': 'uid'},
+    )
+    schema['users']['value'].stype = 'numerical'
+    request = PredictiveQuery(
+        'PREDICT users.value FOR EACH users.uid', schema
+    ).materialize(indices=list(range(10, 10 + rows)), model=KumoRelational())
+    request.payloads[0]['task']['kind'] = kind
+    return request
 
 
 def item(**fields):
@@ -324,10 +309,38 @@ def item(**fields):
     return PredictionItem(**fields)
 
 
-def named(items, payload):
-    from sdm_client.adapters.relational import _named_entities
+def named(items, request):
+    from dataclasses import asdict
 
-    return _named_entities(tuple(items), payload)
+    from test_tabular_direct_core import Endpoint, client
+
+    table = request.payloads[0]['predict']['instance_table']
+    key = table['columns'].index('instance_id')
+    identifiers = {
+        str(200 + i): str(row[key]) for i, row in enumerate(table['rows'])
+    }
+    predictions = []
+    for item in items:
+        value = {
+            key: value
+            for key, value in asdict(item).items()
+            if value is not None
+        }
+        if value.get('id') in identifiers:
+            value['id'] = identifiers[value['id']]
+        predictions.append(value)
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-relational',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': predictions,
+        }
+    )
+    with client(endpoint) as model_client:
+        return model_client.predict(
+            request, model='kumo-relational', outputs=('prediction',)
+        ).items
 
 
 def test_the_caller_entity_replaces_the_transport_key():
@@ -369,45 +382,23 @@ def test_a_response_that_does_not_line_up_is_refused(items, fragment):
 
     with pytest.raises(StructuredDataError) as error:
         named(items, correlated_payload(rows=2))
-    assert fragment in str(error.value)
-
-
-def test_a_forecast_may_answer_a_row_once_per_step():
-    payload = correlated_payload(rows=1, kind='forecasting')
-    out = named(
-        [
-            item(row_index=0, id='200', forecast_step=1, prediction=1.0),
-            item(row_index=0, id='200', forecast_step=2, prediction=2.0),
-        ],
-        payload,
-    )
-    assert [entry.forecast_step for entry in out] == [1, 2]
-    assert {entry.id for entry in out} == {10}
-
-
-def test_a_forecast_answering_the_same_step_twice_is_refused():
-    from sdm_client.errors import StructuredDataError
-
-    with pytest.raises(StructuredDataError) as error:
-        named(
-            [
-                item(row_index=0, id='200', forecast_step=1),
-                item(row_index=0, id='200', forecast_step=1),
-            ],
-            correlated_payload(rows=1, kind='forecasting'),
-        )
-    assert 'step 1 more than once' in str(error.value)
-
-
-def test_a_forecast_row_without_a_step_is_refused():
-    from sdm_client.errors import StructuredDataError
-
-    with pytest.raises(StructuredDataError) as error:
-        named(
-            [item(row_index=0, id='200')],
-            correlated_payload(rows=1, kind='forecasting'),
-        )
-    assert 'names no step' in str(error.value)
+    fields = {
+        'missing a row_index': ('prediction.row_index', 'missing'),
+        'asked about 2 rows': ('prediction.row_index', 'out_of_range'),
+        'more than once': ('prediction.row_index', 'repeated'),
+        'asked about': ('prediction.id', 'not_the_row_s'),
+        'carries no id': ('prediction.id', 'missing'),
+        'unanswered': ('prediction.row_index', 'unanswered'),
+        'carries a forecast step': (
+            'prediction.forecast_step',
+            'not_a_forecast',
+        ),
+    }
+    assert error.value.code == 'INVALID_RESPONSE'
+    assert (
+        error.value.details['field'],
+        error.value.details['reason'],
+    ) == fields[fragment]
 
 
 # --- a session answers the question it pinned -------------------------------
@@ -417,11 +408,11 @@ def test_a_session_refuses_a_request_that_asks_something_else():
     """Only the rows travel on a scoring call, so the pinned question is the one
     that would be answered. Two unrelated temporal queries compile to identical
     task and schema payloads, so nothing downstream can tell them apart."""
-    pytest.importorskip('sdm_relational_engine')
     import pandas as pd
+    from test_frame_sessions_core import Endpoint
+    from test_tabular_direct_core import client
 
     from sdm_client import PredictiveQuery, Schema
-    from sdm_client.client import FittedModel
     from sdm_client.schema import Relationship
 
     users = pd.DataFrame({'uid': range(40)})
@@ -454,16 +445,17 @@ def test_a_session_refuses_a_request_that_asks_something_else():
         'PREDICT COUNT(b.*, 0, 30, days) > 0 FOR EACH users.uid', schema
     ).materialize(**kw)
 
-    handle = FittedModel._open(
-        None, None, 'sid', ('prediction',), question=pinned._question
-    )
-
-    with pytest.raises(StructuredDataError, match='pinned'):
-        handle.predict(other)
+    endpoint = Endpoint()
+    with client(endpoint) as model_client:
+        with model_client.fit(
+            pinned, model='kumo-relational', outputs=('prediction',)
+        ) as handle:
+            with pytest.raises(StructuredDataError, match='pinned'):
+                handle.predict(other)
+    assert not endpoint.scored
 
 
 def test_a_session_refuses_a_request_asked_as_several_questions():
-    pytest.importorskip('sdm_relational_engine')
 
     import pandas as pd
 
@@ -500,9 +492,8 @@ def test_a_session_refuses_a_request_asked_as_several_questions():
 
 def test_a_session_scoring_call_carries_the_inference_block():
     """The contract's SessionPredictionRequest lists `inference`; dropping it
-    made explanations unreachable through a session on a deployment that only
+    made explanations unreachable through a session, because the endpoint only
     explains when inference.run_mode is 'fast'."""
-    pytest.importorskip('sdm_relational_engine')
     from sdm_client.adapters.relational import _SESSION_SCORING
 
     assert 'inference' in _SESSION_SCORING
@@ -529,14 +520,6 @@ def test_a_tabular_request_records_the_question_it_was_built_from():
     assert request.query == 'PREDICT t.a FOR EACH t.k'
 
 
-def _pinned(request):
-    from sdm_client.client import FittedModel
-
-    return FittedModel._open(
-        None, None, 'sid', ('prediction',), question=request._question
-    )
-
-
 def test_a_session_refuses_a_frame_built_request_with_another_context():
     """A request built from frames is as much a question as a gathered one.
 
@@ -556,7 +539,7 @@ def test_a_session_refuses_a_frame_built_request_with_another_context():
         )
 
     with pytest.raises(StructuredDataError, match='context pinned'):
-        _pinned(asked([1, 0, 1, 0])).predict(asked([0, 1, 0, 1]))
+        score_pinned(asked([1, 0, 1, 0]), asked([0, 1, 0, 1]))
 
 
 def test_a_session_accepts_the_same_frames_built_twice():
@@ -589,7 +572,7 @@ def test_a_session_refuses_the_same_query_asked_as_another_kind():
 
     assert regression.query == classification.query
     with pytest.raises(StructuredDataError, match='task kind'):
-        _pinned(regression).predict(classification)
+        score_pinned(regression, classification)
 
 
 def test_a_session_accepts_a_literal_written_with_the_other_quote():
@@ -676,47 +659,6 @@ def test_a_context_whose_answers_are_missing_is_not_called_a_leak():
     assert not [item for item in caught if 'being scored' in str(item.message)]
 
 
-def test_the_session_warning_counts_rows_and_not_keys():
-    """`scored_keys()` returns a set, so duplicate scoring rows disappeared
-    before either number was taken: two rows asking about one pinned entity
-    were reported as one of one."""
-    import pandas as pd
-
-    from sdm_client import Request, Schema
-    from sdm_client.client import _warn_scoring_what_was_pinned
-    from sdm_client.wire.keys import _named_by
-
-    context = pd.DataFrame(
-        {'id': [1, 2, 3], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data(
-            {'instance': context}, primary_keys={'instance': 'id'}
-        )
-
-    def said_for(ids):
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            request = Request(
-                context=context,
-                predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
-                schema=schema,
-                target='y',
-                task='classification',
-            )
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter('always')
-            _warn_scoring_what_was_pinned(
-                request, frozenset({_named_by([1])}), False
-            )
-        return [str(item.message) for item in caught]
-
-    assert said_for([1, 1, 2])[0].startswith('2 of the 3 rows being scored')
-    assert said_for([1, 1])[0].startswith('2 of the 2 rows being scored')
-    assert said_for([7, 8, 9]) == []
-
-
 def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
     """The leak warning is about a pairing that only travels on the one-shot
     call. Asked where the request is built, it fired about a context a session
@@ -746,48 +688,6 @@ def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
     assert not [item for item in caught if 'being scored' in str(item.message)]
 
 
-def test_the_session_warning_knows_one_entity_written_two_ways():
-    """The pinned key is read from an encoded envelope and the scored key from
-    a frame, so an entity pinned as `1` and scored as `1.0` never met, and a
-    session scored rows its context answers without saying so."""
-    import pandas as pd
-
-    from sdm_client import Request, Schema
-    from sdm_client.client import _warn_scoring_what_was_pinned
-    from sdm_client.wire.keys import _named_by
-
-    context = pd.DataFrame(
-        {'id': [1, 2, 3], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data(
-            {'instance': context}, primary_keys={'instance': 'id'}
-        )
-
-    def warned_for(ids):
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            request = Request(
-                context=context,
-                predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
-                schema=schema,
-                target='y',
-                task='classification',
-            )
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter('always')
-            _warn_scoring_what_was_pinned(
-                request, frozenset({_named_by([1])}), False
-            )
-        return bool(caught)
-
-    for named in ([1], [1.0], pd.array([1.0], dtype='Float64'), ['1']):
-        assert warned_for(named)
-    for named in ([9], [9.0], [1.5]):
-        assert not warned_for(named)
-
-
 def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
     """The schema is not sent again on a scoring call: it was pinned when the
     session opened. Typing the rows from the half that travels sent `1.0`
@@ -797,7 +697,6 @@ def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
     import pandas as pd
 
     from sdm_client import Request, Schema
-    from sdm_client.adapters.tabular import TabularAdapter
 
     frame = pd.DataFrame(
         {
@@ -826,25 +725,14 @@ def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
             task='classification',
         )
 
-    adapter = TabularAdapter()
-    pinned = adapter.session_plan(opening, ('prediction',))
-    assert pinned['schema']['instance_table']['columns']['id']['dtype'] == (
-        'int64'
-    )
-
-    payload = next(
-        iter(adapter.session_prediction_plan(scoring, ('prediction',), pinned))
+    pinned, payload = score_pinned(opening, scoring)
+    assert (
+        pinned['schema']['instance_table']['columns']['id']['dtype'] == 'int64'
     )
     table = payload['predict']['instance_table']
     at = table['columns'].index('id')
     assert [row[at] for row in table['rows']] == [1, 2]
-
-    unpinned = next(
-        iter(adapter.session_prediction_plan(scoring, ('prediction',)))
-    )
-    table = unpinned['predict']['instance_table']
-    at = table['columns'].index('id')
-    assert [row[at] for row in table['rows']] == [1.0, 2.0]
+    assert all(type(row[at]) is int for row in table['rows'])
 
 
 @pytest.mark.parametrize(
@@ -869,7 +757,6 @@ def test_rows_the_pinned_schema_cannot_hold_are_refused_by_name(
     import pandas as pd
 
     from sdm_client import Request, Schema
-    from sdm_client.adapters.tabular import TabularAdapter
     from sdm_client.errors import StructuredDataError
 
     frame = pd.DataFrame(
@@ -899,17 +786,8 @@ def test_rows_the_pinned_schema_cannot_hold_are_refused_by_name(
             task='classification',
         )
 
-    adapter = TabularAdapter()
-    pinned = adapter.session_plan(opening, ('prediction',))
-
     def plan():
-        return next(
-            iter(
-                adapter.session_prediction_plan(
-                    scoring, ('prediction',), pinned
-                )
-            )
-        )
+        return score_pinned(opening, scoring)[1]
 
     if answers:
         assert plan()['predict']['instance_table']['rows']
@@ -918,3 +796,84 @@ def test_rows_the_pinned_schema_cannot_hold_are_refused_by_name(
             plan()
         assert 'this session pinned' in str(raised.value)
         assert 'fit()' in str(raised.value)
+
+
+def score_pinned(opening, scoring):
+    from test_entity_id_parity import StubTransport
+    from test_tabular_direct_core import client
+
+    class SessionTransport(StubTransport):
+        def close(self):
+            pass
+
+    transport = SessionTransport(
+        {
+            'model': 'kumo-tabular',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [
+                {'row_index': i, 'prediction': 0}
+                for i in range(scoring.predict_rows)
+            ],
+        }
+    )
+    with client(transport) as model_client:
+        with model_client.fit(
+            opening, model='kumo-tabular', outputs=('prediction',)
+        ) as fitted:
+            fitted.predict(scoring)
+    assert len(transport.scored) == 1
+    return transport.created, transport.scored[0]
+
+
+@pytest.mark.parametrize(
+    ('ids', 'overlap'),
+    [
+        ([1, 1, 2], 2),
+        ([1, 1], 2),
+        ([7, 8, 9], 0),
+        ([1], 1),
+        ([1.0], 1),
+        ([9.0], 0),
+    ],
+)
+def test_session_overlap_warning_counts_rows_and_normalizes_keys(ids, overlap):
+    import pandas as pd
+
+    from sdm_client import Request
+
+    context = pd.DataFrame(
+        {'id': [1, 4, 5], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
+    )
+    schema = Schema.from_data(
+        {'instance': context}, primary_keys={'instance': 'id'}
+    )
+    opening = Request(
+        context=context,
+        predict=pd.DataFrame({'id': [6], 'x': [0.1]}),
+        schema=schema,
+        target='y',
+        task='classification',
+    )
+    scoring = Request(
+        context=context,
+        predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
+        schema=schema,
+        target='y',
+        task='classification',
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        score_pinned(opening, scoring)
+    notices = [
+        str(item.message)
+        for item in caught
+        if "session's pinned context" in str(item.message)
+    ]
+    if overlap:
+        assert len(notices) == 1
+        assert notices[0].startswith(
+            f'{overlap} of the {len(ids)} rows being scored'
+        )
+    else:
+        assert notices == []

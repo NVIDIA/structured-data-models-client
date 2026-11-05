@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.name.database-only",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "source.open/explicit/snowflake",
+    "schema.from-source/all-tables/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "client.predict/binary/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int8/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "named_part": "catalog",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "A Snowflake source naming only its database, with its schema supplied by the current session.",
+  "source": "Correctness case snowflake.name.database-only using the shop fixture."
+}

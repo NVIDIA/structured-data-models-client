@@ -2,22 +2,22 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# The client carries sdm_client._native, built from rust/bindings/sdm-py.
+# Maturin produces one cp310-abi3 wheel per supported platform.
 [build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
 
 [project]
 name = "structured-data-models-client"
-# The version lives in exactly one place per distribution: `_version.py`, a
-# module holding a single literal and importing nothing. setuptools reads it
-# statically, so building the wheel never imports the package, which matters
-# because importing these roots pulls pandas, and a build backend that has to
-# import pandas to learn a version number cannot produce a wheel at all.
+# maturin reads the version from sdm-py's Cargo.toml, the workspace's
+# version; `_version.py` still holds the same literal for code that reads it,
+# and a test holds these and the other two distributions equal.
 dynamic = ["version"]
 description = "One Python client for NVIDIA's structured-data foundation model NIMs"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license-files = ["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES-RUST.txt"]
 requires-python = ">=3.10"
 authors = [{ name = "NVIDIA" }]
 keywords = ["structured-data", "foundation-model", "tabular", "relational"]
@@ -25,7 +25,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -35,14 +35,17 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-# What the base install carries: the wire vocabulary, the language, an HTTP
-# session, and frames. A model that does heavy client-side work brings its own
-# runtime through an extra instead.
+# Both models use the bundled Rust core. Arrow carries columnar data across
+# the native boundary through the PyCapsule interface (available since 14.0.1).
 dependencies = [
-    "structured-data-models-api==1.0.0",
-    "structured-data-models-pql==1.0.0",
+    "structured-data-models-api==2.0.0rc1",
     "pandas>=2.2.2",
-    "numpy>=1.23",
+    "numpy>=1.23.5",
+    "pyarrow>=14.0.1",
+    # IANA zones must also be available on Windows and minimal containers.
+    "tzdata>=2024.1",
+    # The existing relational validator floor also supplies its error formatter.
+    "pydantic>=2.7",
     "requests>=2.28",
     "urllib3>=1.26",
 ]
@@ -54,24 +57,16 @@ Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 Changelog = "https://github.com/NVIDIA/structured-data-models-client/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-# A model that does heavy client-side work brings its own runtime; a warehouse
-# driver is opt-in the same way, through the shared connectors package.
-#
-# `relational` stays narrower than this distribution. The engine is a
-# native build, publishing CPython wheels for 3.10-3.14 on Linux, macOS and
-# Windows and no sdist, so the extra stops at 3.15 and on PyPy, while this
-# distribution is pure Python and admits each later interpreter as it
-# arrives. pip reports the gap as "No matching distribution found for
-# structured-data-models-relational-engine", which names the symptom and not
-# the reason, so it is written down here and in the installation guide.
-relational = ["structured-data-models-relational-engine==1.0.0"]
-sqlite = ["structured-data-models-connectors[sqlite]==1.0.0"]
-duckdb = ["structured-data-models-connectors[duckdb]==1.0.0"]
-snowflake = ["structured-data-models-connectors[snowflake]==1.0.0"]
-databricks = ["structured-data-models-connectors[databricks]==1.0.0"]
-postgres = ["structured-data-models-connectors[postgres]==1.0.0"]
-lakebase = ["structured-data-models-connectors[lakebase]==1.0.0"]
-s3 = ["structured-data-models-connectors[s3]==1.0.0"]
+# Keep the existing installation spelling; both models now use the base runtime.
+relational = []
+# Warehouse drivers remain opt-in through the shared connectors package.
+sqlite = ["structured-data-models-connectors[sqlite]==2.0.0rc1"]
+duckdb = ["structured-data-models-connectors[duckdb]==2.0.0rc1"]
+snowflake = ["structured-data-models-connectors[snowflake]==2.0.0rc1"]
+databricks = ["structured-data-models-connectors[databricks]==2.0.0rc1"]
+postgres = ["structured-data-models-connectors[postgres]==2.0.0rc1"]
+lakebase = ["structured-data-models-connectors[lakebase]==2.0.0rc1"]
+s3 = ["structured-data-models-connectors[s3]==2.0.0rc1"]
 # Reaching a model served on Databricks Model Serving. The one extra that names
 # a third-party package directly: the transport that imports it lives in this
 # distribution, not in the engine or the connectors. It is a way to reach a
@@ -87,17 +82,17 @@ in-process = ["structured-data-models>=0.2.1,<0.3; python_version >= '3.11'"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
-test = ["pytest", "requests-mock"]
+test = ["psutil; sys_platform == 'win32'", "pytest", "pytest-xdist", "pytz", "requests-mock", "jsonschema>=4.18", "pyyaml"]
 
-[tool.setuptools.dynamic]
-version = {attr = "sdm_client._version.__version__"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["sdm_client*"]
-
-[tool.setuptools.package-data]
-"sdm_client" = ["py.typed"]
+# The Python package is src/sdm_client, py.typed and _native.pyi included;
+# the extension module lands beside them. The shipped build has the
+# production features only: `test-ops` is for the binding's own tests.
+[tool.maturin]
+manifest-path = "../../rust/bindings/sdm-py/Cargo.toml"
+module-name = "sdm_client._native"
+python-source = "src"
+locked = true
+exclude = ["**/__pycache__/**", "**/*.pyc", "**/*.pyo"]
 
 [tool.ruff]
 extend = "../../pyproject.toml"

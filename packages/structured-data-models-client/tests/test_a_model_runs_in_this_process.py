@@ -163,12 +163,12 @@ def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(
             (
                 PredictiveQuery(COUNT, tables).materialize(indices=[0, 1]),
                 list(range(40)),
-                'VALIDATION_FAILED',
+                'UNSUPPORTED_REQUEST',
             ),
             (
                 PredictiveQuery(BINARY, tables).materialize(indices=[1, 3]),
                 list(range(0, 40, 2)),
-                'TASK_SCHEMA_MISMATCH',
+                'UNSUPPORTED_REQUEST',
             ),
         ):
             error = refused(
@@ -177,6 +177,10 @@ def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(
                 )
             )
             assert error.code == code
+            if len(holdout) == 40:
+                assert error.details['context_rows'] == 0
+            else:
+                assert error.details['classes_in_context'] == 1
 
 
 @pytest.mark.parametrize(
@@ -332,7 +336,7 @@ def test_without_the_extra_the_extra_is_named():
     says which Python it needs."""
     script = (
         'import sys\n'
-        "for name in ('sdm', 'torch', 'pyarrow'):\n"
+        "for name in ('sdm', 'torch'):\n"
         '    sys.modules[name] = None\n'
         'from sdm_client import SDMClient, StructuredDataError\n'
         'try:\n'
@@ -526,7 +530,7 @@ def test_releasing_a_session_does_not_wait_for_a_model_to_finish(
 
     monkeypatch.setattr(type(tabular), 'fit', watched)
     client = SDMClient.in_process(tabular)
-    backend = client._backend
+    backend = client._transport
     try:
         call = threading.Thread(
             target=lambda: client.predict(request, model=KumoTabular())
@@ -625,7 +629,7 @@ def test_closing_beats_a_call_that_was_already_running(relational, monkeypatch):
         indices=[0, 1], model=KumoRelational()
     )
     client = SDMClient.in_process(relational)
-    backend = client._backend
+    backend = client._transport
     failed: list[BaseException] = []
 
     def pin() -> None:

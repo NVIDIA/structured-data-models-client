@@ -26,7 +26,8 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | entities one question gathers | relational | 100,000, in at most 100 calls | at `materialize()`, and this client's own: the endpoint is never asked for more than one call's worth |
 | calls a question asked in parts makes | relational | 200, one per candidate or step | at `materialize()`, as `sdm_client.decompose.MOST_PARTS` |
 | request body | relational | 30 MiB per call | at `materialize()` |
-| request body | relational and tabular, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
+| request body | tabular or relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
+| gradient explanations | relational and tabular | endpoint-dependent; no separate client row/context limit | endpoint validates support |
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
 
@@ -35,9 +36,6 @@ since this client checks it. A NIM also has limits of its own, which each
 deployment sets, such as the longest string a cell may hold or the most
 distinct values a column may have. Those protect a shared server, and are
 not applied when the model runs in your own process.
-
-**An explanation has no row limit of its own.** Every scored row is
-explained, on either model.
 
 A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a
@@ -180,6 +178,10 @@ defensible default for a temporal model; plan for a recency window rather than
 for a representative sample, and gather more context if you need the older
 anchors.
 
+Snowflake samples rows without a warehouse seed.
+`random_seed` is optional, and setting it does not make Snowflake's warehouse row sample reproducible.
+Repeated predictions can therefore differ even with the same seed.
+
 ## What a deployment serves
 
 `capabilities()` describes **this client** and reports `source='sdk'`. It is
@@ -196,3 +198,10 @@ broader build with six task kinds and seven output fields. A narrower build
 serves only classification and regression, refusing the rest itself. The
 contract has no capabilities route, so the client declares the broader set
 and lets the narrower build reject unsupported requests.
+
+## Explanation admission
+
+`EXPLAIN PREDICT` augments the requested outputs; it does not make an empty `outputs=[]` valid.
+A ranking with this prefix is refused at materialization before source gathering.
+An explanation requested later through `predict(outputs=...)` is checked at prediction admission.
+The optional Python model runtime checks its supported outputs before loading weights.

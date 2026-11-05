@@ -1,0 +1,43 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.name.two-part",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "{schema}.users",
+        "orders": "{schema}.orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "Tables named with schema and table, the {schema} placeholder the capture writes (P2-MID2-6): the reference's answer to a name qualified by its schema.",
+  "source": "Correctness case lakebase.name.two-part using the shop fixture."
+}

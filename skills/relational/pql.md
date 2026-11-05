@@ -13,8 +13,8 @@ could be either, `materialize(task=...)` settles it.)
 [ ASSUMING <condition> ]
 ```
 
-`EXPLAIN PREDICT …` means the same as `outputs=['explanation']`; passing both
-is allowed and redundant. A ranking refuses it; a forecast explains each step.
+`EXPLAIN PREDICT …` adds `'explanation'` to the ordinary requested outputs.
+Explicitly including that output too is allowed; `outputs=[]` remains invalid. A ranking refuses it; a forecast explains each step.
 
 `CLASSIFY` is in the language and **not reachable on these models**. It takes
 a multicategorical target, and that is the one thing these models will not
@@ -354,8 +354,8 @@ Read the column number: it points at the token, not at the clause.
 
 ```
 PREDICT COUNT(orders.*, 0, 30, days, 3) FOR EACH users.user_id
-→ Invalid Syntax ... Could not process the text: ","; in line 1 and col 35
-  ...
+→ [INVALID_REQUEST] ... Expected ')' to close the aggregation, but found ','
+  at row 1, column 35.
 ```
 
 That one is a forecast written as a fifth argument. Forecasts are

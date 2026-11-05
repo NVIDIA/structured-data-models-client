@@ -5,8 +5,7 @@
 """A model run in this process explains its answers as a NIM does.
 
 sdm's gradient tensors are turned into the record a NIM sends per row, the
-same bytes the NIM's converter writes, so the client's ``GradientDecoder``
-reads an in-process explanation unchanged. Small random-weight models stand
+same bytes the NIM's converter writes, so Rust reads the in-process explanation unchanged. Small random-weight models stand
 in for the published ones.
 """
 
@@ -16,12 +15,10 @@ import copy
 import json
 import math
 import warnings
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from sample_tables import graph, people
-from test_relational_explanations import ROWS, TABLES, gathered
 from test_tabular_explanations import CHURN, tabular_asked
 
 from sdm_client import (
@@ -32,7 +29,7 @@ from sdm_client import (
     SDMClient,
 )
 from sdm_client.errors import StructuredDataError
-from sdm_client.explanations import GradientConverter, GradientDecoder
+from sdm_client.in_process.gradients import GradientConverter
 
 pytestmark = pytest.mark.filterwarnings('ignore')
 
@@ -66,15 +63,6 @@ def attribution(sdm, gradients: list, columns: dict[str, list[Any]]) -> Any:
 
 def related_tables(sdm, tables: dict[str, Any]) -> Any:
     return sdm.RelatedTables(tables=tables, relationships=[], task_links=[])
-
-
-def decoded(explained: list[dict], payload: Any = None) -> Any:
-    """``explained``, read back as the client reads a NIM's records."""
-    items = [
-        SimpleNamespace(id=None, row_index=index, explanation=record)
-        for index, record in enumerate(explained)
-    ]
-    return GradientDecoder(payload).decode(items)
 
 
 def test_classes_are_named_as_they_are_sent():
@@ -271,94 +259,6 @@ def test_a_non_finite_gradient_is_refused(sdm, value):
     assert caught.value.code == 'INTERNAL_ERROR'
 
 
-def test_a_tabular_record_reads_back_as_its_entry(sdm):
-    """The decoder reads each record as the documented tabular entry.
-
-    Assumptions:
-    - No payload, as for kumo-tabular; rows have no id.
-    """
-    instance = attribution(
-        sdm,
-        [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]],
-        {'a': [0.0, 0.0], 'b': [0.0, 0.0]},
-    )
-
-    explanations = decoded(GradientConverter.convert(CLASSES, instance, rows=2))
-
-    assert dict(explanations) == {
-        0: {
-            'outputs': CLASSES,
-            'instance': {
-                'columns': ['a', 'b'],
-                'gradients': [[1.0, 2.0], [5.0, 6.0]],
-            },
-        },
-        1: {
-            'outputs': CLASSES,
-            'instance': {
-                'columns': ['a', 'b'],
-                'gradients': [[3.0, 4.0], [7.0, 8.0]],
-            },
-        },
-    }
-
-
-def test_a_relational_record_reads_back_as_the_entitys_rows(sdm):
-    """Each entity's related rows decode as its own rows, with the gradient
-    the converter put on each.
-
-    Assumptions:
-    - Users 5 and 7 gathered in one call, related rows interleaved; each row
-      is owned by the entity its ``instance_id`` names and its gradient is
-      its position in its table.
-    """
-    payload = gathered(5, 7)
-    instances = [row[0] for row in payload['predict']['instance_table']['rows']]
-    sent = payload['predict']['related_tables']
-    related = related_tables(
-        sdm,
-        {
-            name: attribution(
-                sdm,
-                [[[float(at)] for at in range(len(sent[name]['rows']))]],
-                {column: [0.0] * len(sent[name]['rows'])},
-            )
-            for name, (_, column) in TABLES.items()
-        },
-    )
-    instance = attribution(sdm, [[[0.0], [0.0]]], {'anchor': [0.0, 0.0]})
-
-    explained = GradientConverter.convert(
-        CLASSES[:1],
-        instance,
-        related,
-        rows=2,
-        related_rows={name: len(table['rows']) for name, table in sent.items()},
-        owners={
-            name: [instances.index(row[0]) for row in table['rows']]
-            for name, table in sent.items()
-        },
-    )
-    explanations = decoded(explained, payload)
-
-    for index, user in enumerate((5, 7)):
-        for name, (columns, column) in TABLES.items():
-            block = explanations[index]['related'][name]
-            visible = [
-                c for c in columns if c not in ('instance_id', '__node_id')
-            ]
-            assert block['rows'] == [
-                dict(zip(visible, row, strict=True)) for row in ROWS[user][name]
-            ]
-            assert block['columns'] == [column]
-            positions = [
-                at
-                for at, row in enumerate(sent[name]['rows'])
-                if row[0] == instances[index]
-            ]
-            assert block['gradients'] == [[[float(at)] for at in positions]]
-
-
 def test_owners_are_the_predict_rows_sdm_joins_each_related_row_to(sdm):
     """Each related row's owner is the predict row sdm's task graph assigns
     it; a row joining none is -1.
@@ -399,59 +299,6 @@ def test_owners_are_the_predict_rows_sdm_joins_each_related_row_to(sdm):
         'users': [1, 0],
         'orders': [0, 1, -1],
     }
-
-
-def test_a_fitted_tabular_model_is_explained_per_row(
-    sdm, tabular, tabular_request
-):
-    """A real kumo-tabular explanation converts and decodes to one entry per
-    row, in the payload's row order.
-
-    Assumptions:
-    - A small random-weight model fitted with one estimator, as in process.
-    - The query is read from the payload as the in-process backend reads it.
-    """
-    import torch
-    from sdm.explain import GradientExplainer
-
-    from sdm_client.adapters.tabular import TabularAdapter
-    from sdm_client.in_process.tabular import Tabular
-
-    (payload,) = TabularAdapter().prediction_plan(
-        tabular_request(rows=3), ('prediction', 'explanation')
-    )
-    served = Tabular()
-    context = served.context(payload)
-    x, related = served.query(context, payload, payload['schema'])
-    fitted = copy.copy(tabular)
-    fitted.fit(
-        context.x,
-        context.y,
-        num_estimators=1,
-        generator=torch.Generator().manual_seed(42),
-    )
-
-    instance, nothing = GradientExplainer().explain(fitted, x, related)
-    alone, _ = GradientExplainer().explain(fitted, x[[2]], related)
-    sent = len(payload['predict']['instance_table']['rows'])
-    explanations = decoded(
-        GradientConverter.convert(
-            GradientConverter.class_outputs(context.labels), instance, rows=sent
-        )
-    )
-
-    assert nothing is None
-    assert instance.numerical.shape[-2] == sent
-    assert torch.allclose(instance.numerical[:, 2], alone.numerical[:, 0])
-    assert sorted(explanations) == [0, 1, 2]
-    for entry in explanations.values():
-        assert entry['outputs'] == GradientConverter.class_outputs(
-            context.labels
-        )
-        assert entry['instance']['columns'] == ['age']
-        assert [
-            len(by_column) for by_column in entry['instance']['gradients']
-        ] == [1, 1]
 
 
 def relational_payload() -> dict[str, Any]:
@@ -550,63 +397,6 @@ def relational_payload() -> dict[str, Any]:
             'related_tables': related([7, 8], 100),
         },
     }
-
-
-def test_a_fitted_relational_model_is_explained_per_entity(sdm, relational):
-    """A real kumo-relational explanation converts and decodes; sdm's tensors
-    hold the payload's related rows in the payload's order.
-
-    Assumptions:
-    - A small random-weight model fitted with one estimator, as in process.
-    - Each related row's owner per sdm is the entity its ``instance_id`` names.
-    """
-    import torch
-    from sdm.explain import GradientExplainer
-
-    from sdm_client.in_process.relational import Relational
-
-    payload = relational_payload()
-    served = Relational()
-    context = served.context(payload)
-    x, related = served.query(context, payload, payload['schema'])
-    fitted = copy.copy(relational)
-    fitted.fit(
-        context.x,
-        context.y,
-        context.related,
-        num_estimators=1,
-        generator=torch.Generator().manual_seed(42),
-    )
-
-    instance, attributed = GradientExplainer().explain(fitted, x, related)
-    sent = payload['predict']['related_tables']
-    instances = [row[0] for row in payload['predict']['instance_table']['rows']]
-    owned = GradientConverter.entity_rows(x, related)
-    explanations = decoded(
-        GradientConverter.convert(
-            GradientConverter.class_outputs(context.labels),
-            instance,
-            attributed,
-            rows=len(instances),
-            related_rows={name: len(t['rows']) for name, t in sent.items()},
-            owners=owned,
-        ),
-        payload,
-    )
-
-    for name, table in sent.items():
-        assert attributed.tables[name].numerical.shape[-2] == len(table['rows'])
-        assert owned[name] == [instances.index(row[0]) for row in table['rows']]
-    assert sorted(explanations) == [0, 1]
-    for index, user in enumerate((7, 8)):
-        entry = explanations[index]
-        assert entry['outputs'] == GradientConverter.class_outputs(
-            context.labels
-        )
-        assert [
-            row['user_id'] for row in entry['related']['orders']['rows']
-        ] == [user, user]
-        assert entry['related']['orders']['columns'] == ['amount']
 
 
 BINARY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
@@ -763,16 +553,39 @@ def test_nothing_is_explained_unless_asked(tabular, explains):
 
 
 def regression_answer(tabular, fields, levels=None) -> Any:
-    """A tabular regression answered in process for ``fields``, with
-    ``levels`` as the quantile levels the payload asks for."""
-    from sdm_client.adapters.tabular import TabularAdapter
-
-    adapter = TabularAdapter()
-    (payload,) = adapter.prediction_plan(asked('spend', 'regression'), fields)
+    """Exercise the real runtime through a public prediction."""
+    request = asked('spend', 'regression')
     if levels is not None:
+        # Quantile levels are the runtime's wire-level option, not a public Request option.
+        from test_tabular_direct_core import Endpoint
+        from test_tabular_direct_core import client as endpoint_client
+
+        class Captured(Exception):
+            pass
+
+        class CaptureEndpoint(Endpoint):
+            def predict(self, payload):
+                self.calls.append(payload)
+                raise Captured
+
+        endpoint = CaptureEndpoint()
+        with endpoint_client(endpoint) as capturing:
+            with pytest.raises(Captured):
+                capturing.predict(request, model=KumoTabular(), outputs=fields)
+        payload = endpoint.calls[0]
         payload['output']['quantile_levels'] = levels
-    with SDMClient.in_process(tabular) as client:
-        return client._backend.predict(adapter, payload, fields)
+        with SDMClient.in_process(tabular) as model_client:
+            raw = model_client._transport.predict(payload)
+        from sdm_client._rust.direct import bind_request
+        from sdm_client._rust.direct_response import decoded_reply
+
+        return decoded_reply(
+            raw, payload, bind_request(request, KumoTabular(), fields)
+        )
+    with SDMClient.in_process(tabular) as model_client:
+        return model_client.predict(
+            request, model=KumoTabular(), outputs=fields
+        )
 
 
 def test_a_regression_explains_its_point_and_the_levels_asked_for(tabular):

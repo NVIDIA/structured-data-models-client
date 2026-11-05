@@ -34,7 +34,6 @@ from sdm_client import (
     Schema,
 )
 from sdm_client.client import FittedModel, _empty_answer
-from sdm_client.core.backend import NimBackend
 from sdm_client.core.transport import _build_retry
 from sdm_client.errors import (
     NimRequestError,
@@ -167,7 +166,7 @@ class Transport:
 
 class Client:
     def __init__(self, transport: Transport) -> None:
-        self._backend = NimBackend(transport)
+        self._transport = transport
 
 
 class Adapter:
@@ -247,12 +246,8 @@ def relational_schema(child: pd.DataFrame) -> Schema:
     return schema
 
 
-def test_a_failure_while_building_the_graph_is_a_client_error():
-    """`Graph.from_data`, the key and stype assignments, the links and
-    `graph.validate()` all ran one line above the guard that converts their
-    failures."""
-    pytest.importorskip('sdm_relational_engine')
-
+def test_an_empty_related_table_is_supported():
+    """An empty child has no neighbors and does not invalidate its parents."""
     schema = relational_schema(
         pd.DataFrame(
             {
@@ -261,20 +256,21 @@ def test_a_failure_while_building_the_graph_is_a_client_error():
             }
         )
     )
-    with pytest.raises(StructuredDataError) as raised:
-        PredictiveQuery(
+
+    def materialize():
+        return PredictiveQuery(
             'PREDICT parent.label FOR EACH parent.ID', schema
         ).materialize(
             indices=[1], num_context_samples=2, model=KumoRelational()
         )
-    assert raised.value.code == 'INVALID_REQUEST'
-    assert 'empty' in str(raised.value).lower()
+
+    request = materialize()
+    assert len(request.payloads[0]['predict']['instance_table']['rows']) == 1
 
 
 def test_a_working_graph_is_not_affected():
     """The child needs a key of its own; a table whose primary key is also the
     link column is refused for a different reason."""
-    pytest.importorskip('sdm_relational_engine')
 
     parent = pd.DataFrame({'ID': range(40), 'label': ['a', 'b'] * 20})
     child = pd.DataFrame(
@@ -349,7 +345,6 @@ def test_a_relational_request_reports_the_rows_it_carries():
     zero-row request without sending, so a relational request that claims to
     have no rows gets an empty answer and never reaches the endpoint.
     """
-    pytest.importorskip('sdm_relational_engine')
 
     parent = pd.DataFrame({'ID': range(40), 'label': ['a', 'b'] * 20})
     child = pd.DataFrame(
