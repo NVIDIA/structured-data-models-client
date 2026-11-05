@@ -3,36 +3,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The contract lock check: no entry merged into rust-core is rewritten.
+"""Validate current protocol schemas and require a version bump for shape changes.
 
-``rust/crates/sdm-contract/schema/contract.lock`` holds one line per contract
-version, ``<version> sha256:<hex> <schema file>``, and ``validated-query.lock``
-beside it the same for the PQL validated-query format, which is versioned on
-its own. The hash covers a projection of the schema that strips only the
-annotation keywords (``description``, ``title``, ``examples``), keyword by
-keyword, so a doc comment needs no new version while a property named
-``description`` is still part of the shape (Phase 1 decision H7).
-
-Entries present at the merge base with ``origin/rust-core`` are merged and
-never rewritten; an entry not yet merged is a working version, rewritten at
-each bump within a phase, and a lock holds at most one (decision H4). For
-each lock, this check fails when
-
-- a locked schema file no longer has its locked hash,
-- an entry the lock at the merge base held is missing or different now,
-- the lock holds more than one entry the merge base does not, or
-- the lock at the base cannot be read, or there is no merge base.
-
-That each committed schema is the one the types generate, and that each
-current version has an entry, is checked by ``cargo test -p sdm-contract
---test schema_lock``. Run from anywhere in the repository; CI checks out
-every branch so the merge base is there; ``--base`` names another base, and
-the root Python test runs with ``--no-base``, since its checkout is shallow.
-``--prune-working`` retains merged entries and only the newest working entry,
-without changing schema files or hashes; it requires a verified base.
-With no base to read, which entries are merged is not known: each but the
-newest is taken as merged, so only the hashes are checked, and a phase's
-working entry beside the merged ones passes (T2.1b: version 26 beside 25).
+Only the current contract and PQL schema are retained. Their generated locks
+record shape hashes, excluding documentation annotations. With --base, compare
+against the actual target revision's newest locked version: reject rollback or
+a changed schema under the same version. Git preserves historical schemas.
 """
 
 from __future__ import annotations
@@ -121,77 +97,54 @@ def check(
     base: Iterable[tuple[str, str]],
     read_schema: Callable[[str], bytes | None],
 ) -> list[str]:
-    """Problems with the lock ``current``, given the lock at the merge base
-    with rust-core as ``(commit, text)`` (none when the base has no lock)
-    and a reader of committed schema files."""
+    """Check one current entry, its file, and the target revision's contract."""
     problems = []
     try:
         now = parse_lock(current)
     except ValueError as error:
         return [f'the lock: {error}']
-    for version, (locked, name) in sorted(now.items()):
-        body = read_schema(name)
-        if body is None:
-            problems.append(f'version {version}: {name} is missing')
-            continue
+    if len(now) != 1:
+        return ['the lock must hold exactly one current version']
+    version, (locked, name) = next(iter(now.items()))
+    if not re.fullmatch(
+        rf'(?:sdm-contract|pql-validated-query)-{version}\.json', name
+    ):
+        problems.append(
+            f'version {version}: schema filename does not match its version'
+        )
+    body = read_schema(name)
+    if body is None:
+        problems.append(f'version {version}: {name} is missing')
+    else:
         try:
             found = digest(body)
         except ValueError as error:
             problems.append(f'version {version}: {name} is not JSON: {error}')
-            continue
-        if found != locked:
-            problems.append(
-                f'version {version}: {name} no longer has its locked hash; '
-                f'a schema change needs a new version'
-            )
-    merged: set[int] = set()
+        else:
+            if found != locked:
+                problems.append(
+                    f'version {version}: {name} no longer has its locked hash; a schema change needs a new version'
+                )
     for commit, text in base:
         try:
             then = parse_lock(text)
+            if not then:
+                raise ValueError('empty lock')
         except ValueError as error:
             problems.append(
                 f'the lock at {commit[:12]} cannot be read: {error}'
             )
             continue
-        for version, entry in sorted(then.items()):
-            merged.add(version)
-            if version not in now:
-                problems.append(
-                    f'version {version}, merged at {commit[:12]}, was removed'
-                )
-            elif now[version] != entry:
-                problems.append(
-                    f'version {version}, merged at {commit[:12]}, was rewritten'
-                )
-    working = sorted(set(now) - merged)
-    if len(working) > 1:
-        problems.append(
-            f'versions {working} are not merged into rust-core; a lock holds '
-            f'one working entry, rewritten at each bump within a phase'
-        )
+        previous = max(then)
+        if version < previous:
+            problems.append(
+                f'version {version}: rollback from version {previous} at {commit[:12]}'
+            )
+        elif version == previous and now[version] != then[previous]:
+            problems.append(
+                f'version {version}: schema changed without a version bump from {commit[:12]}'
+            )
     return problems
-
-
-def prune_working(current: str, base: Iterable[tuple[str, str]]) -> str:
-    """Keep immutable merged lines and the newest working entry, without rehashing."""
-    now = parse_lock(current)
-    merged: set[int] = set()
-    for commit, text in base:
-        for version, entry in parse_lock(text).items():
-            if now.get(version) != entry:
-                raise ValueError(
-                    f'version {version}, merged at {commit[:12]}, was removed or rewritten'
-                )
-            merged.add(version)
-    working = set(now) - merged
-    keep = merged | ({max(working)} if working else set())
-    return ''.join(
-        line
-        for line in current.splitlines(keepends=True)
-        if not line.strip()
-        or line.lstrip().startswith('#')
-        or int(line.split()[0]) in keep
-    )
 
 
 def _git(*args: str) -> str:
@@ -204,13 +157,13 @@ def _git(*args: str) -> str:
 
 
 def _base_lock(base: str, lock: Path) -> list[tuple[str, str]]:
-    """The lock at the merge base of HEAD and ``base``, if it has one."""
-    merge_base = _git('merge-base', 'HEAD', base).strip()
+    """Read the actual target revision, not an older merge base."""
+    commit = _git('rev-parse', '--verify', f'{base}^{{commit}}').strip()
     try:
-        _git('cat-file', '-e', f'{merge_base}:{lock}')
+        _git('cat-file', '-e', f'{commit}:{lock}')
     except subprocess.CalledProcessError:
-        return []  # the base predates the lock
-    return [(merge_base, _git('show', f'{merge_base}:{lock}'))]
+        return []  # the target predates the lock
+    return [(commit, _git('show', f'{commit}:{lock}'))]
 
 
 def unlocked_schemas(root: Path = REPO_ROOT) -> list[Path]:
@@ -238,17 +191,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         '--base',
         default='origin/rust-core',
-        help='the branch whose merge base with HEAD is also checked',
+        help='target revision whose latest contract must not be rewritten or rolled back',
     )
     parser.add_argument(
         '--no-base',
         action='store_true',
-        help='check the hashes only, each entry but the newest taken as merged (a shallow checkout)',
-    )
-    parser.add_argument(
-        '--prune-working',
-        action='store_true',
-        help='retain merged entries and only the newest working entry; preserve schema files',
+        help='check current schema hashes only, without a target revision',
     )
     parser.add_argument(
         '--prune-unlocked',
@@ -256,12 +204,10 @@ def main(argv: list[str] | None = None) -> int:
         help='remove obsolete versioned schema files absent from both validated locks',
     )
     args = parser.parse_args(argv)
-    if args.prune_working and args.no_base:
-        parser.error('--prune-working requires a verified merge base')
 
     failed = False
     for lock in LOCKS:
-        failed |= _check_lock(lock, args.base, args.no_base, args.prune_working)
+        failed |= _check_lock(lock, args.base, args.no_base)
     if args.prune_unlocked and not failed:
         for path in unlocked_schemas():
             path.unlink()
@@ -269,65 +215,32 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if failed else 0
 
 
-def _check_lock(
-    lock: Path, base: str, no_base: bool, prune: bool = False
-) -> bool:
-    """Checks one lock; whether it failed."""
-    base_locks: list[tuple[str, str]] = []
+def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
+    """Check one generated current lock and, unless disabled, its target."""
     path = REPO_ROOT / lock
     current = path.read_text(encoding='utf-8') if path.is_file() else ''
-    if no_base:
-        # Each entry but the newest taken as merged, as the base would hold
-        # it, so the hashes alone are checked; a lock that does not parse is
-        # reported by ``check``.
-        try:
-            entries = parse_lock(current)
-        except ValueError:
-            entries = {}
-        older = ''.join(
-            f'{version} sha256:{locked} {name}\n'
-            for version, (locked, name) in sorted(entries.items())
-            if version != max(entries)
+    try:
+        base_locks = [] if no_base else _base_lock(base, lock)
+    except subprocess.CalledProcessError as error:
+        print(
+            f'{lock.name}: cannot read base {base}: {error.stderr.strip() or error}',
+            file=sys.stderr,
         )
-        base_locks = [('(no base)', older)] if older else []
-    else:
-        try:
-            base_locks = _base_lock(base, lock)
-        except subprocess.CalledProcessError as error:
-            print(
-                f'{lock.name}: no merge base with {base}: '
-                f'{error.stderr.strip() or error}',
-                file=sys.stderr,
-            )
-            return True
+        return True
 
     def read_schema(name: str) -> bytes | None:
         path = REPO_ROOT / SCHEMA_DIR / name
         return path.read_bytes() if path.is_file() else None
 
-    original = current
-    if prune:
-        try:
-            current = prune_working(current, base_locks)
-        except ValueError as error:
-            print(f'{lock.name}: {error}', file=sys.stderr)
-            return True
     problems = check(current, base_locks, read_schema)
-    if not current and not problems:
-        problems = [f'{lock} is missing']
     for problem in problems:
         print(f'{lock.name}: {problem}', file=sys.stderr)
     if problems:
         return True
-    if prune and current != original:
-        path.write_text(current, encoding='utf-8')
-    merged = set(parse_lock(base_locks[0][1])) if base_locks else set()
-    entries = parse_lock(current)
+    version = next(iter(parse_lock(current)))
     print(
-        f'{lock.name}: {len(entries)} version(s) locked, '
-        f'{len(merged)} at the merge base and unchanged, '
-        f'{len(set(entries) - merged)} working'
-        + (' (base not checked)' if no_base else '')
+        f'{lock.name}: current version {version} verified'
+        + (' (base not checked)' if no_base else f' against {base}')
     )
     return False
 

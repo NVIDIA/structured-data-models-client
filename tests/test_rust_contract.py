@@ -6,8 +6,8 @@
 
 The scalar edge values the contract encodes decode exactly with only ``json``
 and ``decimal``: nothing passes through a double. And the contract lock check
-fails a rewritten or removed merged entry, a second working entry and a
-changed schema, and its hash ignores doc comments but not shape.
+fails rollback, same-version shape changes and extra historical entries.
+Its hash ignores doc comments but not shape.
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ def _digest(body: bytes) -> str:
 
 
 def test_the_lock_check_holds_on_the_committed_lock() -> None:
-    # The checkout here may be shallow; rust-lint checks the merge base.
+    # The checkout here may be shallow; rust-lint checks the target revision.
     assert _lock_module().main(['--no-base']) == 0
 
 
@@ -149,55 +149,58 @@ def test_the_lock_check_fails_an_unreadable_base_lock() -> None:
     assert any('cannot be read' in p for p in problems), problems
 
 
-def test_a_merged_entry_is_never_rewritten_or_removed() -> None:
+def test_current_schema_requires_a_bump_but_not_historical_copies() -> None:
     lock = _lock_module()
-    one, two = b'{"v": 1}\n', b'{"v": 2}\n'
+    one, two = b'{"v": 1}', b'{"v": 2}'
+    first = f'1 sha256:{lock.digest(one)} sdm-contract-1.json\n'
+    second = f'2 sha256:{lock.digest(two)} sdm-contract-2.json\n'
     schemas = {'sdm-contract-1.json': one, 'sdm-contract-2.json': two}
-    first = f'1 sha256:{_digest(one)} sdm-contract-1.json\n'
-    both = first + f'2 sha256:{_digest(two)} sdm-contract-2.json\n'
-
-    # Version 1 is merged; version 2 is the phase's one working entry.
-    assert lock.check(both, [('a' * 40, first)], schemas.get) == []
-
-    # Version 1's schema changed in place, its entry rewritten to match.
-    changed = b'{"v": 1, "x": 0}\n'
-    rewritten = f'1 sha256:{_digest(changed)} sdm-contract-1.json\n'
+    assert lock.check(second, [('base', first)], schemas.get) == []
+    assert lock.check(second, [('base', first + second)], schemas.get) == []
+    problems = lock.check(first, [('base', second)], schemas.get)
+    assert any('rollback' in p for p in problems)
+    changed = f'1 sha256:{lock.digest(two)} sdm-contract-1.json\n'
     problems = lock.check(
-        rewritten, [('b' * 40, first)], {'sdm-contract-1.json': changed}.get
+        changed, [('base', first)], {'sdm-contract-1.json': two}.get
     )
-    assert any('was rewritten' in p for p in problems), problems
-
-    # A merged entry is gone.
-    problems = lock.check(
-        f'2 sha256:{_digest(two)} sdm-contract-2.json\n',
-        [('c' * 40, first)],
-        schemas.get,
-    )
-    assert any('was removed' in p for p in problems), problems
+    assert any('without a version bump' in p for p in problems)
+    assert lock.check(first + second, [], schemas.get) == [
+        'the lock must hold exactly one current version'
+    ]
+    assert lock.check('', [], schemas.get) == [
+        'the lock must hold exactly one current version'
+    ]
 
 
-def test_a_working_entry_is_rewritten_and_a_lock_holds_only_one() -> None:
+def test_target_revision_is_used_even_when_merge_base_is_older(
+    tmp_path, monkeypatch
+) -> None:
+    import subprocess
+
     lock = _lock_module()
-    one, two = b'{"v": 1}\n', b'{"v": 2}\n'
-    # No entry at the base: the one entry is working, and may be rewritten
-    # at each bump within the phase.
-    assert (
-        lock.check(
-            f'3 sha256:{_digest(two)} sdm-contract-3.json\n',
-            [],
-            {'sdm-contract-3.json': two}.get,
-        )
-        == []
-    )
-    # Two entries the base does not hold: one too many.
-    both = (
-        f'1 sha256:{_digest(one)} sdm-contract-1.json\n'
-        f'2 sha256:{_digest(two)} sdm-contract-2.json\n'
-    )
-    problems = lock.check(
-        both, [], {'sdm-contract-1.json': one, 'sdm-contract-2.json': two}.get
-    )
-    assert any('one working entry' in p for p in problems), problems
+
+    def git(*args):
+        return subprocess.check_output(
+            ['git', '-C', str(tmp_path), *args], text=True
+        ).strip()
+
+    git('init', '-q')
+    git('config', 'user.email', 'test@example.invalid')
+    git('config', 'user.name', 'Contract test')
+    path = tmp_path / lock.LOCK
+    path.parent.mkdir(parents=True)
+    path.write_text('1 sha256:old sdm-contract-1.json\n')
+    git('add', '.')
+    git('commit', '-qm', 'common')
+    common = git('rev-parse', 'HEAD')
+    path.write_text('2 sha256:new sdm-contract-2.json\n')
+    git('commit', '-qam', 'target advances')
+    target = git('rev-parse', 'HEAD')
+    git('checkout', '-q', '--detach', common)
+    monkeypatch.setattr(lock, 'REPO_ROOT', tmp_path)
+    assert lock._base_lock(target, lock.LOCK) == [
+        (target, '2 sha256:new sdm-contract-2.json\n')
+    ]
 
 
 def test_the_lock_check_fails_a_schema_changed_without_a_bump() -> None:
@@ -248,31 +251,3 @@ def test_the_hash_ignores_doc_comments_and_keeps_a_property_named_description() 
     data = json.loads(json.dumps(schema))
     data['enum'] = [{'description': 'other'}]
     assert digest(data) != locked
-
-
-def test_pruning_preserves_merged_lines_and_only_newest_working() -> None:
-    lock = _lock_module()
-    schemas = {
-        f'sdm-contract-{n}.json': json.dumps({'v': n}).encode()
-        for n in range(1, 5)
-    }
-    lines = {
-        n: f'{n} sha256:{lock.digest(schemas[f"sdm-contract-{n}.json"])} sdm-contract-{n}.json\n'
-        for n in range(1, 5)
-    }
-    base = [('a' * 40, lines[1] + lines[2])]
-    current = '# retained header\n' + ''.join(lines.values())
-    pruned = lock.prune_working(current, base)
-    assert pruned == '# retained header\n' + lines[1] + lines[2] + lines[4]
-    assert lock.check(pruned, base, schemas.get) == []
-    assert lock.prune_working(pruned, base) == pruned
-    for bad in (
-        current.replace(lines[1], ''),
-        current.replace('1 sha256:', '1 sha256:bad'),
-    ):
-        try:
-            lock.prune_working(bad, base)
-        except ValueError as error:
-            assert 'removed or rewritten' in str(error)
-        else:
-            raise AssertionError('pruning must refuse changed merged entries')

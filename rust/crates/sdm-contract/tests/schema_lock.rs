@@ -2,26 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The regeneration and lock checks of the two versioned schemas: the
-//! contract's (`contract.lock`) and the PQL validated-query format's
-//! (`validated-query.lock`).
-//!
-//! A lock entry holds the SHA-256 of a projection of the schema that strips
-//! only the annotation keywords (`description`, `title`, `examples`), as
-//! compact JSON with sorted keys, so a doc comment needs no new version
-//! while a change of shape does (decision H7); `contract_lock.py` computes
-//! the same.
-//!
+//! Regenerate and verify only the current protocol and PQL schemas.
 //! `SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated`
-//! writes the schema of each current version and sets its lock entry: the
-//! working entry of a phase is rewritten at each bump (decision H4). That
-//! no entry merged into `rust-core` changes, and that a lock holds at most
-//! one working entry, is checked by `scripts/rust_core/contract_lock.py`.
-//!
-//! From T1.22 the contract's schema holds the JSON of the attachments the
-//! control messages name (`$defs/Attachments`): every field naming an
-//! attachment is accounted for, and a field added to an attachment's
-//! definitions fails the lock, each seeded below.
+//! updates each current file and lock. `contract_lock.py --prune-unlocked`
+//! removes superseded generated files after validation against the target.
+//! Shape changes require version bumps; Git retains historical snapshots.
+//! Every attachment field remains accounted for by the checks below.
 
 #![allow(
     clippy::disallowed_methods,
@@ -186,31 +172,16 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-/// Writes the schema of `format`'s current version and sets its lock
-/// entry, the phase's working entry (decision H4).
+/// Write the current generated schema and its single lock entry.
 fn write(format: &Format, generated: &str) {
-    let lock_path = schema_dir().join(format.lock);
-    let lock = std::fs::read_to_string(&lock_path).unwrap_or_default();
-    parse_lock(&lock).unwrap();
     let entry = format!(
-        "{} sha256:{} {}",
+        "# Current {} schema; regenerate with schema_lock.rs.\n{} sha256:{} {}\n",
+        format.prefix,
         format.version,
         sha256(generated),
         format.schema_file(format.version)
     );
-    let mut lines: Vec<String> = lock
-        .lines()
-        .filter(|line| line.split_whitespace().next() != Some(format.version.to_string().as_str()))
-        .map(str::to_owned)
-        .collect();
-    if lines.is_empty() {
-        lines.push(format!(
-            "# The {} schema lock: one line per version; see contract_lock.py.",
-            format.prefix
-        ));
-    }
-    lines.push(entry);
-    std::fs::write(&lock_path, lines.join("\n") + "\n").unwrap();
+    std::fs::write(schema_dir().join(format.lock), entry).unwrap();
     std::fs::write(
         schema_dir().join(format.schema_file(format.version)),
         generated,
@@ -239,11 +210,12 @@ fn the_committed_schemas_are_the_generated_ones() {
 }
 
 #[test]
-fn every_locked_version_matches_its_committed_schema() {
+fn only_the_current_version_is_locked_and_matches_its_schema() {
     for format in &FORMATS {
         let lock = read(&schema_dir().join(format.lock));
         let entries = parse_lock(&lock).unwrap();
-        assert!(entries.iter().any(|(v, _, _)| *v == format.version));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, format.version);
         for (version, _, file) in &entries {
             let schema = read(&schema_dir().join(file));
             verify(format, &schema, &lock, *version).unwrap();
