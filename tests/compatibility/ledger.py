@@ -302,7 +302,7 @@ def validate_coverage(data, root):
             hashes = {
                 path: hashlib.sha256(
                     json.dumps(
-                        load_fixture(root / 'tests/parity' / path),
+                        load_fixture(root / 'tests/compatibility' / path),
                         sort_keys=True,
                         separators=(',', ':'),
                         allow_nan=False,
@@ -458,13 +458,23 @@ def main():
         data['api_inventory']['java'],
     )
     base = git('merge-base', args.base, 'HEAD')
-    baseline_present = bool(
-        git('ls-tree', '--name-only', base, 'tests/parity/manifest.json')
+    # A directory move does not make an existing API ledger a first adoption.
+    baseline_path = next(
+        (
+            path
+            for path in (
+                'tests/compatibility/manifest.json',
+                'tests/parity/manifest.json',
+            )
+            if git('ls-tree', '--name-only', base, path)
+        ),
+        None,
     )
+    baseline_present = baseline_path is not None
     old_python = json.loads(git('show', f'{base}:tests/golden/public_api.json'))
     new_python = json.loads((root / 'tests/golden/public_api.json').read_text())
     if baseline_present:
-        before = json.loads(git('show', f'{base}:tests/parity/manifest.json'))
+        before = json.loads(git('show', f'{base}:{baseline_path}'))
         validate_changes(before, data, base)
         validate_changed_symbols(
             before,

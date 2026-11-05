@@ -50,7 +50,7 @@ def run(connector, root, commit):
             commands = {
                 'python': [
                     sys.executable,
-                    'tests/parity/python_runner.py',
+                    'tests/compatibility/python_runner.py',
                     '--phase',
                     'candidate',
                     '--mode',
@@ -78,7 +78,7 @@ def run(connector, root, commit):
                     + str(root / 'java-provenance.json'),
                     '-Dsdm.parity.commit=' + commit,
                     '-Dsdm.parity.manifest='
-                    + str(repository / 'tests/parity/manifest.json'),
+                    + str(repository / 'tests/compatibility/manifest.json'),
                     '-Dsdm.parity.config=' + str(config_path),
                     '-Dsdm.parity.output=' + str(evidence / 'java.jsonl'),
                     '-Dsdm.parity.connectors=' + connector,

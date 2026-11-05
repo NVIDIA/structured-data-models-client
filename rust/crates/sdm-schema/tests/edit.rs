@@ -574,7 +574,7 @@ fn inspect_schema_checks_columns_before_relationships() {
 #[test]
 fn compatibility_ledger_names_each_semantic_assignment_contract() {
     let ledger: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../tests/parity/manifest.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../tests/compatibility/manifest.json")).unwrap();
     let record = ledger["type_contracts"]
         .as_array()
         .unwrap()

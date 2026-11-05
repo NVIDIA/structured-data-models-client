@@ -70,7 +70,7 @@ def parity_junit_check(
     """Hold the maintained API ledger to this same fresh Surefire run."""
     import xml.etree.ElementTree as ElementTree
 
-    ledger = repo / 'tests/parity/manifest.json'
+    ledger = repo / 'tests/compatibility/manifest.json'
     if not ledger.is_file():
         report.fail('parity API', f'missing ledger: {ledger}')
         return
@@ -190,7 +190,7 @@ def main():
         if args.gate == 'live':
             from api_contracts import groups, validate_live_targets
 
-            data = json.loads((repo / 'tests/parity/manifest.json').read_text())
+            data = json.loads((repo / 'tests/compatibility/manifest.json').read_text())
             validate_live_targets(
                 data, {item['id'] for item in data['api_contracts']}
             )

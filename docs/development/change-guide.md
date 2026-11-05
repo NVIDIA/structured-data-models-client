@@ -5,7 +5,7 @@
 # Changing a capability
 
 Start with [CONTRIBUTING.md](../../CONTRIBUTING.md) for installation, maintained tests, formatting, typing, and signed commits.
-The [compatibility manifest](../../tests/parity/manifest.json) connects public APIs to behavior tests, applicability, and engine ownership.
+The [compatibility manifest](../../tests/compatibility/manifest.json) connects public APIs to behavior tests, applicability, and engine ownership.
 Use the actual pull request target as the comparison base.
 Private refactoring does not create a new public API contract.
 
@@ -26,7 +26,7 @@ The generated view derives model, task, connector, and type values from referenc
 Generate a readable, disposable view with:
 
 ```bash
-.venv/bin/python tests/parity/developer_views.py --out /tmp/sdm-developer-contracts.md
+.venv/bin/python tests/compatibility/developer_views.py --out /tmp/sdm-developer-contracts.md
 ```
 
 This view reports declarations, existing group coverage, explicit per-symbol assertion links, language exceptions, scenario scope, and type boundaries.
@@ -79,8 +79,8 @@ Generate Java inventory after compiling the API, and run the existing gate again
 
 ```bash
 .venv/bin/python scripts/snapshot_java_api.py --out java/target/public-api.json
-.venv/bin/python tests/parity/ledger.py --base origin/main --java-inventory java/target/public-api.json
-.venv/bin/python -m pytest tests/parity/test_ledger.py -q
+.venv/bin/python tests/compatibility/ledger.py --base origin/main --java-inventory java/target/public-api.json
+.venv/bin/python -m pytest tests/compatibility/test_ledger.py -q
 ```
 
 Substitute the real pull request target for `origin/main` when necessary.

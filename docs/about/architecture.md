@@ -77,7 +77,7 @@ See [Rust crate rules](../../rust/README.md) for the enforced dependency boundar
 
 ## Compatibility and validation
 
-The [compatibility ledger](../../tests/parity/README.md) maps supported APIs and capabilities across languages, models, connectors and type families.
+The [compatibility ledger](../../tests/compatibility/README.md) maps supported APIs and capabilities across languages, models, connectors and type families.
 API snapshots and behavior tests enforce those declarations, including explicit applicability exceptions.
 Local contract tests do not establish live endpoint coverage; endpoint evidence and final runtime/performance acceptance remain separate.
 Maintained tests use the current client and self-contained fixtures, without installing a historical implementation.

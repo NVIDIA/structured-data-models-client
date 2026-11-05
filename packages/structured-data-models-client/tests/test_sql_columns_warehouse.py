@@ -48,7 +48,7 @@ def test_live_calculated_column_values_refresh_and_prediction(connector):
     fixture = json.loads(
         (
             Path(__file__).resolve().parents[3]
-            / 'tests/parity/fixtures/shop.json'
+            / 'tests/compatibility/fixtures/shop.json'
         ).read_text()
     )
     expected = {

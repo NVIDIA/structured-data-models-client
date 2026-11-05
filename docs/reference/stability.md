@@ -53,7 +53,7 @@ Java's public surface is the public classes in `com.nvidia.sdm`, including publi
 `com.nvidia.sdm.internal` is implementation detail.
 Python and Java promise equivalent capabilities, with idiomatic data containers and naming rather than identical method signatures.
 Python uses pandas/NumPy/Arrow inputs where supported; Java uses its documented Arrow and source APIs.
-The compatibility ledger in `tests/parity/manifest.json` records explicit language applicability exceptions.
+The compatibility ledger in `tests/compatibility/manifest.json` records explicit language applicability exceptions.
 
 | Boundary | Responsibility |
 |---|---|

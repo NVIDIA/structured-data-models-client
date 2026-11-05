@@ -25,7 +25,7 @@ MAX_FIXTURE_BYTES = 250_000
 
 def fixture(path: Path) -> bool:
     if path.parts[:2] == ('tests', 'golden') or path == Path(
-        'tests/parity/manifest.json'
+        'tests/compatibility/manifest.json'
     ):
         return (
             False  # Generated API snapshots and the ledger have separate gates.

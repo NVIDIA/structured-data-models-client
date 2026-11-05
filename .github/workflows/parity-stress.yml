@@ -68,7 +68,7 @@ jobs:
           config: ${{ secrets.PARITY_CONFIG_JSON }}
       - name: Authenticate the giant route before allocating large values
         run: |
-          "$PARITY_DIR/candidate/bin/python" tests/parity/resource_preflight.py \
+          "$PARITY_DIR/candidate/bin/python" tests/compatibility/resource_preflight.py \
             --config "$PARITY_DIR/config.json" --giant-endpoint "$SDM_T136_LIVE_ENDPOINT" \
             --out "$PARITY_DIR/evidence/preflight.json" \
             > "$PARITY_DIR/private/preflight.log" 2>&1

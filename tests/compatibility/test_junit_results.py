@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
     'fault', ['missing', 'duplicate', 'skipped', 'failure', 'error', None]
 )
 def test_required_junit_results(tmp_path, fault, gate):
-    coverage = runpy.run_path(str(ROOT / 'tests/parity/check_junit.py'))
-    ledger = tmp_path / 'tests/parity/manifest.json'
+    coverage = runpy.run_path(str(ROOT / 'tests/compatibility/check_junit.py'))
+    ledger = tmp_path / 'tests/compatibility/manifest.json'
     ledger.parent.mkdir(parents=True)
     ledger.write_text(
         json.dumps(
@@ -61,7 +61,7 @@ def test_required_junit_results(tmp_path, fault, gate):
 
 
 def test_missing_ledger_is_not_a_success(tmp_path):
-    checker = runpy.run_path(str(ROOT / 'tests/parity/check_junit.py'))
+    checker = runpy.run_path(str(ROOT / 'tests/compatibility/check_junit.py'))
     report = checker['Report']()
     checker['parity_junit_check'](tmp_path, tmp_path / 'reports', report)
     assert report.problems and 'missing ledger' in report.problems[0]
@@ -74,7 +74,7 @@ def test_runner_uses_fresh_reports_and_preserves_natives(
     import sys
     from types import SimpleNamespace
 
-    checker = runpy.run_path(str(ROOT / 'tests/parity/check_junit.py'))
+    checker = runpy.run_path(str(ROOT / 'tests/compatibility/check_junit.py'))
     reports = tmp_path / 'java/target/surefire-reports'
     reports.mkdir(parents=True)
     stale = reports / 'TEST-stale.xml'
@@ -82,7 +82,7 @@ def test_runner_uses_fresh_reports_and_preserves_natives(
     native = tmp_path / 'java/target/natives/library.so'
     native.parent.mkdir()
     native.write_bytes(b'keep-native')
-    ledger = tmp_path / 'tests/parity/manifest.json'
+    ledger = tmp_path / 'tests/compatibility/manifest.json'
     ledger.parent.mkdir(parents=True)
     ledger.write_text(json.dumps({'api_contracts': []}))
     calls = []
@@ -116,7 +116,7 @@ def test_runner_uses_fresh_reports_and_preserves_natives(
 def test_live_missing_parameterized_invocation_fails(tmp_path):
     from check_junit import Report, parity_junit_check
 
-    ledger = tmp_path / 'tests/parity/manifest.json'
+    ledger = tmp_path / 'tests/compatibility/manifest.json'
     ledger.parent.mkdir(parents=True)
     ledger.write_text(
         json.dumps(
@@ -164,7 +164,7 @@ def test_local_class_requirements_keep_local_results_strict(tmp_path, fault):
     required = [target]
     if fault == 'missing-named-method':
         required.append(target + '#missing')
-    ledger = tmp_path / 'tests/parity/manifest.json'
+    ledger = tmp_path / 'tests/compatibility/manifest.json'
     ledger.parent.mkdir(parents=True)
     ledger.write_text(
         json.dumps(

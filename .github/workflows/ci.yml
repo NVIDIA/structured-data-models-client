@@ -97,8 +97,8 @@ jobs:
         run: |
           python scripts/check_java_api.py --base "$SDM_API_BASE"
           python scripts/snapshot_java_api.py --out java/target/public-api.json
-          python tests/parity/ledger.py --base "$SDM_API_BASE" --java-inventory java/target/public-api.json
-          python -m pytest tests/parity/test_ledger.py tests/parity/test_api_outcomes.py tests/parity/test_java_api.py tests/parity/test_junit_results.py tests/parity/test_live_api.py -q
+          python tests/compatibility/ledger.py --base "$SDM_API_BASE" --java-inventory java/target/public-api.json
+          python -m pytest tests/compatibility/test_ledger.py tests/compatibility/test_api_outcomes.py tests/compatibility/test_java_api.py tests/compatibility/test_junit_results.py tests/compatibility/test_live_api.py -q
 
   in-process:
     name: In-process models (CPU)
@@ -132,7 +132,7 @@ jobs:
           python -m pytest packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py \
             packages/structured-data-models-client/tests/test_every_backend_answers_alike.py \
             -q -m 'not live_nim'
-          python tests/parity/api_contracts.py --gate in-process --run --out in-process-api.json
+          python tests/compatibility/api_contracts.py --gate in-process --run --out in-process-api.json
 
   # Shared matrix and service image configuration.
   configuration:
@@ -352,7 +352,7 @@ jobs:
           SDM_PYTHON: python
       - name: Required Rust type and provider test identities
         working-directory: .
-        run: python tests/parity/api_contracts.py --language rust --gate native --run --out "$RUNNER_TEMP/rust-contract-results.json"
+        run: python tests/compatibility/api_contracts.py --language rust --gate native --run --out "$RUNNER_TEMP/rust-contract-results.json"
       # Fresh dependency tests deliberately changed the lock, not the
       # committed source the following observations and gate must judge.
       # Preserve that experiment before restoring only its known change.
@@ -652,7 +652,7 @@ jobs:
               print(f'optional driver imported: {module}')
           PY
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q --native-build production
-          python tests/parity/api_contracts.py --run --group direct-dtypes-options \
+          python tests/compatibility/api_contracts.py --run --group direct-dtypes-options \
             --group results-merge --group sessions --out desktop-api-results.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -1498,7 +1498,7 @@ jobs:
       - name: Required Python API cases and collected result identities
         run: |
           set -o pipefail
-          python tests/parity/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json" \
+          python tests/compatibility/api_contracts.py --run --out "$RUNNER_TEMP/python-api-results.json" \
             2>&1 | tee "$RUNNER_TEMP/python-api.log"
       - name: Retain required API accounting and diagnostics on failure
         if: always()
@@ -1783,11 +1783,11 @@ jobs:
           python-version: '3.12'
       - uses: ./.github/actions/python-cache
       - name: Run Java tests and verify the maintained API ledger
-        run: python tests/parity/check_junit.py --run
+        run: python tests/compatibility/check_junit.py --run
       - name: Test the JUnit result checker
         run: |
           pip install --quiet pytest
-          python -m pytest -q tests/parity/test_junit_results.py
+          python -m pytest -q tests/compatibility/test_junit_results.py
 
   # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
   # runtime dependencies alone, on each JDK and platform the JAR promises,

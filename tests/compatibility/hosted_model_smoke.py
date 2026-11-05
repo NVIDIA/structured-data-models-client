@@ -44,7 +44,7 @@ def run(root):
         server = subprocess.Popen(
             [
                 sys.executable,
-                'tests/parity/cpu_model_server.py',
+                'tests/compatibility/cpu_model_server.py',
                 '--url-file',
                 str(url),
             ],

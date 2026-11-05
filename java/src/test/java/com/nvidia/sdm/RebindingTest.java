@@ -68,7 +68,7 @@ class RebindingTest {
   @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "SDM_SQL_COLUMN_CONFIG", matches = ".+")
   void postgresReconnectAndLivePrediction() throws Exception {
     var config = ParityRunner.read(java.nio.file.Path.of(System.getenv("SDM_SQL_COLUMN_CONFIG")));
-    var fixture = ParityRunner.read(java.nio.file.Path.of("../tests/parity/fixtures/shop.json"));
+    var fixture = ParityRunner.read(java.nio.file.Path.of("../tests/compatibility/fixtures/shop.json"));
     try (var allocator = new org.apache.arrow.memory.RootAllocator();
          var oldInputs = new ParityRunner.Inputs(); var newInputs = new ParityRunner.Inputs()) {
       oldInputs.open("postgres", config, fixture, allocator);

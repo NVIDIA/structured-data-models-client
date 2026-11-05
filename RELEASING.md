@@ -29,7 +29,7 @@ python -m pytest packages/structured-data-models-api/tests \
 # Shared core and bindings (see CONTRIBUTING.md for native test setup).
 cargo test --manifest-path rust/Cargo.toml --workspace --locked
 python -m pytest rust/bindings/sdm-py/tests -q --native-build test-ops
-python tests/parity/check_junit.py --run
+python tests/compatibility/check_junit.py --run
 
 ruff check . && ruff format --check .
 mypy packages/structured-data-models-api/src \

@@ -271,7 +271,7 @@ def main():
         )
         command = [
             sys.executable,
-            str(ROOT / 'tests/parity' / script),
+            str(ROOT / 'tests/compatibility' / script),
             '--gate',
             'live',
             '--run',

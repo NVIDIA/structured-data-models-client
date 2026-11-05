@@ -88,7 +88,7 @@ def test_orphan_pruning_preserves_locked_and_embedded_schemas(tmp_path):
 
 
 @pytest.mark.parametrize(
-    'name', ['contract/new.json', 'tests/parity/fixtures/new.json']
+    'name', ['contract/new.json', 'tests/compatibility/fixtures/new.json']
 )
 def test_budget_rejects_oversize_unknown_fixtures_missing_consumers_and_orphans(
     tmp_path, monkeypatch, name
@@ -135,5 +135,5 @@ def test_prune_refuses_invalid_lock_before_removing_any_schema(
 
 
 def test_parity_fixture_is_not_exempt_from_consumer_budget():
-    assert budget.fixture(Path('tests/parity/fixtures/unreviewed.json'))
-    assert not budget.fixture(Path('tests/parity/manifest.json'))
+    assert budget.fixture(Path('tests/compatibility/fixtures/unreviewed.json'))
+    assert not budget.fixture(Path('tests/compatibility/manifest.json'))

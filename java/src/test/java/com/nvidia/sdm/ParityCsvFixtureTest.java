@@ -15,7 +15,7 @@ class ParityCsvFixtureTest {
   @ParameterizedTest
   @ValueSource(strings = {"csv", "zip"})
   void rawDateTextMatchesFrozenPandasFixtureWriter(String connector) throws Exception {
-    var fixture = ParityRunner.read(Path.of("../tests/parity/fixtures/shop.json"));
+    var fixture = ParityRunner.read(Path.of("../tests/compatibility/fixtures/shop.json"));
     try (var allocator = new RootAllocator();
         var inputs = new ParityRunner.Inputs()) {
       inputs.open(connector, Map.of(), fixture, allocator);
@@ -44,7 +44,7 @@ class ParityCsvFixtureTest {
 
   @org.junit.jupiter.api.Test
   void allExpandedShopFixturesKeepTheirExpectedIdentity() throws Exception {
-    Path base = Path.of("../tests/parity");
+    Path base = Path.of("../tests/compatibility");
     var manifest = ParityRunner.read(base.resolve("manifest.json"));
     var hashes = new java.util.LinkedHashMap<String, String>();
     for (Object capability : ParityRunner.list(manifest.get("capabilities"))) {
@@ -64,7 +64,7 @@ class ParityCsvFixtureTest {
 
   @org.junit.jupiter.api.Test
   void shopVariantsKeepExactValuesNullsAndColumnOrder() throws Exception {
-    var fixture = ShopFixtures.load(Path.of("../tests/parity/fixtures/shop-numeric.json"));
+    var fixture = ShopFixtures.load(Path.of("../tests/compatibility/fixtures/shop-numeric.json"));
     var users = ParityRunner.map(ParityRunner.map(fixture.get("tables")).get("users"));
     assertEquals(java.util.List.of("id", "value", "class", "flag", "narrow", "wide", "fraction", "single"), users.get("columns"));
     var rows = ParityRunner.list(users.get("rows"));
@@ -74,17 +74,17 @@ class ParityCsvFixtureTest {
     assertNull(first.get(6));
     assertEquals("1.123456", ParityRunner.list(rows.get(1)).get(6));
     assertEquals("decimal128(20,6)", ParityRunner.map(users.get("types")).get("fraction"));
-    var tags = ShopFixtures.load(Path.of("../tests/parity/fixtures/shop-tags.json"));
+    var tags = ShopFixtures.load(Path.of("../tests/compatibility/fixtures/shop-tags.json"));
     var tagRows = ParityRunner.list(ParityRunner.map(ParityRunner.map(tags.get("tables")).get("users")).get("rows"));
     assertEquals(java.util.List.of("red", "blue"), ParityRunner.list(tagRows.get(0)).get(4));
     assertEquals(java.util.List.of(), ParityRunner.list(tagRows.get(1)).get(4));
     assertNull(ParityRunner.list(tagRows.get(2)).get(4));
     assertNull(ParityRunner.list(ParityRunner.list(tagRows.get(3)).get(4)).get(1));
-    var upper = ShopFixtures.load(Path.of("../tests/parity/fixtures/shop-snowflake-semantic.json"));
+    var upper = ShopFixtures.load(Path.of("../tests/compatibility/fixtures/shop-snowflake-semantic.json"));
     assertEquals("ID", ParityRunner.map(upper.get("primary_keys")).get("users"));
     assertEquals(java.util.List.of(java.util.List.of("events.ID", "users.ID"), java.util.List.of("events.ITEM", "items.ITEM")), upper.get("links"));
     first.set(0, -123);
-    var clean = ShopFixtures.load(Path.of("../tests/parity/fixtures/shop-numeric.json"));
+    var clean = ShopFixtures.load(Path.of("../tests/compatibility/fixtures/shop-numeric.json"));
     var cleanRows = ParityRunner.list(ParityRunner.map(ParityRunner.map(clean.get("tables")).get("users")).get("rows"));
     assertEquals("0", ParityRunner.list(cleanRows.get(0)).get(0).toString());
   }

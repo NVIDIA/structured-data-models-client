@@ -14,8 +14,6 @@ import pytest
 
 @contextlib.contextmanager
 def operations():
-    from tests.parity.routes import LegacyGuard
-
     from sdm_client import _native
 
     actual = _native.Run
@@ -32,7 +30,7 @@ def operations():
                 observed.append(operation['op'] + ':' + operation['action'])
             return actual.start(control, attachments)
 
-    with LegacyGuard(), patch.object(_native, 'Run', Run):
+    with patch.object(_native, 'Run', Run):
         yield observed
 
 

@@ -277,8 +277,8 @@ def test_java_release_paths_follow_the_pom_version():
     assert "ET.parse('java/pom.xml')" in ci
     assert (
         "os.environ['PARITY_JAR']"
-        in (ROOT / 'tests/parity/hosted_runner.py').read_text()
+        in (ROOT / 'tests/compatibility/hosted_runner.py').read_text()
     )
-    artifacts = (ROOT / 'tests/parity/ci_artifacts.py').read_text()
+    artifacts = (ROOT / 'tests/compatibility/ci_artifacts.py').read_text()
     assert "one((root / 'java').glob('*.jar'))" in artifacts
     assert 'java-artifacts.json' in artifacts

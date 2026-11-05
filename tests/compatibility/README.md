@@ -26,15 +26,15 @@ Support declarations and local checks do not replace the live evidence matrix be
 ```sh
 python scripts/check_java_api.py --base origin/main
 python scripts/snapshot_java_api.py --out java/target/public-api.json
-python tests/parity/ledger.py --base origin/main --java-inventory java/target/public-api.json
-python tests/parity/api_contracts.py --run --out python-api-results.json
-python tests/parity/api_contracts.py --gate native --run --out python-type-results.json
-python tests/parity/api_contracts.py --language rust --gate native --run --out rust-contract-results.json
+python tests/compatibility/ledger.py --base origin/main --java-inventory java/target/public-api.json
+python tests/compatibility/api_contracts.py --run --out python-api-results.json
+python tests/compatibility/api_contracts.py --gate native --run --out python-type-results.json
+python tests/compatibility/api_contracts.py --language rust --gate native --run --out rust-contract-results.json
 ```
 
 Use the actual PR target for `--base`; `origin/main` above is the ordinary main-target example.
 Use an installed candidate Python client with its test extras, JDK/Maven and the pinned Rust toolchain.
-Java behavior tests use the existing `tests/parity/check_junit.py --run` command and its fresh Surefire reports; local Postgres is required for its database cases.
+Java behavior tests use the existing `tests/compatibility/check_junit.py --run` command and its fresh Surefire reports; local Postgres is required for its database cases.
 CI reuses its built wheel/native artifacts and existing Python, Java and Cargo jobs.
 The separate compatibility job needs no native compilation, endpoint or private credentials.
 
@@ -77,7 +77,7 @@ The commands below remain available for explicitly configured full live-model va
 Run all applicable Python cells by omitting filters, or repeat `--case`, `--connector` and `--model` to select a scope:
 
 ```sh
-CANDIDATE_PYTHON tests/parity/python_runner.py --phase candidate --commit CANDIDATE_COMMIT --provenance WHEEL_PROVENANCE.json --mode live --config PRIVATE_CONFIG --out python.jsonl
+CANDIDATE_PYTHON tests/compatibility/python_runner.py --phase candidate --commit CANDIDATE_COMMIT --provenance WHEEL_PROVENANCE.json --mode live --config PRIVATE_CONFIG --out python.jsonl
 ```
 
 The Java runner emits the same schema with `language=java`; concatenate its records with `python.jsonl` before comparison.
@@ -85,7 +85,7 @@ Python records must pass artifact, native identity, lifecycle and outcome checks
 Explicit manifest differences in refusal behavior are reported as language differences, never agreement.
 
 ```sh
-python tests/parity/compare.py --comparison current-clients --candidate candidates.jsonl --candidate-commit CANDIDATE_COMMIT --out report.json --matrix matrix.md
+python tests/compatibility/compare.py --comparison current-clients --candidate candidates.jsonl --candidate-commit CANDIDATE_COMMIT --out report.json --matrix matrix.md
 ```
 
 Only current clients are executed and compared.
@@ -136,7 +136,7 @@ Candidate records must identify the requested commit and one consistent installe
 API-only behavior gates are mapped in `manifest.json` under `api_contracts`, separately from the prediction matrix.
 The installed API gate checks generated-file integrity and public wire behavior without requiring a sibling source repository.
 The two canonical-source provenance tests remain in the maintainer suite and explicitly skip when the pinned external contract checkout is unavailable; an installed API pass does not prove those source comparisons.
-`python tests/parity/api_contracts.py --language python --gate local --run --out api-report.json` runs those existing public tests; missing or skipped coverage stays incomplete.
+`python tests/compatibility/api_contracts.py --language python --gate local --run --out api-report.json` runs those existing public tests; missing or skipped coverage stays incomplete.
 The registry pins the exported API snapshot so API additions require an explicit coverage update.
 Candidate provenance must match the installed wheel, native library, source commit and clean-build sidecar.
 
@@ -178,7 +178,7 @@ Set the same `ci_run_id` dispatch input to pin identical bytes across reruns.
 For the optional registry, use the installed candidate Python interpreter, its pretrained model runtime, the candidate JNI library and Maven:
 
 ```sh
-CANDIDATE_PYTHON tests/parity/live_api.py \
+CANDIDATE_PYTHON tests/compatibility/live_api.py \
   --config PRIVATE_CONFIG --commit CANDIDATE_COMMIT \
   --out EVIDENCE/live-api.json --private-dir PRIVATE_DIAGNOSTICS \
   --provenance WHEEL_PROVENANCE.json --java-provenance JAVA_PROVENANCE.json \

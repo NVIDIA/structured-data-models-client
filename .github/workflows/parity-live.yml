@@ -48,7 +48,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import os, sys
-          sys.path.insert(0, 'tests/parity')
+          sys.path.insert(0, 'tests/compatibility')
           from ci_artifacts import select_run
           from hosted_profile import profile
           import json
@@ -110,7 +110,7 @@ jobs:
         env:
           CONNECTOR: ${{ matrix.connector }}
         run: |
-          "$PARITY_DIR/candidate/bin/python" tests/parity/hosted_runner.py \
+          "$PARITY_DIR/candidate/bin/python" tests/compatibility/hosted_runner.py \
             --connector "$CONNECTOR" --root "$PARITY_DIR" --commit "$PARITY_COMMIT" \
             > "$PARITY_DIR/private/provision.log" 2>&1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -137,7 +137,7 @@ jobs:
           models: 'true'
       - name: Small pretrained CPU model and session smoke suite
         run: |
-          "$PARITY_DIR/candidate/bin/python" tests/parity/hosted_model_smoke.py --root "$PARITY_DIR" \
+          "$PARITY_DIR/candidate/bin/python" tests/compatibility/hosted_model_smoke.py --root "$PARITY_DIR" \
             > "$PARITY_DIR/private/model-smoke.log" 2>&1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -176,7 +176,7 @@ jobs:
           set -euo pipefail
           python -m pip install 'jsonschema>=4.18'
           mkdir -p "$RUNNER_TEMP/parity/evidence"
-          python tests/parity/hosted_aggregate.py --root "$RUNNER_TEMP/shards" \
+          python tests/compatibility/hosted_aggregate.py --root "$RUNNER_TEMP/shards" \
             --commit "$PARITY_COMMIT" --run-id "$CI_RUN_ID" --models "$RUNNER_TEMP/models" --out "$RUNNER_TEMP/parity/evidence/report.json"
           test "$SHARDS_RESULT" = success
           test "$MODELS_RESULT" = success

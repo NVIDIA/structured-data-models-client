@@ -306,7 +306,7 @@ def main():
         parser.error(
             '--run uses installed Python pytest and requires --out; Java/Rust reuse their existing test runners'
         )
-    # Pytest fixtures also import repository-owned tests.parity helpers.
+    # Pytest fixtures also import repository-owned tests.compatibility helpers.
     sys.path.insert(0, str(ROOT))
     import pytest
 

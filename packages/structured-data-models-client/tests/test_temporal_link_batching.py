@@ -208,7 +208,7 @@ def test_live_temporal_link_batches_preserve_entity_identity():
     fixture = json.loads(
         (
             Path(__file__).resolve().parents[3]
-            / 'tests/parity/fixtures/shop.json'
+            / 'tests/compatibility/fixtures/shop.json'
         ).read_text()
     )
     frames = {

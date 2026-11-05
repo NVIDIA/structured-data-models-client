@@ -123,7 +123,7 @@ class TemporalLinkBatchingTest {
     if (url == null || url.isBlank()) url = System.getenv("SDM_RELATIONAL_URL");
     org.junit.jupiter.api.Assumptions.assumeTrue(url != null && !url.isBlank(),
         "SDM_LINK_URL or SDM_RELATIONAL_URL is required");
-    var fixture = ParityRunner.read(java.nio.file.Path.of("../tests/parity/fixtures/shop.json"));
+    var fixture = ParityRunner.read(java.nio.file.Path.of("../tests/compatibility/fixtures/shop.json"));
     var original = object(fixture.get("tables"));
     List<List<Object>> users = new ArrayList<>(), events = new ArrayList<>();
     var sourceUsers = rows(object(original.get("users")));

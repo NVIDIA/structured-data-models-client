@@ -55,7 +55,7 @@ runs:
         CANDIDATE_COMMIT: ${{ inputs.commit }}
       run: |
         set -euo pipefail
-        python tests/parity/ci_artifacts.py --root "$RUNNER_TEMP/parity" \
+        python tests/compatibility/ci_artifacts.py --root "$RUNNER_TEMP/parity" \
           --commit "$CANDIDATE_COMMIT" --run-id "$REQUESTED_CI_RUN" \
           2> "$RUNNER_TEMP/parity/private/artifacts.log"
     - name: Install the verified candidate and live drivers
@@ -81,5 +81,5 @@ runs:
           echo '::error::Live dependencies could not be installed; private diagnostics retained.'
           exit 1
         fi
-        "$PARITY_DIR/candidate/bin/python" tests/parity/ci_artifacts.py \
+        "$PARITY_DIR/candidate/bin/python" tests/compatibility/ci_artifacts.py \
           --root "$PARITY_DIR" --commit "$CANDIDATE_COMMIT" --installed

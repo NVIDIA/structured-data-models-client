@@ -33,7 +33,7 @@ def test_live_end_time_selection_masking_and_prediction(connector):
     fixture = json.loads(
         (
             Path(__file__).resolve().parents[3]
-            / 'tests/parity/fixtures/shop.json'
+            / 'tests/compatibility/fixtures/shop.json'
         ).read_text()
     )
     events = pd.DataFrame(

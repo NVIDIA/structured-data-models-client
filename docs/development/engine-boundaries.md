@@ -20,7 +20,7 @@ They summarize ownership; Arrow admission and logging may invoke host-runtime fa
 ## Capability contracts
 
 These are enduring rules extracted from completed implementation plans, not a second API inventory.
-The [compatibility manifest](../../tests/parity/manifest.json) maps exact Python/Java symbols, applicability, types and assertion links; the implementation docstrings define full signatures.
+The [compatibility manifest](../../tests/compatibility/manifest.json) maps exact Python/Java symbols, applicability, types and assertion links; the implementation docstrings define full signatures.
 
 | Capability | Owner and rule |
 |---|---|

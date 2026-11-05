@@ -170,9 +170,10 @@ def test_live_workflow_validates_current_clients_without_frozen_install():
         for job in workflow('parity-live.yml')['jobs'].values()
         for step in job['steps']
     )
-    runner = (ROOT / 'tests/parity/hosted_runner.py').read_text()
-    aggregate = (ROOT / 'tests/parity/hosted_aggregate.py').read_text()
-    assert "comparison='current-clients'" in aggregate
+    runner = (ROOT / 'tests/compatibility/hosted_runner.py').read_text()
+    aggregate = (ROOT / 'tests/compatibility/hosted_aggregate.py').read_text()
+    assert 'report = assess(' in aggregate
+    assert 'records(combined)' in aggregate
     assert "'candidate'" in runner
     assert '-Dsdm.parity.mode=local' in runner
     for retired in (
@@ -193,8 +194,8 @@ def test_ordinary_hosted_separates_cpu_smoke_without_giant_prerequisites():
         for job in data['jobs'].values()
         for step in job['steps']
     )
-    assert 'tests/parity/hosted_model_smoke.py' in scripts
-    assert 'tests/parity/hosted_runner.py' in scripts
+    assert 'tests/compatibility/hosted_model_smoke.py' in scripts
+    assert 'tests/compatibility/hosted_runner.py' in scripts
     assert data['jobs']['aggregate']['needs'] == [
         'preflight',
         'shards',

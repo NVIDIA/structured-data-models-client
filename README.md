@@ -138,7 +138,7 @@ suite, and compared to the output printed beneath it.
 ## Repository layout
 
 The client uses the shared Rust core under `rust/`.
-The compatibility ledger in `tests/parity/manifest.json` records supported APIs and required coverage.
+The compatibility ledger in `tests/compatibility/manifest.json` records supported APIs and required coverage.
 
 ### Product (ships to users)
 
@@ -170,7 +170,7 @@ The compatibility ledger in `tests/parity/manifest.json` records supported APIs 
   Recorded fixtures preserve useful regression coverage without requiring the old client at test time.
 - `rust/crates/sdm-testkit/`: a test host and provider conformance runner for the Rust core.
 - `tests/`: API, packaging, CI, architecture and integration checks.
-  `tests/parity/` records supported capabilities and their coverage across languages, models and connectors.
+  `tests/compatibility/` records supported capabilities and their coverage across languages, models and connectors.
 - `scripts/rust_core/`: native wheel/JAR builds, installed-wheel checks, Rust attribution generation and architecture checks.
 - `scripts/live/`: endpoint and warehouse validation tools, including resource write guards.
 - `docs/development/`: the [change guide](docs/development/change-guide.md), [engine boundaries](docs/development/engine-boundaries.md) and [validation evidence](docs/development/validation.md).
