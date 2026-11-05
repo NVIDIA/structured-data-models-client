@@ -8198,6 +8198,11 @@
       "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
       "record": "capabilities/types.regression",
       "reason": "Fixture identity now hashes the expanded shared shop data; exact original values, types and order are preserved."
+    },
+    {
+      "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
+      "record": "api_contracts/large-values",
+      "reason": "Rename the retained timestamp-buffer test module by behavior; required test and large-value coverage are unchanged."
     }
   ],
   "capabilities": [

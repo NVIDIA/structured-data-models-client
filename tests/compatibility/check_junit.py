@@ -190,7 +190,9 @@ def main():
         if args.gate == 'live':
             from api_contracts import groups, validate_live_targets
 
-            data = json.loads((repo / 'tests/compatibility/manifest.json').read_text())
+            data = json.loads(
+                (repo / 'tests/compatibility/manifest.json').read_text()
+            )
             validate_live_targets(
                 data, {item['id'] for item in data['api_contracts']}
             )
