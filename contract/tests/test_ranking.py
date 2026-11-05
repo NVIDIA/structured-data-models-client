@@ -2,62 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.8's exits on ``python-core`` (the package's test author's): ranking,
-end to end (the design's T2.8a and T2.8b rows).
+"""Ranking preserves candidate scoring, ordering, cutoffs and invalid-request diagnostics.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t28_ranking.py -q
-
-Written from the design's rows (each item an exit) and the reference
-(python-ref at ``contract/reference-env.txt``'s commit), before the
-implementation. ``sdm-testkit``'s ``tests/t28_ranking.rs`` holds
-``rust-host`` to the same cases and vectors.
-
-The S1 cases, ``contract/cases/s1/rank.*.json`` and ``forecast.*.json``,
-run on DuckDB, SQLite and Postgres over the shop base with ``items`` and
-``buys`` (a ranking of the items each user buys in 30 days). The scripted
-endpoint answers no probabilities, so they judge the materialize side
-(T2.8a): each part's payload, and every refusal before a call. The
-vectors, ``contract/ranking-vectors.json``, recorded from the reference by
-``contract/tools/ranking_record.py``, whose ``observe`` these tests call on
-the core's routes, judge the predict side (T2.8b) on DuckDB, each model
-call answered by a script with the probabilities a ranking orders by.
-
-Each test's one line says the exit it proves:
-
-- control: each case is the design row item it names (:data:`CASES`),
-  runs on all three databases, and python-ref's line for it on each is
-  recorded at its case file, its outcome the case's;
-- control: the vectors are the reference's, their inputs the recorder's,
-  each exit has one, and they are not vacuous (ties, a cut, an unscored
-  candidate, a NaN, an off-type answer);
-- control: each case refused before any call is refused, on the
-  reference, by the rule its argument meets, and the same call with that
-  argument changed is gathered (the recorder's ``controls``);
-- T2.8a, "``top_k``, candidates, the decomposition in ``sdm-request``;
-  ``problem_type`` for ranking; the forecast's ``top_k`` and
-  ``MOST_PARTS`` refusals in the core": python-core answers each case on
-  each database as python-ref does (its outcome, and each request the
-  scripted endpoint received but its request id), and the core does it: the
-  host hands the core the question as asked (one ``materialize``, its query
-  not a part's), and a refusal is the core's (the stage's core operation
-  ran and refused with the reference's code);
-- T2.8b, "scores, rankings, ``prediction_statistic``, PD-1, reassembly;
-  ``response_field`` for rankings; ``instance_id_type``,
-  ``prediction_type``": python-core answers each vector as python-ref
-  does: the result through ``to_pandas()`` and ``.items``, its outputs, the
-  candidates left unscored and the notices' classes, every call's asked
-  outputs and status, or the refusal's code, class, the HTTP status an
-  endpoint's refusal carries and, for a part, the sentence saying which
-  candidate it was asked for.
-
-PD-1 ("NaN ranks last") cannot be reached from the public calls: the
-reference refuses a non-finite probability, the only score a ranking
-orders by, ``INVALID_RESPONSE`` said of the part's candidate, so the
-vectors ``pd1.*`` hold the core to that refusal; a NaN inside a
-``rankings`` member an answer carries is given back as it came, never
-ordered.
-
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

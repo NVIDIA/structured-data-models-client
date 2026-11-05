@@ -5,7 +5,7 @@
 //! T1.32g part 2e: an interval's values in canonical form on this host
 //! (`sdm_testkit::values`), held from outside the implementation (the
 //! package's independent test author) to `contract/t132g-p2e-vectors.json`,
-//! which `contract/tests/test_t132g_interval_values.py` holds the Python
+//! which `contract/tests/test_arrow_interval_values.py` holds the Python
 //! runner's `arrow_values` to as well, so the two encoders agree through it.
 //!
 //! The form (the file's `about`): an Arrow `month_day_nano_interval` is

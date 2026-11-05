@@ -2,58 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.9's exits on ``python-core`` (the package's test author's):
-forecasting's options.
+"""Forecast options preserve step counts, quantiles, lag values and row alignment.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t29_forecasting.py -q
-
-Written from the design's T2.9 row (``num_forecasts``, ``lag_timesteps``,
-quantiles; ``response_field`` for quantiles; "forecast cases on rust-host
-and python-core") and the reference, before the implementation.
-``sdm-testkit``'s ``tests/t29_forecasting.rs`` holds ``rust-host`` to the
-same cases. Every case is an S1 case over the ``shop`` base, run on DuckDB,
-SQLite and Postgres, its expectation and python-ref's committed lines the
-reference's at 6298913c. Each test's one line says what it proves:
-
-- control: the cases are the row's, each on all three databases, with
-  python-ref's line on each, whose outcome is the case's ``expect``;
-- control: the lines are not vacuous: a forecast of N steps is N requests,
-  each about its own window, and N rows per entity; a refused value sends
-  nothing; ``lag_timesteps`` of n adds n lagged targets to every request
-  (0 adds none, its requests ``forecast.steps-2``'s), and a static target
-  none; each request asks for the outputs its case names, an answered
-  quantile is a ``quantile_<q>`` column and an unanswered one is said;
-- ``num_forecasts``: python-core answers each ``num_forecasts`` case as the
-  reference does on each database, through the core (outcome, requests,
-  result and warnings), the values the reference takes and the ones it
-  refuses;
-- ``lag_timesteps``: the same for each ``lag_timesteps`` case, the values
-  the reference takes (lagged targets in every step's request) and the
-  ones it refuses (``INVALID_REQUEST``, never the core's not-yet
-  refusal);
-- quantiles: the same for each case naming ``quantiles`` in ``outputs``:
-  every request asks for what the case names, and an answer without them
-  is said as the reference says it;
-- ``response_field`` for quantiles: each case whose answer carries
-  quantiles answers through ``predict`` with them laid out as the
-  reference lays them out (``to_pandas()``'s columns and rows), each
-  step's on its own rows;
-- a lagged condition asked one entity a call (``lag.condition-per-call``,
-  ``rows_per_call=1``; Codex, round 2): control, the reference declares
-  each lag column bool in every call's schema, and one call's first lags
-  are all empty on their own rows (computed here); exit, python-core and
-  rust-host declare each call's lag columns as the reference does;
-- a lagged average with empty windows (``lag.average-empty-windows``, one call,
-  the orchestrator's decision under KO2-70 to fix the reference's
-  misalignment in the core): control, the reference packs the non-empty
-  windows' values at the top of each lag column, its targets being the
-  windows' as computed here from the shop base's orders; exit, python-core
-  sends python-ref's requests but for the lags, each lag cell the value of
-  that row's own window, computed here from the shop base's orders. The
-  comparator sees the difference, which the implementer registers naming
-  the case.
-
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

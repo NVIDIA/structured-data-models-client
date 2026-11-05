@@ -64,7 +64,7 @@ on any vector needs a register entry whose ``refs`` name it
 (``REGISTER_REF`` + its id).
 
 Nothing here is written by hand but the inputs. ``VECTORS``, ``joins`` and
-``REGISTER_REF`` are imported by ``contract/tests/test_t22_sqlite.py``.
+``REGISTER_REF`` are imported by ``contract/tests/test_sqlite_sql_key_joins.py``.
 """
 
 from __future__ import annotations

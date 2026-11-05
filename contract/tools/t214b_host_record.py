@@ -35,7 +35,7 @@ the shop base and the ranking tables of ``rank.top-k`` (:data:`SETUP`):
   candidate each call asks about, in order, and the result's rankings, or
   the refusal.
 
-:func:`observe` is imported by ``contract/tests/test_t214b_host.py``, so
+:func:`observe` is imported by ``contract/tests/test_request_state_endpoint_bytes.py``, so
 ``python-core`` is observed by the same code, with the core routes forced.
 """
 

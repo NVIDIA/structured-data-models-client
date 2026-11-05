@@ -26,7 +26,7 @@ last a ``Page`` carrying a continuation; it fails the page a case's
 the fault named, as ``expected.json``'s ``faults`` say.
 
 REPORT is the JSON the kit's tests read (``contract/tests/
-test_t25_provider_kit.py``'s docstring): each case's ``fetched`` (the
+test_provider_conformance.py``'s docstring): each case's ``fetched`` (the
 request of every fetch the provider path answered or failed, one per
 page), and its ``answer`` (the columns and rows the core admitted) or its
 ``error`` (the core's code, kind, retryable and fields). Each case is

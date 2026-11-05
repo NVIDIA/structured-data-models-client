@@ -44,7 +44,7 @@ H17), the public schema as ``run_python.py`` projects it, the number of
 SDMWarnings each call gave, and the request's payloads as JSON, each
 ``metadata.request_id`` left out (for a vector, as the twin's are kept
 whole, their :func:`digest`). :func:`run` is imported by
-``contract/tests/test_t218_column_names.py``, so ``python-core`` is run by
+``contract/tests/test_column_names.py``, so ``python-core`` is run by
 the same code.
 """
 

@@ -48,7 +48,7 @@ raise one mid-request (the Databricks SDK on a failed OAuth refresh):
 the reference raises it as it was, with the answers already received
 kept on it as for its own errors. ``--raised`` records that part alone.
 
-:func:`observe` is imported by ``contract/tests/test_t28c_multicall.py``,
+:func:`observe` is imported by ``contract/tests/test_prediction_batching.py``,
 so ``python-core`` is observed by the same code.
 """
 

@@ -2,24 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The decimal stype fix riding along in T2.14b, on ``python-core`` (the
-package's test author's).
+"""Exact decimal values retain their declared semantic types.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t214b_decimal_stype.py -q
-
-A DECIMAL column with digits after the point whose values differ only past
-float64's precision: the reference reads a decimal of scale > 0 as float64
-before it infers anything, so the 80 values of
-``decimal.stype-past-float-precision``'s ``orders.d``
-(``order_id * 1e-18 + 1.25`` as ``DECIMAL(38, 18)``) are one value to it, and
-the column is categorical; the core counts the exact decimals, 80 of 80, and
-says numerical (the stype investigation of T2.13b's differential probe). On
-SQLite the contract loader stores a decimal as text, which both read as
-text. ``sdm-schema``'s ``tests/t214b_decimal_stype.rs`` holds the inference
-itself to the same column, and ``sdm-testkit``'s rust-host runs the case
-under ``tests/t214b_host.rs``.
-
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

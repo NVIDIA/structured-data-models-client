@@ -2,44 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T1.36 fix 24's request ids through the runner's capture, when a forecast
-step sends no call (Codex round 2, P2), held from outside the
-implementation (the independent test author).
-
-A forecast step whose instance table has no rows sends no model call
-(``sdm-core``'s ``predict.rs``), so the calls a forecast makes are its
-steps with rows, each carrying that step's own request id. The capture of
-``contract/runners/run_python.py`` (``_Boundary``, as ``--mode
-python-core`` installs it) must follow that. Over the three-step SUM
-vector of ``contract/t136-forecast-vectors.json`` (``sum-days-3``), with
-validation and every DuckDB route on the core, against the scripted
-endpoint:
-
-- ``test_a_step_with_no_rows_is_captured_as_it_is_answered[first|middle|
-  first-and-last]``: one step's rows emptied, or two. Under the capture,
-  ``predict`` answers. The calls the endpoint received are the steps with
-  rows, in order, each carrying the id its step was started with (read
-  from ``predict``'s start). The capture keeps the last call's body. The
-  answer is the one given without the capture, and without the capture
-  it is the steps with rows: two rows each. Fails at 8295049c on all
-  three: ``RunnerFailure`` (the model call does not carry the request id
-  predict was started with), because the capture expects one id per step
-  in order and is handed a later step's call.
-- ``test_the_capture_still_refuses_a_call_with_another_step_s_id``: the
-  negative control. The core is started with step 3's id on step 2, or a
-  stale id on step 3, behind the capture's back; the capture refuses the
-  call by name, with all steps asked and with the first step empty; the
-  same tampered start without the capture is answered. Passes at 8295049c
-  (where the first-step-empty variants are refused for the bug as well).
-- ``test_the_capture_refuses_an_id_that_is_not_the_next_step_with_rows``
-  (Codex round 3, P2): the calls must carry exactly the ids of the steps
-  with rows, in order. Step 3 empty with its id on step 2's call, and
-  steps 1 and 3 empty with step 3's id on step 2's one call, fail at
-  b02af721 (accepted); steps with rows swapped, and an empty later step's
-  id on step 1, are refused there already.
-
-The implementer changes nothing of this file.
-"""
+"""Forecast capture preserves request identity when empty steps make no model call."""
 
 from __future__ import annotations
 

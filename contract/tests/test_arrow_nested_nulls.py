@@ -2,55 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.36 P3 C3: a struct with a null row holding a union reads, whole.
-
-Written by the package's independent test author, before the fix.
-
-    python -m pytest contract/tests/test_t136_struct_null_union.py -q
-
-``run_python._arrow_cells`` reads a struct through ``StructArray.flatten()``,
-which folds the struct's validity into each child. A union has no validity
-of its own, so when a struct with a null row holds one, Arrow C++ aborts
-the process (``array_nested.cc``: ``Check failed: (data_->buffers[0]) ==
-(nullptr)``, SIGABRT, exit 134 from a shell), and the runner with it.
-DuckDB writes such a struct (T1.32g p2c found it).
-
-``contract/t136-struct-union-vectors.json`` holds the cells such a read must
-give, in the canonical form of ``contract/t132g-p2c-vectors.json``'s
-``about``: a null struct row is ``null``; a non-null one ``["struct",
-[[name, cell], ...]]``; a union member ``["union", type code, member name,
-cell]``. Its vectors: the struct DuckDB writes, one with other members and a
-null union beside the union, a list of such structs (each list's structs a
-slice of the child at its offset), a struct in a struct with the outer one
-null, a map whose values are such structs, and built ones DuckDB cannot
-write: a dense union in a struct with a null row, and lists of structs
-holding a dense or a sparse union, so a read that drops a struct's offset
-gives other cells.
-
-A value under a null struct row is hidden: no cell shows it, so it names
-nothing unencodable either, as the reading before the fix (``flatten()``
-nulled it) and ``sdm-testkit``'s ``values`` (row by row) agree. Reading a
-struct's children as stored (``StructArray.field``) reaches those values;
-the second set of vectors, added by the test author after review of the
-first fix, holds that: built (DuckDB nulls a null struct's children
-itself), each a null struct row hiding a value the form does not hold
-(a ``date64``) as a child, as the member a union chooses at that row
-(dense and sparse), in a list's struct at an offset, in a map's value and
-in a struct in a struct; each expects the cells it gave before and
-``unencodable`` empty. A control holds a visible ``date64`` beside a
-hidden one, which still names ``arrow:date64[ms]``. Every vector's
-``unencodable`` is exactly the names its visible cells show as ``["?",
-name]``.
-
-Each vector is read through ``run_python.arrow_values`` in a child process
-(this file run as a script, given the vector's name), so the abort is this
-test failing, named, and not the pytest session dying. Nothing else of the
-form changes: ``test_t132g_map_union_values.py`` and
-``test_t132g_interval_values.py`` still hold every other value.
-
-Not read by ``sdm-testkit``'s Rust tests: the abort is pyarrow's, and this
-file's vectors are held to the Python runner only.
-"""
+"""Nested Arrow values preserve offsets and mask children beneath null structs."""
 
 from __future__ import annotations
 

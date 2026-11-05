@@ -27,7 +27,7 @@ def _module(name: str, path: Path) -> Any:
 
 OWN = _module(
     't310_fallback_recording_fixtures',
-    Path(__file__).with_name('test_t32_recording_own.py'),
+    Path(__file__).with_name('test_driver_capture.py'),
 )
 run = OWN.run
 

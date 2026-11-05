@@ -54,4 +54,4 @@ The shared AdventureWorks cases use these committed rows for source-description,
 
 [`notebook-fa0637d4.ipynb`](notebook-fa0637d4.ipynb) is `examples/databricks/adventureworks_relational.ipynb` exactly as it was at `fa0637d4` (`git show fa0637d4:examples/databricks/adventureworks_relational.ipynb`).
 `main` deleted the notebook in `18e26f1c`, in favour of `kumo_relational_quickstart.ipynb`.
-`contract/tests/test_t133_adventureworks_cases.py` reads its `QUESTIONS` to hold the AdventureWorks cases to the questions they were written from, so T2.0c keeps it here, frozen, rather than in `examples/`.
+`contract/tests/test_adventureworks_classification.py` reads its `QUESTIONS` to hold the AdventureWorks cases to the questions they were written from, so T2.0c keeps it here, frozen, rather than in `examples/`.

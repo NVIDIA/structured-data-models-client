@@ -35,7 +35,7 @@ said of its candidate, ``prediction_statistic``, ``response_field`` for
 
 Nothing here is written by hand but the inputs; every expected value is the
 reference's. ``observe`` and ``answer`` are imported by
-``contract/tests/test_t28_ranking.py``, so both routes are observed and
+``contract/tests/test_ranking.py``, so both routes are observed and
 answered by the same code.
 
 Beside the vectors it records ``controls``: each S1 case refused before

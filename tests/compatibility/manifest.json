@@ -3260,7 +3260,7 @@
       },
       "tests": {
         "python": [
-          "contract/tests/test_t136_host2_values.py"
+          "contract/tests/test_duckdb_timestamp_buffers.py"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/DuckDbLargeValueTest.java"

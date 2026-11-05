@@ -2,49 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.14b's wording exits on ``python-core`` (the package's test author's):
-the host wording rows G15, M4, FX-1 and FX-4 (KO2-32), the core refusals
-that reach Python as their code's generic sentence, and a binary target
-with one class in its sample.
+"""Public errors and warnings preserve useful messages for invalid requests.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t214b_wording.py -q
-
-Written from the design's T2.14b row, migration-plan.md's "Host error and
-warning wording" rows and the carried notes (T2.12 round 1: core refusals
-reach Python users as "the request is not one the core accepts" where the
-reference names the table, the key and an example; T2.13's tracker, every
-other refusal still said as its code's sentence; T2.8 round 3, a binary
-target whose sample holds one class), against the reference (python-ref at
-``contract/reference-env.txt``'s commit), before the implementation.
-
-Evidence, all from the reference: its committed lines for the
-``wording.*`` cases (``run_python.py``) and
-``contract/t214b-wording-vectors.json`` (``wording_record.py``: each
-case's outcome, a refusal's message and details, every warning by class and
-text, and FX-4's probes), which ``python-core`` is observed against by the
-same code (``wording_record.observe`` and ``probe``).
-
-- G15: a key or time column ``from_source`` refuses (``wording.key-*``,
-  ``wording.time-*``) and the schema edits the ``edit.*`` cases refuse are
-  said with the table, the column and what the table has, as the
-  reference says them.
-- M4: the sampler's warnings in the reference's words: a context reaching
-  back before the data (``CONTEXT_BEFORE_DATA``) and an anchor after it
-  (``ANCHOR_AFTER_DATA``), each naming the times, and the missing-index
-  warning beside them (E41(i): all three the core's words until now).
-- FX-1: pandas' ``RuntimeWarning`` from casting a double past float32's
-  range, beside the refusal, as the reference gives it
-  (``wording.float32-*``).
-- FX-4: a whole table's MIN that is an infinity, shown in the
-  constant-column warning as the reference shows it (DuckDB's ``fetchall``
-  hands it over as ``datetime.max`` or ``datetime.min``).
-- The generic refusals: every committed S1 case the core refuses as the
-  reference does but in its code's sentence, said naming what the
-  reference's message names (:data:`NAMED`), and never the bare sentence.
-- A binary target with one class (``wording.binary-one-class``,
-  ``decimal.compare-*``), explained as the reference explains it.
-
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ import pytest
 HERE = Path(__file__).resolve().parent
 NAME = 't310_spark_recording_fixtures'
 spec = importlib.util.spec_from_file_location(
-    NAME, HERE / 'test_t32_recording_own.py'
+    NAME, HERE / 'test_driver_capture.py'
 )
 assert spec is not None and spec.loader is not None
 OWN = importlib.util.module_from_spec(spec)

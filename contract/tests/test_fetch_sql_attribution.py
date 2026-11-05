@@ -2,12 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.1d: python-core's ``--record-fetches`` names, for each fetch the
-core asked, the statements the driver ran for it, in order: the driver
-capture's first statements, one per statement of each fetch's plan, a
-call left on the old route running after them; a capture holding fewer
-than the plans is a runner failure, never a recording that misnames them.
-"""
+"""Each native fetch retains the driver statements executed for its plan."""
 
 from __future__ import annotations
 

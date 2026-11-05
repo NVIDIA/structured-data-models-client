@@ -96,7 +96,7 @@ exception is ``refusal UNNAMED``).
 
 Nothing here is written by hand but the inputs. ``VECTORS``, ``case_for``,
 ``run`` and ``project`` are imported by
-``contract/tests/test_t132b_decimal_vectors.py``, so ``python-core`` is
+``contract/tests/test_decimal_key_joins.py``, so ``python-core`` is
 observed and projected by the same code.
 """
 

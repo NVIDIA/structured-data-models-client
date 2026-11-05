@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! T2.16a's exit on `rust-host` (the package's test author's), beside
-//! `contract/tests/test_t216a_recorded_explanation.py`, which holds
+//! `contract/tests/test_result_observation.py`, which holds
 //! `python-core` to the same: the host records a result's explanation and
 //! its items' metadata, so the gate's `core` rule compares them across
 //! hosts (T2.13's exits; T2.1n round 1, P3 3).

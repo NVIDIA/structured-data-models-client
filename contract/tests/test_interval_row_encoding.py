@@ -2,11 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.1d: an interval has one canonical cell, read as a row's value
-(pyarrow's ``MonthDayNano``, as the Postgres provider hands it over) or
-read from Arrow (``month_day_nano_interval``), so a row read and an Arrow
-read of the same interval compare equal; a plain tuple stays a list.
-"""
+"""Interval row and Arrow values share the same canonical encoding."""
 
 from __future__ import annotations
 

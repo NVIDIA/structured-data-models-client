@@ -85,7 +85,7 @@ jobs:
           "$PARITY_DIR/candidate/bin/python" - <<'PYGIANT'
           import json, os, pathlib, subprocess, xml.etree.ElementTree as ET
           root = pathlib.Path(os.environ['PARITY_DIR'])
-          node = 'contract/tests/test_t136_host2_values.py::test_big_a_value_past_int32_offsets_on_the_core[big.blob.large]'
+          node = 'contract/tests/test_duckdb_timestamp_buffers.py::test_big_a_value_past_int32_offsets_on_the_core[big.blob.large]'
           commands = [
               ('python', [str(root / 'candidate/bin/python'), '-m', 'pytest', node, '-q', '--junitxml=' + str(root / 'giant-python.xml')]),
               ('java', ['mvn', '-B', '-f', 'java/pom.xml', '-Dtest=DuckDbLargeValueTest',

@@ -40,7 +40,7 @@ on every database, and only DuckDB's ``fetchall`` hands an infinity over as
 ``probes``.
 
 :func:`observe` and :func:`probe` are imported by
-``contract/tests/test_t214b_wording.py``, so ``python-core`` is observed by
+``contract/tests/test_public_error_messages.py``, so ``python-core`` is observed by
 the same code.
 """
 

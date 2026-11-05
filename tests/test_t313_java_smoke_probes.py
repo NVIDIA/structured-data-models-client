@@ -22,7 +22,7 @@ def test_a_relative_jar_is_resolved_before_the_probe_changes_directory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spec = importlib.util.spec_from_file_location(
-        't313_java_acceptance', ROOT / 'contract/tests/test_t311_java.py'
+        't313_java_acceptance', ROOT / 'contract/tests/test_java_packaging.py'
     )
     assert spec is not None and spec.loader is not None
     acceptance = importlib.util.module_from_spec(spec)

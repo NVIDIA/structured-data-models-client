@@ -2,14 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.0h: the floor cell at its new pins.
-
-T2.0c moves the floor CI cell to pandas 2.2.2 and NumPy 1.23.5 (KO2-37).
-The runner names an environment's cell from its versions; one it does not
-recognise records no cell, and compare then holds it to the pandas-3
-reference. Both the new pins and the earlier ones (which the phase
-branch's ci.yml installs until T2.0c lands) are the floor cell.
-"""
+"""Supported dependency versions select their intended validation environment."""
 
 from __future__ import annotations
 

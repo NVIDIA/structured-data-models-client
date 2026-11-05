@@ -2,16 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Query-option contracts on DuckDB, SQLite and PostgreSQL.
+"""Query options preserve endpoint payloads, filtering, result fields and diagnostics.
 
-Archived cases and vectors retain the original Python reference observations.
-Current-client checks compare every payload, result, warning and item field against
-that reference, except the explicit Phase 6 EXPLAIN improvements.
-EXPLAIN now requests explanations by default and supports multiple entities.
-The current expectations below preserve the archived files and check each entity's
-raw explanation independently, including the legacy first-explanation alias.
-
-Run with SDM_POSTGRES_TEST_DSN to exercise PostgreSQL as well as local drivers.
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

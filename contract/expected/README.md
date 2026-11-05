@@ -31,5 +31,5 @@ Their differences from DuckDB follow the fixture loader's explicit mappings in `
 
 These expectations describe the declared fixture mappings; they do not claim that every backend supports identical physical types.
 `explain.two-entities` now succeeds on all three backends: Phase 6 supports explanations for multiple prediction rows.
-`contract/tests/test_t213_options.py::test_each_explained_entity_retains_its_own_raw_response` independently checks both rows' distinct explanation values, the request batch size and the public success outcome.
+`contract/tests/test_query_options.py::test_each_explained_entity_retains_its_own_raw_response` independently checks both rows' distinct explanation values, the request batch size and the public success outcome.
 Rust/Java host expectations remain under reconciliation.

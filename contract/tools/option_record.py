@@ -40,7 +40,7 @@ the package's exits name, is kept here, per case key:
 - for a refusal, ``message``: the exception's text, and ``details``:
   ``StructuredDataError.details``, each value as JSON writes it.
 
-:func:`observe` is imported by ``contract/tests/test_t213_options.py``,
+:func:`observe` is imported by ``contract/tests/test_query_options.py``,
 so ``python-core`` is observed by the same code.
 """
 

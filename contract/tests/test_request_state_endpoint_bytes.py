@@ -2,43 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.14b's host clean-up on ``python-core`` (the package's test
-author's): the response bytes untouched, the facts the core returns read
-from the core, the candidate repeats as the reference keeps them, and the
-request state's version.
+"""Request state preserves resolved facts, repeated candidates and endpoint response bytes.
 
-    python -m pytest contract/tests/test_t214b_host.py -q
-
-Written from the brief's T2.14b section and T2.14a's ledger (MID2 P2-4 and
-P2-2, and Phase 1's ``_encoded`` row), before the implementation:
-
-- **Response bytes untouched**: the transport hands the core the
-  endpoint's answer as the bytes it sent, as it sends the core's request
-  as the bytes the core wrote (``_send_body``); the re-encoding
-  (``_rust/predict.py``'s ``_encoded`` and ``_ENCODED_DEPTH``) is gone.
-  Observed at ``sdm_client._native``'s boundary, the one place the host
-  hands the core a model call's answer (``model_reply``), with the
-  scripted endpoint writing its JSON compactly, as a real endpoint does.
-- **Facts read from the core**: the target's windowing and entity table
-  are the core's ``Materialized.query`` (``QueryFacts``), not the old
-  validator's; held by giving the host other facts at the boundary and
-  seeing the request carry them. Beside that, guards recorded from the
-  reference by ``contract/tools/t214b_host_record.py``
-  (``contract/t214b-host-vectors.json``): each query's facts, the step or
-  candidate a refused call is said of, and a ranking's candidates that
-  repeat by Python's equality (``1``, ``1.0``, ``True``, ``Decimal('1')``,
-  ``np.int64(1)``), asked as the reference's ``dict.fromkeys`` keeps
-  them, the first of each. These pass on the base, where the host decides;
-  they hold the move to the reference.
-- **The request state's version** (H23): a request whose state names
-  another version is refused before any call, ``INVALID_REQUEST`` with
-  ``field: state.version`` and the version, and its message says so
-  rather than only that the request is not one the core accepts.
-
-The case ``rank.repeated-candidates`` holds the repeats on all three
-databases on python-core here and on rust-host (``sdm-testkit``'s
-``tests/t214b_host.rs``), where no Python decides them.
-
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

@@ -2,15 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The recording mode's round-1 findings (T3.2 fix 5, Codex r1 1 to 3):
-
-- Snowflake's session time zone is read with ``SHOW PARAMETERS``, its
-  ``value`` column, not a ``CURRENT_SETTING`` Snowflake does not have;
-- two identical executions on one cursor or Spark session are two
-  statements, each keeping its own result;
-- the recording's completeness holds each statement whole (parameters,
-  error, every read) and each Arrow result to its read.
-"""
+"""Repeated driver reads retain separate results and the actual session time zone."""
 
 from __future__ import annotations
 
@@ -30,7 +22,7 @@ def _own() -> ModuleType:
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(
-        name, HERE / 'test_t32_recording_own.py'
+        name, HERE / 'test_driver_capture.py'
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

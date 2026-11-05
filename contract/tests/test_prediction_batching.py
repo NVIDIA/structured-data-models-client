@@ -2,53 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.8c's exits on ``python-core`` (the package's test author's):
-multi-call ``predict``, ``main``'s 1fc5a686.
+"""Prediction batching preserves row limits, request-size boundaries and partial answers.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        contract/tests/test_t28c_multicall.py -q
-
-Written from the design's T2.8c row (each item an exit) and the reference
-(python-ref at ``contract/reference-env.txt``'s commit, which holds
-1fc5a686), before the implementation. ``sdm-testkit``'s
-``tests/t28c_multicall.rs`` holds ``rust-host`` to the same exits.
-
-The cases, ``contract/cases/s1/multicall.*.json``, each run on DuckDB,
-SQLite and Postgres (the case format's ``input.materialize.rows_per_call``
-and ``input.fail_call``, the call the scripted endpoint fails):
-
-- ``rows-per-call-3``: ``rows_per_call=3`` over the shop's 8 users, three
-  calls of 3, 3 and 2 rows, the rows numbered 0 to 7 across them;
-- ``fail-call-2`` and ``fail-call-0``: the same with the third, or the
-  first, call failed by the endpoint: the calls answered before it carried
-  on the error, or none;
-- ``rows-per-call.<value>``: invalid values (0, -1, 2.5, 3.0, true, "3"),
-  refused at materialize, and two that only lower the cap (10,001 and
-  2**64), one call;
-- the ceilings' boundaries, on generated users with one key and one
-  target: ``entities-per-call.10001`` (calls of 10,000 and 1),
-  ``entities.100000`` and ``.100001`` (the most one materialize gathers,
-  and one past it), ``calls.100`` and ``.101`` (``rows_per_call=1``: the
-  most calls, and one past; ``calls.100`` also sends about 109 context
-  rows in each of its 100 calls, more than 10,000 summed, so the pre-send
-  context check is held to each call);
-- ``body-30mib.one-row`` and ``.several-rows``: a call past the 30 MiB
-  body (1,000 context rows of a 40,000-character category), refused at
-  materialize naming what to change;
-- ``forecast.one-call``, ``forecast.batched`` and ``forecast.fail-call-1``:
-  a two-step forecast whose entities fit one call, one whose entities do
-  not (the batched-forecast refusal), and one whose second step's call
-  fails (the step already answered carried on the error, which register
-  P2B-9 says the core route drops until T2.8c).
-
-Each test's one line says the exit it proves. Two kinds of evidence, both
-from the reference: its committed lines (``run_python.py``: the outcome,
-each request the endpoint received, the result's digest) and
-``contract/t28c-multicall-vectors.json`` (``multicall_record.py``: the rows
-each call scores, the result's rows, a refusal's details, the answers
-carried on it, its first sentence and the 30 MiB body's remedy), which
-``python-core`` is observed against by the same code.
-
+Current-client checks use retained expected values and scripted endpoint responses.
+No archived client runtime is executed.
 """
 
 from __future__ import annotations

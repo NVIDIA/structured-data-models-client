@@ -4,7 +4,7 @@
 
 //! T2.5's and T2.6's exits on `rust-host`'s providers (the package's test
 //! author's): the provider conformance kit and the in-memory fallback.
-//! `contract/tests/test_t25_provider_kit.py` holds the Python host's
+//! `contract/tests/test_provider_conformance.py` holds the Python host's
 //! providers to the same exits, over the same data.
 //!
 //! The kit's data is `contract/fixtures/provider-kit/`: `dataset.sql`, the
