@@ -447,6 +447,7 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
+    ("OperationResult/direct_value.value", "column_analysis"),
     ("Operation/add_sql_column.input", "sql_column_input"),
     ("Operation/add_sql_column.schema", "Materialize.schema"),
     ("Operation/rebind_source.schema", "Materialize.schema"),
@@ -881,6 +882,10 @@ const OTHER: &[(&str, &str)] = &[
         "inspected instance Arrow table",
     ),
     ("RelatedTable.data", "inspected related Arrow table"),
+    (
+        "Operation/analyze_columns.payloads",
+        "encoded endpoint payloads inspected for context analysis",
+    ),
     ("Operation/fit.payloads", "encoded endpoint payloads"),
     ("Operation/predict.payloads", "encoded endpoint payloads"),
     ("Operation/predict.pinned", "encoded pinned context"),
