@@ -59,6 +59,23 @@ class GradientExplanationsTest {
         try(SdmClient client=SdmClient.connect(url)) {
           PredictionResult result=client.predict(request,model,List.of("prediction","explanation",target.equals("value")?"quantiles":"probabilities"));
           assertEquals(2,result.explanations().gradients().entries().size());
+          ColumnExplanations columns=result.explanations().columns();
+          assertNotNull(columns); assertFalse(columns.rows().isEmpty());
+          for(ColumnExplanations.Row row:columns.rows()) {
+            assertTrue(Double.isFinite(row.mean()));
+            assertTrue(row.share()>=0 && row.share()<=1);
+            assertTrue(row.score()>=0 && row.score()<=1);
+            if(target.equals("value")) {
+              assertNull(row.classLabel());
+              assertTrue(row.mean()>=0 && row.mean()<=23.75);
+            } else {
+              assertTrue(List.of("a","b").contains(row.classLabel()));
+              assertTrue(row.mean()>=0 && row.mean()<=1);
+            }
+          }
+          try(RootAllocator allocator=new RootAllocator();VectorSchemaRoot root=columns.toArrow(allocator)) {
+            assertEquals(columns.rows().size(),root.getRowCount());
+          }
           try(RootAllocator allocator=new RootAllocator();VectorSchemaRoot root=result.explanations().gradients().toArrow(allocator)) {
             assertTrue(root.getRowCount()>0);
           }
