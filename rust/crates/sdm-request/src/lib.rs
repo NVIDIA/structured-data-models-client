@@ -14,6 +14,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod batching;
 pub mod inference;
 pub mod options;
 pub mod payload;

@@ -41,6 +41,7 @@ fn pandas_2() -> InstantRange {
 
 fn start(facts: HostFacts) -> ControlMessage {
     ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts,
         operation: Operation::ValidateQuery(ValidateQuery {

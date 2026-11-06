@@ -53,6 +53,7 @@ fn facts(local_zone: Option<LocalZone>) -> HostFacts {
 
 fn start_message(operation: Operation, local_zone: Option<LocalZone>) -> ControlMessage {
     ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts(local_zone),
         operation,

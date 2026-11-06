@@ -154,6 +154,7 @@ ADVICE: dict[str, Callable[..., str]] = {
     'nothing': lambda: 'None',
     'optimize_indices': lambda: 'KumoRelational(graph, optimize=True)',
     'predict_call': lambda: 'predict()',
+    'raise_limit': lambda setting: f'limits=Limits({setting}=...)',
     'raise_most_parts': lambda: 'raise sdm_client.decompose.MOST_PARTS',
     'semantic_model': lambda name: f'source.semantic_model({name!r})',
     'set_primary_key': lambda table, column: (
@@ -165,7 +166,6 @@ ADVICE: dict[str, Callable[..., str]] = {
     ),
     'missing_time': lambda: "'NaT'",
     'result_frame': lambda: 'to_pandas()',
-    'smaller_calls': lambda: 'materialize(rows_per_call=N)',
     'trust_expressions': lambda: 'trust_expressions=True',
 }
 

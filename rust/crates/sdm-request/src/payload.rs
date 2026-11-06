@@ -79,12 +79,6 @@ pub const RESERVED: [&str; 2] = [INSTANCE_ID, ANCHOR_TIME];
 const NO_ANCHOR: i64 = -9_223_372_036_854_775_807;
 /// The largest integer a JSON number carries exactly in every reader.
 const JSON_SAFE: i128 = 9_007_199_254_740_991;
-/// The largest payload the endpoint takes, in bytes (`_MAX_SIZE`), counted
-/// as the bytes the payload is written as and sent, UTF-8 (register PD-2),
-/// not the reference's `json.dumps` count, which escapes every character
-/// past ASCII.
-pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
-
 /// One column of a sampled table: as sampled, or a text feature as the
 /// reference's sampler sends it, each value its words
 /// (`sdm_engine::words`), written as a `stringlist` column.
@@ -219,11 +213,6 @@ pub struct Sampled {
     /// How many candidates the call asked be kept (`top_k`), written into
     /// the task as the engine writes it.
     pub top_k: Option<u32>,
-    /// The most rows any call of the request this payload is one call of
-    /// scores (`_the_largest_batch`, `main`'s multi-call `predict`): the
-    /// size a refusal of a payload past the endpoint's limit names as the
-    /// one to ask below.
-    pub rows_per_call: usize,
     /// The lagged target columns (`lag_timesteps`), in order; none
     /// where the call asks for none.
     pub lags: Vec<LagColumn>,
@@ -234,12 +223,58 @@ pub struct Sampled {
     pub float_text: fn(f64) -> String,
 }
 
-/// A payload built: its JSON text, the bytes the request sends, and how
-/// many context examples answered the question and were taken out.
+/// A payload built: its JSON text, how many of its bytes a call sends (the
+/// members only this client reads left out), and how many context examples
+/// answered the question and were taken out.
 #[derive(Debug, Clone)]
 pub struct Built {
     pub bytes: Vec<u8>,
+    pub model_bytes: usize,
     pub answering: usize,
+}
+
+/// A built payload held to the most bytes one call takes (`limit`, the
+/// `max_request_bytes` setting), counted as the bytes the payload is
+/// written as and sent, UTF-8 (register PD-2), not the reference's
+/// `json.dumps` count, which escapes every character past ASCII. A payload
+/// past it is asked as smaller calls when it is predicted
+/// ([`crate::batching`]), so it is refused here only where no call is small
+/// enough: where the context, sent with every call, makes a call of one row
+/// past the limit on its own.
+pub fn check_bytes(built: &Built, limit: u64) -> Result<(), CoreError> {
+    if built.model_bytes as u64 <= limit {
+        return Ok(());
+    }
+    let payload = sdm_wire::json::read(&built.bytes)
+        .map_err(|_| internal("a built payload does not read back"))?;
+    let rows = crate::batching::predict_rows(&payload).unwrap_or(0);
+    // The bytes a call carrying the first `n` rows sends.
+    let sent = |n: usize| -> Result<u64, CoreError> {
+        let mut call = crate::batching::predict_slice(&payload, 0..n)?;
+        call.remove("client_generated_keys");
+        call.remove("client_analysis_delta");
+        Ok(call.to_bytes().len() as u64)
+    };
+    let one = sent(rows.min(1))?;
+    if rows > 1 && one <= limit {
+        return Ok(());
+    }
+    let count = |n: u64| Detail::Scalar(sdm_contract::Scalar::UInt64(n));
+    Err(sdm_contract::limits::MAX_REQUEST_BYTES.named(
+        CoreError::new(
+            Sentence::PayloadNoSmallerCall,
+            "the context alone makes a call larger than one call takes",
+        )
+        .with_field("field", Detail::text("payload"))
+        .with_field("bytes", count(one))
+        .with_field("context_bytes", count(sent(0)?))
+        .with_field("limit", count(limit))
+        .with_field(
+            "batch_too_large_to_send",
+            Detail::Scalar(sdm_contract::Scalar::Bool(true)),
+        )
+        .with_field("rows", count(rows as u64)),
+    ))
 }
 
 fn invalid(sentence: Sentence, message: &str, column: &str) -> CoreError {
@@ -1564,13 +1599,8 @@ fn build_mode(
         }
         .to_bytes()
     };
-    // The limit counts the bytes the request sends, as written (PD-2).
-    // The refusal names what to change, as the reference's client words
-    // its engine's (`_said_in_this_client_s_terms`, `main`'s 1fc5a686): a
-    // call scoring several rows can be asked as smaller calls, below the
-    // most rows a call of the request scores (`smaller_calls`); a call of
-    // one row cannot, and only a narrower context helps
-    // (`no_smaller_call`).
+    // The bytes a call sends of it, which the limit counts (PD-2): all but
+    // the members only this client reads.
     let analysis_bytes = client_analysis_delta.as_ref().map_or(0, |delta| {
         serde_json::to_vec(delta)
             .expect("typed delta serializes")
@@ -1579,36 +1609,9 @@ fn build_mode(
             + 1
     });
     let model_bytes = bytes.len() - client_only_bytes - analysis_bytes;
-    if model_bytes > PAYLOAD_BYTES {
-        let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
-        return Err(CoreError::new(
-            if sampled.num_test > 1 {
-                Sentence::PayloadSmallerCalls
-            } else {
-                Sentence::PayloadNoSmallerCall
-            },
-            "the request is larger than the endpoint takes",
-        )
-        .with_field("field", Detail::text("payload"))
-        .with_field("bytes", count(model_bytes))
-        .with_field("limit", count(PAYLOAD_BYTES))
-        .with_field(
-            "batch_too_large_to_send",
-            Detail::Scalar(sdm_contract::Scalar::Bool(true)),
-        )
-        .with_field(
-            "remedy",
-            Detail::text(if sampled.num_test > 1 {
-                "smaller_calls"
-            } else {
-                "no_smaller_call"
-            }),
-        )
-        .with_field("rows", count(sampled.num_test))
-        .with_field("rows_per_call", count(sampled.rows_per_call)));
-    }
     Ok(Built {
         bytes,
+        model_bytes,
         answering: answered.len(),
     })
 }

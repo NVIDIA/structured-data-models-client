@@ -768,14 +768,11 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     # core's call as the core wrote it, so the bytes the endpoint receives
     # are the bytes the core counted against the limit, characters past
     # ASCII as their own bytes, never json.dumps' escapes. At the limit's
-    # edge the call is sent, at most the limit; one character past it,
-    # nothing is sent. Since the reference's 26ecdd28 the call
-    # leaves out the engine's inference config, which the payload holds,
-    # so the payload is the larger and meets the limit first: the edge is
-    # the payload's, which materialize names in its refusal, and one past
-    # it materialize refuses (the call's own refusal, past the limit with
-    # the payload within it, is sdm-core's
-    # a_call_past_the_limit_is_refused_before_it_is_sent).
+    # edge the call is sent whole, at most the limit; one character past
+    # it, the call's two rows are asked as smaller calls, each within it.
+    # The payload, which holds the engine's inference config the call
+    # leaves out, may pass the limit where the call does not: materialize
+    # gathers it all the same, since a call of one row fits.
     limit = 30 * 1024 * 1024
     lengths = []
     for emoji, ascii in ((0, 0), (1, 0), (0, 1)):
@@ -792,31 +789,23 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     assert wide % 4 == 0 and narrow == 1
     emoji = (limit - base) // wide
     ascii = (limit - base - emoji * wide) // narrow
-    # The call's edge is past the payload's: materialize refuses it, naming
-    # the payload's size, and the payload's edge is that much nearer.
-    with pytest.raises(StructuredDataError) as over:
-        _emoji_request(monkeypatch, emoji, ascii)
-    details = over.value.details
-    assert over.value.code == 'INVALID_REQUEST'
-    assert details['field'] == 'payload' and details['limit'] == limit
-    excess = details['bytes'] - limit
-    assert 0 < excess < wide * 64
-    room = emoji * wide + ascii * narrow - excess
-    emoji = room // wide
-    ascii = (room - emoji * wide) // narrow
     written, received, refused = _sent(
         monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
     )
     assert refused.code == 'RECORDED'
     assert written == received
-    assert len(received[0]) == base + emoji * wide + ascii * narrow <= limit
+    assert len(received[0]) == base + emoji * wide + ascii * narrow == limit
     assert b'\\ud83d' not in received[0]
     assert '\U0001f600'.encode() in received[0]
-    with pytest.raises(StructuredDataError) as past:
-        _emoji_request(monkeypatch, emoji, ascii + 1)
-    assert past.value.code == 'INVALID_REQUEST'
-    assert past.value.details['field'] == 'payload'
-    assert past.value.details['bytes'] == limit + 1
+    # One byte past: split into calls of one row each, which share their
+    # context, so the first post pins that context as a session for them;
+    # the endpoint refuses it before anything else is sent.
+    _, received, refused = _sent(
+        monkeypatch, _emoji_request(monkeypatch, emoji, ascii + 1)
+    )
+    assert refused.code == 'RECORDED'
+    [first] = received
+    assert json.loads(first)['metadata']['num_prediction_examples'] == 1
 
 
 def test_embeddings_are_the_old_route_s_on_the_core(

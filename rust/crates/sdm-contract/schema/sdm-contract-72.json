@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/71",
+  "$id": "sdm-contract/72",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -16,6 +16,10 @@
         },
         "facts": {
           "$ref": "#/$defs/HostFacts"
+        },
+        "limits": {
+          "description": "The size limits the caller set and the environment names, which the\ncore resolves before the run starts (contract v72); left out, each\nlimit is its default ([`crate::limits`]).",
+          "$ref": "#/$defs/GivenLimits"
         },
         "operation": {
           "$ref": "#/$defs/Operation"
@@ -311,6 +315,12 @@
         },
         "DirectValue.check_tabular_cap": {
           "$ref": "#/$defs/CheckedTabularCap"
+        },
+        "ResolveLimits.input": {
+          "$ref": "#/$defs/ResolveLimits"
+        },
+        "DirectValue.resolve_limits": {
+          "$ref": "#/$defs/Limits"
         },
         "ObserveTabularMembership.input": {
           "$ref": "#/$defs/ObserveTabularMembership"
@@ -701,6 +711,8 @@
         "DirectValue.select_tabular_rows",
         "CheckTabularCap.input",
         "DirectValue.check_tabular_cap",
+        "ResolveLimits.input",
+        "DirectValue.resolve_limits",
         "ObserveTabularMembership.input",
         "DirectValue.observe_tabular_membership",
         "DecideTabularTask.input",
@@ -3829,6 +3841,50 @@
       "additionalProperties": false,
       "required": [
         "accepted"
+      ]
+    },
+    "ResolveLimits": {
+      "description": "The input of `resolve_limits`, which reads nothing but the run's\nlimits: none.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "Limits": {
+      "description": "The limits a run holds a request to, resolved; `resolve_limits` answers\nthem, so a host can say what its caller's settings came to.",
+      "type": "object",
+      "properties": {
+        "max_relational_context_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_relational_predict_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_temporal_link_predict_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_tabular_context_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_request_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "max_relational_context_rows",
+        "max_relational_predict_rows",
+        "max_temporal_link_predict_rows",
+        "max_tabular_context_rows",
+        "max_request_bytes"
       ]
     },
     "ObserveTabularMembership": {
@@ -7954,7 +8010,7 @@
       ]
     },
     "GivenCandidate": {
-      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\n), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\nits own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\nholds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\nfixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\ntext the reference writes into its question (in Python, `str` of it);\nit is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\nno scalar holds, written into its question by its text as `spelled`\nis, with the name of the kind of value it is (`date`, `datetime` for a\ntimestamp with no zone, `datetime_zoned` for one with one, `time`).\nTwo of one kind and one text are one candidate; a host whose language\nholds others equal (two zones of one instant) says so with `repeat`\n.\n- `repeat`: a value the host's own language holds equal to one given\nbefore it, left out as the reference's `dict.fromkeys` leaves it out.\nA host whose candidates are all scalars sends none, the core keeping\neach distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\none it cannot hash), which names no row and which the core refuses by\nname, as the reference fails on it.",
+      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\n), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\nits own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\nholds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\nfixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\ntext the reference writes into its question (in Python, `str` of it);\nit is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\nno scalar holds, written into its question by its text as `spelled`\nis, with the name of the kind of value it is (`date`, `datetime` for a\ntimestamp with no zone, `datetime_zoned` for one with one, `time`).\nTwo of one kind and one text are one candidate; a host whose language\nholds others equal (two zones of one instant) says so with `repeat`\n  .\n- `repeat`: a value the host's own language holds equal to one given\nbefore it, left out as the reference's `dict.fromkeys` leaves it out.\nA host whose candidates are all scalars sends none, the core keeping\neach distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\none it cannot hash), which names no row and which the core refuses by\nname, as the reference fails on it.",
       "oneOf": [
         {
           "type": "string",
@@ -10915,7 +10971,7 @@
       ]
     },
     "NamedTable": {
-      "description": "A table named for the schema: the name a query uses, and the relation\nof the source it reads (design choice 12), which a host naming a table\nby a string gives as one part.",
+      "description": "A table named for the schema: the name a query uses, and the relation\nof the source it reads, which a host naming a table\nby a string gives as one part.",
       "type": "object",
       "properties": {
         "name": {
@@ -10993,7 +11049,7 @@
           "type": "string"
         },
         "source": {
-          "description": "The relation of the source this table reads (design choice 12): its\nown name, one part, unless the caller named it otherwise (decision\nE59).",
+          "description": "The relation of the source this table reads: its\nown name, one part, unless the caller named it otherwise (decision\nE59).",
           "$ref": "#/$defs/Relation"
         },
         "columns": {
@@ -12693,6 +12749,29 @@
         "max_ns"
       ]
     },
+    "GivenLimits": {
+      "description": "What a host passes with every run (contract v72): the values its caller\nset, by [`Setting::name`], and the text of each setting's environment\nvariable that is set, by [`Setting::env`], each as the host read it.\nLeft out, every limit is its default.",
+      "type": "object",
+      "properties": {
+        "given": {
+          "description": "The values the caller set, each a whole number of at least one.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "environment": {
+          "description": "The environment variables set, each as its text.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "Operation": {
       "description": "One operation's request.",
       "oneOf": [
@@ -13699,6 +13778,24 @@
             "op": {
               "type": "string",
               "const": "check_tabular_cap"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "input"
+          ]
+        },
+        {
+          "description": "The size limits the run holds requests to, as resolved from its\nstart's (contract v72).",
+          "type": "object",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "resolve_limits"
             }
           },
           "additionalProperties": false,
@@ -14740,7 +14837,7 @@
           "$ref": "#/$defs/Determinism"
         },
         "max_seed": {
-          "description": "The largest seed the provider samples with (register entry RS-7),\nwhich every provider declares: there is no \"any seed\" default\n(design choice 1). The core refuses a sample with a larger seed,\n`INVALID_REQUEST` naming the seed, before the sample is planned;\nwhich seeds a provider takes is the provider's to declare, never a\nname the core matches.",
+          "description": "The largest seed the provider samples with (register entry RS-7),\nwhich every provider declares: there is no \"any seed\" default\n. The core refuses a sample with a larger seed,\n`INVALID_REQUEST` naming the seed, before the sample is planned;\nwhich seeds a provider takes is the provider's to declare, never a\nname the core matches.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -14779,7 +14876,7 @@
           ]
         },
         "fallback": {
-          "description": "The limits within which the core answers an optional request the\nprovider does not declare itself, in memory, from the rows a `scan`\nreads (design choice 1, the in-memory fallback); left out,\nthe provider declares none, and such a request is refused,\n`UNSUPPORTED_REQUEST`, as before. A declared request that fails is\nthe provider's error either way, never answered by the fallback.",
+          "description": "The limits within which the core answers an optional request the\nprovider does not declare itself, in memory, from the rows a `scan`\nreads; left out,\nthe provider declares none, and such a request is refused,\n`UNSUPPORTED_REQUEST`, as before. A declared request that fails is\nthe provider's error either way, never answered by the fallback.",
           "anyOf": [
             {
               "$ref": "#/$defs/FallbackLimits"
@@ -17682,9 +17779,9 @@
         "explanation_fast_mode",
         "options_unread",
         "options_unread_statistic",
-        "payload_smaller_calls",
         "payload_no_smaller_call",
         "call_past_endpoint",
+        "direct_call_past_bytes",
         "outputs_none",
         "not_finite",
         "past_int64",
@@ -17720,8 +17817,6 @@
         "statistic_not_a_regression",
         "no_hop_num_hops",
         "no_hop_num_neighbors",
-        "hops_past_endpoint",
-        "hops_past_endpoint_uncounted",
         "inference_run_mode_invalid",
         "inference_config_not_an_object",
         "inference_option_unknown",
@@ -17769,7 +17864,6 @@
         "frame_key_missing_parts",
         "frame_no_valid_rows",
         "not_in_table",
-        "subgraph_past_tables",
         "unresolved",
         "anchor_not_a_time",
         "anchor_before_data",
@@ -17829,6 +17923,8 @@
         "large_text_materialize",
         "admitted_past_type",
         "invalid_configuration",
+        "limit_environment_invalid",
+        "limit_given_below_one",
         "part_forecast_step",
         "part_forecast_step_outran",
         "part_ranking_candidate",
@@ -18010,7 +18106,7 @@
           }
         },
         "answered": {
-          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\n): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
+          "description": "What a request asked in several model calls had been answered when\na later call failed: the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
           "anyOf": [
             {
               "$ref": "#/$defs/AnsweredParts"

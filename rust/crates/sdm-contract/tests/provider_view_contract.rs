@@ -781,9 +781,12 @@ fn view_errors_explain_trust_and_recovery() {
     );
     assert_eq!(
         said(Sentence::ServingPastLimit),
-        "this request is {bytes:,} bytes once wrapped for serving endpoint {endpoint!r}, above \
-         the {limit:,} byte limit it accepts. Send fewer rows per call: a smaller \
-         num_context_samples, or fewer entities to score"
+        "this request is too large for serving endpoint {endpoint!r}: a call carrying it is \
+         {bytes:,} bytes once wrapped, {context_bytes:,} of them the context, above the {limit:,} \
+         byte limit the endpoint accepts. Calls past the limit are split into smaller ones where \
+         they score several rows, but the context is sent whole with every call, so gather a \
+         smaller context (num_context_samples, num_neighbors or the columns the graph carries), \
+         or score fewer rows at a time"
     );
     // The way out of an untrusted expression is the host's to spell.
     assert_eq!(

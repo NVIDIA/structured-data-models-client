@@ -69,6 +69,9 @@ pub enum Operation {
     OrderSampledTabularRows(crate::direct::DirectInput),
     SelectTabularRows(crate::direct::DirectInput),
     CheckTabularCap(crate::direct::DirectInput),
+    /// The size limits the run holds requests to, as resolved from its
+    /// start's (contract v72).
+    ResolveLimits(crate::direct::DirectInput),
     CheckDirectShape(crate::direct::DirectInput),
     CheckDirectCell(crate::direct::DirectInput),
     CheckColumn(crate::direct::DirectInput),
@@ -161,6 +164,7 @@ impl Operation {
             Operation::OrderSampledTabularRows(_) => "order_sampled_tabular_rows",
             Operation::SelectTabularRows(_) => "select_tabular_rows",
             Operation::CheckTabularCap(_) => "check_tabular_cap",
+            Operation::ResolveLimits(_) => "resolve_limits",
             Operation::CheckDirectShape(_) => "check_direct_shape",
             Operation::CheckDirectCell(_) => "check_direct_cell",
             Operation::CheckColumn(_) => "check_column",
@@ -333,6 +337,7 @@ impl Operation {
             | Operation::OrderSampledTabularRows(v)
             | Operation::SelectTabularRows(v)
             | Operation::CheckTabularCap(v)
+            | Operation::ResolveLimits(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
             | Operation::FeatureImportance(v)
@@ -1198,7 +1203,7 @@ impl<T> Given<T> {
 /// timestamp with no zone, `datetime_zoned` for one with one, `time`).
 /// Two of one kind and one text are one candidate; a host whose language
 /// holds others equal (two zones of one instant) says so with `repeat`
-///.
+///   .
 /// - `repeat`: a value the host's own language holds equal to one given
 /// before it, left out as the reference's `dict.fromkeys` leaves it out.
 /// A host whose candidates are all scalars sends none, the core keeping
@@ -1948,6 +1953,10 @@ pub struct Attachments {
     pub check_tabular_cap_input: crate::tabular::CheckTabularCap,
     #[schemars(rename = "DirectValue.check_tabular_cap")]
     pub check_tabular_cap_output: crate::tabular::CheckedTabularCap,
+    #[schemars(rename = "ResolveLimits.input")]
+    pub resolve_limits_input: crate::limits::ResolveLimits,
+    #[schemars(rename = "DirectValue.resolve_limits")]
+    pub resolve_limits_output: crate::limits::Limits,
     #[schemars(rename = "ObserveTabularMembership.input")]
     pub observe_tabular_membership_input: crate::tabular::ObserveTabularMembership,
     #[schemars(rename = "DirectValue.observe_tabular_membership")]

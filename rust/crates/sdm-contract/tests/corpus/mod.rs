@@ -103,6 +103,7 @@ pub fn messages() -> Vec<ControlMessage> {
             facts.local_zone = Some(LocalZone::Posix("EST5EDT,M3.2.0,M11.1.0".into()));
         }
         ControlMessage::Start(Box::new(StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts,
             operation,

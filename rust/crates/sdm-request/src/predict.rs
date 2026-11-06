@@ -49,6 +49,9 @@ use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::limits::{
+    Limits, MAX_RELATIONAL_CONTEXT_ROWS, MAX_REQUEST_BYTES, MAX_TABULAR_CONTEXT_ROWS,
+};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
 use sdm_wire::response::{PredictionResponse, Refused, integer_text, numeric_text};
@@ -92,9 +95,6 @@ pub const INFERENCE_OPTIONS: [&str; 6] = [
 
 /// The most classes `kumo-relational` classifies (`classes_max`).
 pub const CLASSES_MAX: usize = 10;
-
-/// The most context rows `kumo-relational` reads (`context_rows_max`).
-pub const CONTEXT_ROWS_MAX: usize = 10_000;
 
 /// The context the mode that explains takes at most (`context_rows_fast`).
 pub const CONTEXT_ROWS_FAST: usize = 1_000;
@@ -391,6 +391,7 @@ pub fn prepare(
     model: &str,
     asked: &[String],
     defaulted: bool,
+    limits: &Limits,
 ) -> Result<Vec<String>, CoreError> {
     let Some(payload) = payloads.first() else {
         return Err(CoreError::new(Sentence::Internal, "a request of no call"));
@@ -456,7 +457,7 @@ pub fn prepare(
         .map(|p| rows_of(p, "context"))
         .max()
         .unwrap_or(0);
-    check_capacity(spec, rows, false)?;
+    check_capacity(spec, rows, false, limits)?;
     if spec.id == TABULAR {
         // The tabular model takes no relational request this build sends.
         return Err(not_yet("model"));
@@ -857,25 +858,36 @@ fn is_chosen(value: &Value) -> bool {
     }
 }
 
-/// The bytes of the call `body` writes, as the host sends them, unchanged:
-/// refused past the endpoint's limit (`PAYLOAD_BYTES`), counted on these
-/// bytes, the envelope included, which are the bytes sent (register PD-2,
-/// fix round 1), before the model is called.
-pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
+/// The bytes of the call `body` writes, as the host sends them, unchanged,
+/// counted on these bytes, the envelope included, which are the bytes sent
+/// (register PD-2, fix round 1): refused past `limit` (`max_request_bytes`)
+/// before the model is called ([`call_past_bytes`]). A call that scores rows
+/// is split to fit before it gets here ([`crate::batching`]), so this
+/// refuses a call that cannot be made smaller.
+pub fn call_bytes(call: &Value, limit: u64) -> Result<Vec<u8>, CoreError> {
     let bytes = call.to_bytes();
-    if bytes.len() > crate::payload::PAYLOAD_BYTES {
-        return Err(CoreError::new(
-            Sentence::CallPastEndpoint,
-            "the call is larger than the endpoint takes",
-        )
-        .with_field("field", Detail::text("call"))
-        .with_field("bytes", Detail::Scalar(Scalar::UInt64(bytes.len() as u64)))
-        .with_field(
-            "limit",
-            Detail::Scalar(Scalar::UInt64(crate::payload::PAYLOAD_BYTES as u64)),
-        ));
+    if bytes.len() as u64 > limit {
+        return Err(call_past_bytes(call, bytes.len() as u64, limit));
     }
     Ok(bytes)
+}
+
+/// The refusal of `call`, `bytes` long, past `limit`, the most bytes one call
+/// takes (`max_request_bytes`): it names the call's bytes, those of its
+/// context, which every call carries, and the setting that raises the limit.
+pub fn call_past_bytes(call: &Value, bytes: u64, limit: u64) -> CoreError {
+    let context = crate::batching::predict_slice(call, 0..0)
+        .map_or(bytes, |context| context.to_bytes().len() as u64);
+    MAX_REQUEST_BYTES.named(
+        CoreError::new(
+            Sentence::CallPastEndpoint,
+            "the call is larger than one call takes",
+        )
+        .with_field("field", Detail::text("call"))
+        .with_field("bytes", Detail::Scalar(Scalar::UInt64(bytes)))
+        .with_field("context_bytes", Detail::Scalar(Scalar::UInt64(context)))
+        .with_field("limit", Detail::Scalar(Scalar::UInt64(limit))),
+    )
 }
 
 /// The entity a row is about, as the result gives it: as the reference's
@@ -2328,26 +2340,58 @@ fn check_task_outputs(
     }
     Ok(())
 }
-fn check_capacity(spec: &Spec, rows: usize, direct: bool) -> Result<(), CoreError> {
-    if (direct || spec.id == RELATIONAL) && rows > CONTEXT_ROWS_MAX {
-        return Err(unsupported(
-            if direct {
-                Sentence::DirectContextLimit
-            } else {
-                Sentence::ContextPastModel
-            },
-            spec.id,
-            "the request's context is larger than the model reads",
+/// A direct request's context, as it is sent to `model`, held to the most
+/// that model reads ([`check_capacity`]); a model this build does not
+/// carry is checked where it is bound.
+pub fn check_direct_context(model: &str, rows: usize, limits: &Limits) -> Result<(), CoreError> {
+    match MODELS.iter().find(|spec| spec.id == model) {
+        Some(spec) => check_capacity(spec, rows, true, limits),
+        None => Ok(()),
+    }
+}
+
+/// The context a request carries held to the most its model reads
+/// (`max_relational_context_rows` or `max_tabular_context_rows`), a
+/// refusal naming the setting that raises it.
+fn check_capacity(
+    spec: &Spec,
+    rows: usize,
+    direct: bool,
+    limits: &Limits,
+) -> Result<(), CoreError> {
+    let (setting, most) = if spec.id == TABULAR {
+        (&MAX_TABULAR_CONTEXT_ROWS, limits.max_tabular_context_rows)
+    } else {
+        (
+            &MAX_RELATIONAL_CONTEXT_ROWS,
+            limits.max_relational_context_rows,
         )
-        .with_field("context_rows", count(rows))
-        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
+    };
+    if (direct || spec.id == RELATIONAL) && rows as u64 > most {
+        return Err(setting.named(
+            unsupported(
+                if direct {
+                    Sentence::DirectContextLimit
+                } else {
+                    Sentence::ContextPastModel
+                },
+                spec.id,
+                "the request's context is larger than the model reads",
+            )
+            .with_field("context_rows", count(rows))
+            .with_field("context_rows_max", Detail::Scalar(Scalar::UInt64(most))),
+        ));
     }
     Ok(())
 }
 
 /// Model preflight for live direct request facts, before conversion or empty handling.
+/// The context is held to `limits` where they are given; a decision checked
+/// again later is the same decision whatever the limits, which the call that
+/// sends the request holds the context to once more.
 pub fn bind_direct(
     input: sdm_contract::direct::DirectCallFacts,
+    limits: Option<&Limits>,
 ) -> Result<sdm_contract::direct::BoundDirectCall, CoreError> {
     let facts = input.clone();
     let spec = MODELS
@@ -2381,7 +2425,9 @@ pub fn bind_direct(
         input.tables,
     )?;
     check_task_outputs(spec, &input.kind, &outputs, false)?;
-    check_capacity(spec, input.context_rows, true)?;
+    if let Some(limits) = limits {
+        check_capacity(spec, input.context_rows, true, limits)?;
+    }
     Ok(sdm_contract::direct::BoundDirectCall {
         facts,
         model: input.model,

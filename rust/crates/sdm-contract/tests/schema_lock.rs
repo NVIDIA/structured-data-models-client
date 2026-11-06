@@ -557,6 +557,11 @@ const JSON: &[(&str, &str)] = &[
         "OperationResult/direct_value.value",
         "DirectValue.check_tabular_cap",
     ),
+    ("Operation/resolve_limits.input", "ResolveLimits.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.resolve_limits",
+    ),
     (
         "Operation/observe_tabular_membership.input",
         "ObserveTabularMembership.input",

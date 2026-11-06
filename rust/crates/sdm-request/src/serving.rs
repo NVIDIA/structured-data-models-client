@@ -62,8 +62,45 @@ const STATUS_KEPT: &[u16] = &[400, 401, 403, 404, 409, 429, 504];
 
 /// The call `call` (the core's own JSON) as the endpoint's envelope, the
 /// bytes a host posts, or `ServingPastLimit` when it is more than
-/// `max_request_bytes`, counted on the actual UTF-8 body.
+/// `max_request_bytes`, counted on the actual UTF-8 body. A call that scores
+/// rows is split to fit before it gets here ([`crate::batching`]), so the
+/// refusal names the context every call carries.
 pub fn envelope(endpoint: &str, max_request_bytes: u64, call: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let read = readable(call)?;
+    let out = wrapped(&read)?;
+    let size = out.len() as u64;
+    if size > max_request_bytes {
+        let context = crate::batching::predict_slice(&read, 0..0)
+            .and_then(|context| wrapped(&context))
+            .map_or(size, |context| context.len() as u64);
+        return Err(CoreError::new(
+            Sentence::ServingPastLimit,
+            "the call is larger than the serving endpoint takes",
+        )
+        .with_field("endpoint", Detail::text(endpoint))
+        .with_field("bytes", count(size))
+        .with_field("context_bytes", count(context))
+        .with_field("limit", count(max_request_bytes)));
+    }
+    Ok(out)
+}
+
+/// How many bytes the endpoint's envelope of `call` is, as [`envelope`]
+/// writes and weighs it.
+pub fn envelope_len(call: &Value) -> Result<u64, CoreError> {
+    if !call.all_finite() {
+        return Err(CoreError::new(
+            Sentence::ServingValueNotJson,
+            "the call carries a value with no JSON form",
+        )
+        .with_field("reason", Detail::text("out_of_range_float")));
+    }
+    Ok(wrapped(call)?.len() as u64)
+}
+
+/// The call read back as the envelope carries it, refused where a value
+/// has no JSON form.
+fn readable(call: &[u8]) -> Result<Value, CoreError> {
     let read = json::read(call).map_err(|e| {
         CoreError::new(
             Sentence::ServingValueNotJson,
@@ -78,6 +115,11 @@ pub fn envelope(endpoint: &str, max_request_bytes: u64, call: &[u8]) -> Result<V
         )
         .with_field("reason", Detail::text("out_of_range_float")));
     }
+    Ok(read)
+}
+
+/// The envelope's bytes of a readable call.
+fn wrapped(read: &Value) -> Result<Vec<u8>, CoreError> {
     // Value's writer always produces UTF-8; this conversion performs no
     // number decoding, integer narrowing or host-dependent formatting.
     let payload = String::from_utf8(read.to_bytes()).map_err(|_| {
@@ -86,25 +128,14 @@ pub fn envelope(endpoint: &str, max_request_bytes: u64, call: &[u8]) -> Result<V
             "the wire JSON writer returned invalid UTF-8",
         )
     })?;
-    let out = Value::Object(vec![(
+    Ok(Value::Object(vec![(
         "dataframe_records".into(),
         Value::Array(vec![Value::Object(vec![(
             REQUEST_COLUMN.into(),
             Value::Text(payload),
         )])]),
     )])
-    .to_bytes();
-    let size = out.len() as u64;
-    if size > max_request_bytes {
-        return Err(CoreError::new(
-            Sentence::ServingPastLimit,
-            "the call is larger than the serving endpoint takes",
-        )
-        .with_field("endpoint", Detail::text(endpoint))
-        .with_field("bytes", count(size))
-        .with_field("limit", count(max_request_bytes)));
-    }
-    Ok(out)
+    .to_bytes())
 }
 
 /// The served model's answer in the endpoint's reply `body` (a 2xx), a JSON

@@ -44,6 +44,7 @@ fn description_recording(case: &Case, extra_fetch: bool) -> Recording {
         .as_ref()
         .unwrap();
     let start = ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts().unwrap(),
         operation: Operation::DescribeSource(DescribeSource {

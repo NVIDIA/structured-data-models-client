@@ -34,11 +34,12 @@
 //! than their own; the core puts each on its own row ( fix 1, a
 //! registered difference decided under ).
 
+use sdm_contract::limits::MAX_REQUEST_BYTES;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::{self, Labels, Target};
 use sdm_engine::sample::out_of_range;
 use sdm_engine::time::offset::Offset;
-use sdm_request::payload::{LagColumn, LagValues, PAYLOAD_BYTES};
+use sdm_request::payload::{LagColumn, LagValues};
 
 /// The field a lag's refusal names.
 const FIELD: &str = "lag_timesteps";
@@ -144,9 +145,9 @@ pub(crate) struct Lag {
 
 impl Lag {
     /// Refuses lags that would make a payload of `rows` instance rows
-    /// larger than the endpoint takes, before any column is computed, as
-    /// the payload's limit refuses it.
-    pub fn fits(&self, rows: usize) -> Result<(), CoreError> {
+    /// larger than one call takes (`limit`, `max_request_bytes`), before
+    /// any column is computed, as the payload's limit refuses it.
+    pub fn fits(&self, rows: usize, limit: u64) -> Result<(), CoreError> {
         let least = usize::try_from(self.steps)
             .ok()
             .and_then(|steps| {
@@ -155,16 +156,15 @@ impl Lag {
                     .checked_mul(steps)
             })
             .unwrap_or(usize::MAX);
-        if least > PAYLOAD_BYTES {
-            return Err(CoreError::new(
-                Sentence::LagPastPayload,
-                "the request is larger than the endpoint takes",
-            )
-            .with_field("field", Detail::text("payload"))
-            .with_field("lag_timesteps", Detail::Scalar(Scalar::UInt64(self.steps)))
-            .with_field(
-                "limit",
-                Detail::Scalar(Scalar::UInt64(PAYLOAD_BYTES as u64)),
+        if least as u64 > limit {
+            return Err(MAX_REQUEST_BYTES.named(
+                CoreError::new(
+                    Sentence::LagPastPayload,
+                    "the request is larger than one call takes",
+                )
+                .with_field("field", Detail::text("payload"))
+                .with_field("lag_timesteps", Detail::Scalar(Scalar::UInt64(self.steps)))
+                .with_field("limit", Detail::Scalar(Scalar::UInt64(limit))),
             ));
         }
         Ok(())
@@ -542,7 +542,7 @@ mod tests {
                 times: vec![],
             },
         );
-        let e = lag.fits(2).err().unwrap();
+        let e = lag.fits(2, MAX_REQUEST_BYTES.default).err().unwrap();
         assert_eq!(e.code, ErrorCode::InvalidRequest);
         assert_eq!(e.fields["field"], Detail::text("payload"));
     }

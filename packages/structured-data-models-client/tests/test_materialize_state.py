@@ -602,8 +602,8 @@ def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next() -> (
         [query],
         connection,
         indices=[0, 1],
-        num_hops=7,
-        expected_error='UNSUPPORTED_REQUEST',
+        num_hops=0,
+        expected_error='INVALID_REQUEST',
     ) == [(0, 0)]
     assert _calls([query], connection, indices=[0, 1]) == [(6, 1)]
     other = PredictiveQuery(QUERY, schema)

@@ -12,6 +12,7 @@ use sdm_contract::direct::storage::{
     DIRECT_STORAGE_KEY, DirectStorage, StorageOwner, TimestampUnit,
 };
 use sdm_contract::direct::*;
+use sdm_contract::limits::Limits;
 use sdm_contract::ops::{HeldSchema, OperationResult};
 use sdm_contract::tabular_arrow::*;
 use sdm_contract::{CoreError, Detail, HostFacts, Sentence};
@@ -292,29 +293,33 @@ fn bound(
     input: &ArrowPrediction,
     context: &ArrowData,
     scoring: &ArrowData,
+    limits: &Limits,
 ) -> Result<Prepared, CoreError> {
     let description = prepare(asker, &input.request, context, scoring)?;
-    let bound = direct::bind(DirectCallFacts {
-        query: None,
-        model: input.model.clone(),
-        outputs: crate::pql::explanation_outputs(
-            input.request.query.as_deref().unwrap_or(""),
-            &input.request.task,
-            input.outputs.clone(),
-        ),
-        kind: input.request.task.clone(),
-        anchored: input
-            .request
-            .task_options
-            .entries
-            .iter()
-            .rev()
-            .find(|(name, _)| name == "anchor_time_column")
-            .is_some_and(|(_, value)| option_truth(value)),
-        relationships: !description.schema.links.is_empty(),
-        tables: description.schema.tables.len(),
-        context_rows: header(context).rows,
-    })?;
+    let bound = direct::bind(
+        DirectCallFacts {
+            query: None,
+            model: input.model.clone(),
+            outputs: crate::pql::explanation_outputs(
+                input.request.query.as_deref().unwrap_or(""),
+                &input.request.task,
+                input.outputs.clone(),
+            ),
+            kind: input.request.task.clone(),
+            anchored: input
+                .request
+                .task_options
+                .entries
+                .iter()
+                .rev()
+                .find(|(name, _)| name == "anchor_time_column")
+                .is_some_and(|(_, value)| option_truth(value)),
+            relationships: !description.schema.links.is_empty(),
+            tables: description.schema.tables.len(),
+            context_rows: header(context).rows,
+        },
+        limits,
+    )?;
     if bound.model != sdm_request::predict::TABULAR {
         return Err(direct::invalid(Sentence::DirectRelationalFrames)
             .with_field("model", Detail::text(&bound.model)));
@@ -371,8 +376,9 @@ async fn predict(
     input: ArrowPrediction,
     context: ArrowData,
     scoring: ArrowData,
+    limits: &Limits,
 ) -> Result<OperationResult, CoreError> {
-    let prepared = bound(asker, &input, &context, &scoring)?;
+    let prepared = bound(asker, &input, &context, &scoring, limits)?;
     let payload = tabular::body(
         &prepared.columns,
         &context.batches,
@@ -396,8 +402,8 @@ async fn predict(
         part.columns = analysis;
         return crate::predict::finish(asker, part, prepared.bound.outputs);
     }
-    let answer =
-        crate::predict::call_answer(asker, payload.to_bytes(), input.endpoint.as_ref()).await?;
+    let bytes = crate::predict::one_call_bytes(&payload, limits)?;
+    let answer = crate::predict::call_answer(asker, bytes, input.endpoint.as_ref()).await?;
     finish(asker, payload, answer, prepared.bound.outputs, analysis)
 }
 fn finish(
@@ -420,6 +426,7 @@ pub(crate) async fn run(
     mut attached: Attachments,
     facts: HostFacts,
     zones: Arc<dyn Zones>,
+    limits: Limits,
 ) -> Result<OperationResult, CoreError> {
     match operation {
         ArrowTabular::Describe { input, table } => {
@@ -445,7 +452,7 @@ pub(crate) async fn run(
             let input = take_json(&mut attached, input)?;
             let context = take_table(&mut attached, context)?;
             let scoring = take_table(&mut attached, scoring)?;
-            predict(&asker, input, context, scoring).await
+            predict(&asker, input, context, scoring, &limits).await
         }
         ArrowTabular::Fit {
             input,
@@ -455,12 +462,12 @@ pub(crate) async fn run(
             let input = take_json(&mut attached, input)?;
             let context = take_table(&mut attached, context)?;
             let scoring = take_table(&mut attached, predict)?;
-            fit(&asker, input, context, scoring).await
+            fit(&asker, input, context, scoring, &limits).await
         }
         ArrowTabular::Score { input, predict } => {
             let input = take_json(&mut attached, input)?;
             let scoring = take_table(&mut attached, predict)?;
-            score(&asker, input, scoring).await
+            score(&asker, input, scoring, &limits).await
         }
         ArrowTabular::Close { input } => close(&asker, take_json(&mut attached, input)?).await,
         ArrowTabular::MaterializePredict {
@@ -471,12 +478,20 @@ pub(crate) async fn run(
             let input = take_json(&mut attached, input)?;
             let table = take_table(&mut attached, table)?;
             let predict = take_table(&mut attached, predict)?;
-            materialize(&asker, input, table, Some(predict), &facts, zones.as_ref())
+            materialize(
+                &asker,
+                input,
+                table,
+                Some(predict),
+                &facts,
+                zones.as_ref(),
+                &limits,
+            )
         }
         ArrowTabular::Materialize { input, table } => {
             let input = take_json(&mut attached, input)?;
             let table = take_table(&mut attached, table)?;
-            materialize(&asker, input, table, None, &facts, zones.as_ref())
+            materialize(&asker, input, table, None, &facts, zones.as_ref(), &limits)
         }
     }
 }
@@ -519,13 +534,14 @@ async fn fit(
     input: ArrowFit,
     context: ArrowData,
     scoring: ArrowData,
+    limits: &Limits,
 ) -> Result<OperationResult, CoreError> {
     use sdm_contract::{run::Endpoint, session::*};
     use tabular::session as policy;
     if input.prediction.endpoint.is_some() {
         return Err(invalid("this transport does not support sessions"));
     }
-    let prepared = bound(asker, &input.prediction, &context, &scoring)?;
+    let prepared = bound(asker, &input.prediction, &context, &scoring, limits)?;
     let encoded =
         tabular::encode_table(&prepared.columns, &context.batches, crate::pql::float_text)?;
     let keys = policy::encoded_keys(&encoded, &prepared.keys)?;
@@ -549,6 +565,8 @@ async fn fit(
     tabular::typed_inference(input.prediction.request.inference.clone())?;
     let column_analysis = Some(crate::columns::compute(std::slice::from_ref(&payload))?);
     crate::columns::expose(asker, column_analysis.as_deref(), &prepared.bound.outputs)?;
+    // The pinned context is one call, which no split makes smaller.
+    sdm_request::predict::call_bytes(&payload, limits.max_request_bytes)?;
     let answer = session_call(asker, Endpoint::CreateSession, payload).await?;
     let session_id = answer
         .get("session_id")
@@ -578,6 +596,7 @@ async fn score(
     asker: &Asker,
     mut input: ArrowScore,
     scoring: ArrowData,
+    limits: &Limits,
 ) -> Result<OperationResult, CoreError> {
     use tabular::session as policy;
     policy::validate_state(&input.session.state)?;
@@ -589,7 +608,7 @@ async fn score(
             &input.request.task,
             Some(input.session.state.bound.outputs.clone()),
         );
-        input.session.state.bound = direct::bind(facts)?;
+        input.session.state.bound = direct::bind(facts, limits)?;
     }
     let state = &input.session.state;
     if state.closed {
@@ -780,6 +799,7 @@ fn materialize(
     supplied: Option<ArrowData>,
     facts: &HostFacts,
     zones: &dyn Zones,
+    limits: &Limits,
 ) -> Result<OperationResult, CoreError> {
     use sdm_contract::ops::{ProfileName, QueryColumn, QuerySchema, QueryTable};
     use sdm_contract::pql::{NodeKind, ProblemType};
@@ -873,7 +893,7 @@ fn materialize(
     let decision = sdm_engine::tabular::context_decision(
         candidates.len(),
         input.num_context_samples,
-        sdm_request::predict::CONTEXT_ROWS_MAX,
+        usize::try_from(limits.max_tabular_context_rows).unwrap_or(usize::MAX),
     )
     .map_err(|_| invalid("context sample count is invalid"))?;
     let context_rows = if decision.reduced {

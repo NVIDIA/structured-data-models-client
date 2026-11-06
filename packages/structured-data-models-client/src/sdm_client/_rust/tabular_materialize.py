@@ -215,9 +215,11 @@ def _context(
         has_custom_sorter,
         observe,
     )
-    from sdm_client.models import TABULAR_LIMITS
+    from sdm_client.limits import in_effect
 
-    limit = TABULAR_LIMITS['context_rows_max']
+    # The most context rows a single-table request carries, as the core
+    # resolves the setting for the runs below.
+    limit = in_effect().resolved()['max_tabular_context_rows']
     if decision is None:
         over_limit = wanted is not None and bool(wanted > limit)
         accepted = _call('check_tabular_cap', {'over_limit': over_limit})[
@@ -236,8 +238,10 @@ def _context(
             )
     if decision['kind'] == 'refused':
         raise StructuredDataError(
-            f'num_context_samples is {wanted:,}, and the '
-            f'endpoint accepts at most {limit:,} context rows',
+            f'num_context_samples is {wanted:,}, and a request carries at '
+            f'most {limit:,} context rows; if the endpoint takes more, raise '
+            f'it with limits=Limits(max_tabular_context_rows=...) or the '
+            f'environment variable SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS',
             code='UNSUPPORTED_REQUEST',
         )
     if not decision['reduced']:

@@ -64,15 +64,17 @@ public final class DatabricksServing {
   private final AuthenticationSource authentication;
   private final long maxRequestBytes;
   private final Duration timeout;
+  private final Limits limits;
   private final HttpClient client;
 
   private DatabricksServing(
       String endpoint, AuthenticationSource authentication,
-      long maxRequestBytes, Duration timeout) {
+      long maxRequestBytes, Duration timeout, Limits limits) {
     this.endpoint = endpoint;
     this.authentication = authentication;
     this.maxRequestBytes = maxRequestBytes;
     this.timeout = timeout;
+    this.limits = limits;
     this.client = HttpClient.newBuilder().connectTimeout(timeout).build();
   }
 
@@ -110,7 +112,7 @@ public final class DatabricksServing {
       Map<String, String> headers = Map.copyOf(config.authenticate());
       return new Authentication(config.getHost(), headers);
     });
-    return new DatabricksServing(name, source, maxRequestBytes, DEFAULT_TIMEOUT);
+    return new DatabricksServing(name, source, maxRequestBytes, DEFAULT_TIMEOUT, Limits.defaults());
   }
 
   /** The endpoint {@code endpoint} in the workspace at {@code host}, with the gateway's limit. */
@@ -138,7 +140,7 @@ public final class DatabricksServing {
     positiveLimit(maxRequestBytes);
     AuthenticationSource source = new AuthenticationSource(() -> new Authentication(
         base, Map.of("Authorization", "Bearer " + token.get())));
-    return new DatabricksServing(name, source, maxRequestBytes, DEFAULT_TIMEOUT);
+    return new DatabricksServing(name, source, maxRequestBytes, DEFAULT_TIMEOUT, Limits.defaults());
   }
 
   /** This endpoint, each attempt and its retries bounded by {@code timeout}. */
@@ -146,7 +148,16 @@ public final class DatabricksServing {
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
       throw configuration("timeout must be a positive duration");
     }
-    return new DatabricksServing(endpoint, authentication, maxRequestBytes, timeout);
+    return new DatabricksServing(endpoint, authentication, maxRequestBytes, timeout, limits);
+  }
+
+  /**
+   * This endpoint, its requests held to {@code limits} as a client's are ({@link Limits}); the
+   * gateway's own limit on each wrapped call, {@link #maxRequestBytes}, holds as well.
+   */
+  public DatabricksServing limits(Limits limits) {
+    return new DatabricksServing(
+        endpoint, authentication, maxRequestBytes, timeout, Objects.requireNonNull(limits, "limits"));
   }
 
   /** The serving endpoint's name. */
@@ -162,6 +173,11 @@ public final class DatabricksServing {
   /** The longest one call, its retries included, may take. */
   public Duration timeout() {
     return timeout;
+  }
+
+  /** The size limits requests to this endpoint are held to. */
+  public Limits limits() {
+    return limits;
   }
 
   /** Where requests go: the endpoint's name, since it has no URL of its own. */

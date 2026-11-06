@@ -162,9 +162,12 @@ would break rather than letting the endpoint return a 500.
 | context rows, with `num_context_samples` | `10,000` |
 | rows scored at once | `10,000` |
 | rows scored for a link prediction | `200` |
-| tables in the gathered graph | `15` |
-| hops gathered | `6` |
+| bytes one call takes | `31,457,280` |
 | classes | `10` |
+
+The context rows with `num_context_samples`, the rows scored at once, the rows scored for a link prediction and the bytes one call takes are the serving layer's defaults, and a deployment may be configured to take more.
+Each is a setting: pass `limits=Limits(...)` to `SDMClient` and to `materialize()`, or set its environment variable, such as `SDM_CLIENT_MAX_RELATIONAL_CONTEXT_ROWS`.
+The gathered graph may carry any number of tables and hops.
 
 **More rows than one call scores are not refused.** They are gathered in
 batches of at most that many, and `predict()` sends one call per batch and
@@ -181,9 +184,9 @@ in parts is not batched at all: a ranking is already a call per candidate and
 a forecast one per step, and batching a part would send that many times as
 many calls.
 
-**The table limit is on the graph a request carries, not on the schema.** A
-schema may describe far more than fifteen tables; what counts is how many the
-query actually reaches.
+**A call past the most bytes one takes is split, not refused.** It is sent as
+several smaller calls, each with the whole context, so only a context too
+large on its own is refused, naming its size and the limit.
 Gradient explanations follow the model endpoint's supported outputs; the client does not impose a separate one-row or fast-context limit.
 
 ## Asking for more than one answer each

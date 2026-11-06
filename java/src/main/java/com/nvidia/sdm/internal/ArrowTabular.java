@@ -54,6 +54,15 @@ public final class ArrowTabular {
 
   public static Host.Finished run(String action, Object input, Map<String, byte[]> tables,
       Host.Model model) {
+    return run(action, input, tables, model, null);
+  }
+
+  /**
+   * Runs {@code action} as {@link #run(String, Object, Map, Host.Model)}, held to the size limits
+   * {@code limits} names (null: those of {@code model}'s client, else none).
+   */
+  public static Host.Finished run(String action, Object input, Map<String, byte[]> tables,
+      Host.Model model, Map<String, Long> limits) {
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "tabular_arrow");
     operation.put("action", action);
@@ -72,7 +81,7 @@ public final class ArrowTabular {
         operation.put(entry.getKey(), id);
         attachments.put(id, stream);
       }
-      return Host.run(operation, attachments, new Host.Call(null, model, Map.of()));
+      return Host.run(operation, attachments, new Host.Call(null, model, Map.of(), limits));
     } finally {
       for (ArrowArrayStream stream : streams) stream.close();
       for (ArrowReader reader : readers) {

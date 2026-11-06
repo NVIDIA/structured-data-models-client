@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     # dependency, and a core route over frames needs none of it.
     from sdm_connectors.providers import Provider
 
+from sdm_client import limits
 from sdm_client._rust import NativeBoundaryError, codec, errors, facts
 from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
@@ -224,6 +225,7 @@ def run(
             'message': 'start',
             'contract': core.CONTRACT_VERSION,
             'facts': facts.host_facts(core),
+            'limits': limits.in_effect()._given(),
             'operation': operation,
         }
     )

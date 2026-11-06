@@ -175,6 +175,7 @@ pub(crate) fn prepare_score(
     asker: &Asker,
     input: SessionScoreInput,
     mut attached: Attachments,
+    limits: &sdm_contract::limits::Limits,
 ) -> Result<OperationResult, CoreError> {
     let mut request: PrepareTabularScore = take_json(&mut attached, input.input)?;
     if request.predict != input.predict {
@@ -197,7 +198,7 @@ pub(crate) fn prepare_score(
             &facts.kind,
             Some(request.state.bound.outputs.clone()),
         );
-        request.state.bound = sdm_request::direct::bind(facts)?;
+        request.state.bound = sdm_request::direct::bind(facts, limits)?;
     }
     let table = take_value(&mut attached, request.predict)?;
     let mut payload = object([

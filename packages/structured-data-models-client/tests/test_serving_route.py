@@ -395,16 +395,29 @@ def test_malformed_serving_response_is_a_transport_error(
     assert len(received) == 1
 
 
-def test_a_call_past_the_caller_s_limit_is_refused_before_it_is_sent() -> None:
+def test_a_call_past_the_caller_s_limit_is_split_and_a_context_past_it_refused() -> (
+    None
+):
     request = _materialized()
     _, received = _predict(request)
     [(_, body, _)] = received
-    # The limit applies to the actual UTF-8 envelope posted to the SDK.
-    core, on_core = _predict(request, max_request_bytes=len(body) - 1)
+    # The limit applies to the actual UTF-8 envelope posted to the SDK: one
+    # byte under the call, its two rows are asked as two calls, each with
+    # the whole context and within the limit.
+    split, on_core = _predict(request, max_request_bytes=len(body) - 1)
+    assert not isinstance(split, Exception), split
+    assert len(on_core) == 2
+    assert all(len(sent) <= len(body) - 1 for _, sent, _ in on_core)
+    assert {json.dumps(_call(sent)['context']) for _, sent, _ in on_core} == {
+        json.dumps(_call(body)['context'])
+    }
+    # A limit no call of one row fits: refused, naming the context's size,
+    # and nothing sent.
+    core, on_core = _predict(request, max_request_bytes=100)
     assert on_core == []
     assert isinstance(core, StructuredDataError), core
-    assert core.details['limit'] == len(body) - 1
-    assert core.details['bytes'] == len(body)
+    assert core.details['limit'] == 100
+    assert core.details['context_bytes'] < core.details['bytes'] < len(body)
     # The size itself is admitted.
     core, received = _predict(request, max_request_bytes=len(body))
     assert not isinstance(core, Exception), core
@@ -426,11 +439,11 @@ def test_utf8_serving_preserves_public_payload_and_measures_the_sent_body() -> (
         assert call[field] == request.payloads[0][field], field
     assert result.to_pandas()['id'].tolist() == [0, 1]
     assert result.to_pandas()['prediction'].tolist() == [1.0, 1.0]
-    refused, sent = _predict(request, max_request_bytes=len(body) - 1)
-    assert isinstance(refused, StructuredDataError)
-    assert sent == []
-    assert refused.details['bytes'] == len(body)
-    assert refused.details['limit'] == len(body) - 1
+    split, sent = _predict(request, max_request_bytes=len(body) - 1)
+    assert not isinstance(split, Exception), split
+    assert len(sent) == 2
+    assert all('é😀'.encode() in part for _, part, _ in sent)
+    assert split.to_pandas()['id'].tolist() == [0, 1]
 
 
 @pytest.mark.parametrize(

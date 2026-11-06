@@ -189,6 +189,19 @@ def test_vectors_cover_required_success_and_failure_cases() -> None:
 CASES = RECORDED['cases']
 
 
+#: The recorded cases this client departs from the reference on, on purpose,
+#: and why: it gathers each of them where the reference refused.
+DEPARTED = {
+    # An earlier endpoint read at most 15 tables; the model reads as many as
+    # a request carries, so the client sets no most.
+    'star.tables-16': 'no table limit',
+    # A call past the byte limit that scores several rows is split into
+    # smaller calls when it is predicted; only a context too large on its
+    # own is refused at materialize.
+    'size.one-past-the-limit': 'split by bytes',
+}
+
+
 @pytest.mark.parametrize('spec', CASES, ids=[c['name'] for c in CASES])
 def test_the_core_s_payload_rules_are_the_reference_s(
     spec: dict[str, Any], monkeypatch: pytest.MonkeyPatch
@@ -196,6 +209,11 @@ def test_the_core_s_payload_rules_are_the_reference_s(
     expected = spec['expected']
     got, attachments = _on_the_core(spec, monkeypatch)
     covers = spec['covers']
+
+    if spec['name'] in DEPARTED:
+        assert expected['outcome'] == 'refused'
+        assert got['outcome'] == 'payload', got
+        return
 
     if covers == R.AVG_NULL:
         # The reference crashes (INTERNAL_ERROR); the core refuses it by
@@ -279,22 +297,20 @@ def test_the_core_s_payload_rules_are_the_reference_s(
         pytest.fail(f'no exit named: {covers}')
 
 
-def test_a_payload_past_the_byte_limit_is_refused_by_name(
+def test_a_payload_past_the_byte_limit_is_gathered_to_be_split(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # PD-2, past the limit: the core's refusal is named (a rule or a code
-    # the reference gives), never a crash, and the case before it is taken.
+    # PD-2, past the limit: a payload of two rows whose context fits with
+    # one is gathered, to be asked as smaller calls when it is predicted.
     past = next(c for c in CASES if c['name'] == 'size.one-past-the-limit')
     got, attachments = _on_the_core(past, monkeypatch)
-    assert got['outcome'] == 'refused'
-    assert not _not_held(got), got
-    assert got['code'] == past['expected']['code']
-    assert not attachments
+    assert got['outcome'] == 'payload', got
+    assert len(attachments) == 1
 
 
-@pytest.mark.parametrize('padding, accepted', [(5, True), (8, False)])
+@pytest.mark.parametrize('padding, within', [(5, True), (8, False)])
 def test_client_only_provenance_does_not_consume_model_payload_limit(
-    padding, accepted, monkeypatch
+    padding, within, monkeypatch
 ):
     import copy
 
@@ -305,13 +321,13 @@ def test_client_only_provenance_does_not_consume_model_payload_limit(
         f"UPDATE users SET note=note||'{'a' * padding}' WHERE user_id=0"
     )
     got, attachments = _on_the_core(spec, monkeypatch)
-    if accepted:
-        assert got['outcome'] == 'payload', got
-        state = bytes(attachments[0])
-        prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
-        assert state.startswith(prefix)
-        model_bytes = b'{' + state[len(prefix) :]
+    # Past the limit, the two rows are gathered to be split when predicted.
+    assert got['outcome'] == 'payload', got
+    state = bytes(attachments[0])
+    prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
+    assert state.startswith(prefix)
+    model_bytes = b'{' + state[len(prefix) :]
+    if within:
         assert len(model_bytes) <= R.PAYLOAD_LIMIT < len(state)
     else:
-        assert got['outcome'] == 'refused'
-        assert '30MB' in got['message']
+        assert R.PAYLOAD_LIMIT < len(model_bytes)

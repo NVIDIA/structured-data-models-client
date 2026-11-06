@@ -111,7 +111,10 @@ guesses that way and names the argument that settles it.
 
 `Request(context=..., predict=...)` takes two frames and sends exactly those
 rows. It trims neither. A context above 10,000 rows is refused with the count
-and the cap rather than quietly dropping rows you named.
+and the cap rather than quietly dropping rows you named. The cap is a setting
+with the serving layer's default: for a deployment configured to take more,
+pass `limits=Limits(max_tabular_context_rows=...)` to `SDMClient` and to
+`materialize()`, or set `SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS`.
 
 The rows to score need not appear in the labelled half, and usually should not:
 they are the rows whose answer you do not have.

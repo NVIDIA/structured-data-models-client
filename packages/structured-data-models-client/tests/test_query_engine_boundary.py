@@ -731,22 +731,18 @@ def gathered_from(built: Schema) -> set[str]:
     return set(request.payloads[0]['schema']['related_tables'])
 
 
-def test_a_schema_wider_than_the_cap_is_gathered_when_its_subgraph_is_not():
-    """21 declared tables, 6 gathered, and the endpoint reads 15."""
-    from sdm_client.models import RELATIONAL_LIMITS
-
+def test_a_schema_wider_than_fifteen_tables_is_gathered_as_its_subgraph():
+    """21 declared tables, 6 gathered: what is sent is what the query reaches."""
     built = star(satellites=20, joining=5)
-    assert len(built) > RELATIONAL_LIMITS['tables_max']
+    assert len(built) > 15
 
     assert len(gathered_from(built)) == 6
 
 
-def test_a_subgraph_wider_than_the_cap_is_still_refused():
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    with pytest.raises(StructuredDataError) as error:
-        gathered_from(star(satellites=20, joining=20))
-    assert str(RELATIONAL_LIMITS['tables_max']) in str(error.value)
+def test_a_subgraph_wider_than_fifteen_tables_is_gathered_whole():
+    """An earlier endpoint read at most 15 tables; the model reads as many as
+    a request carries, so a subgraph of 21 is gathered rather than refused."""
+    assert len(gathered_from(star(satellites=20, joining=20))) == 21
 
 
 # --- a table the request leaves out is said to be left out ------------------

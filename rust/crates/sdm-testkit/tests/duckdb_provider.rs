@@ -72,6 +72,7 @@ fn start(request: &Value) -> HostRun {
         fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: host::facts().unwrap(),
         operation: Operation::Test(TestOperation::Fetch {
@@ -571,6 +572,7 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
         fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: host::facts().unwrap(),
         operation: Operation::Test(TestOperation::Keyed {
