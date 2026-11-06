@@ -641,12 +641,60 @@ fn empty_and_invalid_partial_maps_do_not_hide_later_valid_rows() {
         },
     ];
     let payload = built(&sampled);
-    assert_eq!(foreign_keys(&payload, "context"), json!([null, 0.0, null]));
-    assert_eq!(foreign_keys(&payload, "predict"), json!([3.0]));
+    assert_eq!(foreign_keys(&payload, "context"), json!([null, 0, null]));
+    assert_eq!(foreign_keys(&payload, "predict"), json!([3]));
     assert_eq!(
         payload["schema"]["related_tables"]["orders"]["columns"]["user_id"]["dtype"],
-        json!("float64")
+        json!("int64")
     );
+}
+
+#[test]
+fn a_foreign_key_beside_nulls_keeps_every_digit_of_a_large_key() {
+    let big = 1_i64 << 60;
+    let mut sampled = shop();
+    sampled.tables[0].columns[0].1 = array(Int64Array::from(
+        (0..5).map(|i| big + i).collect::<Vec<_>>(),
+    ));
+    let edge = sampled.links[0].clone();
+    sampled.links = vec![SampledLink {
+        pairs: vec![(1, 1), (2, 2), (3, 3)],
+        ..edge
+    }];
+    let payload = built(&sampled);
+    assert_eq!(
+        foreign_keys(&payload, "context"),
+        json!([null, (big + 1).to_string(), (big + 2).to_string()])
+    );
+    assert_eq!(
+        foreign_keys(&payload, "predict"),
+        json!([(big + 3).to_string()])
+    );
+    assert_eq!(
+        payload["schema"]["related_tables"]["orders"]["columns"]["user_id"]["dtype"],
+        json!("int64")
+    );
+}
+
+#[test]
+fn a_foreign_key_to_a_table_outside_the_sample_is_not_sent() {
+    let mut sampled = shop();
+    sampled.tables[1]
+        .columns
+        .push(("item_id".into(), array(Int64Array::from(vec![5, 6, 5, 6]))));
+    let payload = built(&sampled);
+    for half in ["context", "predict"] {
+        let columns = payload[half]["related_tables"]["orders"]["columns"]
+            .as_array()
+            .unwrap();
+        assert!(!columns.contains(&json!("item_id")), "{half}");
+    }
+    assert!(
+        payload["schema"]["related_tables"]["orders"]["columns"]
+            .get("item_id")
+            .is_none()
+    );
+    assert_eq!(check("StatePayload", &payload), Ok(()));
 }
 
 fn foreign_keys(payload: &Value, half: &str) -> Value {

@@ -9,20 +9,20 @@
 //! holds `python-core` to as well, so the two hosts agree through them.
 //!
 //! - Exit "on both core hosts, over `base.binary` and `base.multiclass`,
-//! the classes, their order, the positive class and the context-leakage
-//! payload fields match the reference", from the real payload (not the
-//! test-only labels operation): the task, the context's and predicted
-//! rows, and each related table's columns and the instance ids it keeps
-//! (the context that answers the question taken out; a static target's
-//! column left out).
+//!   the classes, their order, the positive class and the context-leakage
+//!   payload fields match the reference", from the real payload (not the
+//!   test-only labels operation): the task, the context's and predicted
+//!   rows, and each related table's columns and the instance ids it keeps
+//!   (the context that answers the question taken out; a static target's
+//!   column left out).
 //! - Exit "python-core and rust-host public outcomes match for context
-//! leakage and limits": the leakage fields above, and the entity count's
-//! limit. The reference at b413e9ad refused 1,001 entities
-//! `UNSUPPORTED_REQUEST`; since main's 1fc5a686 (6298913c) it takes up to
-//! 10,000, so on `base.regression` (8 users) it refuses the 1,001 indices
-//! `INVALID_REQUEST` for another reason, while the core's 1,000-entity
-//! limit, field `indices`, still refuses them first, `UNSUPPORTED_REQUEST`
-//! (B-3, until ); `python-core` is held to the same.
+//!   leakage and limits": the leakage fields above, and the entity count's
+//!   limit. The reference at b413e9ad refused 1,001 entities
+//!   `UNSUPPORTED_REQUEST`; since main's 1fc5a686 (6298913c) it takes up to
+//!   10,000, so on `base.regression` (8 users) it refuses the 1,001 indices
+//!   `INVALID_REQUEST` for another reason, while the core's 1,000-entity
+//!   limit, field `indices`, still refuses them first, `UNSUPPORTED_REQUEST`
+//!   (B-3, until ); `python-core` is held to the same.
 //!
 //! Before the core refuses both classification cases by its rule
 //! `classification_task`, and these tests say so.

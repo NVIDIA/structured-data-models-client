@@ -7,15 +7,15 @@
 //! package's test author before the implementation:
 //!
 //! - P2--1: "The second data layer drops a whole key list when one name
-//! in it is null, where `sdm-data` drops only the null name
-//! (`sdm-testkit/src/layer.rs`)": a key's and a foreign key's column list
-//! holding a null name is read with the null name dropped and every other
-//! name kept, as `sdm-data`'s reader (`read.rs`, `names`) reads it;
+//!   in it is null, where `sdm-data` drops only the null name
+//!   (`sdm-testkit/src/layer.rs`)": a key's and a foreign key's column list
+//!   holding a null name is read with the null name dropped and every other
+//!   name kept, as `sdm-data`'s reader (`read.rs`, `names`) reads it;
 //! - P2--2: "The memory test provider... does not answer
-//! `column_ranges`, so on a table bigger than the preview it picks the
-//! time column from the preview (`sdm-testkit/src/memory.rs`)": the
-//! provider declares `column_ranges` and answers it over every row of a
-//! table whose times all lie past its first rows.
+//!   `column_ranges`, so on a table bigger than the preview it picks the
+//!   time column from the preview (`sdm-testkit/src/memory.rs`)": the
+//!   provider declares `column_ranges` and answers it over every row of a
+//!   table whose times all lie past its first rows.
 //!
 use std::collections::BTreeMap;
 use std::sync::Arc;

@@ -6,20 +6,20 @@
 //! independent test author), at `rust-host`'s public route:
 //!
 //! - Exit 1, the lock refuses a payload whose shape changed: the payload
-//! `rust-host` materializes for each case that reaches materialize holds
-//! to the contract's locked `$defs/StatePayload`, and every one-step
-//! change of its shape (a key the format requires dropped, a key it does
-//! not name added, a value retyped, a dtype or row format the wire does
-//! not name) is refused, at every path outside the open data (a row's
-//! cells). A lock that took any of them would not be the typed payload's.
+//!   `rust-host` materializes for each case that reaches materialize holds
+//!   to the contract's locked `$defs/StatePayload`, and every one-step
+//!   change of its shape (a key the format requires dropped, a key it does
+//!   not name added, a value retyped, a dtype or row format the wire does
+//!   not name) is refused, at every path outside the open data (a row's
+//!   cells). A lock that took any of them would not be the typed payload's.
 //! - Exit 2, rust-host follows the core's word on a held sampler state: a
-//! materializer handed a state the core refuses (another version, a memo
-//! that does not read, a memo no run left) answers that call with the
-//! refusal, and its next call starts afresh, exactly as a materializer
-//! that never held one (the same fetches and answer); the one after it is
-//! handed the state that fresh run left, as a materializer's second call.
-//! A host that ignored `drop_held` would hand the refused state back and
-//! be refused again.
+//!   materializer handed a state the core refuses (another version, a memo
+//!   that does not read, a memo no run left) answers that call with the
+//!   refusal, and its next call starts afresh, exactly as a materializer
+//!   that never held one (the same fetches and answer); the one after it is
+//!   handed the state that fresh run left, as a materializer's second call.
+//!   A host that ignored `drop_held` would hand the refused state back and
+//!   be refused again.
 
 use std::path::PathBuf;
 

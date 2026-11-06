@@ -8,24 +8,24 @@
 //! Arrow and binds the text it is given.
 //!
 //! - A `json` or `jsonb` value, which the provider hands over as JSON text
-//! (Arrow's `arrow.json`), is read as the reference's
-//! `_sanitize_postgres_frame` writes it: a JSON null a null, an object or
-//! an array as compact JSON, ASCII only (its strings' other characters
-//! escaped, as `\u` and four hexadecimal digits), and any other value as
-//! the reference's language writes it (`str`): `true` as `True`, a
-//! number as its digits or the text of its double (`float_text`), a
-//! string as itself. A JSON column's elements in an array alike.
+//!   (Arrow's `arrow.json`), is read as the reference's
+//!   `_sanitize_postgres_frame` writes it: a JSON null a null, an object or
+//!   an array as compact JSON, ASCII only (its strings' other characters
+//!   escaped, as `\u` and four hexadecimal digits), and any other value as
+//!   the reference's language writes it (`str`): `true` as `True`, a
+//!   number as its digits or the text of its double (`float_text`), a
+//!   string as itself. A JSON column's elements in an array alike.
 //! - A `numeric` declared past the 76 digits an Arrow decimal holds, which
-//! the provider hands over as each value's exact text, its declared scale
-//! marked ([`DECLARED_SCALE_MARKER`]), is read by its declaration, as the
-//! reference's `_to_dtype` reads it: of a scale above zero as doubles,
-//! of a scale of zero as integers, a column holding a whole number past
-//! `int64` as its digits (where the reference overflows), a NaN missing.
+//!   the provider hands over as each value's exact text, its declared scale
+//!   marked ([`DECLARED_SCALE_MARKER`]), is read by its declaration, as the
+//!   reference's `_to_dtype` reads it: of a scale above zero as doubles,
+//!   of a scale of zero as integers, a column holding a whole number past
+//!   `int64` as its digits (where the reference overflows), a NaN missing.
 //! - A key set is written as the JSON text its statement reads, as the
-//! reference writes it ([`key_rows`]): a time without a zone as
-//! pandas' `Timestamp.isoformat` writes it (the reference compares a
-//! text time column with it as text), binary as `\x` and its
-//! hexadecimal digits, so the provider binds the text it is handed.
+//!   reference writes it ([`key_rows`]): a time without a zone as
+//!   pandas' `Timestamp.isoformat` writes it (the reference compares a
+//!   text time column with it as text), binary as `\x` and its
+//!   hexadecimal digits, so the provider binds the text it is handed.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

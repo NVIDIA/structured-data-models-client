@@ -129,6 +129,26 @@ def test_materialize_selects_the_model_from_the_call_shape(
     assert request.predict_rows == (2 if argument == 'predict' else 1)
 
 
+@pytest.mark.parametrize(
+    ('text', 'advice'),
+    [
+        (
+            'PREDICT users.churn FOR EACH users.user_id WHERE users.age > 30',
+            'Filter the rows before constructing the query.',
+        ),
+        (
+            "PREDICT users.churn = 'yes' FOR EACH users.user_id",
+            "Add the derived value as a column of 'users' and predict that "
+            'column.',
+        ),
+    ],
+)
+def test_a_query_a_tabular_model_cannot_answer_says_what_to_do(text, advice):
+    with pytest.raises(StructuredDataError) as raised:
+        query(text).materialize(indices=[0, 1], model='kumo-tabular')
+    assert str(raised.value).endswith(advice)
+
+
 def test_a_query_predicting_a_column_that_is_not_there_is_refused():
     with pytest.raises((StructuredDataError, ValueError)):
         PredictiveQuery(

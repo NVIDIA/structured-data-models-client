@@ -70,7 +70,6 @@ code is right and the skill is stale: say so rather than working around it.
 ## What is not here
 
 - Training, fine-tuning, checkpoints, model registries. The models do not train.
-- `predictive_query`, the parser package behind `PredictiveQuery`. It is
-  internal, as [`docs/reference/stability.md`](../docs/reference/stability.md)
-  says. Write the query as a string.
+- The parser behind `PredictiveQuery`. It is part of the client's Rust core
+  and has no Python API of its own. Write the query as a string.
 - Deployment, authentication and endpoint operation. A skill assumes a URL.

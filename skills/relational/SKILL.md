@@ -62,13 +62,11 @@ The task is not an argument. It follows from the query: see
 
 ## The whole interface
 
-`KumoRelational` needs the engine, which is an extra:
+`KumoRelational` needs nothing beyond the client:
 
 ```
-pip install 'structured-data-models-client[relational]'
+pip install structured-data-models-client
 ```
-
-Without it the first call raises `MissingExtraError` naming that command.
 
 ```python
 import pandas as pd

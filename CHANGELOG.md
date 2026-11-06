@@ -3,11 +3,12 @@
 Kept in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) shape, and
 versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
-these packages. The three Python distributions and Java library share one version.
+these packages. The three Python distributions share one version.
 
 ## Unreleased
 
-Release candidate versions are `2.0.0rc1` for Python and Java and `2.0.0-rc.1` for Rust.
+The release candidate version is `2.0.0rc1`, spelled `2.0.0-rc.1` in Rust's `Cargo.toml`.
+The Java library is built and tested in CI but is not released.
 The public API snapshot records this version update; publication remains pending.
 
 ### Added
@@ -39,8 +40,8 @@ The public API snapshot records this version update; publication remains pending
   yourself is used as it is.
 - The client now contains the Rust core instead of depending on separate
   relational-engine and Python PQL packages.
-  Python wheels and the Java JAR target Linux x86-64/ARM64, macOS
-  x86-64/ARM64 and Windows x86-64.
+  Python wheels target Linux x86-64/ARM64, macOS x86-64/ARM64 and Windows
+  x86-64; the Java library, built from source, supports the same platforms.
   Native Windows ARM64 is deferred pending upstream Arrow dependencies.
 
 - Both models support gradient explanation collections when the model runtime supports them.
@@ -48,8 +49,58 @@ The public API snapshot records this version update; publication remains pending
   `EXPLAIN PREDICT` requests explanations, including each forecast step; client-assembled rankings refuse them.
   Python also accepts manually supplied `PredictionResult(explanations=...)` mappings.
 
+- `Schema` gains `infer_metadata`, `infer_links`, `link_report`,
+  `metadata_report` and `print_metadata`/`print_links`, `link_origins`
+  (as `RelationshipOrigin` pairs), `with_relationship`, `without_relationship`,
+  `without_table`, `with_source` and `with_sql_column`, and `to_mermaid`,
+  `to_html` and `visualize` for an offline diagram.
+- `RelationalTask` and `Schema.materialize_examples` ask a relational
+  question from labelled examples without PQL; `build_timeseries` builds a
+  forecast's input from a series.
+- `PredictiveQuery.labels` computes a query's historical labels without
+  calling a model.
+- `InferenceConfig` holds relational inference settings.
+- `ExplanationSummarizer` writes a short summary of an explanation with an
+  LLM endpoint.
+- `Table.end_time_column` and `SourceTable.end_time_column` name a row's end
+  time.
+- `PredictionResult.merge(parts, columns=...)` takes the column analysis to
+  keep on the merged result.
+
 ### Changed
 
+- `structured-data-models-client` is now a native wheel, `cp310-abi3`, built
+  for Linux x86-64 and aarch64 (manylinux), macOS arm64 and x86-64, and Windows
+  AMD64. 1.0.0 was pure Python. It no longer installs on PyPy, musl Linux,
+  32-bit platforms or Windows ARM64.
+- A failure in the data source a schema reads, such as a warehouse query that
+  errors, raises `StructuredDataError` with code `PROVIDER_ERROR`, and
+  `details['driver_class']` names the driver's exception class. 1.0.0 raised
+  these from the relational engine as `INTERNAL_ERROR`. A semantic view or
+  metric view whose expression names a column its base table lacks is one of
+  them: the warehouse refuses the read, where 1.0.0 refused the view as
+  `INVALID_REQUEST` before reading it.
+
+- A related table sampled from frames sends its own primary key, where
+  1.0.0 sent a generated `__node_id`.
+- Each `materialize()` on a schema from `Schema.from_source` reads its
+  tables' catalog and preview again, and a semantic model's definition, so a
+  column dropped or retyped since is found. 1.0.0 read them once and kept
+  them on the schema, so a warehouse sees more queries per call than it did.
+- An HTTP 408 from `POST /v1/predictions` is retried, as 429, 502, 503 and
+  504 are.
+- A relational request reached over three or more hops fills a foreign key
+  from every path that reaches the row, where 1.0.0 took the first path and
+  left the rest null. The model sees more links, so predictions can differ.
+- Related rows with the same timestamp keep their source order. 1.0.0 used
+  NumPy's unstable sort, whose order depends on the platform, so sampled
+  rows and predictions can differ where timestamps tie.
+- `SUM` and `AVG` labels, and the lagged target columns built from them, are
+  summed in float32 with Kahan compensation, as
+  pandas' Cython grouped sum computes them. 1.0.0 left this to the installed
+  pandas, whose answer depends on its version: pandas 3.1 sums sorted groups
+  with NumPy and averages in float64. A label can differ in its last digit,
+  and a threshold on it can flip.
 - Sampled Tabular context uses stable Rust index ordering, including duplicate labels and mixed numeric labels.
   Equal labels retain sampled order; mixed numbers compare by their represented values.
   Context order and predictions can differ from platform-specific NumPy ordering; sampled membership and warehouse sampling are unchanged.
@@ -82,6 +133,33 @@ The public API snapshot records this version update; publication remains pending
 - A request's description leaves out a wire table carrying an integer past
   the float range on every pandas release. pandas 3.1 had started to build
   a frame around one, where earlier releases refused it.
+
+### Removed
+
+- `structured-data-models-pql` (`predictive_query`) and
+  `structured-data-models-relational-engine` (`sdm_relational_engine`) are no
+  longer distributed, and importing either fails. Write predictive queries
+  through `sdm_client.PredictiveQuery`.
+- The `[relational]` extra installs nothing extra. It is kept so existing
+  install commands still work.
+- Features that lived only in the relational engine are gone: Snowflake SPCS
+  serving, the engine's telemetry and progress logging, and its extras
+  `snowflake-serving`, `explain` and `relbench`. RelBench datasets load with
+  `Schema.from_relbench`. The LLM summary of an explanation is now
+  `ExplanationSummarizer`, a different API: `summarize(view, query, prediction)`
+  takes an `ExplanationView` and raises on failure, where 1.0.0's
+  `generate_summary` returned fallback text.
+
+### Upgrading from 1.0.0
+
+Uninstall the two retired packages before upgrading:
+
+```bash
+pip uninstall structured-data-models-relational-engine structured-data-models-pql
+```
+
+The 1.0.0 engine pins `structured-data-models-api==1.0.0`, which conflicts
+with 2.0.
 
 ## 1.0.0 - 2026-10-15
 

@@ -47,36 +47,35 @@ SDM_TABULAR_URL=... SDM_RELATIONAL_URL=... \
   python -m pytest packages/structured-data-models-client/tests -m live_nim -q
 ```
 
-## Java artifacts
+## Java
 
-The same successful CI run supplies the Java JAR and POM.
-The release workflow checks their source commit, version and SHA-256 hashes before attaching them to the GitHub Release.
-The JAR must contain Linux and macOS x86-64/ARM64 libraries plus Windows x86-64.
-Windows ARM64 is deferred for both languages because required Arrow binaries are not published upstream.
+The Java library is built and tested in CI, but it is not released yet.
+The release workflow attaches no JAR or POM, and nothing is published to a Maven repository.
+Keep `java/pom.xml` at the same version as the rest, so the library is ready when it is released.
 
-Attaching a JAR is not Maven repository publication.
-The Java repository destination and release credentials remain to be configured before the first Java release; install the published coordinates in a clean consumer before marking Java publication complete.
-Keep the JAR, POM, Rust workspace and three Python distribution versions aligned.
+## Pre-releases
 
-## Current release-candidate preparation
-
-Prepare `2.0.0rc1` for Python and Java; Rust uses the equivalent SemVer spelling `2.0.0-rc.1`.
-Publication and tagging are on hold until the owner explicitly authorizes them.
-Java initially targets GitHub Release assets; Maven Central is a follow-up.
-The existing publication workflow accepts final-release tags only; RC publication would need a separately reviewed prerelease path.
+A tag such as `v2.0.0rc1`, `v2.0.0b1` or `v2.0.0a1` runs the same workflow with the same checks.
+The version is the PEP 440 spelling, as in `_version.py`; Rust's `Cargo.toml` writes the same version in SemVer (`2.0.0-rc.1`).
+The GitHub Release is marked as a pre-release.
+`CHANGELOG.md` needs a `## 2.0.0rc1` heading, since the release notes are taken from it.
+Tagging `v2.0.0rc1` is on hold until the owner approves it.
 
 ## Bumping the version
 
-One literal per distribution, in `_version.py`. All three must match, and
-`tests/test_release_contract.py` fails if they do not.
+The version is written in several places, and all of them move together:
 
-```bash
-for f in packages/*/src/*/_version.py; do
-  sed -i '' "s/__version__ = '.*'/__version__ = '1.2.0'/" "$f"
-done
-```
+| Where | Spelling for `2.0.0rc1` |
+| --- | --- |
+| `packages/*/src/*/_version.py` (one per distribution) | `2.0.0rc1` |
+| `rust/Cargo.toml`, `[workspace.package] version`, which maturin stamps on the client wheel | `2.0.0-rc.1` |
+| `rust/Cargo.lock`, the workspace crates' entries (`cargo update --workspace` rewrites them) | `2.0.0-rc.1` |
+| `java/pom.xml`, `<version>` | `2.0.0rc1` |
+| `packages/structured-data-models-client/pyproject.toml`, the pins on `structured-data-models-api` and the connectors extras | `2.0.0rc1` |
+| `tests/golden/public_api.json`, rewritten by `scripts/snapshot_public_api.py --write` | `2.0.0rc1` |
 
-Internal pins (`structured-data-models-api==1.0.0` in `structured-data-models-client`'s dependencies) move with them.
+`tests/test_release_contract.py` fails if `_version.py`, the Rust workspace, `java/pom.xml` or a first-party pin disagree.
+Search for the old version afterwards to catch anything else, such as the coordinates in `java/README.md`.
 
 Update `CHANGELOG.md`: the entries for the release go under its own heading
 with the date you are tagging on, not the date you wrote them, so the tag

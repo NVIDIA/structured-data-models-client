@@ -13,12 +13,12 @@
 //! digits joined by `:` (D1).
 //!
 //! - A literal whose every run has four digits or fewer is read by D2 to
-//! D7 and D9 ([`Reader::plain`]); a day-first reading warns by D4.
+//!   D7 and D9 ([`Reader::plain`]); a day-first reading warns by D4.
 //! - A literal with a run of five digits or more (D8) is not read: it is
-//! [`Reading::Packed`], refused by name before any field is read, by the
-//! owner's decision of 2026-10-12 (register DT-5). The
-//! reference reads such a literal through `dateutil` (a packed date, a
-//! long zero-padded field) or refuses it; the core reads neither.
+//!   [`Reading::Packed`], refused by name before any field is read, by the
+//!   owner's decision of 2026-10-12 (register DT-5). The
+//!   reference reads such a literal through `dateutil` (a packed date, a
+//!   long zero-padded field) or refuses it; the core reads neither.
 //!
 //! What the reader takes from the host: the current year, which places a
 //! two-digit year (D5), and whether the platform's `strftime` pads a year

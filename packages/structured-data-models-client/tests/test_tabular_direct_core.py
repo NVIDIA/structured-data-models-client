@@ -235,6 +235,58 @@ def test_empty_call_skips_late_inference_conversion() -> None:
     assert endpoint.calls == []
 
 
+def test_an_empty_answer_without_a_key_names_no_id() -> None:
+    context, scoring = frames()
+    request = Request(
+        context.drop(columns='row_id'),
+        scoring.drop(columns='row_id').iloc[:0],
+        target='target',
+        task='classification',
+    )
+    result = client(Endpoint()).predict(request, model='kumo-tabular')
+    assert list(result.to_pandas().columns) == ['row_index', 'prediction']
+
+
+@pytest.mark.parametrize(
+    ('change', 'task', 'said'),
+    [
+        ('constant', 'classification', 'every context row'),
+        ('constant', 'regression', 'every context row'),
+        ('overlap', 'classification', 'also in context'),
+    ],
+)
+def test_a_frame_warning_reads_as_the_old_client_wrote_it(
+    change: str, task: str, said: str
+) -> None:
+    from sdm_client.core.warnings import SDMWarning
+
+    context, scoring = frames()
+    if change == 'constant':
+        context['target'] = 1
+    else:
+        scoring['row_id'] = [0, 1]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        request = Request(context, scoring, target='target', task=task)
+        if change == 'overlap':
+            reply = {
+                'model': 'kumo-tabular',
+                'id': 'answer',
+                'metadata': {},
+                'predictions': [
+                    {'row_index': at, 'id': f'[{at}]', 'prediction': 0}
+                    for at in range(2)
+                ],
+            }
+            client(Endpoint(reply)).predict(request, model=KumoTabular())
+    [message] = [
+        str(w.message)
+        for w in caught
+        if issubclass(w.category, SDMWarning) and said in str(w.message)
+    ]
+    assert not message.startswith('[')
+
+
 def test_constructor_guard_order() -> None:
     context, scoring = frames()
     with pytest.raises(StructuredDataError, match='task must'):

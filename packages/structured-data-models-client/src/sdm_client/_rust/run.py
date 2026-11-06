@@ -82,7 +82,12 @@ class Page:
 class TransportFailed(Exception):
     r"""The client's transport failed: the endpoint could not be reached,
     or its answer could not be read. Raised by a:data:`Model`, and told to
-    the core as a transport error. It carries no text."""
+    the core as a transport error. ``account`` is the transport's own
+    error, whose message and details the core's error is given."""
+
+    def __init__(self, account: StructuredDataError | None = None) -> None:
+        super().__init__()
+        self.account = account
 
 
 class Refused(Exception):  # noqa: N818 - says what happened to the call
@@ -289,6 +294,7 @@ def _steps(
     driver_class: str | None = None
     refused: Refused | None = None
     cleanup_refusal = False
+    transport: StructuredDataError | None = None
     while True:
         error: StructuredDataError | None = None
         try:
@@ -314,6 +320,9 @@ def _steps(
                 _carried(error, refused.raised)
                 _of_the_part(error, refused.raised)
                 raise refused.raised
+            if transport is not None and error.code == 'TRANSPORT_ERROR':
+                error.message = f'{error.message}: {transport.message}'
+                error.details = {**transport.details, **error.details}
             raise error from None
         _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
@@ -327,7 +336,10 @@ def _steps(
         if step['step'] == 'call_model' and (
             model is not None or model_endpoints is not None
         ):
-            latest = _call(core, handle, step, model, model_endpoints)
+            try:
+                latest = _call(core, handle, step, model, model_endpoints)
+            except TransportFailed as failed:
+                transport, latest = failed.account, None
             # Cleanup must not replace the primary prediction refusal.
             deleting = (
                 isinstance(step['endpoint'], dict)
@@ -404,6 +416,7 @@ def _call(
     body = handle.take_attachment(step['body'])
     attached: dict[int, Any] = {}
     refused: Refused | None = None
+    account: StructuredDataError | None = None
     transport_error: dict[str, Any] = {
         'outcome': 'transport_error',
         'kind': 'model_endpoint',
@@ -419,7 +432,8 @@ def _call(
             raise NativeBoundaryError(
                 'this host has no sender for the model endpoint'
             )
-    except TransportFailed:
+    except TransportFailed as failed:
+        account = failed.account
         outcome: dict[str, Any] = transport_error
     except EndpointFailed as failed:
         said: dict[str, Any] = {'status': failed.status}
@@ -463,6 +477,8 @@ def _call(
         handle.reply(reply, attached)
     except core.CoreError as failed:
         errors.raise_from_core(failed.control, failed.attachments)
+    if account is not None:
+        raise TransportFailed(account)
     return refused
 
 

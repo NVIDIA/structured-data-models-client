@@ -29,7 +29,7 @@ def _run(
     attachments: dict[int, Any] = {1: codec.attachment(value)}
     payloads = []
     if request is not None:
-        for payload in request.payloads:
+        for payload in request._envelopes:
             number = len(attachments) + 1
             # Project the protocol's transmitted half before JSON conversion.
             # The unsent graph can be large and must not be inspected at score.
@@ -184,7 +184,7 @@ def predict(fitted: Any, request: Any) -> Any:
                 'action': 'predict',
                 'state': fitted._relational_session,
                 'question': sessions.question(request),
-                'request_ids': [_request_id() for _ in request.payloads],
+                'request_ids': [_request_id() for _ in request._envelopes],
                 'inference_asked': sorted(
                     _keys_the_caller_set(
                         request.requested_inference.get('inference_config', {})

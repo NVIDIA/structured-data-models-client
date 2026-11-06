@@ -12,24 +12,24 @@
 //! one `NativeError`. It makes no semantic call into Java.
 //!
 //! - Arrow crosses through the Arrow C Data interface only, with no copy:
-//! an Arrow attachment in is an `ArrowArrayStream` struct Java exported
-//! its data into and hands over by address, which this layer moves out
-//! of; one out is a [`NativeArrow`] handle, which Java exports into a
-//! struct of its own when it reads it ([`export_arrow`]).
+//!   an Arrow attachment in is an `ArrowArrayStream` struct Java exported
+//!   its data into and hands over by address, which this layer moves out
+//!   of; one out is a [`NativeArrow`] handle, which Java exports into a
+//!   struct of its own when it reads it ([`export_arrow`]).
 //! - Every native resource has one owner and an explicit release: a run is
-//! a `Box<HostRun>` Java's `Run` owns and releases once
-//! ([`Java_com_nvidia_sdm_internal_NativeCore_release`]); an Arrow
-//! attachment out is a `Box<ArrowData>` Java's `NativeArrow` owns and
-//! releases once. Java guards each handle so no call reaches a released
-//! one.
+//!   a `Box<HostRun>` Java's `Run` owns and releases once
+//!   ([`Java_com_nvidia_sdm_internal_NativeCore_release`]); an Arrow
+//!   attachment out is a `Box<ArrowData>` Java's `NativeArrow` owns and
+//!   releases once. Java guards each handle so no call reaches a released
+//!   one.
 //! - Every exported entry contains a panic: the core's own are contained by
-//! `sdm-host` (`contain`) and come back as `INTERNAL_ERROR` with
-//! `fields.panic`, and one in this layer is caught at the entry and
-//! thrown the same way, so no unwind crosses into the JVM.
+//!   `sdm-host` (`contain`) and come back as `INTERNAL_ERROR` with
+//!   `fields.panic`, and one in this layer is caught at the entry and
+//!   thrown the same way, so no unwind crosses into the JVM.
 //! - The core's `tracing` events reach SLF4J through the `log` facade
-//! ([`logging`]), installed when Java first loads the library.
+//!   ([`logging`]), installed when Java first loads the library.
 //! - Loading the library starts no thread; it reads no environment
-//! variable.
+//!   variable.
 
 mod logging;
 

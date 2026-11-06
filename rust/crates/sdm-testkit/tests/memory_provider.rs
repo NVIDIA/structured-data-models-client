@@ -8,11 +8,11 @@
 //! (`sdm_testkit::layer`):
 //!
 //! - a prediction whose two schema tables read one source is the one the
-//! same provider gives over two equal sources, whole;
+//!   same provider gives over two equal sources, whole;
 //! - against DuckDB's SQL, a prediction's description, its result and its
-//! request but the in-context examples are DuckDB's; the examples are
-//! drawn by each provider's own seeded sample (DuckDB's reservoir
-//! shuffles even a table it keeps whole), so they are not compared;
+//!   request but the in-context examples are DuckDB's; the examples are
+//!   drawn by each provider's own seeded sample (DuckDB's reservoir
+//!   shuffles even a table it keeps whole), so they are not compared;
 //! - the swapped layer refuses a SQL dialect by name.
 
 use std::path::PathBuf;

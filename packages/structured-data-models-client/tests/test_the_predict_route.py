@@ -871,3 +871,20 @@ def test_embeddings_are_the_old_route_s_on_the_core(
         core = _outcome(request, url, outputs=outputs)
     assert isinstance(core, StructuredDataError)
     assert core.code == 'INVALID_RESPONSE'
+
+
+def test_an_unknown_model_names_itself_and_the_known_ones() -> None:
+    from sdm_client import UnknownModelError
+
+    request = _materialized()
+    with SDMClient('http://127.0.0.1:9', max_retries=0) as client:
+        with pytest.raises(UnknownModelError) as raised:
+            client.predict(request, model='kumo-forcast')
+
+    assert raised.value.model == 'kumo-forcast'
+    assert raised.value.details['model'] == 'kumo-forcast'
+    assert raised.value.details['known_models'] == [
+        'kumo-relational',
+        'kumo-tabular',
+    ]
+    assert "Unknown model 'kumo-forcast'" in str(raised.value)

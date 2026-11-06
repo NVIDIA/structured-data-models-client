@@ -5,8 +5,7 @@
 """End-to-end against a running ``kumo-relational`` NIM.
 
 Excluded by default. Point ``SDM_RELATIONAL_URL`` at the endpoint and run with
-``-m live_nim``. Needs the ``[relational]`` extra, because the gathering step
-runs in the engine.
+``-m live_nim``.
 
     SDM_RELATIONAL_URL=http://localhost:8001 pytest -m live_nim
 

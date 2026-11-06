@@ -68,60 +68,8 @@ def test_materialized_payload_matches_recorded_request(recording):
         assert expected['output'].pop('prediction_statistic') == 'median'
     assert actual['inference'].pop('inference_config') == defaults
     assert actual.pop('client_generated_keys') == {'orders': '__node_id'}
-    # Analysis restores labelled rows withheld from the model to avoid
-    # target leakage. This client-only delta is stripped at the wire boundary.
-    analysis = actual.pop('client_analysis_delta', None)
-    if recording['case'] == 'lag.static-2':
-        assert set(analysis) == {
-            'version',
-            'schema_json',
-            'instance_table',
-            'related_tables',
-        }
-        assert analysis['version'] == 1
-        assert json.loads(analysis['schema_json']) == expected['schema']
-        anchor = '2023-03-01T00:00:00.000000Z'
-        removed = {
-            'instance_table': (
-                8,
-                [4, 6],
-                [[4, 1, anchor, 21], [6, 0, anchor, 20]],
-            ),
-            'users': (8, [4, 6], [[4, 1, 'DE'], [6, 0, 'US']]),
-            'orders': (
-                9,
-                [4, 6, 7],
-                [
-                    [4, 4, 11.5, '2023-01-08T00:00:00.000000Z', 1],
-                    [6, 6, 22.0, '2023-02-26T00:00:00.000000Z', 0],
-                    [6, 7, 10.0, '2023-01-01T00:00:00.000000Z', 0],
-                ],
-            ),
-        }
-        assert set(analysis['related_tables']) == {'users', 'orders'}
-        for name, (count, positions, rows) in removed.items():
-            context = expected['context']
-            table = (
-                context[name]
-                if name == 'instance_table'
-                else context['related_tables'][name]
-            )
-            delta = (
-                analysis[name]
-                if name == 'instance_table'
-                else analysis['related_tables'][name]
-            )
-            assert delta == {
-                'original_rows': count,
-                'positions': positions,
-                'removed': {
-                    'format': 'arrays',
-                    'columns': table['columns'],
-                    'rows': rows,
-                },
-            }
-    else:
-        assert analysis is None
+    # Column analysis reads the rows sent; no copy of withheld rows is kept.
+    assert 'client_analysis_delta' not in actual
     assert actual == expected
     assert request.entity_table == 'users'
     assert request.indices == [0, 1]

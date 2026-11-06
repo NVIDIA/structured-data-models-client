@@ -5,6 +5,7 @@
 """Public merge retains native owners and delegates policy without encoding rows."""
 
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -65,18 +66,35 @@ def test_merge_preserves_owners_without_row_or_metadata_serialization(
         assert not {'items', 'metadata', 'explanation'} & descriptor.keys()
 
 
-def test_stable_union_deduplicates_within_parts_and_keeps_exact_numbers():
+def test_union_keeps_repeats_within_a_part_and_drops_earlier_values():
     first = part([1, 1, np.int64(1), 2**53 + 1, 2**53, np.uint64(2**64 - 1)])
     result = PredictionResult.merge(
         [first, part([True, 1.0, float(2**53), 2**64 - 1])]
     )
-    assert result.unscored_candidates == (
-        1,
-        2**53 + 1,
-        2**53,
-        np.uint64(2**64 - 1),
+    assert result.unscored_candidates == first.unscored_candidates
+    assert all(
+        a is b
+        for a, b in zip(
+            result.unscored_candidates, first.unscored_candidates, strict=True
+        )
     )
-    assert result.unscored_candidates[-1] is first.unscored_candidates[-1]
+
+
+@pytest.mark.parametrize(
+    ('earlier', 'later', 'kept'),
+    [
+        (Decimal('1.50'), 1.5, 1),
+        (Decimal('2.0'), Decimal('2'), 1),
+        (Decimal(2**64), 2**64, 1),
+        (Decimal('-Infinity'), float('-inf'), 1),
+        (Decimal('0.1'), 0.1, 2),
+        (Decimal('NaN'), Decimal('NaN'), 2),
+    ],
+)
+def test_decimal_candidates_merge_by_value(earlier, later, kept):
+    result = PredictionResult.merge([part([earlier]), part([later])])
+    assert len(result.unscored_candidates) == kept
+    assert result.unscored_candidates[0] is earlier
 
 
 def test_nan_values_remain_distinct_under_ieee_equality():

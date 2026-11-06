@@ -8,13 +8,13 @@
 //! envelope only: input-sized fields travel as attachments.
 //!
 //! - From the host, a message past [`CONTROL_CAP`] bytes, or one the
-//! contract cannot read, is refused with `INVALID_MESSAGE` before anything
-//! reads it ([`decode`]).
+//!   contract cannot read, is refused with `INVALID_MESSAGE` before anything
+//!   reads it ([`decode`]).
 //! - From the core, nothing is truncated, refused or dropped for size: a
-//! message whose encoding would pass the cap travels whole as a bytes
-//! attachment of its JSON, named by a minimal `attached` message
-//! ([`write`], [`write_error`]). A message the core's own
-//! encoder refuses is a defect in the core, `INTERNAL_ERROR`.
+//!   message whose encoding would pass the cap travels whole as a bytes
+//!   attachment of its JSON, named by a minimal `attached` message
+//!   ([`write`], [`write_error`]). A message the core's own
+//!   encoder refuses is a defect in the core, `INTERNAL_ERROR`.
 
 use sdm_contract::data::AttachmentId;
 use sdm_contract::{ControlMessage, CoreError, Detail, Scalar, Sentence};

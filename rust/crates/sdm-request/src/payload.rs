@@ -515,24 +515,6 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
     }
 }
 
-/// An integer key cell as the float a column of keys and nulls holds it
-/// at: its value rounded to the nearest double, as pandas reads such a
-/// column.
-fn float_key(cell: &Value) -> Result<Value, CoreError> {
-    let value = match cell {
-        Value::Number(token) => token
-            .parse::<i64>()
-            .map_err(|_| internal("an integer key is not an integer"))?
-            as f64,
-        Value::Text(digits) => digits
-            .parse::<i128>()
-            .map_err(|_| internal("an integer key's digits do not read"))?
-            as f64,
-        _ => return Err(internal("an integer key is not an integer")),
-    };
-    Value::float(value).ok_or_else(|| internal("an integer key is not finite"))
-}
-
 /// `prefix`, or `prefix_1`, `prefix_2` and on, whichever `occupied` does not
 /// hold first.
 fn unique_name(occupied: &[String], prefix: &str) -> String {
@@ -1242,8 +1224,8 @@ fn build_mode(
     // Each foreign key once, merging every partial link row by row. The
     // first partial map supplying a sampled source row gives its key,
     // preserving last-valid-pair precedence within each map. Only a row
-    // no link supplies is null. An integer key column holding a
-    // null, or a float32 key's column, is written as float64, as pandas
+    // no link supplies is null. An integer key keeps its exact value beside
+    // the nulls; a float32 key's column is written as float64, as pandas
     // types such a column.
     let mut written: Vec<(&str, &str, &str)> = Vec::new();
     for link in &sampled.links {
@@ -1282,21 +1264,16 @@ fn build_mode(
         if values.iter().all(Option::is_none) {
             continue;
         }
-        let as_float = key_dtype == Dtype::Int64 && values.iter().any(Option::is_none);
         let cells = values
             .into_iter()
-            .map(|v| match v {
-                Some(cell) if as_float => float_key(&cell),
-                Some(cell) => Ok(cell),
-                None => Ok(Value::Null),
-            })
-            .collect::<Result<_, _>>()?;
+            .map(|v| v.unwrap_or(Value::Null))
+            .collect();
         // A float32 key's foreign key is a float64, as pandas types the
         // column the reference fills with the keys as Python floats (
         // each value is written widened either way).
         let column = FrameColumn {
             name: link.fkey.clone(),
-            dtype: if as_float || key_dtype == Dtype::Float32 {
+            dtype: if key_dtype == Dtype::Float32 {
                 Dtype::Float64
             } else {
                 key_dtype
@@ -1316,6 +1293,15 @@ fn build_mode(
             target_columns: vec![dst_key.clone()],
         });
         written.push(edge);
+    }
+    // A foreign key whose link was not written points at a table outside
+    // the sample. It is no feature, and is not sent.
+    for (_, frame, key, stypes) in &mut frames {
+        frame.columns.retain(|column| {
+            column.name == INSTANCE_ID
+                || column.name == *key
+                || stypes.iter().any(|(name, _)| *name == column.name)
+        });
     }
 
     let num_train = sampled.num_train;
@@ -1397,41 +1383,6 @@ fn build_mode(
         }
     };
 
-    // Retain only leakage-excluded rows. Surviving rows already live in context.
-    // Positions restore original order; identity deduplication must not reorder rows.
-    let removed = |frame: &Frame, batch: &[usize]| -> sdm_wire::payload::RemovedRows {
-        let original: Vec<usize> = batch
-            .iter()
-            .enumerate()
-            .filter_map(|(r, &instance)| (instance < num_train).then_some(r))
-            .collect();
-        let positions = original
-            .iter()
-            .enumerate()
-            .filter_map(|(at, &r)| answered.contains(&batch[r]).then_some(at))
-            .collect();
-        sdm_wire::payload::RemovedRows {
-            original_rows: original.len(),
-            positions,
-            removed: frame.table(
-                |r| batch[r] < num_train && answered.contains(&batch[r]),
-                None,
-            ),
-        }
-    };
-    let client_analysis_delta = (!answered.is_empty()).then(|| sdm_wire::payload::AnalysisDelta {
-        version: 1,
-        schema_json: String::new(), // Filled after schema assembly below.
-        instance_table: removed(&instance, &(0..instance.rows).collect::<Vec<_>>()),
-        related_tables: Named(
-            frames
-                .iter()
-                .zip(&sampled.tables)
-                .map(|((name, frame, ..), table)| (name.clone(), removed(frame, &table.batch)))
-                .collect(),
-        ),
-    });
-
     let mut fields: Vec<String> = if link.is_some() {
         vec!["rankings".into()]
     } else {
@@ -1483,10 +1434,6 @@ fn build_mode(
         fields,
         prediction_statistic: sampled.statistic.clone(),
     };
-    let client_analysis_delta = client_analysis_delta.map(|mut delta| {
-        delta.schema_json = serde_json::to_string(&schema).expect("typed schema serializes");
-        delta
-    });
     let metadata = Metadata {
         source_query: (!sampled.source_query.is_empty()).then(|| sampled.source_query.clone()),
         num_context_examples: num_train as u64,
@@ -1506,7 +1453,7 @@ fn build_mode(
     };
     let bytes = if link.is_some() {
         StatePayload {
-            client_analysis_delta: client_analysis_delta.clone(),
+            client_analysis_delta: None,
             client_generated_keys,
             model,
             task: sdm_wire::payload::TemporalLinkTask {
@@ -1529,7 +1476,7 @@ fn build_mode(
         .to_bytes()
     } else if kind.is_classification() {
         StatePayload {
-            client_analysis_delta: client_analysis_delta.clone(),
+            client_analysis_delta: None,
             client_generated_keys,
             model,
             task: task!(ClassTarget {
@@ -1548,7 +1495,7 @@ fn build_mode(
         .to_bytes()
     } else {
         StatePayload {
-            client_analysis_delta: client_analysis_delta.clone(),
+            client_analysis_delta: None,
             client_generated_keys,
             model,
             task: task!(Target {
@@ -1571,14 +1518,7 @@ fn build_mode(
     // most rows a call of the request scores (`smaller_calls`); a call of
     // one row cannot, and only a narrower context helps
     // (`no_smaller_call`).
-    let analysis_bytes = client_analysis_delta.as_ref().map_or(0, |delta| {
-        serde_json::to_vec(delta)
-            .expect("typed delta serializes")
-            .len()
-            + br#""client_analysis_delta":"#.len()
-            + 1
-    });
-    let model_bytes = bytes.len() - client_only_bytes - analysis_bytes;
+    let model_bytes = bytes.len() - client_only_bytes;
     if model_bytes > PAYLOAD_BYTES {
         let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(

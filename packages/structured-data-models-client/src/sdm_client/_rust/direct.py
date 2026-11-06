@@ -669,7 +669,7 @@ def predict(
     if finished.result['op'] == 'decoded_direct_response':
         finished = _response(finished)
     answer = results.expect(finished.result, results.Predicted)
-    return prediction._result(
+    result = prediction._result(
         prediction._table(finished.take(answer.result)),
         model=answer.model,
         request_id=answer.request_id,
@@ -677,6 +677,10 @@ def predict(
         outputs=answer.outputs,
         by_step=False,
     )
+    from sdm_client.client import _names_its_rows
+
+    result._names_its_rows = _names_its_rows(request)
+    return result
 
 
 def _builtin(value: Any) -> dict[str, Any]:
