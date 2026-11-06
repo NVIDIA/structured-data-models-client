@@ -8243,17 +8243,17 @@
       "reason": "Rename test files and remove historical fixture prose; all type vectors and their expected outcomes remain identical. Update the whole-file digest for metadata changes."
     },
     {
-      "base_commit": "9488cfeb3fa8b78c35ebaf0ae12f969c6695af9f",
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "api_contracts/results-merge",
       "reason": "PredictionResult.merge keeps a candidate repeated within one part and compares Decimal candidates by value, as 1.0.0 did; the merge test is renamed for the restored behaviour."
     },
     {
-      "base_commit": "9488cfeb3fa8b78c35ebaf0ae12f969c6695af9f",
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "api_inventory",
       "reason": "ColumnExplanations.Row gains a constructor without a score, as the column analysis on main no longer computes one; the scored constructor and score() remain, deprecated."
     },
     {
-      "base_commit": "9488cfeb3fa8b78c35ebaf0ae12f969c6695af9f",
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "api_contracts/column-explanations",
       "reason": "Column analysis reads the labelled rows a request sends, as on main, so the request keeps no pre-trim delta and its tests are replaced by one over the sent rows."
     }
