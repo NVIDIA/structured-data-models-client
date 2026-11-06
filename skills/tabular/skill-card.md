@@ -15,8 +15,8 @@ Developers and data scientists use this skill with coding agents to write Python
 Global <br>
 
 ## Requirements / Dependencies: <br>
-**Requires API Key or External Credential:** [Not Specified] <br>
-**Credential Type(s):** [None identified] <br>  
+**Requires API Key or External Credential:** [Optional] <br>
+**Credential Type(s):** [API key] <br>  
 
 Do not include secrets in prompts/logs/output; use least-privilege credentials; rotate keys as appropriate. See skill body for more details. <br>
 
