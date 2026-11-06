@@ -72,7 +72,9 @@ class Endpoint:
                         self.close_connection = True
                         return
                     if (outer.mode == 'expired' and outer.scored == 2) or (
-                        outer.mode == 'expired_twice' and outer.scored >= 2
+                        outer.mode == 'expired_twice'
+                        and outer.scored >= 2
+                        and self.path.startswith('/v1/sessions/')
                     ):
                         status = 404
                     elif outer.mode == 'malformed' and outer.scored == 2:
@@ -277,16 +279,16 @@ def test_session_and_stateless_scoring_preserve_inference_and_outputs():
     assert sent[0] == sent[1]
 
 
-def test_expired_session_is_recreated_only_once():
+def test_a_session_missing_after_recreation_falls_back_to_stateless_calls():
     endpoint = Endpoint('expired_twice')
     try:
         with SDMClient(url=endpoint.url, max_retries=0) as client:
-            with pytest.raises(StructuredDataError) as caught:
-                client.predict(request(), model=KumoRelational())
+            result = client.predict(request(), model=KumoRelational())
+        assert len(result.to_pandas()) == 3
         assert endpoint.created == 2
-        assert endpoint.scored == 3
+        posts = [path for method, path, _ in endpoint.calls if method == 'POST']
+        assert posts[-2:] == ['/v1/predictions', '/v1/predictions']
         assert sum(method == 'DELETE' for method, _, _ in endpoint.calls) == 2
-        assert caught.value.details['answered'] is not None
     finally:
         endpoint.close()
 

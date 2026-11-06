@@ -80,6 +80,16 @@ The public API snapshot records this version update; publication remains pending
   metric view whose expression names a column its base table lacks is one of
   them: the warehouse refuses the read, where 1.0.0 refused the view as
   `INVALID_REQUEST` before reading it.
+- A column of a type a described table does not take, such as a list of
+  booleans, a struct or a map, raises `UnsupportedRequestError` with code
+  `UNSUPPORTED_REQUEST` and `details['rule']` `column_type`. The message and
+  details name the column, its table and its Arrow type. 1.0.0 raised a
+  `ValueError` naming the column and table.
+- `predict()` on a request gathered in several calls that share one context
+  scores them through a temporary endpoint session, so the context is
+  uploaded once. 1.0.0 sent every call stateless. An expired session is
+  recreated once; if the endpoint loses it again, as replicas that do not
+  share sessions do, the remaining calls are sent stateless.
 
 - A related table sampled from frames sends its own primary key, where
   1.0.0 sent a generated `__node_id`.
@@ -133,6 +143,12 @@ The public API snapshot records this version update; publication remains pending
 - A request's description leaves out a wire table carrying an integer past
   the float range on every pandas release. pandas 3.1 had started to build
   a frame around one, where earlier releases refused it.
+- On Databricks through Spark, a `TIMESTAMP` column is read in UTC, so the
+  anchor time and the rows a window takes no longer move with the client
+  machine's time zone. 1.0.0 read its range as local times.
+- On Databricks through Spark, a `DECIMAL` value with a fraction is sent
+  exactly, such as `997.67`. 1.0.0 sent it through a float, such as
+  `997.6700000000001`.
 
 ### Removed
 

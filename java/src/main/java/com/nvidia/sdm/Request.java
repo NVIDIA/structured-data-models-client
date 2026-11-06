@@ -276,13 +276,35 @@ public final class Request {
     return query;
   }
 
-  /** Each call's payload, as the JSON text the core wrote, in the order the calls are made. */
+  /**
+   * Each call's payload as it is sent, as JSON text, in the order the calls are made: without the
+   * {@code client_} keys the client keeps beside a payload for itself, as the Python host shows it.
+   */
   public List<String> payloads() {
     List<String> texts = new ArrayList<>();
     for (byte[] payload : payloads) {
-      texts.add(new String(payload, StandardCharsets.UTF_8));
+      texts.add(new String(sent(payload), StandardCharsets.UTF_8));
     }
     return texts;
+  }
+
+  /** {@code payload} without its client-only keys; the core's text itself where it has none. */
+  private static byte[] sent(byte[] payload) {
+    try {
+      if (Json.read(payload) instanceof Map<?, ?> envelope
+          && envelope.keySet().stream().anyMatch(Request::clientOnly)) {
+        Map<Object, Object> kept = new java.util.LinkedHashMap<>(envelope);
+        kept.keySet().removeIf(Request::clientOnly);
+        return Json.write(kept);
+      }
+    } catch (Json.JsonException e) {
+      return payload;
+    }
+    return payload;
+  }
+
+  private static boolean clientOnly(Object key) {
+    return key instanceof String name && name.startsWith("client_");
   }
 
   /** The table whose entities the query is about. */

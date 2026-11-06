@@ -17541,6 +17541,7 @@
         "data_request_refused",
         "unsupported_type",
         "not_yet_describe",
+        "column_type_unsupported",
         "empty_table",
         "table_name_empty",
         "table_name_characters",

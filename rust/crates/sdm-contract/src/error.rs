@@ -859,6 +859,7 @@ sentences! {
     DataRequestRefused = "data_request_refused", E::InvalidRequest;
     UnsupportedType = "unsupported_type", E::UnsupportedType;
     NotYetDescribe = "not_yet_describe", E::UnsupportedRequest;
+    ColumnTypeUnsupported = "column_type_unsupported", E::UnsupportedRequest, rule "column_type";
     EmptyTable = "empty_table", E::InvalidRequest;
     TableNameEmpty = "table_name_empty", E::InvalidRequest;
     TableNameCharacters = "table_name_characters", E::InvalidRequest;

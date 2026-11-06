@@ -509,6 +509,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::NotYetDescribe => said(
             r#"describing this source needs the {rule!r} rule, which is not one this client's core supports yet"#,
         ),
+        S::ColumnTypeUnsupported => said(
+            r#"column {column!r} of table '{source!d}' has the Arrow type {arrow_type}, which a described table does not take. Change the column's type, or remove the column from the table."#,
+        ),
         S::EmptyTable => said(r#"Table '{source!d}' is empty"#),
         S::TableNameEmpty => said(r#"The name {table!r} must be a non-empty string."#),
         S::TableNameCharacters => {
