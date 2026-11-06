@@ -8,11 +8,11 @@
 //! `neighbor_lookback` (contract v28), each request it was asked logged.
 //!
 //! - every table's rows counted once, in the graph's order, before the
-//! entity sample, which names its table's rows (`num_rows_dict`, the
-//! `TABLESAMPLE` percentage's denominator);
+//!   entity sample, which names its table's rows (`num_rows_dict`, the
+//!   `TABLESAMPLE` percentage's denominator);
 //! - each neighbor read by a foreign key over a table with a time column
-//! bounded below by a `start` seed column, exclusive, beside the anchor
-//! (`_by_fkey`'s look-back window);
+//!   bounded below by a `start` seed column, exclusive, beside the anchor
+//!   (`_by_fkey`'s look-back window);
 //! - a provider declaring neither is asked no row count and no look-back.
 
 use std::path::PathBuf;

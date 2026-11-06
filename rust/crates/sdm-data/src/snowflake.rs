@@ -11,35 +11,35 @@
 //! client (recordings hold them):
 //!
 //! - every name in double quotes, a quote in one doubled, its case never
-//! changed (`quote_ident`); a relation of a database, a schema and a
-//! table, each part quoted alone, so `a.b` is one name (`SNOW/table.py:
+//!   changed (`quote_ident`); a relation of a database, a schema and a
+//!   table, each part quoted alone, so `a.b` is one name (`SNOW/table.py:
 //! 115-117`); the source's database and schema each given or read once a
-//! run from the session (`SELECT CURRENT_DATABASE, CURRENT_SCHEMA`),
-//! and a relation the session leaves without a schema refused as the
-//! reference refuses it;
+//!   run from the session (`SELECT CURRENT_DATABASE, CURRENT_SCHEMA`),
+//!   and a relation the session leaves without a schema refused as the
+//!   reference refuses it;
 //! - the catalog: `INFORMATION_SCHEMA.TABLES` for the listing, the schema
-//! bound; `DESCRIBE TABLE` for a table's columns and its keys;
-//! `SHOW IMPORTED KEYS IN TABLE` for its foreign keys; a semantic view's
-//! YAML through `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)`, its name bound;
+//!   bound; `DESCRIBE TABLE` for a table's columns and its keys;
+//!   `SHOW IMPORTED KEYS IN TABLE` for its foreign keys; a semantic view's
+//!   YAML through `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)`, its name bound;
 //! - the answers of `SHOW` and `DESCRIBE` come as text, which the provider's
-//! row adapter builds (the connector gives them as rows only), each read
-//! by its position in the result, as the reference reads the rows;
+//!   row adapter builds (the connector gives them as rows only), each read
+//!   by its position in the result, as the reference reads the rows;
 //! - an exact aggregate row count, also supporting views (approved P3D-2/3);
 //! - an entity sample `SAMPLE ROW (<n> ROWS)`, at most 1,000,000 rows,
-//! which takes no seed (owner option C);
+//!   which takes no seed (owner option C);
 //! - a declared type read by the reference's type map ([`declared_dtype`]);
 //! - the connector's Arrow conformed as the reference reads its frames
-//! ([`conform`]);
+//!   ([`conform`]);
 //! - a failure with errno 2003 or a diagnostic containing "does not exist" is
-//! "not found", which the core's spelling retry reads; a name's
-//! spellings are as given, then all its parts upper-cased, once.
+//!   "not found", which the core's spelling retry reads; a name's
+//!   spellings are as given, then all its parts upper-cased, once.
 //!
 //! - a key set bound as the reference binds it, one JSON text the core
-//! writes ([`crate::key_text`]), unpacked by `FLATTEN(PARSE_JSON(?))`,
-//! its seeds separated by `, ` as `json.dumps` writes them, a window's
-//! bounds over every seed bound after it; a lookup's first row of each
-//! seed and the rows holding its key kept in the statement, where the
-//! reference keeps them after its fetch.
+//!   writes ([`crate::key_text`]), unpacked by `FLATTEN(PARSE_JSON(?))`,
+//!   its seeds separated by `, ` as `json.dumps` writes them, a window's
+//!   bounds over every seed bound after it; a lookup's first row of each
+//!   seed and the rows holding its key kept in the statement, where the
+//!   reference keeps them after its fetch.
 
 use std::sync::Arc;
 

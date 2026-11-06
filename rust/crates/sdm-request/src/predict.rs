@@ -8,32 +8,32 @@
 //! design's "Host-held semantics" rows it moved):
 //!
 //! - [`prepare`] is `SDMClient._prepare`: the model the request is sent to
-//! (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
-//! asked for (the task's default ones when the caller named none, an
-//! empty list refused `INVALID_REQUEST`) and `check_request_against_model`
-//! (the request's shape, its task's kind, each output and the context's
-//! size against what the model serves);
+//!   (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
+//!   asked for (the task's default ones when the caller named none, an
+//!   empty list refused `INVALID_REQUEST`) and `check_request_against_model`
+//!   (the request's shape, its task's kind, each output and the context's
+//!   size against what the model serves);
 //! - [`nothing_to_score`] is `Request.nothing_to_score`: a request with no
-//! row to score is answered without a call (`_empty_answer`, [`empty`]);
+//!   row to score is answered without a call (`_empty_answer`, [`empty`]);
 //! - [`preflight`] is the relational adapter's `_preflight`: an empty
-//! context, more classes than the model takes and a classification whose
-//! context has one answer refused, a regression's constant context given
-//! as a notice, and an explanation's row count and run mode;
+//!   context, more classes than the model takes and a classification whose
+//!   context has one answer refused, a regression's constant context given
+//!   as a notice, and an explanation's row count and run mode;
 //! - [`body`] is `prediction_plan`'s call of one payload: the payload with
-//! the model named, the outputs asked for (a regression's with its
-//! statistic), the request's id in its metadata, and only the inference
-//! options the model reads (`_inference`);
+//!   the model named, the outputs asked for (a regression's with its
+//!   statistic), the request's id in its metadata, and only the inference
+//!   options the model reads (`_inference`);
 //! - [`layout`] is `normalize` and `_named_entities`, with the answer's
-//! classes given back as the target's own type (`as_declared_target`):
-//! each answer checked against the row it claims and given back under the
-//! entity it is about, read back as the key's dtype (`as_declared`), or,
-//! where the payload names no entity, given back as written, as a
-//! [`Part`];
+//!   classes given back as the target's own type (`as_declared_target`):
+//!   each answer checked against the row it claims and given back under the
+//!   entity it is about, read back as the key's dtype (`as_declared`), or,
+//!   where the payload names no entity, given back as written, as a
+//!   [`Part`];
 //! - [`merge`] is `PredictionResult.merge`, the parts of one request put
-//! together, and [`absent`] is `_report_absent`'s finding, the outputs the
-//! caller named that no answer carries;
+//!   together, and [`absent`] is `_report_absent`'s finding, the outputs the
+//!   caller named that no answer carries;
 //! - [`table`] lays a part out as the result: one row per answer, ordered
-//! by `row_index` as `PredictionResult.to_pandas` orders them.
+//!   by `row_index` as `PredictionResult.to_pandas` orders them.
 //!
 //! What the result does not carry yet is refused by name, never dropped
 //! (`UNSUPPORTED_REQUEST`, B-4): the tabular model on this relational

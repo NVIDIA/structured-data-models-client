@@ -23,9 +23,9 @@
 //! sum-window`'s, its id and status its own.
 //!
 //! - The diagnostic case before the answered one: the run succeeds and
-//! writes both lines, the diagnostic case's a refusal, `PROVIDER_ERROR`.
+//!   writes both lines, the diagnostic case's a refusal, `PROVIDER_ERROR`.
 //! - The acceptance case before the answered one: the run fails, naming
-//! the case and the fetch past the recording, and writes no file.
+//!   the case and the fetch past the recording, and writes no file.
 
 #![allow(
     clippy::disallowed_methods,

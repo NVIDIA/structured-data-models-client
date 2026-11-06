@@ -6,13 +6,13 @@
 //! `jiff`.
 //!
 //! - Zone answers go through the host's resolver, once over the vendored
-//! 2026c directory and once over the bundled database; every answer must
-//! equal the reference's, and each run first checks that its database is
-//! the version the expectations are tied to.
+//!   2026c directory and once over the bundled database; every answer must
+//!   equal the reference's, and each run first checks that its database is
+//!   the version the expectations are tied to.
 //! - `DateOffset` answers must equal the reference's.
 //! - Unit conversions, single values and PQL literals repeat the
-//! probe's own reading with `jiff` in place of `chrono`, and must equal the
-//! probe's `chrono` answers, with explicit exceptions named here.
+//!   probe's own reading with `jiff` in place of `chrono`, and must equal the
+//!   probe's `chrono` answers, with explicit exceptions named here.
 
 #![allow(
     clippy::disallowed_methods,

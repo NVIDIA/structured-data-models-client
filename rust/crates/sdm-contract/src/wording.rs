@@ -12,27 +12,27 @@
 //! for a brace:
 //!
 //! - `{name}`: the field `name` as text; `{name[0]}` the first of a list;
-//! `{name:,}` a whole number with its thousands grouped;
+//!   `{name:,}` a whole number with its thousands grouped;
 //! - `{name!c}`: the field with a conversion, the host's one value
-//! formatter: `r` the value as the host writes it as a literal, `l` a
-//! list of them as an and-list (`'a', 'b' and 'c'`), `a` a list of text
-//! as an and-list as it is, `j` joined by commas, `c` a list of text
-//! joined by commas as it is, `R` joined by semicolons, `d` joined by
-//! dots, `p` a row of values (a list as the host writes a tuple, else as
-//! `r`), `t` a date or time as the host's time type writes it, `T` a list
-//! of times of day or text as the host writes a list of them, and for a
-//! value the caller gave, held as the JSON text the host wrote it in, `G`
-//! as a literal, `S` as text, `N` the name of its type and `I` the whole
-//! number it is (so `{name!I:,}` groups its thousands);
+//!   formatter: `r` the value as the host writes it as a literal, `l` a
+//!   list of them as an and-list (`'a', 'b' and 'c'`), `a` a list of text
+//!   as an and-list as it is, `j` joined by commas, `c` a list of text
+//!   joined by commas as it is, `R` joined by semicolons, `d` joined by
+//!   dots, `p` a row of values (a list as the host writes a tuple, else as
+//!   `r`), `t` a date or time as the host's time type writes it, `T` a list
+//!   of times of day or text as the host writes a list of them, and for a
+//!   value the caller gave, held as the JSON text the host wrote it in, `G`
+//!   as a literal, `S` as text, `N` the name of its type and `I` the whole
+//!   number it is (so `{name!I:,}` groups its thousands);
 //! - `{name:to(other)}`: a list paired with the list `other`, each pair as
-//! the two literals joined by ` to `, the pairs by commas;
+//!   the two literals joined by ` to `, the pairs by commas;
 //! - `{name:place}`, `{name:backend}`: a database the field names, by the
-//! names the data layer gives it ([`DatabaseNames`]);
+//!   names the data layer gives it ([`DatabaseNames`]);
 //! - `{host.name}`: a value only the host holds, such as a candidate as the
-//! caller gave it, which the host supplies by name (conversions as
-//! above);
+//!   caller gave it, which the host supplies by name (conversions as
+//!   above);
 //! - `{advice:id(field,...)}`: what to write in the host's language, an
-//! [`Advice`] each host spells once, given the fields named.
+//!   [`Advice`] each host spells once, given the fields named.
 //!
 //! The sentence of the part of a question asked in parts an error happened
 //! in (a forecast's step, a ranking's candidate, [`crate::Code::Part`]) is

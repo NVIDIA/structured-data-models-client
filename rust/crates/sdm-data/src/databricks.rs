@@ -14,24 +14,24 @@
 //!
 //! - names quoted with backticks, a backtick in one doubled (`quote_ident`);
 //! - a relation of one to three parts (catalog, schema, table), a source's
-//! relations read under its namespace of a catalog and a schema (design
-//! fix C), Unity Catalog's names compared without regard to case;
+//!   relations read under its namespace of a catalog and a schema (design
+//!   fix C), Unity Catalog's names compared without regard to case;
 //! - the catalog read through `<catalog>.information_schema`, the schema
-//! and table bound as parameters and folded with `lower(?)`, as Unity
-//! Catalog stores them (`DatabricksTable._get_source_columns`); the
-//! table keeps the name its caller gives it, which the host takes back;
+//!   and table bound as parameters and folded with `lower(?)`, as Unity
+//!   Catalog stores them (`DatabricksTable._get_source_columns`); the
+//!   table keeps the name its caller gives it, which the host takes back;
 //! - a column typed by its declaration first, as the reference types it
-//! (`_to_dtype`, [`declared_dtype`]);
+//!   (`_to_dtype`, [`declared_dtype`]);
 //! - a key set bound as one parameter of JSON text, unpacked by
-//! `posexplode(from_json(?, '<type>'))`, the position the seed's batch
-//! (`_by_pkey`, `_by_fkey`, `_by_time`);
+//!   `posexplode(from_json(?, '<type>'))`, the position the seed's batch
+//!   (`_by_pkey`, `_by_fkey`, `_by_time`);
 //! - an entity sample as `TABLESAMPLE (<p> PERCENT) REPEATABLE (<seed>)`,
-//! the percentage the reference's arithmetic over the table's rows,
-//! written as the reference's language writes a float
-//! ([`percent_text`]);
+//!   the percentage the reference's arithmetic over the table's rows,
+//!   written as the reference's language writes a float
+//!   ([`percent_text`]);
 //! - a neighbor read limited per seed with `QUALIFY ROW_NUMBER`;
 //! - a derived relation read as the reference reads a metric view's table
-//! (`_quoted_source_name`).
+//!   (`_quoted_source_name`).
 //!
 //! Where the reference fetches rows and finishes in its own process (a
 //! key lookup's duplicates removed after the fetch) the statement does the

@@ -10,14 +10,14 @@
 //! [`CoreError`]. It makes no semantic call into Python.
 //!
 //! - Arrow crosses through the PyCapsule interface only: an
-//! Arrow attachment in is any object with `__arrow_c_stream__`, and one
-//! out is an [`ArrowStream`] that has it. pyarrow's private
-//! `_export_to_c` and `_import_from_c` are never reached.
+//!   Arrow attachment in is any object with `__arrow_c_stream__`, and one
+//!   out is an [`ArrowStream`] that has it. pyarrow's private
+//!   `_export_to_c` and `_import_from_c` are never reached.
 //! - The GIL is released for every core call and held only while touching
-//! Python objects; the core's `tracing` events reach Python's `logging`
-//! through `pyo3-log`, installed at the first core call.
+//!   Python objects; the core's `tracing` events reach Python's `logging`
+//!   through `pyo3-log`, installed at the first core call.
 //! - Importing the module starts no thread and installs no logger, signal
-//! handler or global pool; it reads no environment variable.
+//!   handler or global pool; it reads no environment variable.
 
 use std::collections::BTreeMap;
 use std::ffi::CString;
@@ -70,13 +70,13 @@ fn logging(py: Python<'_>) -> Option<&pyo3_log::ResetHandle> {
 /// returning it, so after the call:
 ///
 /// - an `Exception` is reported as `logging` reports its own handler
-/// failures, through `sys.unraisablehook`, and the call's answer is
-/// delivered; the exception is the handler's and holds nothing the core
-/// wrote but the event;
+///   failures, through `sys.unraisablehook`, and the call's answer is
+///   delivered; the exception is the handler's and holds nothing the core
+///   wrote but the event;
 /// - anything else, such as `KeyboardInterrupt` or `SystemExit`, is raised
-/// in place of the answer, which is dropped: the run stays where the
-/// call left it, so a step `next` gave is gone and the next call meets
-/// the run's following state.
+///   in place of the answer, which is dropped: the run stays where the
+///   call left it, so a step `next` gave is gone and the next call meets
+///   the run's following state.
 fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> PyResult<T> {
     let answer = py.detach(call);
     match PyErr::take(py) {

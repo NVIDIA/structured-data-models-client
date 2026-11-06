@@ -4571,13 +4571,13 @@ fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
 /// ends of its aggregations' windows; `condition` the entity filter's.
 ///
 /// - `no_entity_at_anchor`: the entity table's earliest time is after the
-/// anchor (`entity_table`, `column`, `anchor`, `earliest`, and `later`
-/// where an anchor after it leaves the target's window room in the data);
+///   anchor (`entity_table`, `column`, `anchor`, `earliest`, and `later`
+///   where an anchor after it leaves the target's window room in the data);
 /// - `no_entity_passed`: the data leaves room after the anchor for the
-/// target's whole window, and an entity filter chose no example
-/// (`anchor`, `tables`, `min_time`, `max_time`, `condition`);
+///   target's whole window, and an entity filter chose no example
+///   (`anchor`, `tables`, `min_time`, `max_time`, `condition`);
 /// - `anchor_too_late`: the data leaves no such room (the same facts but
-/// the condition);
+///   the condition);
 /// - `too_restrictive`: anything else, as the reference's generic reason.
 ///
 /// A time bound that cannot be read gives the reason without it, as the

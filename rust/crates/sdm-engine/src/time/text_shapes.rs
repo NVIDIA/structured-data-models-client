@@ -8,14 +8,14 @@
 //! (design, row; `dependencies.md`):
 //!
 //! - year first: `YYYY-MM-DD` or `YYYY/MM/DD` (either separator in either
-//! place), two-digit month and day, optionally followed by a space or
-//! `T`, `HH:MM`, optional `:SS` with an optional fraction of any length,
-//! and an optional zone with or without one space before it;
+//!   place), two-digit month and day, optionally followed by a space or
+//!   `T`, `HH:MM`, optional `:SS` with an optional fraction of any length,
+//!   and an optional zone with or without one space before it;
 //! - day or month first: `D/M/YY` to `DD/MM/YYYY` with `/` or `-`, a year
-//! of two to four digits, optionally followed by a space or `T`, `H:MM` or
-//! `HH:MM`, optional seconds and fraction, and an optional zone;
+//!   of two to four digits, optionally followed by a space or `T`, `H:MM` or
+//!   `HH:MM`, optional seconds and fraction, and an optional zone;
 //! - a zone is `Z`, `+HH`, `+HHMM`, `+HH:MM` (or with `-`), or a name
-//! starting with a letter (`[A-Za-z][A-Za-z0-9_+/-]*`).
+//!   starting with a letter (`[A-Za-z][A-Za-z0-9_+/-]*`).
 //!
 //! A value matches whole, as given; whether surrounding white space is
 //! taken off first is the caller's rule. Digits are ASCII digits: the

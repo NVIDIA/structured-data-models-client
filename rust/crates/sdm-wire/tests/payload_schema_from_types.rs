@@ -7,15 +7,15 @@
 //! typed `sdm-wire` structs.
 //!
 //! - The committed `state-payload.json` is, byte for byte, what the types
-//! generate.
+//!   generate.
 //! - The definition the contract lock covers (`$defs/StatePayload` of the
-//! schema file `contract.lock` names for this version) is that same
-//! schema, with the state's version alone added; so is the one
-//! `sdm_contract::schema_json` generates. Neither holds a hand-kept copy.
+//!   schema file `contract.lock` names for this version) is that same
+//!   schema, with the state's version alone added; so is the one
+//!   `sdm_contract::schema_json` generates. Neither holds a hand-kept copy.
 //! - The schema names every member the types write: a payload with every
-//! optional member present serializes to keys each of which the schema's
-//! node at that path names, and each required key is one the types
-//! always write.
+//!   optional member present serializes to keys each of which the schema's
+//!   node at that path names, and each required key is one the types
+//!   always write.
 
 #![allow(
     clippy::disallowed_methods,

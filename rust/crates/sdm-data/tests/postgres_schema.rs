@@ -9,17 +9,17 @@
 //! (`old-behaviour/-lakebase.md`, rows 16, 21 and 38).
 //!
 //! - A source given no schema is settled first: the one statement that
-//! asks the session is the namespace read, the old client's own
-//! `SELECT current_schema`.
+//!   asks the session is the namespace read, the old client's own
+//!   `SELECT current_schema`.
 //! - Every request kind, under a schema, names it in every statement, and
-//! none asks the session for its schema or finds a relation by the
-//! search path (`to_regclass`): a temporary or `pg_catalog` relation of
-//! a table's name is never read in its place, nor refused.
+//!   none asks the session for its schema or finds a relation by the
+//!   search path (`to_regclass`): a temporary or `pg_catalog` relation of
+//!   a table's name is never read in its place, nor refused.
 //! - The catalog's column read is the old client's statement, but for the
-//! schema and table it binds and the core writes in place, as recorded
-//! on Lakebase (C-1, `contract/captures/lakebase/base.binary`).
+//!   schema and table it binds and the core writes in place, as recorded
+//!   on Lakebase (C-1, `contract/captures/lakebase/base.binary`).
 //! - A dotted name is one table under the schema, as the old client never
-//! splits a name (row 20).
+//!   splits a name (row 20).
 
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
