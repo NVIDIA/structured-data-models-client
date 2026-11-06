@@ -146,13 +146,15 @@ That context includes the rows held back from the call because they carried the 
 Column explanations group the labelled entities into cohorts by each column of each table they reach.
 Key columns and the columns a relationship joins on are left out.
 Each table also gets `COUNT(*)`, how many of its rows each entity reaches.
+An entity whose rows fall in several cohorts is divided among them in proportion to its rows: a user with one category-A order and nine category-B orders counts as 0.1 of an entity in cohort A and 0.9 in cohort B.
+`share` and `mean` are computed over these fractional weights, so they measure how the entities' rows are associated with each cohort, not the plain rate among entities that ever touched it.
 `share` is the fraction of the population included in that column analysis that belongs to the cohort; `share: 0.2` means 20%.
 Missing numerical values are excluded, so this population can differ between columns.
 Consider how well each cohort is represented before interpreting differences; a small share does not necessarily mean a small absolute sample size.
 For regression, `mean` is the average observed target within the cohort, in the target's units, and `class` is `None`.
 For example, for an order total in dollars, `mean: 120` means an average observed total of $120.
 For classification, `class` names the target label and `mean` is the proportion of the cohort with that observed label.
-For example, `class: "churned"` and `mean: 0.3` means 30% of the cohort's labelled examples churned; it is not an individual prediction's probability.
+For example, `class: "churned"` and `mean: 0.3` means a weighted 30% of the cohort churned; it is not an individual prediction's probability.
 Compare means within the same column and class, and the same table and hop.
 These are associations in the context, not gradients and not causes.
 A forecast gets one analysis, over the context of every step.
