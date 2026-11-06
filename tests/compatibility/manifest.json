@@ -8256,6 +8256,11 @@
       "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "api_contracts/column-explanations",
       "reason": "Column analysis reads the labelled rows a request sends, as on main, so the request keeps no pre-trim delta and its tests are replaced by one over the sent rows."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "type_contracts/arrow-admission-and-inference",
+      "reason": "Arrow moves from 58.4.0 to 58.4.1 for RUSTSEC-2026-0442, so the vectors name the locked arrow-schema version; every type vector and expected outcome is unchanged. Update the whole-file digest."
     }
   ],
   "capabilities": [
@@ -9795,7 +9800,7 @@
         ]
       },
       "evidence_level": "local-boundary",
-      "vectors_sha256": "7affcc95bf8f09ab93695adf80a42d05746722ae28e87e9d7a406c7e5d4bd904"
+      "vectors_sha256": "b1ae6bd5fd9eebe14020b88ce02326696f70757a7a6535cd79da5e491995adef"
     },
     {
       "id": "semantic-types",
