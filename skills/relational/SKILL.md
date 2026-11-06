@@ -192,6 +192,36 @@ A ranking is a call per candidate and a forecast a call per step; an explanation
 Endpoint support and task restrictions are described in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
 
+An explanation is kept out of `to_pandas()`.
+The gradients are on `result.explanations.gradients`, a mapping from each row's key to its entry.
+The key is the entity's `id` when IDs are unique, or `row_index` when IDs are missing or repeated.
+Forecast keys add the step: `(id, forecast_step)` or `(row_index, forecast_step)`.
+One entry covers the entity's own row and every related row gathered for it, each under its table's name in `related`:
+
+```python
+entry = result.explanations.gradients[1]  # the entity whose id is 1
+entry['outputs']                          # the explained scores, in order
+entry['related']['users']                 # the entity's table; the entity's own row is at hop 0
+block = entry['related']['orders']        # one block per related table
+block['rows']                             # each row's values as sent
+block['keys']                             # each row's key, when the table has a key of its own
+block['columns']                          # the model's preprocessed numerical columns
+block['gradients']                        # [output][row][column]
+result.explanations.gradients.to_pandas()  # one line per (entity, table, row, output, column)
+analysis = result.explanations.columns
+if analysis is not None:
+    cohorts = analysis.to_pandas()        # one line per (table, hop, column, cohort, class)
+```
+
+Column explanations are on `result.explanations.columns`.
+This client computes them from the labelled context `materialize()` gathered; the endpoint does not.
+Column explanations group labelled context examples by input values and summarize their observed outcomes.
+They describe associations, not how much a column contributed to an individual prediction.
+See [beyond-one-answer.md](references/beyond-one-answer.md) for interpreting `mean`, `class`, and `share`.
+`result.explanations.columns` is `None` unless `explanation` was asked for.
+It can also be `None` when statistics are unavailable, so check it before calling `to_pandas()`.
+Gradients and column explanations both need a deployment that serves `explanation`.
+
 ## Asking the same context more than once
 
 `fit()` uploads a context once and pins it in the endpoint's memory; every

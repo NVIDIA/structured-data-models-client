@@ -55,6 +55,32 @@ The optional Python model runtime also supports them.
 `EXPLAIN` adds explanation output without dropping ordinary outputs; `outputs=[]` remains invalid.
 See [the result contract](../../docs/reference/prediction-output.md).
 
+```python
+# With missing or repeated IDs, keys are row_index values.
+entry = result.explanations.gradients[0]   # row_index 0 under that assumption
+entry['outputs']                           # the explained scores, in order
+entry['instance']['columns']               # the model's preprocessed numerical columns
+entry['instance']['gradients']             # [output][column]
+result.explanations.gradients.to_pandas()  # one line per (row, output, column)
+analysis = result.explanations.columns
+if analysis is not None:
+    cohorts = analysis.to_pandas()        # one line per (column, cohort, class)
+```
+
+Column explanations are on `result.explanations.columns`, which is `None` unless `explanation` was asked for or when statistics are unavailable, so check it before calling `to_pandas()`.
+This client computes them from the labelled rows sent with the request; the endpoint does not.
+Column explanations group the labelled rows into cohorts by each column, leaving out the key, the target, and timestamps.
+`share` is the fraction of the population included in that column analysis that belongs to the cohort; `share: 0.2` means 20%.
+Missing numerical values are excluded, so this population can differ between columns.
+Consider how well each cohort is represented before interpreting differences; a small share does not necessarily mean a small absolute sample size.
+For regression, `mean` is the average observed target within the cohort, in the target's units, and `class` is `None`.
+For example, for an order total in dollars, `mean: 120` means an average observed total of $120.
+For classification, `class` names the target label and `mean` is the proportion of the cohort with that observed label.
+For example, `class: "churned"` and `mean: 0.3` means 30% of the cohort's labelled examples churned; it is not an individual prediction's probability.
+Compare means within the same column and class.
+These are associations in the labelled rows, not gradients and not causes.
+A session makes them once, at `fit()`, from the context it pins.
+
 ## The whole interface
 
 ```python

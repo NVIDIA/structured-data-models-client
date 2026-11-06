@@ -123,8 +123,46 @@ Source keys can identify related rows; synthetic transport keys are not user key
 Only scored rows and their sampled related rows receive gradients, not the labelled context examples.
 A gradient measures sensitivity to a preprocessed feature, not a causal effect.
 
+```python
+entry = result.explanations.gradients[1]  # the entity whose id is 1
+block = entry['related']['orders']        # one block per table, by name
+block['rows'][0]                          # the first row's values, as sent
+block['gradients'][0][0]                  # first output, first row: one gradient per name in block['columns']
+```
+
 Unique prediction IDs key the collection; missing/repeated IDs use `row_index`.
 Forecast keys include the step, and merging preserves distinct rows and steps.
 `result.explanations.gradients.to_pandas()` flattens entries with table, hop, related-row identity, output and column.
 `EXPLAIN` ranking is rejected before gathering; explanations requested later through `outputs` are checked before prediction.
+
+```python
+result.explanations.gradients[(1, 2)]      # on a forecast: entity 1, step 2
+result.explanations.gradients.to_pandas()  # id, forecast_step on a forecast, table, hop, key, row, output, column, gradient
+```
+
+Column explanations are on `result.explanations.columns`, which is `None` unless `explanation` was asked for.
+This client computes them from the labelled context `materialize()` gathered; the endpoint does not.
+That context includes the rows held back from the call because they carried the answer.
+Column explanations group the labelled entities into cohorts by each column of each table they reach.
+Key columns and the columns a relationship joins on are left out.
+Each table also gets `COUNT(*)`, how many of its rows each entity reaches.
+`share` is the fraction of the population included in that column analysis that belongs to the cohort; `share: 0.2` means 20%.
+Missing numerical values are excluded, so this population can differ between columns.
+Consider how well each cohort is represented before interpreting differences; a small share does not necessarily mean a small absolute sample size.
+For regression, `mean` is the average observed target within the cohort, in the target's units, and `class` is `None`.
+For example, for an order total in dollars, `mean: 120` means an average observed total of $120.
+For classification, `class` names the target label and `mean` is the proportion of the cohort with that observed label.
+For example, `class: "churned"` and `mean: 0.3` means 30% of the cohort's labelled examples churned; it is not an individual prediction's probability.
+Compare means within the same column and class, and the same table and hop.
+These are associations in the context, not gradients and not causes.
+A forecast gets one analysis, over the context of every step.
+If the statistics cannot be computed, `result.explanations.columns` is `None` and a warning says so; the predictions still come back.
+
+```python
+analysis = result.explanations.columns
+if analysis is not None:
+    cohorts = analysis.to_pandas()  # table, hop, column, stype, cohort, class, share, mean, score
+    cohorts[cohorts['table'] == 'orders']  # the cohorts of each column of orders
+```
+
 See [the result contract](../../../docs/reference/prediction-output.md).
