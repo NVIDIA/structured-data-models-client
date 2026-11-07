@@ -2832,7 +2832,8 @@
           "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_custom_nullable_producer_never_takes_arrow_snapshot",
           "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_float_refusal_keeps_specific_diagnostic",
           "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_integer_range_after_earlier_column_mutation",
-          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_conversion_order_and_nested_options"
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_conversion_order_and_nested_options",
+          "packages/structured-data-models-client/tests/test_configurable_limits.py"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#directSchemaAndOptionsAreOwnedAndInferenceTravelsOnPredictAndScore",
@@ -3338,7 +3339,8 @@
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_ambient_identity_is_used_when_no_client_is_given",
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_workspace_that_cannot_authenticate_says_how_to_fix_it",
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_unusable_timeout_is_refused_at_construction",
-          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not"
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not",
+          "packages/structured-data-models-client/tests/test_configurable_limits.py"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes",
@@ -3868,7 +3870,8 @@
         "python": [
           "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_without_the_extra_the_extra_is_named",
           "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_a_tabular_answer_is_the_one_the_model_gives_when_called_directly",
-          "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_a_session_keeps_the_question_it_pinned"
+          "packages/structured-data-models-client/tests/test_a_model_runs_in_this_process.py::test_a_session_keeps_the_question_it_pinned",
+          "packages/structured-data-models-client/tests/test_configurable_limits.py"
         ],
         "java": []
       },
@@ -4746,9 +4749,57 @@
           "reason": "Exact class-label identity and presentation are tested here; this does not expand general model dtype admission."
         }
       }
+    },
+    {
+      "id": "configurable-limits",
+      "apis": {
+        "python": [
+          "Limits",
+          "SDMClient.limits"
+        ],
+        "java": [
+          "Limits",
+          "SdmClient.limits"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_configurable_limits.py"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/LimitsTest.java"
+        ]
+      },
+      "gate": "local",
+      "note": "Size limits as settings: defaults, argument and environment precedence, a raised tabular context taken, byte-aware splitting and the refusal of a context too large on its own, through Rust and controlled HTTP exchanges; no live endpoint validation claimed.",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/limits.rs",
+          "rust/crates/sdm-request/src/batching.rs",
+          "rust/crates/sdm-core/src/predict.rs"
+        ],
+        "operations": [
+          "predict",
+          "materialize"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Focused limit tests define the settings' boundary; no scenario linkage is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
     }
   ],
-  "public_api_snapshot_sha256": "652bd2757ca1d8ed12360b795a5c7f80ce63978210306cee1319532503f9d031",
+  "public_api_snapshot_sha256": "9d490ce2c68265be9c2bb679a7ed7215d594bd63fada342929eaa9833f4ea37b",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -5169,7 +5220,13 @@
         ]
       },
       "sdm_client.PredictiveQuery.materialize": {
-        "capability": "direct-dtypes-options"
+        "capability": "direct-dtypes-options",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_materialize_samples_to_a_raised_tabular_limit",
+            "behavior": "The limits argument holds the requests made through it to the settings it names; a raised tabular context limit is taken where the default refuses, naming the setting."
+          }
+        ]
       },
       "sdm_client.Relationship": {
         "capability": "schema-edits"
@@ -5250,7 +5307,13 @@
         "capability": "direct-dtypes-options"
       },
       "sdm_client.SDMClient": {
-        "capability": "direct-dtypes-options"
+        "capability": "direct-dtypes-options",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_tabular_context_of_200_000_rows_is_sent_when_the_limit_is_raised",
+            "behavior": "The limits argument holds the requests made through it to the settings it names; a raised tabular context limit is taken where the default refuses, naming the setting."
+          }
+        ]
       },
       "sdm_client.SDMClient.capabilities": {
         "capability": "readiness-discovery"
@@ -5262,13 +5325,25 @@
         "capability": "sessions"
       },
       "sdm_client.SDMClient.for_databricks_serving": {
-        "capability": "public-serving-refusals"
+        "capability": "public-serving-refusals",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_tabular_context_of_200_000_rows_is_sent_when_the_limit_is_raised",
+            "behavior": "The limits argument holds the requests made through it to the settings it names; a raised tabular context limit is taken where the default refuses, naming the setting."
+          }
+        ]
       },
       "sdm_client.SDMClient.health_ready": {
         "capability": "readiness-discovery"
       },
       "sdm_client.SDMClient.in_process": {
-        "capability": "in-process-models"
+        "capability": "in-process-models",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_tabular_context_of_200_000_rows_is_sent_when_the_limit_is_raised",
+            "behavior": "The limits argument holds the requests made through it to the settings it names; a raised tabular context limit is taken where the default refuses, naming the setting."
+          }
+        ]
       },
       "sdm_client.SDMClient.models": {
         "capability": "readiness-discovery"
@@ -6152,6 +6227,69 @@
           {
             "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
             "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.Limits": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_materialize_samples_to_a_raised_tabular_limit",
+            "behavior": "A setting given comes before its environment variable, which comes before the default, as resolved by the core."
+          }
+        ]
+      },
+      "sdm_client.Limits.max_relational_context_rows": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_setting_given_that_is_not_a_whole_number_is_refused",
+            "behavior": "Each setting is a keyword of Limits taking a whole number of at least 1, read otherwise from SDM_CLIENT_ and its name in capitals."
+          }
+        ]
+      },
+      "sdm_client.Limits.max_relational_predict_rows": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_raised_relational_predict_limit_and_a_lowered_one_set_the_calls",
+            "behavior": "A lowered relational predict limit sets the rows each call scores."
+          }
+        ]
+      },
+      "sdm_client.Limits.max_temporal_link_predict_rows": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_setting_given_that_is_not_a_whole_number_is_refused",
+            "behavior": "Each setting is a keyword of Limits taking a whole number of at least 1, read otherwise from SDM_CLIENT_ and its name in capitals."
+          }
+        ]
+      },
+      "sdm_client.Limits.max_tabular_context_rows": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_materialize_samples_to_a_raised_tabular_limit",
+            "behavior": "A raised tabular context limit is taken, from the argument before the environment variable."
+          }
+        ]
+      },
+      "sdm_client.Limits.max_request_bytes": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_call_past_the_byte_limit_is_split_and_each_part_fits",
+            "behavior": "A call past the byte limit is split and each part fits."
+          }
+        ]
+      },
+      "sdm_client.SDMClient.limits": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_tabular_context_of_200_000_rows_is_sent_when_the_limit_is_raised",
+            "behavior": "A client raised to 200,000 tabular context rows sends them; the default refuses naming the setting."
           }
         ]
       }
@@ -8052,6 +8190,177 @@
             "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
           }
         ]
+      },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder limits(com.nvidia.sdm.Limits);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aTabularContextPastTheDefaultIsSentWhenTheLimitIsRaised",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.DatabricksServing#public com.nvidia.sdm.DatabricksServing limits(com.nvidia.sdm.Limits);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.DatabricksServing#public com.nvidia.sdm.Limits limits();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits#public boolean equals(java.lang.Object);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits#public int hashCode();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits#public java.lang.String toString();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits#public java.util.Map<java.lang.String, java.lang.Long> values();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits#public static com.nvidia.sdm.Limits defaults();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits#public static com.nvidia.sdm.Limits$Builder builder();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder#public com.nvidia.sdm.Limits build();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder#public com.nvidia.sdm.Limits$Builder maxRelationalContextRows(long);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder#public com.nvidia.sdm.Limits$Builder maxRelationalPredictRows(long);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder#public com.nvidia.sdm.Limits$Builder maxRequestBytes(long);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder#public com.nvidia.sdm.Limits$Builder maxTabularContextRows(long);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Limits$Builder#public com.nvidia.sdm.Limits$Builder maxTemporalLinkPredictRows(long);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder limits(com.nvidia.sdm.Limits);": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
+      },
+      "com.nvidia.sdm.SdmClient#public com.nvidia.sdm.Limits limits();": {
+        "capability": "configurable-limits",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aTabularContextPastTheDefaultIsSentWhenTheLimitIsRaised",
+            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
+          }
+        ]
       }
     }
   },
@@ -8233,6 +8542,36 @@
       "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
       "record": "type_contracts/arrow-admission-and-inference",
       "reason": "Rename test files and remove historical fixture prose; all type vectors and their expected outcomes remain identical. Update the whole-file digest for metadata changes."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/configurable-limits",
+      "reason": "Adds the configurable size limits: Python Limits and SDMClient.limits, Java Limits, SdmClient.limits and the limits options of ClientOptions, DatabricksServing and MaterializeOptions, each with focused behavior tests."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_inventory",
+      "reason": "Adds the public declarations of the configurable size limits, each mapped to the configurable-limits group with a direct assertion."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "public_api_snapshot_sha256",
+      "reason": "The public snapshot records sdm_client.Limits, SDMClient.limits and the limits arguments of SDMClient, SDMClient.in_process, SDMClient.for_databricks_serving and PredictiveQuery.materialize."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/public-serving-refusals",
+      "reason": "Links the configurable-limits tests that assert the new limits argument of SDMClient.for_databricks_serving; the group's existing tests and scope are unchanged."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/in-process-models",
+      "reason": "Links the configurable-limits tests that assert the new limits argument of this group's entry points; the group's existing tests and scope are unchanged."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/direct-dtypes-options",
+      "reason": "Links the configurable-limits tests that assert the new limits argument of this group's entry points; the group's existing tests and scope are unchanged."
     }
   ],
   "capabilities": [

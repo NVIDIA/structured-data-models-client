@@ -133,7 +133,7 @@ impl FrameGraph {
         &self,
         graph: &Graph,
         seeds: SeedRows<'_>,
-        hops: &[options::Hop],
+        hops: &options::Hops,
         excluded: &[(String, String)],
         seed: Option<u128>,
     ) -> Result<crate::subgraph::Walked, CoreError> {
@@ -144,7 +144,10 @@ impl FrameGraph {
         } = seeds;
         let rows = self.0.snapshot.entity_rows(&entity.name, keys)?;
         let mut counts = Vec::new();
-        for hop in hops {
+        // Hops past as many as the snapshot holds rows reach nothing more,
+        // so a count of hops past it is walked as that many.
+        let most = self.0.snapshot.rows().saturating_add(1);
+        for hop in (0..most).map_while(|at| hops.get(at)) {
             match hop {
                 options::Hop::Keep(n) => {
                     counts.push(i64::try_from(*n).map_err(|_| not_yet("frame_neighbor_count"))?)
@@ -331,6 +334,7 @@ pub(crate) async fn materialize(
     mut attachments: crate::run::Attachments,
     facts: HostFacts,
     zones: Arc<dyn sdm_engine::time::Zones>,
+    limits: sdm_contract::limits::Limits,
 ) -> Result<OperationResult, CoreError> {
     let Some(Attachment::FrameGraph(owner)) = attachments.remove(&request.graph) else {
         return Err(internal("frame graph owner is absent"));
@@ -368,6 +372,7 @@ pub(crate) async fn materialize(
         most_entities: call.most_entities,
         most_calls: call.most_calls,
         facts,
+        limits,
         zones,
         memo: None,
         source: "in_memory".into(),

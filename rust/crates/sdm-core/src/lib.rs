@@ -21,6 +21,7 @@ pub mod exact_number;
 mod fallback;
 mod held;
 mod lag;
+pub mod limits;
 pub mod materialize;
 mod memory;
 #[cfg(test)]

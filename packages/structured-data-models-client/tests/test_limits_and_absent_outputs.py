@@ -27,7 +27,6 @@ import pytest
 from sdm_client import PredictiveQuery, Schema
 from sdm_client.client import _report_absent
 from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_TABULAR
 from sdm_client.result import PredictionResult
 
 
@@ -59,16 +58,12 @@ def query(schema: Schema) -> PredictiveQuery:
 # --- the context the endpoint will take ------------------------------------
 
 
-def test_the_declared_cap_is_the_one_the_endpoint_enforces():
-    """Measured at the boundary: 10,000 answer, 10,001 refuse."""
-    assert KUMO_TABULAR.runtime.limits['context_rows_max'] == 10_000
-
-
 def test_a_context_above_the_cap_is_refused_before_it_is_encoded():
     schema = table(200)
     with pytest.raises(StructuredDataError) as raised:
         query(schema).materialize(indices=[0, 1], num_context_samples=50_000)
-    assert 'accepts at most 10,000 context rows' in str(raised.value)
+    assert 'carries at most 10,000 context rows' in str(raised.value)
+    assert 'SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS' in str(raised.value)
 
 
 def test_the_cap_itself_is_allowed():
@@ -226,7 +221,8 @@ def test_a_materialized_context_above_the_cap_is_refused_not_merely_the_number()
     schema = table(12_000)
     with pytest.raises(StructuredDataError) as raised:
         query(schema).materialize(indices=[0, 1], num_context_samples=10_001)
-    assert 'accepts at most 10,000 context rows' in str(raised.value)
+    assert 'carries at most 10,000 context rows' in str(raised.value)
+    assert 'SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS' in str(raised.value)
 
 
 def test_the_predict_route_advises_something_that_route_allows():

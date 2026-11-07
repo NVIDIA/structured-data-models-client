@@ -680,14 +680,22 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
                 f'{case_key}: details[{name!r}] is {details.get(name)!r} '
                 f'where python-ref has {value!r}'
             )
-        assert got['remedy'] == want['remedy'], (
-            f'{case_key}: the remedy is {got["remedy"]!r:.200} where '
-            f'python-ref names {want["remedy"]!r:.200}'
-        )
         if case_id in BODY:
-            assert got['opening'] == want['opening'], (
-                f'{case_key}: {got["opening"]!r:.200} where python-ref '
-                f'opens {want["opening"]!r}'
+            # Both contexts are past the 30 MiB on their own. This client
+            # splits a call past the limit into smaller ones, so it names
+            # what does not split, the context, its size and the limit,
+            # where the reference named a smaller call or a narrower context.
+            assert want['remedy'].startswith(BODY[case_id])
+            assert (got['opening'] or '').startswith(
+                '[INVALID_REQUEST] the context alone is too large to send: a '
+                'call carrying it '
+                'and one row to score is '
+            ), f'{case_key}: {got["opening"]!r:.300}'
+            assert got['remedy'] is None
+        else:
+            assert got['remedy'] == want['remedy'], (
+                f'{case_key}: the remedy is {got["remedy"]!r:.200} where '
+                f'python-ref names {want["remedy"]!r:.200}'
             )
         if case_id in INVALID:
             assert 'rows_per_call' in (got['opening'] or ''), (

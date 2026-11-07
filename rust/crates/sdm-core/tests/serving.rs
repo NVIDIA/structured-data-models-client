@@ -183,6 +183,7 @@ fn predict(calls: &[&[i64]], endpoint: Option<ModelEndpoint>) -> Run {
     start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Predict(Predict {
@@ -349,10 +350,9 @@ fn each_call_is_wrapped_as_the_endpoint_reads_it_and_answered_from_its_row() {
 }
 
 #[test]
-fn a_call_past_the_caller_s_limit_is_refused_before_it_is_sent() {
-    // The first call fits; the second, larger, does not: it is refused
-    // when it would be sent, carrying the first call's answers, as the old
-    // transport weighs each call as it sends it.
+fn a_call_past_the_caller_s_limit_is_split_and_one_that_cannot_be_is_refused() {
+    // The first call fits; the second, larger, does not: it is asked as
+    // smaller calls, each with the whole context, each within the limit.
     let mut probe = predict(&[&[10]], serving(16_000_000));
     let Ok(Step::CallModel(call)) = probe.next() else {
         panic!("a call");
@@ -367,18 +367,30 @@ fn a_call_past_the_caller_s_limit_is_refused_before_it_is_sent() {
         retryable: false,
     };
     let (end, bodies) = drive(&mut run, None, &failure);
-    assert_eq!(bodies.len(), 1);
+    assert_eq!(bodies.len(), 4);
     assert_eq!(bodies[0], one);
-    let error = end.unwrap_err();
-    assert_eq!(error.sentence, Sentence::ServingPastLimit);
-    assert_eq!(error.code, ErrorCode::InvalidRequest);
-    assert_eq!(error.fields["limit"], Detail::Scalar(Scalar::UInt64(limit)));
-    assert_eq!(count(&error, "calls_answered"), Some(1));
-    // A limit the first call misses: nothing is sent.
+    assert!(bodies.iter().all(|body| body.len() as u64 <= limit));
+    let Ok(Step::Done {
+        result: OperationResult::Predict(predicted),
+    }) = end
+    else {
+        panic!("the run predicts: {end:?}");
+    };
+    let result = arrow(&mut run, predicted.result);
+    assert_eq!(int64s(&result, "row_index"), (0..4).collect::<Vec<_>>());
+    // A limit one row's call misses: no call is small enough, and nothing
+    // is sent.
     let mut run = predict(&[&[10]], serving(limit - 1));
     let (end, bodies) = drive(&mut run, None, &failure);
     assert!(bodies.is_empty());
-    assert_eq!(end.unwrap_err().sentence, Sentence::ServingPastLimit);
+    let error = end.unwrap_err();
+    assert_eq!(error.sentence, Sentence::ServingPastLimit);
+    assert_eq!(error.code, ErrorCode::InvalidRequest);
+    assert_eq!(
+        error.fields["limit"],
+        Detail::Scalar(Scalar::UInt64(limit - 1))
+    );
+    assert!(count(&error, "context_bytes").is_some_and(|context| context < limit));
 }
 
 #[test]

@@ -5,6 +5,7 @@
 //! Model-neutral direct shape guards and shared model preflight facts.
 
 use sdm_contract::direct::{BoundDirectCall, ColumnFlags, DirectCallFacts, DirectShape, FrameKind};
+use sdm_contract::limits::Limits;
 use sdm_contract::ops::{DescribedTable, Dtype, Stype};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use std::collections::BTreeSet;
@@ -106,13 +107,15 @@ pub fn column_names(columns: &[String], table: &str) -> Result<(), CoreError> {
 }
 
 /// Resolve model/output/capability/task/capacity before inspecting scoring values.
-pub fn bind(input: DirectCallFacts) -> Result<BoundDirectCall, CoreError> {
-    crate::predict::bind_direct(input)
+pub fn bind(input: DirectCallFacts, limits: &Limits) -> Result<BoundDirectCall, CoreError> {
+    crate::predict::bind_direct(input, Some(limits))
 }
 
 /// Validate the producer's typed decision against its original consumed facts.
+/// The capacity was checked when it was bound, and is checked again where
+/// the request is sent.
 pub fn bound(value: &BoundDirectCall) -> Result<(), CoreError> {
-    if bind(value.facts.clone())? != *value {
+    if crate::predict::bind_direct(value.facts.clone(), None)? != *value {
         return Err(CoreError::protocol(
             Sentence::InvalidMessage,
             "bound direct call differs from its consumed facts",

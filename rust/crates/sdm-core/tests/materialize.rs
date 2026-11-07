@@ -268,6 +268,7 @@ fn materialize_on(
     start(
         &root,
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,
@@ -1136,13 +1137,13 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         assert_eq!(err.code, ErrorCode::InvalidRequest, "{values}");
         assert_eq!(err.fields["field"], Detail::text(field), "{values}");
     }
-    let past = valued(r#"{"num_hops": 7}"#, &[]).unwrap_err();
-    assert_eq!(past.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(past.fields["field"], Detail::text("num_hops"));
-    assert!(!past.fields.contains_key("rule"), "the bound, not the rule");
-    // The sampling options taken reach the first read.
+    // The sampling options taken reach the first read: as many hops as are
+    // asked, the six an earlier endpoint read and past them.
     for values in [
         r#"{"num_hops": 3}"#,
+        r#"{"num_hops": 7}"#,
+        r#"{"num_hops": 1000000}"#,
+        r#"{"num_neighbors": [8, 8, 4, 4, 2, 2, 1, 1]}"#,
         r#"{"num_neighbors": [4, 0]}"#,
         r#"{"random_seed": null}"#,
         r#"{"max_pq_iterations": 2, "use_prediction_time": true}"#,

@@ -136,6 +136,7 @@ fn run_of(root: &CompositionRoot, operation: Operation) -> Result<sdm_core::Run,
     start(
         root,
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,
@@ -149,6 +150,7 @@ fn another_contract_version_is_refused_before_a_run_exists() {
     let err = start(
         &root(),
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION + 1,
             facts: facts(),
             operation: validate(),
@@ -182,6 +184,7 @@ fn a_clock_that_is_not_a_timestamp_in_utc_is_refused() {
         let err = start(
             &root(),
             StartRun {
+                limits: Default::default(),
                 contract: CONTRACT_VERSION,
                 facts: bad,
                 operation: validate(),
@@ -570,6 +573,7 @@ fn start_with(operation: Operation, attachments: Attachments) -> Result<sdm_core
     start(
         &root(),
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,
@@ -730,6 +734,7 @@ fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
     start(
         &root(),
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,
@@ -786,6 +791,7 @@ fn validate_run(query: &str, facts: HostFacts) -> Result<sdm_core::Run, CoreErro
     start(
         &root(),
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts,
             operation,

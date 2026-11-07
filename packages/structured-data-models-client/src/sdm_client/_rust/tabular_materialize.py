@@ -215,15 +215,13 @@ def _context(
         has_custom_sorter,
         observe,
     )
-    from sdm_client.models import TABULAR_LIMITS
 
-    limit = TABULAR_LIMITS['context_rows_max']
+    # The most context rows a request carries (`max_tabular_context_rows`),
+    # the count compared with it natively before any frame length is read;
+    # past it, the core refuses, naming the setting.
+    limit = _call('check_tabular_cap', {'requested': None})['limit']
     if decision is None:
-        over_limit = wanted is not None and bool(wanted > limit)
-        accepted = _call('check_tabular_cap', {'over_limit': over_limit})[
-            'accepted'
-        ]
-        if not accepted:
+        if wanted is not None and bool(wanted > limit):
             decision = {'kind': 'refused'}
         else:
             count = int(wanted) if isinstance(wanted, np.integer) else wanted
@@ -235,10 +233,10 @@ def _context(
                 },
             )
     if decision['kind'] == 'refused':
+        _call('check_tabular_cap', {'requested': str(int(wanted))})
         raise StructuredDataError(
-            f'num_context_samples is {wanted:,}, and the '
-            f'endpoint accepts at most {limit:,} context rows',
-            code='UNSUPPORTED_REQUEST',
+            'the core refused a context count it then accepted',
+            code='INTERNAL_ERROR',
         )
     if not decision['reduced']:
         return candidates

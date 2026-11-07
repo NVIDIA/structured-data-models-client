@@ -8,6 +8,7 @@
 //! Errors identify the option and reason without exposing the supplied value.
 
 use sdm_contract::data::NegativeNeighborBound;
+use sdm_contract::limits::{Limits, MAX_RELATIONAL_CONTEXT_ROWS};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token, whole};
 use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
@@ -591,14 +592,44 @@ pub enum Hop {
     Stop,
 }
 
+/// The hops a walk takes, each with the neighbors it keeps of each row: the
+/// sizes listed, then the last of them again for as many hops more as were
+/// asked. A walk reads them one hop at a time ([`Hops::get`]), so a count
+/// of hops far past what the data holds costs nothing: the walk ends at
+/// the first hop that reaches no row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hops {
+    listed: Vec<Hop>,
+    /// How many hops follow the listed ones, each the last listed size.
+    more: usize,
+}
+
+impl Hops {
+    /// The size of hop `hop`, counted from zero; none past the last.
+    pub fn get(&self, hop: usize) -> Option<&Hop> {
+        match self.listed.get(hop) {
+            Some(size) => Some(size),
+            None if hop - self.listed.len() < self.more => self.listed.last(),
+            None => None,
+        }
+    }
+}
+
+impl From<Vec<Hop>> for Hops {
+    fn from(listed: Vec<Hop>) -> Self {
+        Hops { listed, more: 0 }
+    }
+}
+
 /// The hops the walk takes, each with its size, as the engine resolves
 /// them (`_resolve_options`): `num_neighbors` where it is given, each size
 /// read as [`hop`] reads it; else the first `num_hops` of the run mode's sizes
-/// (`_DEFAULT_NUM_NEIGHBORS`), two where it is not named, and a `num_hops`
+/// (`_DEFAULT_NUM_NEIGHBORS`), two where it is not named, each hop past the
+/// sizes the mode lists keeping as many as its last; and a `num_hops`
 /// named as none, which the engine cannot compare with its bounds,
 /// `INVALID_REQUEST` (`not_a_whole_number`), as the engine's `TypeError`
-/// is the caller's. Call it after [`hops`] has bounded the count.
-pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
+/// is the caller's. Call it after [`hops`] has checked the count.
+pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Hops, CoreError> {
     let Some(given) = &asked.neighbors else {
         if asked.num_hops_none {
             return Err(mistyped(
@@ -609,14 +640,13 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
         }
         let hops = asked
             .num_hops
-            .and_then(|n| n.magnitude)
-            .map_or(2, |n| usize::try_from(n).unwrap_or(usize::MAX));
-        return Ok(mode
-            .all_neighbors()
-            .into_iter()
-            .take(hops)
-            .map(Hop::Keep)
-            .collect());
+            .map_or(Some(2), |n| n.magnitude)
+            .map_or(usize::MAX, |n| usize::try_from(n).unwrap_or(usize::MAX));
+        let sizes = mode.all_neighbors();
+        return Ok(Hops {
+            listed: sizes.into_iter().take(hops).map(Hop::Keep).collect(),
+            more: hops.saturating_sub(sizes.len()),
+        });
     };
     given
         .iter()
@@ -624,7 +654,8 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
         .map(|(at, size)| {
             hop(size).map_err(|e| e.with_field("hop", Detail::Scalar(Scalar::UInt64(at as u64))))
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()
+        .map(Hops::from)
 }
 
 /// One hop's size, as the reference's DuckDB sampler reads the value it
@@ -790,16 +821,11 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
     }
 }
 
-/// The most rows one model call scores (`predict_rows_max`, the serving
-/// layer's `TFM_MAX_TEST_ROWS`, which the reference's client and engine
-/// hold at 10,000 from `main`'s 1fc5a686).
-pub const PREDICT_ROWS: u64 = 10_000;
-
 /// How many entities one call scores, as the caller asked or as the
-/// endpoint allows (`rows_one_call_scores`): the caller's size only ever
-/// lowers the endpoint's.
-pub fn rows_one_call_scores(asked: Option<u64>) -> u64 {
-    rows_one_task_call_scores(asked, BatchTask::Ordinary)
+/// limits allow (`rows_one_call_scores`): the caller's size only ever
+/// lowers the limit's.
+pub fn rows_one_call_scores(asked: Option<u64>, limits: &Limits) -> u64 {
+    rows_one_task_call_scores(asked, BatchTask::Ordinary, limits)
 }
 
 /// The task distinction that determines an entity batch's model limit.
@@ -810,12 +836,15 @@ pub enum BatchTask {
     TemporalLink,
 }
 
-/// Apply the task's serving limit after validating the requested positive size.
+/// Apply the task's serving limit after validating the requested positive
+/// size: the most rows one call scores (`max_relational_predict_rows`, the
+/// serving layer's `TFM_MAX_TEST_ROWS`), or one temporal link prediction
+/// call (`max_temporal_link_predict_rows`).
 /// PQL and supplied examples use the same policy; hosts do not split rows.
-pub fn rows_one_task_call_scores(asked: Option<u64>, task: BatchTask) -> u64 {
+pub fn rows_one_task_call_scores(asked: Option<u64>, task: BatchTask, limits: &Limits) -> u64 {
     let limit = match task {
-        BatchTask::Ordinary => PREDICT_ROWS,
-        BatchTask::TemporalLink => 200,
+        BatchTask::Ordinary => limits.max_relational_predict_rows,
+        BatchTask::TemporalLink => limits.max_temporal_link_predict_rows,
     };
     asked.map_or(limit, |n| n.min(limit))
 }
@@ -860,7 +889,8 @@ impl RunMode {
         }
     }
 
-    /// The most context examples the mode gathers.
+    /// The most context examples the mode gathers where the caller asks
+    /// for no more: a best run gathers as many as are asked past it.
     pub fn context_examples(self) -> usize {
         match self {
             RunMode::Fast => 1_000,
@@ -881,10 +911,14 @@ impl RunMode {
 /// The run mode a context size asks for, as the client chooses it
 /// (`_run_mode_for`, with `num_context_samples`' bound of
 /// `_validate_materialize_args`): none or up to a fast run's examples, a
-/// fast run; up to a best run's, a best one. Below 1 is `INVALID_REQUEST`;
-/// past a best run's examples, `UNSUPPORTED_REQUEST`, as the endpoint takes
-/// no more.
-pub fn run_mode(asked: Option<Integer>, given: Option<&str>) -> Result<RunMode, CoreError> {
+/// fast run; up to `most`, a best one. Below 1 is `INVALID_REQUEST`;
+/// past `most` (`max_relational_context_rows`), `UNSUPPORTED_REQUEST`,
+/// naming the setting that raises it.
+pub fn run_mode(
+    asked: Option<Integer>,
+    given: Option<&str>,
+    most: u64,
+) -> Result<RunMode, CoreError> {
     // A refusal names the size as the caller gave it, its JSON text.
     let named = |refused: CoreError| match given {
         Some(given) => refused.with_field("given", Detail::text(given)),
@@ -908,29 +942,24 @@ pub fn run_mode(asked: Option<Integer>, given: Option<&str>) -> Result<RunMode, 
     }
     match value {
         Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),
-        Some(n) if n <= RunMode::Best.context_examples() as u128 => Ok(RunMode::Best),
-        _ => Err(named(
+        Some(n) if n <= u128::from(most) => Ok(RunMode::Best),
+        _ => Err(MAX_RELATIONAL_CONTEXT_ROWS.named(named(
             CoreError::new(
                 Sentence::NumContextSamplesPastMost,
-                "num_context_samples is past the most context the endpoint takes",
+                "num_context_samples is past the most context a request carries",
             )
             .with_field("field", Detail::text("num_context_samples"))
-            .with_field(
-                "limit",
-                Detail::Scalar(Scalar::UInt64(RunMode::Best.context_examples() as u64)),
-            ),
-        )),
+            .with_field("limit", Detail::Scalar(Scalar::UInt64(most))),
+        ))),
     }
 }
 
-/// The most hops the endpoint reads (`hops_max`).
-pub const HOPS_MAX: u128 = 6;
-
-/// The hops the sampling options ask for, as the client bounds them
+/// The hops the sampling options ask for, as the client checks them
 /// (`_check_shape`): `num_neighbors`' length where it is given, else
 /// `num_hops`; none, or fewer than one, is `INVALID_REQUEST` (a request
-/// that crosses no relationship), more than [`HOPS_MAX`]
-/// `UNSUPPORTED_REQUEST`.
+/// that crosses no relationship). The client sets no most: the model reads
+/// as many hops as the request carries, and a walk ends at the first hop
+/// that reaches no row.
 pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result<(), CoreError> {
     let (
         field,
@@ -943,34 +972,19 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
         (None, Some(n)) => ("num_hops", n),
         (None, None) => return Ok(()),
     };
-    // How many hops were asked, as the host's words name them.
-    let asked = value.map(|n| format!("{}{n}", if negative && n > 0 { "-" } else { "" }));
-    let named = |error: CoreError| match &asked {
-        Some(n) => error.with_field("hops", Detail::text(n)),
-        None => error,
-    };
     if negative || value == Some(0) {
+        // How many hops were asked, as the host's words name them.
+        let asked = value.map(|n| format!("{}{n}", if negative && n > 0 { "-" } else { "" }));
         let sentence = if field == "num_hops" {
             Sentence::NoHopNumHops
         } else {
             Sentence::NoHopNumNeighbors
         };
-        return Err(named(invalid(sentence, field, "no_hop"))
-            .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))));
-    }
-    if value.is_none_or(|n| n > HOPS_MAX) {
-        return Err(named(
-            CoreError::new(
-                if asked.is_some() {
-                    Sentence::HopsPastEndpoint
-                } else {
-                    Sentence::HopsPastEndpointUncounted
-                },
-                "the sampling options ask more hops than the endpoint reads",
-            )
-            .with_field("field", Detail::text(field))
-            .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))),
-        ));
+        let refused = invalid(sentence, field, "no_hop");
+        return Err(match asked {
+            Some(n) => refused.with_field("hops", Detail::text(n)),
+            None => refused,
+        });
     }
     Ok(())
 }
@@ -1369,18 +1383,22 @@ mod tests {
 
     #[test]
     fn the_run_mode_is_the_client_s() {
-        assert_eq!(run_mode(None, None).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1)), None).unwrap(), RunMode::Fast);
+        let most = MAX_RELATIONAL_CONTEXT_ROWS.default;
+        assert_eq!(run_mode(None, None, most).unwrap(), RunMode::Fast);
         assert_eq!(
-            run_mode(int(false, Some(1_000)), None).unwrap(),
+            run_mode(int(false, Some(1)), None, most).unwrap(),
             RunMode::Fast
         );
         assert_eq!(
-            run_mode(int(false, Some(1_001)), None).unwrap(),
+            run_mode(int(false, Some(1_000)), None, most).unwrap(),
+            RunMode::Fast
+        );
+        assert_eq!(
+            run_mode(int(false, Some(1_001)), None, most).unwrap(),
             RunMode::Best
         );
         assert_eq!(
-            run_mode(int(false, Some(10_000)), None).unwrap(),
+            run_mode(int(false, Some(10_000)), None, most).unwrap(),
             RunMode::Best
         );
         for (asked, code) in [
@@ -1389,8 +1407,27 @@ mod tests {
             (int(false, Some(10_001)), ErrorCode::UnsupportedRequest),
             (int(false, None), ErrorCode::UnsupportedRequest),
         ] {
-            assert_eq!(run_mode(asked, None).unwrap_err().code, code, "{asked:?}");
+            assert_eq!(
+                run_mode(asked, None, most).unwrap_err().code,
+                code,
+                "{asked:?}"
+            );
         }
+        let past = run_mode(int(false, Some(10_001)), None, most).unwrap_err();
+        assert_eq!(
+            past.fields["setting"],
+            Detail::text("max_relational_context_rows")
+        );
+        assert_eq!(
+            past.fields["env"],
+            Detail::text("SDM_CLIENT_MAX_RELATIONAL_CONTEXT_ROWS")
+        );
+        // A raised limit admits more, as a best run.
+        assert_eq!(
+            run_mode(int(false, Some(200_000)), None, 200_000).unwrap(),
+            RunMode::Best
+        );
+        assert!(run_mode(int(false, Some(200_001)), None, 200_000).is_err());
     }
 
     #[test]
@@ -1398,6 +1435,11 @@ mod tests {
         let some = |n: u128| int(false, Some(n));
         assert!(hops(None, None).is_ok());
         assert!(hops(some(6), None).is_ok());
+        // No most: past the six an earlier endpoint read is taken.
+        assert!(hops(some(7), None).is_ok());
+        assert!(hops(some(1_000), None).is_ok());
+        assert!(hops(None, some(12)).is_ok());
+        assert!(hops(int(false, None), None).is_ok());
         assert!(
             hops(some(9), some(2)).is_ok(),
             "the neighbors' length counts"
@@ -1413,14 +1455,6 @@ mod tests {
         assert_eq!(
             hops(int(true, Some(1)), None).unwrap_err().code,
             ErrorCode::InvalidRequest
-        );
-        assert_eq!(
-            hops(some(7), None).unwrap_err().code,
-            ErrorCode::UnsupportedRequest
-        );
-        assert_eq!(
-            hops(int(false, None), None).unwrap_err().code,
-            ErrorCode::UnsupportedRequest
         );
     }
 
@@ -1942,15 +1976,32 @@ mod tests {
     #[test]
     fn the_hops_are_the_run_mode_s_first_num_hops_two_by_default() {
         let fast = |text: &str| neighbors(&asked(text), RunMode::Fast).unwrap();
-        assert_eq!(fast("{}"), vec![Hop::Keep(32), Hop::Keep(32)]);
+        assert_eq!(fast("{}"), Hops::from(vec![Hop::Keep(32), Hop::Keep(32)]));
         assert_eq!(
             fast(r#"{"num_hops": 4}"#),
-            vec![Hop::Keep(32), Hop::Keep(32), Hop::Keep(8), Hop::Keep(8)]
+            Hops::from(vec![
+                Hop::Keep(32),
+                Hop::Keep(32),
+                Hop::Keep(8),
+                Hop::Keep(8)
+            ])
         );
         assert_eq!(
             neighbors(&asked(r#"{"num_hops": 3}"#), RunMode::Best).unwrap(),
-            vec![Hop::Keep(64), Hop::Keep(64), Hop::Keep(8)]
+            Hops::from(vec![Hop::Keep(64), Hop::Keep(64), Hop::Keep(8)])
         );
+        // Past the six sizes a mode lists, each hop keeps the last.
+        let eight = fast(r#"{"num_hops": 8}"#);
+        let sizes: Vec<Option<Hop>> = (0..9).map(|hop| eight.get(hop).cloned()).collect();
+        let mut expected: Vec<Option<Hop>> = [32, 32, 8, 8, 4, 4, 4, 4]
+            .iter()
+            .map(|&n| Some(Hop::Keep(n)))
+            .collect();
+        expected.push(None);
+        assert_eq!(sizes, expected);
+        // A count far past any graph is read lazily, never laid out.
+        let far = fast(r#"{"num_hops": 100000000000000000000000000000000000000000}"#);
+        assert_eq!(far.get(1_000_000), Some(&Hop::Keep(4)));
         // num_hops named as none, with no num_neighbors, is the engine's
         // TypeError: the caller's.
         let e = neighbors(&asked(r#"{"num_hops": null}"#), RunMode::Fast).unwrap_err();
@@ -1963,7 +2014,7 @@ mod tests {
         let given = asked(r#"{"num_neighbors": [5, 1, 0, 3], "num_hops": 2}"#);
         assert_eq!(
             neighbors(&given, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)]
+            Hops::from(vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)])
         );
         // Numeric bounds keep their sign; caller text retains its origin
         // for capability-driven warehouse lookback arithmetic.
@@ -1986,19 +2037,19 @@ mod tests {
                     RunMode::Fast
                 )
                 .unwrap(),
-                vec![Hop::Keep(4), wanted],
+                Hops::from(vec![Hop::Keep(4), wanted]),
             );
         }
         assert_eq!(hops_ignored(&given), None);
         let wide = asked(r#"{"num_neighbors": [100000000000000000000000000000]}"#);
         assert_eq!(
             neighbors(&wide, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(u64::MAX)]
+            Hops::from(vec![Hop::Keep(u64::MAX)])
         );
         let odd = asked(r#"{"num_neighbors": [2.0, 2.5, true, false, 0.5, -0.0, 0.0, 1e30]}"#);
         assert_eq!(
             neighbors(&odd, RunMode::Fast).unwrap(),
-            vec![
+            Hops::from(vec![
                 Hop::Keep(2),
                 Hop::Keep(2),
                 Hop::Keep(1),
@@ -2007,17 +2058,17 @@ mod tests {
                 Hop::Stop,
                 Hop::Stop,
                 Hop::Keep(u64::MAX)
-            ]
+            ])
         );
         let spelled = asked(r#"{"num_neighbors": ["3", "-0", "0", "2.5"]}"#);
         assert_eq!(
             neighbors(&spelled, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(3), Hop::Keep(0), Hop::Keep(0), Hop::Keep(2)]
+            Hops::from(vec![Hop::Keep(3), Hop::Keep(0), Hop::Keep(0), Hop::Keep(2)])
         );
         let spaced = asked(r#"{"num_neighbors": [" 3 ", "1e1", ".5"]}"#);
         assert_eq!(
             neighbors(&spaced, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(3), Hop::Keep(10), Hop::Keep(0)]
+            Hops::from(vec![Hop::Keep(3), Hop::Keep(10), Hop::Keep(0)])
         );
         for size in ["null", "[1]"] {
             let e = neighbors(
@@ -2037,7 +2088,7 @@ mod tests {
         );
         assert_eq!(
             neighbors(&values, RunMode::Fast).unwrap(),
-            vec![
+            Hops::from(vec![
                 Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
                 Hop::Negative(
                     sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()
@@ -2046,7 +2097,7 @@ mod tests {
                 Hop::Expression("3 OR TRUE".into()),
                 Hop::Expression("nonsense".into()),
                 Hop::Keep(u64::MAX),
-            ]
+            ])
         );
     }
 

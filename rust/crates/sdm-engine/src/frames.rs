@@ -237,6 +237,13 @@ pub enum FrameNeighbor {
 }
 
 impl Snapshot {
+    /// How many rows the snapshot admits across its tables: a walk reaches
+    /// no row it has not reached at any hop past this many, since each hop
+    /// that reaches anything reaches at least one row anew.
+    pub fn rows(&self) -> usize {
+        self.tables.values().map(|table| table.valid.len()).sum()
+    }
+
     /// Physical storage of one admitted column, without scanning or sampling rows.
     pub fn column_type(&self, table: &str, column: &str) -> Result<DataType, CoreError> {
         let rows = &self

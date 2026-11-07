@@ -35,11 +35,14 @@ fn count_error(error: tabular::CountError) -> TabularCountError {
     }
 }
 
-pub(crate) fn decide(input: DecideTabularContext) -> TabularContextDecision {
+pub(crate) fn decide(
+    input: DecideTabularContext,
+    limits: &sdm_contract::limits::Limits,
+) -> TabularContextDecision {
     match tabular::context_decision(
         input.population,
         input.requested,
-        sdm_request::predict::CONTEXT_ROWS_MAX,
+        usize::try_from(limits.max_tabular_context_rows).unwrap_or(usize::MAX),
     ) {
         Ok(value) => TabularContextDecision::Selected {
             wanted: value.wanted,
@@ -80,7 +83,10 @@ pub(crate) fn order(
 
 /// Fuse ordinary expansion, exclusion, target filtering and capacity policy.
 /// Sampling remains after native warning delivery and uses its reached count.
-pub(crate) fn select(input: SelectTabularRows) -> Result<SelectedTabularRows, CoreError> {
+pub(crate) fn select(
+    input: SelectTabularRows,
+    limits: &sdm_contract::limits::Limits,
+) -> Result<SelectedTabularRows, CoreError> {
     let (scored, excluded, population) = match input.mode {
         TabularSelectionMode::Indices { source, requested } => {
             let expanded = tabular::expand_keys(&source, &requested);
@@ -108,10 +114,13 @@ pub(crate) fn select(input: SelectTabularRows) -> Result<SelectedTabularRows, Co
         excluded,
     })?
     .positions;
-    let context = decide(DecideTabularContext {
-        population: candidates.len(),
-        requested: input.requested_context,
-    });
+    let context = decide(
+        DecideTabularContext {
+            population: candidates.len(),
+            requested: input.requested_context,
+        },
+        limits,
+    );
     Ok(SelectedTabularRows::Selected {
         scored,
         candidates,

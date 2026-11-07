@@ -57,16 +57,13 @@ def _Gathered(*payloads):
 def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     """A pin, not a probe.
 
-    These numbers were read from the relational NIM. This asserts they have
-    not drifted in the client, which is all it can do offline. The live suites
-    check that the endpoint still agrees.
+    These numbers were read from the relational NIM, as the defaults of the
+    settings a deployment may raise. This asserts they have not drifted in
+    the client, which is all it can do offline. The live suites check that
+    the endpoint still agrees. The sizes a deployment sets are settings,
+    whose defaults the core pins; no most is set on tables or hops.
     """
-    assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
-    assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
-    assert RELATIONAL_LIMITS['hops_max'] == 6
-    assert RELATIONAL_LIMITS['tables_max'] == 15
+    assert RELATIONAL_LIMITS == {'context_rows_fast': 1_000, 'classes_max': 10}
 
 
 @pytest.mark.parametrize('bad', ['2', True])
@@ -247,7 +244,7 @@ def test_the_context_cap_is_held_to_each_call_and_not_their_sum(over):
     """Both sides of the cap, because only the allowed one was covered: a
     per-call count that always read nought would have passed that alone."""
 
-    cap = RELATIONAL_LIMITS['context_rows_max']
+    cap = 10_000
     each = cap + 1 if over else cap // 2 + 1
     request = gathered_in_calls(calls=2, context_rows=each)
     if not over:

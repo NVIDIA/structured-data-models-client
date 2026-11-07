@@ -1198,7 +1198,7 @@ impl<T> Given<T> {
 /// timestamp with no zone, `datetime_zoned` for one with one, `time`).
 /// Two of one kind and one text are one candidate; a host whose language
 /// holds others equal (two zones of one instant) says so with `repeat`
-///.
+///   .
 /// - `repeat`: a value the host's own language holds equal to one given
 /// before it, left out as the reference's `dict.fromkeys` leaves it out.
 /// A host whose candidates are all scalars sends none, the core keeping

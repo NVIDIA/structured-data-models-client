@@ -39,12 +39,14 @@ public final class SdmClient implements AutoCloseable {
 
   private final HttpTransport transport;
   private final DatabricksServing serving;
+  private final Limits limits;
   private volatile boolean closed;
   private final java.util.Set<FittedModel> sessions = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-  private SdmClient(HttpTransport transport, DatabricksServing serving) {
+  private SdmClient(HttpTransport transport, DatabricksServing serving, Limits limits) {
     this.transport = transport;
     this.serving = serving;
+    this.limits = limits;
   }
 
   /**
@@ -62,7 +64,9 @@ public final class SdmClient implements AutoCloseable {
   public static SdmClient connect(String url, ClientOptions options) {
     Objects.requireNonNull(options, "options");
     return new SdmClient(
-        new HttpTransport(url, options.apiKey(), options.timeout(), options.maxRetries()), null);
+        new HttpTransport(url, options.apiKey(), options.timeout(), options.maxRetries()),
+        null,
+        options.limits());
   }
 
   /**
@@ -71,7 +75,16 @@ public final class SdmClient implements AutoCloseable {
    * endpoint's envelope and reads its every answer and failure.
    */
   public static SdmClient forDatabricksServing(DatabricksServing serving) {
-    return new SdmClient(null, Objects.requireNonNull(serving, "serving"));
+    Objects.requireNonNull(serving, "serving");
+    return new SdmClient(null, serving, serving.limits());
+  }
+
+  /**
+   * The size limits this client holds requests to, as it was opened with them; a setting not set
+   * takes its environment variable, else its default.
+   */
+  public Limits limits() {
+    return limits;
   }
 
   /** Where this client sends requests: a URL, or {@code databricks-serving:<endpoint>}. */
@@ -197,6 +210,10 @@ public final class SdmClient implements AutoCloseable {
 
   Host.Model tabularTransport() {
     return new Host.Model() {
+      public Map<String, Long> limits() {
+        return limits.values();
+      }
+
       public byte[] call(byte[] body) throws Host.TransportFailed, Host.Refused, Host.EndpointFailed {
         return SdmClient.this.call(body);
       }

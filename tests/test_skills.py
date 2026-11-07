@@ -2231,10 +2231,8 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         'Sessions': capabilities.sessions,
     }
     if name == 'tabular':
-        from sdm_client.models import TABULAR_LIMITS
-
         said['Explanations'] = 'explanation' in capabilities.outputs
-        said['Context rows'] = TABULAR_LIMITS['context_rows_max']
+        said['Context rows'] = _defaults()['max_tabular_context_rows']
     assert set(shown) == set(said), (
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
     )
@@ -2259,26 +2257,37 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
 
 
 #: Each row of the limits table in ``skills/relational/SKILL.md``, against the
-#: constant it reports. Every key is spoken for in both directions: a limit the
-#: client enforces and the skill omits is a refusal an agent cannot see coming,
-#: and a row naming no limit is a number nobody is holding to anything.
+#: constant or setting it reports. Every key is spoken for in both
+#: directions: a limit the client enforces and the skill omits is a refusal
+#: an agent cannot see coming, and a row naming no limit is a number nobody is
+#: holding to anything.
 LIMIT_ROWS = {
     'context rows, by default': 'context_rows_fast',
-    'context rows, with `num_context_samples`': 'context_rows_max',
-    'rows scored at once': 'predict_rows_max',
-    'rows scored for a link prediction': (
-        'predict_rows_temporal_link_prediction'
-    ),
-    'tables in the gathered graph': 'tables_max',
-    'hops gathered': 'hops_max',
+    'context rows, with `num_context_samples`': 'max_relational_context_rows',
+    'rows scored at once': 'max_relational_predict_rows',
+    'rows scored for a link prediction': 'max_temporal_link_predict_rows',
+    'bytes one call takes': 'max_request_bytes',
     'classes': 'classes_max',
 }
+
+
+def _defaults() -> dict[str, int]:
+    r"""Each setting's default, by name: the core's table."""
+    from sdm_client.limits import defaults
+
+    return defaults()
 
 
 def test_the_limits_table_is_the_shipped_limits():
     from sdm_client.models import RELATIONAL_LIMITS
 
-    assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
+    relational = {
+        name: default
+        for name, default in _defaults().items()
+        if name != 'max_tabular_context_rows'
+    }
+    enforced = {**RELATIONAL_LIMITS, **relational}
+    assert set(LIMIT_ROWS.values()) == set(enforced), (
         'the client enforces a limit this table does not account for'
     )
     path = SKILLS / 'relational' / 'SKILL.md'
@@ -2291,9 +2300,8 @@ def test_the_limits_table_is_the_shipped_limits():
     )
     for label, key in LIMIT_ROWS.items():
         value = int(only(shown[label][0]).replace(',', ''))
-        assert value == RELATIONAL_LIMITS[key], (
-            f'{label!r} says {value}, the client enforces '
-            f'{RELATIONAL_LIMITS[key]}'
+        assert value == enforced[key], (
+            f'{label!r} says {value}, the client enforces {enforced[key]}'
         )
 
 

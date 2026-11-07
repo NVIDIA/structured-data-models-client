@@ -25,6 +25,7 @@ pub(crate) fn run(
     operation: TestOperation,
     attachments: &mut Attachments,
     facts: HostFacts,
+    limits: sdm_contract::limits::Limits,
     zones: Arc<dyn Zones>,
 ) -> Result<Run, CoreError> {
     let keyed = match &operation {
@@ -106,6 +107,7 @@ pub(crate) fn run(
             sdm_contract::ops::Operation::Materialize(*materialize),
             std::mem::take(attachments),
             facts,
+            limits,
             Arc::clone(&zones),
             true,
         )?,

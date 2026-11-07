@@ -56,6 +56,7 @@ fn fixture(files: &[(&str, &str)]) -> PathBuf {
 
 fn start_message(operation: Operation, roots: &[&Path]) -> Vec<u8> {
     encode(&ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {

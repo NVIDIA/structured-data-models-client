@@ -587,6 +587,7 @@ fn validate(
         "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
     });
     let start = ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::ValidateQuery(ValidateQuery {
@@ -1106,6 +1107,7 @@ fn describe_on(
         "check_keys": spec.check_keys,
     });
     let start = ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::DescribeSource(DescribeSource {
@@ -1263,6 +1265,7 @@ fn edit_schema(
         "edit": serde_json::from_slice::<Value>(&edit_bytes)?,
     }));
     let start = ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::EditSchema(EditSchema {
@@ -1779,6 +1782,7 @@ fn start_materialize(
         "seed": serde_json::to_value(&seed)?,
     }));
     let start = ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: as_op(Materialize {
@@ -2124,6 +2128,7 @@ fn predict(
         },
     }));
     let start = ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::Predict(Predict {

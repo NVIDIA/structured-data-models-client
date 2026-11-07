@@ -522,8 +522,10 @@ def test_the_context_size_refused_is_named_as_the_caller_gave_it() -> None:
     with pytest.raises(StructuredDataError) as past:
         query.materialize(indices=[1], num_context_samples=10_001)
     assert str(past.value).split('] ', 1)[1] == (
-        'num_context_samples is 10,001, and the endpoint accepts at most '
-        '10,000 context rows'
+        'num_context_samples is 10,001, and a request carries at most 10,000 '
+        'context rows; if the endpoint takes more, raise it with '
+        'limits=Limits(max_relational_context_rows=...) or the environment '
+        'variable SDM_CLIENT_MAX_RELATIONAL_CONTEXT_ROWS'
     )
     with pytest.raises(StructuredDataError) as below:
         query.materialize(indices=[1], num_context_samples=-(10**100))

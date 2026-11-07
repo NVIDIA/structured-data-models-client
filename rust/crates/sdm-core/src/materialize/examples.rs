@@ -16,16 +16,17 @@ pub(crate) fn start(
     request: MaterializeExamples,
     attachments: Attachments,
     facts: HostFacts,
+    limits: Limits,
 ) -> Result<Run, CoreError> {
     match &request.source {
         ExampleSource::Sql { provider, .. } => {
             let data = root.data_access(provider)?;
             Ok(Run::with_data(data, move |asker| async move {
-                run(asker, request, attachments, facts).await
+                run(asker, request, attachments, facts, limits).await
             }))
         }
         ExampleSource::Frames { .. } => Ok(Run::new(move |asker| async move {
-            run(asker, request, attachments, facts).await
+            run(asker, request, attachments, facts, limits).await
         })),
     }
 }
@@ -111,6 +112,7 @@ async fn run(
     request: MaterializeExamples,
     mut attachments: Attachments,
     facts: HostFacts,
+    limits: Limits,
 ) -> Result<OperationResult, CoreError> {
     let call: ExampleCall = crate::attached::take_json(&mut attachments, request.input)?;
     if call.rows_per_call == Some(0) {
@@ -151,8 +153,20 @@ async fn run(
     } else {
         None
     };
-    if context.num_rows() > TABLE_ROWS {
-        return Err(refuse("context exceeds the model row limit"));
+    // The instance table holds the context's examples: at most as many as
+    // a request carries (`max_relational_context_rows`).
+    if context.num_rows() as u64 > limits.max_relational_context_rows {
+        return Err(MAX_RELATIONAL_CONTEXT_ROWS.named(
+            CoreError::new(
+                Sentence::ContextPastRows,
+                "the context holds more rows than a request takes",
+            )
+            .with_field("context_rows", count(context.num_rows()))
+            .with_field(
+                "limit",
+                Detail::Scalar(Scalar::UInt64(limits.max_relational_context_rows)),
+            ),
+        ));
     }
     refuse_entities(predict.num_rows() as u64, 1, None)?;
     let seed = call
@@ -301,6 +315,7 @@ async fn run(
             magnitude: Some(context.num_rows() as u128),
         }),
         None,
+        limits.max_relational_context_rows,
     )?;
     options::hops(
         None,
@@ -331,8 +346,12 @@ async fn run(
         } else {
             options::BatchTask::Ordinary
         };
-        usize::try_from(options::rows_one_task_call_scores(call.rows_per_call, task))
-            .map_err(|_| internal("batch size overflow"))?
+        usize::try_from(options::rows_one_task_call_scores(
+            call.rows_per_call,
+            task,
+            &limits,
+        ))
+        .map_err(|_| internal("batch size overflow"))?
     };
     let mut calls = Vec::new();
     for start in (0..predict.num_rows()).step_by(per_call) {
@@ -420,9 +439,6 @@ async fn run(
             Some(seed),
         )
         .await?;
-        if walked.tables.len() > SUBGRAPH_TABLES {
-            return Err(refuse("sampled graph exceeds the model table limit"));
-        }
         if let Some(destination) = destination
             && !walked.tables.iter().any(|t| t.name == destination.name)
         {
@@ -447,7 +463,6 @@ async fn run(
             options: options.clone(),
             statistic: None,
             top_k: None,
-            rows_per_call: per_call,
             lags: vec![],
             float_text: crate::pql::float_text,
         };
@@ -459,6 +474,7 @@ async fn run(
                 forecast,
             },
         )?;
+        payload::check_bytes(&built, limits.max_request_bytes)?;
         calls.push((built.bytes, count as u64));
     }
     let mut calls = calls.into_iter();

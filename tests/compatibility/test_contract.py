@@ -251,6 +251,7 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'explanation-summaries',
         'gradient-explanations',
         'column-explanations',
+        'configurable-limits',
     }
 
 

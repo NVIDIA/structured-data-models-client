@@ -12,6 +12,11 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
+- The size limits the client holds a request to are settings rather than constants, for a deployment configured to take more than the serving layer's defaults.
+  Python `Limits` and Java `Limits` name each one (`max_relational_context_rows`, `max_relational_predict_rows`, `max_temporal_link_predict_rows`, `max_tabular_context_rows`, `max_request_bytes`), taken by `SDMClient(limits=...)`, `materialize(limits=...)`, Java `ClientOptions`, `DatabricksServing` and `MaterializeOptions`.
+  A setting not given takes its environment variable (`SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS` and the like), else today's default.
+  A refusal at one of them names the setting and its environment variable.
+- A call past the most bytes one call takes, or past a Databricks serving endpoint's 16 MB once wrapped, is split into smaller calls, each with the whole context, rather than refused; only a context too large on its own is refused, naming its size and the limit.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned
   RelBench datasets with verified caches, offline mode and declared schema metadata.
 - Python and Java requests and fitted handles expose immutable sanitization reports for in-memory relational preparation, with per-table row exclusions and explicit unavailable/not-applicable states.
@@ -63,6 +68,10 @@ The public API snapshot records this version update; publication remains pending
 - Gradient explanations have no separate one-row or 1,000-context-row client restriction.
   Endpoint capabilities and ordinary request limits still apply.
   The singular raw `result.explanation` view remains supported.
+
+### Removed
+
+- The relational limits of 15 tables in a request's graph and 6 hops, which an earlier endpoint enforced and the current model does not: a request may carry any number of tables and hops of at least one.
 
 ### Fixed
 

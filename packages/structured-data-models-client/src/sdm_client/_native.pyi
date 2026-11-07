@@ -70,6 +70,10 @@ MEANINGS: tuple[tuple[str, str], ...]
 #: Each data type name a host may give a column, and the contract's name
 #: of the type it names: the one table of them.
 DTYPE_NAMES: tuple[tuple[str, str], ...]
+#: Each size limit a caller may set, ``(name, env, default)``: its name,
+#: the environment variable a host reads it from and its default; the one
+#: table of them every host reads.
+LIMITS: tuple[tuple[str, str, int], ...]
 
 class _ArrowStreamExportable(Protocol):
     def __arrow_c_stream__(

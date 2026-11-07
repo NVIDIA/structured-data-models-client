@@ -1244,12 +1244,32 @@ pub fn decide_materialized_task(
     }
 }
 
-/// Select the cap refusal from a reached native comparison, without coercing
-/// its original count owner or reading the candidate frame population.
+/// The context a materialized request asks for held to the most a request
+/// carries (`max_tabular_context_rows`), without reading the candidate
+/// frame population: past it, `UNSUPPORTED_REQUEST` naming the count as it
+/// was given and the setting that raises the limit. A count past `u128` is
+/// past any limit, and one below zero is under it.
 pub fn check_materialized_cap(
     input: sdm_contract::tabular::CheckTabularCap,
-) -> sdm_contract::tabular::CheckedTabularCap {
-    sdm_contract::tabular::CheckedTabularCap {
-        accepted: !input.over_limit,
+    limits: &sdm_contract::limits::Limits,
+) -> Result<sdm_contract::tabular::CheckedTabularCap, CoreError> {
+    let most = limits.max_tabular_context_rows;
+    if let Some(given) = input.requested {
+        let past = match given.parse::<u128>() {
+            Ok(count) => count > u128::from(most),
+            Err(_) => !given.starts_with('-'),
+        };
+        if past {
+            return Err(sdm_contract::limits::MAX_TABULAR_CONTEXT_ROWS.named(
+                CoreError::new(
+                    Sentence::NumContextSamplesPastMost,
+                    "num_context_samples is past the most context a request carries",
+                )
+                .with_field("field", Detail::text("num_context_samples"))
+                .with_field("given", Detail::text(given))
+                .with_field("limit", Detail::Scalar(Scalar::UInt64(most))),
+            ));
+        }
     }
+    Ok(sdm_contract::tabular::CheckedTabularCap { limit: most })
 }

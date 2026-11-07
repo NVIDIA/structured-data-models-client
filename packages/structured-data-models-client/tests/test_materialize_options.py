@@ -372,7 +372,7 @@ def _refusal_of(**options: Any) -> StructuredDataError:
 def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20() -> (
     None
 ):
-    for options in ({'num_context_samples': 10001}, {'num_hops': 7}):
+    for options in ({'num_context_samples': 10001},):
         core = _refusal_of(**options)
         assert core.code == 'UNSUPPORTED_REQUEST', options
         assert type(core).__name__ == 'UnsupportedRequestError', options

@@ -176,8 +176,10 @@ pub(crate) async fn materialize(
     // each question gathers whole, held as many times over as there are
     // questions (`refuse_more_entities_than_fit_in_memory`), past the
     // host's limit, 100,000 where it names none.
-    let per_call =
-        sdm_request::options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
+    let per_call = sdm_request::options::rows_one_call_scores(
+        asked_rows_per_call(inputs.values.as_ref())?,
+        &inputs.limits,
+    );
     let entities = inputs.indices.as_ref().map_or(0, |data| {
         data.batches.iter().map(|b| b.num_rows()).sum::<usize>()
     });
@@ -347,7 +349,7 @@ pub(crate) async fn predict(
         let checked = (|| -> Result<(), CoreError> {
             let payload = crate::predict::payload(payload)?;
             let payloads = [payload];
-            let outputs = prepare(&payloads, &inputs.model, &asked, false)?;
+            let outputs = prepare(&payloads, &inputs.model, &asked, false, &inputs.limits)?;
             preflight(&payloads, &outputs, query, &inputs.model)?;
             body(
                 &payloads[0],

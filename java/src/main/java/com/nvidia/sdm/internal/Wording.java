@@ -118,6 +118,9 @@ public final class Wording {
     spelled.put("nothing", given -> "null");
     spelled.put("optimize_indices", given -> "an index on the key column");
     spelled.put("predict_call", given -> "predict()");
+    spelled.put(
+        "raise_limit",
+        given -> "Limits.builder()." + camel(plainText(given.get(0))) + "(...)");
     spelled.put("raise_most_parts", given -> "a higher limit on the parts one question is asked as");
     spelled.put("result_frame", given -> "PredictionResult.read()");
     spelled.put(
@@ -135,9 +138,6 @@ public final class Wording {
         given ->
             "Name another key with FromSourceOptions.builder().primaryKey(...), or pass"
                 + " checkKeys(false) to skip (one full scan per table).");
-    spelled.put(
-        "smaller_calls",
-        given -> "MaterializeOptions.builder().option(\"rows_per_call\", N)");
     spelled.put("trust_expressions", given -> "semanticModel(name, true)");
     return Map.copyOf(spelled);
   }
@@ -710,6 +710,21 @@ public final class Wording {
   /** A value as it is: text as itself, any other value as its literal. */
   private static String plain(Object value) throws Unfilled {
     return value instanceof String text ? text : literal(value);
+  }
+
+  /** A setting's name as its builder method spells it: {@code max_request_bytes} as {@code maxRequestBytes}. */
+  static String camel(String name) {
+    StringBuilder spelled = new StringBuilder(name.length());
+    boolean upper = false;
+    for (char c : name.toCharArray()) {
+      if (c == '_') {
+        upper = true;
+      } else {
+        spelled.append(upper ? Character.toUpperCase(c) : c);
+        upper = false;
+      }
+    }
+    return spelled.toString();
   }
 
   private static String plainText(Object value) {

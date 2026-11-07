@@ -32,11 +32,12 @@
 //! the answer.
 
 use sdm_contract::error::AnsweredParts;
+use sdm_contract::limits::Limits;
 use sdm_contract::ops::{ModelEndpoint, OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::predict::{
-    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, call_starts,
+    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_past_bytes, call_starts,
     empty, layout, left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight,
     prepare, refused, steps_unexplained, table,
 };
@@ -103,6 +104,8 @@ pub(crate) struct Inputs {
     /// core writes and whose answers it reads; `None` for the
     /// client's own endpoint.
     pub endpoint: Option<ModelEndpoint>,
+    /// The size limits the run holds its calls to.
+    pub limits: Limits,
 }
 
 /// The JSON a request state's payload holds, or a refusal naming where in
@@ -407,6 +410,7 @@ pub(crate) async fn one(
         &inputs.model,
         &inputs.outputs,
         inputs.default_outputs,
+        &inputs.limits,
     )?;
     let computed = if provided_analysis.is_none() && crate::columns::requested(&outputs) {
         Some(crate::columns::compute(&payloads[..1])?)
@@ -429,18 +433,20 @@ pub(crate) async fn one(
             warn(asker, notice);
         }
         // Every call written before the first is sent, as the client's
-        // plan is listed whole (`_numbered_across_calls`), then each call's
-        // rows counted.
+        // plan is listed whole (`_numbered_across_calls`), each split into
+        // smaller calls where it is past the most bytes a call takes, then
+        // each call's rows counted.
+        let mut sent = Vec::with_capacity(payloads.len());
         let mut bodies = Vec::with_capacity(payloads.len());
+        let mut sizes = Vec::with_capacity(payloads.len());
         for (payload, request_id) in payloads.iter().zip(&ids) {
-            bodies.push(body(
-                payload,
-                &inputs.model,
-                request_id,
-                &outputs,
-                &inputs.inference_asked,
-            )?);
+            for (call, body, bytes) in fitted(inputs, &outputs, payload, request_id)? {
+                sent.push(call);
+                bodies.push(body);
+                sizes.push(bytes);
+            }
         }
+        let payloads = sent;
         let mut session = crate::batch_session::Session::eligible(
             &bodies,
             inputs.supports_sessions && inputs.endpoint.is_none(),
@@ -449,8 +455,8 @@ pub(crate) async fn one(
         // Retain only the small scoring half alongside encoded fallback bytes.
         let plans = bodies
             .into_iter()
-            .map(|body| {
-                let bytes = call_bytes(&body)?;
+            .zip(sizes)
+            .map(|(body, bytes)| {
                 let scoring = if session.is_some() {
                     sdm_request::frame_session::subset(
                         &body,
@@ -459,9 +465,9 @@ pub(crate) async fn one(
                 } else {
                     Value::Null
                 };
-                Ok((scoring, bytes))
+                (scoring, bytes)
             })
-            .collect::<Result<Vec<_>, CoreError>>()?;
+            .collect::<Vec<_>>();
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
         for ((payload, (body, bytes)), start) in payloads.iter().zip(plans).zip(starts) {
@@ -505,6 +511,49 @@ pub(crate) async fn one(
         }
     }
     Ok((merged, outputs, scored))
+}
+
+/// `payload`'s calls, each with the body it sends and that body's bytes:
+/// the one call where its body fits the most bytes a call takes
+/// (`max_request_bytes`) and, to a serving endpoint, the most its envelope
+/// takes; else as many calls as it is split into so that each fits
+/// ([`sdm_request::batching::fitted`]), each scoring a run of its rows with
+/// the whole context. Every call of a split carries the payload's request
+/// id, so the bytes weighed are the bytes sent. A call of one row that is
+/// still past a limit is refused, naming the context's bytes.
+fn fitted(
+    inputs: &Inputs,
+    outputs: &[String],
+    payload: &Value,
+    request_id: &str,
+) -> Result<Vec<(Value, Value, Vec<u8>)>, CoreError> {
+    let limit = inputs.limits.max_request_bytes;
+    let mut fit = |call: &Value| -> sdm_request::batching::Fit<(Value, Vec<u8>)> {
+        let body = body(
+            call,
+            &inputs.model,
+            request_id,
+            outputs,
+            &inputs.inference_asked,
+        )?;
+        let bytes = body.to_bytes();
+        if bytes.len() as u64 > limit {
+            return Ok(Err(call_past_bytes(&body, bytes.len() as u64, limit)));
+        }
+        if let Some(ModelEndpoint::ServingEndpoint {
+            name,
+            max_request_bytes,
+        }) = &inputs.endpoint
+            && let (_, Some(past)) = serving::weigh(name, *max_request_bytes, &body)?
+        {
+            return Ok(Err(past));
+        }
+        Ok(Ok((body, bytes)))
+    };
+    Ok(sdm_request::batching::fitted(payload, &mut fit)?
+        .into_iter()
+        .map(|(call, (body, bytes))| (call, body, bytes))
+        .collect())
 }
 
 /// One payload's call, its body as written, sent and its answer laid out;

@@ -54,6 +54,7 @@ fn start(operation: Operation, attachments: Attachments) -> Result<sdm_core::Run
     sdm_core::start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
+            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,

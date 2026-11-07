@@ -1013,7 +1013,6 @@ sentences! {
     ExplanationFastMode = "explanation_fast_mode", E::UnsupportedRequest;
     OptionsUnread = "options_unread", E::UnsupportedRequest;
     OptionsUnreadStatistic = "options_unread_statistic", E::UnsupportedRequest;
-    PayloadSmallerCalls = "payload_smaller_calls", E::InvalidRequest;
     PayloadNoSmallerCall = "payload_no_smaller_call", E::InvalidRequest;
     CallPastEndpoint = "call_past_endpoint", E::InvalidRequest;
     OutputsNone = "outputs_none", E::InvalidRequest;
@@ -1051,8 +1050,6 @@ sentences! {
     StatisticNotARegression = "statistic_not_a_regression", E::InvalidRequest;
     NoHopNumHops = "no_hop_num_hops", E::InvalidRequest;
     NoHopNumNeighbors = "no_hop_num_neighbors", E::InvalidRequest;
-    HopsPastEndpoint = "hops_past_endpoint", E::UnsupportedRequest;
-    HopsPastEndpointUncounted = "hops_past_endpoint_uncounted", E::UnsupportedRequest;
     InferenceRunModeInvalid = "inference_run_mode_invalid", E::InvalidRequest;
     InferenceConfigNotAnObject = "inference_config_not_an_object", E::InvalidRequest;
     InferenceOptionUnknown = "inference_option_unknown", E::InvalidRequest;
@@ -1100,7 +1097,6 @@ sentences! {
     FrameKeyMissingParts = "frame_key_missing_parts", E::InvalidRequest;
     FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
     NotInTable = "not_in_table", E::InvalidRequest;
-    SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;
     Unresolved = "unresolved", E::InvalidRequest;
     AnchorNotATime = "anchor_not_a_time", E::InvalidRequest;
     AnchorBeforeData = "anchor_before_data", E::InvalidRequest;
@@ -1160,6 +1156,7 @@ sentences! {
     LargeTextMaterialize = "large_text_materialize", E::UnsupportedType;
     AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
     InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
+    LimitEnvironmentInvalid = "limit_environment_invalid", E::InvalidConfiguration;
     PartForecastStep = "part_forecast_step", Code::Part;
     PartForecastStepOutran = "part_forecast_step_outran", Code::Part;
     PartRankingCandidate = "part_ranking_candidate", Code::Part;

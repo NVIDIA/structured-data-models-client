@@ -75,6 +75,7 @@ fn core(provider: &Value) -> Value {
 fn recording(leg: &str, core: &Value) -> Value {
     let spec = &core["describe_source"];
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
+        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: host::facts().unwrap(),
         operation: Operation::DescribeSource(DescribeSource {

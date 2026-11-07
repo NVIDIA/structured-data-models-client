@@ -48,6 +48,7 @@ public final class MaterializeOptions {
   private final Object contextAnchorTime;
   private final boolean contextAnchorGiven;
   private final Map<String, Object> options;
+  private final Limits limits;
 
   private MaterializeOptions(Builder builder) {
     this.model = builder.model;
@@ -59,6 +60,7 @@ public final class MaterializeOptions {
     this.contextAnchorTime = builder.contextAnchorTime;
     this.contextAnchorGiven = builder.contextAnchorGiven;
     this.options = Collections.unmodifiableMap(new LinkedHashMap<>(builder.options));
+    this.limits = builder.limits;
   }
 
   public static Builder builder() {
@@ -93,6 +95,10 @@ public final class MaterializeOptions {
     return options;
   }
 
+  Limits limits() {
+    return limits;
+  }
+
   /** Builds {@link MaterializeOptions}. */
   public static final class Builder {
     private String model;
@@ -104,6 +110,7 @@ public final class MaterializeOptions {
     private Object contextAnchorTime;
     private boolean contextAnchorGiven;
     private final Map<String, Object> options = new LinkedHashMap<>();
+    private Limits limits = Limits.defaults();
 
     private Builder() {}
 
@@ -205,6 +212,15 @@ public final class MaterializeOptions {
     /** How many entities one call scores ({@code rows_per_call}). */
     public Builder rowsPerCall(long rows) {
       return option("rows_per_call", rows);
+    }
+
+    /**
+     * The size limits the request is gathered for: pass the {@link SdmClient#limits} of the
+     * client it will be sent with ({@link Limits}).
+     */
+    public Builder limits(Limits limits) {
+      this.limits = Objects.requireNonNull(limits, "limits");
+      return this;
     }
 
     public MaterializeOptions build() {
