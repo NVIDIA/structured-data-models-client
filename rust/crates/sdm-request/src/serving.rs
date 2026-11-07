@@ -66,41 +66,6 @@ const STATUS_KEPT: &[u16] = &[400, 401, 403, 404, 409, 429, 504];
 /// rows is split to fit before it gets here ([`crate::batching`]), so the
 /// refusal names the context every call carries.
 pub fn envelope(endpoint: &str, max_request_bytes: u64, call: &[u8]) -> Result<Vec<u8>, CoreError> {
-    let read = readable(call)?;
-    let out = wrapped(&read)?;
-    let size = out.len() as u64;
-    if size > max_request_bytes {
-        let context = crate::batching::predict_slice(&read, 0..0)
-            .and_then(|context| wrapped(&context))
-            .map_or(size, |context| context.len() as u64);
-        return Err(CoreError::new(
-            Sentence::ServingPastLimit,
-            "the call is larger than the serving endpoint takes",
-        )
-        .with_field("endpoint", Detail::text(endpoint))
-        .with_field("bytes", count(size))
-        .with_field("context_bytes", count(context))
-        .with_field("limit", count(max_request_bytes)));
-    }
-    Ok(out)
-}
-
-/// How many bytes the endpoint's envelope of `call` is, as [`envelope`]
-/// writes and weighs it.
-pub fn envelope_len(call: &Value) -> Result<u64, CoreError> {
-    if !call.all_finite() {
-        return Err(CoreError::new(
-            Sentence::ServingValueNotJson,
-            "the call carries a value with no JSON form",
-        )
-        .with_field("reason", Detail::text("out_of_range_float")));
-    }
-    Ok(wrapped(call)?.len() as u64)
-}
-
-/// The call read back as the envelope carries it, refused where a value
-/// has no JSON form.
-fn readable(call: &[u8]) -> Result<Value, CoreError> {
     let read = json::read(call).map_err(|e| {
         CoreError::new(
             Sentence::ServingValueNotJson,
@@ -108,14 +73,42 @@ fn readable(call: &[u8]) -> Result<Value, CoreError> {
         )
         .with_field("reason", Detail::text(e.category))
     })?;
-    if !read.all_finite() {
+    let (out, past) = weigh(endpoint, max_request_bytes, &read)?;
+    past.map_or(Ok(out), Err)
+}
+
+/// The envelope of `call`, as [`envelope`] writes it, and where it is more
+/// than `max_request_bytes`, its refusal (`ServingPastLimit`), naming the
+/// context's bytes too; a value with no JSON form is refused outright.
+pub fn weigh(
+    endpoint: &str,
+    max_request_bytes: u64,
+    call: &Value,
+) -> Result<(Vec<u8>, Option<CoreError>), CoreError> {
+    if !call.all_finite() {
         return Err(CoreError::new(
             Sentence::ServingValueNotJson,
             "the call carries a value with no JSON form",
         )
         .with_field("reason", Detail::text("out_of_range_float")));
     }
-    Ok(read)
+    let out = wrapped(call)?;
+    let size = out.len() as u64;
+    if size <= max_request_bytes {
+        return Ok((out, None));
+    }
+    let context = crate::batching::predict_slice(call, 0..0)
+        .and_then(|context| wrapped(&context))
+        .map_or(size, |context| context.len() as u64);
+    let past = CoreError::new(
+        Sentence::ServingPastLimit,
+        "the call is larger than the serving endpoint takes",
+    )
+    .with_field("endpoint", Detail::text(endpoint))
+    .with_field("bytes", count(size))
+    .with_field("context_bytes", count(context))
+    .with_field("limit", count(max_request_bytes));
+    Ok((out, Some(past)))
 }
 
 /// The envelope's bytes of a readable call.

@@ -831,7 +831,7 @@ pub(crate) async fn predict(
         part.columns = analysis;
         return crate::predict::finish(&asker, part, bound.outputs);
     }
-    let bytes = crate::predict::one_call_bytes(&payload, &limits)?;
+    let bytes = predict::call_bytes(&payload, limits.max_request_bytes)?;
     if deferred_options {
         use sdm_contract::direct::native_response::{NativeDirectCall, PreparedDirectCall};
         let payload = asker.attach(Attachment::Bytes(payload.to_bytes()))?;

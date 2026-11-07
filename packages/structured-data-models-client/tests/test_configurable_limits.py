@@ -22,53 +22,31 @@ from test_limits_and_absent_outputs import gathered, query, table
 from test_tabular_direct_core import Endpoint, client
 
 from sdm_client import KumoTabular, Limits, Request, StructuredDataError
-from sdm_client.limits import settings
 
-DEFAULTS = {
-    'max_relational_context_rows': 10_000,
-    'max_relational_predict_rows': 10_000,
-    'max_temporal_link_predict_rows': 200,
-    'max_tabular_context_rows': 10_000,
-    'max_request_bytes': 30 * 1024 * 1024,
-}
+SETTINGS = (
+    'max_relational_context_rows',
+    'max_relational_predict_rows',
+    'max_temporal_link_predict_rows',
+    'max_tabular_context_rows',
+    'max_request_bytes',
+)
 
 
 @pytest.fixture(autouse=True)
 def _no_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    for setting in settings():
-        monkeypatch.delenv(setting.env, raising=False)
-
-
-def test_the_defaults_are_the_serving_layers() -> None:
-    assert {s.name: s.default for s in settings()} == DEFAULTS
-    assert {s.name: s.env for s in settings()} == {
-        name: f'SDM_CLIENT_{name.upper()}' for name in DEFAULTS
-    }
-    assert Limits().resolved() == DEFAULTS
-
-
-def test_an_argument_comes_before_the_environment_before_the_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv('SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS', '200000')
-    monkeypatch.setenv('SDM_CLIENT_MAX_REQUEST_BYTES', '64_000_000')
-    from_env = Limits().resolved()
-    assert from_env['max_tabular_context_rows'] == 200_000
-    assert from_env['max_request_bytes'] == 64_000_000
-    assert from_env['max_relational_context_rows'] == 10_000
-    given = Limits(max_tabular_context_rows=50_000).resolved()
-    assert given['max_tabular_context_rows'] == 50_000
+    for name in SETTINGS:
+        monkeypatch.delenv(f'SDM_CLIENT_{name.upper()}', raising=False)
 
 
 @pytest.mark.parametrize('text', ['0', '-1', '2.5', 'lots', '1e6'])
 def test_an_environment_variable_that_is_not_a_whole_number_is_refused(
     monkeypatch: pytest.MonkeyPatch, text: str
 ) -> None:
-    monkeypatch.setenv('SDM_CLIENT_MAX_RELATIONAL_PREDICT_ROWS', text)
+    monkeypatch.setenv('SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS', text)
     with pytest.raises(StructuredDataError) as refused:
-        Limits().resolved()
+        query(table(20)).materialize(indices=[0, 1])
     assert refused.value.code == 'INVALID_CONFIGURATION'
-    assert 'SDM_CLIENT_MAX_RELATIONAL_PREDICT_ROWS' in str(refused.value)
+    assert 'SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS' in str(refused.value)
 
 
 @pytest.mark.parametrize('value', [0, -5, True, 2.5, '10'])
@@ -113,19 +91,22 @@ def test_materialize_samples_to_a_raised_tabular_limit(
     schema = table(12_000)
     with pytest.raises(StructuredDataError):
         query(schema).materialize(indices=[0, 1], num_context_samples=11_000)
-    request = query(schema).materialize(
-        indices=[0, 1],
-        num_context_samples=11_000,
-        limits=Limits(max_tabular_context_rows=20_000),
-    )
-    assert request.context_rows == 11_000
-    monkeypatch.setenv('SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS', '20000')
+    monkeypatch.setenv('SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS', '20_000')
     assert (
         query(schema)
         .materialize(indices=[0, 1], num_context_samples=11_000)
         .context_rows
         == 11_000
     )
+    # An argument comes before the environment variable.
+    with pytest.raises(StructuredDataError) as refused:
+        query(schema).materialize(
+            indices=[0, 1],
+            num_context_samples=11_000,
+            limits=Limits(max_tabular_context_rows=10_500),
+        )
+    assert 'at most 10,500 context rows' in str(refused.value)
+    assert 'SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS' in str(refused.value)
 
 
 def test_a_raised_relational_predict_limit_and_a_lowered_one_set_the_calls() -> (
@@ -211,7 +192,7 @@ def test_a_context_too_large_on_its_own_is_refused_naming_the_setting() -> None:
     with pytest.raises(StructuredDataError) as refused:
         _sent(request, Limits(max_request_bytes=1_000))
     said = str(refused.value)
-    assert 'context alone' in said
+    assert 'of them the context' in said
     assert 'SDM_CLIENT_MAX_REQUEST_BYTES' in said
     assert 'max_request_bytes' in said
 

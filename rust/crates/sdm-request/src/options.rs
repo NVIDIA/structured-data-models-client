@@ -615,12 +615,6 @@ impl Hops {
     }
 }
 
-impl PartialEq<Vec<Hop>> for Hops {
-    fn eq(&self, other: &Vec<Hop>) -> bool {
-        self.more == 0 && &self.listed == other
-    }
-}
-
 impl From<Vec<Hop>> for Hops {
     fn from(listed: Vec<Hop>) -> Self {
         Hops { listed, more: 0 }
@@ -1982,14 +1976,19 @@ mod tests {
     #[test]
     fn the_hops_are_the_run_mode_s_first_num_hops_two_by_default() {
         let fast = |text: &str| neighbors(&asked(text), RunMode::Fast).unwrap();
-        assert_eq!(fast("{}"), vec![Hop::Keep(32), Hop::Keep(32)]);
+        assert_eq!(fast("{}"), Hops::from(vec![Hop::Keep(32), Hop::Keep(32)]));
         assert_eq!(
             fast(r#"{"num_hops": 4}"#),
-            vec![Hop::Keep(32), Hop::Keep(32), Hop::Keep(8), Hop::Keep(8)]
+            Hops::from(vec![
+                Hop::Keep(32),
+                Hop::Keep(32),
+                Hop::Keep(8),
+                Hop::Keep(8)
+            ])
         );
         assert_eq!(
             neighbors(&asked(r#"{"num_hops": 3}"#), RunMode::Best).unwrap(),
-            vec![Hop::Keep(64), Hop::Keep(64), Hop::Keep(8)]
+            Hops::from(vec![Hop::Keep(64), Hop::Keep(64), Hop::Keep(8)])
         );
         // Past the six sizes a mode lists, each hop keeps the last.
         let eight = fast(r#"{"num_hops": 8}"#);
@@ -2015,7 +2014,7 @@ mod tests {
         let given = asked(r#"{"num_neighbors": [5, 1, 0, 3], "num_hops": 2}"#);
         assert_eq!(
             neighbors(&given, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)]
+            Hops::from(vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)])
         );
         // Numeric bounds keep their sign; caller text retains its origin
         // for capability-driven warehouse lookback arithmetic.
@@ -2038,19 +2037,19 @@ mod tests {
                     RunMode::Fast
                 )
                 .unwrap(),
-                vec![Hop::Keep(4), wanted],
+                Hops::from(vec![Hop::Keep(4), wanted]),
             );
         }
         assert_eq!(hops_ignored(&given), None);
         let wide = asked(r#"{"num_neighbors": [100000000000000000000000000000]}"#);
         assert_eq!(
             neighbors(&wide, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(u64::MAX)]
+            Hops::from(vec![Hop::Keep(u64::MAX)])
         );
         let odd = asked(r#"{"num_neighbors": [2.0, 2.5, true, false, 0.5, -0.0, 0.0, 1e30]}"#);
         assert_eq!(
             neighbors(&odd, RunMode::Fast).unwrap(),
-            vec![
+            Hops::from(vec![
                 Hop::Keep(2),
                 Hop::Keep(2),
                 Hop::Keep(1),
@@ -2059,17 +2058,17 @@ mod tests {
                 Hop::Stop,
                 Hop::Stop,
                 Hop::Keep(u64::MAX)
-            ]
+            ])
         );
         let spelled = asked(r#"{"num_neighbors": ["3", "-0", "0", "2.5"]}"#);
         assert_eq!(
             neighbors(&spelled, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(3), Hop::Keep(0), Hop::Keep(0), Hop::Keep(2)]
+            Hops::from(vec![Hop::Keep(3), Hop::Keep(0), Hop::Keep(0), Hop::Keep(2)])
         );
         let spaced = asked(r#"{"num_neighbors": [" 3 ", "1e1", ".5"]}"#);
         assert_eq!(
             neighbors(&spaced, RunMode::Fast).unwrap(),
-            vec![Hop::Keep(3), Hop::Keep(10), Hop::Keep(0)]
+            Hops::from(vec![Hop::Keep(3), Hop::Keep(10), Hop::Keep(0)])
         );
         for size in ["null", "[1]"] {
             let e = neighbors(
@@ -2089,7 +2088,7 @@ mod tests {
         );
         assert_eq!(
             neighbors(&values, RunMode::Fast).unwrap(),
-            vec![
+            Hops::from(vec![
                 Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
                 Hop::Negative(
                     sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()
@@ -2098,7 +2097,7 @@ mod tests {
                 Hop::Expression("3 OR TRUE".into()),
                 Hop::Expression("nonsense".into()),
                 Hop::Keep(u64::MAX),
-            ]
+            ])
         );
     }
 

@@ -2273,9 +2273,9 @@ LIMIT_ROWS = {
 
 def _defaults() -> dict[str, int]:
     r"""Each setting's default, by name: the core's table."""
-    from sdm_client.limits import settings
+    from sdm_client.limits import defaults
 
-    return {setting.name: setting.default for setting in settings()}
+    return defaults()
 
 
 def test_the_limits_table_is_the_shipped_limits():

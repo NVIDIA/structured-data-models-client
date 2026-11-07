@@ -21,14 +21,12 @@ import pytest
 from test_materialize_options import _materialize
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.limits import settings
+from sdm_client.limits import defaults
 from sdm_client.materializers.relational import RelationalMaterializer
 from sdm_client.models import RELATIONAL_LIMITS
 
 FAST = RELATIONAL_LIMITS['context_rows_fast']
-MAX = {setting.name: setting.default for setting in settings()}[
-    'max_relational_context_rows'
-]
+MAX = defaults()['max_relational_context_rows']
 
 
 # --- which value goes on the wire -----------------------------------------

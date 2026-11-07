@@ -20,7 +20,7 @@ or set its environment variable, ``SDM_CLIENT_`` and the setting's name in
 capitals, such as ``SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS=200000``. A value
 passed to :class:`Limits` comes before the environment's, which comes before
 the default. The names, variables and defaults are the core's, the one table
-every host reads (:data:`SETTINGS`), and the core resolves them.
+every host reads, and the core resolves them.
 """
 
 from __future__ import annotations
@@ -30,25 +30,9 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, fields
-from typing import Any, NamedTuple
+from typing import Any
 
 from sdm_client.errors import StructuredDataError
-
-
-class Setting(NamedTuple):
-    r"""One limit a caller may set: its name, the environment variable it is
-    read from, its default and what it holds a request to."""
-
-    name: str
-    env: str
-    default: int
-    about: str
-
-
-def _settings() -> tuple[Setting, ...]:
-    from sdm_client._rust.run import native
-
-    return tuple(Setting(*setting) for setting in native().LIMITS)
 
 
 @dataclass(frozen=True)
@@ -109,15 +93,17 @@ class Limits:
         r"""What a run's start carries of these limits: the values set here,
         and the text of each setting's environment variable that is set,
         read now, which the core resolves (contract ``GivenLimits``)."""
+        from sdm_client._rust.run import native
+
         given = {
             field.name: getattr(self, field.name)
             for field in fields(self)
             if getattr(self, field.name) is not None
         }
         environment = {
-            setting.env: os.environ[setting.env]
-            for setting in _settings()
-            if setting.env in os.environ
+            env: os.environ[env]
+            for _, env, _ in native().LIMITS
+            if env in os.environ
         }
         start: dict[str, Any] = {}
         if given:
@@ -126,27 +112,12 @@ class Limits:
             start['environment'] = environment
         return start
 
-    def resolved(self) -> dict[str, int]:
-        r"""What these limits come to, each setting by its name: the value
-        set here, else its environment variable's, else its default, as the
-        core resolves them for every request.
 
-        Raises:
-            StructuredDataError: With code ``INVALID_CONFIGURATION``, if an
-                environment variable is not a whole number of at least 1.
-        """
-        from sdm_client._rust import direct
+def defaults() -> dict[str, int]:
+    r"""Each setting's default, by name: the core's one table of them."""
+    from sdm_client._rust.run import native
 
-        with limits_in_effect(self):
-            answer = direct._call('resolve_limits', {})
-        return {
-            setting.name: int(answer[setting.name]) for setting in _settings()
-        }
-
-
-def settings() -> tuple[Setting, ...]:
-    r"""Every limit a caller may set, in order: the core's one table."""
-    return _settings()
+    return {name: default for name, _, default in native().LIMITS}
 
 
 _IN_EFFECT: contextvars.ContextVar[Limits | None] = contextvars.ContextVar(

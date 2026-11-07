@@ -60,15 +60,10 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     These numbers were read from the relational NIM, as the defaults of the
     settings a deployment may raise. This asserts they have not drifted in
     the client, which is all it can do offline. The live suites check that
-    the endpoint still agrees. No most is set on tables or hops.
+    the endpoint still agrees. The sizes a deployment sets are settings,
+    whose defaults the core pins; no most is set on tables or hops.
     """
-    from sdm_client.limits import settings
-
-    defaults = {setting.name: setting.default for setting in settings()}
     assert RELATIONAL_LIMITS == {'context_rows_fast': 1_000, 'classes_max': 10}
-    assert defaults['max_relational_context_rows'] == 10_000
-    assert defaults['max_relational_predict_rows'] == 10_000
-    assert defaults['max_temporal_link_predict_rows'] == 200
 
 
 @pytest.mark.parametrize('bad', ['2', True])

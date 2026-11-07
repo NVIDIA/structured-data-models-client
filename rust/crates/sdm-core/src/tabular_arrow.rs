@@ -402,7 +402,7 @@ async fn predict(
         part.columns = analysis;
         return crate::predict::finish(asker, part, prepared.bound.outputs);
     }
-    let bytes = crate::predict::one_call_bytes(&payload, limits)?;
+    let bytes = sdm_request::predict::call_bytes(&payload, limits.max_request_bytes)?;
     let answer = crate::predict::call_answer(asker, bytes, input.endpoint.as_ref()).await?;
     finish(asker, payload, answer, prepared.bound.outputs, analysis)
 }

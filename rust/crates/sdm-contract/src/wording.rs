@@ -940,10 +940,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"the context alone is too large to send: a call carrying it and one row to score is {bytes:,} bytes, {context_bytes:,} of them the context, and a call takes at most {limit:,}. Calls past the limit are split into smaller ones, but the context is sent whole with every call, so what comes down is num_context_samples, num_neighbors or the columns the graph carries; or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
         ),
         S::CallPastEndpoint => said(
-            r#"the context alone is too large to send: a call carrying it is {bytes:,} bytes, {context_bytes:,} of them the context, and a call takes at most {limit:,}. Calls past the limit are split into smaller ones, but the context is sent whole with every call, so reduce the context gathered (num_context_samples), the neighbourhood sampled, or the tables and columns in the graph; or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
-        ),
-        S::DirectCallPastBytes => said(
-            r#"this request is {bytes:,} bytes, {context_bytes:,} of them the context, and a call takes at most {limit:,}. A single-table request is sent as one call, so score fewer rows at a time or carry a smaller context; or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
+            r#"this call is {bytes:,} bytes, {context_bytes:,} of them the context, and a call takes at most {limit:,}. A relational call scoring several rows is split into smaller ones, but the context is sent whole with every call, and a single-table request or a pinned context is sent as one call; so carry a smaller context (num_context_samples, the neighbourhood sampled, or the tables and columns in the graph), or score fewer rows at a time; or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
         ),
         S::OutputsNone => said(r#"outputs must name at least one field"#),
         S::NotFinite => said(
@@ -1336,9 +1333,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::LimitEnvironmentInvalid => said(
             r#"the environment variable {env} is {given!r}, and {setting} takes a whole number of at least 1"#,
         ),
-        S::LimitGivenBelowOne => {
-            said(r#"{setting} is {given:,}, and it takes a whole number of at least 1"#)
-        }
         S::PartForecastStep => {
             said(r#"This is forecast step {forecast_step} of {forecast_steps}."#)
         }

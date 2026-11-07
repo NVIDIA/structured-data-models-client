@@ -19,6 +19,7 @@ use sdm_contract::{CoreError, Sentence};
 use sdm_wire::json::Value;
 
 use crate::payload::INSTANCE_ID;
+use crate::predict::predict_rows;
 
 fn bad(reason: &str) -> CoreError {
     CoreError::new(
@@ -28,7 +29,7 @@ fn bad(reason: &str) -> CoreError {
 }
 
 /// The rows a table of the payload holds: its column names and rows.
-fn table_rows(table: &Value) -> Option<(Vec<&str>, &[Value])> {
+pub(crate) fn table_rows(table: &Value) -> Option<(Vec<&str>, &[Value])> {
     let Some(Value::Array(columns)) = table.get("columns") else {
         return None;
     };
@@ -37,12 +38,6 @@ fn table_rows(table: &Value) -> Option<(Vec<&str>, &[Value])> {
     };
     let names: Vec<&str> = columns.iter().filter_map(Value::as_text).collect();
     (names.len() == columns.len()).then_some((names, rows.as_slice()))
-}
-
-/// How many rows the payload scores: its predict half's instance rows.
-pub fn predict_rows(payload: &Value) -> Option<usize> {
-    let table = payload.get("predict")?.get("instance_table")?;
-    table_rows(table).map(|(_, rows)| rows.len())
 }
 
 /// An instance id as a whole number, where it is one.
@@ -159,37 +154,43 @@ pub fn predict_slice(payload: &Value, range: Range<usize>) -> Result<Value, Core
     Ok(sliced)
 }
 
-/// The calls `payload` is asked as so that each fits, in order, each its
-/// rows' range: the whole where it fits (`fits`, given the payload a call
-/// would carry), else halves, each split again until it fits. A call of one
-/// row that does not fit cannot be split, and is refused by `refuse`, given
-/// that one row's payload: the context is sent with every call.
-pub fn fitted(
+/// What a call comes to ([`fitted`]): what it carries where it fits, or the
+/// refusal of a call too large; the outer error ends the split.
+pub type Fit<T> = Result<Result<T, CoreError>, CoreError>;
+
+/// The calls `payload` is asked as so that each fits, in order, each with
+/// what `fit` made of it: the whole where it fits, else halves, each split
+/// again until it fits. `fit` answers what a call carries, or the refusal
+/// of a call too large (the inner error); any other error ends the split. A
+/// call of one row too large cannot be split, and its refusal is returned:
+/// the context is sent with every call.
+pub fn fitted<T>(
     payload: &Value,
-    fits: &mut dyn FnMut(&Value) -> Result<bool, CoreError>,
-    refuse: &mut dyn FnMut(&Value) -> CoreError,
-) -> Result<Vec<(Range<usize>, Value)>, CoreError> {
-    if fits(payload)? {
-        let rows = predict_rows(payload).unwrap_or(0);
-        return Ok(vec![(0..rows, payload.clone())]);
-    }
-    let rows = predict_rows(payload).ok_or_else(|| bad("the rows scored are unread"))?;
+    fit: &mut dyn FnMut(&Value) -> Fit<T>,
+) -> Result<Vec<(Value, T)>, CoreError> {
+    let past = match fit(payload)? {
+        Ok(fitted) => return Ok(vec![(payload.clone(), fitted)]),
+        Err(past) => past,
+    };
+    let rows = match predict_rows(payload) {
+        Some(rows) if rows > 1 => rows,
+        _ => return Err(past),
+    };
     let mut done = Vec::new();
-    // Ranges still to fit, the first next.
-    let mut pending: Vec<Range<usize>> = Vec::new();
-    pending.push(0..rows);
+    // Ranges still to fit, the first next; the whole is known not to.
+    let middle = rows / 2;
+    let mut pending: Vec<Range<usize>> = vec![middle..rows, 0..middle];
     while let Some(range) = pending.pop() {
         let sliced = predict_slice(payload, range.clone())?;
-        if range.len() != rows && fits(&sliced)? {
-            done.push((range, sliced));
-            continue;
+        match fit(&sliced)? {
+            Ok(fitted) => done.push((sliced, fitted)),
+            Err(past) if range.len() <= 1 => return Err(past),
+            Err(_) => {
+                let middle = range.start + range.len() / 2;
+                pending.push(middle..range.end);
+                pending.push(range.start..middle);
+            }
         }
-        if range.len() <= 1 {
-            return Err(refuse(&sliced));
-        }
-        let middle = range.start + range.len() / 2;
-        pending.push(middle..range.end);
-        pending.push(range.start..middle);
     }
     Ok(done)
 }
@@ -257,43 +258,36 @@ mod tests {
         value.to_bytes().len()
     }
 
+    /// The rows each call of `whole` scores where a call takes `most` bytes.
+    fn calls(whole: &Value, most: usize) -> Result<Vec<usize>, CoreError> {
+        let mut fit = |p: &Value| {
+            Ok(if size(p) <= most {
+                Ok(())
+            } else {
+                Err(CoreError::new(Sentence::Internal, "refused"))
+            })
+        };
+        Ok(fitted(whole, &mut fit)?
+            .iter()
+            .map(|(call, ())| predict_rows(call).unwrap())
+            .collect())
+    }
+
     #[test]
     fn a_call_that_fits_is_one_call_and_one_past_is_halved_until_each_fits() {
         let whole = payload();
         let one = size(&predict_slice(&whole, 0..1).unwrap());
         let two = size(&predict_slice(&whole, 0..2).unwrap());
         let all = size(&whole);
-        let mut refuse = |_: &Value| CoreError::new(Sentence::Internal, "refused");
-        let calls = fitted(&whole, &mut |p| Ok(size(p) <= all), &mut refuse).unwrap();
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].0, 0..4);
+        assert_eq!(calls(&whole, all).unwrap(), [4]);
         // One byte under the whole: two calls of two rows.
-        let calls = fitted(&whole, &mut |p| Ok(size(p) < all), &mut refuse).unwrap();
-        let ranges: Vec<_> = calls.iter().map(|(r, _)| r.clone()).collect();
-        assert_eq!(ranges, [0..2, 2..4]);
-        // Exactly two rows' worth: still two calls; one byte under it: four.
-        let ranges: Vec<_> = fitted(&whole, &mut |p| Ok(size(p) <= two), &mut refuse)
-            .unwrap()
-            .into_iter()
-            .map(|(r, _)| r)
-            .collect();
-        assert_eq!(ranges, [0..2, 2..4]);
-        let ranges: Vec<_> = fitted(&whole, &mut |p| Ok(size(p) < two), &mut refuse)
-            .unwrap()
-            .into_iter()
-            .map(|(r, _)| r)
-            .collect();
-        // The last two rows carry fewer related rows than the first two,
-        // so together they fit where the first two do not.
-        assert_eq!(ranges, [0..1, 1..2, 2..4]);
+        assert_eq!(calls(&whole, all - 1).unwrap(), [2, 2]);
+        // Exactly two rows' worth: still two calls. One byte under it: the
+        // last two rows carry fewer related rows than the first two, so
+        // together they fit where the first two do not.
+        assert_eq!(calls(&whole, two).unwrap(), [2, 2]);
+        assert_eq!(calls(&whole, two - 1).unwrap(), [1, 1, 2]);
         // Under one row's worth, the context alone does not fit.
-        let mut refused_rows = None;
-        let error = fitted(&whole, &mut |p| Ok(size(p) < one), &mut |p| {
-            refused_rows = predict_rows(p);
-            CoreError::new(Sentence::Internal, "refused")
-        })
-        .unwrap_err();
-        assert_eq!(error.message, "refused");
-        assert_eq!(refused_rows, Some(1));
+        assert_eq!(calls(&whole, one - 1).unwrap_err().message, "refused");
     }
 }

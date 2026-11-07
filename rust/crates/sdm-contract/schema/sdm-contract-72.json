@@ -316,12 +316,6 @@
         "DirectValue.check_tabular_cap": {
           "$ref": "#/$defs/CheckedTabularCap"
         },
-        "ResolveLimits.input": {
-          "$ref": "#/$defs/ResolveLimits"
-        },
-        "DirectValue.resolve_limits": {
-          "$ref": "#/$defs/Limits"
-        },
         "ObserveTabularMembership.input": {
           "$ref": "#/$defs/ObserveTabularMembership"
         },
@@ -711,8 +705,6 @@
         "DirectValue.select_tabular_rows",
         "CheckTabularCap.input",
         "DirectValue.check_tabular_cap",
-        "ResolveLimits.input",
-        "DirectValue.resolve_limits",
         "ObserveTabularMembership.input",
         "DirectValue.observe_tabular_membership",
         "DecideTabularTask.input",
@@ -3819,60 +3811,23 @@
       ]
     },
     "CheckTabularCap": {
-      "description": "Reached native comparison against the model cap, before frame length reads.",
+      "description": "The context a materialized single-table request asks for, held to the\nmost context rows a request carries before frame length reads: the\n`num_context_samples` given, as its decimal text however large, or none.",
       "type": "object",
       "properties": {
-        "over_limit": {
-          "type": "boolean"
+        "requested": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "over_limit"
-      ]
-    },
-    "CheckedTabularCap": {
-      "type": "object",
-      "properties": {
-        "accepted": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "accepted"
-      ]
-    },
-    "ResolveLimits": {
-      "description": "The input of `resolve_limits`, which reads nothing but the run's\nlimits: none.",
-      "type": "object",
       "additionalProperties": false
     },
-    "Limits": {
-      "description": "The limits a run holds a request to, resolved; `resolve_limits` answers\nthem, so a host can say what its caller's settings came to.",
+    "CheckedTabularCap": {
+      "description": "The context asked for is within the limit, which the host compares its\nown count with, natively, before it reads any frame length; past it,\nthe run is refused.",
       "type": "object",
       "properties": {
-        "max_relational_context_rows": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "max_relational_predict_rows": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "max_temporal_link_predict_rows": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "max_tabular_context_rows": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "max_request_bytes": {
+        "limit": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -3880,11 +3835,7 @@
       },
       "additionalProperties": false,
       "required": [
-        "max_relational_context_rows",
-        "max_relational_predict_rows",
-        "max_temporal_link_predict_rows",
-        "max_tabular_context_rows",
-        "max_request_bytes"
+        "limit"
       ]
     },
     "ObserveTabularMembership": {
@@ -13787,24 +13738,6 @@
           ]
         },
         {
-          "description": "The size limits the run holds requests to, as resolved from its\nstart's (contract v72).",
-          "type": "object",
-          "properties": {
-            "input": {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "op": {
-              "type": "string",
-              "const": "resolve_limits"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "op",
-            "input"
-          ]
-        },
-        {
           "description": "An input-sized direct value, carried as typed JSON bytes.",
           "type": "object",
           "properties": {
@@ -17781,7 +17714,6 @@
         "options_unread_statistic",
         "payload_no_smaller_call",
         "call_past_endpoint",
-        "direct_call_past_bytes",
         "outputs_none",
         "not_finite",
         "past_int64",
@@ -17924,7 +17856,6 @@
         "admitted_past_type",
         "invalid_configuration",
         "limit_environment_invalid",
-        "limit_given_below_one",
         "part_forecast_step",
         "part_forecast_step_outran",
         "part_ranking_candidate",

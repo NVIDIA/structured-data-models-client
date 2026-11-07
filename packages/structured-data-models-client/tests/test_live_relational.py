@@ -193,11 +193,9 @@ def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
     """
     import copy
 
-    from sdm_client.limits import settings
+    from sdm_client.limits import defaults
 
-    cap = {setting.name: setting.default for setting in settings()}[
-        'max_relational_predict_rows'
-    ]
+    cap = defaults()['max_relational_predict_rows']
     payload = copy.deepcopy(query.materialize(indices=[0, 1]).payloads[0])
     rows = payload['predict']['instance_table']['rows']
 

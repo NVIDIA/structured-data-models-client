@@ -297,7 +297,7 @@ pub(crate) async fn run(
             // Every scoring call held to the most bytes a call takes before
             // the first is sent.
             for (body, _) in &plans {
-                crate::predict::one_call_bytes(body, &limits)?;
+                predict::call_bytes(body, limits.max_request_bytes)?;
             }
             let mut parts = Vec::new();
             let mut start = 0;

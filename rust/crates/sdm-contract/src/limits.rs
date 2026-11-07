@@ -26,21 +26,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Detail};
 
-/// The prefix of every setting's environment variable.
-pub const ENVIRONMENT_PREFIX: &str = "SDM_CLIENT_";
-
 /// One limit a caller may set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Setting {
     /// The setting's name, as a host's argument names it.
     pub name: &'static str,
-    /// The environment variable a host reads it from, the name uppercased
-    /// after [`ENVIRONMENT_PREFIX`].
+    /// The environment variable a host reads it from: `SDM_CLIENT_` and the
+    /// name in capitals.
     pub env: &'static str,
     /// The value where neither the caller nor the environment names one.
     pub default: u64,
-    /// What the limit holds a request to.
-    pub about: &'static str,
 }
 
 /// The most context rows `kumo-relational` reads: the serving layer's
@@ -49,7 +44,6 @@ pub const MAX_RELATIONAL_CONTEXT_ROWS: Setting = Setting {
     name: "max_relational_context_rows",
     env: "SDM_CLIENT_MAX_RELATIONAL_CONTEXT_ROWS",
     default: 10_000,
-    about: "the most context rows a relational request carries; num_context_samples asks for at most this many",
 };
 
 /// The most rows one `kumo-relational` call scores: the serving layer's
@@ -58,7 +52,6 @@ pub const MAX_RELATIONAL_PREDICT_ROWS: Setting = Setting {
     name: "max_relational_predict_rows",
     env: "SDM_CLIENT_MAX_RELATIONAL_PREDICT_ROWS",
     default: 10_000,
-    about: "the most rows one relational call scores; more are asked in several calls",
 };
 
 /// The most rows one temporal link prediction call scores.
@@ -66,7 +59,6 @@ pub const MAX_TEMPORAL_LINK_PREDICT_ROWS: Setting = Setting {
     name: "max_temporal_link_predict_rows",
     env: "SDM_CLIENT_MAX_TEMPORAL_LINK_PREDICT_ROWS",
     default: 200,
-    about: "the most rows one temporal link prediction call scores; more are asked in several calls",
 };
 
 /// The most context rows `kumo-tabular` reads: the serving layer's
@@ -75,7 +67,6 @@ pub const MAX_TABULAR_CONTEXT_ROWS: Setting = Setting {
     name: "max_tabular_context_rows",
     env: "SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS",
     default: 10_000,
-    about: "the most context rows a single-table request carries; materialize() samples down to it",
 };
 
 /// The most bytes one call's body takes, as written and sent: the serving
@@ -85,7 +76,6 @@ pub const MAX_REQUEST_BYTES: Setting = Setting {
     name: "max_request_bytes",
     env: "SDM_CLIENT_MAX_REQUEST_BYTES",
     default: 30 * 1024 * 1024,
-    about: "the most bytes one call's body takes; a call past it is split into smaller calls",
 };
 
 impl Setting {
@@ -107,11 +97,6 @@ pub const SETTINGS: [Setting; 5] = [
     MAX_REQUEST_BYTES,
 ];
 
-/// The setting named `name`, if there is one.
-pub fn setting(name: &str) -> Option<&'static Setting> {
-    SETTINGS.iter().find(|setting| setting.name == name)
-}
-
 /// What a host passes with every run (contract v72): the values its caller
 /// set, by [`Setting::name`], and the text of each setting's environment
 /// variable that is set, by [`Setting::env`], each as the host read it.
@@ -127,16 +112,8 @@ pub struct GivenLimits {
     pub environment: BTreeMap<String, String>,
 }
 
-/// The input of `resolve_limits`, which reads nothing but the run's
-/// limits: none.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResolveLimits {}
-
-/// The limits a run holds a request to, resolved; `resolve_limits` answers
-/// them, so a host can say what its caller's settings came to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
+/// The limits a run holds a request to, resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     pub max_relational_context_rows: u64,
     pub max_relational_predict_rows: u64,
@@ -157,42 +134,12 @@ impl Default for Limits {
     }
 }
 
-impl Limits {
-    /// The value of the setting named `name`, if there is one.
-    pub fn get(&self, name: &str) -> Option<u64> {
-        Some(match name {
-            n if n == MAX_RELATIONAL_CONTEXT_ROWS.name => self.max_relational_context_rows,
-            n if n == MAX_RELATIONAL_PREDICT_ROWS.name => self.max_relational_predict_rows,
-            n if n == MAX_TEMPORAL_LINK_PREDICT_ROWS.name => self.max_temporal_link_predict_rows,
-            n if n == MAX_TABULAR_CONTEXT_ROWS.name => self.max_tabular_context_rows,
-            n if n == MAX_REQUEST_BYTES.name => self.max_request_bytes,
-            _ => return None,
-        })
-    }
-
-    /// The setting named `name` set to `value`; false where there is none.
-    pub fn set(&mut self, name: &str, value: u64) -> bool {
-        let slot = match name {
-            n if n == MAX_RELATIONAL_CONTEXT_ROWS.name => &mut self.max_relational_context_rows,
-            n if n == MAX_RELATIONAL_PREDICT_ROWS.name => &mut self.max_relational_predict_rows,
-            n if n == MAX_TEMPORAL_LINK_PREDICT_ROWS.name => {
-                &mut self.max_temporal_link_predict_rows
-            }
-            n if n == MAX_TABULAR_CONTEXT_ROWS.name => &mut self.max_tabular_context_rows,
-            n if n == MAX_REQUEST_BYTES.name => &mut self.max_request_bytes,
-            _ => return false,
-        };
-        *slot = value;
-        true
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn every_setting_is_named_once_and_read_from_its_own_variable() {
+    fn each_setting_has_its_own_name_variable_and_serving_layer_default() {
         let mut names: Vec<&str> = SETTINGS.iter().map(|s| s.name).collect();
         names.sort_unstable();
         names.dedup();
@@ -200,25 +147,18 @@ mod tests {
         for setting in SETTINGS {
             assert_eq!(
                 setting.env,
-                format!("{ENVIRONMENT_PREFIX}{}", setting.name.to_ascii_uppercase())
+                format!("SDM_CLIENT_{}", setting.name.to_ascii_uppercase())
             );
-            assert!(setting.default >= 1);
-            assert_eq!(Limits::default().get(setting.name), Some(setting.default));
-            let mut limits = Limits::default();
-            assert!(limits.set(setting.name, setting.default + 1));
-            assert_eq!(limits.get(setting.name), Some(setting.default + 1));
         }
-        assert_eq!(Limits::default().get("max_tables"), None);
-        assert!(!Limits::default().set("max_tables", 1));
-    }
-
-    #[test]
-    fn the_defaults_are_the_serving_layers() {
-        let limits = Limits::default();
-        assert_eq!(limits.max_relational_context_rows, 10_000);
-        assert_eq!(limits.max_relational_predict_rows, 10_000);
-        assert_eq!(limits.max_temporal_link_predict_rows, 200);
-        assert_eq!(limits.max_tabular_context_rows, 10_000);
-        assert_eq!(limits.max_request_bytes, 31_457_280);
+        assert_eq!(
+            Limits::default(),
+            Limits {
+                max_relational_context_rows: 10_000,
+                max_relational_predict_rows: 10_000,
+                max_temporal_link_predict_rows: 200,
+                max_tabular_context_rows: 10_000,
+                max_request_bytes: 31_457_280,
+            }
+        );
     }
 }

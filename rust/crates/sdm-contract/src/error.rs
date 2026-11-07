@@ -1015,7 +1015,6 @@ sentences! {
     OptionsUnreadStatistic = "options_unread_statistic", E::UnsupportedRequest;
     PayloadNoSmallerCall = "payload_no_smaller_call", E::InvalidRequest;
     CallPastEndpoint = "call_past_endpoint", E::InvalidRequest;
-    DirectCallPastBytes = "direct_call_past_bytes", E::InvalidRequest;
     OutputsNone = "outputs_none", E::InvalidRequest;
     NotFinite = "not_finite", E::InvalidRequest;
     PastInt64 = "past_int64", E::InvalidRequest;
@@ -1158,7 +1157,6 @@ sentences! {
     AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
     InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
     LimitEnvironmentInvalid = "limit_environment_invalid", E::InvalidConfiguration;
-    LimitGivenBelowOne = "limit_given_below_one", E::InvalidConfiguration;
     PartForecastStep = "part_forecast_step", Code::Part;
     PartForecastStepOutran = "part_forecast_step_outran", Code::Part;
     PartRankingCandidate = "part_ranking_candidate", Code::Part;

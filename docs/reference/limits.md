@@ -62,7 +62,6 @@ request = query.materialize(indices=keys, limits=limits)
 result = client.predict(request, model=KumoTabular())
 ```
 
-`client.limits.resolved()` reports what each setting comes to.
 In Java, pass `Limits.builder()...build()` to `ClientOptions.builder().limits(...)`, `DatabricksServing.limits(...)` and `MaterializeOptions.builder().limits(...)`.
 Both read the same environment variables, and an environment variable that is not a whole number of at least 1 is refused with code `INVALID_CONFIGURATION`, naming it.
 A refusal at one of these limits names the setting and its environment variable.

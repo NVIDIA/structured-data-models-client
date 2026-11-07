@@ -329,9 +329,7 @@
           "max_tabular_context_rows",
           "max_temporal_link_predict_rows"
         ],
-        "public_methods": {
-          "resolved": "(self) -> 'dict[str, int]'"
-        },
+        "public_methods": {},
         "signature": "(max_relational_context_rows: 'int | None' = None, max_relational_predict_rows: 'int | None' = None, max_temporal_link_predict_rows: 'int | None' = None, max_tabular_context_rows: 'int | None' = None, max_request_bytes: 'int | None' = None) -> None"
       },
       "LinkMetadata": {

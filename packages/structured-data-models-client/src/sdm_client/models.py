@@ -57,10 +57,6 @@ DEFAULT_PREDICTION_STATISTIC = 'median'
 PREDICTION_STATISTICS = frozenset({'mean', 'median'})
 SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
 
-# The tabular model's context is held to a setting, not a fixed size
-# (`sdm_client.Limits.max_tabular_context_rows`).
-TABULAR_LIMITS: dict[str, int] = {}
-
 KUMO_TABULAR = ModelSpec(
     model_id=TFM_MODEL_KUMO_TABULAR,
     profile='TABULAR',
@@ -71,7 +67,6 @@ KUMO_TABULAR = ModelSpec(
         outputs=frozenset(
             {'prediction', 'probabilities', 'quantiles', 'explanation'}
         ),
-        limits=TABULAR_LIMITS,
         explanation_formats=('sdm_gradient_v1',),
     ),
 )

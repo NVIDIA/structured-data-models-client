@@ -81,7 +81,7 @@ public final class SdmClient implements AutoCloseable {
 
   /**
    * The size limits this client holds requests to, as it was opened with them; a setting not set
-   * takes its environment variable, else its default, which {@link Limits#resolved} reports.
+   * takes its environment variable, else its default.
    */
   public Limits limits() {
     return limits;

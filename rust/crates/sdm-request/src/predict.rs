@@ -306,15 +306,7 @@ fn classifies(kind: &str) -> bool {
 
 /// One half's instance table: its column names and its rows.
 fn instance_table<'a>(payload: &'a Value, half: &str) -> Option<(Vec<&'a str>, &'a [Value])> {
-    let table = payload.get(half)?.get("instance_table")?;
-    let Some(Value::Array(columns)) = table.get("columns") else {
-        return None;
-    };
-    let Some(Value::Array(rows)) = table.get("rows") else {
-        return None;
-    };
-    let names: Vec<&str> = columns.iter().filter_map(Value::as_text).collect();
-    (names.len() == columns.len()).then_some((names, rows.as_slice()))
+    crate::batching::table_rows(payload.get(half)?.get("instance_table")?)
 }
 
 /// The rows of one half, counted as `Request._rows` counts them: none

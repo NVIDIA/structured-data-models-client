@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sdm_client import Limits, PredictiveQuery, Schema
+from sdm_client import PredictiveQuery, Schema
 from sdm_client.client import _report_absent
 from sdm_client.errors import StructuredDataError
 from sdm_client.result import PredictionResult
@@ -56,16 +56,6 @@ def query(schema: Schema) -> PredictiveQuery:
 
 
 # --- the context the endpoint will take ------------------------------------
-
-
-def test_the_declared_cap_is_the_one_the_endpoint_enforces():
-    """Measured at the boundary: 10,000 answer, 10,001 refuse; the default
-    of a setting a deployment may raise."""
-    from sdm_client.limits import settings
-
-    defaults = {setting.name: setting.default for setting in settings()}
-    assert defaults['max_tabular_context_rows'] == 10_000
-    assert Limits().resolved()['max_tabular_context_rows'] == 10_000
 
 
 def test_a_context_above_the_cap_is_refused_before_it_is_encoded():

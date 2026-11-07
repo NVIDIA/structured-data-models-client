@@ -472,17 +472,22 @@ pub enum TabularOrderError {
     TemporalYearOutOfRange,
 }
 
-/// Reached native comparison against the model cap, before frame length reads.
+/// The context a materialized single-table request asks for, held to the
+/// most context rows a request carries before frame length reads: the
+/// `num_context_samples` given, as its decimal text however large, or none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CheckTabularCap {
-    pub over_limit: bool,
+    pub requested: Option<String>,
 }
 
+/// The context asked for is within the limit, which the host compares its
+/// own count with, natively, before it reads any frame length; past it,
+/// the run is refused.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CheckedTabularCap {
-    pub accepted: bool,
+    pub limit: u64,
 }
 
 /// One ordinary selection composition. Only proven-passive native producers

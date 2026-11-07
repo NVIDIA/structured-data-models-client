@@ -329,16 +329,12 @@ pub fn start(
                 crate::direct::value(&asker, &crate::tabular_selection::select(input, &limits)?)
             })
         }
-        Operation::ResolveLimits(request) => {
-            let _: sdm_contract::limits::ResolveLimits =
-                take_json(&mut attachments, request.input)?;
-            Run::new(move |asker| async move { crate::direct::value(&asker, &limits) })
-        }
         Operation::CheckTabularCap(request) => {
             let input: sdm_contract::tabular::CheckTabularCap =
                 take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
-                crate::direct::value(&asker, &sdm_request::tabular::check_materialized_cap(input))
+                let checked = sdm_request::tabular::check_materialized_cap(input, &limits)?;
+                crate::direct::value(&asker, &checked)
             })
         }
         Operation::CheckDirectShape(request) => {

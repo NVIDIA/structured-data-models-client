@@ -4755,12 +4755,10 @@
       "apis": {
         "python": [
           "Limits",
-          "Limits.resolved",
           "SDMClient.limits"
         ],
         "java": [
           "Limits",
-          "Limits.resolved",
           "SdmClient.limits"
         ]
       },
@@ -4781,7 +4779,6 @@
           "rust/crates/sdm-core/src/predict.rs"
         ],
         "operations": [
-          "resolve_limits",
           "predict",
           "materialize"
         ]
@@ -4802,7 +4799,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "c6a02b69061a6f8f3a8703232962044d1ec5d79d67c4e8749374f57efc2ccee0",
+  "public_api_snapshot_sha256": "9d490ce2c68265be9c2bb679a7ed7215d594bd63fada342929eaa9833f4ea37b",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -6237,7 +6234,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_an_argument_comes_before_the_environment_before_the_default",
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_materialize_samples_to_a_raised_tabular_limit",
             "behavior": "A setting given comes before its environment variable, which comes before the default, as resolved by the core."
           }
         ]
@@ -6246,8 +6243,8 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_the_defaults_are_the_serving_layers",
-            "behavior": "Each setting is named, read from SDM_CLIENT_ and its name in capitals, and defaults to the serving layer's value."
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_setting_given_that_is_not_a_whole_number_is_refused",
+            "behavior": "Each setting is a keyword of Limits taking a whole number of at least 1, read otherwise from SDM_CLIENT_ and its name in capitals."
           }
         ]
       },
@@ -6255,8 +6252,8 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_the_defaults_are_the_serving_layers",
-            "behavior": "Each setting is named, read from SDM_CLIENT_ and its name in capitals, and defaults to the serving layer's value."
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_raised_relational_predict_limit_and_a_lowered_one_set_the_calls",
+            "behavior": "A lowered relational predict limit sets the rows each call scores."
           }
         ]
       },
@@ -6264,8 +6261,8 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_the_defaults_are_the_serving_layers",
-            "behavior": "Each setting is named, read from SDM_CLIENT_ and its name in capitals, and defaults to the serving layer's value."
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_setting_given_that_is_not_a_whole_number_is_refused",
+            "behavior": "Each setting is a keyword of Limits taking a whole number of at least 1, read otherwise from SDM_CLIENT_ and its name in capitals."
           }
         ]
       },
@@ -6273,8 +6270,8 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_the_defaults_are_the_serving_layers",
-            "behavior": "Each setting is named, read from SDM_CLIENT_ and its name in capitals, and defaults to the serving layer's value."
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_materialize_samples_to_a_raised_tabular_limit",
+            "behavior": "A raised tabular context limit is taken, from the argument before the environment variable."
           }
         ]
       },
@@ -6282,17 +6279,8 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_the_defaults_are_the_serving_layers",
-            "behavior": "Each setting is named, read from SDM_CLIENT_ and its name in capitals, and defaults to the serving layer's value."
-          }
-        ]
-      },
-      "sdm_client.Limits.resolved": {
-        "capability": "configurable-limits",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_the_defaults_are_the_serving_layers",
-            "behavior": "Resolved limits equal the serving layer defaults when nothing is set."
+            "test": "packages/structured-data-models-client/tests/test_configurable_limits.py::test_a_call_past_the_byte_limit_is_split_and_each_part_fits",
+            "behavior": "A call past the byte limit is split and each part fits."
           }
         ]
       },
@@ -8216,7 +8204,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8225,7 +8213,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8234,7 +8222,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8243,7 +8231,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8252,7 +8240,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8261,16 +8249,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
-            "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Limits#public java.util.Map<java.lang.String, java.lang.Long> resolved();": {
-        "capability": "configurable-limits",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#theDefaultsAreTheServingLayers",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8279,7 +8258,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8288,7 +8267,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#theDefaultsAreTheServingLayers",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8297,7 +8276,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8306,7 +8285,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8315,7 +8294,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8324,7 +8303,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8333,7 +8312,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8342,7 +8321,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8351,7 +8330,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8360,7 +8339,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]
@@ -8369,7 +8348,7 @@
         "capability": "configurable-limits",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne",
+            "test": "java/src/test/java/com/nvidia/sdm/LimitsTest.java#aSettingGivenIsKeptByNameAndMustBeAtLeastOne",
             "behavior": "Limits are set through the public builders and options, resolved by the core, and held by the client's requests."
           }
         ]

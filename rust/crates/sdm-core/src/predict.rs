@@ -527,81 +527,33 @@ fn fitted(
     payload: &Value,
     request_id: &str,
 ) -> Result<Vec<(Value, Value, Vec<u8>)>, CoreError> {
-    let write = |call: &Value| {
-        body(
+    let limit = inputs.limits.max_request_bytes;
+    let mut fit = |call: &Value| -> sdm_request::batching::Fit<(Value, Vec<u8>)> {
+        let body = body(
             call,
             &inputs.model,
             request_id,
             outputs,
             &inputs.inference_asked,
-        )
-    };
-    let limit = inputs.limits.max_request_bytes;
-    let serving = inputs.endpoint.as_ref().map(
-        |ModelEndpoint::ServingEndpoint {
-             name,
-             max_request_bytes,
-         }| (name.as_str(), *max_request_bytes),
-    );
-    let mut fits = |call: &Value| -> Result<bool, CoreError> {
-        let body = write(call)?;
-        if body.to_bytes().len() as u64 > limit {
-            return Ok(false);
-        }
-        Ok(match serving {
-            Some((_, most)) => serving::envelope_len(&body)? <= most,
-            None => true,
-        })
-    };
-    let mut refuse = |call: &Value| -> CoreError {
-        let body = match write(call) {
-            Ok(body) => body,
-            Err(error) => return error,
-        };
+        )?;
         let bytes = body.to_bytes();
         if bytes.len() as u64 > limit {
-            return call_past_bytes(&body, bytes.len() as u64, limit);
+            return Ok(Err(call_past_bytes(&body, bytes.len() as u64, limit)));
         }
-        match serving {
-            Some((name, most)) => match serving::envelope(name, most, &bytes) {
-                Err(error) => error,
-                Ok(_) => internal("a call that fits was refused"),
-            },
-            None => internal("a call that fits was refused"),
+        if let Some(ModelEndpoint::ServingEndpoint {
+            name,
+            max_request_bytes,
+        }) = &inputs.endpoint
+            && let (_, Some(past)) = serving::weigh(name, *max_request_bytes, &body)?
+        {
+            return Ok(Err(past));
         }
+        Ok(Ok((body, bytes)))
     };
-    sdm_request::batching::fitted(payload, &mut fits, &mut refuse)?
+    Ok(sdm_request::batching::fitted(payload, &mut fit)?
         .into_iter()
-        .map(|(_, call)| {
-            let body = write(&call)?;
-            let bytes = body.to_bytes();
-            Ok((call, body, bytes))
-        })
-        .collect()
-}
-
-/// The bytes of a call sent as it is, never split (a request of a single
-/// table, sent as one call): refused past the most bytes a call takes
-/// (`max_request_bytes`), naming the bytes of its context.
-pub(crate) fn one_call_bytes(call: &Value, limits: &Limits) -> Result<Vec<u8>, CoreError> {
-    let bytes = call.to_bytes();
-    let limit = limits.max_request_bytes;
-    if bytes.len() as u64 > limit {
-        let context = sdm_request::batching::predict_slice(call, 0..0)
-            .map_or(bytes.len() as u64, |context| {
-                context.to_bytes().len() as u64
-            });
-        return Err(sdm_contract::limits::MAX_REQUEST_BYTES.named(
-            CoreError::new(
-                Sentence::DirectCallPastBytes,
-                "a call sent whole is larger than one call takes",
-            )
-            .with_field("bytes", count(bytes.len()))
-            .with_field("context_bytes", Detail::Scalar(Scalar::UInt64(context)))
-            .with_field("limit", Detail::Scalar(Scalar::UInt64(limit))),
-        ));
-    }
-    Ok(bytes)
+        .map(|(call, (body, bytes))| (call, body, bytes))
+        .collect())
 }
 
 /// One payload's call, its body as written, sent and its answer laid out;

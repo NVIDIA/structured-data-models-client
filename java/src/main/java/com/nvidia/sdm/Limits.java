@@ -4,7 +4,6 @@
 
 package com.nvidia.sdm;
 
-import com.nvidia.sdm.internal.LimitSettings;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -48,17 +47,6 @@ public final class Limits {
   /** The settings set here, by name, such as {@code max_request_bytes}; none for a default. */
   public Map<String, Long> values() {
     return values;
-  }
-
-  /**
-   * What these limits come to, each setting by name: the value set here, else its environment
-   * variable's, else its default, as the core resolves them for every request.
-   *
-   * @throws StructuredDataException {@code INVALID_CONFIGURATION} when an environment variable is
-   *     not a whole number of at least 1
-   */
-  public Map<String, Long> resolved() {
-    return LimitSettings.resolved(values);
   }
 
   @Override

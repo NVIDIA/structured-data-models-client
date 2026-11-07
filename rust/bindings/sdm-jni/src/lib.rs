@@ -464,7 +464,6 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
                     "name": setting.name,
                     "env": setting.env,
                     "default": setting.default,
-                    "about": setting.about,
                 }))
                 .collect::<Vec<_>>(),
         });

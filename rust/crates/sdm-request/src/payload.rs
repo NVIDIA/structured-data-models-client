@@ -247,7 +247,7 @@ pub fn check_bytes(built: &Built, limit: u64) -> Result<(), CoreError> {
     }
     let payload = sdm_wire::json::read(&built.bytes)
         .map_err(|_| internal("a built payload does not read back"))?;
-    let rows = crate::batching::predict_rows(&payload).unwrap_or(0);
+    let rows = crate::predict::predict_rows(&payload).unwrap_or(0);
     // The bytes a call carrying the first `n` rows sends.
     let sent = |n: usize| -> Result<u64, CoreError> {
         let mut call = crate::batching::predict_slice(&payload, 0..n)?;

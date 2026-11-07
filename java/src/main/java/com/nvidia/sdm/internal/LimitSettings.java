@@ -17,16 +17,12 @@ import java.util.Map;
 public final class LimitSettings {
   private LimitSettings() {}
 
-  /** Each setting the core names, in order: its {@code name}, {@code env} and {@code default}. */
-  @SuppressWarnings("unchecked")
-  public static List<Map<String, Object>> settings() {
-    return (List<Map<String, Object>>) NativeCore.load().get("limits");
-  }
-
   /** What a run's start carries of {@code values}, the settings the caller set by name. */
+  @SuppressWarnings("unchecked")
   public static Map<String, Object> given(Map<String, Long> values) {
     Map<String, String> environment = new LinkedHashMap<>();
-    for (Map<String, Object> setting : settings()) {
+    for (Map<String, Object> setting :
+        (List<Map<String, Object>>) NativeCore.load().get("limits")) {
       String name = (String) setting.get("env");
       String text = System.getenv(name);
       if (text != null) {
@@ -41,22 +37,5 @@ public final class LimitSettings {
       given.put("environment", environment);
     }
     return given;
-  }
-
-  /** What {@code values} come to, each setting by name, as the core resolves them. */
-  public static Map<String, Long> resolved(Map<String, Long> values) {
-    Map<String, Object> operation = new LinkedHashMap<>();
-    operation.put("op", "resolve_limits");
-    operation.put("input", 1);
-    try (Host.Finished finished =
-        Host.run(operation, Map.of(1, Host.attachment(Map.of())), Host.Call.limited(values))) {
-      Map<String, Object> answer = ArrowTabular.value(finished);
-      Map<String, Long> resolved = new LinkedHashMap<>();
-      for (Map<String, Object> setting : settings()) {
-        String name = (String) setting.get("name");
-        resolved.put(name, ((Number) answer.get(name)).longValue());
-      }
-      return resolved;
-    }
   }
 }

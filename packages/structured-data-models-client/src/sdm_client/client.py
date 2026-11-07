@@ -415,8 +415,7 @@ class SDMClient:
     @property
     def limits(self) -> Limits:
         r"""The size limits this client was opened with; a setting left
-        ``None`` takes its environment variable, else its default, which
-        :meth:`Limits.resolved` reports."""
+        ``None`` takes its environment variable, else its default."""
         return self._limits or Limits()
 
     @property

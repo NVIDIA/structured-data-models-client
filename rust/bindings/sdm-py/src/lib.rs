@@ -660,7 +660,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             py,
             sdm_contract::limits::SETTINGS
                 .iter()
-                .map(|setting| (setting.name, setting.env, setting.default, setting.about))
+                .map(|setting| (setting.name, setting.env, setting.default))
                 .collect::<Vec<_>>(),
         )?,
     )?;

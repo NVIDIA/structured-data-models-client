@@ -97,9 +97,9 @@ def test_more_entities_than_one_call_scores_is_refused_before_gathering(
 ):
     """A part is one call, which is what makes the fan-out countable. The
     refusal reads the count it was given, so it costs no gathering."""
-    from sdm_client.limits import settings
+    from sdm_client.limits import defaults
 
-    defaults = {setting.name: setting.default for setting in settings()}
+    defaults = defaults()
     count = defaults['max_relational_predict_rows'] + 1
     with pytest.raises(StructuredDataError) as refused:
         built(query, indices=[1] * count, **how)

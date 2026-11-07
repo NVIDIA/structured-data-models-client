@@ -7,52 +7,51 @@
 //! environment's, else the default ([`sdm_contract::limits::SETTINGS`]).
 //! Every host reads its limits through this one rule.
 
-use sdm_contract::limits::{GivenLimits, Limits, SETTINGS};
-use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+use sdm_contract::limits::{
+    GivenLimits, Limits, MAX_RELATIONAL_CONTEXT_ROWS, MAX_RELATIONAL_PREDICT_ROWS,
+    MAX_REQUEST_BYTES, MAX_TABULAR_CONTEXT_ROWS, MAX_TEMPORAL_LINK_PREDICT_ROWS, SETTINGS, Setting,
+};
+use sdm_contract::{CoreError, Detail, Sentence};
 
-/// The limits `given` names, or the refusal of a value that is not a whole
-/// number of at least one, naming the setting and where it was set. A name
-/// that is no setting's is the host's fault, `INVALID_MESSAGE`.
+/// The limits `given` names, or the refusal of an environment variable that
+/// is not a whole number of at least one, naming the setting and the
+/// variable. A name that is no setting's, or a value given below one, is
+/// the host's fault, `INVALID_MESSAGE`: a host checks its caller's values.
 pub fn resolve(given: &GivenLimits) -> Result<Limits, CoreError> {
-    for name in given.given.keys() {
-        if !SETTINGS.iter().any(|setting| setting.name == name) {
-            return Err(unknown("limits.given", name));
+    for (name, &value) in &given.given {
+        if value == 0 || !SETTINGS.iter().any(|setting| setting.name == name) {
+            return Err(malformed("limits.given", name));
         }
     }
     for env in given.environment.keys() {
         if !SETTINGS.iter().any(|setting| setting.env == env) {
-            return Err(unknown("limits.environment", env));
+            return Err(malformed("limits.environment", env));
         }
     }
-    let mut limits = Limits::default();
-    for setting in &SETTINGS {
-        let value = if let Some(&value) = given.given.get(setting.name) {
-            if value == 0 {
-                return Err(setting.named(
-                    CoreError::new(
-                        Sentence::LimitGivenBelowOne,
-                        "a limit the caller set is not a whole number of at least one",
-                    )
-                    .with_field("given", Detail::Scalar(Scalar::UInt64(value))),
-                ));
-            }
-            value
-        } else if let Some(text) = given.environment.get(setting.env) {
-            whole(text).ok_or_else(|| {
-                setting.named(
-                    CoreError::new(
-                        Sentence::LimitEnvironmentInvalid,
-                        "a limit's environment variable is not a whole number of at least one",
-                    )
-                    .with_field("given", Detail::text(text)),
-                )
-            })?
-        } else {
-            setting.default
+    let pick = |setting: &Setting| -> Result<u64, CoreError> {
+        if let Some(&value) = given.given.get(setting.name) {
+            return Ok(value);
+        }
+        let Some(text) = given.environment.get(setting.env) else {
+            return Ok(setting.default);
         };
-        limits.set(setting.name, value);
-    }
-    Ok(limits)
+        whole(text).ok_or_else(|| {
+            setting.named(
+                CoreError::new(
+                    Sentence::LimitEnvironmentInvalid,
+                    "a limit's environment variable is not a whole number of at least one",
+                )
+                .with_field("given", Detail::text(text)),
+            )
+        })
+    };
+    Ok(Limits {
+        max_relational_context_rows: pick(&MAX_RELATIONAL_CONTEXT_ROWS)?,
+        max_relational_predict_rows: pick(&MAX_RELATIONAL_PREDICT_ROWS)?,
+        max_temporal_link_predict_rows: pick(&MAX_TEMPORAL_LINK_PREDICT_ROWS)?,
+        max_tabular_context_rows: pick(&MAX_TABULAR_CONTEXT_ROWS)?,
+        max_request_bytes: pick(&MAX_REQUEST_BYTES)?,
+    })
 }
 
 /// `text` as a whole number of at least one: decimal digits, with `_`
@@ -74,10 +73,10 @@ fn whole(text: &str) -> Option<u64> {
         .filter(|&value| value >= 1)
 }
 
-fn unknown(field: &str, name: &str) -> CoreError {
+fn malformed(field: &str, name: &str) -> CoreError {
     CoreError::protocol(
         Sentence::InvalidMessage,
-        "the start names a limit that is no setting's",
+        "the start names a limit that is no setting's, or one below one",
     )
     .with_field("field", Detail::text(field))
     .with_field("name", Detail::text(name))
@@ -88,7 +87,6 @@ mod tests {
     use std::collections::BTreeMap;
 
     use sdm_contract::ErrorCode;
-    use sdm_contract::limits::{MAX_REQUEST_BYTES, MAX_TABULAR_CONTEXT_ROWS};
 
     use super::*;
 
@@ -161,9 +159,9 @@ mod tests {
     }
 
     #[test]
-    fn a_given_zero_and_an_unknown_name_are_refused() {
+    fn a_given_zero_and_an_unknown_name_are_the_host_s_fault() {
         let error = resolve(&given(&[(MAX_REQUEST_BYTES.name, 0)], &[])).unwrap_err();
-        assert_eq!(error.sentence, Sentence::LimitGivenBelowOne);
+        assert_eq!(error.sentence, Sentence::InvalidMessage);
         let error = resolve(&given(&[("max_tables", 20)], &[])).unwrap_err();
         assert_eq!(error.sentence, Sentence::InvalidMessage);
         let error = resolve(&given(&[], &[("SDM_CLIENT_MAX_HOPS", "8")])).unwrap_err();

@@ -13,24 +13,12 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.table.Table;
 import org.junit.jupiter.api.Test;
 
-/** The size limits a client holds requests to: their defaults and a raised one taking effect. */
+/** The size limits a client holds requests to: a raised one taking effect. */
 class LimitsTest {
-  @Test void theDefaultsAreTheServingLayers() {
-    assertEquals(
-        Map.of(
-            "max_relational_context_rows", 10_000L,
-            "max_relational_predict_rows", 10_000L,
-            "max_temporal_link_predict_rows", 200L,
-            "max_tabular_context_rows", 10_000L,
-            "max_request_bytes", 31_457_280L),
-        Limits.defaults().resolved());
-  }
-
-  @Test void aSettingGivenComesBeforeTheDefaultAndMustBeAtLeastOne() {
+  @Test void aSettingGivenIsKeptByNameAndMustBeAtLeastOne() {
     Limits limits = Limits.builder().maxTabularContextRows(200_000).build();
     assertEquals(Map.of("max_tabular_context_rows", 200_000L), limits.values());
-    assertEquals(200_000L, limits.resolved().get("max_tabular_context_rows"));
-    assertEquals(10_000L, limits.resolved().get("max_relational_context_rows"));
+    assertEquals(Map.of(), Limits.defaults().values());
     StructuredDataException refused = assertThrows(
         StructuredDataException.class, () -> Limits.builder().maxRequestBytes(0));
     assertEquals("INVALID_CONFIGURATION", refused.code());
