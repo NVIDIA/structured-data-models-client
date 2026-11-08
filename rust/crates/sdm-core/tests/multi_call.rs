@@ -159,7 +159,6 @@ fn predict(state: RequestState, attachments: Attachments) -> Result<Run, CoreErr
     start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Predict(Predict {

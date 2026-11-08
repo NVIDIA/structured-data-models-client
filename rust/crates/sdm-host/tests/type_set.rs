@@ -828,7 +828,6 @@ fn infer_column(received: &DataType) -> Value {
             "time_columns": {},
         });
         let start = StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::DescribeSource(DescribeSource {

@@ -38,7 +38,6 @@ use serde::{Deserialize, Serialize};
 use crate::data::{AttachmentId, DataRequest, FetchPlan, ProviderError};
 use crate::error::{CoreError, CoreWarning, ErrorKind};
 use crate::facts::HostFacts;
-use crate::limits::GivenLimits;
 use crate::ops::{Operation, OperationResult};
 
 /// Names one fetch or model call within a run, so its reply can be matched.
@@ -195,16 +194,7 @@ pub struct StartRun {
     /// The contract version the host speaks; see `CONTRACT_VERSION`.
     pub contract: u32,
     pub facts: HostFacts,
-    /// The size limits the caller set and the environment names, which the
-    /// core resolves before the run starts (contract v72); left out, each
-    /// limit is its default ([`crate::limits`]).
-    #[serde(default, skip_serializing_if = "is_unset")]
-    pub limits: GivenLimits,
     pub operation: Operation,
-}
-
-fn is_unset(limits: &GivenLimits) -> bool {
-    limits == &GivenLimits::default()
 }
 
 /// Every control message that crosses between a host and the core.

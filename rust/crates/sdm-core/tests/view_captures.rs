@@ -337,7 +337,6 @@ fn replay_spec(
     let mut run = start(
         &root,
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::DescribeSource(DescribeSource {
@@ -891,7 +890,6 @@ fn materialize_query(
     let mut run = start(
         &root,
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Materialize(Materialize {

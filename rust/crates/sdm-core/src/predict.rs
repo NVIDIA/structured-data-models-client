@@ -32,14 +32,13 @@
 //! the answer.
 
 use sdm_contract::error::AnsweredParts;
-use sdm_contract::limits::Limits;
 use sdm_contract::ops::{ModelEndpoint, OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::predict::{
-    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_past_bytes, call_starts,
-    empty, layout, left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight,
-    prepare, refused, steps_unexplained, table,
+    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_starts, empty, layout,
+    left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight, prepare, refused,
+    steps_unexplained, table,
 };
 use sdm_request::serving::{self, Failure};
 use sdm_wire::json::{self, Value};
@@ -104,8 +103,6 @@ pub(crate) struct Inputs {
     /// core writes and whose answers it reads; `None` for the
     /// client's own endpoint.
     pub endpoint: Option<ModelEndpoint>,
-    /// The size limits the run holds its calls to.
-    pub limits: Limits,
 }
 
 /// The JSON a request state's payload holds, or a refusal naming where in
@@ -410,7 +407,6 @@ pub(crate) async fn one(
         &inputs.model,
         &inputs.outputs,
         inputs.default_outputs,
-        &inputs.limits,
     )?;
     let computed = if provided_analysis.is_none() && crate::columns::requested(&outputs) {
         Some(crate::columns::compute(&payloads[..1])?)
@@ -433,30 +429,28 @@ pub(crate) async fn one(
             warn(asker, notice);
         }
         // Every call written before the first is sent, as the client's
-        // plan is listed whole (`_numbered_across_calls`), each split into
-        // smaller calls where it is past the most bytes a call takes, then
-        // each call's rows counted.
-        let mut sent = Vec::with_capacity(payloads.len());
+        // plan is listed whole (`_numbered_across_calls`), then each call's
+        // rows counted. To a serving endpoint, whose refusal of a call too
+        // large is a dropped connection, a call past its limit is split up
+        // front into calls that fit.
+        let mut calls = Vec::with_capacity(payloads.len());
         let mut bodies = Vec::with_capacity(payloads.len());
-        let mut sizes = Vec::with_capacity(payloads.len());
         for (payload, request_id) in payloads.iter().zip(&ids) {
-            for (call, body, bytes) in fitted(inputs, &outputs, payload, request_id)? {
-                sent.push(call);
+            for (call, body) in fitted(inputs, &outputs, payload, request_id)? {
+                calls.push((call, request_id.as_str()));
                 bodies.push(body);
-                sizes.push(bytes);
             }
         }
-        let payloads = sent;
+        let payloads: Vec<Value> = calls.iter().map(|(call, _)| call.clone()).collect();
         let mut session = crate::batch_session::Session::eligible(
             &bodies,
             inputs.supports_sessions && inputs.endpoint.is_none(),
         );
-        // Validate all full calls before any network effect, including their size.
         // Retain only the small scoring half alongside encoded fallback bytes.
         let plans = bodies
             .into_iter()
-            .zip(sizes)
-            .map(|(body, bytes)| {
+            .map(|body| {
+                let bytes = body.to_bytes();
                 let scoring = if session.is_some() {
                     sdm_request::frame_session::subset(
                         &body,
@@ -470,7 +464,10 @@ pub(crate) async fn one(
             .collect::<Vec<_>>();
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
-        for ((payload, (body, bytes)), start) in payloads.iter().zip(plans).zip(starts) {
+        // The rows a call the endpoint took after a smaller one was asked,
+        // kept for the calls after it.
+        let mut most = None;
+        for (((payload, request_id), (body, bytes)), start) in calls.iter().zip(plans).zip(starts) {
             let response = async {
                 if let Some(session) = session.as_mut()
                     && let Some(answer) = session.score(asker, &body).await?
@@ -478,7 +475,10 @@ pub(crate) async fn one(
                     let response = PredictionResponse::read(&answer).map_err(refused)?;
                     return layout(payload, &response, crate::pql::float_text);
                 }
-                call(asker, payload, bytes, inputs.endpoint.as_ref()).await
+                answered(
+                    asker, inputs, &outputs, request_id, payload, bytes, &mut most,
+                )
+                .await
             }
             .await;
             let answered = match response {
@@ -513,47 +513,103 @@ pub(crate) async fn one(
     Ok((merged, outputs, scored))
 }
 
-/// `payload`'s calls, each with the body it sends and that body's bytes:
-/// the one call where its body fits the most bytes a call takes
-/// (`max_request_bytes`) and, to a serving endpoint, the most its envelope
-/// takes; else as many calls as it is split into so that each fits
+/// `payload` as the calls it is sent in, each with its body: one call, or,
+/// to a serving endpoint, as many as it is split into so that each one's
+/// envelope fits the endpoint's `max_request_bytes`
 /// ([`sdm_request::batching::fitted`]), each scoring a run of its rows with
-/// the whole context. Every call of a split carries the payload's request
-/// id, so the bytes weighed are the bytes sent. A call of one row that is
-/// still past a limit is refused, naming the context's bytes.
+/// the whole context. A call of one row past it is refused.
 fn fitted(
     inputs: &Inputs,
     outputs: &[String],
     payload: &Value,
     request_id: &str,
-) -> Result<Vec<(Value, Value, Vec<u8>)>, CoreError> {
-    let limit = inputs.limits.max_request_bytes;
-    let mut fit = |call: &Value| -> sdm_request::batching::Fit<(Value, Vec<u8>)> {
-        let body = body(
+) -> Result<Vec<(Value, Value)>, CoreError> {
+    let write = |call: &Value| {
+        body(
             call,
             &inputs.model,
             request_id,
             outputs,
             &inputs.inference_asked,
-        )?;
-        let bytes = body.to_bytes();
-        if bytes.len() as u64 > limit {
-            return Ok(Err(call_past_bytes(&body, bytes.len() as u64, limit)));
-        }
-        if let Some(ModelEndpoint::ServingEndpoint {
-            name,
-            max_request_bytes,
-        }) = &inputs.endpoint
-            && let (_, Some(past)) = serving::weigh(name, *max_request_bytes, &body)?
-        {
-            return Ok(Err(past));
-        }
-        Ok(Ok((body, bytes)))
+        )
     };
-    Ok(sdm_request::batching::fitted(payload, &mut fit)?
-        .into_iter()
-        .map(|(call, (body, bytes))| (call, body, bytes))
-        .collect())
+    let Some(ModelEndpoint::ServingEndpoint {
+        name,
+        max_request_bytes,
+    }) = &inputs.endpoint
+    else {
+        return Ok(vec![(payload.clone(), write(payload)?)]);
+    };
+    let mut fit = |call: &Value| -> sdm_request::batching::Fit<Value> {
+        let body = write(call)?;
+        let size = serving::wrapped(&body)?.len() as u64;
+        Ok(if size > *max_request_bytes {
+            Err(serving::past_limit(name, *max_request_bytes, size))
+        } else {
+            Ok(body)
+        })
+    };
+    sdm_request::batching::fitted(payload, &mut fit)
+}
+
+/// The statuses that say a call was too large or too slow to answer: the
+/// host's timeout (told as 408), the endpoint's 413, and a gateway's 502 or
+/// 504, which a call it gave up on comes back as.
+const TOO_LARGE: [u16; 4] = [408, 413, 502, 504];
+
+/// `payload`'s answer, its rows numbered from zero. Where the endpoint
+/// refuses the call as too large or too slow ([`TOO_LARGE`]), its rows are
+/// asked again in calls of half as many, each with the whole context, and
+/// that size is kept in `most` for the calls after it. A call of one row is
+/// not split: its refusal, the endpoint's own, stands, as does any other.
+async fn answered(
+    asker: &Asker,
+    inputs: &Inputs,
+    outputs: &[String],
+    request_id: &str,
+    payload: &Value,
+    bytes: Vec<u8>,
+    most: &mut Option<usize>,
+) -> Result<Part, CoreError> {
+    let rows = predict_rows(payload).unwrap_or(0);
+    let size = match *most {
+        Some(most) if rows > most => most,
+        _ => match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
+            Err(error) if rows > 1 && too_large(&error) => {
+                let half = rows.div_ceil(2);
+                *most = Some(half);
+                half
+            }
+            answer => return answer,
+        },
+    };
+    let mut parts = Vec::new();
+    for start in (0..rows).step_by(size) {
+        let range = start..(start + size).min(rows);
+        let call = sdm_request::batching::predict_slice(payload, range)?;
+        let bytes = body(
+            &call,
+            &inputs.model,
+            request_id,
+            outputs,
+            &inputs.inference_asked,
+        )?
+        .to_bytes();
+        let part = Box::pin(answered(
+            asker, inputs, outputs, request_id, &call, bytes, most,
+        ))
+        .await?;
+        parts.push(numbered_from(part, start)?);
+    }
+    merge(parts)
+}
+
+/// Whether `error` is a refusal by one of the [`TOO_LARGE`] statuses.
+fn too_large(error: &CoreError) -> bool {
+    matches!(
+        error.fields.get(sdm_contract::error::REFUSED_STATUS),
+        Some(Detail::Scalar(Scalar::UInt16(status))) if TOO_LARGE.contains(status)
+    )
 }
 
 /// One payload's call, its body as written, sent and its answer laid out;

@@ -27,7 +27,6 @@ use sdm_host::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
 /// envelope.
 fn start(model: String) -> ControlMessage {
     ControlMessage::Start(Box::new(StartRun {
-        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {

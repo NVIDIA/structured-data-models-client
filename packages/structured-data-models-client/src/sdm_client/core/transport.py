@@ -35,7 +35,7 @@ _DEFAULT_BACKOFF_FACTOR = 0.5
 #: the same on every attempt, so a server fault reproduces, and the caller
 #: mistakes this endpoint reports as a 500 are reclassified from the body as
 #: the caller's after three more uploads of the whole gathered context.
-_RETRY_STATUS = (408, 429, 502, 503, 504)
+_RETRY_STATUS = (408, 429, 500, 502, 503, 504)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512
 _LOCAL_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})

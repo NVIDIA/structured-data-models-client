@@ -216,27 +216,12 @@ def _context(
         observe,
     )
 
-    # The most context rows a request carries (`max_tabular_context_rows`),
-    # the count compared with it natively before any frame length is read;
-    # past it, the core refuses, naming the setting.
-    limit = _call('check_tabular_cap', {'requested': None})['limit']
+    # The context is sampled only to a count the caller asked for.
     if decision is None:
-        if wanted is not None and bool(wanted > limit):
-            decision = {'kind': 'refused'}
-        else:
-            count = int(wanted) if isinstance(wanted, np.integer) else wanted
-            decision = _call(
-                'decide_tabular_context',
-                {
-                    'population': len(candidates),
-                    'requested': count,
-                },
-            )
-    if decision['kind'] == 'refused':
-        _call('check_tabular_cap', {'requested': str(int(wanted))})
-        raise StructuredDataError(
-            'the core refused a context count it then accepted',
-            code='INTERNAL_ERROR',
+        count = int(wanted) if isinstance(wanted, np.integer) else wanted
+        decision = _call(
+            'decide_tabular_context',
+            {'population': len(candidates), 'requested': count},
         )
     if not decision['reduced']:
         return candidates

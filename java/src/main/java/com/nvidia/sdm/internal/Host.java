@@ -87,14 +87,6 @@ public final class Host {
   public interface Model {
     byte[] call(byte[] body) throws TransportFailed, Refused, EndpointFailed;
 
-    /**
-     * The size limits the caller set on the client this model is reached through, by setting
-     * name; null where it set none.
-     */
-    default Map<String, Long> limits() {
-      return null;
-    }
-
     /** Session-aware transports override this; existing model callbacks remain prediction-only. */
     default byte[] call(Object endpoint, byte[] body) throws TransportFailed, Refused, EndpointFailed {
       if (!"predict".equals(endpoint)) throw new StructuredDataException(
@@ -163,40 +155,18 @@ public final class Host {
 
   /**
    * What one run is given beside its operation: its provider and model, or null for an operation
-   * that reads no data and calls no model, the values only this host holds that a sentence may
-   * name ({@code {host.<name>}}), each read from the error's or warning's fields, and the size
-   * limits the caller set, by setting name ({@code com.nvidia.sdm.Limits}), null for those of the
-   * model's client, else none.
+   * that reads no data and calls no model, and the values only this host holds that a sentence
+   * may name ({@code {host.<name>}}), each read from the error's or warning's fields.
    */
   public record Call(
-      Provider provider,
-      Model model,
-      Map<String, Function<Map<String, Object>, Object>> held,
-      Map<String, Long> limits) {
+      Provider provider, Model model, Map<String, Function<Map<String, Object>, Object>> held) {
     public Call {
       held = held == null ? Map.of() : Map.copyOf(held);
-      limits = limits == null ? null : Map.copyOf(limits);
-    }
-
-    public Call(
-        Provider provider, Model model, Map<String, Function<Map<String, Object>, Object>> held) {
-      this(provider, model, held, null);
     }
 
     /** A run with nothing beside its operation. */
     public static Call none() {
       return new Call(null, null, Map.of());
-    }
-
-    /** A run with nothing beside its operation but the size limits the caller set. */
-    public static Call limited(Map<String, Long> limits) {
-      return new Call(null, null, Map.of(), limits);
-    }
-
-    /** The size limits the run is held to: those given, else those of the model's client. */
-    Map<String, Long> effectiveLimits() {
-      if (limits != null) return limits;
-      return model == null ? null : model.limits();
     }
   }
 
@@ -338,10 +308,6 @@ public final class Host {
     start.put("message", "start");
     start.put("contract", contract());
     start.put("facts", HostFacts.now());
-    Map<String, Object> limits = LimitSettings.given(call.effectiveLimits());
-    if (!limits.isEmpty()) {
-      start.put("limits", limits);
-    }
     start.put("operation", operation);
     byte[] message = control(start);
     NativeCore.setLogLevel(NativeLog.level());

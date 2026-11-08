@@ -34,8 +34,7 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::{Endpoint, StartRun};
 use sdm_contract::{
-    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Sentence, Step,
-    Unit,
+    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
 };
 use sdm_core::{
     Attachment, Attachments, CompositionRoot, ModelResult, Run, UnknownZone, Zones, start,
@@ -141,7 +140,6 @@ fn predict_run_setting(
     start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,
@@ -266,7 +264,6 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
         start(
             &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
             StartRun {
-                limits: Default::default(),
                 contract: CONTRACT_VERSION,
                 facts: facts(),
                 operation,
@@ -1263,11 +1260,9 @@ fn an_output_named_and_left_out_is_noted() {
 }
 
 /// The call's size: the core writes the call's bytes, which the host sends
-/// unchanged, and holds each call to the most bytes one takes before the
-/// model is called (register PD-2, fix round 1); counted to the byte,
-/// with characters past ASCII counted as the bytes written. A call past it
-/// is split into smaller calls; one whose context alone is past it, here
-/// padded in the metadata every call carries, is refused.
+/// unchanged, and refuses a call past the endpoint's limit before the model
+/// is called (register PD-2, fix round 1); counted to the byte,
+/// with characters past ASCII counted as the bytes written.
 #[test]
 fn a_call_past_the_limit_is_refused_before_it_is_sent() {
     // Pad a non-truncated metadata field; diagnostic query clipping is independent.
@@ -1287,25 +1282,18 @@ fn a_call_past_the_limit_is_refused_before_it_is_sent() {
             other => panic!("not a call: {other:?}"),
         }
     };
-    let limit = sdm_contract::limits::MAX_REQUEST_BYTES.default as usize;
+    let limit = sdm_request::payload::PAYLOAD_BYTES;
     let base = called(padded("")).unwrap();
-    // ASCII to the limit, exactly: taken whole; one byte more: split, the
-    // first call smaller.
+    // ASCII to the limit, exactly: taken; one byte more: refused.
     assert_eq!(called(padded(&"a".repeat(limit - base))).unwrap(), limit);
-    let split = called(padded(&"a".repeat(limit - base + 1))).unwrap();
-    assert!(split < limit, "{split}");
-    // Padding past the limit on its own: no call is small enough.
-    let past = called(padded(&"a".repeat(limit))).unwrap_err();
+    let past = called(padded(&"a".repeat(limit - base + 1))).unwrap_err();
     assert_eq!(past.code, ErrorCode::InvalidRequest);
-    assert_eq!(past.sentence, Sentence::CallPastEndpoint);
     assert_eq!(past.fields["field"], text("call"));
-    assert_eq!(past.fields["setting"], text("max_request_bytes"));
-    assert_eq!(past.fields["env"], text("SDM_CLIENT_MAX_REQUEST_BYTES"));
     // Three-byte characters, each counted as its three bytes written.
     let euros = (limit - base) / 3;
     let rest = limit - base - 3 * euros;
     let at = format!("{}{}", "\u{20ac}".repeat(euros), "a".repeat(rest));
     assert_eq!(called(padded(&at)).unwrap(), limit);
     let over = format!("{}{}", "\u{20ac}".repeat(euros + 1), "a".repeat(rest));
-    assert!(called(padded(&over)).unwrap() < limit);
+    assert!(called(padded(&over)).is_err());
 }

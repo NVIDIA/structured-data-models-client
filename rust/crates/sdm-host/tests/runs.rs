@@ -53,7 +53,6 @@ fn facts(zone_roots: Vec<ZoneRootFact>) -> HostFacts {
 
 fn start_message(operation: Operation, zone_roots: Vec<ZoneRootFact>) -> Vec<u8> {
     encode(&ControlMessage::Start(Box::new(StartRun {
-        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: facts(zone_roots),
         operation,

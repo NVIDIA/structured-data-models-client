@@ -651,19 +651,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 .collect::<PyResult<Vec<_>>>()?,
         )?,
     )?;
-    // Each size limit a caller may set (`sdm_contract::limits::SETTINGS`):
-    // its name, the environment variable a host reads it from, and its
-    // default, the one table of them every host reads.
-    module.add(
-        "LIMITS",
-        PyTuple::new(
-            py,
-            sdm_contract::limits::SETTINGS
-                .iter()
-                .map(|setting| (setting.name, setting.env, setting.default))
-                .collect::<Vec<_>>(),
-        )?,
-    )?;
     // Each data type name a host may give a column, and the contract's name
     // of the type it names: the one table of them.
     module.add(

@@ -75,8 +75,7 @@ public final class RelationalMaterializer implements AutoCloseable {
     attached.put(2, Host.attachment(input));
     attached.put(3, Indices.column(options.indices(), ArrowData.allocator()));
     attached.put(4, Host.optionAttachment(PredictiveQuery.values(options)));
-    try (Host.Finished finished =
-        Host.run(op, attached, Host.Call.limited(options.limits().values()))) {
+    try (Host.Finished finished = Host.run(op, attached)) {
       Results.Gathered gathered = (Results.Gathered) Results.expect(finished.result(), "materialize");
       @SuppressWarnings("unchecked") Map<String, Object> state = (Map<String, Object>) finished.result().get("state");
       MaterializedRequest retained = new MaterializedRequest(state, finished);

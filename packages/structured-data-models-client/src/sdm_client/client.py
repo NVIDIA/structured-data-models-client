@@ -37,8 +37,6 @@ from sdm_client.errors import (
     StructuredDataError,
     UnknownModelError,
 )
-from sdm_client.limits import Limits, limits_in_effect
-from sdm_client.limits import check as check_limits
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
@@ -191,15 +189,14 @@ class FittedModel:
                 f'question that many times. Ask it with predict()',
                 code='UNSUPPORTED_REQUEST',
             )
-        with limits_in_effect(self._client._limits):
-            if getattr(self, '_relational_session', None) is not None:
-                from sdm_client._rust import frame_sessions
+        if getattr(self, '_relational_session', None) is not None:
+            from sdm_client._rust import frame_sessions
 
-                return frame_sessions.predict(self, request)
-            if getattr(self, '_tabular_session', None) is not None:
-                from sdm_client._rust import sessions
+            return frame_sessions.predict(self, request)
+        if getattr(self, '_tabular_session', None) is not None:
+            from sdm_client._rust import sessions
 
-                return sessions.predict(self, request)
+            return sessions.predict(self, request)
         raise StructuredDataError(
             'this fitted model has no native session state; fit again',
             code='INVALID_CONFIGURATION',
@@ -274,7 +271,6 @@ class SDMClient:
         verify_ssl: bool = True,
         timeout: float = 60.0,
         max_retries: int = 3,
-        limits: Limits | None = None,
     ) -> None:
         r"""Open a client against one NIM.
 
@@ -295,11 +291,6 @@ class SDMClient:
                 the same on every attempt. ``POST /v1/sessions`` is excluded:
                 a re-sent create would orphan a pinned context on the
                 endpoint.
-            limits: The size limits requests to this endpoint are held to,
-                for a deployment configured to take more or less than the
-                serving layer's defaults. A setting left out takes its
-                environment variable, else its default; see
-                :class:`~sdm_client.Limits`.
         """
         self._start(
             Transport(
@@ -308,13 +299,10 @@ class SDMClient:
                 verify_ssl=verify_ssl,
                 timeout=timeout,
                 max_retries=max_retries,
-            ),
-            limits,
+            )
         )
 
-    def _start(
-        self, transport: WireTransport, limits: Limits | None = None
-    ) -> None:
+    def _start(self, transport: WireTransport) -> None:
         r"""Set everything a client holds, given what carries its requests.
 
         The one place a client's state is set.:meth:`for_databricks_serving`
@@ -323,27 +311,22 @@ class SDMClient:
         new state here, not to ``__init__``.
         """
         self._transport: WireTransport = transport
-        self._limits: Limits | None = check_limits(limits)
         self._adapters: dict[str, ModelAdapter] = {}
         self._pinned: set[FittedModel] = set()
 
     @classmethod
-    def in_process(
-        cls, *models: Any, device: Any = None, limits: Limits | None = None
-    ) -> SDMClient:
+    def in_process(cls, *models: Any, device: Any = None) -> SDMClient:
         """Run models locally using the same Rust preparation and result path.
 
         Pass loaded structured-data-models models, or omit them to load weights
         on first use. The optional ``in-process`` extra requires Python 3.11+.
         ``device`` controls models loaded by this client; supplied models keep
-        their placement. Local refusals carry no HTTP status. ``limits``
-        holds requests to the sizes it names, as for an endpoint; see
-        :class:`~sdm_client.Limits`.
+        their placement. Local refusals carry no HTTP status.
         """
         from sdm_client.in_process import InProcessBackend
 
         client = cls.__new__(cls)
-        client._start(InProcessBackend(models, device), limits)
+        client._start(InProcessBackend(models, device))
         return client
 
     @classmethod
@@ -353,7 +336,6 @@ class SDMClient:
         *,
         workspace_client: Any | None = None,
         timeout: float | None = None,
-        limits: Limits | None = None,
     ) -> SDMClient:
         r"""Open a client against a Databricks Model Serving endpoint.
 
@@ -385,10 +367,6 @@ class SDMClient:
                 timeouts. Given with a ``WorkspaceClient``, it is set on the
                 copy, never on the caller's client; with a subclass or test
                 double, which cannot be copied, it is refused.
-            limits: The size limits requests are held to, as for a NIM; see
-                :class:`~sdm_client.Limits`. The gateway's own 16 MB limit on
-                each call, once wrapped, holds as well: a call past either is
-                split into smaller calls where it scores several rows.
 
         Raises:
             MissingExtraError: If ``databricks-sdk`` is not installed; install
@@ -407,16 +385,9 @@ class SDMClient:
         client._start(
             DatabricksServingTransport(
                 endpoint, workspace_client, timeout=timeout
-            ),
-            limits,
+            )
         )
         return client
-
-    @property
-    def limits(self) -> Limits:
-        r"""The size limits this client was opened with; a setting left
-        ``None`` takes its environment variable, else its default."""
-        return self._limits or Limits()
 
     @property
     def url(self) -> str:
@@ -478,12 +449,11 @@ class SDMClient:
         """
         _require_a_request(request)
         _require_output_names(outputs)
-        with limits_in_effect(self._limits):
-            if request.parts is not None:
-                return self._answer_in_parts(request, model, outputs)
-            return _prediction_handler(request).predict(
-                self, request, model, outputs
-            )
+        if request.parts is not None:
+            return self._answer_in_parts(request, model, outputs)
+        return _prediction_handler(request).predict(
+            self, request, model, outputs
+        )
 
     def _answer_in_parts(
         self,
@@ -605,14 +575,13 @@ class SDMClient:
         _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
         spec = self._spec(model)
-        with limits_in_effect(self._limits):
-            if spec.model_id == 'kumo-tabular':
-                from sdm_client._rust import sessions
+        if spec.model_id == 'kumo-tabular':
+            from sdm_client._rust import sessions
 
-                return sessions.fit(self, request, model, outputs, holdout)
-            from sdm_client._rust import frame_sessions
+            return sessions.fit(self, request, model, outputs, holdout)
+        from sdm_client._rust import frame_sessions
 
-            return frame_sessions.fit(self, request, model, outputs, holdout)
+        return frame_sessions.fit(self, request, model, outputs, holdout)
 
     @staticmethod
     def _spec(model: str | Model) -> ModelSpec:

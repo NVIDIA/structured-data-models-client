@@ -31,7 +31,7 @@ import java.util.concurrent.TimeoutException;
  * Transport} ({@code sdm_client/core/transport.py}): it posts the core's call to {@code
  * /v1/predictions} as the bytes the core wrote, never parsing or re-encoding them (design choice
  * 10, "Model calls"), and gives back the endpoint's answer as the bytes it sent, which the core
- * reads. A transient failure (a status of 429, 502, 503 or 504, or a connection that failed) is
+ * reads. A transient failure (a status of 429, 500, 502, 503 or 504, or a connection that failed) is
  * tried again with exponential backoff, a {@code Retry-After} the endpoint sends honoured up to a
  * minute; the timeout bounds each attempt whole, its answer's body included; a status of 400 or more is the endpoint's refusal ({@link ModelEndpointException}); an
  * endpoint that cannot be reached, or an answer past 64 MiB or that is not a JSON object, is a
@@ -42,7 +42,7 @@ public final class HttpTransport {
   public static final String PREDICTIONS = "/v1/predictions";
 
   /** The statuses tried again. */
-  static final Set<Integer> RETRY_STATUS = Set.of(408, 429, 502, 503, 504);
+  static final Set<Integer> RETRY_STATUS = Set.of(408, 429, 500, 502, 503, 504);
 
   /** The largest answer read. */
   static final int MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
@@ -216,7 +216,9 @@ public final class HttpTransport {
           backoff(attempt, null);
           continue;
         }
-        throw new Failed("the request timed out after " + timeout + ", the timeout given");
+        // As the endpoint's 408, so the core asks the rows again in halves.
+        throw ModelEndpointException.of(408, ("the request timed out after " + timeout
+            + ", the timeout given").getBytes(java.nio.charset.StandardCharsets.UTF_8));
       } catch (IOException e) {
         if (attempt < retries) {
           backoff(attempt, null);

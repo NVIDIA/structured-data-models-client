@@ -715,7 +715,6 @@ pub(crate) async fn predict(
     asker: Asker,
     request: Predict,
     mut attached: Attachments,
-    limits: sdm_contract::limits::Limits,
 ) -> Result<OperationResult, CoreError> {
     if request.state.is_some() || request.held.is_some() {
         return Err(CoreError::protocol(
@@ -824,14 +823,11 @@ pub(crate) async fn predict(
         None
     };
     let analysis = crate::columns::expose(&asker, analysis.as_deref(), &bound.outputs)?;
-    // The context and the call held to the run's limits, as they are sent.
-    predict::check_direct_context(&bound.model, bound.facts.context_rows, &limits)?;
     if predict::nothing_to_score(&payload) {
         let mut part = tabular::response::empty(&bound.model, &payload)?;
         part.columns = analysis;
         return crate::predict::finish(&asker, part, bound.outputs);
     }
-    let bytes = predict::call_bytes(&payload, limits.max_request_bytes)?;
     if deferred_options {
         use sdm_contract::direct::native_response::{NativeDirectCall, PreparedDirectCall};
         let payload = asker.attach(Attachment::Bytes(payload.to_bytes()))?;
@@ -848,7 +844,8 @@ pub(crate) async fn predict(
         }));
     }
     let answer =
-        crate::predict::call_answer(&asker, bytes, request.model_endpoint.as_ref()).await?;
+        crate::predict::call_answer(&asker, payload.to_bytes(), request.model_endpoint.as_ref())
+            .await?;
     let mut payload = payload;
     if let Some(analysis) = analysis {
         payload.set("client_column_analysis", Value::Text(analysis));

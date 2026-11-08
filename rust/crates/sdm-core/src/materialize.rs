@@ -79,7 +79,6 @@ use sdm_contract::data::{
     MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME, TableColumn,
     TextTimes,
 };
-use sdm_contract::limits::{Limits, MAX_RELATIONAL_CONTEXT_ROWS};
 use sdm_contract::ops::{
     ColumnRef, ForecastStep, Materialized, MemoBounds, MemoRows, MemoStoredTime, OperationResult,
     ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestBatch,
@@ -187,8 +186,6 @@ pub(crate) struct Inputs {
     /// (`Materialize.most_calls`).
     pub most_calls: Option<u32>,
     pub facts: HostFacts,
-    /// The size limits the run holds the request to.
-    pub limits: Limits,
     /// The zones the run resolves names with: the host's local zone, which
     /// places a date literal's two-digit year (`pql::local_year`).
     pub zones: Arc<dyn sdm_engine::time::Zones>,
@@ -2879,8 +2876,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // being one call (a forecast over more entities than one call scores
     // would make the steps times the batches), and the population each step
     // gathers, counted across the steps.
-    let per_call =
-        options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?, &inputs.limits);
+    let per_call = options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
     let entities = inputs.indices.as_ref().map_or(0, |data| {
         data.batches
             .iter()
@@ -3068,7 +3064,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let mode = options::run_mode(
         asked_values.num_context_samples,
         asked_values.num_context_samples_given.as_deref(),
-        inputs.limits.max_relational_context_rows,
     )?;
     // The hops the sampling options ask, bounded as the client bounds them,
     // before the options this core does not take are refused by name.
@@ -3105,7 +3100,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         indices,
         anchor_time,
         facts,
-        limits,
         zones,
         most_entities,
         most_calls,
@@ -3127,7 +3121,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let anchor_entity = inputs_anchor_entity;
     // The most context examples asked for, which narrows the context the
     // mode gathers (`_narrow_context`); the bound above holds it to the
-    // most a request carries (`max_relational_context_rows`).
+    // best mode's.
     let asked_examples = num_context_samples
         .and_then(|n| n.magnitude)
         .and_then(|n| usize::try_from(n).ok());
@@ -3493,7 +3487,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // per entity, with the entity table's columns the query reads; for a
     // temporal query, walked back from the context's anchor by the window.
     // A best run gathers its own examples, or as many as were asked past
-    // them where the limit is raised to take more.
+    // them: the client sets no most.
     let context_examples = match mode {
         options::RunMode::Fast => mode.context_examples(),
         options::RunMode::Best => mode.context_examples().max(asked_examples.unwrap_or(0)),
@@ -3797,7 +3791,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 ),
                 (
                     "most".to_owned(),
-                    Detail::Scalar(Scalar::UInt64(limits.max_relational_context_rows)),
+                    count(options::RunMode::Best.context_examples()),
                 ),
             ]
             .into(),
@@ -3841,7 +3835,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let per_call = usize::try_from(options::rows_one_task_call_scores(
         rows_per_call,
         batch_task,
-        &limits,
     ))
     .map_err(|_| internal("a call's rows past usize"))?;
     let num_test = indices.len();
@@ -3920,24 +3913,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         });
     }
     excluded_by_caller(&graph, &exclude_cols, &mut excluded)?;
-    // The instance table holds the context's examples: at most as many as
-    // a request carries (`MAX_TABLE_ROWS`, `max_relational_context_rows`).
-    if num_train as u64 > limits.max_relational_context_rows {
-        return Err(MAX_RELATIONAL_CONTEXT_ROWS.named(
-            invalid(
-                Sentence::ContextPastRows,
-                "the context holds more rows than a request takes",
-                "query",
-            )
-            .with_field("context_rows", count(num_train))
-            .with_field(
-                "limit",
-                Detail::Scalar(Scalar::UInt64(limits.max_relational_context_rows)),
-            ),
-        ));
-    }
-    // The rows the largest call scores (`_the_largest_batch`), which the
-    // lagged columns are held to.
+    // The rows the largest call scores (`_the_largest_batch`), which a
+    // payload past the endpoint's body names as the size to come down from.
     let largest = per_call.min(num_test);
     let train_anchors = anchors.len();
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
@@ -4143,7 +4120,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         if lag_columns.is_none()
             && let Some(lag) = &lag
         {
-            lag.fits(num_train + largest, limits.max_request_bytes)?;
+            lag.fits(num_train + largest)?;
             lag_columns = Some(
                 lag.columns(
                     &(0..num_train)
@@ -4222,9 +4199,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 )?
             }
         };
-        // A call past the most bytes one takes is split when it is
-        // predicted; refused now only where its context alone is past it.
-        payload::check_bytes(&built, limits.max_request_bytes)?;
         answering += built.answering;
         gathered.push((
             built.bytes,

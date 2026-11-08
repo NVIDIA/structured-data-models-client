@@ -209,7 +209,6 @@ advice! {
     Nothing = "nothing", [];
     OptimizeIndices = "optimize_indices", [];
     PredictCall = "predict_call", [];
-    RaiseLimit = "raise_limit", ["setting"];
     RaiseMostParts = "raise_most_parts", [];
     SemanticModel = "semantic_model", ["metric_view"];
     ResultFrame = "result_frame", [];
@@ -339,9 +338,6 @@ pub fn template(sentence: Sentence) -> Template {
         }
         S::DirectTargetScored => said(
             r#"predict carries the target column {target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{target!r}])"#,
-        ),
-        S::DirectContextLimit => said(
-            r#"this request carries {context_rows:,} context rows and {model} reads at most {context_rows_max:,}. A request built directly is sent as it was given, so choose the rows you want as context, or gather it with materialize(), which keeps the context under the cap and says how; if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
         ),
         S::TabularMissingRowIndex => said(
             r#"kumo-tabular returned a response that does not match the contract: PredictionItem response is missing required field 'row_index'"#,
@@ -745,7 +741,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"column {column!r} holds a value that {admitted_type}, the type it was described as, cannot hold"#,
         ),
         S::LagPastPayload => said(
-            r#"the {lag_timesteps:,} past steps lag_timesteps asks for make the request larger than the {limit:,} bytes a call takes; ask for fewer steps, or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
+            r#"the {lag_timesteps:,} past steps lag_timesteps asks for make the request larger than the {limit:,} bytes the endpoint takes; ask for fewer steps"#,
         ),
         S::DateLiteralPacked => said(
             r#"{query!r} is not a query a relational model can answer: {literal} is not a valid instance of time"#,
@@ -882,9 +878,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::ModelLacksOutputs => said(
             r#"{model} does not produce {unsupported_outputs!r}; it produces {supported_outputs!r}"#,
         ),
-        S::ContextPastModel => said(
-            r#"this request carries {context_rows:,} context rows and {model} reads at most {context_rows_max:,}. A request built directly is sent as it was given, so choose the rows you want as context, or gather it with {advice:materialize_call()}, which keeps the context under the cap and says how; if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
-        ),
         S::NoContextRows => said(
             r#"no context rows are left: every row that could be context is also being scored, and a row carrying the answer being asked for is not sent as context. Score fewer rows, so that the rest are there to learn from"#,
         ),
@@ -936,12 +929,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::OptionsUnreadStatistic => said(
             r#"{model} does not read inference option(s) {unsupported!r}; drop them from inference_config to send the request without them. The keys this client forwards are {forwarded!r}, and the endpoint decides for itself whether it serves the value given for one. A regression's statistic is chosen with {advice:choose_statistic()} instead: 'median', the default, or 'mean'"#,
         ),
-        S::PayloadNoSmallerCall => said(
-            r#"the context alone is too large to send: a call carrying it and one row to score is {bytes:,} bytes, {context_bytes:,} of them the context, and a call takes at most {limit:,}. Calls past the limit are split into smaller ones, but the context is sent whole with every call, so what comes down is num_context_samples, num_neighbors or the columns the graph carries; or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
-        ),
-        S::CallPastEndpoint => said(
-            r#"this call is {bytes:,} bytes, {context_bytes:,} of them the context, and a call takes at most {limit:,}. A relational call scoring several rows is split into smaller ones, but the context is sent whole with every call, and a single-table request or a pinned context is sent as one call; so carry a smaller context (num_context_samples, the neighbourhood sampled, or the tables and columns in the graph), or score fewer rows at a time; or, if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
-        ),
         S::OutputsNone => said(r#"outputs must name at least one field"#),
         S::NotFinite => said(
             r#"encountered a non-finite value ({value}); NIM requests must contain finite numbers or nulls"#,
@@ -969,9 +956,6 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::NumContextSamplesBelowOne => said(
             r#"num_context_samples must be at least 1; a model predicts from labelled examples, and {given!S} leaves it none"#,
-        ),
-        S::NumContextSamplesPastMost => said(
-            r#"num_context_samples is {given!I:,}, and a request carries at most {limit:,} context rows; if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
         ),
         S::NumHopsNotWhole => said(r#"num_hops must be a whole number, got {given!N} {given!G}"#),
         S::NumHopsNone => said(r#"num_hops must be a whole number, got {advice:nothing()}"#),
@@ -1138,9 +1122,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::TargetNotAFeature => {
             said(r#"the column the query predicts is not one of the features of the entity table"#)
         }
-        S::ContextPastRows => said(
-            r#"the context holds {context_rows:,} rows, and a request carries at most {limit:,}; if the endpoint takes more, raise it with {advice:raise_limit(setting)} or the environment variable {env}"#,
-        ),
         S::HeldBySeveralRowsOne => said(
             r#"Cannot score {keys[0]!r}: more than one row of table '{table}' holds this value of '{key}', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row."#,
         ),
@@ -1330,9 +1311,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::InvalidConfiguration => {
             said(r#"the configuration of this call is not one the core accepts"#)
         }
-        S::LimitEnvironmentInvalid => said(
-            r#"the environment variable {env} is {given!r}, and {setting} takes a whole number of at least 1"#,
-        ),
         S::PartForecastStep => {
             said(r#"This is forecast step {forecast_step} of {forecast_steps}."#)
         }
@@ -1549,7 +1527,7 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"this request carries a value that cannot be sent as JSON: {reason}"#)
         }
         S::ServingPastLimit => said(
-            r#"this request is too large for serving endpoint {endpoint!r}: a call carrying it is {bytes:,} bytes once wrapped, {context_bytes:,} of them the context, above the {limit:,} byte limit the endpoint accepts. Calls past the limit are split into smaller ones where they score several rows, but the context is sent whole with every call, so gather a smaller context (num_context_samples, num_neighbors or the columns the graph carries), or score fewer rows at a time"#,
+            r#"this request is {bytes:,} bytes once wrapped for serving endpoint {endpoint!r}, above the {limit:,} byte limit it accepts. Send fewer rows per call: a smaller num_context_samples, or fewer entities to score"#,
         ),
         S::ServingNotJson => {
             said(r#"serving endpoint {endpoint!r} answered with a response that is not JSON"#)

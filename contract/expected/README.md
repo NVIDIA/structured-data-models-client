@@ -30,7 +30,6 @@ Their differences from DuckDB follow the fixture loader's explicit mappings in `
 | Postgres | NaN-key fixtures refuse at materialize; a negative neighbor bound retains the existing `PROVIDER_ERROR` outcome |
 
 `sample.num-hops.seven` and `sample.num-neighbors.seven-hops` now reach predict on every backend: the client sets no most on hops, since the model reads as many as a request carries, where the reference refused past six.
-The `multicall.body-30mib` cases keep their refusal at materialize, now naming the context's size and the `max_request_bytes` setting, since a call past the limit is split and only a context too large on its own is refused.
 
 These expectations describe the declared fixture mappings; they do not claim that every backend supports identical physical types.
 `explain.two-entities` now succeeds on all three backends: The client supports explanations for multiple prediction rows.

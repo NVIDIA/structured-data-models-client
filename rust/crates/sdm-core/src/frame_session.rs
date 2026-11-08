@@ -90,7 +90,6 @@ pub(crate) async fn run(
     asker: Asker,
     operation: FrameSessionOperation,
     mut attached: Attachments,
-    limits: sdm_contract::limits::Limits,
 ) -> Result<OperationResult, CoreError> {
     let (input_id, payload_ids, pinned_id, action) = match operation {
         FrameSessionOperation::Fit { input, payloads } => (input, payloads, None, "fit"),
@@ -148,7 +147,6 @@ pub(crate) async fn run(
                 &model,
                 outputs.as_deref().unwrap_or(&[]),
                 default_outputs,
-                &limits,
             )?;
             let query = question
                 .as_ref()
@@ -180,8 +178,6 @@ pub(crate) async fn run(
             let state_keys = row_keys(&body, "context", windowed)?;
             let column_analysis = Some(crate::columns::compute(std::slice::from_ref(&body))?);
             crate::columns::expose(&asker, column_analysis.as_deref(), &fields)?;
-            // The pinned context is one call, which no split makes smaller.
-            predict::call_bytes(&body, limits.max_request_bytes)?;
             let answer = call(&asker, Endpoint::CreateSession, body).await?;
             let id = session_id(&answer)?;
             let state = FrameSessionState {
@@ -274,7 +270,6 @@ pub(crate) async fn run(
                     &state.model,
                     &state.outputs,
                     false,
-                    &limits,
                 )?;
                 let scored = row_keys(&layout, "predict", state.windowed)?;
                 shown += keys::overlap_count(&state.keys.rows, &scored.rows)?;
@@ -294,11 +289,6 @@ pub(crate) async fn run(
             }
             let analysis =
                 crate::columns::expose(&asker, state.column_analysis.as_deref(), &state.outputs)?;
-            // Every scoring call held to the most bytes a call takes before
-            // the first is sent.
-            for (body, _) in &plans {
-                predict::call_bytes(body, limits.max_request_bytes)?;
-            }
             let mut parts = Vec::new();
             let mut start = 0;
             for (body, layout) in plans {

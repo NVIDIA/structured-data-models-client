@@ -34,7 +34,6 @@ fn run(
     sdm_core::start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: HostFacts {
                 now: Scalar::Timestamp {
@@ -117,19 +116,16 @@ fn send(endpoint: Endpoint, payload: Vec<u8>, response: Value) -> Value {
 
 #[test]
 fn fit_score_twice_and_retry_close_with_remapped_attachments() {
-    let bound = sdm_request::direct::bind(
-        DirectCallFacts {
-            query: None,
-            model: "kumo-tabular".into(),
-            outputs: Some(vec!["prediction".into()]),
-            kind: "regression".into(),
-            anchored: false,
-            relationships: false,
-            tables: 1,
-            context_rows: 3,
-        },
-        &Default::default(),
-    )
+    let bound = sdm_request::direct::bind(DirectCallFacts {
+        query: None,
+        model: "kumo-tabular".into(),
+        outputs: Some(vec!["prediction".into()]),
+        kind: "regression".into(),
+        anchored: false,
+        relationships: false,
+        tables: 1,
+        context_rows: 3,
+    })
     .unwrap();
     let columns = TabularColumns {
         dtypes: vec![("id".into(), Dtype::Int64), ("y".into(), Dtype::Float64)],

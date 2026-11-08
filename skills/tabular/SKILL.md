@@ -34,7 +34,6 @@ with SDMClient(url='http://localhost:8000') as client:
 | Relationships | no |
 | Explanations | yes |
 | Sessions | yes |
-| Context rows | 10,000 |
 
 Anything outside that list belongs to the relational model. Asking for
 `rankings` or a forecast here is refused before a request
@@ -110,11 +109,9 @@ guesses that way and names the argument that settles it.
 ## Which rows get scored
 
 `Request(context=..., predict=...)` takes two frames and sends exactly those
-rows. It trims neither. A context above 10,000 rows is refused with the count
-and the cap rather than quietly dropping rows you named. The cap is a setting
-with the serving layer's default: for a deployment configured to take more,
-pass `limits=Limits(max_tabular_context_rows=...)` to `SDMClient` and to
-`materialize()`, or set `SDM_CLIENT_MAX_TABULAR_CONTEXT_ROWS`.
+rows. It trims neither, and holds the context to no size of its own: a
+context larger than the endpoint takes is the endpoint's refusal, shown as it
+said it.
 
 The rows to score need not appear in the labelled half, and usually should not:
 they are the rows whose answer you do not have.
@@ -160,8 +157,8 @@ print(answer.to_pandas())
 ```
 
 Twenty rows in, three named, and `request.context_rows` is 17: the scored rows
-are held out of their own context. `materialize()` also samples down to the
-10,000-row cap.
+are held out of their own context. `materialize()` samples the context only
+to a `num_context_samples` you pass.
 
 On this model the language is cut down to a column of one table as the target:
 no aggregation, no window, no comparison, no forecast, no ranking, no entity
@@ -218,7 +215,6 @@ names what to change.
 |---|---|
 | a task the model does not serve | `forecasting`, `temporal_link_prediction` and the rest are relational |
 | an output it does not produce | `rankings`, `embeddings`, `scores` |
-| a context above the cap | more than 10,000 labelled rows in a direct `Request` |
 | relationships | this model reads one table; use `kumo-relational` |
 
 Catch `StructuredDataError` to catch all of them.

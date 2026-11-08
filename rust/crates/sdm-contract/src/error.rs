@@ -787,7 +787,6 @@ sentences! {
     DirectScored = "direct_scored", E::InvalidRequest;
     DirectTargetMissing = "direct_target_missing", E::InvalidRequest;
     DirectTargetScored = "direct_target_scored", E::InvalidRequest;
-    DirectContextLimit = "direct_context_limit", E::UnsupportedRequest;
     TabularMissingRowIndex = "tabular_missing_row_index", E::InvalidResponse;
     DirectMultilabel = "direct_multilabel", E::UnsupportedRequest;
     DirectRelationalFrames = "direct_relational_frames", E::UnsupportedRequest;
@@ -994,7 +993,6 @@ sentences! {
     ModelLacksShape = "model_lacks_shape", E::UnsupportedRequest;
     ModelLacksTask = "model_lacks_task", E::UnsupportedRequest;
     ModelLacksOutputs = "model_lacks_outputs", E::UnsupportedRequest;
-    ContextPastModel = "context_past_model", E::UnsupportedRequest;
     NoContextRows = "no_context_rows", E::UnsupportedRequest;
     TooManyClasses = "too_many_classes", E::UnsupportedRequest;
     OneClassColumn = "one_class_column", E::UnsupportedRequest;
@@ -1013,8 +1011,6 @@ sentences! {
     ExplanationFastMode = "explanation_fast_mode", E::UnsupportedRequest;
     OptionsUnread = "options_unread", E::UnsupportedRequest;
     OptionsUnreadStatistic = "options_unread_statistic", E::UnsupportedRequest;
-    PayloadNoSmallerCall = "payload_no_smaller_call", E::InvalidRequest;
-    CallPastEndpoint = "call_past_endpoint", E::InvalidRequest;
     OutputsNone = "outputs_none", E::InvalidRequest;
     NotFinite = "not_finite", E::InvalidRequest;
     PastInt64 = "past_int64", E::InvalidRequest;
@@ -1025,7 +1021,6 @@ sentences! {
     LagPastTimes = "lag_past_times", E::ValueOutOfRange;
     NumContextSamplesNotWhole = "num_context_samples_not_whole", E::InvalidRequest;
     NumContextSamplesBelowOne = "num_context_samples_below_one", E::InvalidRequest;
-    NumContextSamplesPastMost = "num_context_samples_past_most", E::UnsupportedRequest;
     NumHopsNotWhole = "num_hops_not_whole", E::InvalidRequest;
     NumHopsNone = "num_hops_none", E::InvalidRequest;
     RandomSeedNotWhole = "random_seed_not_whole", E::InvalidRequest;
@@ -1088,7 +1083,6 @@ sentences! {
     EntityTableEmpty = "entity_table_empty", E::InvalidRequest;
     EntityKeyMissing = "entity_key_missing", E::InvalidRequest;
     TargetNotAFeature = "target_not_a_feature", E::InvalidRequest;
-    ContextPastRows = "context_past_rows", E::InvalidRequest;
     HeldBySeveralRowsOne = "held_by_several_rows_one", E::InvalidRequest;
     HeldBySeveralRows = "held_by_several_rows", E::InvalidRequest;
     HeldBySeveralRowsMany = "held_by_several_rows_many", E::InvalidRequest;
@@ -1156,7 +1150,6 @@ sentences! {
     LargeTextMaterialize = "large_text_materialize", E::UnsupportedType;
     AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
     InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
-    LimitEnvironmentInvalid = "limit_environment_invalid", E::InvalidConfiguration;
     PartForecastStep = "part_forecast_step", Code::Part;
     PartForecastStepOutran = "part_forecast_step_outran", Code::Part;
     PartRankingCandidate = "part_ranking_candidate", Code::Part;

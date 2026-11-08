@@ -214,7 +214,6 @@ fn run_of(operation: Operation, attachments: Attachments) -> Result<Run, CoreErr
     start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,

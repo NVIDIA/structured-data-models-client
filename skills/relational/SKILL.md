@@ -152,30 +152,22 @@ views, and a notebook's own session are in
 
 ## Which rows get scored
 
-`materialize(indices=[...])` names the entities. It gathers each one's
-neighbourhood, checks every limit before sending, and refuses with the limit it
-would break rather than letting the endpoint return a 500.
+`materialize(indices=[...])` names the entities and gathers each one's
+neighbourhood. The client holds a request to no size of its own: it sends its
+best attempt, and a call the endpoint refuses as too large, or times out on,
+is asked again in halves, each with the whole context. A refusal of one row,
+or a `422`, is the endpoint's, shown as it said it.
 
 | Limit | Value |
 |---|---|
 | context rows, by default | `1,000` |
-| context rows, with `num_context_samples` | `10,000` |
-| rows scored at once | `10,000` |
-| rows scored for a link prediction | `200` |
-| bytes one call takes | `31,457,280` |
 | classes | `10` |
 
-The context rows with `num_context_samples`, the rows scored at once, the rows scored for a link prediction and the bytes one call takes are the serving layer's defaults, and a deployment may be configured to take more.
-Each is a setting: pass `limits=Limits(...)` to `SDMClient` and to `materialize()`, or set its environment variable, such as `SDM_CLIENT_MAX_RELATIONAL_CONTEXT_ROWS`.
-The gathered graph may carry any number of tables and hops.
-
-**More rows than one call scores are not refused.** They are gathered in
-batches of at most that many, and `predict()` sends one call per batch and
-returns one result, whose rows are numbered across the whole request, so
-`to_pandas()` gives the indices back in the order they were asked for. The
-10,000 is the deployment's `TFM_MAX_TEST_ROWS`, not a property of the
-protocol; pass `rows_per_call=` to ask in smaller batches, which is what a
-graph too wide for a full one needs. It only goes down.
+**Rows are scored in batches.** They are gathered in batches of 10,000 (200
+for a link prediction), and `predict()` sends one call per batch and returns
+one result, whose rows are numbered across the whole request, so `to_pandas()`
+gives the indices back in the order they were asked for. Pass
+`rows_per_call=` to ask in batches of another size.
 
 Every batch is built before the first is sent, so one `materialize()` gathers
 at most 100,000 entities, in at most 100 calls. Both are this client's own:
@@ -184,9 +176,7 @@ in parts is not batched at all: a ranking is already a call per candidate and
 a forecast one per step, and batching a part would send that many times as
 many calls.
 
-**A call past the most bytes one takes is split, not refused.** It is sent as
-several smaller calls, each with the whole context, so only a context too
-large on its own is refused, naming its size and the limit.
+The gathered graph may carry any number of tables and hops.
 Gradient explanations follow the model endpoint's supported outputs; the client does not impose a separate one-row or fast-context limit.
 
 ## Asking for more than one answer each

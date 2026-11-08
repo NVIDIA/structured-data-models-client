@@ -27,7 +27,6 @@ pub mod examples;
 pub mod facts;
 pub mod frames;
 pub mod labels;
-pub mod limits;
 pub mod ops;
 pub mod pql;
 pub mod rebind;

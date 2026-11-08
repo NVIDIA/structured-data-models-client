@@ -27,7 +27,6 @@ fn run(operation: Operation, attached: Attachments) -> Run {
     sdm_core::start(
         &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: HostFacts {
                 now: Scalar::Timestamp {

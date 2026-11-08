@@ -404,14 +404,13 @@ class DatabricksServingTest {
       client.predict(request, SdmClient.KUMO_RELATIONAL);
       byte[] body = workspace.bodies.get(0);
       assertTrue(new String(body, StandardCharsets.UTF_8).contains("é😀"));
-      // One byte under the call: it is split into smaller calls, each within the limit and
-      // each carrying the whole context, its rows answered as one.
       try (Workspace limited = new Workspace();
           SdmClient capped = SdmClient.forDatabricksServing(limited.serving(body.length - 1))) {
-        assertEquals(client.predict(request, SdmClient.KUMO_RELATIONAL).rows(),
-            capped.predict(request, SdmClient.KUMO_RELATIONAL).rows());
-        assertTrue(limited.bodies.size() > 1);
-        for (byte[] part : limited.bodies) assertTrue(part.length <= body.length - 1);
+        StructuredDataException error = assertThrows(StructuredDataException.class,
+            () -> capped.predict(request, SdmClient.KUMO_RELATIONAL));
+        assertEquals("INVALID_REQUEST", error.code());
+        assertEquals(body.length, ((Number) error.details().get("bytes")).intValue());
+        assertTrue(limited.bodies.isEmpty());
       }
     }
   }
@@ -552,9 +551,7 @@ class DatabricksServingTest {
               () -> client.predict(request, SdmClient.KUMO_RELATIONAL));
       assertEquals("INVALID_REQUEST", error.code());
       assertEquals(100L, ((Number) error.details().get("limit")).longValue());
-      assertTrue(error.getMessage().contains("above the 100 byte limit the endpoint accepts"),
-          error.getMessage());
-      assertTrue(error.getMessage().contains("of them the context"), error.getMessage());
+      assertTrue(error.getMessage().contains("above the 100 byte limit it accepts"), error.getMessage());
       assertEquals(List.of(), workspace.bodies);
     }
   }

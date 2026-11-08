@@ -195,10 +195,9 @@ DEPARTED = {
     # An earlier endpoint read at most 15 tables; the model reads as many as
     # a request carries, so the client sets no most.
     'star.tables-16': 'no table limit',
-    # A call past the byte limit that scores several rows is split into
-    # smaller calls when it is predicted; only a context too large on its
-    # own is refused at materialize.
-    'size.one-past-the-limit': 'split by bytes',
+    # The client holds a payload to no size of its own: a call the endpoint
+    # refuses as too large is asked again in halves when it is predicted.
+    'size.one-past-the-limit': 'no byte limit',
 }
 
 

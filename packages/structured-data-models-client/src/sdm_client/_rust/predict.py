@@ -606,6 +606,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
         failure: StructuredDataError | None = None
         unexpected: Exception | None = None
         transport_failed = False
+        timed_out: StructuredDataError | None = None
         refused: NimRequestError | None = None
         try:
             # The core's call, its bytes as written (register PD-2),
@@ -619,7 +620,13 @@ def sender(client: SDMClient, model_id: str) -> Any:
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
-            if failed.code == 'TRANSPORT_ERROR':
+            if failed.code == 'TRANSPORT_ERROR' and 'timeout' in failed.details:
+                # Told to the core as a 408, so it asks the rows again in
+                # halves; the timeout is what is raised if no half answers.
+                timed_out = StructuredDataError(
+                    failed.message, code=failed.code, details=failed.details
+                )
+            elif failed.code == 'TRANSPORT_ERROR':
                 transport_failed = True
             else:
                 from sdm_client.in_process.backend import InProcessBackend
@@ -641,6 +648,8 @@ def sender(client: SDMClient, model_id: str) -> Any:
             unexpected = other
         if transport_failed:
             raise TransportFailed
+        if timed_out is not None:
+            raise Refused(timed_out, 408)
         raised: StructuredDataError | None = failure
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is

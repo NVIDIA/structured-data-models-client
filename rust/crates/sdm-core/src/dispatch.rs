@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-use sdm_contract::limits::Limits;
 use sdm_contract::ops::{
     GivenCandidate, HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
     RequestState, SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceSpec,
@@ -50,9 +49,6 @@ pub fn start(
     zones: Arc<dyn Zones>,
 ) -> Result<Run, CoreError> {
     check_contract(start.contract)?;
-    // The size limits the run holds requests to, the caller's before the
-    // environment's before the defaults, resolved before anything runs.
-    let limits = crate::limits::resolve(&start.limits)?;
     // The clock is an instant in UTC, spelled as the contract spells it.
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
@@ -72,7 +68,7 @@ pub fn start(
             crate::materialize::frames::labels(asker, request, attachments, facts, zones).await
         }),
         Operation::MaterializeExamples(request) => {
-            crate::materialize::examples::start(root, request, attachments, facts, limits)?
+            crate::materialize::examples::start(root, request, attachments, facts)?
         }
         Operation::RebindSource(request) => {
             crate::rebind::start(root, request, attachments, facts)?
@@ -115,10 +111,10 @@ pub fn start(
             Run::new(move |asker| async move { crate::result::merge(&asker, request, attachments) })
         }
         Operation::TabularArrow(request) => Run::new(move |asker| async move {
-            crate::tabular_arrow::run(asker, request, attachments, facts, zones, limits).await
+            crate::tabular_arrow::run(asker, request, attachments, facts, zones).await
         }),
         Operation::FrameSession(input) => Run::new(move |asker| async move {
-            crate::frame_session::run(asker, input, attachments, limits).await
+            crate::frame_session::run(asker, input, attachments).await
         }),
         Operation::DescribeFrameTables(input) => Run::new(move |asker| async move {
             crate::frame_schema::describe(&asker, input, attachments)
@@ -127,8 +123,7 @@ pub fn start(
             crate::materialize::frames::prepare(&asker, input, attachments, &facts)
         }),
         Operation::MaterializeFrames(input) => Run::new(move |asker| async move {
-            crate::materialize::frames::materialize(asker, input, attachments, facts, zones, limits)
-                .await
+            crate::materialize::frames::materialize(asker, input, attachments, facts, zones).await
         }),
         Operation::CountTabularSessionOverlap(request) => Run::new(move |asker| async move {
             crate::session::count_overlap(&asker, request, attachments)
@@ -137,7 +132,7 @@ pub fn start(
             crate::session::send(&asker, request, attachments).await
         }),
         Operation::PrepareTabularScore(request) => Run::new(move |asker| async move {
-            crate::session::prepare_score(&asker, request, attachments, &limits)
+            crate::session::prepare_score(&asker, request, attachments)
         }),
         Operation::CheckTabularSessionReply(request) => Run::new(move |asker| async move {
             crate::session::check_reply(&asker, request, attachments)
@@ -288,7 +283,7 @@ pub fn start(
             let input: sdm_contract::tabular::DecideTabularContext =
                 take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
-                crate::direct::value(&asker, &crate::tabular_selection::decide(input, &limits))
+                crate::direct::value(&asker, &crate::tabular_selection::decide(input))
             })
         }
         Operation::SampleTabularRows(request) => {
@@ -326,15 +321,7 @@ pub fn start(
             let input: sdm_contract::tabular::SelectTabularRows =
                 take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
-                crate::direct::value(&asker, &crate::tabular_selection::select(input, &limits)?)
-            })
-        }
-        Operation::CheckTabularCap(request) => {
-            let input: sdm_contract::tabular::CheckTabularCap =
-                take_json(&mut attachments, request.input)?;
-            Run::new(move |asker| async move {
-                let checked = sdm_request::tabular::check_materialized_cap(input, &limits)?;
-                crate::direct::value(&asker, &checked)
+                crate::direct::value(&asker, &crate::tabular_selection::select(input)?)
             })
         }
         Operation::CheckDirectShape(request) => {
@@ -359,7 +346,7 @@ pub fn start(
                     &input.kind,
                     input.outputs,
                 );
-                crate::direct::value(&asker, &sdm_request::direct::bind(input, &limits)?)
+                crate::direct::value(&asker, &sdm_request::direct::bind(input)?)
             })
         }
         Operation::InspectDirectPair(request) => Run::new(move |asker| async move {
@@ -487,7 +474,6 @@ pub fn start(
             operation,
             attachments,
             facts,
-            limits,
             Arc::clone(&zones),
             #[cfg(feature = "test-ops")]
             false,
@@ -495,7 +481,7 @@ pub fn start(
         Operation::Predict(request) => {
             if request.direct.is_some() {
                 return Ok(Run::new(move |asker| {
-                    crate::direct::predict(asker, request, attachments, limits)
+                    crate::direct::predict(asker, request, attachments)
                 }));
             }
             // What predict asks: the state `materialize` answered, or a
@@ -526,13 +512,12 @@ pub fn start(
                 ranking: asked.ranking,
                 batches: asked.batches,
                 endpoint: request.model_endpoint,
-                limits,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }
         #[cfg(feature = "test-ops")]
         Operation::Test(operation) => {
-            crate::test_ops::run(root, operation, &mut attachments, facts, limits, zones)?
+            crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
         }
     })
 }
@@ -688,7 +673,6 @@ pub(crate) fn materialize(
     operation: Operation,
     mut attachments: Attachments,
     facts: HostFacts,
-    limits: Limits,
     zones: Arc<dyn Zones>,
     #[cfg(feature = "test-ops")] labels_only: bool,
 ) -> Result<Run, CoreError> {
@@ -798,7 +782,6 @@ pub(crate) fn materialize(
                     most_entities: request.most_entities,
                     most_calls: request.most_calls,
                     facts,
-                    limits,
                     zones: Arc::clone(&zones),
                     #[cfg(feature = "test-ops")]
                     labels_only,

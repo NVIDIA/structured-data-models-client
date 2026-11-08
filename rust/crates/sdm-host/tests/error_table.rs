@@ -26,7 +26,6 @@ use sdm_host::{Attachments, HostRun, Outgoing, ZoneResolver, encode, read};
 
 fn start_message(operation: TestOperation) -> Vec<u8> {
     encode(&ControlMessage::Start(Box::new(StartRun {
-        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {

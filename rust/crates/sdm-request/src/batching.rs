@@ -2,8 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A call's predict rows taken apart, so a call past the most bytes one call
-//! takes is asked as several smaller ones.
+//! A call's predict rows taken apart, so a call too large is asked as
+//! several smaller ones: up front where a serving endpoint's byte limit is
+//! known ([`fitted`]), or in halves where the endpoint refuses it.
 //!
 //! A payload carries its context whole and the rows it scores beside it,
 //! each row of its predict half's tables belonging to one of the rows

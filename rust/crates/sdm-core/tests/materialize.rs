@@ -268,7 +268,6 @@ fn materialize_on(
     start(
         &root,
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation,

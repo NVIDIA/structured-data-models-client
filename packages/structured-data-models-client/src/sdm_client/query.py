@@ -41,8 +41,6 @@ from sdm_client.decompose import (
     said_as_parts_are,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.limits import Limits, limits_in_effect
-from sdm_client.limits import check as check_limits
 from sdm_client.materializers import RelationalMaterializer
 from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
@@ -149,7 +147,6 @@ class PredictiveQuery:
         model: str | Model | None = None,
         candidates: Sequence[Any] | None = None,
         task: str | None = None,
-        limits: Limits | None = None,
         **options: Any,
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
@@ -199,14 +196,9 @@ class PredictiveQuery:
                 ``rows_per_call``: how many entities one call scores, which
                 defaults to what the endpoint takes, 10,000 or 200 for a
                 temporal link prediction, and may only be lowered. Lower it
-                for a deployment holding to less than this client knows of. A
-                call past the most bytes one takes is asked as smaller calls
-                when it is predicted.
-            limits: The size limits the request is gathered for: the most
-                context rows, rows one call scores and bytes one call takes.
-                Pass the :attr:`~sdm_client.SDMClient.limits` of the client it
-                will be sent with. A setting left out takes its environment
-                variable, else its default; see :class:`~sdm_client.Limits`.
+                for a graph wide enough that a full batch outruns the 30 MiB
+                body, or for a deployment holding to less than this client
+                knows of.
 
         Returns:
             A:class:`~sdm_client.Request` carrying the data.
@@ -218,29 +210,6 @@ class PredictiveQuery:
                 given, if both are, if an option is not one this accepts, or if
                 ``model`` cannot answer a schema of this shape.
         """
-        with limits_in_effect(check_limits(limits)):
-            return self._materialize(
-                indices=indices,
-                predict=predict,
-                num_context_samples=num_context_samples,
-                model=model,
-                candidates=candidates,
-                task=task,
-                **options,
-            )
-
-    def _materialize(
-        self,
-        *,
-        indices: Sequence[Any] | None,
-        predict: pd.DataFrame | None,
-        num_context_samples: int | None,
-        model: str | Model | None,
-        candidates: Sequence[Any] | None,
-        task: str | None,
-        **options: Any,
-    ) -> Request:
-        r""":meth:`materialize`, with the limits it was given in effect."""
         spec = spec_for(model) if model is not None else None
         in_place = self.schema.source is not None
         relational = (

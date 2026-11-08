@@ -2232,7 +2232,6 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
     }
     if name == 'tabular':
         said['Explanations'] = 'explanation' in capabilities.outputs
-        said['Context rows'] = _defaults()['max_tabular_context_rows']
     assert set(shown) == set(said), (
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
     )
@@ -2257,37 +2256,19 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
 
 
 #: Each row of the limits table in ``skills/relational/SKILL.md``, against the
-#: constant or setting it reports. Every key is spoken for in both
-#: directions: a limit the client enforces and the skill omits is a refusal
-#: an agent cannot see coming, and a row naming no limit is a number nobody is
-#: holding to anything.
+#: constant it reports. Every key is spoken for in both directions: a limit the
+#: client enforces and the skill omits is a refusal an agent cannot see coming,
+#: and a row naming no limit is a number nobody is holding to anything.
 LIMIT_ROWS = {
     'context rows, by default': 'context_rows_fast',
-    'context rows, with `num_context_samples`': 'max_relational_context_rows',
-    'rows scored at once': 'max_relational_predict_rows',
-    'rows scored for a link prediction': 'max_temporal_link_predict_rows',
-    'bytes one call takes': 'max_request_bytes',
     'classes': 'classes_max',
 }
-
-
-def _defaults() -> dict[str, int]:
-    r"""Each setting's default, by name: the core's table."""
-    from sdm_client.limits import defaults
-
-    return defaults()
 
 
 def test_the_limits_table_is_the_shipped_limits():
     from sdm_client.models import RELATIONAL_LIMITS
 
-    relational = {
-        name: default
-        for name, default in _defaults().items()
-        if name != 'max_tabular_context_rows'
-    }
-    enforced = {**RELATIONAL_LIMITS, **relational}
-    assert set(LIMIT_ROWS.values()) == set(enforced), (
+    assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
         'the client enforces a limit this table does not account for'
     )
     path = SKILLS / 'relational' / 'SKILL.md'
@@ -2300,8 +2281,9 @@ def test_the_limits_table_is_the_shipped_limits():
     )
     for label, key in LIMIT_ROWS.items():
         value = int(only(shown[label][0]).replace(',', ''))
-        assert value == enforced[key], (
-            f'{label!r} says {value}, the client enforces {enforced[key]}'
+        assert value == RELATIONAL_LIMITS[key], (
+            f'{label!r} says {value}, the client enforces '
+            f'{RELATIONAL_LIMITS[key]}'
         )
 
 

@@ -43,7 +43,6 @@ use sdm_host::{HostRun, Outgoing, Unreadable, Unreadables, encode, read};
 
 fn start_message(operation: Operation) -> Vec<u8> {
     encode(&ControlMessage::Start(Box::new(StartRun {
-        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {
@@ -834,7 +833,6 @@ fn a_test_only_panic_s_payload_is_the_canary() {
     let mut run = sdm_core::start(
         &sdm_host::default_root(),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: HostFacts {
                 now: Scalar::Timestamp {

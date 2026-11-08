@@ -36,7 +36,6 @@ from sdm_client.explanations import (
     GradientExplanations,
 )
 from sdm_client.inference import InferenceConfig
-from sdm_client.limits import Limits
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
 from sdm_client.relational_task import RelationalTask
@@ -82,7 +81,6 @@ __all__ = [
     'FittedModel',
     'KumoRelational',
     'KumoTabular',
-    'Limits',
     'MissingExtraError',
     'Model',
     'ModelCapabilities',

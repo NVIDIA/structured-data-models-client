@@ -8,7 +8,6 @@
 //! Errors identify the option and reason without exposing the supplied value.
 
 use sdm_contract::data::NegativeNeighborBound;
-use sdm_contract::limits::{Limits, MAX_RELATIONAL_CONTEXT_ROWS};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token, whole};
 use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
@@ -821,11 +820,16 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
     }
 }
 
-/// How many entities one call scores, as the caller asked or as the
-/// limits allow (`rows_one_call_scores`): the caller's size only ever
-/// lowers the limit's.
-pub fn rows_one_call_scores(asked: Option<u64>, limits: &Limits) -> u64 {
-    rows_one_task_call_scores(asked, BatchTask::Ordinary, limits)
+/// How many rows one model call scores where the caller names no size
+/// (`predict_rows_max`, the serving layer's `TFM_MAX_TEST_ROWS` default):
+/// a batching default, not a cap; a call the endpoint refuses as too large
+/// is asked again in halves.
+pub const PREDICT_ROWS: u64 = 10_000;
+
+/// How many entities one call scores, as the caller asked, else the
+/// default (`rows_one_call_scores`).
+pub fn rows_one_call_scores(asked: Option<u64>) -> u64 {
+    rows_one_task_call_scores(asked, BatchTask::Ordinary)
 }
 
 /// The task distinction that determines an entity batch's model limit.
@@ -836,17 +840,13 @@ pub enum BatchTask {
     TemporalLink,
 }
 
-/// Apply the task's serving limit after validating the requested positive
-/// size: the most rows one call scores (`max_relational_predict_rows`, the
-/// serving layer's `TFM_MAX_TEST_ROWS`), or one temporal link prediction
-/// call (`max_temporal_link_predict_rows`).
-/// PQL and supplied examples use the same policy; hosts do not split rows.
-pub fn rows_one_task_call_scores(asked: Option<u64>, task: BatchTask, limits: &Limits) -> u64 {
-    let limit = match task {
-        BatchTask::Ordinary => limits.max_relational_predict_rows,
-        BatchTask::TemporalLink => limits.max_temporal_link_predict_rows,
-    };
-    asked.map_or(limit, |n| n.min(limit))
+/// The rows one call scores: the requested positive size, else the task's
+/// default batch. PQL and supplied examples use the same policy.
+pub fn rows_one_task_call_scores(asked: Option<u64>, task: BatchTask) -> u64 {
+    asked.unwrap_or(match task {
+        BatchTask::Ordinary => PREDICT_ROWS,
+        BatchTask::TemporalLink => 200,
+    })
 }
 
 /// A task's kind, as the engine names it.
@@ -911,14 +911,9 @@ impl RunMode {
 /// The run mode a context size asks for, as the client chooses it
 /// (`_run_mode_for`, with `num_context_samples`' bound of
 /// `_validate_materialize_args`): none or up to a fast run's examples, a
-/// fast run; up to `most`, a best one. Below 1 is `INVALID_REQUEST`;
-/// past `most` (`max_relational_context_rows`), `UNSUPPORTED_REQUEST`,
-/// naming the setting that raises it.
-pub fn run_mode(
-    asked: Option<Integer>,
-    given: Option<&str>,
-    most: u64,
-) -> Result<RunMode, CoreError> {
+/// fast run; past it, a best one, gathering as many as are asked. Below 1
+/// is `INVALID_REQUEST`.
+pub fn run_mode(asked: Option<Integer>, given: Option<&str>) -> Result<RunMode, CoreError> {
     // A refusal names the size as the caller gave it, its JSON text.
     let named = |refused: CoreError| match given {
         Some(given) => refused.with_field("given", Detail::text(given)),
@@ -942,15 +937,7 @@ pub fn run_mode(
     }
     match value {
         Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),
-        Some(n) if n <= u128::from(most) => Ok(RunMode::Best),
-        _ => Err(MAX_RELATIONAL_CONTEXT_ROWS.named(named(
-            CoreError::new(
-                Sentence::NumContextSamplesPastMost,
-                "num_context_samples is past the most context a request carries",
-            )
-            .with_field("field", Detail::text("num_context_samples"))
-            .with_field("limit", Detail::Scalar(Scalar::UInt64(most))),
-        ))),
+        _ => Ok(RunMode::Best),
     }
 }
 
@@ -1383,51 +1370,25 @@ mod tests {
 
     #[test]
     fn the_run_mode_is_the_client_s() {
-        let most = MAX_RELATIONAL_CONTEXT_ROWS.default;
-        assert_eq!(run_mode(None, None, most).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(None, None).unwrap(), RunMode::Fast);
         assert_eq!(
-            run_mode(int(false, Some(1)), None, most).unwrap(),
+            run_mode(int(false, Some(1_000)), None).unwrap(),
             RunMode::Fast
         );
-        assert_eq!(
-            run_mode(int(false, Some(1_000)), None, most).unwrap(),
-            RunMode::Fast
-        );
-        assert_eq!(
-            run_mode(int(false, Some(1_001)), None, most).unwrap(),
-            RunMode::Best
-        );
-        assert_eq!(
-            run_mode(int(false, Some(10_000)), None, most).unwrap(),
-            RunMode::Best
-        );
-        for (asked, code) in [
-            (int(false, Some(0)), ErrorCode::InvalidRequest),
-            (int(true, Some(5)), ErrorCode::InvalidRequest),
-            (int(false, Some(10_001)), ErrorCode::UnsupportedRequest),
-            (int(false, None), ErrorCode::UnsupportedRequest),
+        // Past a fast run's examples, a best run, however many are asked.
+        for asked in [
+            int(false, Some(1_001)),
+            int(false, Some(200_000)),
+            int(false, None),
         ] {
+            assert_eq!(run_mode(asked, None).unwrap(), RunMode::Best);
+        }
+        for asked in [int(false, Some(0)), int(true, Some(5))] {
             assert_eq!(
-                run_mode(asked, None, most).unwrap_err().code,
-                code,
-                "{asked:?}"
+                run_mode(asked, None).unwrap_err().code,
+                ErrorCode::InvalidRequest
             );
         }
-        let past = run_mode(int(false, Some(10_001)), None, most).unwrap_err();
-        assert_eq!(
-            past.fields["setting"],
-            Detail::text("max_relational_context_rows")
-        );
-        assert_eq!(
-            past.fields["env"],
-            Detail::text("SDM_CLIENT_MAX_RELATIONAL_CONTEXT_ROWS")
-        );
-        // A raised limit admits more, as a best run.
-        assert_eq!(
-            run_mode(int(false, Some(200_000)), None, 200_000).unwrap(),
-            RunMode::Best
-        );
-        assert!(run_mode(int(false, Some(200_001)), None, 200_000).is_err());
     }
 
     #[test]

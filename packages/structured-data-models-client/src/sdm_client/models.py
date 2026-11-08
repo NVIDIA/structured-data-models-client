@@ -37,14 +37,9 @@ from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 from sdm_client.base import ModelSpec, RuntimeContract
 from sdm_client.errors import StructuredDataError, UnknownModelError
 
-# Fixed properties of the relational model. The sizes a deployment sets (the
-# most context rows, rows one call scores and bytes one call takes) are not
-# here: they are settings, the core's one table of them, which a caller
-# raises or lowers to match the deployment it sends to (`sdm_client.Limits`).
-#
-# `context_rows_fast` is the context gathered when `num_context_samples` is
-# not given, a default rather than a cap. The relational model reads as many
-# tables and hops as a request carries, so neither is limited here.
+# Fixed properties of the relational model. The client holds a request to no
+# size of its own: it sends its best attempt, and a call the endpoint refuses
+# as too large, or times out on, is asked again in halves.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'classes_max': 10,

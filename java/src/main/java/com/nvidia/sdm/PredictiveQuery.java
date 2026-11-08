@@ -130,8 +130,7 @@ public final class PredictiveQuery {
     input.put("task", options.task());
     try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("materialize_predict", input,
         Map.of("table", schema.data().values().iterator().next(), "predict",
-            com.nvidia.sdm.internal.ArrowTabular.snapshot(predict)), null,
-        options.limits().values())) {
+            com.nvidia.sdm.internal.ArrowTabular.snapshot(predict)), null)) {
       Map<String, Object> result = com.nvidia.sdm.internal.ArrowTabular.value(finished);
       @SuppressWarnings("unchecked") Map<String, Object> description = (Map<String, Object>) result.get("description");
       Map<String, Object> request = com.nvidia.sdm.internal.ArrowTabular.request(
@@ -186,8 +185,7 @@ public final class PredictiveQuery {
         throw new StructuredDataException("warehouse sampling options do not apply to Tabular",
             "INVALID_REQUEST", Map.of(), null);
       try (Host.Finished finished = com.nvidia.sdm.internal.ArrowTabular.run("materialize", input,
-          Map.of("table", schema.data().values().iterator().next()), null,
-          options.limits().values())) {
+          Map.of("table", schema.data().values().iterator().next()), null)) {
         Map<String, Object> result = com.nvidia.sdm.internal.ArrowTabular.value(finished);
         @SuppressWarnings("unchecked") Map<String, Object> description = (Map<String, Object>) result.get("description");
         Map<String, Object> request = com.nvidia.sdm.internal.ArrowTabular.request(
@@ -224,8 +222,7 @@ public final class PredictiveQuery {
         new LinkedHashMap<>(Providers.held(schema.source()));
     held.put("query", fields -> text);
     try (Host.Finished finished =
-        Host.run(operation, attachments,
-            new Host.Call(chosen.provider(), null, held, options.limits().values()))) {
+        Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {
       Results.Gathered gathered =
           (Results.Gathered) Results.expect(finished.result(), "materialize");
       if (gathered.query() == null) {

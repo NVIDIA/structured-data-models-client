@@ -17,10 +17,6 @@
         "facts": {
           "$ref": "#/$defs/HostFacts"
         },
-        "limits": {
-          "description": "The size limits the caller set and the environment names, which the\ncore resolves before the run starts (contract v72); left out, each\nlimit is its default ([`crate::limits`]).",
-          "$ref": "#/$defs/GivenLimits"
-        },
         "operation": {
           "$ref": "#/$defs/Operation"
         },
@@ -309,12 +305,6 @@
         },
         "DirectValue.select_tabular_rows": {
           "$ref": "#/$defs/SelectedTabularRows"
-        },
-        "CheckTabularCap.input": {
-          "$ref": "#/$defs/CheckTabularCap"
-        },
-        "DirectValue.check_tabular_cap": {
-          "$ref": "#/$defs/CheckedTabularCap"
         },
         "ObserveTabularMembership.input": {
           "$ref": "#/$defs/ObserveTabularMembership"
@@ -703,8 +693,6 @@
         "tabular_arrow_session",
         "SelectTabularRows.input",
         "DirectValue.select_tabular_rows",
-        "CheckTabularCap.input",
-        "DirectValue.check_tabular_cap",
         "ObserveTabularMembership.input",
         "DirectValue.observe_tabular_membership",
         "DecideTabularTask.input",
@@ -3808,34 +3796,6 @@
         "zero",
         "above_limit",
         "above_population"
-      ]
-    },
-    "CheckTabularCap": {
-      "description": "The context a materialized single-table request asks for, held to the\nmost context rows a request carries before frame length reads: the\n`num_context_samples` given, as its decimal text however large, or none.",
-      "type": "object",
-      "properties": {
-        "requested": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "CheckedTabularCap": {
-      "description": "The context asked for is within the limit, which the host compares its\nown count with, natively, before it reads any frame length; past it,\nthe run is refused.",
-      "type": "object",
-      "properties": {
-        "limit": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "limit"
       ]
     },
     "ObserveTabularMembership": {
@@ -7961,7 +7921,7 @@
       ]
     },
     "GivenCandidate": {
-      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\n), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\nits own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\nholds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\nfixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\ntext the reference writes into its question (in Python, `str` of it);\nit is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\nno scalar holds, written into its question by its text as `spelled`\nis, with the name of the kind of value it is (`date`, `datetime` for a\ntimestamp with no zone, `datetime_zoned` for one with one, `time`).\nTwo of one kind and one text are one candidate; a host whose language\nholds others equal (two zones of one instant) says so with `repeat`\n  .\n- `repeat`: a value the host's own language holds equal to one given\nbefore it, left out as the reference's `dict.fromkeys` leaves it out.\nA host whose candidates are all scalars sends none, the core keeping\neach distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\none it cannot hash), which names no row and which the core refuses by\nname, as the reference fails on it.",
+      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\n), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\nits own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\nholds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\nfixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\ntext the reference writes into its question (in Python, `str` of it);\nit is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\nno scalar holds, written into its question by its text as `spelled`\nis, with the name of the kind of value it is (`date`, `datetime` for a\ntimestamp with no zone, `datetime_zoned` for one with one, `time`).\nTwo of one kind and one text are one candidate; a host whose language\nholds others equal (two zones of one instant) says so with `repeat`\n.\n- `repeat`: a value the host's own language holds equal to one given\nbefore it, left out as the reference's `dict.fromkeys` leaves it out.\nA host whose candidates are all scalars sends none, the core keeping\neach distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\none it cannot hash), which names no row and which the core refuses by\nname, as the reference fails on it.",
       "oneOf": [
         {
           "type": "string",
@@ -12700,29 +12660,6 @@
         "max_ns"
       ]
     },
-    "GivenLimits": {
-      "description": "What a host passes with every run (contract v72): the values its caller\nset, by [`Setting::name`], and the text of each setting's environment\nvariable that is set, by [`Setting::env`], each as the host read it.\nLeft out, every limit is its default.",
-      "type": "object",
-      "properties": {
-        "given": {
-          "description": "The values the caller set, each a whole number of at least one.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          }
-        },
-        "environment": {
-          "description": "The environment variables set, each as its text.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
     "Operation": {
       "description": "One operation's request.",
       "oneOf": [
@@ -13711,24 +13648,6 @@
             "op": {
               "type": "string",
               "const": "select_tabular_rows"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "op",
-            "input"
-          ]
-        },
-        {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
-          "type": "object",
-          "properties": {
-            "input": {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "op": {
-              "type": "string",
-              "const": "check_tabular_cap"
             }
           },
           "additionalProperties": false,
@@ -17486,7 +17405,6 @@
         "direct_scored",
         "direct_target_missing",
         "direct_target_scored",
-        "direct_context_limit",
         "tabular_missing_row_index",
         "direct_multilabel",
         "direct_relational_frames",
@@ -17693,7 +17611,6 @@
         "model_lacks_shape",
         "model_lacks_task",
         "model_lacks_outputs",
-        "context_past_model",
         "no_context_rows",
         "too_many_classes",
         "one_class_column",
@@ -17712,8 +17629,6 @@
         "explanation_fast_mode",
         "options_unread",
         "options_unread_statistic",
-        "payload_no_smaller_call",
-        "call_past_endpoint",
         "outputs_none",
         "not_finite",
         "past_int64",
@@ -17724,7 +17639,6 @@
         "lag_past_times",
         "num_context_samples_not_whole",
         "num_context_samples_below_one",
-        "num_context_samples_past_most",
         "num_hops_not_whole",
         "num_hops_none",
         "random_seed_not_whole",
@@ -17787,7 +17701,6 @@
         "entity_table_empty",
         "entity_key_missing",
         "target_not_a_feature",
-        "context_past_rows",
         "held_by_several_rows_one",
         "held_by_several_rows",
         "held_by_several_rows_many",
@@ -17855,7 +17768,6 @@
         "large_text_materialize",
         "admitted_past_type",
         "invalid_configuration",
-        "limit_environment_invalid",
         "part_forecast_step",
         "part_forecast_step_outran",
         "part_ranking_candidate",

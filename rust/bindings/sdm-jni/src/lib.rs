@@ -456,16 +456,6 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
             "wire_names": sdm_host::wire_names()
                 .into_iter()
                 .collect::<std::collections::BTreeMap<_, _>>(),
-            // Each size limit a caller may set, in order: its name, the
-            // environment variable a host reads it from, and its default.
-            "limits": sdm_contract::limits::SETTINGS
-                .iter()
-                .map(|setting| serde_json::json!({
-                    "name": setting.name,
-                    "env": setting.env,
-                    "default": setting.default,
-                }))
-                .collect::<Vec<_>>(),
         });
         let bytes =
             serde_json::to_vec(&info).map_err(|_| Failure::Usage("the library's description"))?;

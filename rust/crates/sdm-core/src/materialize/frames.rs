@@ -334,7 +334,6 @@ pub(crate) async fn materialize(
     mut attachments: crate::run::Attachments,
     facts: HostFacts,
     zones: Arc<dyn sdm_engine::time::Zones>,
-    limits: sdm_contract::limits::Limits,
 ) -> Result<OperationResult, CoreError> {
     let Some(Attachment::FrameGraph(owner)) = attachments.remove(&request.graph) else {
         return Err(internal("frame graph owner is absent"));
@@ -372,7 +371,6 @@ pub(crate) async fn materialize(
         most_entities: call.most_entities,
         most_calls: call.most_calls,
         facts,
-        limits,
         zones,
         memo: None,
         source: "in_memory".into(),

@@ -170,7 +170,6 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
         fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
-        limits: Default::default(),
         contract: CONTRACT_VERSION,
         facts: host::facts().unwrap(),
         operation: Operation::Test(TestOperation::Keyed {

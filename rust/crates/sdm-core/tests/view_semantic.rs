@@ -241,7 +241,6 @@ fn semantic_run(definition: &str, spec: SourceSpec) -> sdm_core::Run {
     start(
         &CompositionRoot::new(Arc::new(fake)),
         StartRun {
-            limits: Default::default(),
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::DescribeSource(DescribeSource {
