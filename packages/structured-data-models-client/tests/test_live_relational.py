@@ -193,9 +193,7 @@ def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
     """
     import copy
 
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    cap = RELATIONAL_LIMITS['predict_rows_max']
+    cap = 10_000  # the default batch
     payload = copy.deepcopy(query.materialize(indices=[0, 1]).payloads[0])
     rows = payload['predict']['instance_table']['rows']
 

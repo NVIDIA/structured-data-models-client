@@ -300,59 +300,41 @@ def test_a_rows_per_call_that_is_not_a_size_is_refused(given, text):
     assert 'a call scores a whole number of rows' in str(refused.value)
 
 
-def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
-    monkeypatch,
-):
-    """A context is gathered per call, so a small enough batch holds one per
-    entity however few entities there are."""
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 3)
+def test_a_batch_size_of_one_gathers_a_call_per_entity():
+    """A context is gathered per call, and the client sets no most on the
+    calls: a batch of one is a call for each entity."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            query().materialize(
-                indices=[5, 6, 7, 8, 9],
-                num_context_samples=20,
-                rows_per_call=1,
-            )
-    assert refused.value.details['calls'] == 5
-    assert '3 calls' in str(refused.value)
+        request = query().materialize(
+            indices=[5, 6, 7, 8, 9],
+            num_context_samples=20,
+            rows_per_call=1,
+        )
+    assert len(request.payloads) == 5
 
 
-def test_a_population_past_the_ceiling_is_refused_before_the_engine_is_reached(
-    monkeypatch,
-):
-    """Reaching the engine means building the graph and labelling every index,
-    which for a population far past the ceiling is minutes of work and the
-    memory with it before anything says no."""
-    from sdm_client.materializers import relational as materializer
+def test_more_than_100_000_entities_are_gathered():
+    """The client sets no most on the entities one materialize gathers."""
+    from sdm_client import KumoRelational
 
-    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
-    with pytest.raises(StructuredDataError) as refused:
-        query().materialize(indices=list(range(5)), num_context_samples=20)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['entities'] == 5
-
-
-def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
-    monkeypatch,
-):
-    """The calls a population comes to is known only once the engine has said
-    how many entities it really holds, so this one is checked there, and still
-    before the batches themselves are built.
-    """
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
+    count = 100_001
+    frame = pd.DataFrame(
+        {'uid': range(count + 10), 'label': [*range(count), *[None] * 10]}
+    )
+    users = Schema.from_data({'users': frame}, primary_keys={'users': 'uid'})
+    users['users']['label'].stype = 'numerical'
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            query().materialize(
-                indices=[5, 6, 7, 8, 9], num_context_samples=20, rows_per_call=2
-            )
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['calls'] == 3
+        request = PredictiveQuery(
+            'PREDICT users.label FOR EACH users.uid', users
+        ).materialize(
+            indices=list(range(count)),
+            model=KumoRelational(),
+            rows_per_call=50_001,
+        )
+    assert [
+        len(p['predict']['instance_table']['rows']) for p in request.payloads
+    ] == [50_001, 50_000]
 
 
 def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):

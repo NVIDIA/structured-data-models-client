@@ -406,11 +406,11 @@ class DatabricksServingTest {
       assertTrue(new String(body, StandardCharsets.UTF_8).contains("é😀"));
       try (Workspace limited = new Workspace();
           SdmClient capped = SdmClient.forDatabricksServing(limited.serving(body.length - 1))) {
-        StructuredDataException error = assertThrows(StructuredDataException.class,
-            () -> capped.predict(request, SdmClient.KUMO_RELATIONAL));
-        assertEquals("INVALID_REQUEST", error.code());
-        assertEquals(body.length, ((Number) error.details().get("bytes")).intValue());
-        assertTrue(limited.bodies.isEmpty());
+        // Past the endpoint's limit, the call is split before it is sent,
+        // each part within it.
+        capped.predict(request, SdmClient.KUMO_RELATIONAL);
+        assertTrue(limited.bodies.size() > 1);
+        for (byte[] part : limited.bodies) assertTrue(part.length <= body.length - 1);
       }
     }
   }

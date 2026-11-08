@@ -79,11 +79,6 @@ pub const RESERVED: [&str; 2] = [INSTANCE_ID, ANCHOR_TIME];
 const NO_ANCHOR: i64 = -9_223_372_036_854_775_807;
 /// The largest integer a JSON number carries exactly in every reader.
 const JSON_SAFE: i128 = 9_007_199_254_740_991;
-/// The bytes a payload's lagged columns are held to before any is computed
-/// (`_MAX_SIZE`, 30 MiB), a bound on the work `lag_timesteps` asks for: a
-/// call itself is held to no size, and is asked in halves where the
-/// endpoint refuses it as too large.
-pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 
 /// One column of a sampled table: as sampled, or a text feature as the
 /// reference's sampler sends it, each value its words

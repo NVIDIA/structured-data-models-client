@@ -256,7 +256,7 @@ def test_the_limits_page_records_the_default_the_code_has() -> None:
         Path(__file__).resolve().parents[3] / 'docs' / 'reference' / 'limits.md'
     ).read_text()
     assert '1,000 when explaining, otherwise 10,000' not in page
-    assert '1,000 by default, up to 10,000 with `num_context_samples`' in page
+    assert 'The context is sampled only to a `num_context_samples`' in page
 
 
 def test_a_concrete_timestamp_materializes() -> None:

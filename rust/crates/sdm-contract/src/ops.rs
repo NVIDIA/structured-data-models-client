@@ -1319,19 +1319,6 @@ pub struct Materialize {
     /// `too_many_parts`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub most_parts: Option<u32>,
-    /// The most entities one `materialize` gathers, across the calls it is
-    /// asked in, which the host lets its caller set (`main`'s
-    /// `MOST_ENTITIES`); 100,000 where it names none (design choice 1,
-    /// multi-call `predict`, read which asks a request of more
-    /// rows than one call scores in several calls; until then the core
-    /// refuses more than one call's rows, a lower bound than either).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub most_entities: Option<u64>,
-    /// The most model calls one request is asked in (`main`'s
-    /// `MOST_CALLS`); 100 where the host names none (read as
-    /// `most_entities`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub most_calls: Option<u32>,
     /// The sampler state the materializer's last run left, which the host
     /// hands back as it took it; none for a materializer's
     /// first run.

@@ -340,9 +340,10 @@ def test_direct_context_limit_never_samples() -> None:
     scoring = pd.DataFrame({'feature': [30, 31]})
     request = Request(context, scoring, target='target', task='classification')
     endpoint = Endpoint()
-    with pytest.raises(StructuredDataError, match='reads at most 10,000'):
-        client(endpoint).predict(request, model='kumo-tabular')
-    assert endpoint.calls == []
+    # A direct context is sent as it was given, held to no size.
+    client(endpoint).predict(request, model='kumo-tabular')
+    (sent,) = endpoint.calls
+    assert len(sent['context']['instance_table']['rows']) == 10001
 
 
 def test_target_container_guard_is_immediate() -> None:

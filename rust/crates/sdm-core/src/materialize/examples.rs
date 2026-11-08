@@ -151,7 +151,6 @@ async fn run(
     } else {
         None
     };
-    refuse_entities(predict.num_rows() as u64, 1, None)?;
     let seed = call
         .random_seed
         .to_u128()

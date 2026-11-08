@@ -240,8 +240,6 @@ fn materialize(held: &HeldSchema) -> Run {
         values: None,
         options: vec![],
         most_parts: None,
-        most_entities: None,
-        most_calls: None,
         candidates: None,
         sampler_state: None,
     });

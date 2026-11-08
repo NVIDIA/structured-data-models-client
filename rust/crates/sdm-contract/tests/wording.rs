@@ -377,7 +377,6 @@ fn the_sentences_the_hosts_choose_between_today_are_the_core_s() {
             Sentence::TimeColumnsRefusedEmpty,
         ),
         (Sentence::KeyNotNames, Sentence::KeyNotNamesGiven),
-        (Sentence::MostEntities, Sentence::MostEntitiesParts),
         (Sentence::BatchedPartForecast, Sentence::BatchedPartRanking),
         (
             Sentence::CandidatesUnscoredOne,

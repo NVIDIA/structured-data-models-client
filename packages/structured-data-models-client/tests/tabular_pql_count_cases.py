@@ -34,10 +34,9 @@ class StopWarning(Exception):
 
 def observe_case(name: str) -> dict[str, Any]:
     from sdm_client import KumoTabular, PredictiveQuery, SDMClient
-    from sdm_client.models import TABULAR_LIMITS
 
     assert name in CASES
-    cap = TABULAR_LIMITS['context_rows_max']
+    cap = 10_000
     events: list[Any] = []
     recorded: list[dict[str, str]] = []
     outcome: dict[str, Any] = {}

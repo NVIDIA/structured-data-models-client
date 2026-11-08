@@ -368,8 +368,6 @@ pub(crate) async fn materialize(
         values,
         options: call.options,
         most_parts: call.most_parts,
-        most_entities: call.most_entities,
-        most_calls: call.most_calls,
         facts,
         zones,
         memo: None,

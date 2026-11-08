@@ -1260,40 +1260,85 @@ fn an_output_named_and_left_out_is_noted() {
 }
 
 /// The call's size: the core writes the call's bytes, which the host sends
-/// unchanged, and refuses a call past the endpoint's limit before the model
-/// is called (register PD-2, fix round 1); counted to the byte,
-/// with characters past ASCII counted as the bytes written.
+/// unchanged (register PD-2), and holds a call to no size of its own.
 #[test]
-fn a_call_past_the_limit_is_refused_before_it_is_sent() {
-    // Pad a non-truncated metadata field; diagnostic query clipping is independent.
-    let padded = |padding: &str| {
-        payload_text().replace(
-            "\"metadata\":{",
-            &format!("\"metadata\":{{\"caller_note\":\"{padding}\","),
+fn a_call_of_any_size_is_sent() {
+    let padding = "a".repeat(31 * 1024 * 1024);
+    let payload = payload_text().replace(
+        "\"metadata\":{",
+        &format!("\"metadata\":{{\"caller_note\":\"{padding}\","),
+    );
+    let mut run = predict_run(REQUEST_STATE_VERSION, payload, "kumo-relational").unwrap();
+    let (_, body) = call(&mut run);
+    assert!(body.len() > 31 * 1024 * 1024);
+}
+
+/// The model's answer to a call of the instance ids `ids`, each its row.
+fn rows_answered(ids: &[i64]) -> ModelResult {
+    let predictions: Vec<String> = ids
+        .iter()
+        .enumerate()
+        .map(|(at, id)| format!(r#"{{"id":"{id}","row_index":{at},"prediction":1.0}}"#))
+        .collect();
+    ModelResult::Response {
+        status: 200,
+        content_type: "application/json".into(),
+        body: format!(
+            r#"{{"id":"r1","model":"m","metadata":{{}},"predictions":[{}]}}"#,
+            predictions.join(",")
         )
-    };
-    let called = |payload: String| -> Result<usize, CoreError> {
-        let mut run = predict_run(REQUEST_STATE_VERSION, payload, "kumo-relational").unwrap();
-        match run.next()? {
-            Step::CallModel(call) => match run.take_attachment(call.body) {
-                Some(Attachment::Bytes(body)) => Ok(body.len()),
-                _ => panic!("the body is attached"),
-            },
-            other => panic!("not a call: {other:?}"),
+        .into_bytes(),
+    }
+}
+
+fn refused_with(status: u16) -> ModelResult {
+    ModelResult::Response {
+        status,
+        content_type: "application/json".into(),
+        body: b"{}".to_vec(),
+    }
+}
+
+/// The rows a call scores: its predict half's instance ids.
+fn scored(body: &[u8]) -> Vec<i64> {
+    let read: serde_json::Value = serde_json::from_slice(body).unwrap();
+    read["predict"]["instance_table"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row[0].as_i64().unwrap_or(-1))
+        .collect()
+}
+
+/// A call refused as too large (413), or by a gateway (502, 504), or timed
+/// out (the host's 408), is asked again in halves, each with the whole
+/// context, and the answers are numbered as one.
+#[test]
+fn a_call_too_large_or_too_slow_is_asked_again_in_halves() {
+    for status in [408, 413, 502, 504] {
+        let mut run =
+            predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-relational").unwrap();
+        let (id, whole) = call(&mut run);
+        assert_eq!(scored(&whole).len(), 2);
+        run.submit_model(id, refused_with(status)).unwrap();
+        for _ in 0..2 {
+            let (id, half) = call(&mut run);
+            let read: serde_json::Value = serde_json::from_slice(&half).unwrap();
+            let sent: serde_json::Value = serde_json::from_slice(&whole).unwrap();
+            assert_eq!(read["context"], sent["context"], "{status}");
+            let ids = scored(&half);
+            assert_eq!(ids.len(), 1, "{status}");
+            run.submit_model(id, rows_answered(&ids)).unwrap();
         }
-    };
-    let limit = sdm_request::payload::PAYLOAD_BYTES;
-    let base = called(padded("")).unwrap();
-    // ASCII to the limit, exactly: taken; one byte more: refused.
-    assert_eq!(called(padded(&"a".repeat(limit - base))).unwrap(), limit);
-    let past = called(padded(&"a".repeat(limit - base + 1))).unwrap_err();
-    assert_eq!(past.code, ErrorCode::InvalidRequest);
-    assert_eq!(past.fields["field"], text("call"));
-    // Three-byte characters, each counted as its three bytes written.
-    let euros = (limit - base) / 3;
-    let rest = limit - base - 3 * euros;
-    let at = format!("{}{}", "\u{20ac}".repeat(euros), "a".repeat(rest));
-    assert_eq!(called(padded(&at)).unwrap(), limit);
-    let over = format!("{}{}", "\u{20ac}".repeat(euros + 1), "a".repeat(rest));
-    assert!(called(padded(&over)).is_err());
+        assert!(matches!(run.next().unwrap(), Step::Done { .. }), "{status}");
+    }
+}
+
+/// A `422`, or any refusal not of a size, is not asked again: the run ends
+/// with the endpoint's refusal.
+#[test]
+fn a_422_is_not_asked_again() {
+    let (_, end) = answered(422, b"{}");
+    let error = end.unwrap_err();
+    assert_eq!(error.fields["status"], Detail::Scalar(Scalar::UInt16(422)));
 }

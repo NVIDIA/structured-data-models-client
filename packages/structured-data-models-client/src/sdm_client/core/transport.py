@@ -315,6 +315,21 @@ def _build_retry(
         return Retry(**options)
 
 
+def read_timed_out(error: BaseException | None) -> bool:
+    r"""Whether a request failure is the answer taking longer than the
+    timeout, which a smaller call can fix, rather than a connection that
+    could not be made (``NewConnectionError`` is a ``TimeoutError`` too)."""
+    seen: set[int] = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(
+            error, (requests.ReadTimeout, urllib3.exceptions.ReadTimeoutError)
+        ):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
+
+
 def _timed_out(error: BaseException | None) -> bool:
     r"""Whether a request failure is a timeout, however it reached us.
 

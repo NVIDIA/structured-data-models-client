@@ -66,7 +66,7 @@ The public API snapshot records this version update; publication remains pending
 
 ### Removed
 
-- The client's own size limits: the 10,000 context rows, the 30 MiB request body and the 15 tables and 6 hops of a relational request.
+- The client's own size limits: the 10,000 context rows, the 30 MiB request body, the 100,000 entities and 100 calls of one `materialize()`, and the 15 tables and 6 hops of a relational request.
   The client sends its best attempt: a call the endpoint refuses as too large (`413`, a gateway's `502` or `504`) or times out on is asked again in halves, each with the whole context, and a `500` is retried as a `503` is.
   A `422`, or a refusal of a call of one row, is shown as the endpoint said it.
   The context is sampled only to a `num_context_samples` the caller passes; through Databricks model serving, a call is still split up front to fit its 16 MB.

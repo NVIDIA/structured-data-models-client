@@ -228,8 +228,6 @@ fn materialize_start(
         values: None,
         options: vec![],
         most_parts: None,
-        most_entities: None,
-        most_calls: None,
         candidates: None,
         sampler_state: None,
     });
@@ -1110,11 +1108,6 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     for (asked, code) in [
         ("0", ErrorCode::InvalidRequest),
         ("-3", ErrorCode::InvalidRequest),
-        ("10001", ErrorCode::UnsupportedRequest),
-        (
-            "1267650600228229401496703205376",
-            ErrorCode::UnsupportedRequest,
-        ),
         ("2.5", ErrorCode::InvalidRequest),
     ] {
         let err = valued(

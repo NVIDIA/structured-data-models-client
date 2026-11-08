@@ -779,8 +779,6 @@ pub(crate) fn materialize(
                     values,
                     options: request.options,
                     most_parts: request.most_parts,
-                    most_entities: request.most_entities,
-                    most_calls: request.most_calls,
                     facts,
                     zones: Arc::clone(&zones),
                     #[cfg(feature = "test-ops")]

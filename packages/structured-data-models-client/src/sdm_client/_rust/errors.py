@@ -68,15 +68,12 @@ ERRORS: dict[str, type[StructuredDataError]] = {
 }
 
 #: The refusals the reference raises as its base class under their code,
-#: by code and rule: ``main``'s 1fc5a686 ceilings on what one
-#: ``materialize`` gathers and its refusal of a batched forecast, each a
+#: by code and rule: ``main``'s 1fc5a686 refusal of a batched forecast, a
 #: ``StructuredDataError(code='UNSUPPORTED_REQUEST')`` in the reference's
 #: client, so a caller's ``except`` sees the class it would there ( fix
 #: 2). Every other refusal takes its code's class (data:`ERRORS`).
 AS_THE_BASE_CLASS: frozenset[tuple[str, str]] = frozenset(
     {
-        ('UNSUPPORTED_REQUEST', 'most_entities'),
-        ('UNSUPPORTED_REQUEST', 'most_calls'),
         ('UNSUPPORTED_REQUEST', 'batched_part'),
     }
 )
@@ -143,7 +140,6 @@ ADVICE: dict[str, Callable[..., str]] = {
         f'not (link.source_table == {source!r} and link.target_table == '
         f'{target!r} and link.source_column in {others!r})]'
     ),
-    'materialize_call': lambda: 'materialize()',
     'name_candidates': lambda column: (
         f'materialize(..., candidates=frame[{column!r}])'
     ),

@@ -385,6 +385,7 @@ def test_supplied_link_batches_obey_model_limit():
         predicted,
         rows_per_call=500,
     )
+    # A batch size asked is taken as asked; 200 is only the default.
     assert [
         len(p['predict']['instance_table']['rows']) for p in request.payloads
-    ] == [200, 1]
+    ] == [201]

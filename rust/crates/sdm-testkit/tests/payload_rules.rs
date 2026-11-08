@@ -190,12 +190,12 @@ fn base_multiclass_s_classification_payload_and_leakage_are_the_reference_s() {
 }
 
 #[test]
-fn more_entities_than_one_materialize_holds_are_refused_by_its_limit() {
-    // The entity count, on base.regression. the core takes up to
-    // 100,000 entities, in calls of at most 10,000, as the reference at
-    // 6298913c (main's 1fc5a686): 1,001 entities are refused INVALID_REQUEST
-    // for the reference's reason (the base holds 8 users), never by a limit
-    // (B-3, retired).
+fn no_entity_count_is_refused_by_a_limit() {
+    // The entity count, on base.regression: the core holds a materialize
+    // to no count, gathering as many calls as the entities need. 1,001
+    // entities are refused INVALID_REQUEST for the reference's reason (the
+    // base holds 8 users), never by a limit (B-3, retired), and so are
+    // 100,001.
     let want = expected("base.regression.entities-1001");
     assert_eq!(want["outcome"], "refused");
     assert_eq!(want["code"], "INVALID_REQUEST");
@@ -211,26 +211,12 @@ fn more_entities_than_one_materialize_holds_are_refused_by_its_limit() {
             .collect();
         host::run(&case, &bases).unwrap()
     };
-    let observed = with(1001);
-    let Answer::Error { code, fields, .. } = &observed.answer else {
-        panic!("not refused: {:?}", observed.answer);
-    };
-    assert_eq!(code, "INVALID_REQUEST");
-    assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
-    // Past 100,000 the core's own limit refuses them before anything is
-    // read, naming it (`most_entities`), not a rule it does not hold yet.
-    let observed = with(100_001);
-    assert!(
-        observed.materialized.is_none(),
-        "100,001 entities were taken"
-    );
-    let Answer::Error { code, fields, .. } = &observed.answer else {
-        panic!("not refused: {:?}", observed.answer);
-    };
-    assert_eq!(code, "UNSUPPORTED_REQUEST");
-    assert_eq!(
-        fields.get("rule").map(String::as_str),
-        Some("most_entities")
-    );
-    assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
+    for n in [1001, 100_001] {
+        let observed = with(n);
+        let Answer::Error { code, fields, .. } = &observed.answer else {
+            panic!("not refused: {:?}", observed.answer);
+        };
+        assert_eq!(code, "INVALID_REQUEST", "{n}");
+        assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
+    }
 }

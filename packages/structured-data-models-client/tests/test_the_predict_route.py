@@ -761,21 +761,13 @@ def _sent(
     return written, received, refused.value
 
 
-def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
+def test_the_bytes_sent_are_the_core_s_at_any_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Register PD-2: the HTTP transport sends the
-    # core's call as the core wrote it, so the bytes the endpoint receives
-    # are the bytes the core counted against the limit, characters past
-    # ASCII as their own bytes, never json.dumps' escapes. At the limit's
-    # edge the call is sent, at most the limit; one character past it,
-    # nothing is sent. Since the reference's 26ecdd28 the call
-    # leaves out the engine's inference config, which the payload holds,
-    # so the payload is the larger and meets the limit first: the edge is
-    # the payload's, which materialize names in its refusal, and one past
-    # it materialize refuses (the call's own refusal, past the limit with
-    # the payload within it, is sdm-core's
-    # a_call_past_the_limit_is_refused_before_it_is_sent).
+    # Register PD-2: the HTTP transport sends the core's call as the core
+    # wrote it, characters past ASCII as their own bytes, never json.dumps'
+    # escapes; and the client holds a call to no size of its own, so one
+    # past the 30 MiB the reference refused is sent.
     limit = 30 * 1024 * 1024
     lengths = []
     for emoji, ascii in ((0, 0), (1, 0), (0, 1)):
@@ -784,39 +776,17 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
         )
         assert written == received
         lengths.append(len(received[0]))
-    base, wide, narrow = (
-        lengths[0],
-        lengths[1] - lengths[0],
-        lengths[2] - lengths[0],
-    )
-    assert wide % 4 == 0 and narrow == 1
-    emoji = (limit - base) // wide
-    ascii = (limit - base - emoji * wide) // narrow
-    # The call's edge is past the payload's: materialize refuses it, naming
-    # the payload's size, and the payload's edge is that much nearer.
-    with pytest.raises(StructuredDataError) as over:
-        _emoji_request(monkeypatch, emoji, ascii)
-    details = over.value.details
-    assert over.value.code == 'INVALID_REQUEST'
-    assert details['field'] == 'payload' and details['limit'] == limit
-    excess = details['bytes'] - limit
-    assert 0 < excess < wide * 64
-    room = emoji * wide + ascii * narrow - excess
-    emoji = room // wide
-    ascii = (room - emoji * wide) // narrow
+    base, wide = lengths[0], lengths[1] - lengths[0]
+    assert wide % 4 == 0 and lengths[2] - lengths[0] == 1
+    emoji = (limit - base) // wide + 1
     written, received, refused = _sent(
-        monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
+        monkeypatch, _emoji_request(monkeypatch, emoji, 0)
     )
     assert refused.code == 'RECORDED'
     assert written == received
-    assert len(received[0]) == base + emoji * wide + ascii * narrow <= limit
+    assert len(received[0]) == base + emoji * wide > limit
     assert b'\\ud83d' not in received[0]
     assert '\U0001f600'.encode() in received[0]
-    with pytest.raises(StructuredDataError) as past:
-        _emoji_request(monkeypatch, emoji, ascii + 1)
-    assert past.value.code == 'INVALID_REQUEST'
-    assert past.value.details['field'] == 'payload'
-    assert past.value.details['bytes'] == limit + 1
 
 
 def test_embeddings_are_the_old_route_s_on_the_core(

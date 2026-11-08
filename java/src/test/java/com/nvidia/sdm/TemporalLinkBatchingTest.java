@@ -96,7 +96,8 @@ class TemporalLinkBatchingTest {
           assertEquals(java.util.stream.IntStream.rangeClosed(1, count).boxed().toList(), ids);
         }
         assertEquals(List.of(100, 100, 1), sizes(materialize(schema, QUERY, 201, 100)));
-        assertEquals(List.of(200, 1), sizes(materialize(schema, QUERY, 201, 1000)));
+        // A size asked is taken as asked; 200 is only the default.
+        assertEquals(List.of(201), sizes(materialize(schema, QUERY, 201, 1000)));
         assertEquals(List.of(201), sizes(materialize(schema,
             "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id", 201, null)));
       }
@@ -113,7 +114,7 @@ class TemporalLinkBatchingTest {
         Table predict = arrow(allocator, predicted, "temporal_link_prediction")) {
       Request request = memory(fixture, false).materializeExamples(task(test), context, predict,
           ExamplesOptions.builder().rowsPerCall(1000).build());
-      assertEquals(List.of(200, 1), sizes(request));
+      assertEquals(List.of(201), sizes(request));
     }
   }
 

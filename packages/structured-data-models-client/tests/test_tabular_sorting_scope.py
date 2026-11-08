@@ -48,7 +48,9 @@ def materialize(frame, entry, wanted):
     return query(frame).materialize(**arguments, task='regression')
 
 
-@pytest.mark.parametrize('entry', ['indices', 'predict'])
+# Only a count the caller names reduces the context; the predict route takes
+# no count, and sends its context whole.
+@pytest.mark.parametrize('entry', ['indices'])
 @pytest.mark.parametrize('owner', ['frame_sort', 'sampled_frame_sort', 'label'])
 def test_reduced_custom_sorting_is_refused_without_execution(
     monkeypatch, entry, owner

@@ -238,20 +238,10 @@ def gathered_in_calls(*, calls: int, context_rows: int):
     )
 
 
-@pytest.mark.parametrize('over', [False, True], ids=['under', 'over'])
-def test_the_context_cap_is_held_to_each_call_and_not_their_sum(over):
-    """Both sides of the cap, because only the allowed one was covered: a
-    per-call count that always read nought would have passed that alone."""
-
-    cap = 10_000
-    each = cap + 1 if over else cap // 2 + 1
-    request = gathered_in_calls(calls=2, context_rows=each)
-    if not over:
-        sent(request)
-        return
-    with pytest.raises(StructuredDataError) as refused:
-        sent(request)
-    assert f'{each:,} context rows' in str(refused.value)
+def test_each_call_s_context_is_sent_at_any_size():
+    """The client holds a context to no size of its own, in each call or
+    across them."""
+    sent(gathered_in_calls(calls=2, context_rows=10_001))
 
 
 def test_a_batched_request_reports_the_context_one_call_carries():

@@ -34,7 +34,7 @@ use sdm_wire::json::Value;
 
 use crate::materialize::{
     Call, Gathered, Inputs, MOST_PARTS, REQUEST_STATE_VERSION, asked_rows_per_call, attach_request,
-    one, refuse_entities,
+    one,
 };
 use crate::pql::RankingPlan;
 use crate::run::Asker;
@@ -195,7 +195,6 @@ pub(crate) async fn materialize(
         .with_field("parts", Detail::Scalar(Scalar::UInt64(parts)))
         .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
     }
-    refuse_entities(entities, parts, inputs.most_entities)?;
     // Each question gathered with the call's values but `top_k`, which is
     // the whole ranking's, each by a materializer of its own, so with no
     // memo of another's reads; the materializer's own memo is left as it

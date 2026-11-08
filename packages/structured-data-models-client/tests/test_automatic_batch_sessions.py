@@ -78,7 +78,7 @@ class Endpoint:
                     elif outer.mode == 'malformed' and outer.scored == 2:
                         answer = {'predictions': 'invalid'}
                     elif outer.mode == 'fail' and outer.scored == 2:
-                        status = 500
+                        status = 422
                     elif outer.mode == 'retry' and outer.scored == 1:
                         status = 408
                     else:
@@ -165,9 +165,9 @@ def test_failed_batch_preserves_paid_answers_and_cleanup():
         with SDMClient(url=endpoint.url, max_retries=1) as client:
             with pytest.raises(StructuredDataError) as caught:
                 client.predict(request(), model=KumoRelational())
-        assert endpoint.scored == 2  # HTTP500 is not retried.
+        assert endpoint.scored == 2  # a 422 is not retried
         assert endpoint.calls[-1][:2] == ('DELETE', '/v1/sessions/s1')
-        assert getattr(caught.value, 'status_code', None) == 500
+        assert getattr(caught.value, 'status_code', None) == 422
         assert caught.value.details['answered'] is not None
     finally:
         endpoint.close()

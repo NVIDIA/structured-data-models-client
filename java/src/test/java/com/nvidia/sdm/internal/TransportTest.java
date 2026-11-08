@@ -27,7 +27,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The model transport over {@code java.net.http}: the call is sent as the bytes given,
- * one past 16 MB included; a transient status is tried again; a refusal is the endpoint's; an
+ * one past 16 MB included; a transient status or a 500 is tried again; a refusal is the endpoint's;
+ * a timeout is told as a 408; an
  * answer that is not JSON, or one past 64 MiB, is a failed transport.
  */
 class TransportTest {
@@ -83,20 +84,20 @@ class TransportTest {
 
   @Test
   void aTransientStatusIsTriedAgain() throws Exception {
-    try (Endpoint endpoint = new Endpoint(OBJECT, 503, 429)) {
+    try (Endpoint endpoint = new Endpoint(OBJECT, 503, 429, 500)) {
       assertArrayEquals(OBJECT, endpoint.transport(3).predict("{}".getBytes(StandardCharsets.UTF_8)));
-      assertEquals(3, endpoint.received.size());
+      assertEquals(4, endpoint.received.size());
     }
   }
 
   @Test
   void aRefusalIsTheEndpointsAndIsNotTriedAgain() throws Exception {
-    try (Endpoint endpoint = new Endpoint(OBJECT, 500)) {
+    try (Endpoint endpoint = new Endpoint(OBJECT, 422)) {
       ModelEndpointException refused =
           assertThrows(
               ModelEndpointException.class,
               () -> endpoint.transport(3).predict("{}".getBytes(StandardCharsets.UTF_8)));
-      assertEquals(500, refused.status());
+      assertEquals(422, refused.status());
       assertEquals("later", refused.getMessage());
       assertEquals(1, endpoint.received.size());
     }
@@ -161,10 +162,12 @@ class TransportTest {
           new HttpTransport(
               "http://127.0.0.1:" + server.getAddress().getPort(), null, Duration.ofMillis(300), 0);
       long started = System.nanoTime();
-      HttpTransport.Failed failed =
+      // Told as the endpoint's 408, so the core asks the rows again in halves.
+      ModelEndpointException failed =
           assertThrows(
-              HttpTransport.Failed.class,
+              ModelEndpointException.class,
               () -> transport.predict("{}".getBytes(StandardCharsets.UTF_8)));
+      assertEquals(408, failed.status());
       long millis = (System.nanoTime() - started) / 1_000_000;
       assertTrue(millis < 5_000, "the call took " + millis + " ms");
       assertTrue(failed.getMessage().contains("timed out"), failed.getMessage());

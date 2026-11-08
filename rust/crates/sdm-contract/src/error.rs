@@ -941,7 +941,6 @@ sentences! {
     Undeclared = "undeclared", E::UnsupportedRequest;
     SeedPastRange = "seed_past_range", E::InvalidRequest;
     BigIntegerPastType = "big_integer_past_type", E::ValueOutOfRange;
-    LagPastPayload = "lag_past_payload", E::InvalidRequest;
     DateLiteralPacked = "date_literal_packed", E::InvalidRequest, rule "date_literal_packed";
     LocalZoneUnread = "local_zone_unread", E::InvalidRequest;
     ClockPastYears = "clock_past_years", E::InvalidRequest;
@@ -1107,9 +1106,6 @@ sentences! {
     NoEntityPassedSeveral = "no_entity_passed_several", E::InvalidRequest;
     AnchorTooLateSeveral = "anchor_too_late_several", E::InvalidRequest;
     ForecastTopK = "forecast_top_k", E::InvalidRequest, rule "forecast_top_k";
-    MostEntities = "most_entities", E::UnsupportedRequest, rule "most_entities";
-    MostEntitiesParts = "most_entities_parts", E::UnsupportedRequest, rule "most_entities";
-    MostCalls = "most_calls", E::UnsupportedRequest, rule "most_calls";
     NotYetMaterialize = "not_yet_materialize", E::UnsupportedRequest;
     MissingIndexTable = "missing_index_table", W::MissingIndices;
     MissingIndexTables = "missing_index_tables", W::MissingIndices;

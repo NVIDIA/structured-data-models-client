@@ -19,7 +19,7 @@ import numpy as np
 
 from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import Refused, TransportFailed, run
-from sdm_client.core.transport import EndpointFailed
+from sdm_client.core.transport import EndpointFailed, read_timed_out
 from sdm_client.decompose import RANKING
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -620,7 +620,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
-            if failed.code == 'TRANSPORT_ERROR' and 'timeout' in failed.details:
+            if failed.code == 'TRANSPORT_ERROR' and read_timed_out(failed):
                 # Told to the core as a 408, so it asks the rows again in
                 # halves; the timeout is what is raised if no half answers.
                 timed_out = StructuredDataError(

@@ -198,6 +198,8 @@ DEPARTED = {
     # The client holds a payload to no size of its own: a call the endpoint
     # refuses as too large is asked again in halves when it is predicted.
     'size.one-past-the-limit': 'no byte limit',
+    # Nor on the context: a count past 10,000 is gathered.
+    'base.regression.num-context-10001': 'no context limit',
 }
 
 

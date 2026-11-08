@@ -14,7 +14,8 @@ from tabular_ordinary_index_cases import CASES, frame_for, observe_case
 def expected_case(name):
     """Pandas ordering and Decimal effects without invoking any client code."""
     family, entry, shape, mode = name.split('/')
-    n, wanted = (81, 40) if entry == 'indices' else (10002, 10000)
+    # The predict route sends the frame's labelled rows whole: no sampling.
+    n, wanted = (81, 40) if entry == 'indices' else (10002, 10001)
     with localcontext() as context:
         context.prec = 2
         context.traps[FloatOperation] = False
@@ -25,6 +26,8 @@ def expected_case(name):
         try:
             selected = (
                 frame.iloc[:-1]
+                if entry == 'predict'
+                else frame.iloc[:-1]
                 .sample(n=wanted, random_state=42)
                 .sort_index(kind='stable')
             )
@@ -38,17 +41,20 @@ def expected_case(name):
                 ),
             }
         ids = selected['id'].tolist()
+        flags = {
+            signal.__name__ for signal, set_ in context.flags.items() if set_
+        }
+        if entry == 'predict' and family == 'decimal_float':
+            # The whole frame is encoded unsorted, which compares its
+            # decimals with floats where a sample's sort would have first.
+            flags.add('FloatOperation')
         return {
             'context_count': wanted,
             'context_ids_sha256': digest(ids),
             'encoded_ids_sha256': digest(ids),
             'index_dtype': str(selected.index.dtype),
             'predictions': [{'row_index': 0, 'id': n - 1, 'prediction': 0.0}],
-            'flags': sorted(
-                signal.__name__
-                for signal, set_ in context.flags.items()
-                if set_
-            ),
+            'flags': sorted(flags),
         }
 
 

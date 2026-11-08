@@ -99,7 +99,6 @@ public final class Wording {
                 + ") && List.of("
                 + String.join(", ", quotedAll(given.get(2)))
                 + ").contains(link.sourceColumn()))).toList())");
-    spelled.put("materialize_call", given -> "materialize()");
     spelled.put("missing_time", given -> "null");
     spelled.put(
         "name_candidates",

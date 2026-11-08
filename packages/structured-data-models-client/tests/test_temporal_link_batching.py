@@ -106,7 +106,8 @@ def materialize(schema, count=201, rows_per_call=None, query=QUERY):
         (200, None, [200]),
         (201, None, [200, 1]),
         (201, 100, [100, 100, 1]),
-        (201, 1000, [200, 1]),
+        # A size asked is taken as asked; 200 is only the default.
+        (201, 1000, [201]),
     ],
 )
 def test_pql_link_batches_preserve_every_entity(
@@ -135,15 +136,12 @@ def test_node_predictions_keep_the_ordinary_limit(link_schema):
     ] == [201]
 
 
-def test_link_batches_respect_total_call_limit(link_schema, monkeypatch):
-    from sdm_client.materializers import relational
-
-    monkeypatch.setattr(relational, 'MOST_CALLS', 1)
-    with pytest.raises(StructuredDataError) as caught:
-        materialize(link_schema)
-    assert caught.value.code == 'UNSUPPORTED_REQUEST'
-    assert caught.value.details['calls'] == 2
-    assert caught.value.details['rows_per_call'] == 200
+def test_link_batches_are_as_many_calls_as_the_entities_need(link_schema):
+    request = materialize(link_schema)
+    assert [
+        len(p['predict']['instance_table']['rows']) for p in request.payloads
+    ][:1] == [200]
+    assert len(request.payloads) == 2
 
 
 def test_link_batch_result_order_and_partial_failure(

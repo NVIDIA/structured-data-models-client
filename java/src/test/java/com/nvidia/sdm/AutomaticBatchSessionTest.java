@@ -49,7 +49,7 @@ class AutomaticBatchSessionTest {
             if(mode.equals("transport") && scores>=2) { exchange.close();return; }
             if(mode.equals("expired") && scores==2) status=404;
             else if(mode.equals("retry") && scores==1) status=408;
-            else if(mode.equals("fail") && scores==2) status=500;
+            else if(mode.equals("fail") && scores==2) status=422;
             else if(mode.equals("malformed") && scores==2) answer=Map.of("predictions","invalid");
             else {
               var table=object(object(payload.get("predict")).get("instance_table"));
@@ -134,7 +134,7 @@ class AutomaticBatchSessionTest {
   @Test void failedBatchKeepsPaidAnswersAndCloses() throws Exception {
     try(Endpoint endpoint=new Endpoint("fail"); SdmClient client=endpoint.client()) {
       var error=assertThrows(ModelEndpointException.class,()->client.predict(request(),SdmClient.KUMO_RELATIONAL));
-      assertEquals(500,error.status()); assertEquals(2,endpoint.scores);assertEquals(1,endpoint.deletes);
+      assertEquals(422,error.status()); assertEquals(2,endpoint.scores);assertEquals(1,endpoint.deletes);
       assertNotNull(error.details().get("answered"));
     }
   }

@@ -11,9 +11,14 @@ from tabular_arrow_index_cases import CASES, digest, frame_for, observe_case
 def expected_case(name):
     """Same-runtime pandas ordering, independent of client implementation."""
     family, entry, shape = name.split('/')
-    n, wanted = (81, 40) if entry == 'indices' else (10002, 10000)
+    # The predict route sends the frame's labelled rows whole: no sampling.
+    n, wanted = (81, 40) if entry == 'indices' else (10002, 10001)
     frame = frame_for(family, n, shape)
-    selected = frame.iloc[:-1].sample(n=wanted, random_state=42).sort_index()
+    selected = (
+        frame.iloc[:-1]
+        if entry == 'predict'
+        else frame.iloc[:-1].sample(n=wanted, random_state=42).sort_index()
+    )
     ids = selected['id'].tolist()
     return {
         'context_count': wanted,

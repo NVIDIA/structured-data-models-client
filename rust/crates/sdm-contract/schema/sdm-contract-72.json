@@ -7897,22 +7897,6 @@
           ],
           "format": "uint32",
           "minimum": 0
-        },
-        "most_entities": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "most_calls": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
         }
       },
       "additionalProperties": false,
@@ -14430,24 +14414,6 @@
               "format": "uint32",
               "minimum": 0
             },
-            "most_entities": {
-              "description": "The most entities one `materialize` gathers, across the calls it is\nasked in, which the host lets its caller set (`main`'s\n`MOST_ENTITIES`); 100,000 where it names none (design choice 1,\nmulti-call `predict`, read which asks a request of more\nrows than one call scores in several calls; until then the core\nrefuses more than one call's rows, a lower bound than either).",
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0
-            },
-            "most_calls": {
-              "description": "The most model calls one request is asked in (`main`'s\n`MOST_CALLS`); 100 where the host names none (read as\n`most_entities`).",
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0
-            },
             "sampler_state": {
               "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it; none for a materializer's\nfirst run.",
               "anyOf": [
@@ -17559,7 +17525,6 @@
         "undeclared",
         "seed_past_range",
         "big_integer_past_type",
-        "lag_past_payload",
         "date_literal_packed",
         "local_zone_unread",
         "clock_past_years",
@@ -17725,9 +17690,6 @@
         "no_entity_passed_several",
         "anchor_too_late_several",
         "forecast_top_k",
-        "most_entities",
-        "most_entities_parts",
-        "most_calls",
         "not_yet_materialize",
         "missing_index_table",
         "missing_index_tables",

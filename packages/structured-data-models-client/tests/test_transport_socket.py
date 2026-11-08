@@ -377,13 +377,11 @@ def test_a_detail_that_is_not_text_names_no_diagnosis():
 
 
 def test_a_request_is_sent_again_only_for_what_sending_it_again_can_fix():
-    """A 500 is not retried. The payload and the model are the same on every
-    attempt, so a server fault reproduces. Caller mistakes this endpoint
-    reports as a 500 are reclassified from the body, but only after three more
-    uploads of the whole gathered context. Overload,
-    gateway and timeout are the transient ones and are still retried."""
+    """A connection error or a 5xx is retried with backoff, up to
+    ``max_retries``; overload is too. A 422 is the caller's, and sending the
+    same request again cannot fix it."""
     for status, sends in (
-        (500, 1),
+        (500, 4),
         (429, 4),
         (502, 4),
         (503, 4),

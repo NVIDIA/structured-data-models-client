@@ -36,23 +36,17 @@ def test_public_count_task_journey(monkeypatch, route, name):
             }
         }
         assert not events and not warnings
-    elif name == 'warning_raise':
-        assert outcome == {
-            'error': {
-                'type': 'StopWarning',
-                'code': None,
-                'message': 'warning handler stopped',
-            }
-        }
-        assert len(events) == 1 and events[0][0] == 'warning'
-        assert len(warnings) == 1 and 'were sampled' in warnings[0]['message']
     else:
         assert 'error' not in outcome
+        # The context is sampled only to a count the caller names: past the
+        # old cap, with none named, every labelled row is sent, unremarked.
         expected_count = (
             12
             if name.startswith('task_')
             else 4
             if name == 'count_owner'
+            else actual['cap'] + 1
+            if name in ('over_default', 'warning_record', 'warning_raise')
             else actual['cap']
         )
         assert len(outcome['context_ids']) == expected_count
@@ -67,12 +61,7 @@ def test_public_count_task_journey(monkeypatch, route, name):
             ['endpoint', expected_count],
             ['predicted'],
         ]
-        if name == 'count_owner':
-            assert events[:-3] == [['count_gt', actual['cap']]]
-        elif name.startswith('task_') or name in (
-            'over_default',
-            'warning_record',
-        ):
+        if name.startswith('task_'):
             assert len(events) == 4 and events[0][0] == 'warning'
         else:
             assert len(events) == 3
@@ -80,10 +69,6 @@ def test_public_count_task_journey(monkeypatch, route, name):
             assert (
                 len(warnings) == 1
                 and 'two whole numbers' in warnings[0]['message']
-            )
-        elif name in ('over_default', 'warning_record'):
-            assert (
-                len(warnings) == 1 and 'were sampled' in warnings[0]['message']
             )
         else:
             assert not warnings

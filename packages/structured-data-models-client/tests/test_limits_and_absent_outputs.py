@@ -4,10 +4,9 @@
 
 """What the endpoint will not take, and what the answer did not contain.
 
-Two silences. The tabular endpoint caps a context at 10,000 rows and the client
-did not know it, so a caller could encode and transmit a table of any size to
-be refused at the far end, while the identical overage on the other model was
-refused locally with a message naming the limit.
+The context the client sends: whole, or sampled only to a count the caller
+names. The client holds it to no size of its own; a context larger than the
+endpoint takes is the endpoint's refusal.
 
 And a field a caller names is validated against the model and never against
 what comes back. The endpoint answers 200, leaves the field out, and the frame
@@ -27,7 +26,6 @@ import pytest
 from sdm_client import PredictiveQuery, Schema
 from sdm_client.client import _report_absent
 from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_TABULAR
 from sdm_client.result import PredictionResult
 
 
@@ -59,16 +57,12 @@ def query(schema: Schema) -> PredictiveQuery:
 # --- the context the endpoint will take ------------------------------------
 
 
-def test_the_declared_cap_is_the_one_the_endpoint_enforces():
-    """Measured at the boundary: 10,000 answer, 10,001 refuse."""
-    assert KUMO_TABULAR.runtime.limits['context_rows_max'] == 10_000
-
-
-def test_a_context_above_the_cap_is_refused_before_it_is_encoded():
+def test_a_count_past_the_rows_there_takes_them_all():
     schema = table(200)
-    with pytest.raises(StructuredDataError) as raised:
-        query(schema).materialize(indices=[0, 1], num_context_samples=50_000)
-    assert 'accepts at most 10,000 context rows' in str(raised.value)
+    request = query(schema).materialize(
+        indices=[0, 1], num_context_samples=50_000
+    )
+    assert len(request.context.instance_table) == 198
 
 
 def test_the_cap_itself_is_allowed():
@@ -79,14 +73,13 @@ def test_the_cap_itself_is_allowed():
     assert len(request.context.instance_table) == 198
 
 
-def test_an_unnamed_context_is_capped_and_says_so():
+def test_an_unnamed_context_is_sent_whole():
     schema = table(12_000)
     request, said = warnings_from(
         partial(query(schema).materialize, indices=[0, 1])
     )
-    assert len(request.context.instance_table) == 10_000
-    assert any('were sampled' in s for s in said), said
-    assert any('num_context_samples' in s for s in said)
+    assert len(request.context.instance_table) == 11_998
+    assert not any('were sampled' in s for s in said), said
 
 
 def test_a_context_under_the_cap_is_left_whole_and_unremarked():
@@ -98,27 +91,26 @@ def test_a_context_under_the_cap_is_left_whole_and_unremarked():
     assert not any('were sampled' in s for s in said)
 
 
-def test_the_capped_context_is_a_sample_and_not_the_first_rows():
+def test_a_counted_context_is_a_sample_and_not_the_first_rows():
     """Taking the head would bias the context toward whatever the table is
     ordered by, which for a table ordered by time is the oldest rows."""
     schema = table(12_000)
-    request = query(schema).materialize(indices=[0])
+    request = query(schema).materialize(indices=[0], num_context_samples=10_000)
     taken = request.context.instance_table['rid']
     assert taken.max() > 11_000
     assert len(taken) == 10_000
 
 
-def test_the_predict_frame_route_is_capped_too():
-    """The route with no knob at all. The schema's table became the context
-    whole, so a large table was encoded and sent in full every time, to be
-    refused."""
+def test_the_predict_frame_route_sends_the_table_whole():
+    """The route with no knob at all: the schema's table, less the rows
+    scored, is the context."""
     schema = table(12_000)
     rows = schema['t'].data.head(3).drop(columns=['amount'])
     request, said = warnings_from(
         partial(query(schema).materialize, predict=rows)
     )
-    assert len(request.context.instance_table) == 10_000
-    assert any('were sampled' in s for s in said)
+    assert len(request.context.instance_table) == 11_997
+    assert not any('were sampled' in s for s in said)
 
 
 # --- what the answer did not carry -----------------------------------------
@@ -220,28 +212,18 @@ def test_the_result_is_returned_unchanged():
         assert _report_absent(answer, ['quantiles'], 'kumo-x') is answer
 
 
-def test_a_materialized_context_above_the_cap_is_refused_not_merely_the_number():
-    """A small table makes this a check on the argument. The rows have to be
-    there for it to be a check on the context."""
+def test_a_count_past_the_old_cap_is_gathered():
+    """The rows are there, so the count is the context's size."""
     schema = table(12_000)
-    with pytest.raises(StructuredDataError) as raised:
-        query(schema).materialize(indices=[0, 1], num_context_samples=10_001)
-    assert 'accepts at most 10,000 context rows' in str(raised.value)
+    request = query(schema).materialize(
+        indices=[0, 1], num_context_samples=10_001
+    )
+    assert len(request.context.instance_table) == 10_001
 
 
-def test_the_predict_route_advises_something_that_route_allows():
-    """Its own refusal says `num_context_samples` cannot be used here, so the
-    warning must not tell the caller to pass it."""
+def test_the_predict_route_takes_no_count():
     schema = table(12_000)
     rows = schema['t'].data.head(3).drop(columns=['amount'])
-    _, said = warnings_from(partial(query(schema).materialize, predict=rows))
-    capped = [s for s in said if 'were sampled' in s]
-    assert capped
-    remedy = capped[0].split('sampled.')[1]
-    assert 'Pass num_context_samples' not in remedy
-    assert 'takes no num_context_samples' in remedy
-    assert 'building the schema' in remedy
-
     with pytest.raises(StructuredDataError) as raised:
         query(schema).materialize(predict=rows, num_context_samples=100)
     assert 'cannot be used with predict=<frame>' in str(raised.value)
@@ -397,15 +379,14 @@ def test_a_target_that_varies_is_left_alone():
     assert not any('every context row' in s for s in said)
 
 
-def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
-    """The client's own preamble says it refuses first where it can tell, and
-    the model is known by the time this check runs, so sending 12,500 rows to
-    be told the limit at the far end was work nobody needed to do."""
+def test_a_context_past_the_old_cap_is_sent():
+    """The client holds a context to no size of its own: 12,500 rows are
+    sent, for the endpoint to answer or refuse."""
     import numpy as np
     import pandas as pd
     from test_adapter_and_result import envelope
 
-    from sdm_client import Request, UnsupportedRequestError
+    from sdm_client import Request
 
     rng = np.random.default_rng(0)
     rows = 12_500
@@ -418,8 +399,7 @@ def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
         task='classification',
     )
 
-    with pytest.raises(UnsupportedRequestError, match='12,500'):
-        envelope(request)
+    envelope(request)
 
 
 def test_a_context_within_the_cap_is_not_refused():

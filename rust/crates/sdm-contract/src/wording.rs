@@ -201,7 +201,6 @@ advice! {
     EmptyRequest = "empty_request", [];
     GiveAHop = "give_a_hop", [];
     KeepOneLink = "keep_one_link", ["source_table", "target_table", "others"];
-    MaterializeCall = "materialize_call", [];
     MissingTime = "missing_time", [];
     NameCandidates = "name_candidates", ["column"];
     NamePrimaryKey = "name_primary_key", ["table"];
@@ -740,9 +739,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::BigIntegerPastType => said(
             r#"column {column!r} holds a value that {admitted_type}, the type it was described as, cannot hold"#,
         ),
-        S::LagPastPayload => said(
-            r#"the {lag_timesteps:,} past steps lag_timesteps asks for make the request larger than the {limit:,} bytes the endpoint takes; ask for fewer steps"#,
-        ),
         S::DateLiteralPacked => said(
             r#"{query!r} is not a query a relational model can answer: {literal} is not a valid instance of time"#,
         ),
@@ -1186,15 +1182,6 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::ForecastTopK => said(
             r#"top_k is how many candidates a ranking keeps, and a forecast ranks nothing; it gives back one value per step"#,
-        ),
-        S::MostEntities => said(
-            r#"{entities:,} entities is past the {limit:,} one {advice:materialize_call()} will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time"#,
-        ),
-        S::MostEntitiesParts => said(
-            r#"{entities:,} entities gathered {gathered_times:,} times over, {total:,} in all, is past the {limit:,} one {advice:materialize_call()} will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time"#,
-        ),
-        S::MostCalls => said(
-            r#"{entities:,} entities are gathered as {calls:,} calls of {rows_per_call:,}, and every one is built, with its own context, before any is sent. That is past the {limit:,} calls this will hold at once; ask about fewer entities at a time"#,
         ),
         S::NotYetMaterialize => said(
             r#"materializing this request needs the {rule!r} rule, which is not one this client's core supports yet"#,

@@ -97,9 +97,7 @@ def test_more_entities_than_one_call_scores_is_refused_before_gathering(
 ):
     """A part is one call, which is what makes the fan-out countable. The
     refusal reads the count it was given, so it costs no gathering."""
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    count = RELATIONAL_LIMITS['predict_rows_max'] + 1
+    count = 10_000 + 1  # one past the default batch
     with pytest.raises(StructuredDataError) as refused:
         built(query, indices=[1] * count, **how)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
@@ -115,22 +113,6 @@ def test_a_smaller_batch_lowers_what_a_part_may_ask_for(monkeypatch):
         built(FORECAST, indices=[1, 2, 3], rows_per_call=2)
     assert refused.value.details['rows_per_call'] == 2
     assert built(FORECAST, indices=[1, 2], rows_per_call=2).parts
-
-
-def test_the_whole_decomposed_question_is_held_to_the_memory_ceiling(
-    monkeypatch,
-):
-    """Each part gathers the whole population with a context of its own, so a
-    ranking over 200 candidates holds 200 times what one of them does. Bounding
-    each part on its own left the question itself unbounded."""
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 5)
-    built(RANK, indices=[1, 2], candidates=[0, 1])
-    with pytest.raises(StructuredDataError) as refused:
-        built(RANK, indices=[1, 2, 3], candidates=[0, 1])
-    assert refused.value.details['total'] == 6
-    assert refused.value.details['gathered_times'] == 2
 
 
 def test_a_step_that_fails_keeps_the_steps_already_paid_for():

@@ -26,9 +26,8 @@ Its `row_index` counts across the whole request rather than from zero per call, 
 A session scores those batches against the context it pinned, so the context is uploaded once rather than once per call.
 `fit()` itself takes a request of one call, since a session pins one context: fit a small request and score the batched one against the handle.
 
-Every batch is built before the first is sent, each with its own context, so the whole population is held in memory at once.
-One `materialize()` gathers at most 100,000 entities, in at most 100 calls, and the refusal names whichever of the two it met.
-Neither counts the parts of a question asked in several: a ranking is one call per candidate and a forecast one per step, bounded by `sdm_client.decompose.MOST_PARTS`, 200.
+Every batch is built before the first is sent, each with its own context, so the whole population is held in memory at once; the client sets no most on the entities or the calls.
+A question asked in parts is different: a ranking is one call per candidate and a forecast one per step, bounded by `sdm_client.decompose.MOST_PARTS`, 200, a limit on the wait rather than on the size.
 A question asked in parts is not batched by rows, since a batched part would send the parts times the batches.
 
 A call that fails ends the request.
