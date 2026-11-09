@@ -84,10 +84,12 @@ class SnowSampler(SQLSampler):
         random_seed: int | None = None,
         entity_ids: list | None = None,
     ) -> pd.DataFrame:
-        # NOTE Snowflake does support `SEED` only as part of `SYSTEM` sampling,
-        # which samples blocks rather than a fixed number of rows.
-        if entity_ids is None:
-            self._warn_random_seed_unsupported(random_seed)
+        # NOTE Snowflake supports `SEED` only as part of `SYSTEM` sampling,
+        # which samples blocks rather than a fixed number of rows. A seeded
+        # draw therefore orders by a hash of the primary key and the seed
+        # and takes the first `num_rows` rows instead: deterministic across
+        # calls, unlike `SAMPLE ROW`, which ignores the seed entirely.
+        seeded = entity_ids is None and random_seed is not None
 
         num_rows = min(num_rows, 1_000_000)  # Snowflake's upper limit.
 
@@ -120,7 +122,7 @@ class SnowSampler(SQLSampler):
             self.table_column_proj_dict[table_name][column]
             for column in self._ordered_columns(table_name, columns)
         ]
-        if entity_ids is not None:
+        if entity_ids is not None or seeded:
             sql = (
                 f'SELECT {", ".join(projections)}\n'
                 f'FROM {self.source_name_dict[table_name]}'
@@ -133,6 +135,10 @@ class SnowSampler(SQLSampler):
             )
         if len(filters) > 0:
             sql += f'\nWHERE{" AND".join(filters)}'
+        if seeded:
+            key_ref = self.table_column_ref_dict[table_name][key]
+            sql += f'\nORDER BY HASH({key_ref}, {random_seed})'
+            sql += f'\nLIMIT {num_rows}'
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:
             # NOTE This may return duplicate primary keys. This is okay.
