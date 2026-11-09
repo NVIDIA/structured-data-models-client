@@ -863,6 +863,12 @@ pub struct DescribedColumn {
     /// Other columns keep none. Absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
+    /// The type the source's catalog declares the column, as it spells it,
+    /// for every column a catalog lists. A later `materialize` compares it
+    /// with the catalog then, and reads the table's preview again only
+    /// where they differ. Absent where no catalog was read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_type: Option<String>,
     /// Set for a column of numbers the host provider handed over as their
     /// exact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):
     /// whether its catalog declares it a key. The schema reads such a column
@@ -1067,6 +1073,9 @@ pub struct SourceFacts {
     /// [`DescribedColumn::declared_type`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
+    /// [`DescribedColumn::catalog_type`]; absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_type: Option<String>,
     /// [`DescribedColumn::exact_number`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exact_number: Option<ExactNumber>,

@@ -666,10 +666,13 @@ def test_each_materialize_resolves_each_tables_spelling_again() -> None:
     describes = _describes(warehouse, mark)
     assert describes[:1] == [f'DESCRIBE TABLE "{DB}"."{SCHEMA}"."users"']
     assert f'DESCRIBE TABLE {_UPPER}."USERS"' in describes
-    previews = [
-        text for text in warehouse.asked(mark) if text.endswith('LIMIT 1000')
+    reads = [
+        text
+        for text in warehouse.asked(mark)
+        if not text.startswith('DESCRIBE')
     ]
-    assert any('"USERS"' in text for text in previews), previews
+    assert not any(text.endswith('LIMIT 1000') for text in reads), reads
+    assert any('"USERS"' in text for text in reads), reads
     warehouse.upper = set()
     mark = len(warehouse.calls)
     _materialize_reads(schema)

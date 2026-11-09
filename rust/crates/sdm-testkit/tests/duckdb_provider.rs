@@ -209,10 +209,9 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     );
     assert!(tables.iter().all(|t| t["duplicate_keys"]["v"] == "0"));
     // One fetch per statement the reference runs: ten in Schema.from_source,
-    // six in materialize; and the six of the two tables' catalogs
-    // and previews each materialize reads again, as the source holds them
-    // at that run.
-    assert_eq!(observed.fetches.len(), 22);
+    // six in materialize; and the two tables' catalogs each materialize
+    // reads again, as the source holds them at that run.
+    assert_eq!(observed.fetches.len(), 18);
     // The whole description, the request state with its payload, the
     // inputs and the step trace are the ones python-core records
     // (contract/pinned, which contract/tests holds python-core to), so CI
@@ -237,6 +236,29 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
             "origin": "inferred"
         }]
     });
+    // The snapshot also predates each column's catalog type, which a later
+    // materialize compares with the catalog then.
+    let catalog_types = [
+        ("orders", "order_id", "BIGINT"),
+        ("orders", "user_id", "BIGINT"),
+        ("orders", "price", "DOUBLE"),
+        ("orders", "ts", "TIMESTAMP"),
+        ("users", "user_id", "BIGINT"),
+        ("users", "age", "INTEGER"),
+        ("users", "country", "VARCHAR"),
+    ];
+    for (table, column, declared) in catalog_types {
+        let columns = expected_description["tables"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|t| t["name"] == table)
+            .unwrap()["columns"]
+            .as_array_mut()
+            .unwrap();
+        let held = columns.iter_mut().find(|c| c["name"] == column).unwrap();
+        held["catalog_type"] = serde_json::json!(declared);
+    }
     assert_eq!(described, expected_description);
     let mut expected_materialized = pinned["materialized"].clone();
     expected_materialized["payload"]["client_generated_keys"] =
@@ -278,8 +300,43 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
             }
         }
     }
+    // A table whose catalog is unchanged since it was described is read
+    // again by its catalog only, neither its keys nor its preview.
+    expected_fetches
+        .as_array_mut()
+        .unwrap()
+        .retain(|fetch| fetch.get("purpose").is_none() || fetch["request"]["part"] == "columns");
     assert_eq!(Value::from(observed.fetches), expected_fetches);
     let mut expected_inputs = pinned["inputs"].clone();
+    // The schema each later run is handed keeps those catalog types with
+    // its columns' facts.
+    fn with_catalog_types(value: &mut Value, types: &[(&str, &str, &str)]) {
+        match value {
+            Value::Object(object) => {
+                if let (Some(Value::String(table)), Some(Value::Array(columns))) =
+                    (object.get("name").cloned(), object.get_mut("columns"))
+                {
+                    for column in columns.iter_mut() {
+                        let name = column["name"].as_str().unwrap_or_default().to_owned();
+                        if let Some(facts) = column.get_mut("source").and_then(Value::as_object_mut)
+                            && let Some((_, _, declared)) =
+                                types.iter().find(|(t, c, _)| *t == table && *c == name)
+                        {
+                            facts.insert("catalog_type".into(), serde_json::json!(declared));
+                        }
+                    }
+                }
+                for child in object.values_mut() {
+                    with_catalog_types(child, types);
+                }
+            }
+            Value::Array(items) => items
+                .iter_mut()
+                .for_each(|item| with_catalog_types(item, types)),
+            _ => {}
+        }
+    }
+    with_catalog_types(&mut expected_inputs, &catalog_types);
     expected_inputs[2]["state"] = expected_materialized;
     assert_eq!(Value::from(observed.inputs.clone()), expected_inputs);
     // predict's call and result: the call's request id compared by
@@ -879,10 +936,11 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         ("predict".to_owned(), 0),
     ];
     // The reads the core marks as plan B's taken out (A-1): two
-    // tables' catalog, keys and preview; every statement after them is the
-    // reference's.
+    // tables' catalogs, unchanged since they were described, so neither
+    // table's keys nor preview is read again; every statement after them is
+    // the reference's.
     let fresh = ours.len() - sdm_testkit::plan_b::as_the_old_client_ran(&ours).len();
-    assert_eq!(fresh, 6);
+    assert_eq!(fresh, 2);
     let ours = sdm_testkit::plan_b::as_the_old_client_ran(&ours);
     assert_eq!(per_stage(&ours), counts);
     assert_eq!(per_stage(&theirs), counts);
@@ -891,8 +949,9 @@ fn base_regression_s_statements_return_the_reference_s_results() {
     let logged = &driver["query_log"];
     assert_eq!(logged["statements"], 16 + fresh as u64);
     assert_eq!(logged["bindings"], 3);
-    // Of the six read again, the four whose text DuckDB logs as written.
-    assert_eq!(logged["compared"], 14 + 4);
+    // The two read again are catalog pragmas, whose text DuckDB does not
+    // log as written.
+    assert_eq!(logged["compared"], 14);
     assert_eq!(logged["differing"], serde_json::json!([]));
     assert_eq!(driver["capture"]["bindings"].as_array().unwrap().len(), 3);
     for (position, (a, b)) in ours.iter().zip(&theirs).enumerate() {

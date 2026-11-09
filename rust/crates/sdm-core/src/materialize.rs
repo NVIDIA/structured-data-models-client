@@ -3223,8 +3223,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // source's tables as they stand at this run, a host provider's columns
     // that held no facts. The reference's engine read a source's tables once
     // and kept them on the schema (`materializers/sources.py:56-71`); this
-    // reads them again each run, so a column dropped or retyped since is
-    // found, at the cost of the catalog and preview reads. On every
+    // reads each table's catalog again each run, so a column dropped or
+    // retyped since is found, and its keys and preview only where the
+    // catalog changed. On every
     // path, every check over what the source holds comes after: the
     // engine's meanings, time columns and edges ([`kept_checks`]), the
     // graph and what the sampler needs.

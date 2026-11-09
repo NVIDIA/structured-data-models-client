@@ -127,6 +127,7 @@ pub fn by_data_type(relation: &Relation, dtype: Option<&str>) -> SourceFacts {
         nullable: true,
         unique: false,
         declared_type: None,
+        catalog_type: None,
         exact_number: None,
     }
 }
@@ -356,6 +357,7 @@ fn read_with_frame_widths(
                 nullable: facts.nullable,
                 unique: facts.unique,
                 declared_type: facts.declared_type,
+                catalog_type: facts.catalog_type,
                 exact_number: facts.exact_number,
             });
         }
@@ -461,6 +463,7 @@ pub fn facts_of(relation: &Relation, column: &DescribedColumn) -> SourceFacts {
         nullable: column.nullable,
         unique: column.unique,
         declared_type: column.declared_type.clone(),
+        catalog_type: column.catalog_type.clone(),
         exact_number: column.exact_number,
     }
 }

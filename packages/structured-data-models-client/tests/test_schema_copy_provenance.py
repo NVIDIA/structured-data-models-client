@@ -155,7 +155,7 @@ def test_copies_refresh_the_same_source_metadata(made, monkeypatch):
     assert isinstance(once, list)
     assert again == once
     assert asked == first
-    assert 'describe' in asked and 'preview' in asked
+    assert 'describe' in asked and 'preview' not in asked
 
 
 def test_source_facts_are_immutable_and_excluded_from_column_equality():

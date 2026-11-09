@@ -2040,6 +2040,13 @@
             "null"
           ]
         },
+        "catalog_type": {
+          "description": "[`DescribedColumn::catalog_type`]; absent from the JSON when none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "exact_number": {
           "description": "[`DescribedColumn::exact_number`]; absent from the JSON when none.",
           "anyOf": [
@@ -11099,6 +11106,13 @@
         },
         "declared_type": {
           "description": "The source's opaque catalog declaration, retained for numeric and\ntemporal columns and marked big integers.\nA dialect uses it to preserve exact numeric key joins and destination\nfloat coercion, and to distinguish zoned instants from NTZ wall clocks.\nOther columns keep none. Absent when none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "catalog_type": {
+          "description": "The type the source's catalog declares the column, as it spells it,\nfor every column a catalog lists. A later `materialize` compares it\nwith the catalog then, and reads the table's preview again only\nwhere they differ. Absent where no catalog was read.",
           "type": [
             "string",
             "null"

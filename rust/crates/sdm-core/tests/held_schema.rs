@@ -70,6 +70,7 @@ fn source(relation: &str, dtype: Dtype, received: ColumnType, unique: bool) -> O
         nullable: !unique,
         unique,
         declared_type: None,
+        catalog_type: None,
         exact_number: None,
     })
 }
@@ -552,6 +553,7 @@ fn numeric() -> HeldSchema {
         nullable: exact == ExactNumber::Other,
         unique: exact == ExactNumber::DeclaredKey,
         declared_type: None,
+        catalog_type: None,
         exact_number: Some(exact),
     };
     for table in &mut held.tables {

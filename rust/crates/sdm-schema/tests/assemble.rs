@@ -555,6 +555,7 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
         nullable: true,
         unique: false,
         declared_type: None,
+        catalog_type: None,
         exact_number: None,
     };
     assemble::mark_keys(&mut stamped);

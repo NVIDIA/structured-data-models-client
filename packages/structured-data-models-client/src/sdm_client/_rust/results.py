@@ -115,8 +115,8 @@ class SourceFacts:
     since), the data type the source's catalog and values give it, the type
     the provider handed over (the contract's ``ColumnType``, as JSON),
     whether it may hold no value, whether a key of it alone keeps it
-    unique, a big integer's or temporal column's declared type, and whether
-    it is a column of exact numbers."""
+    unique, a big integer's or temporal column's declared type, the type
+    its catalog declares, and whether it is a column of exact numbers."""
 
     relation: Any
     dtype: str
@@ -124,6 +124,7 @@ class SourceFacts:
     nullable: bool
     unique: bool
     declared_type: str | None = None
+    catalog_type: str | None = None
     exact_number: str | None = None
 
     @classmethod
@@ -133,7 +134,7 @@ class SourceFacts:
             value,
             "a column's source facts",
             ('relation', 'dtype', 'received', 'nullable', 'unique'),
-            ('declared_type', 'exact_number'),
+            ('declared_type', 'catalog_type', 'exact_number'),
         )
         return cls(
             relation=read['relation'],
@@ -142,6 +143,7 @@ class SourceFacts:
             nullable=_flag(read['nullable'], 'nullable'),
             unique=_flag(read['unique'], 'unique'),
             declared_type=_maybe(read['declared_type'], _text, 'declared_type'),
+            catalog_type=_maybe(read['catalog_type'], _text, 'catalog_type'),
             exact_number=_maybe(read['exact_number'], _text, 'exact_number'),
         )
 
@@ -162,6 +164,7 @@ class SourceFacts:
                         'nullable',
                         'unique',
                         'declared_type',
+                        'catalog_type',
                         'exact_number',
                     )
                     if key in column
@@ -181,6 +184,8 @@ class SourceFacts:
         }
         if self.declared_type is not None:
             written['declared_type'] = self.declared_type
+        if self.catalog_type is not None:
+            written['catalog_type'] = self.catalog_type
         if self.exact_number is not None:
             written['exact_number'] = self.exact_number
         return written

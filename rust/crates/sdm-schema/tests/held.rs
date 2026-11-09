@@ -22,6 +22,7 @@ fn facts(dtype: Dtype, received: ColumnType) -> SourceFacts {
         nullable: false,
         unique: true,
         declared_type: Some("HUGEINT".into()),
+        catalog_type: None,
         exact_number: None,
     }
 }
