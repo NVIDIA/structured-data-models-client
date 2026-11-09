@@ -97,6 +97,9 @@ these packages. All five distributions share one version and one entry.
 
 ### Fixed
 
+- `Graph.from_snowflake_semantic_view` reads a semantic view whose base table
+  is a quoted identifier. The view reports such a name with its quotes, which
+  were quoted a second time, so the table was reported as not found.
 - A predictive query longer than 1,024 characters is answered. A relational
   request carries the query in `metadata.source_query` for logging, which the
   contract caps at 1,024 characters, so a NIM refused a longer one with
