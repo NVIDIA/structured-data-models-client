@@ -49,8 +49,19 @@ PREDICTS = re.compile(r'\b\w+\.predict\(')
 LINK = re.compile(r'\]\(([^)]+)\)')
 
 
+#: Files the NVIDIA skills catalog requires beside each skill. They are written
+#: for the catalog, not for an agent. A skill links to none of them, and none
+#: holds an example. The governance card is HTML-laced markdown in the catalog's
+#: own template. NVSkills CI writes the benchmark report on each signing run.
+#: Holding either to the markdown read here would fail on a file nobody here
+#: writes by hand.
+CATALOG_FILES = frozenset({'skill-card.md', 'BENCHMARK.md'})
+
+
 def documents() -> list[Path]:
-    return sorted(SKILLS.rglob('*.md'))
+    return sorted(
+        path for path in SKILLS.rglob('*.md') if path.name not in CATALOG_FILES
+    )
 
 
 def fences(path: Path, language: str) -> list[str]:
