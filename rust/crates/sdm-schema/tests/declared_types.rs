@@ -57,7 +57,10 @@ fn previewed_as(
     .unwrap();
     let column = |name: &str, dtype: Option<Dtype>| CatalogColumn {
         name: name.to_owned(),
-        declared_type: String::new(),
+        declared_type: match dtype {
+            Some(Dtype::Unsupported) => "VARIANT".to_owned(),
+            _ => String::new(),
+        },
         not_null: false,
         primary_key: false,
         key_nullable: false,
@@ -88,7 +91,7 @@ fn a_declared_unsupported_type_is_refused_by_name_whatever_the_values() {
 fn a_refused_column_type_names_the_column_its_table_and_its_type() {
     let declared = previewed(Some(Dtype::Unsupported)).unwrap_err();
     let read = previewed_as(None, Arc::new(NullArray::new(2))).unwrap_err();
-    for (refused, arrow_type) in [(declared, "Utf8"), (read, "Null")] {
+    for (refused, column_type) in [(declared, "VARIANT"), (read, "Null")] {
         assert_eq!(refused.sentence, Sentence::ColumnTypeUnsupported);
         assert_eq!(refused.fields["rule"], Detail::text("column_type"));
         assert_eq!(refused.fields["column"], Detail::text("profile"));
@@ -96,6 +99,6 @@ fn a_refused_column_type_names_the_column_its_table_and_its_type() {
             refused.fields["source"],
             Detail::List(vec![Scalar::Utf8("users".into())])
         );
-        assert_eq!(refused.fields["arrow_type"], Detail::text(arrow_type));
+        assert_eq!(refused.fields["column_type"], Detail::text(column_type));
     }
 }

@@ -300,14 +300,16 @@ impl InferredTable {
     }
 }
 
-/// The refusal of column `column` of `source`, whose preview gave it an
-/// Arrow type no described column takes (`column_type`), naming the
-/// column, its table and the type, as the reference names the column and
-/// its table (`_to_dtype`).
-pub fn column_type(source: &Relation, column: &str, data_type: &DataType) -> CoreError {
+/// The refusal of column `column` of `source`, whose type `column_type`
+/// no described column takes (`column_type`), naming the column, its table
+/// and the type, as the reference names the column and its table
+/// (`_to_dtype`).
+pub fn column_type(source: &Relation, column: &str, column_type: &str) -> CoreError {
     CoreError::new(
         Sentence::ColumnTypeUnsupported,
-        format!("column {column:?} has the Arrow type {data_type}, which a described table does not take"),
+        format!(
+            "column {column:?} has the type {column_type}, which a described table does not take"
+        ),
     )
     .with_field("operation", Detail::text("describe_source"))
     .with_field(
@@ -315,7 +317,7 @@ pub fn column_type(source: &Relation, column: &str, data_type: &DataType) -> Cor
         Detail::List(source.source.iter().cloned().map(Scalar::Utf8).collect()),
     )
     .with_field("column", Detail::text(column))
-    .with_field("arrow_type", Detail::text(data_type.to_string()))
+    .with_field("column_type", Detail::text(column_type))
 }
 
 /// The owner's switch of P1B-11 (2026-10-13): an empty table is refused as
@@ -628,13 +630,19 @@ impl Keyed {
         let dtype = match declared.dtype {
             // A declaration the reference reads as unsupported (Databricks'
             // struct, map or interval, `_to_dtype`) is refused by name, as
-            // a struct or map the values give is (B-10).
+            // a struct or map the values give is (B-10), and by the type it
+            // declares: a Snowflake VARIANT arrives as text.
             Some(Dtype::Unsupported) => {
-                return Err(column_type(relation, &declared.name, field.data_type()));
+                let named = match declared.declared_type.trim() {
+                    "" => field.data_type().to_string(),
+                    spelled => spelled.to_owned(),
+                };
+                return Err(column_type(relation, &declared.name, &named));
             }
             Some(declared) => declared,
-            None => dtype_of(field.data_type())
-                .ok_or_else(|| column_type(relation, &declared.name, field.data_type()))?,
+            None => dtype_of(field.data_type()).ok_or_else(|| {
+                column_type(relation, &declared.name, &field.data_type().to_string())
+            })?,
         };
         let is_primary = declared.primary_key || self.primary.contains(&declared.name);
         Ok(SourceFacts {
@@ -817,7 +825,7 @@ fn preview_with(
         }
         // Its one refusal is of a type it does not read: named here.
         let sample = values::column(batches, index, floats)
-            .map_err(|_| column_type(source, &declared.name, field.data_type()))?;
+            .map_err(|_| column_type(source, &declared.name, &field.data_type().to_string()))?;
         if dtype == Dtype::Time {
             // The engine reads a time of day's values as times, which none
             // is, and says how many it dropped.

@@ -83,8 +83,14 @@ The public API snapshot records this version update; publication remains pending
 - A column of a type a described table does not take, such as a list of
   booleans, a struct or a map, raises `UnsupportedRequestError` with code
   `UNSUPPORTED_REQUEST` and `details['rule']` `column_type`. The message and
-  details name the column, its table and its Arrow type. 1.0.0 raised a
-  `ValueError` naming the column and table.
+  details name the column, its table and its type, as the source declares it
+  where it does, such as a Snowflake `VARIANT`. 1.0.0 raised a `ValueError`
+  naming the column and table.
+- Describing an empty table raises `StructuredDataError` with code
+  `INVALID_REQUEST` and `details['rule']` `empty_table`. 1.0.0 raised a
+  `RuntimeError`, so `except RuntimeError` no longer catches it.
+- A column whose name holds a dot is kept and sent. 1.0.0 left it out with a
+  warning.
 - `predict()` on a request gathered in several calls that share one context
   scores them through a temporary endpoint session, so the context is
   uploaded once. 1.0.0 sent every call stateless. An expired session is
