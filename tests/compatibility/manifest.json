@@ -9939,16 +9939,6 @@
       "evidence_level": "live-required"
     },
     {
-      "api_contract": "automatic-batch-sessions",
-      "test": "packages/structured-data-models-client/tests/test_temporal_link_batching.py::test_live_temporal_link_batches_preserve_entity_identity",
-      "evidence_level": "live-required"
-    },
-    {
-      "api_contract": "automatic-batch-sessions",
-      "test": "java/src/test/java/com/nvidia/sdm/TemporalLinkBatchingTest.java#liveShopBatches",
-      "evidence_level": "live-required"
-    },
-    {
       "api_contract": "gradient-explanations",
       "test": "packages/structured-data-models-client/tests/test_gradient_explanations.py::test_pretrained_local_model_gradients",
       "evidence_level": "live-required",
