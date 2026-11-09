@@ -10,7 +10,20 @@ It is an extra:
 pip install 'structured-data-models-client[in-process]'
 ```
 
-That brings structured-data-models and PyTorch, and needs Python 3.11 or
+No published release carries `in_process()` yet, so until one does, that
+command installs a client without it. Install from a checkout instead:
+
+```
+git clone https://github.com/NVIDIA/structured-data-models-client
+cd structured-data-models-client
+pip install -e './packages/structured-data-models-client[in-process]'
+```
+
+A pip warning that the client `does not provide the extra 'in-process'`, or
+an `AttributeError` saying `SDMClient` has no attribute `in_process`, is an
+installed client older than the feature, whichever command installed it.
+
+The extra brings structured-data-models and PyTorch, and needs Python 3.11 or
 later. Without it, `SDMClient.in_process()` raises `MissingExtraError` naming
 that command; on Python 3.10 the error names the Python it needs instead. The
 first prediction fetches the published weights, `nvidia/Kumo-Tabular` on
@@ -18,7 +31,8 @@ Hugging Face, into the Hugging Face cache, and later ones read them from
 there. That is both task checkpoints of the large model, about 1.7 GB, once;
 `size='small'`, below, is about 220 MB. No Hugging Face account or token is
 needed; a warning about unauthenticated requests is about rate limits, not
-access. The model runs on a GPU when there is one, else on the CPU.
+access. The model runs on a CUDA GPU when there is one, else on the CPU: the
+check is CUDA's alone, so on Apple silicon it runs on the CPU.
 
 Open the client with `SDMClient.in_process()` in place of a URL. Everything
 else is [the whole interface](../SKILL.md): the request, the model handle and
@@ -77,24 +91,33 @@ on where it ran, which is the first difference below.
 - **Where it ran decides the numbers.** On a GPU, with the published weights,
   the answers are a NIM's exactly. On a CPU the model computes at full
   precision and draws its random numbers there, so a probability can differ
-  from a GPU-hosted NIM's by more than rounding: in one comparison a class
-  probability moved by 0.16. The draw is seeded, so two runs on one machine
-  print the same numbers; it is the device that moves them, not the run.
-  Compare against a NIM on the same device, or compare shapes rather than
-  numbers, as above.
+  from a GPU-hosted NIM's by more than rounding: in the quickstart's
+  comparison a class probability moved by 0.16. The draw is seeded, so two
+  runs on one machine print the same numbers; it is the device that moves
+  them, not the run. Compare against a NIM on the same device, or compare
+  shapes rather than numbers, as above.
 - **A deployment's limits are not applied.** This client's own still are: a
   context above 10,000 rows is refused as it would be for a NIM. A deployment
   also protects a shared server with limits of its own, such as the longest
-  string a cell may hold, and nothing applies those here.
+  string a cell may hold, and nothing applies those here. A request is also
+  read for what the model needs rather than against every rule of the request
+  contract, so a name longer than the contract's 1,024 characters is answered
+  here and refused by a NIM with `VALIDATION_FAILED`.
 - **A refusal has no HTTP status.** It is a `StructuredDataError` carrying the
   code a NIM would give, `UNSUPPORTED_OUTPUT` for `quantiles` on a
   classification, and never a `NimRequestError`, since nothing was sent.
   Catching `StructuredDataError` catches it as before.
 - **A session is held in this process's memory** until `close()`, or until
   the client closes, with no expiry. `fit()` works as it does against a NIM,
-  and the `with` block above is what lets go of what it holds.
+  and the `with` block above is what lets go of what it holds. Closing also
+  lets go of the models the client loaded, and the next client reads them
+  from the cache into memory again, so a notebook that opens a `with` block
+  per cell pays that load per cell: open one client, use it across the
+  cells, and `close()` it at the end.
 - **`client.models()` lists what it can run**, rather than what an endpoint
   advertises: both models when it loads them itself, or the ones passed in.
+  Listing `kumo-relational` is not a report that the `relational` extra is
+  installed; building a relational request still needs it.
 
 ## A machine that cannot reach Hugging Face
 
@@ -114,6 +137,27 @@ model already loaded with structured-data-models is used as it is:
 shares its weights with every context the client fits, and refuses `device=`
 beside it, since that model is already somewhere. Loading it yourself is also
 how to pick a size: the client loads `'large'`, and `'medium'` and `'small'`
-are published beside it. The quickstart's section on a model in this process,
-in [`docs/get-started/quickstart.md`](../../../docs/get-started/quickstart.md),
-shows the same for the relational model.
+are published beside it.
+
+```python
+import sdm
+
+small = sdm.models.KumoTabular(size='small')
+with SDMClient.in_process(small) as client:
+    print(client.models())
+    smaller = client.predict(request, model=KumoTabular())
+print(list(smaller.to_pandas().columns))
+```
+
+**Verified** in this process, on a CPU:
+
+```
+['kumo-tabular']
+['row_index', 'prediction', 'probability_0', 'probability_1']
+```
+
+A model loaded that way arrives in evaluation mode and loaded for both tasks,
+which is what this client asks of it. One put back into training mode is
+refused with `INVALID_CONFIGURATION` naming `.eval()`, and one loaded for a
+single `task=` is refused with `UNSUPPORTED_TASK` for the other; a NIM's
+model is never either.

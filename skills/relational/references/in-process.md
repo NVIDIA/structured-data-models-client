@@ -11,15 +11,30 @@ answer one:
 pip install 'structured-data-models-client[relational,in-process]'
 ```
 
-The second brings structured-data-models and PyTorch, and needs Python 3.11
-or later. Without it, `SDMClient.in_process()` raises `MissingExtraError`
+No published release carries `in_process()` yet, so until one does, that
+command installs a client without it. Install from a checkout instead:
+
+```
+git clone https://github.com/NVIDIA/structured-data-models-client
+cd structured-data-models-client
+pip install -e \
+    './packages/structured-data-models-client[relational,in-process]'
+```
+
+A pip warning that the client `does not provide the extra 'in-process'`, or
+an `AttributeError` saying `SDMClient` has no attribute `in_process`, is an
+installed client older than the feature, whichever command installed it.
+
+The second extra brings structured-data-models and PyTorch, and needs Python
+3.11 or later. Without it, `SDMClient.in_process()` raises `MissingExtraError`
 naming that command; on Python 3.10 the error names the Python it needs
 instead. The first prediction fetches the published weights,
 `nvidia/Kumo-Relational` on Hugging Face, into the Hugging Face cache, and
 later ones read them from there. That is both task checkpoints, about 240 MB,
 once. No Hugging Face account or token is needed; a warning about
 unauthenticated requests is about rate limits, not access. The model runs on
-a GPU when there is one, else on the CPU.
+a CUDA GPU when there is one, else on the CPU: the check is CUDA's alone, so
+on Apple silicon it runs on the CPU.
 
 Open the client with `SDMClient.in_process()` in place of a URL. Everything
 else is [the whole interface](../SKILL.md): the schema, the query and
@@ -62,9 +77,9 @@ request = PredictiveQuery(
     'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', schema
 ).materialize(indices=[1, 2, 3], model=KumoRelational())
 
-with SDMClient.in_process() as client:
-    print(client.url, client.models())
-    answer = client.predict(request, model=KumoRelational())
+client = SDMClient.in_process()
+print(client.url, client.models())
+answer = client.predict(request, model=KumoRelational())
 print(list(answer.to_pandas().columns), len(answer.to_pandas()), 'rows')
 
 named = answer.to_pandas().merge(users, left_on='id', right_on='user_id')
@@ -85,6 +100,11 @@ is how the answers go back onto those entities: never line them up by row
 order. The numbers are not shown because they depend on where it ran, which
 is the first difference below.
 
+The client is kept open here rather than wrapped in a `with` block, because
+the next section asks it a second question and closing it would read the
+checkpoints into memory again. That is the notebook pattern: one client
+across the cells, `close()` at the end.
+
 ## An explanation, here
 
 The shipping deployment refuses `explanation` on every task. This process
@@ -92,11 +112,11 @@ serves it, with the same `result.explanations` a deployment that serves it
 gives, keyed by the entity:
 
 ```python
-with SDMClient.in_process() as client:
-    explained = client.predict(
-        request, model=KumoRelational(), outputs=['prediction', 'explanation']
-    )
+explained = client.predict(
+    request, model=KumoRelational(), outputs=['prediction', 'explanation']
+)
 print(sorted(explained.explanations.gradients))
+client.close()
 ```
 
 **Verified** in this process, on a CPU:
@@ -120,15 +140,23 @@ explanations.
 - **A deployment's limits are not applied.** This client's own still are:
   every limit `materialize()` checks is checked as it would be for a NIM. A
   deployment also protects a shared server with limits of its own, such as
-  the longest string a cell may hold, and nothing applies those here.
+  the longest string a cell may hold, and nothing applies those here. A
+  request is also read for what the model needs rather than against every
+  rule of the request contract, so a name longer than the contract's 1,024
+  characters, or a key the contract does not name in a request built by hand
+  and passed to `Request.materialized`, is answered here and refused by a NIM
+  with `VALIDATION_FAILED`.
 - **A refusal has no HTTP status.** It is a `StructuredDataError` carrying the
   code a NIM would give, and never a `NimRequestError`, since nothing was
   sent. Inside a session the code is the reason's own, where a NIM files the
   refusal under `SESSION_CREATE_VALIDATION_FAILED`. Catching
   `StructuredDataError` catches it as before.
 - **A session is held in this process's memory** until `close()`, or until
-  the client closes, with no expiry. `fit()` works as it does against a NIM,
-  and the `with` block above is what lets go of what it holds.
+  the client closes, with no expiry. `fit()` works as it does against a NIM.
+  Closing also lets go of the models the client loaded, and the next client
+  reads them from the cache into memory again, so a notebook that opens a
+  `with` block per cell pays that load per cell: open one client, use it
+  across the cells, and `close()` it at the end, as above.
 - **`client.models()` lists what it can run**, rather than what an endpoint
   advertises: both models when it loads them itself, or the ones passed in.
 
@@ -152,3 +180,9 @@ fits, and refuses `device=` beside it, since that model is already somewhere.
 The quickstart's section on a model in this process, in
 [`docs/get-started/quickstart.md`](../../../docs/get-started/quickstart.md),
 shows it.
+
+A model loaded that way arrives in evaluation mode and loaded for both tasks,
+which is what this client asks of it. One put back into training mode is
+refused with `INVALID_CONFIGURATION` naming `.eval()`, and one loaded for a
+single `task=` is refused with `UNSUPPORTED_TASK` for the other; a NIM's
+model is never either.
