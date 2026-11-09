@@ -140,7 +140,9 @@ def test_session_refuses_changed_question_and_retries_failed_close(client):
     changed = PredictiveQuery(
         'PREDICT users.value > 3 FOR EACH users.id', asked.schema
     )
-    with pytest.raises(StructuredDataError, match='the query pinned is') as refused:
+    with pytest.raises(
+        StructuredDataError, match='the query pinned is'
+    ) as refused:
         fitted.predict(gather(changed, [2]))
     assert 'users.value > 3' in str(refused.value)
     assert not endpoint.scored
