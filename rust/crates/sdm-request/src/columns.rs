@@ -960,9 +960,9 @@ pub fn validate(raw: &str) -> Result<ColumnAnalysis, CoreError> {
 }
 
 /// The labelled rows several calls of one request send, as one context:
-/// every call carries the same labelled draw, less its own scored entities,
-/// under the same instance ids, so each instance, keyed by its entity and
-/// anchor, is read once, from the first call that sends it.
+/// each instance, keyed by its entity and anchor, is read once, from the
+/// first call that sends it, under an id of its own, since calls gathered
+/// apart can use one instance id for different entities.
 pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
     let Some(first) = payloads.first() else {
         return Err(invalid("empty analysis request"));
@@ -975,6 +975,7 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
         return Ok(first.clone());
     }
     let mut seen = BTreeSet::new();
+    let mut next_id = 0i64;
     let mut instances = Vec::new();
     let mut related: Vec<(String, Value)> = Vec::new();
     let mut schema = field(first, "schema")?.clone();
@@ -988,15 +989,20 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
             .and_then(Value::as_text)
             .and_then(|name| table.at(name).ok());
         let mut keys = Vec::new();
-        let mut kept = BTreeSet::new();
+        let mut kept = BTreeMap::new();
         for row in &table.rows {
             let at = (
                 key(&row[entity])?,
                 anchor.map(|a| key(&row[a])).transpose()?,
             );
             if !seen.contains(&at) {
-                kept.insert(key(&row[id])?);
-                instances.push(Value::Array(row.to_vec()));
+                kept.insert(key(&row[id])?, next_id);
+                let mut row = row.to_vec();
+                row[id] = Value::int(next_id);
+                instances.push(Value::Array(row));
+                next_id = next_id
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("analysis too large"))?;
             }
             keys.push(at);
         }
@@ -1040,8 +1046,10 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
                     .collect::<Result<Vec<_>, CoreError>>()?;
                 let from = array(field(rows, "columns")?)?;
                 for row in &read.rows {
-                    if kept.contains(&key(&row[at])?) {
-                        all.push(Value::Array(widen(row, from)));
+                    if let Some(&new) = kept.get(&key(&row[at])?) {
+                        let mut row = row.to_vec();
+                        row[at] = Value::int(new);
+                        all.push(Value::Array(widen(&row, from)));
                     }
                 }
                 held.set("columns", Value::Array(names.clone()));
@@ -1326,6 +1334,39 @@ mod lifecycle_tests {
             .map(|r| (r.cohort.as_str(), r.share, r.mean))
             .collect::<Vec<_>>();
         assert_eq!(cohorts, [("p", 0.6, 1.0 / 3.0), ("q", 0.4, 0.5)]);
+    }
+
+    #[test]
+    fn calls_gathered_apart_keep_each_instance_and_its_rows() {
+        let call = |instances: &str, users: &str| {
+            parse(&format!(
+                r#"{{"task":{{"kind":"regression","target":{{"column_name":"y"}}}},
+                "schema":{{"instance_table":{{"columns":{{"instance_id":{{"stype":"ID"}},"__kumo_entity_ref_0":{{"stype":"ID"}},"y":{{"stype":"numerical"}}}}}},
+                "related_tables":{{"users":{{"primary_key":["instance_id","uid"],"columns":{{"instance_id":{{"stype":"ID"}},"uid":{{"stype":"ID"}},"age":{{"stype":"numerical"}}}}}}}},
+                "relationships":[{{"source_columns":["__kumo_entity_ref_0"],"target_table":"users","target_columns":["uid"]}}]}},
+                "context":{{"instance_table":{{"columns":["instance_id","__kumo_entity_ref_0","y"],"rows":[{instances}]}},
+                "related_tables":{{"users":{{"columns":["instance_id","uid","age"],"rows":[{users}]}}}}}}}}"#
+            ))
+        };
+        let first = call("[0,1,0],[1,2,1]", "[0,1,30],[1,2,40]");
+        let second = call("[0,3,1],[1,4,1]", "[0,3,50],[1,4,60]");
+        let combined = sent(&[first, second]).unwrap();
+        let context = field(&combined, "context").unwrap();
+        let instances = Table::read(field(context, "instance_table").unwrap()).unwrap();
+        let entity = instances
+            .rows
+            .iter()
+            .map(|r| (key(&r[0]).unwrap(), key(&r[1]).unwrap()))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(entity.len(), 4);
+        let users = field(field(context, "related_tables").unwrap(), "users").unwrap();
+        for row in &Table::read(users).unwrap().rows {
+            assert_eq!(entity[&key(&row[0]).unwrap()], key(&row[1]).unwrap());
+        }
+        assert!(matches!(
+            analyze(&combined).unwrap(),
+            ColumnAnalysis::Ready { .. }
+        ));
     }
 
     #[test]
