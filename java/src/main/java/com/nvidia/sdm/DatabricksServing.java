@@ -239,8 +239,8 @@ public final class DatabricksServing {
           return response.body();
         }
         // A 429 or a 503 is tried again until the deadline, as the SDK tries it; a
-        // 500 once more, as Python's transport tries it, then reported as it is.
-        if (status == 500 && !retried500) {
+        // 500 or a 502 once more, as Python's transport tries it, then reported as it is.
+        if ((status == 500 || status == 502) && !retried500) {
           retried500 = true;
         } else if (status != 429 && status != 503) {
           throw new Host.EndpointFailed(status, response.body());

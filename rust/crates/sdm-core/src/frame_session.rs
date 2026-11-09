@@ -63,7 +63,9 @@ pub(crate) async fn call(
     endpoint: Endpoint,
     body: Value,
 ) -> Result<Value, CoreError> {
-    match asker
+    // A create call carries only the context, which cannot be split.
+    let create = matches!(endpoint, Endpoint::CreateSession);
+    let result = match asker
         .call_model(endpoint, "application/json".into(), body.to_bytes())
         .await
     {
@@ -84,6 +86,10 @@ pub(crate) async fn call(
                 .with_field("status", Detail::Scalar(Scalar::UInt16(status))))
         }
         _ => Err(internal("session transport returned another reply kind")),
+    };
+    match create {
+        true => result.map_err(|error| crate::predict::created(error, &body)),
+        false => result,
     }
 }
 pub(crate) async fn run(
@@ -291,22 +297,54 @@ pub(crate) async fn run(
                 crate::columns::expose(&asker, state.column_analysis.as_deref(), &state.outputs)?;
             let mut parts = Vec::new();
             let mut start = 0;
+            // A scoring call carries no context: its rows are asked in halves
+            // where the endpoint refuses it as too large or too slow, the
+            // size kept for the calls after it.
+            let mut most = None;
+            let write = |call: &Value| {
+                Ok(subset(
+                    call,
+                    &["predict", "output", "inference", "metadata"],
+                ))
+            };
+            let session_id = state.session_id.clone();
+            let send = |call: Value,
+                        bytes: Vec<u8>|
+             -> crate::predict::Sent<'_, sdm_request::predict::Part> {
+                let session_id = session_id.clone();
+                let asker = &asker;
+                Box::pin(async move {
+                    let answer = self::call(
+                        asker,
+                        Endpoint::SessionPredict { session_id },
+                        crate::predict::payload(&bytes)?,
+                    )
+                    .await?;
+                    let response = sdm_wire::response::PredictionResponse::read(&answer)
+                        .map_err(predict::refused)?;
+                    predict::layout(&call, &response, crate::pql::float_text)
+                })
+            };
+            let how = crate::predict::Asking {
+                write: &write,
+                send: &send,
+                merge: crate::predict::numbered_parts,
+                context: false,
+            };
             for (body, layout) in plans {
                 let answered: Result<_, CoreError> = async {
                     let part = if predict::nothing_to_score(&layout) {
                         predict::empty(&state.model, &layout)
                     } else {
-                        let answer = call(
-                            &asker,
-                            Endpoint::SessionPredict {
-                                session_id: state.session_id.clone(),
-                            },
-                            body,
+                        crate::predict::answered(
+                            &how,
+                            layout.clone(),
+                            body.to_bytes(),
+                            &mut most,
+                            0,
                         )
-                        .await?;
-                        let response = sdm_wire::response::PredictionResponse::read(&answer)
-                            .map_err(predict::refused)?;
-                        predict::layout(&layout, &response, crate::pql::float_text)?
+                        .await
+                        .map_err(|unanswered| unanswered.error)?
                     };
                     predict::numbered_from(part, start)
                 }

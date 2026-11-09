@@ -1215,6 +1215,8 @@ sentences! {
     SeedIgnored = "seed_ignored", W::SeedIgnored;
     ServingValueNotJson = "serving_value_not_json", E::InvalidRequest;
     ServingPastLimit = "serving_past_limit", E::InvalidRequest;
+    CallTooLargeAfterHalving = "call_too_large_after_halving", E::InvalidRequest;
+    ContextTooLargeForEndpoint = "context_too_large_for_endpoint", E::InvalidRequest;
     ServingNotJson = "serving_not_json", E::TransportError;
     ServingNotAnObject = "serving_not_an_object", E::TransportError;
     ServingRefused = "serving_refused", E::EndpointRefused;

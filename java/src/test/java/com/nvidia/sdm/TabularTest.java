@@ -58,6 +58,8 @@ class TabularTest {
     int deleteFailuresRemaining;
     boolean wrongId;
     boolean gradients;
+    int createStatus = 200;
+    int failScores;
     Endpoint() throws Exception {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext("/", exchange -> {
@@ -72,7 +74,11 @@ class TabularTest {
           @SuppressWarnings("unchecked") Map<String,Object> body = (Map<String,Object>)Json.read(exchange.getRequestBody().readAllBytes());
           calls.add(body);
           byte[] answer;
-          if (path.equals("/v1/sessions")) {
+          if (path.equals("/v1/sessions") && createStatus != 200) {
+            creates++; exchange.sendResponseHeaders(createStatus, -1); return;
+          } else if (path.endsWith("/predictions") && path.startsWith("/v1/sessions/") && failScores > 0) {
+            failScores--; exchange.sendResponseHeaders(413, -1); return;
+          } else if (path.equals("/v1/sessions")) {
             creates++; answer = Json.write(Map.of("session_id", "s" + creates));
           } else {
             @SuppressWarnings("unchecked") Map<String,Object> predict = (Map<String,Object>)body.get("predict");
@@ -122,6 +128,40 @@ class TabularTest {
         assertEquals(endpoint.calls.get(0).get("context"), call.get("context"));
       }
       assertEquals(List.of(10_000, 1), sizes);
+    }
+  }
+
+  @Test void aSessionWhoseContextIsTooLargeIsRefusedNamingIt() throws Exception {
+    try (RootAllocator allocator = new RootAllocator(); Table context = table(allocator, true, 1, 2);
+        Table predict = table(allocator, false, 3); Endpoint endpoint = new Endpoint();
+        SdmClient client = SdmClient.connect(endpoint.url())) {
+      endpoint.createStatus = 413;
+      Request request = new Request(context, predict, "y", "regression");
+      StructuredDataException refused = assertThrows(StructuredDataException.class,
+          () -> client.fit(request, SdmClient.KUMO_TABULAR));
+      assertTrue(refused.getMessage().contains("the context is too large for this endpoint"),
+          refused.getMessage());
+      assertEquals(1, endpoint.creates);
+    }
+  }
+
+  @Test void aPinnedSessionsScoringCallIsAskedInHalves() throws Exception {
+    try (RootAllocator allocator = new RootAllocator(); Table context = table(allocator, true, 1, 2);
+        Table predict = table(allocator, false, 3, 4, 5, 6); Endpoint endpoint = new Endpoint();
+        SdmClient client = SdmClient.connect(endpoint.url())) {
+      Request request = new Request(context, predict, "y", "regression");
+      FittedModel fitted = client.fit(request, SdmClient.KUMO_TABULAR);
+      endpoint.failScores = 1;
+      assertEquals(4, fitted.predict(request).rows());
+      List<Integer> sizes = new ArrayList<>();
+      for (Map<String, Object> call : endpoint.calls.subList(1, endpoint.calls.size())) {
+        @SuppressWarnings("unchecked") Map<String, Object> half = (Map<String, Object>) call.get("predict");
+        @SuppressWarnings("unchecked") Map<String, Object> rows = (Map<String, Object>) half.get("instance_table");
+        sizes.add(((List<?>) rows.get("rows")).size());
+        assertFalse(call.containsKey("context"));
+      }
+      assertEquals(List.of(4, 2, 2), sizes);
+      fitted.close();
     }
   }
 

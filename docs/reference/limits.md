@@ -5,12 +5,22 @@ It sends its best attempt and recovers from what the endpoint says:
 
 | The endpoint answers | The client |
 |---|---|
-| `413`, a gateway's `502` or `504`, the call times out, or its answer is past 64 MiB | asks the call's rows again in two halves at once, each with the whole context, and keeps that smaller size for the request's later calls; a `502` is first tried again at its size |
-| `503` or `429` | waits as `Retry-After` says and tries again |
-| a connection error, a `500` or a `502` | tries again with backoff, up to `max_retries` (3 by default); through Databricks model serving, a `500` is tried once more |
+| `413`, Databricks' `400` saying "Request size cannot exceed", an answer past 64 MiB, a `504`, or the call times out | asks the call's rows again in two halves at once, each with the whole context, and keeps that smaller size for the request's later calls; a batch is halved at most 3 times, to an eighth of its rows, and then refused naming the call's rows, bytes and status |
+| the same, where the context is half the call's bytes or more | does not split, since fewer rows cannot help, and says the context is too large for the endpoint, with the sizes |
+| `503` or `429` | waits as `Retry-After` says and tries again at the same size |
+| a connection error, a `500` or a `502` | tries again at the same size with backoff, up to `max_retries` (3 by default), and never splits; through Databricks model serving, a `500` or `502` is tried once more |
 | `422`, or a refusal of a call of one row | does not try again, and shows the endpoint's message |
 
-The context is never split, so a context too large on its own is the endpoint's refusal, shown as it said it.
+What a call too large or too slow comes to depends on what it carries:
+
+| Call | Too large or too slow |
+|---|---|
+| a prediction, context and rows to score | its rows are halved, at most 3 times, unless the context is half the call's bytes or more: then it is refused at once, naming the sizes |
+| a session's create (`fit()`, or an automatic batch session), the context alone | refused at once: the context is too large for the endpoint; send fewer context rows or columns |
+| a session's scoring call, rows to score alone | its rows are halved, at most 3 times; no context to weigh |
+
+A temporary failure is tried again at the same size on every call; none is split.
+The context is never split.
 The context is sampled only to a `num_context_samples` you pass.
 `timeout` and `max_retries` are optional settings of the client.
 

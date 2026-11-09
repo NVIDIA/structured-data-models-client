@@ -17799,6 +17799,8 @@
         "seed_ignored",
         "serving_value_not_json",
         "serving_past_limit",
+        "call_too_large_after_halving",
+        "context_too_large_for_endpoint",
         "serving_not_json",
         "serving_not_an_object",
         "serving_refused",

@@ -758,3 +758,25 @@ fn an_invalid_status_is_a_malformed_response_not_a_clamped_status() {
     assert_eq!(error.code, ErrorCode::InvalidResponse);
     assert_eq!(error.fields["reason"], text("invalid_serving_status"));
 }
+
+/// The gateway refuses a call too large as a 400 saying so: read as a 413,
+/// so the core asks the call's rows in halves, whichever host carried it.
+#[test]
+fn the_gateway_s_oversize_400_is_read_as_a_413() {
+    for body in [
+        r#"{"error_code":"BAD_REQUEST","message":"Request size cannot exceed 16MB"}"#,
+        "BAD_REQUEST: Request size cannot exceed 16777216 bytes",
+    ] {
+        let error = rest(400, body);
+        assert_eq!(
+            error.fields[REFUSED_STATUS],
+            Detail::Scalar(Scalar::UInt16(413)),
+            "{body}"
+        );
+    }
+    let other = rest(400, r#"{"error_code":"BAD_REQUEST","message":"bad row"}"#);
+    assert_eq!(
+        other.fields[REFUSED_STATUS],
+        Detail::Scalar(Scalar::UInt16(400))
+    );
+}

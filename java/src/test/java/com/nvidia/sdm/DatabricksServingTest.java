@@ -46,8 +46,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
+import org.apache.arrow.vector.table.Table;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -577,24 +579,49 @@ class DatabricksServingTest {
   }
 
   @Test
-  void a500IsTriedAgainAsA503Is() throws Exception {
-    try (Connection connection = Shop.open("duckdb");
-        Workspace workspace = new Workspace(body -> Answer.of(500, ""));
-        SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
-      assertEquals(2, client.predict(asked(connection), SdmClient.KUMO_RELATIONAL).rows());
-      assertEquals(2, workspace.bodies.size());
+  void a500OrA502IsTriedAgainAtItsSize() throws Exception {
+    for (int status : new int[] {500, 502}) {
+      try (Connection connection = Shop.open("duckdb");
+          Workspace workspace = new Workspace(body -> Answer.of(status, ""));
+          SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
+        assertEquals(2, client.predict(asked(connection), SdmClient.KUMO_RELATIONAL).rows());
+        assertEquals(2, workspace.bodies.size(), "status " + status);
+        assertArrayEquals(workspace.bodies.get(0), workspace.bodies.get(1), "never split");
+      }
     }
   }
 
   @Test
   void aCallTheGatewayRefusesAsTooLargeIsAskedInHalves() throws Exception {
-    for (int status : new int[] {413, 502}) {
-      try (Connection connection = Shop.open("duckdb");
-          Workspace workspace = new Workspace(body -> Answer.of(status, ""));
+    String oversized = "{\"error_code\":\"BAD_REQUEST\",\"message\":\"Request size cannot exceed 16MB\"}";
+    for (int status : new int[] {413, 400}) {
+      String text = status == 400 ? oversized : "";
+      Request request;
+      try (RootAllocator allocator = new RootAllocator();
+          Table context = TabularTest.table(allocator, true, 1);
+          Table predict = TabularTest.table(allocator, false, 2, 3)) {
+        request = new Request(context, predict, "y", "regression");
+      }
+      try (Workspace workspace = new Workspace(body -> Answer.of(status, text));
           SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
-        assertEquals(2, client.predict(asked(connection), SdmClient.KUMO_RELATIONAL).rows());
+        assertEquals(2, client.predict(request, SdmClient.KUMO_TABULAR).rows());
         assertEquals(3, workspace.bodies.size(), "status " + status);
       }
+    }
+  }
+
+  @Test
+  void aCallWhoseContextDominatesIsNotSplit() throws Exception {
+    try (Connection connection = Shop.open("duckdb");
+        Workspace workspace = new Workspace(body -> Answer.of(413, ""));
+        SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
+      Request request = asked(connection);
+      StructuredDataException error =
+          assertThrows(
+              StructuredDataException.class,
+              () -> client.predict(request, SdmClient.KUMO_RELATIONAL));
+      assertTrue(error.getMessage().contains("the context is too large"), error.getMessage());
+      assertEquals(1, workspace.bodies.size());
     }
   }
 

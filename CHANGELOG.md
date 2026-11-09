@@ -52,7 +52,7 @@ The public API snapshot records this version update; publication remains pending
 ### Changed
 
 - A single-table request is scored in calls of 10,000 rows, each with the whole context, split further as a relational request is.
-- A `500` is retried with backoff as a `502` or `503` is; through Databricks model serving, once more.
+- A `500` is retried with backoff as a `502` or `503` is, at the same size; through Databricks model serving, a `500` or `502` once more.
 - `rows_per_call` is taken as asked rather than lowered to 10,000 (200 for a link prediction), which is now only its default.
 - `num_context_samples` past 10,000 and more than 6 hops are accepted.
 
@@ -73,7 +73,7 @@ The public API snapshot records this version update; publication remains pending
 ### Removed
 
 - The client's own size limits: the 10,000 context rows, the 30 MiB request body, the 100,000 entities and 100 calls of one `materialize()`, and the 15 tables and 6 hops of a relational request.
-  The client sends its best attempt: a call the endpoint refuses as too large (`413`, a gateway's `502` or `504`) or times out on is asked again in halves, each with the whole context, and a `500` is retried as a `503` is.
+  The client sends its best attempt: a call the endpoint refuses as too large (`413`, Databricks' `400` saying "Request size cannot exceed", an answer past 64 MiB) or times out on (`504`, a timeout) is asked again in halves, each with the whole context, at most 3 times per batch; one whose context is half its bytes or more is refused at once, naming the sizes. A session's create call, which carries only the context, is refused at once when too large; a session's scoring call is halved as a prediction is. A `500`, `502` or `503` is retried at the same size and never split.
   A `422`, or a refusal of a call of one row, is shown as the endpoint said it.
   The context is sampled only to a `num_context_samples` the caller passes; through Databricks model serving, a call is still split up front to fit its 16 MB.
 

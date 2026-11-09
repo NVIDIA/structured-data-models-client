@@ -34,7 +34,8 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::{Endpoint, StartRun};
 use sdm_contract::{
-    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Sentence, Step,
+    Unit,
 };
 use sdm_core::{
     Attachment, Attachments, CompositionRoot, ModelResult, Run, UnknownZone, Zones, start,
@@ -1315,7 +1316,7 @@ fn scored(body: &[u8]) -> Vec<i64> {
 /// context, and the answers are numbered as one.
 #[test]
 fn a_call_too_large_or_too_slow_is_asked_again_in_halves() {
-    for status in [408, 413, 502, 504] {
+    for status in [408, 413, 504] {
         let mut run =
             predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-relational").unwrap();
         let (id, whole) = call(&mut run);
@@ -1334,11 +1335,83 @@ fn a_call_too_large_or_too_slow_is_asked_again_in_halves() {
     }
 }
 
-/// A `422`, or any refusal not of a size, is not asked again: the run ends
-/// with the endpoint's refusal.
+/// A `422`, a `502`, a `503` or a `500`, or any refusal not of a size, is
+/// not asked again by the core: the run ends with the endpoint's refusal
+/// (the host has tried a temporary one again at its size).
 #[test]
-fn a_422_is_not_asked_again() {
-    let (_, end) = answered(422, b"{}");
+fn a_refusal_not_of_a_size_is_not_split() {
+    for status in [422, 502, 503, 500] {
+        let (_, end) = answered(status, b"{}");
+        let error = end.unwrap_err();
+        assert_eq!(
+            error.fields["status"],
+            Detail::Scalar(Scalar::UInt16(status)),
+            "{status}"
+        );
+    }
+}
+
+/// `payload_text` scoring `rows` rows, its context of `context` rows.
+fn sized_payload(rows: usize, context: usize) -> String {
+    let scored: Vec<String> = (0..rows)
+        .map(|i| format!("[{},{}]", context + i, i))
+        .collect();
+    let known: Vec<String> = (0..context).map(|i| format!("[{i},{i}.5]")).collect();
+    payload_text()
+        .replace(
+            r#"[[2,7],[3,"9007199254740993"]]"#,
+            &format!("[{}]", scored.join(",")),
+        )
+        .replace(
+            "[[0,1e-05],[1,12345678.900000001]]",
+            &format!("[{}]", known.join(",")),
+        )
+}
+
+/// A batch is halved at most three times, to an eighth of its rows; still
+/// refused then, the call is refused naming its rows, bytes and status.
+#[test]
+fn a_batch_is_halved_at_most_three_times() {
+    let mut run = predict_run(
+        REQUEST_STATE_VERSION,
+        sized_payload(16, 2),
+        "kumo-relational",
+    )
+    .unwrap();
+    let mut sizes = Vec::new();
+    let end = loop {
+        match run.next() {
+            Ok(Step::CallModel(call)) => {
+                let Some(Attachment::Bytes(body)) = run.take_attachment(call.body) else {
+                    panic!("the body is attached");
+                };
+                sizes.push(scored(&body).len());
+                run.submit_model(call.id, refused_with(413)).unwrap();
+            }
+            other => break other,
+        }
+    };
+    assert_eq!(sizes, [16, 8, 4, 2]);
     let error = end.unwrap_err();
-    assert_eq!(error.fields["status"], Detail::Scalar(Scalar::UInt16(422)));
+    assert_eq!(error.sentence, Sentence::CallTooLargeAfterHalving);
+    assert_eq!(error.fields["rows"], Detail::Scalar(Scalar::UInt64(2)));
+    assert_eq!(error.fields["halvings"], Detail::Scalar(Scalar::UInt32(3)));
+    assert_eq!(error.fields["status"], Detail::Scalar(Scalar::UInt16(413)));
+}
+
+/// A call whose context is half its bytes or more is not split: fewer rows
+/// cannot make it small enough.
+#[test]
+fn a_call_whose_context_dominates_is_not_split() {
+    let mut run = predict_run(
+        REQUEST_STATE_VERSION,
+        sized_payload(2, 400),
+        "kumo-relational",
+    )
+    .unwrap();
+    let (id, _) = call(&mut run);
+    run.submit_model(id, refused_with(413)).unwrap();
+    let error = run.next().unwrap_err();
+    assert_eq!(error.sentence, Sentence::ContextTooLargeForEndpoint);
+    assert!(error.fields.contains_key("context_bytes"));
 }

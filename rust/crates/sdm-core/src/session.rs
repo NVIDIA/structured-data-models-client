@@ -281,32 +281,54 @@ pub(crate) async fn send(
         }
     }
     sdm_request::inference::envelope(&mut payload)?;
-    let reply = asker
-        .call_model(
-            request.endpoint,
-            "application/json".into(),
-            payload.to_bytes(),
-        )
-        .await;
-    let (status, body) = match reply {
-        Reply::Model(ModelResult::Response { status, body, .. })
-            if (200..300).contains(&status) =>
-        {
-            (status, body)
+    // A create call carries only the context, which cannot be split; a
+    // scoring call's rows are asked in halves where the endpoint refuses it
+    // as too large or too slow.
+    let (status, body) = match request.endpoint {
+        Endpoint::CreateSession => {
+            let created = sent(asker, Endpoint::CreateSession, &payload)
+                .await
+                .map_err(|error| crate::predict::created(error, &payload))?;
+            (200, created)
         }
-        Reply::Model(ModelResult::Response { status, .. } | ModelResult::Failed { status, .. }) => {
-            return Err(
-                sdm_request::predict::bad_response("status", "not_a_success")
-                    .with_field("status", Detail::Scalar(Scalar::UInt16(status))),
-            );
+        endpoint => {
+            let send = |call: Value| -> crate::predict::Sent<'_, Value> {
+                let endpoint = endpoint.clone();
+                Box::pin(
+                    async move { crate::predict::payload(&sent(asker, endpoint, &call).await?) },
+                )
+            };
+            let answer = crate::predict::session_answer(&payload, &send).await?;
+            (200, answer.to_bytes())
         }
-        Reply::Model(ModelResult::TransportError { kind, retryable }) => {
-            return Err(CoreError::transport(kind, retryable));
-        }
-        Reply::Fetch(_) => return Err(internal("session call was answered as a fetch")),
     };
     let response = asker.attach(Attachment::Bytes(body))?;
     crate::direct::value(asker, &SessionTransportReply { status, response })
+}
+
+/// The answer to `payload` sent to `endpoint`, its bytes; a status that is no
+/// success, or a failed transport, refused.
+async fn sent(asker: &Asker, endpoint: Endpoint, payload: &Value) -> Result<Vec<u8>, CoreError> {
+    match asker
+        .call_model(endpoint, "application/json".into(), payload.to_bytes())
+        .await
+    {
+        Reply::Model(ModelResult::Response { status, body, .. })
+            if (200..300).contains(&status) =>
+        {
+            Ok(body)
+        }
+        Reply::Model(ModelResult::Response { status, .. } | ModelResult::Failed { status, .. }) => {
+            Err(
+                sdm_request::predict::bad_response("status", "not_a_success")
+                    .with_field("status", Detail::Scalar(Scalar::UInt16(status))),
+            )
+        }
+        Reply::Model(ModelResult::TransportError { kind, retryable }) => {
+            Err(CoreError::transport(kind, retryable))
+        }
+        Reply::Fetch(_) => Err(internal("session call was answered as a fetch")),
+    }
 }
 
 /// A deletion has no response document. Only a successful transport outcome

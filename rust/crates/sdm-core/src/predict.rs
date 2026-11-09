@@ -478,12 +478,58 @@ pub(crate) async fn one(
         let mut most = None;
         for (((payload, request_id), (body, bytes)), start) in calls.iter().zip(plans).zip(starts) {
             let response = async {
-                if let Some(session) = session.as_mut()
-                    && let Some(answer) = session.score(asker, &body).await?
-                {
-                    let response = PredictionResponse::read(&answer).map_err(refused)?;
-                    return layout(payload, &response, crate::pql::float_text)
-                        .map_err(Unanswered::from);
+                if let Some(session) = session.as_mut() {
+                    match session.score(asker, &body).await {
+                        Ok(Some(answer)) => {
+                            let response = PredictionResponse::read(&answer).map_err(refused)?;
+                            return layout(payload, &response, crate::pql::float_text)
+                                .map_err(Unanswered::from);
+                        }
+                        Ok(None) => {}
+                        // The session's scoring call carries no context: its
+                        // rows are asked in halves as a call's are.
+                        Err(error) if too_large(&error) && session.current().is_some() => {
+                            let session_id = session.current().unwrap_or_default().to_owned();
+                            let write = |call: &Value| {
+                                let written = sdm_request::predict::body(
+                                    call,
+                                    &inputs.model,
+                                    request_id,
+                                    &outputs,
+                                    &inputs.inference_asked,
+                                )?;
+                                Ok(sdm_request::frame_session::subset(
+                                    &written,
+                                    &["predict", "output", "inference", "metadata"],
+                                ))
+                            };
+                            let send = |call: Value, bytes: Vec<u8>| -> Sent<'_, Part> {
+                                let session_id = session_id.clone();
+                                Box::pin(async move {
+                                    let answer = crate::frame_session::call(
+                                        asker,
+                                        Endpoint::SessionPredict { session_id },
+                                        self::payload(&bytes)?,
+                                    )
+                                    .await?;
+                                    let response =
+                                        PredictionResponse::read(&answer).map_err(refused)?;
+                                    layout(&call, &response, crate::pql::float_text)
+                                })
+                            };
+                            let how = Asking {
+                                write: &write,
+                                send: &send,
+                                merge: numbered_parts,
+                                context: false,
+                            };
+                            let sent = body.to_bytes().len();
+                            let (size, halvings) =
+                                split(&how, payload, &error, sent, &mut most, 0)?;
+                            return in_runs(&how, payload.clone(), size, &mut most, halvings).await;
+                        }
+                        Err(error) => return Err(Unanswered::from(error)),
+                    }
                 }
                 let write = |call: &Value| {
                     sdm_request::predict::body(
@@ -502,8 +548,9 @@ pub(crate) async fn one(
                     write: &write,
                     send: &send,
                     merge: numbered_parts,
+                    context: true,
                 };
-                answered(&how, payload.clone(), bytes, &mut most).await
+                answered(&how, payload.clone(), bytes, &mut most, 0).await
             }
             .await;
             let answered = match response {
@@ -589,9 +636,15 @@ fn fitted(
 }
 
 /// The statuses that say a call was too large or too slow to answer: the
-/// host's timeout (told as 408), the endpoint's 413, and a gateway's 502 or
-/// 504, which a call it gave up on comes back as.
-const TOO_LARGE: [u16; 4] = [408, 413, 502, 504];
+/// host's timeout (told as 408) or an answer too large to read (told as
+/// 413), the endpoint's 413, and a gateway's 504, which a call it gave up
+/// on comes back as. A 502, a 503 or a 500 is temporary: the host tries it
+/// again at its size, and it is never split.
+const TOO_LARGE: [u16; 3] = [408, 413, 504];
+
+/// The most times one batch is halved (to an eighth of its rows) before the
+/// call is refused as too large.
+const MOST_HALVINGS: u32 = 3;
 
 /// A call sent, its answer to come.
 pub(crate) type Sent<'a, T> =
@@ -604,6 +657,9 @@ pub(crate) struct Asking<'a, T> {
     pub write: &'a Write<'a>,
     pub send: &'a Sender<'a, T>,
     pub merge: Merge<T>,
+    /// Whether the calls carry a context, which a call too large is weighed
+    /// against before it is split: none on a session's scoring calls.
+    pub context: bool,
 }
 
 /// The answers to runs of a call's rows, each with the row it starts at,
@@ -629,35 +685,82 @@ pub(crate) async fn answered<T>(
     payload: Value,
     bytes: Vec<u8>,
     most: &mut Option<usize>,
+    halvings: u32,
 ) -> Result<T, Unanswered<T>> {
     let rows = predict_rows(&payload).unwrap_or(0);
-    let size = match *most {
-        Some(most) if rows > most => most,
-        _ => match (how.send)(payload.clone(), bytes).await {
-            Err(error) if rows > 1 && too_large(&error) => {
-                let half = rows.div_ceil(2);
-                tracing::info!(
-                    target: "sdm_core::predict",
-                    rows,
-                    status = ?error.fields.get(sdm_contract::error::REFUSED_STATUS),
-                    size = half,
-                    "a call refused as too large or too slow is asked again in smaller calls"
-                );
-                *most = Some(half);
-                half
+    let (size, halvings) = match *most {
+        Some(most) if rows > most => (most, halvings),
+        _ => {
+            let sent = bytes.len();
+            match (how.send)(payload.clone(), bytes).await {
+                Err(error) if rows > 1 && too_large(&error) => {
+                    split(how, &payload, &error, sent, most, halvings)?
+                }
+                answer => return answer.map_err(Unanswered::from),
             }
-            answer => return answer.map_err(Unanswered::from),
-        },
+        }
     };
+    in_runs(how, payload, size, most, halvings).await
+}
+
+/// The size a call refused as too large (`error`, `sent` bytes) is asked
+/// again in, and the halvings that make: half its rows, at most
+/// [`MOST_HALVINGS`] times a batch; refused where its context is half its
+/// bytes or more ([`Asking::context`]), which fewer rows cannot help.
+pub(crate) fn split<T>(
+    how: &Asking<'_, T>,
+    payload: &Value,
+    error: &CoreError,
+    sent: usize,
+    most: &mut Option<usize>,
+    halvings: u32,
+) -> Result<(usize, u32), Unanswered<T>> {
+    let rows = predict_rows(payload).unwrap_or(0);
+    if how.context {
+        // A context that is half the call or more is sent whole with every
+        // smaller call: fewer rows cannot help.
+        let context = payload.get("context").map_or(0, |c| c.to_bytes().len());
+        if context * 2 >= sent {
+            return Err(Unanswered::from(context_too_large(error, context, sent)));
+        }
+    }
+    if halvings >= MOST_HALVINGS {
+        return Err(Unanswered::from(still_too_large(
+            error, rows, sent, halvings,
+        )));
+    }
+    let half = rows.div_ceil(2);
+    tracing::info!(
+        target: "sdm_core::predict",
+        rows,
+        status = ?error.fields.get(sdm_contract::error::REFUSED_STATUS),
+        size = half,
+        halving = halvings + 1,
+        "a call refused as too large or too slow is asked again in smaller calls"
+    );
+    *most = Some(half);
+    Ok((half, halvings + 1))
+}
+
+/// `payload`'s answer asked in runs of `size` rows, each as [`answered`]
+/// asks it, merged; where a run fails, the runs before it are kept.
+pub(crate) async fn in_runs<T>(
+    how: &Asking<'_, T>,
+    payload: Value,
+    size: usize,
+    most: &mut Option<usize>,
+    halvings: u32,
+) -> Result<T, Unanswered<T>> {
+    let rows = predict_rows(&payload).unwrap_or(0);
     let mut answers = Vec::new();
-    for start in (0..rows).step_by(size) {
+    for start in (0..rows).step_by(size.max(1)) {
         let range = start..(start + size).min(rows);
         let written = sdm_request::batching::predict_slice(&payload, range).and_then(|call| {
             let bytes = (how.write)(&call)?.to_bytes();
             Ok((call, bytes))
         });
         let outcome = match written {
-            Ok((call, bytes)) => Box::pin(answered(how, call, bytes, most)).await,
+            Ok((call, bytes)) => Box::pin(answered(how, call, bytes, most, halvings)).await,
             Err(error) => Err(Unanswered::from(error)),
         };
         match outcome {
@@ -698,6 +801,76 @@ impl<T> From<CoreError> for Unanswered<T> {
     }
 }
 
+/// The refusal of a call the endpoint still refused as too large after
+/// [`MOST_HALVINGS`] halvings: its rows, bytes and status, and what to
+/// change. `after_split` tells a host to raise it in place of its own.
+fn still_too_large(error: &CoreError, rows: usize, bytes: usize, halvings: u32) -> CoreError {
+    CoreError::new(
+        Sentence::CallTooLargeAfterHalving,
+        "a call was still too large after it was halved as often as it is",
+    )
+    .with_field("rows", count(rows))
+    .with_field("bytes", count(bytes))
+    .with_field("halvings", Detail::Scalar(Scalar::UInt32(halvings)))
+    .with_field("status", refused_status(error))
+    .with_field("after_split", Detail::Scalar(Scalar::Bool(true)))
+}
+
+/// The refusal of a call too large whose context is half its bytes or more,
+/// which no call of fewer rows makes smaller.
+fn context_too_large(error: &CoreError, context: usize, bytes: usize) -> CoreError {
+    CoreError::new(
+        Sentence::ContextTooLargeForEndpoint,
+        "the context alone is half a call too large or more",
+    )
+    .with_field("context_bytes", count(context))
+    .with_field("bytes", count(bytes))
+    .with_field("status", refused_status(error))
+    .with_field("after_split", Detail::Scalar(Scalar::Bool(true)))
+}
+
+/// The status an endpoint refused a call with.
+fn refused_status(error: &CoreError) -> Detail {
+    error
+        .fields
+        .get(sdm_contract::error::REFUSED_STATUS)
+        .cloned()
+        .unwrap_or(Detail::Scalar(Scalar::Null))
+}
+
+/// The answer to a single-table session's scoring call, `payload`, sent by
+/// `send`: it carries no context, so its rows are asked in halves where the
+/// endpoint refuses it as too large or too slow ([`answered`]), the answers
+/// merged as one ([`merged_answers`]).
+pub(crate) async fn session_answer<'a>(
+    payload: &Value,
+    send: &'a (dyn Fn(Value) -> Sent<'a, Value> + Sync),
+) -> Result<Value, CoreError> {
+    let write = |call: &Value| Ok(call.clone());
+    let sender = |call: Value, _: Vec<u8>| send(call);
+    let how = Asking {
+        write: &write,
+        send: &sender,
+        merge: merged_answers,
+        context: false,
+    };
+    answered(&how, payload.clone(), payload.to_bytes(), &mut None, 0)
+        .await
+        .map_err(|unanswered| unanswered.error)
+}
+
+/// A session's create call's refusal: the call carries only the context,
+/// which cannot be split, so a call refused as too large or too slow is
+/// refused naming the context's bytes; any other refusal stands.
+pub(crate) fn created(error: CoreError, body: &Value) -> CoreError {
+    if !too_large(&error) {
+        return error;
+    }
+    let bytes = body.to_bytes().len();
+    let context = body.get("context").map_or(bytes, |c| c.to_bytes().len());
+    context_too_large(&error, context, bytes)
+}
+
 /// Whether `error` is a refusal by one of the [`TOO_LARGE`] statuses.
 fn too_large(error: &CoreError) -> bool {
     matches!(
@@ -707,7 +880,7 @@ fn too_large(error: &CoreError) -> bool {
 }
 
 /// Parts of one call's rows, each numbered from the row it starts at.
-fn numbered_parts(parts: Vec<(usize, Part)>) -> Result<Part, CoreError> {
+pub(crate) fn numbered_parts(parts: Vec<(usize, Part)>) -> Result<Part, CoreError> {
     merge(
         parts
             .into_iter()
@@ -765,6 +938,7 @@ pub(crate) async fn direct_answer(
         write: &write,
         send: &send,
         merge: merged_answers,
+        context: true,
     };
     let mut most = usize::try_from(sdm_request::options::PREDICT_ROWS).ok();
     let mut answers = Vec::new();
@@ -773,7 +947,7 @@ pub(crate) async fn direct_answer(
         let rows = predict_rows(&call).unwrap_or(0);
         answers.push((
             start,
-            answered(&how, call, body.to_bytes(), &mut most)
+            answered(&how, call, body.to_bytes(), &mut most, 0)
                 .await
                 .map_err(|unanswered| unanswered.error)?,
         ));

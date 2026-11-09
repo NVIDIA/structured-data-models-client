@@ -548,7 +548,9 @@ async fn fit(
     tabular::typed_inference(input.prediction.request.inference.clone())?;
     let column_analysis = Some(crate::columns::compute(std::slice::from_ref(&payload))?);
     crate::columns::expose(asker, column_analysis.as_deref(), &prepared.bound.outputs)?;
-    let answer = session_call(asker, Endpoint::CreateSession, payload).await?;
+    let answer = session_call(asker, Endpoint::CreateSession, payload.clone())
+        .await
+        .map_err(|error| crate::predict::created(error, &payload))?;
     let session_id = answer
         .get("session_id")
         .or_else(|| answer.get("id"))
@@ -719,13 +721,15 @@ async fn score(
         part.columns = analysis;
         return crate::predict::finish(asker, part, state.bound.outputs.clone());
     }
-    let answer = session_call(
-        asker,
-        sdm_contract::run::Endpoint::SessionPredict {
-            session_id: state.session_id.clone(),
-        },
-        payload,
-    )
+    let answer = crate::predict::session_answer(&payload, &|body| {
+        Box::pin(session_call(
+            asker,
+            sdm_contract::run::Endpoint::SessionPredict {
+                session_id: state.session_id.clone(),
+            },
+            body,
+        ))
+    })
     .await?;
     finish(asker, layout, answer, state.bound.outputs.clone(), analysis)
 }

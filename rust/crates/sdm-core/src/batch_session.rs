@@ -90,6 +90,11 @@ impl Session {
         Ok(true)
     }
 
+    /// The session the batches are scored against, once it is open.
+    pub(crate) fn current(&self) -> Option<&str> {
+        self.current.as_deref()
+    }
+
     /// None requests ordinary stateless fallback, never another retry layer.
     pub(crate) async fn score(
         &mut self,

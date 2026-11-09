@@ -22,6 +22,7 @@ import logging
 import math
 import re
 import threading
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -223,8 +224,8 @@ class DatabricksServingTransport:
         says, for the core to name; anything but an ``OSError`` escapes, as
         from:meth:`predict`."""
         self._require_open()
-        # The SDK retries a 429 or a 503, not a 500, which this client tries
-        # once more as it does on its own endpoint.
+        # The SDK retries a 429 or a 503, not a 500 or a 502, which this
+        # client tries once more, after a pause, as temporary.
         for attempt in (0, 1):
             try:
                 answered = self._workspace.api_client.do(
@@ -242,7 +243,8 @@ class DatabricksServingTransport:
             # The SDK's errors and its retry deadline are all OSError, as are
             # requests' own, as in predict.
             except OSError as error:
-                if attempt == 0 and _status_of(error) == 500:
+                if attempt == 0 and _status_of(error) in (500, 502):
+                    time.sleep(_RETRY_PAUSE_SECONDS)
                     continue
                 raise _failed(error) from None
         raise AssertionError('unreachable')
@@ -572,6 +574,9 @@ def _response_body(reply: Any, endpoint: str) -> str:
         )
     return body
 
+
+#: The pause before a 500 or a 502 is tried once more.
+_RETRY_PAUSE_SECONDS = 1.0
 
 #: The statuses the SDK names only by an ``error_code``: a call too large, or
 #: a gateway's failure, which the core asks again in halves.

@@ -409,7 +409,8 @@ public final class Host {
           }
         }
         StructuredDataException error = error(failed, call.held(), details);
-        if (refused != null && (!cleanupRefusal
+        // A call the core split and gave up on is the core's to name.
+        if (refused != null && !Boolean.TRUE.equals(error.details().get("after_split")) && (!cleanupRefusal
             || (refused.status != null && error.details().get("status") instanceof Number status && status.intValue() == refused.status)
             || (refused.status == null && "TRANSPORT_ERROR".equals(error.code())))) {
           throw carried(refused, error);

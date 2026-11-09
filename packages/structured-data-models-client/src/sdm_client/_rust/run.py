@@ -301,13 +301,21 @@ def _steps(
             _answered(handle, failed, error)
         if error is not None:
             # Raised outside the handler, so nothing is its context.
-            if refused is not None and (
-                not cleanup_refusal
-                or (
-                    refused.status is not None
-                    and error.details.get('status') == refused.status
+            # A call the core split and gave up on is the core's to name.
+            if (
+                refused is not None
+                and not error.details.get('after_split')
+                and (
+                    not cleanup_refusal
+                    or (
+                        refused.status is not None
+                        and error.details.get('status') == refused.status
+                    )
+                    or (
+                        refused.status is None
+                        and error.code == 'TRANSPORT_ERROR'
+                    )
                 )
-                or (refused.status is None and error.code == 'TRANSPORT_ERROR')
             ):
                 # The call's own failure, as the caller sees it, carrying
                 # what the core carried on its end of the run.

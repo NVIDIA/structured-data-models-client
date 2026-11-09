@@ -216,7 +216,9 @@ final class Shop {
       for (int at = 0; at < rows.size(); at++) {
         Map<String, Object> item = new LinkedHashMap<>();
         // The instance id as its text, as the scripted endpoint gives it.
-        item.put("id", String.valueOf(((List<Object>) rows.get(at)).get(id)));
+        if (id >= 0) {
+          item.put("id", String.valueOf(((List<Object>) rows.get(at)).get(id)));
+        }
         item.put("row_index", (long) at);
         item.put("prediction", prediction);
         if (call.get("output") instanceof Map<?, ?> output

@@ -132,21 +132,47 @@ def send(
     primitive = inference is None or direct_options.can_encode(inference)
 
     def transmit(target: str | dict[str, Any], body: bytes) -> bytes:
+        from sdm_client._rust.run import Refused
+
         native = json.loads(body)
         if 'inference' in native and not primitive:
             native['inference'] = inference
-        observed['payload'] = native
-        if target == 'create_session':
-            observed['reply'] = client._transport.create_session(native)
-        elif isinstance(target, dict) and set(target) == {'session_predict'}:
-            observed['reply'] = client._transport.session_predict(
-                target['session_predict']['session_id'], native
-            )
-        else:
-            raise NativeBoundaryError('unexpected session transport endpoint')
-        return b'{}'
+        # The call as asked; the core may ask a scoring call's rows in
+        # smaller calls, whose answers it puts back together.
+        observed.setdefault('payload', native)
+        try:
+            if target == 'create_session':
+                reply = client._transport.create_session(native)
+            elif isinstance(target, dict) and set(target) == {
+                'session_predict'
+            }:
+                reply = client._transport.session_predict(
+                    target['session_predict']['session_id'], native
+                )
+            else:
+                raise NativeBoundaryError(
+                    'unexpected session transport endpoint'
+                )
+        except NativeBoundaryError:
+            raise
+        except Exception as error:
+            # The endpoint's status, for the core to split a call too large
+            # or refuse a context too large; the error raised as it is. A
+            # timeout is told as a 408, an answer too large to read a 413.
+            from sdm_client.core.transport import read_timed_out
 
-    run(
+            status = getattr(error, 'status_code', None)
+            if status is None and read_timed_out(error):
+                status = 408
+            if status is None and getattr(error, 'details', {}).get(
+                'response_too_large'
+            ):
+                status = 413
+            raise Refused(error, status) from None
+        observed.setdefault('replies', []).append(reply)
+        return json.dumps(reply).encode()
+
+    finished = run(
         {'op': 'send_tabular_session', 'input': 1, 'payload': 2},
         {
             1: codec.attachment(
@@ -162,7 +188,15 @@ def send(
         },
         model_endpoints=transmit,
     )
-    return observed['reply'], observed['payload']
+    answer = results.expect(finished.result, results.DirectValue)
+    sent = json.loads(finished.take(answer.value))
+    merged = finished.take(sent['response'])
+    replies = observed['replies']
+    # One call is answered by the transport's own reply, as it gave it; a
+    # call asked in smaller calls, by the answers the core put together.
+    if len(replies) == 1:
+        return replies[0], observed['payload']
+    return json.loads(merged), observed['payload']
 
 
 def fit(

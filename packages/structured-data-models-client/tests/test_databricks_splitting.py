@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """A Databricks serving endpoint drops a call too large as a connection, so a
-call past its byte limit is split before it is sent; a 413, a 502 or a call
+call past its byte limit is split before it is sent; a 413, the gateway's
+400 saying a request is too large, a 504 or a call
 that timed out is asked again in halves; a deadline spent waiting on an
 unavailable endpoint is a 503, never split; and a 500 is tried once more."""
 
@@ -30,7 +31,10 @@ from sdm_client.core.databricks_serving import _status_of
 def answer(sent: dict[str, Any]) -> dict[str, Any]:
     r"""The served model's answer to ``sent``: one prediction per row."""
     table = sent['predict']['instance_table']
-    keys = sent['schema']['instance_table'].get('primary_key') or []
+    keys = (
+        sent.get('schema', {}).get('instance_table', {}).get('primary_key')
+        or []
+    )
     at = table['columns'].index(keys[0]) if keys else None
     return {
         'object': 'prediction.response',
@@ -131,6 +135,13 @@ STATUS = {
         b'{"error_code": "REQUEST_LIMIT_EXCEEDED", "message": "slow"}',
         JSON,
     ),
+    # The gateway's refusal of a call too large.
+    400: lambda: sdk_error(
+        400,
+        'Bad Request',
+        b'{"error_code": "BAD_REQUEST", "message": "Request size cannot exceed 16MB"}',
+        JSON,
+    ),
     503: lambda: sdk_error(
         503,
         'Service Unavailable',
@@ -158,7 +169,7 @@ def test_a_tabular_call_past_the_byte_limit_is_split_before_it_is_sent(caplog):
     assert any('smaller calls' in r.getMessage() for r in caplog.records)
 
 
-@pytest.mark.parametrize('status', [413, 502, 504])
+@pytest.mark.parametrize('status', [413, 400, 504])
 def test_a_tabular_call_refused_as_too_large_is_asked_in_halves(status):
     error = STATUS[status]()
     assert _status_of(error) == status, type(error).__mro__
@@ -177,12 +188,20 @@ def test_a_tabular_call_refused_as_too_large_is_asked_in_halves(status):
     assert result.to_pandas()['row_index'].tolist() == [0, 1]
 
 
-def test_a_500_is_tried_once_more():
-    error = STATUS[500]()
-    assert type(error).__name__ == 'InternalError'
-    client, workspace = opened([error])
+@pytest.mark.parametrize('status', [500, 502])
+def test_a_500_or_a_502_is_tried_once_more_at_its_size(status, monkeypatch):
+    from sdm_client.core import databricks_serving
+
+    monkeypatch.setattr(databricks_serving, '_RETRY_PAUSE_SECONDS', 0)
+    client, workspace = opened([STATUS[status]()])
     client.predict(asked(), model='kumo-tabular')
-    assert len(workspace.serving_endpoints.calls) == 2
+    calls = workspace.serving_endpoints.calls
+    assert len(calls) == 2
+    # Never split: both calls carry every row.
+    sent = [
+        json.loads(c['dataframe_records'][0]['request_json']) for c in calls
+    ]
+    assert [len(s['predict']['instance_table']['rows']) for s in sent] == [2, 2]
 
 
 def test_a_deadline_spent_waiting_is_a_503_and_a_call_timed_out_a_504():

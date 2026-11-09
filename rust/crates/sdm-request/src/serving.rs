@@ -57,8 +57,9 @@ const STATUS_BY_CODE: &[(&str, u16)] = &[
 ];
 
 /// The HTTP statuses whose SDK error class the old client reports as the
-/// status itself; any other it reports as 503, which callers retry. A 413,
-/// a 502 or a 504 is kept, so the core asks the call's rows in halves.
+/// status itself; any other it reports as 503, which callers retry. A 413 or
+/// a 504 is kept, so the core asks the call's rows in halves; a 502, so it
+/// is named as the gateway's.
 const STATUS_KEPT: &[u16] = &[400, 401, 403, 404, 409, 413, 429, 502, 504];
 
 /// The call `call` (the core's own JSON) as the endpoint's envelope, the
@@ -118,6 +119,15 @@ pub fn past_limit(endpoint: &str, max_request_bytes: u64, size: u64) -> CoreErro
     .with_field("endpoint", Detail::text(endpoint))
     .with_field("bytes", count(size))
     .with_field("limit", count(max_request_bytes))
+}
+
+/// What the gateway's refusal of a call too large says, a 400 whose message
+/// is this (`Request size cannot exceed 16MB`), matched case-insensitively.
+const OVERSIZED: &str = "request size cannot exceed";
+
+/// Whether a failure's text is the gateway's refusal of a call too large.
+pub fn oversized(text: &str) -> bool {
+    text.to_ascii_lowercase().contains(OVERSIZED)
 }
 
 /// The served model's answer in the endpoint's reply `body` (a 2xx), a JSON
@@ -216,7 +226,13 @@ pub fn failure(endpoint: &str, failed: &Failure<'_>) -> CoreError {
         rest_body(&detail, failed.status)
     };
     let raw_code = raw_code.map(|code| canonical_code(&code));
-    let status = reported_status(failed.status, raw_code.as_deref());
+    // The gateway refuses a call too large as a 400 that says so, which the
+    // core asks again in halves as it does a 413.
+    let status = if failed.status == 400 && oversized(&text) {
+        413
+    } else {
+        reported_status(failed.status, raw_code.as_deref())
+    };
     let provider_code = raw_code.as_deref().filter(|c| code_shaped(c));
     let code = model_diagnosis(&text, provider_code);
     if status >= 500

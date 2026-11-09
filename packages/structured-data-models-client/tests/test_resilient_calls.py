@@ -77,11 +77,10 @@ def _timed_out() -> StructuredDataError:
     'failure',
     [
         _to_nim_error(413, b'{"detail": "too large"}'),
-        _to_nim_error(502, b'{}'),
         _to_nim_error(504, b'{}'),
         _timed_out(),
     ],
-    ids=['413', '502', '504', 'timeout'],
+    ids=['413', '504', 'timeout'],
 )
 def test_a_call_too_large_or_too_slow_is_asked_again_in_halves(failure):
     request = gathered(context_rows=30, run_mode='fast', predict_rows=4)
@@ -115,7 +114,9 @@ def test_a_call_of_one_row_refused_as_too_large_is_the_endpoint_s_refusal():
 
 
 @contextmanager
-def _nim(*failures: int) -> Iterator[tuple[SDMClient, list[dict]]]:
+def _nim(
+    *failures: int, create: int = 200
+) -> Iterator[tuple[SDMClient, list[dict]]]:
     r"""A NIM on a real socket, reached over the client's own HTTP transport:
     each call answered row by row, the first ones failed with ``failures``
     in turn, a 0 among them an answer too large to read."""
@@ -139,10 +140,17 @@ def _nim(*failures: int) -> Iterator[tuple[SDMClient, list[dict]]]:
         def do_GET(self) -> None:
             self._send(200, b'{"data": [{"id": "kumo-tabular"}]}')
 
+        def do_DELETE(self) -> None:
+            self._send(204, b'')
+
         def do_POST(self) -> None:
             length = int(self.headers.get('Content-Length') or 0)
             payload = json.loads(self.rfile.read(length))
             calls.append(payload)
+            if self.path == '/v1/sessions':
+                body = b'{"detail": "too large"}' if create != 200 else b''
+                self._send(create, body or b'{"session_id": "s1"}')
+                return
             if script:
                 status = script.pop(0)
                 if status == 0:
@@ -202,7 +210,7 @@ def test_a_tabular_request_is_scored_in_calls_of_10_000_rows():
 
 
 @pytest.mark.parametrize(
-    'failure', [413, 502, 504, 0], ids=['413', '502', '504', 'answer-too-large']
+    'failure', [413, 504, 0], ids=['413', '504', 'answer-too-large']
 )
 def test_a_tabular_call_too_large_is_asked_again_in_halves(failure, caplog):
     caplog.set_level('INFO', logger='sdm_core')
@@ -278,3 +286,63 @@ def test_the_halves_answered_before_one_fails_are_kept():
     assert _sizes(endpoint) == [4, 2, 2]
     assert refused.value.details['rows_answered'] == 2
     assert len(refused.value.details['answered']) == 2
+
+
+@pytest.mark.parametrize('status', [502, 503, 500])
+def test_a_temporary_failure_is_never_split(status):
+    request = gathered(context_rows=30, run_mode='fast', predict_rows=4)
+    endpoint = Scripted(_to_nim_error(status, b'{"detail": "later"}'))
+    with pytest.raises(StructuredDataError):
+        client(endpoint).predict(request, model='kumo-relational')
+    assert _sizes(endpoint) == [4]
+
+
+def test_a_batch_is_halved_at_most_three_times():
+    request = gathered(context_rows=5, run_mode='fast', predict_rows=16)
+    endpoint = Scripted(*[_too_large() for _ in range(20)])
+    with pytest.raises(StructuredDataError) as refused:
+        client(endpoint).predict(request, model='kumo-relational')
+    assert _sizes(endpoint) == [16, 8, 4, 2]
+    assert 'halved 3 times' in str(refused.value)
+    assert refused.value.details['halvings'] == 3
+
+
+def test_a_call_whose_context_dominates_is_not_split():
+    request = gathered(context_rows=400, run_mode='best', predict_rows=2)
+    endpoint = Scripted(_too_large())
+    with pytest.raises(StructuredDataError) as refused:
+        client(endpoint).predict(request, model='kumo-relational')
+    assert _sizes(endpoint) == [2]
+    assert 'the context is too large for this endpoint' in str(refused.value)
+
+
+def test_a_timeout_counts_toward_the_three_halvings():
+    request = gathered(context_rows=5, run_mode='fast', predict_rows=16)
+    endpoint = Scripted(_timed_out(), *[_too_large() for _ in range(20)])
+    with pytest.raises(StructuredDataError):
+        client(endpoint).predict(request, model='kumo-relational')
+    assert _sizes(endpoint) == [16, 8, 4, 2]
+
+
+def test_a_session_whose_context_is_too_large_is_refused_naming_it():
+    """A create call carries only the context, which cannot be split."""
+    with _nim(create=413) as (nim, calls):
+        with pytest.raises(StructuredDataError) as refused:
+            nim.fit(_tabular(4), model='kumo-tabular')
+    assert len(calls) == 1
+    assert 'the context is too large for this endpoint' in str(refused.value)
+
+
+def test_a_pinned_session_s_scoring_call_is_asked_in_halves():
+    """A scoring call against a pinned context carries no context: its rows
+    are halved, whatever the context's size."""
+    with _nim(413) as (nim, calls):
+        fitted = nim.fit(_tabular(4), model='kumo-tabular')
+        result = fitted.predict(_tabular(4))
+    scoring = [c for c in calls if 'context' not in c]
+    assert [len(c['predict']['instance_table']['rows']) for c in scoring] == [
+        4,
+        2,
+        2,
+    ]
+    assert list(result.to_pandas()['row_index']) == [0, 1, 2, 3]
