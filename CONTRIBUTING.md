@@ -131,7 +131,7 @@ SDM_RELATIONAL_URL=http://localhost:8001 \
     -m live_nim -q
 
 # the published weights, fetched and run in this process; needs the
-# in-process extra, and the relational one for the relational reference
+# in-process extra
 SDM_IN_PROCESS=1 .venv/bin/python -m pytest tests/test_skills.py -m in_process -q
 
 # real warehouses, with credentials in the environment

@@ -15,13 +15,15 @@ command installs a client without it. Install from a checkout instead. That
 build compiles the client's native extension, so it needs rustup and the
 toolchain `rust/rust-toolchain.toml` pins; pip runs the build from the
 client's own directory, where rustup does not read that pin, which is what
-the variable names:
+the variable names. The client pins the API package to a version that is not
+published either, so install that from the checkout too:
 
 ```
 git clone https://github.com/NVIDIA/structured-data-models-client
 cd structured-data-models-client
-RUSTUP_TOOLCHAIN=1.97.0 pip install -e \
-    './packages/structured-data-models-client[in-process]'
+RUSTUP_TOOLCHAIN=1.97.0 pip install \
+    -e './packages/structured-data-models-api' \
+    -e './packages/structured-data-models-client[in-process]'
 ```
 
 A pip warning that the client `does not provide the extra 'in-process'`, or
@@ -121,8 +123,6 @@ on where it ran, which is the first difference below.
   cells, and `close()` it at the end.
 - **`client.models()` lists what it can run**, rather than what an endpoint
   advertises: both models when it loads them itself, or the ones passed in.
-  Listing `kumo-relational` is not a report that the `relational` extra is
-  installed; building a relational request still needs it.
 
 ## A machine that cannot reach Hugging Face
 

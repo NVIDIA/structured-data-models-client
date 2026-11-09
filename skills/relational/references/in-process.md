@@ -4,11 +4,10 @@ Nothing deployed to point at, or tables that must not leave the machine: the
 same client runs the model here instead, with the same calls. This is how a
 notebook asks with no NIM at all.
 
-It takes two extras, the engine that gathers a request and the models that
-answer one:
+It is an extra:
 
 ```
-pip install 'structured-data-models-client[relational,in-process]'
+pip install 'structured-data-models-client[in-process]'
 ```
 
 No published release carries `in_process()` yet, so until one does, that
@@ -16,21 +15,24 @@ command installs a client without it. Install from a checkout instead. That
 build compiles the client's native extension, so it needs rustup and the
 toolchain `rust/rust-toolchain.toml` pins; pip runs the build from the
 client's own directory, where rustup does not read that pin, which is what
-the variable names:
+the variable names. The client pins the API package to a version that is not
+published either, so install that from the checkout too:
 
 ```
 git clone https://github.com/NVIDIA/structured-data-models-client
 cd structured-data-models-client
-RUSTUP_TOOLCHAIN=1.97.0 pip install -e \
-    './packages/structured-data-models-client[relational,in-process]'
+RUSTUP_TOOLCHAIN=1.97.0 pip install \
+    -e './packages/structured-data-models-api' \
+    -e './packages/structured-data-models-client[in-process]'
 ```
 
 A pip warning that the client `does not provide the extra 'in-process'`, or
 an `AttributeError` saying `SDMClient` has no attribute `in_process`, is an
 installed client older than the feature, whichever command installed it.
 
-The second extra brings structured-data-models and PyTorch, and needs Python
-3.11 or later. Without it, `SDMClient.in_process()` raises `MissingExtraError`
+The extra brings structured-data-models and PyTorch, and needs Python 3.11
+or later. Gathering the request needs nothing beyond it: the client carries
+that itself. Without it, `SDMClient.in_process()` raises `MissingExtraError`
 naming that command; on Python 3.10 the error names the Python it needs
 instead. The first prediction fetches the published weights,
 `nvidia/Kumo-Relational` on Hugging Face, into the Hugging Face cache, and
