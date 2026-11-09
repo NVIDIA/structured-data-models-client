@@ -125,8 +125,8 @@ it is there, otherwise on `row_index`, and never on row order.
 
 Every example here points at a NIM. With none to point at, the same client
 runs the model in this process: `SDMClient.in_process()` in place of the URL,
-and the rest unchanged. It is a second extra, it loads the published weights,
-and on a CPU its numbers differ from a GPU's. All of that is in
+and the rest unchanged. It is an extra, it loads the published weights, and on
+a CPU its numbers differ from a GPU's. All of that is in
 [`references/in-process.md`](references/in-process.md).
 
 ## Describing the data
