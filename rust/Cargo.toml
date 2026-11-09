@@ -59,7 +59,7 @@ serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 serde_stacker = "0.1"
 regex = "1"
 # The SQLite engine of the dev-only test host and its tests.
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 sha2 = "0.10"
 stacker = "0.1"
 thiserror = "2"
