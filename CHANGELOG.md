@@ -152,8 +152,8 @@ The public API snapshot records this version update; publication remains pending
 - On Databricks through Spark, a `TIMESTAMP` column is read in UTC, so the
   anchor time and the rows a window takes no longer move with the client
   machine's time zone. 1.0.0 read its range as local times.
-- On Databricks through Spark, a `DECIMAL` value with a fraction is sent
-  exactly, such as `997.67`. 1.0.0 sent it through a float, such as
+- On Databricks, through Spark or a SQL warehouse, a `DECIMAL` value with a
+  fraction is sent exactly, such as `997.67`. 1.0.0 sent it through a float, such as
   `997.6700000000001`.
 
 ### Removed
