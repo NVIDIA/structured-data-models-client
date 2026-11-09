@@ -2228,6 +2228,17 @@ def test_the_relational_examples_print_what_the_skill_shows(name):
     assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
 
 
+def installed(module: str, extra: str) -> None:
+    """Fail, rather than skip, when an opt-in run is missing what it needs."""
+    try:
+        importlib.import_module(module)
+    except ImportError:  # pragma: no cover
+        pytest.fail(
+            f'SDM_IN_PROCESS is set but {module} is not installed. '
+            f"Install it with: pip install '{extra}'"
+        )
+
+
 @pytest.mark.in_process
 @pytest.mark.skipif(
     not IN_PROCESS,
@@ -2239,10 +2250,16 @@ def test_the_relational_examples_print_what_the_skill_shows(name):
 )
 def test_the_in_process_examples_print_what_the_skill_shows(name):
     """These examples open no connection: they fetch the published weights
-    and run the model here, which is what the reference claims they do."""
-    pytest.importorskip('sdm', reason='needs the in-process extra')
+    and run the model here, which is what the reference claims they do.
+
+    ``SDM_IN_PROCESS`` is the reader asking for exactly this, so a missing
+    extra is a broken setup and fails here rather than skipping quietly.
+    """
+    installed('sdm', 'structured-data-models-client[in-process]')
     if name.startswith('relational'):
-        pytest.importorskip('sdm_relational_engine')
+        installed(
+            'sdm_relational_engine', 'structured-data-models-client[relational]'
+        )
     assert_every_example_prints_what_it_shows(SKILLS / name)
 
 

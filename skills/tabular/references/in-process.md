@@ -46,6 +46,13 @@ with SDMClient.in_process() as client:
         request, model=KumoTabular(), outputs=['prediction', 'probabilities']
     )
 print(list(answer.to_pandas().columns), len(answer.to_pandas()), 'rows')
+
+scored = (
+    to_score.reset_index(drop=True)
+    .reset_index(names='row_index')
+    .merge(answer.to_pandas(), on='row_index')
+)
+print(list(scored.columns))
 ```
 
 **Verified** in this process, on a CPU:
@@ -53,10 +60,16 @@ print(list(answer.to_pandas().columns), len(answer.to_pandas()), 'rows')
 ```
 in-process ['kumo-tabular', 'kumo-relational']
 ['row_index', 'prediction', 'probability_0', 'probability_1'] 2 rows
+['row_index', 'age', 'spend', 'prediction', 'probability_0', 'probability_1']
 ```
 
 The frame has the shape a NIM gives: `row_index`, `prediction` and a
-probability column per class. The numbers are not shown because they depend
+probability column per class. `row_index` is the *position* in the frame
+passed as `predict`, not that frame's index label, so drop the index before
+making it a column: a frame that was filtered or sorted carries labels that
+are no longer its positions, and merging on those quietly pairs a row with
+another row's answer, or drops it. Merge on `row_index`, never line the two
+frames up by row order. The numbers are not shown because they depend
 on where it ran, which is the first difference below.
 
 ## What differs from a NIM
@@ -82,6 +95,16 @@ on where it ran, which is the first difference below.
   and the `with` block above is what lets go of what it holds.
 - **`client.models()` lists what it can run**, rather than what an endpoint
   advertises: both models when it loads them itself, or the ones passed in.
+
+## A machine that cannot reach Hugging Face
+
+The weights are read from the Hugging Face cache, and `HF_HOME` says where
+that is. Fetch them once where the Hub is reachable, copy that cache to the
+machine that cannot reach it, point `HF_HOME` at the copy and set
+`HF_HUB_OFFLINE=1`: the model loads from it with no network at all. With
+nothing there, an offline run refuses with `MODEL_NOT_READY` naming
+`LocalEntryNotFoundError`, rather than waiting on a request that cannot
+arrive.
 
 ## Choosing the device, or passing a loaded model
 

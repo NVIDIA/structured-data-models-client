@@ -66,6 +66,9 @@ with SDMClient.in_process() as client:
     print(client.url, client.models())
     answer = client.predict(request, model=KumoRelational())
 print(list(answer.to_pandas().columns), len(answer.to_pandas()), 'rows')
+
+named = answer.to_pandas().merge(users, left_on='id', right_on='user_id')
+print(list(named.columns))
 ```
 
 **Verified** in this process, on a CPU:
@@ -73,11 +76,14 @@ print(list(answer.to_pandas().columns), len(answer.to_pandas()), 'rows')
 ```
 in-process ['kumo-tabular', 'kumo-relational']
 ['row_index', 'id', 'prediction'] 3 rows
+['row_index', 'id', 'prediction', 'user_id', 'segment']
 ```
 
 The frame has the shape a NIM gives: `row_index`, the entity's `id` and the
-`prediction`. The numbers are not shown because they depend on where it ran,
-which is the first difference below.
+`prediction`. `id` is the key the question was asked for, and merging on it
+is how the answers go back onto those entities: never line them up by row
+order. The numbers are not shown because they depend on where it ran, which
+is the first difference below.
 
 ## An explanation, here
 
@@ -125,6 +131,16 @@ explanations.
   and the `with` block above is what lets go of what it holds.
 - **`client.models()` lists what it can run**, rather than what an endpoint
   advertises: both models when it loads them itself, or the ones passed in.
+
+## A machine that cannot reach Hugging Face
+
+The weights are read from the Hugging Face cache, and `HF_HOME` says where
+that is. Fetch them once where the Hub is reachable, copy that cache to the
+machine that cannot reach it, point `HF_HOME` at the copy and set
+`HF_HUB_OFFLINE=1`: the model loads from it with no network at all. With
+nothing there, an offline run refuses with `MODEL_NOT_READY` naming
+`LocalEntryNotFoundError`, rather than waiting on a request that cannot
+arrive.
 
 ## Choosing the device, or passing a loaded model
 
