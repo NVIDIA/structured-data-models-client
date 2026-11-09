@@ -441,6 +441,39 @@ pub fn check_question(
     })
 }
 
+/// The refusal of a scoring call that asks another question than the pinned
+/// one, naming the field that differs, as the Python Tabular session does.
+pub fn question_refusal(difference: &SessionQuestionDifference) -> String {
+    use SessionQuestionField as Field;
+    let shown = |value: &Option<String>| {
+        value
+            .as_ref()
+            .map_or("None".to_owned(), |v| format!("'{v}'"))
+    };
+    let detail = match difference.field {
+        Field::Context => "the context pinned is not the one this request carries, and the \
+                           context is what the answer is learnt from"
+            .to_owned(),
+        field => format!(
+            "{} pinned is {} and this asks {}",
+            match field {
+                Field::Query => "the query",
+                Field::Kind => "the task kind",
+                Field::Target => "the target column",
+                Field::Dtype => "the target column's dtype",
+                _ => "the entity table",
+            },
+            shown(&difference.pinned),
+            shown(&difference.asked),
+        ),
+    };
+    format!(
+        "this session pinned a different question: {detail}. Only the rows travel on a \
+         scoring call, so the pinned question is the one that would be answered. Fit again \
+         to ask something else"
+    )
+}
+
 /// Commit closure only after the host confirms successful remote deletion.
 /// A failed deletion leaves the returned value retryable; already closed
 /// values remain closed. The caller skips sending when `closed` is already set.
