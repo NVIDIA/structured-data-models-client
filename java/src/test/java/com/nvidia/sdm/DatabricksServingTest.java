@@ -461,7 +461,8 @@ class DatabricksServingTest {
 
   private static ModelEndpointException refused(Answer answer) throws Exception {
     try (Connection connection = Shop.open("duckdb");
-        Workspace workspace = new Workspace(body -> answer);
+        // Answered twice: a 500 is tried once more, and a 502 asked in halves.
+        Workspace workspace = new Workspace(body -> answer, body -> answer);
         SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
       Request request = asked(connection);
       StructuredDataException error =
@@ -576,6 +577,28 @@ class DatabricksServingTest {
   }
 
   @Test
+  void a500IsTriedAgainAsA503Is() throws Exception {
+    try (Connection connection = Shop.open("duckdb");
+        Workspace workspace = new Workspace(body -> Answer.of(500, ""));
+        SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
+      assertEquals(2, client.predict(asked(connection), SdmClient.KUMO_RELATIONAL).rows());
+      assertEquals(2, workspace.bodies.size());
+    }
+  }
+
+  @Test
+  void aCallTheGatewayRefusesAsTooLargeIsAskedInHalves() throws Exception {
+    for (int status : new int[] {413, 502}) {
+      try (Connection connection = Shop.open("duckdb");
+          Workspace workspace = new Workspace(body -> Answer.of(status, ""));
+          SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
+        assertEquals(2, client.predict(asked(connection), SdmClient.KUMO_RELATIONAL).rows());
+        assertEquals(3, workspace.bodies.size(), "status " + status);
+      }
+    }
+  }
+
+  @Test
   void anEndpointThatCannotBeReachedIsAFailureAtItsDeadline() throws Exception {
     int port;
     try (ServerSocket free = new ServerSocket(0)) {
@@ -591,7 +614,8 @@ class DatabricksServingTest {
           assertThrows(
               ModelEndpointException.class,
               () -> client.predict(request, SdmClient.KUMO_RELATIONAL));
-      assertEquals(504, error.status());
+      // The deadline spent on connections never made: the endpoint unavailable, never split.
+      assertEquals(503, error.status());
       assertNull(error.code());
     }
   }

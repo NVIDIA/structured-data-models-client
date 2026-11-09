@@ -3338,7 +3338,8 @@
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_the_ambient_identity_is_used_when_no_client_is_given",
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_a_workspace_that_cannot_authenticate_says_how_to_fix_it",
           "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_unusable_timeout_is_refused_at_construction",
-          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not"
+          "packages/structured-data-models-client/tests/test_databricks_serving.py::test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not",
+          "packages/structured-data-models-client/tests/test_databricks_splitting.py"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/DatabricksServingTest.java#officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes",
@@ -4748,7 +4749,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "652bd2757ca1d8ed12360b795a5c7f80ce63978210306cee1319532503f9d031",
+  "public_api_snapshot_sha256": "5f1f001f45522d17f2a3527668d3313d5cd0d439ba7d21acedfdddf5b073a6d0",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -5262,7 +5263,17 @@
         "capability": "sessions"
       },
       "sdm_client.SDMClient.for_databricks_serving": {
-        "capability": "public-serving-refusals"
+        "capability": "public-serving-refusals",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_databricks_splitting.py::test_max_request_bytes_is_passed_through",
+            "behavior": "max_request_bytes reaches the Databricks transport."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_databricks_splitting.py::test_a_tabular_call_past_the_byte_limit_is_split_before_it_is_sent",
+            "behavior": "A call past max_request_bytes is split before it is sent, each part within it."
+          }
+        ]
       },
       "sdm_client.SDMClient.health_ready": {
         "capability": "readiness-discovery"
@@ -8233,6 +8244,21 @@
       "base_commit": "ebc5746391d977fd8d9d779423db33ae547d64ee",
       "record": "type_contracts/arrow-admission-and-inference",
       "reason": "Rename test files and remove historical fixture prose; all type vectors and their expected outcomes remain identical. Update the whole-file digest for metadata changes."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "public_api_snapshot_sha256",
+      "reason": "SDMClient.for_databricks_serving takes an optional max_request_bytes, passed to the Databricks transport, whose calls past it are split before they are sent."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_inventory",
+      "reason": "SDMClient.for_databricks_serving gains max_request_bytes, asserted by the Databricks splitting tests."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/public-serving-refusals",
+      "reason": "Adds the Databricks splitting tests, which assert max_request_bytes and the split before a call is sent."
     }
   ],
   "capabilities": [

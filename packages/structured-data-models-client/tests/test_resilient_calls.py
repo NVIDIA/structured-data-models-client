@@ -9,12 +9,16 @@ asked again in halves, each with the whole context; a 422 is not."""
 from __future__ import annotations
 
 import json
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 import requests
 from test_limits_and_absent_outputs import gathered
 from test_tabular_direct_core import client
 
+from sdm_client import SDMClient
 from sdm_client.core.transport import _to_nim_error
 from sdm_client.errors import StructuredDataError
 
@@ -106,3 +110,106 @@ def test_a_call_of_one_row_refused_as_too_large_is_the_endpoint_s_refusal():
         client(endpoint).predict(request, model='kumo-relational')
     assert len(endpoint.calls) == 1
     assert 'context too large' in str(refused.value)
+
+
+@contextmanager
+def _nim(*failures: int) -> Iterator[tuple[SDMClient, list[dict]]]:
+    r"""A NIM on a real socket, reached over the client's own HTTP transport:
+    each call answered row by row, the first ones failed with ``failures``
+    in turn, a 0 among them an answer too large to read."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from test_databricks_splitting import answer
+
+    calls: list[dict] = []
+    script = list(failures)
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def _send(self, status: int, body: bytes) -> None:
+            self.send_response(status)
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self) -> None:
+            self._send(200, b'{"data": [{"id": "kumo-tabular"}]}')
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get('Content-Length') or 0)
+            payload = json.loads(self.rfile.read(length))
+            calls.append(payload)
+            if script:
+                status = script.pop(0)
+                if status == 0:
+                    self._send(200, b' ' * (64 * 1024 * 1024 + 1))
+                else:
+                    self._send(status, b'{"detail": "refused"}')
+                return
+            self._send(200, json.dumps(answer(payload)).encode())
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(
+        target=lambda: server.serve_forever(poll_interval=0.01), daemon=True
+    )
+    thread.start()
+    try:
+        url = f'http://127.0.0.1:{server.server_address[1]}'
+        with SDMClient(url, max_retries=0) as nim:
+            yield nim, calls
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _tabular(rows: int):
+    import numpy as np
+    import pandas as pd
+
+    from sdm_client import Request
+
+    context = pd.DataFrame(
+        {
+            'row_id': np.arange(40),
+            'feature': np.arange(40) % 7,
+            'target': np.arange(40) % 2,
+        }
+    )
+    scoring = pd.DataFrame(
+        {'row_id': np.arange(100, 100 + rows), 'feature': np.arange(rows) % 7}
+    )
+    return Request(
+        context,
+        scoring,
+        target='target',
+        task='classification',
+    )
+
+
+def test_a_tabular_request_is_scored_in_calls_of_10_000_rows():
+    with _nim() as (nim, calls):
+        result = nim.predict(_tabular(10_001), model='kumo-tabular')
+    assert [len(c['predict']['instance_table']['rows']) for c in calls] == [
+        10_000,
+        1,
+    ]
+    assert all(c['context'] == calls[0]['context'] for c in calls)
+    assert list(result.to_pandas()['row_index']) == list(range(10_001))
+
+
+@pytest.mark.parametrize(
+    'failure', [413, 502, 504, 0], ids=['413', '502', '504', 'answer-too-large']
+)
+def test_a_tabular_call_too_large_is_asked_again_in_halves(failure, caplog):
+    caplog.set_level('INFO', logger='sdm_core')
+    with _nim(failure) as (nim, calls):
+        result = nim.predict(_tabular(4), model='kumo-tabular')
+    assert [len(c['predict']['instance_table']['rows']) for c in calls] == [
+        4,
+        2,
+        2,
+    ]
+    assert list(result.to_pandas()['row_index']) == [0, 1, 2, 3]
+    assert any('smaller calls' in r.getMessage() for r in caplog.records)

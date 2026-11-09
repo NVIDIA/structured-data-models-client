@@ -476,7 +476,7 @@
           "capabilities": "(self, model: 'str | Model') -> 'ModelCapabilities'",
           "close": "(self) -> 'None'",
           "fit": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None, holdout: 'Iterable[Any] | None' = None) -> 'FittedModel'",
-          "for_databricks_serving": "(endpoint: 'str', *, workspace_client: 'Any | None' = None, timeout: 'float | None' = None) -> 'SDMClient'",
+          "for_databricks_serving": "(endpoint: 'str', *, workspace_client: 'Any | None' = None, timeout: 'float | None' = None, max_request_bytes: 'int | None' = None) -> 'SDMClient'",
           "health_ready": "(self) -> 'bool'",
           "in_process": "(*models: 'Any', device: 'Any' = None) -> 'SDMClient'",
           "models": "(self) -> 'list[str]'",

@@ -436,7 +436,16 @@ pub(crate) async fn one(
         let mut calls = Vec::with_capacity(payloads.len());
         let mut bodies = Vec::with_capacity(payloads.len());
         for (payload, request_id) in payloads.iter().zip(&ids) {
-            for (call, body) in fitted(inputs, &outputs, payload, request_id)? {
+            let write = |call: &Value| {
+                body(
+                    call,
+                    &inputs.model,
+                    request_id,
+                    &outputs,
+                    &inputs.inference_asked,
+                )
+            };
+            for (call, body) in fitted(inputs.endpoint.as_ref(), payload, &write)? {
                 calls.push((call, request_id.as_str()));
                 bodies.push(body);
             }
@@ -475,10 +484,25 @@ pub(crate) async fn one(
                     let response = PredictionResponse::read(&answer).map_err(refused)?;
                     return layout(payload, &response, crate::pql::float_text);
                 }
-                answered(
-                    asker, inputs, &outputs, request_id, payload, bytes, &mut most,
-                )
-                .await
+                let write = |call: &Value| {
+                    sdm_request::predict::body(
+                        call,
+                        &inputs.model,
+                        request_id,
+                        &outputs,
+                        &inputs.inference_asked,
+                    )
+                };
+                let endpoint = inputs.endpoint.as_ref();
+                let send = |call: Value, bytes: Vec<u8>| -> Sent<'_, Part> {
+                    Box::pin(async move { self::call(asker, &call, bytes, endpoint).await })
+                };
+                let how = Asking {
+                    write: &write,
+                    send: &send,
+                    merge: numbered_parts,
+                };
+                answered(&how, payload.clone(), bytes, &mut most).await
             }
             .await;
             let answered = match response {
@@ -513,30 +537,21 @@ pub(crate) async fn one(
     Ok((merged, outputs, scored))
 }
 
-/// `payload` as the calls it is sent in, each with its body: one call, or,
-/// to a serving endpoint, as many as it is split into so that each one's
-/// envelope fits the endpoint's `max_request_bytes`
+/// `payload` as the calls it is sent in, each with its body (`write`): one
+/// call, or, to a serving endpoint, whose refusal of a call too large is a
+/// dropped connection, as many as it is split into up front so that each
+/// one's envelope fits the endpoint's `max_request_bytes`
 /// ([`sdm_request::batching::fitted`]), each scoring a run of its rows with
 /// the whole context. A call of one row past it is refused.
 fn fitted(
-    inputs: &Inputs,
-    outputs: &[String],
+    endpoint: Option<&ModelEndpoint>,
     payload: &Value,
-    request_id: &str,
+    write: &Write<'_>,
 ) -> Result<Vec<(Value, Value)>, CoreError> {
-    let write = |call: &Value| {
-        body(
-            call,
-            &inputs.model,
-            request_id,
-            outputs,
-            &inputs.inference_asked,
-        )
-    };
     let Some(ModelEndpoint::ServingEndpoint {
         name,
         max_request_bytes,
-    }) = &inputs.endpoint
+    }) = endpoint
     else {
         return Ok(vec![(payload.clone(), write(payload)?)]);
     };
@@ -549,7 +564,17 @@ fn fitted(
             Ok(body)
         })
     };
-    sdm_request::batching::fitted(payload, &mut fit)
+    let calls = sdm_request::batching::fitted(payload, &mut fit)?;
+    if calls.len() > 1 {
+        tracing::info!(
+            target: "sdm_core::predict",
+            rows = predict_rows(payload).unwrap_or(0),
+            calls = calls.len(),
+            limit = *max_request_bytes,
+            "a call past the serving endpoint's limit is sent as smaller calls"
+        );
+    }
+    Ok(calls)
 }
 
 /// The statuses that say a call was too large or too slow to answer: the
@@ -557,51 +582,69 @@ fn fitted(
 /// 504, which a call it gave up on comes back as.
 const TOO_LARGE: [u16; 4] = [408, 413, 502, 504];
 
-/// `payload`'s answer, its rows numbered from zero. Where the endpoint
-/// refuses the call as too large or too slow ([`TOO_LARGE`]), its rows are
-/// asked again in calls of half as many, each with the whole context, and
-/// that size is kept in `most` for the calls after it. A call of one row is
-/// not split: its refusal, the endpoint's own, stands, as does any other.
-async fn answered(
-    asker: &Asker,
-    inputs: &Inputs,
-    outputs: &[String],
-    request_id: &str,
-    payload: &Value,
+/// A call sent, its answer to come.
+pub(crate) type Sent<'a, T> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, CoreError>> + Send + 'a>>;
+
+/// How a call is asked and, split, put back together: the body a run of its
+/// rows is sent as, the sending, and the answers merged, each with the row
+/// of the call it starts at.
+pub(crate) struct Asking<'a, T> {
+    pub write: &'a Write<'a>,
+    pub send: &'a Sender<'a, T>,
+    pub merge: Merge<T>,
+}
+
+/// The answers to runs of a call's rows, each with the row it starts at,
+/// as the one answer to the call.
+pub(crate) type Merge<T> = fn(Vec<(usize, T)>) -> Result<T, CoreError>;
+
+/// The sending of a run of a call's rows, its body's bytes given.
+pub(crate) type Sender<'a, T> = dyn Fn(Value, Vec<u8>) -> Sent<'a, T> + Sync + 'a;
+
+/// The body a run of a call's rows is sent as.
+pub(crate) type Write<'a> = dyn Fn(&Value) -> Result<Value, CoreError> + Sync + 'a;
+
+/// `payload`'s answer, its rows numbered from zero, sent as `bytes`. Where
+/// the endpoint refuses the call as too large or too slow ([`TOO_LARGE`]),
+/// its rows are asked again in calls of half as many, each with the whole
+/// context, and that size is kept in `most` for the calls after it; a call
+/// of more rows than `most` is asked in calls of that many. A call of one
+/// row is not split: its refusal, the endpoint's own, stands, as does any
+/// other.
+pub(crate) async fn answered<T>(
+    how: &Asking<'_, T>,
+    payload: Value,
     bytes: Vec<u8>,
     most: &mut Option<usize>,
-) -> Result<Part, CoreError> {
-    let rows = predict_rows(payload).unwrap_or(0);
+) -> Result<T, CoreError> {
+    let rows = predict_rows(&payload).unwrap_or(0);
     let size = match *most {
         Some(most) if rows > most => most,
-        _ => match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
+        _ => match (how.send)(payload.clone(), bytes).await {
             Err(error) if rows > 1 && too_large(&error) => {
                 let half = rows.div_ceil(2);
+                tracing::info!(
+                    target: "sdm_core::predict",
+                    rows,
+                    status = ?error.fields.get(sdm_contract::error::REFUSED_STATUS),
+                    size = half,
+                    "a call refused as too large or too slow is asked again in smaller calls"
+                );
                 *most = Some(half);
                 half
             }
             answer => return answer,
         },
     };
-    let mut parts = Vec::new();
+    let mut answers = Vec::new();
     for start in (0..rows).step_by(size) {
         let range = start..(start + size).min(rows);
-        let call = sdm_request::batching::predict_slice(payload, range)?;
-        let bytes = body(
-            &call,
-            &inputs.model,
-            request_id,
-            outputs,
-            &inputs.inference_asked,
-        )?
-        .to_bytes();
-        let part = Box::pin(answered(
-            asker, inputs, outputs, request_id, &call, bytes, most,
-        ))
-        .await?;
-        parts.push(numbered_from(part, start)?);
+        let call = sdm_request::batching::predict_slice(&payload, range)?;
+        let bytes = (how.write)(&call)?.to_bytes();
+        answers.push((start, Box::pin(answered(how, call, bytes, most)).await?));
     }
-    merge(parts)
+    (how.merge)(answers)
 }
 
 /// Whether `error` is a refusal by one of the [`TOO_LARGE`] statuses.
@@ -610,6 +653,79 @@ fn too_large(error: &CoreError) -> bool {
         error.fields.get(sdm_contract::error::REFUSED_STATUS),
         Some(Detail::Scalar(Scalar::UInt16(status))) if TOO_LARGE.contains(status)
     )
+}
+
+/// Parts of one call's rows, each numbered from the row it starts at.
+fn numbered_parts(parts: Vec<(usize, Part)>) -> Result<Part, CoreError> {
+    merge(
+        parts
+            .into_iter()
+            .map(|(start, part)| numbered_from(part, start))
+            .collect::<Result<Vec<_>, _>>()?,
+    )
+}
+
+/// The answers to runs of one call's rows as the one answer to it: the
+/// first's, with every answer's predictions in order, each numbered from
+/// the row its run starts at (`row_index`).
+fn merged_answers(answers: Vec<(usize, Value)>) -> Result<Value, CoreError> {
+    let mut answers = answers.into_iter();
+    let (first, mut whole) = answers
+        .next()
+        .ok_or_else(|| internal("a call answered by none"))?;
+    let mut predictions = Vec::new();
+    for (start, answer) in std::iter::once((first, whole.clone())).chain(answers) {
+        let Some(Value::Array(items)) = answer.get("predictions") else {
+            // An answer that is not a list of predictions is left to be read
+            // and refused as it is.
+            return Ok(answer);
+        };
+        for item in items {
+            let mut item = item.clone();
+            if start > 0
+                && let Some(Value::Number(at)) = item.get("row_index")
+                && let Ok(at) = at.parse::<u64>()
+            {
+                item.set("row_index", Value::Number((at + start as u64).to_string()));
+            }
+            predictions.push(item);
+        }
+    }
+    whole.set("predictions", Value::Array(predictions));
+    Ok(whole)
+}
+
+/// The answer to a call sent as it was built, a single-table request's:
+/// asked in calls of at most [`sdm_request::options::PREDICT_ROWS`] rows,
+/// each with the whole context, split up front to fit a serving endpoint
+/// and in halves where the endpoint refuses one as too large or too slow
+/// ([`answered`]), the answers merged as one ([`merged_answers`]).
+pub(crate) async fn direct_answer(
+    asker: &Asker,
+    payload: &Value,
+    endpoint: Option<&ModelEndpoint>,
+) -> Result<Value, CoreError> {
+    let write = |call: &Value| Ok(call.clone());
+    let send = |_: Value, bytes: Vec<u8>| -> Sent<'_, Value> {
+        Box::pin(call_answer(asker, bytes, endpoint))
+    };
+    let how = Asking {
+        write: &write,
+        send: &send,
+        merge: merged_answers,
+    };
+    let mut most = usize::try_from(sdm_request::options::PREDICT_ROWS).ok();
+    let mut answers = Vec::new();
+    let mut start = 0;
+    for (call, body) in fitted(endpoint, payload, &write)? {
+        let rows = predict_rows(&call).unwrap_or(0);
+        answers.push((
+            start,
+            answered(&how, call, body.to_bytes(), &mut most).await?,
+        ));
+        start += rows;
+    }
+    merged_answers(answers)
 }
 
 /// One payload's call, its body as written, sent and its answer laid out;

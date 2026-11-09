@@ -211,6 +211,13 @@ public final class HttpTransport {
       HttpResponse<byte[]> response;
       try {
         response = attempt(built);
+      } catch (java.net.http.HttpConnectTimeoutException e) {
+        // No connection made: a failed transport, which no smaller call fixes.
+        if (attempt < retries) {
+          backoff(attempt, null);
+          continue;
+        }
+        throw new Failed("the request failed: " + e.getClass().getSimpleName());
       } catch (HttpTimeoutException e) {
         if (attempt < retries) {
           backoff(attempt, null);
@@ -249,13 +256,16 @@ public final class HttpTransport {
    *
    * @throws HttpTimeoutException the attempt did not end within the timeout
    * @throws IOException the endpoint could not be reached or its answer read
-   * @throws Failed the answer is past {@link #MAX_RESPONSE_BYTES}, or the call was interrupted
+   * @throws ModelEndpointException the answer is past {@link #MAX_RESPONSE_BYTES}: told as the
+   *     endpoint's 413, the call too large, so the core asks its rows in smaller calls
+   * @throws Failed the call was interrupted
    */
   private HttpResponse<byte[]> attempt(HttpRequest built) throws IOException, Failed {
     try {
       return exchange(client, built, info -> new Capped(), timeout.toNanos());
     } catch (TooLarge e) {
-      throw new Failed("the response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit");
+      throw ModelEndpointException.of(413, ("the response body exceeds the " + MAX_RESPONSE_BYTES
+          + " byte limit").getBytes(java.nio.charset.StandardCharsets.UTF_8));
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new Failed("the request was interrupted");

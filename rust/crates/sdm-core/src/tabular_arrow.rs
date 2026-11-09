@@ -396,8 +396,7 @@ async fn predict(
         part.columns = analysis;
         return crate::predict::finish(asker, part, prepared.bound.outputs);
     }
-    let answer =
-        crate::predict::call_answer(asker, payload.to_bytes(), input.endpoint.as_ref()).await?;
+    let answer = crate::predict::direct_answer(asker, &payload, input.endpoint.as_ref()).await?;
     finish(asker, payload, answer, prepared.bound.outputs, analysis)
 }
 fn finish(

@@ -168,14 +168,11 @@ pub(crate) async fn materialize(
             .map(|digits| digits.parse::<u32>().unwrap_or(u32::MAX)),
     };
     // `_in_parts`, before anything is gathered, as the client refuses them
-    // (`main`'s 1fc5a686): the batch size asked for; a question over more
-    // entities than one call scores, since a part is one call and a
+    // (`main`'s 1fc5a686): the batch size asked for; and a question over
+    // more entities than one call scores, since a part is one call and a
     // candidate is reported unscored for the whole ranking, so one cold
     // batch would drop it from every row
-    // (`refuse_a_part_that_would_take_several_calls`); and the population
-    // each question gathers whole, held as many times over as there are
-    // questions (`refuse_more_entities_than_fit_in_memory`), past the
-    // host's limit, 100,000 where it names none.
+    // (`refuse_a_part_that_would_take_several_calls`).
     let per_call =
         sdm_request::options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
     let entities = inputs.indices.as_ref().map_or(0, |data| {

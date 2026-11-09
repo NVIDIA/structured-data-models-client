@@ -57,8 +57,9 @@ const STATUS_BY_CODE: &[(&str, u16)] = &[
 ];
 
 /// The HTTP statuses whose SDK error class the old client reports as the
-/// status itself; any other it reports as 503, which callers retry.
-const STATUS_KEPT: &[u16] = &[400, 401, 403, 404, 409, 429, 504];
+/// status itself; any other it reports as 503, which callers retry. A 413,
+/// a 502 or a 504 is kept, so the core asks the call's rows in halves.
+const STATUS_KEPT: &[u16] = &[400, 401, 403, 404, 409, 413, 429, 502, 504];
 
 /// The call `call` (the core's own JSON) as the endpoint's envelope, the
 /// bytes a host posts, or `ServingPastLimit` when it is more than
@@ -583,7 +584,9 @@ mod tests {
     #[test]
     fn a_status_is_reported_as_the_sdk_s_class_gives_it() {
         assert_eq!(reported_status(500, None), 503);
-        assert_eq!(reported_status(502, None), 503);
+        // Kept, so a call too large for the gateway is asked in halves.
+        assert_eq!(reported_status(502, None), 502);
+        assert_eq!(reported_status(413, None), 413);
         assert_eq!(reported_status(429, None), 429);
         assert_eq!(reported_status(400, Some("RESOURCE_DOES_NOT_EXIST")), 404);
         assert_eq!(reported_status(400, Some("BAD_REQUEST")), 400);

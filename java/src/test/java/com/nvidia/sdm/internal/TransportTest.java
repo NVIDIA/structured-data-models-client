@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
  * The model transport over {@code java.net.http}: the call is sent as the bytes given,
  * one past 16 MB included; a transient status or a 500 is tried again; a refusal is the endpoint's;
  * a timeout is told as a 408; an
- * answer that is not JSON, or one past 64 MiB, is a failed transport.
+ * answer that is not JSON is a failed transport, and one past 64 MiB is told as a 413.
  */
 class TransportTest {
   /** An endpoint answering {@code statuses} in turn, then 200, keeping every body. */
@@ -111,6 +111,19 @@ class TransportTest {
             HttpTransport.Failed.class,
             () -> endpoint.transport(0).predict("{}".getBytes(StandardCharsets.UTF_8)));
       }
+    }
+  }
+
+  @Test
+  void anAnswerPast64MiBIsToldAsA413() throws Exception {
+    byte[] answer = new byte[HttpTransport.MAX_RESPONSE_BYTES + 1];
+    Arrays.fill(answer, (byte) ' ');
+    try (Endpoint endpoint = new Endpoint(answer)) {
+      ModelEndpointException refused =
+          assertThrows(
+              ModelEndpointException.class,
+              () -> endpoint.transport(0).predict("{}".getBytes(StandardCharsets.UTF_8)));
+      assertEquals(413, refused.status());
     }
   }
 

@@ -31,6 +31,7 @@ from sdm_client.core.transport import (
     _check_encodable,
     _diagnosis_in,
     _validate_limits,
+    read_timed_out,
 )
 from sdm_client.errors import (
     MissingExtraError,
@@ -222,23 +223,29 @@ class DatabricksServingTransport:
         says, for the core to name; anything but an ``OSError`` escapes, as
         from:meth:`predict`."""
         self._require_open()
-        try:
-            answered = self._workspace.api_client.do(
-                'POST',
-                f'/serving-endpoints/{self._endpoint}/invocations',
-                headers={'Content-Type': 'application/json'},
-                data=_Body(body),
-                raw=True,
-            )
-            contents = answered['contents']
+        # The SDK retries a 429 or a 503, not a 500, which this client tries
+        # once more as it does on its own endpoint.
+        for attempt in (0, 1):
             try:
-                return bytes(contents.read())
-            finally:
-                contents.close()
-        # The SDK's errors and its retry deadline are all OSError, as are
-        # requests' own, as in predict.
-        except OSError as error:
-            raise _failed(error) from None
+                answered = self._workspace.api_client.do(
+                    'POST',
+                    f'/serving-endpoints/{self._endpoint}/invocations',
+                    headers={'Content-Type': 'application/json'},
+                    data=_Body(body),
+                    raw=True,
+                )
+                contents = answered['contents']
+                try:
+                    return bytes(contents.read())
+                finally:
+                    contents.close()
+            # The SDK's errors and its retry deadline are all OSError, as are
+            # requests' own, as in predict.
+            except OSError as error:
+                if attempt == 0 and _status_of(error) == 500:
+                    continue
+                raise _failed(error) from None
+        raise AssertionError('unreachable')
 
     def _answered(self, payload: dict[str, Any]) -> str:
         r"""The served model's answer to ``payload``, as the text it
@@ -566,6 +573,12 @@ def _response_body(reply: Any, endpoint: str) -> str:
     return body
 
 
+#: The SDK's and ``requests``' names for a deadline reached.
+_TIMEOUTS = frozenset(
+    {'DeadlineExceeded', 'OperationTimeout', 'TimeoutError', 'Timeout'}
+)
+
+
 def _status_of(error: BaseException) -> int:
     r"""Map a Databricks SDK error onto an HTTP-equivalent status.
 
@@ -583,12 +596,17 @@ def _status_of(error: BaseException) -> int:
         return 409
     if names & {'TooManyRequests', 'RequestLimitExceeded'}:
         return 429
-    if names & {
-        'DeadlineExceeded',
-        'OperationTimeout',
-        'TimeoutError',
-        'Timeout',
-    }:
+    if names & _TIMEOUTS:
+        # The SDK's deadline spent retrying a 429, a 503 or a connection is
+        # the endpoint being unavailable, not a call too slow to answer:
+        # 504 only where the call itself timed out, which a smaller call
+        # can fix.
+        cause = error.__cause__
+        if cause is not None and not (
+            {c.__name__ for c in type(cause).__mro__} & _TIMEOUTS
+            or read_timed_out(cause)
+        ):
+            return 503
         return 504
     if 'BadRequest' in names:
         return 400

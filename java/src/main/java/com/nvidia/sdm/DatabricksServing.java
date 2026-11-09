@@ -202,11 +202,13 @@ public final class DatabricksServing {
 
   private byte[] send(String path, byte[] body) throws Host.EndpointFailed, Host.TransportFailed {
     long deadline = System.nanoTime() + timeout.toNanos();
+    boolean retried500 = false;
     for (int attempt = 1; ; attempt++) {
       Authentication granted = authenticate(deadline);
       long remaining = deadline - System.nanoTime();
       if (remaining <= 0) {
-        throw new Host.EndpointFailed(504, new byte[0]);
+        // The deadline spent before the call was made: the endpoint unavailable.
+        throw new Host.EndpointFailed(503, new byte[0]);
       }
       // Native SDK authentication can discover the workspace host. Validate it afterwards,
       // before any credential is sent, and on every attempt if the caller edits its config.
@@ -236,11 +238,19 @@ public final class DatabricksServing {
         if (status >= 200 && status < 300) {
           return response.body();
         }
-        if (status != 429 && status != 503) {
+        // A 429 or a 503 is tried again until the deadline, as the SDK tries it; a
+        // 500 once more, as Python's transport tries it, then reported as it is.
+        if (status == 500 && !retried500) {
+          retried500 = true;
+        } else if (status != 429 && status != 503) {
           throw new Host.EndpointFailed(status, response.body());
         }
         pause = retryAfter(response.headers().firstValue("Retry-After").orElse(null));
+      } catch (java.net.http.HttpConnectTimeoutException e) {
+        // No connection made: tried again as any connection is, never split.
+        pause = Math.min(10, attempt) * 1000L;
       } catch (HttpTimeoutException e) {
+        // The call itself took too long: a 504, which the core splits on.
         throw new Host.EndpointFailed(504, new byte[0]);
       } catch (IOException e) {
         pause = Math.min(10, attempt) * 1000L;
@@ -250,8 +260,9 @@ public final class DatabricksServing {
       }
       pause += ThreadLocalRandom.current().nextLong(1000);
       if (System.nanoTime() + pause * 1_000_000L >= deadline) {
-        // The SDK's retries end as its own timeout, which Python reports as 504.
-        throw new Host.EndpointFailed(504, new byte[0]);
+        // The deadline spent waiting on a 429, a 503, a 500 or a connection: the
+        // endpoint is unavailable, a 503, which no smaller call fixes.
+        throw new Host.EndpointFailed(503, new byte[0]);
       }
       try {
         Thread.sleep(pause);

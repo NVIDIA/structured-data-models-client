@@ -844,8 +844,7 @@ pub(crate) async fn predict(
         }));
     }
     let answer =
-        crate::predict::call_answer(&asker, payload.to_bytes(), request.model_endpoint.as_ref())
-            .await?;
+        crate::predict::direct_answer(&asker, &payload, request.model_endpoint.as_ref()).await?;
     let mut payload = payload;
     if let Some(analysis) = analysis {
         payload.set("client_column_analysis", Value::Text(analysis));

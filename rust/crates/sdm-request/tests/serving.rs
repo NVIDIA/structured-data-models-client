@@ -696,7 +696,7 @@ fn an_http_failure_reads_as_the_sdk_reads_the_same_response() {
         (
             502,
             "<html><title>Bad Gateway</title></html>".to_owned(),
-            (Sentence::ServingFailed, 503, None),
+            (Sentence::ServingFailed, 502, None),
         ),
         (
             500,
@@ -735,7 +735,7 @@ fn an_http_failure_reads_as_the_sdk_reads_the_same_response() {
     ];
     for (status, body, reference) in cases {
         let expected = if status == 502 && body.starts_with("<html>") {
-            (Sentence::ServingFailedCoded, 503, Some("BAD_GATEWAY"))
+            (Sentence::ServingFailedCoded, 502, Some("BAD_GATEWAY"))
         } else {
             reference
         };

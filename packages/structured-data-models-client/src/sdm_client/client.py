@@ -286,9 +286,9 @@ class SDMClient:
             timeout: Seconds to wait for each individual attempt, not for the
                 call as a whole.
             max_retries: Transport-level retries of a transient failure (408, 429,
-                502, 503, 504, or a dropped connection) with exponential
-                backoff. A 500 is not retried: the payload and the model are
-                the same on every attempt. ``POST /v1/sessions`` is excluded:
+                500, 502, 503, 504, or a dropped connection) with exponential
+                backoff, a ``Retry-After`` honoured. ``POST /v1/sessions`` is
+                excluded:
                 a re-sent create would orphan a pinned context on the
                 endpoint.
         """
@@ -336,6 +336,7 @@ class SDMClient:
         *,
         workspace_client: Any | None = None,
         timeout: float | None = None,
+        max_request_bytes: int | None = None,
     ) -> SDMClient:
         r"""Open a client against a Databricks Model Serving endpoint.
 
@@ -367,6 +368,11 @@ class SDMClient:
                 timeouts. Given with a ``WorkspaceClient``, it is set on the
                 copy, never on the caller's client; with a subclass or test
                 double, which cannot be copied, it is refused.
+            max_request_bytes: The most bytes one call's wrapped body may
+                take, the gateway's 16 MB when omitted. The endpoint drops a
+                call past it as a connection, so a call past it is split
+                into smaller ones before it is sent, each with the whole
+                context.
 
         Raises:
             MissingExtraError: If ``databricks-sdk`` is not installed; install
@@ -384,7 +390,14 @@ class SDMClient:
         client = cls.__new__(cls)
         client._start(
             DatabricksServingTransport(
-                endpoint, workspace_client, timeout=timeout
+                endpoint,
+                workspace_client,
+                timeout=timeout,
+                **(
+                    {}
+                    if max_request_bytes is None
+                    else {'max_request_bytes': max_request_bytes}
+                ),
             )
         )
         return client

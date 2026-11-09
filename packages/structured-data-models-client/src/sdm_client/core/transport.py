@@ -31,10 +31,8 @@ _MODELS_PATH = '/v1/models'
 _DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_BACKOFF_FACTOR = 0.5
-#: The transient ones. A 500 is not among them: the payload and the model are
-#: the same on every attempt, so a server fault reproduces, and the caller
-#: mistakes this endpoint reports as a 500 are reclassified from the body as
-#: the caller's after three more uploads of the whole gathered context.
+#: The statuses tried again with backoff, up to ``max_retries``: a timeout,
+#: overload, and a server or gateway fault, a 500 included.
 _RETRY_STATUS = (408, 429, 500, 502, 503, 504)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512
@@ -419,10 +417,13 @@ def _read_capped(response: requests.Response, url: str) -> bytes:
     body = bytearray()
     for chunk in response.iter_content(_RESPONSE_CHUNK_BYTES):
         if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
+            # An answer too large to read is the call too large: a call of
+            # fewer rows is asked instead (``response_too_large``).
             raise StructuredDataError(
                 f'Response body from {redact_url(url)} exceeds the '
                 f'{_MAX_RESPONSE_BYTES} byte limit',
                 code='TRANSPORT_ERROR',
+                details={'response_too_large': True},
             )
         body.extend(chunk)
     return bytes(body)
