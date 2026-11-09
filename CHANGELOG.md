@@ -12,6 +12,7 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
+- Python `SDMClient.for_databricks_serving(max_request_bytes=...)` sets the most bytes one wrapped call may take, the gateway's 16 MB by default; a call past it is split before it is sent.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned
   RelBench datasets with verified caches, offline mode and declared schema metadata.
 - Python and Java requests and fitted handles expose immutable sanitization reports for in-memory relational preparation, with per-table row exclusions and explicit unavailable/not-applicable states.
@@ -49,6 +50,11 @@ The public API snapshot records this version update; publication remains pending
   Python also accepts manually supplied `PredictionResult(explanations=...)` mappings.
 
 ### Changed
+
+- A single-table request is scored in calls of 10,000 rows, each with the whole context, split further as a relational request is.
+- A `500` is retried with backoff as a `502` or `503` is; through Databricks model serving, once more.
+- `rows_per_call` is taken as asked rather than lowered to 10,000 (200 for a link prediction), which is now only its default.
+- `num_context_samples` past 10,000 and more than 6 hops are accepted.
 
 - Sampled Tabular context uses stable Rust index ordering, including duplicate labels and mixed numeric labels.
   Equal labels retain sampled order; mixed numbers compare by their represented values.

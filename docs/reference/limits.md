@@ -5,9 +5,9 @@ It sends its best attempt and recovers from what the endpoint says:
 
 | The endpoint answers | The client |
 |---|---|
-| `413`, a gateway's `502` or `504`, or the call times out | asks the call's rows again in two halves, each with the whole context, and keeps that smaller size for the request's later calls |
-| `503` | waits as `Retry-After` says and tries again |
-| a connection error or another `5xx` | tries again with backoff, up to `max_retries` (3 by default) |
+| `413`, a gateway's `502` or `504`, the call times out, or its answer is past 64 MiB | asks the call's rows again in two halves at once, each with the whole context, and keeps that smaller size for the request's later calls; a `502` is first tried again at its size |
+| `503` or `429` | waits as `Retry-After` says and tries again |
+| a connection error, a `500` or a `502` | tries again with backoff, up to `max_retries` (3 by default); through Databricks model serving, a `500` is tried once more |
 | `422`, or a refusal of a call of one row | does not try again, and shows the endpoint's message |
 
 The context is never split, so a context too large on its own is the endpoint's refusal, shown as it said it.
@@ -16,11 +16,13 @@ The context is sampled only to a `num_context_samples` you pass.
 
 Through Databricks model serving, an oversized call is dropped as an opaque connection error, so `predict()` splits a call whose wrapped envelope is past the endpoint's `max_request_bytes` (16 MB, the gateway's own decimal limit) before sending it.
 A call of one row past it is refused, since only a smaller context helps.
+There, a deadline spent waiting on a `429`, a `503` or a connection is reported as a `503` and not split; a `504` is a call that timed out.
 
 ## Batches
 
 A relational request is gathered in batches of 10,000 rows to score, or 200 for a link prediction: a default, not a cap.
-Pass `rows_per_call` to `materialize()` to ask in batches of another size.
+Pass `rows_per_call` to `materialize()` to ask in batches of another size; it is taken as asked.
+A single-table request is scored in calls of 10,000 rows too, each with the whole context, and the answers are put back together as one.
 Each batch has a context of its own, sampled around that batch's rows rather than copied from the first, and `predict()` sends one call per batch and returns one result.
 Its `row_index` counts across the whole request rather than from zero per call, so `to_pandas()`, which orders by it, gives the indices back in the order they were asked for.
 A session scores those batches against the context it pinned, so the context is uploaded once rather than once per call.
@@ -31,7 +33,7 @@ A question asked in parts is different: a ranking is one call per candidate and 
 A question asked in parts is not batched by rows, since a batched part would send the parts times the batches.
 
 A call that fails ends the request.
-The answers already paid for are carried on the error as `details['answered']`, and the rows they cover as `details['rows_answered']`, so the rest can be asked for again without buying the whole population twice.
+The answers already paid for, the halves of a split call included, are carried on the error as `details['answered']`, and the rows they cover as `details['rows_answered']`, so the rest can be asked for again without buying the whole population twice.
 A forecast keeps its answered steps the same way, under `details['answered']`, numbered by step, with how many of them under `details['parts_answered']`; a ranking keeps only the count, because an order over some of its candidates is a different answer rather than part of the one that was asked for.
 
 The relational model reads as many tables and hops as a request carries.

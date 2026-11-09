@@ -1073,8 +1073,8 @@ def test_a_lone_table_is_not_told_which_was_taken():
     ids=['an empty num_neighbors', 'num_hops of zero'],
 )
 def test_both_spellings_of_no_hop_are_refused_alike(option, names):
-    """They are one request written two ways, and the endpoint reads between 1
-    and 6 hops, so one slipping through to be taken literally was the defect."""
+    """They are one request written two ways, and a request samples at least
+    one hop, so one slipping through to be taken literally was the defect."""
     built = catalogue_schema()
 
     with pytest.raises(StructuredDataError, match='no hop at all') as raised:

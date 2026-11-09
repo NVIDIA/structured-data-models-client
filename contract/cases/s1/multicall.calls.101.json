@@ -579,6 +579,6 @@
     "code": "UNSUPPORTED_REQUEST",
     "message": "101 entities are gathered as 101 calls of 1, and every one is built, with its own context, before any is sent. That is past the 100 calls this will hold at once; ask about fewer entities at a time"
   },
-  "why": "rows_per_call=1 over 101 entities: 101 calls, one past the 100 one request is asked in; refused UNSUPPORTED_REQUEST at materialize",
+  "why": "rows_per_call=1 over 101 entities: 101 calls, one past the 100 the reference asked one request in; the reference refused it UNSUPPORTED_REQUEST at materialize; this client sets no most on calls and asks all 101 (contract/expected)",
   "source": "Correctness case multicall.calls.101 using the shop fixture."
 }

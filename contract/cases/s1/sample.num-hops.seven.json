@@ -87,6 +87,6 @@
     "code": "UNSUPPORTED_REQUEST",
     "message": "this request samples 7 hops and the endpoint reads at most 6"
   },
-  "why": "num_hops=7 is past the six hops the endpoint reads: refused UNSUPPORTED_REQUEST at materialize",
+  "why": "num_hops=7 is past the six hops the reference's endpoint read: the reference refused it UNSUPPORTED_REQUEST at materialize; this client sets no most on hops and gathers it (contract/expected)",
   "source": "Correctness case sample.num-hops.seven using the shop fixture."
 }

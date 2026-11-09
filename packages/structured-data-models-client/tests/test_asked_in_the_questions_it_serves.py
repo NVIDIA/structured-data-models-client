@@ -106,8 +106,8 @@ def test_more_entities_than_one_call_scores_is_refused_before_gathering(
 
 
 def test_a_smaller_batch_lowers_what_a_part_may_ask_for(monkeypatch):
-    """`rows_per_call` only goes down, and a part is one call, so asking for a
-    smaller one asks for fewer entities rather than for more calls."""
+    """A part is one call, so asking for a smaller ``rows_per_call`` asks for
+    fewer entities rather than for more calls."""
 
     with pytest.raises(StructuredDataError) as refused:
         built(FORECAST, indices=[1, 2, 3], rows_per_call=2)

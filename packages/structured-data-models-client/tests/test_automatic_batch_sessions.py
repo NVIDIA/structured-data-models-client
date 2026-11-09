@@ -80,7 +80,7 @@ class Endpoint:
                     elif outer.mode == 'fail' and outer.scored == 2:
                         status = 422
                     elif outer.mode == 'retry' and outer.scored == 1:
-                        status = 408
+                        status = 503
                     else:
                         table = payload['predict']['instance_table']
                         index = table['columns'].index('instance_id')

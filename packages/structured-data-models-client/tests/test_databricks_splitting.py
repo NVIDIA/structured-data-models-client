@@ -86,10 +86,58 @@ def opened(failures=(), **kwargs: Any) -> tuple[SDMClient, Workspace]:
     return client, workspace
 
 
-class Status(OSError):
-    def __init__(self, status: int) -> None:
-        super().__init__(f'status {status}')
-        self.status_code = status
+def sdk_error(status: int, reason: str, body: bytes, kind: str) -> OSError:
+    r"""The error the installed Databricks SDK raises for an HTTP answer of
+    ``status``, read by its own parser, as ``api_client.do`` raises it."""
+    parser = pytest.importorskip('databricks.sdk.errors.parser')
+    response = requests.Response()
+    response.status_code = status
+    response.reason = reason
+    response._content = body
+    response.headers['Content-Type'] = kind
+    response.request = requests.Request(
+        'POST',
+        f'https://example.invalid/serving-endpoints/{ENDPOINT}/invocations',
+    ).prepare()
+    response.url = response.request.url
+    error = parser._Parser().get_api_error(response)
+    assert error is not None
+    return error
+
+
+HTML = 'text/html'
+JSON = 'application/json'
+#: The SDK's errors for each status, as the gateway answers them.
+STATUS = {
+    413: lambda: sdk_error(
+        413,
+        'Request Entity Too Large',
+        b'<html><pre>too large</pre></html>',
+        HTML,
+    ),
+    502: lambda: sdk_error(
+        502, 'Bad Gateway', b'<html><title>Bad Gateway</title></html>', HTML
+    ),
+    504: lambda: sdk_error(504, 'Gateway Timeout', b'', 'text/plain'),
+    500: lambda: sdk_error(
+        500,
+        'Internal Server Error',
+        b'{"error_code": "INTERNAL_ERROR", "message": "boom"}',
+        JSON,
+    ),
+    429: lambda: sdk_error(
+        429,
+        'Too Many Requests',
+        b'{"error_code": "REQUEST_LIMIT_EXCEEDED", "message": "slow"}',
+        JSON,
+    ),
+    503: lambda: sdk_error(
+        503,
+        'Service Unavailable',
+        b'{"error_code": "TEMPORARILY_UNAVAILABLE", "message": "later"}',
+        JSON,
+    ),
+}
 
 
 def test_max_request_bytes_is_passed_through():
@@ -112,7 +160,9 @@ def test_a_tabular_call_past_the_byte_limit_is_split_before_it_is_sent(caplog):
 
 @pytest.mark.parametrize('status', [413, 502, 504])
 def test_a_tabular_call_refused_as_too_large_is_asked_in_halves(status):
-    client, workspace = opened([Status(status)])
+    error = STATUS[status]()
+    assert _status_of(error) == status, type(error).__mro__
+    client, workspace = opened([error])
     result = client.predict(asked(), model='kumo-tabular')
     calls = workspace.serving_endpoints.calls
     assert len(calls) == 3
@@ -128,7 +178,9 @@ def test_a_tabular_call_refused_as_too_large_is_asked_in_halves(status):
 
 
 def test_a_500_is_tried_once_more():
-    client, workspace = opened([Status(500)])
+    error = STATUS[500]()
+    assert type(error).__name__ == 'InternalError'
+    client, workspace = opened([error])
     client.predict(asked(), model='kumo-tabular')
     assert len(workspace.serving_endpoints.calls) == 2
 
@@ -139,9 +191,9 @@ def test_a_deadline_spent_waiting_is_a_503_and_a_call_timed_out_a_504():
         error.__cause__ = cause
         return error
 
-    assert _status_of(timed_out(Status(429))) == 503
-    assert _status_of(timed_out(Status(503))) == 503
+    assert _status_of(timed_out(STATUS[429]())) == 503
+    assert _status_of(timed_out(STATUS[503]())) == 503
     assert _status_of(timed_out(requests.ConnectionError('refused'))) == 503
     assert _status_of(timed_out(requests.ReadTimeout('slow'))) == 504
     assert _status_of(timed_out(None)) == 504
-    assert _status_of(Status(413)) == 413
+    assert _status_of(STATUS[504]()) == 504

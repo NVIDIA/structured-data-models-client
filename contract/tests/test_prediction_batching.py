@@ -621,7 +621,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
     if database == 'postgres' and not _server():
         return
     if case_key.split('@')[0] in DEPARTED:
-        return
+        pytest.skip('a departure from the reference, checked on its own')
 
     def check() -> None:
         run = core_run(database)
@@ -670,7 +670,7 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
     if database == 'postgres' and not _server():
         return
     if case_id in DEPARTED:
-        return
+        pytest.skip('a departure from the reference, checked on its own')
 
     def check() -> None:
         want = vectors()['vectors'][case_key]

@@ -28,8 +28,8 @@ import org.junit.jupiter.api.Test;
 /**
  * The model transport over {@code java.net.http}: the call is sent as the bytes given,
  * one past 16 MB included; a transient status or a 500 is tried again; a refusal is the endpoint's;
- * a timeout is told as a 408; an
- * answer that is not JSON is a failed transport, and one past 64 MiB is told as a 413.
+ * a timeout is a failed transport told as a 408, not tried again; an
+ * answer that is not JSON is a failed transport, and one past 64 MiB too, told as a 413.
  */
 class TransportTest {
   /** An endpoint answering {@code statuses} in turn, then 200, keeping every body. */
@@ -115,15 +115,15 @@ class TransportTest {
   }
 
   @Test
-  void anAnswerPast64MiBIsToldAsA413() throws Exception {
+  void anAnswerPast64MiBIsAFailedTransportToldAsA413() throws Exception {
     byte[] answer = new byte[HttpTransport.MAX_RESPONSE_BYTES + 1];
     Arrays.fill(answer, (byte) ' ');
     try (Endpoint endpoint = new Endpoint(answer)) {
-      ModelEndpointException refused =
+      HttpTransport.Failed failed =
           assertThrows(
-              ModelEndpointException.class,
+              HttpTransport.Failed.class,
               () -> endpoint.transport(0).predict("{}".getBytes(StandardCharsets.UTF_8)));
-      assertEquals(413, refused.status());
+      assertEquals(413, failed.status());
     }
   }
 
@@ -175,10 +175,10 @@ class TransportTest {
           new HttpTransport(
               "http://127.0.0.1:" + server.getAddress().getPort(), null, Duration.ofMillis(300), 0);
       long started = System.nanoTime();
-      // Told as the endpoint's 408, so the core asks the rows again in halves.
-      ModelEndpointException failed =
+      // A failed transport, told as a 408 so the core asks the rows again in halves.
+      HttpTransport.Failed failed =
           assertThrows(
-              ModelEndpointException.class,
+              HttpTransport.Failed.class,
               () -> transport.predict("{}".getBytes(StandardCharsets.UTF_8)));
       assertEquals(408, failed.status());
       long millis = (System.nanoTime() - started) / 1_000_000;

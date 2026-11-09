@@ -31,9 +31,11 @@ _MODELS_PATH = '/v1/models'
 _DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_BACKOFF_FACTOR = 0.5
-#: The statuses tried again with backoff, up to ``max_retries``: a timeout,
-#: overload, and a server or gateway fault, a 500 included.
-_RETRY_STATUS = (408, 429, 500, 502, 503, 504)
+#: The statuses tried again with backoff, up to ``max_retries``: overload, and
+#: a server or gateway fault, a 500 included. A 408, 413 or 504, or an answer
+#: slower than the timeout, is not tried again at its size: the core asks the
+#: call's rows in halves at once.
+_RETRY_STATUS = (429, 500, 502, 503)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512
 _LOCAL_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
@@ -299,7 +301,9 @@ def _build_retry(
     options: dict[str, Any] = {
         'total': max_retries,
         'connect': max_retries,
-        'read': max_retries,
+        # A read error, an answer slower than the timeout among them, is not
+        # tried again at its size: the core asks the call's rows in halves.
+        'read': 0,
         'status': max_retries,
         'backoff_factor': backoff_factor,
         'status_forcelist': _RETRY_STATUS,

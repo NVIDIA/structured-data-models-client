@@ -607,7 +607,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
         unexpected: Exception | None = None
         transport_failed = False
         timed_out: StructuredDataError | None = None
-        too_large = 408
+        split_status = 408
         refused: NimRequestError | None = None
         try:
             # The core's call, its bytes as written (register PD-2),
@@ -628,7 +628,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
                 # Told to the core as a 408 or a 413, so it asks the rows
                 # again in halves; this is what is raised if no half answers.
                 if failed.details.get('response_too_large'):
-                    too_large = 413
+                    split_status = 413
                 timed_out = StructuredDataError(
                     failed.message, code=failed.code, details=failed.details
                 )
@@ -655,7 +655,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
         if transport_failed:
             raise TransportFailed
         if timed_out is not None:
-            raise Refused(timed_out, too_large)
+            raise Refused(timed_out, split_status)
         raised: StructuredDataError | None = failure
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is

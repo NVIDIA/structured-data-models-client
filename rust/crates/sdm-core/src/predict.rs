@@ -482,7 +482,8 @@ pub(crate) async fn one(
                     && let Some(answer) = session.score(asker, &body).await?
                 {
                     let response = PredictionResponse::read(&answer).map_err(refused)?;
-                    return layout(payload, &response, crate::pql::float_text);
+                    return layout(payload, &response, crate::pql::float_text)
+                        .map_err(Unanswered::from);
                 }
                 let write = |call: &Value| {
                     sdm_request::predict::body(
@@ -506,19 +507,29 @@ pub(crate) async fn one(
             }
             .await;
             let answered = match response {
-                Ok(part) => numbered_from(part, start),
-                Err(error) => Err(error),
+                Ok(part) => numbered_from(part, start).map_err(Unanswered::from),
+                Err(unanswered) => Err(unanswered),
             };
             match answered {
                 Ok(mut part) => {
                     part.columns = analysis.clone();
                     parts.push(part)
                 }
-                Err(error) => {
+                Err(Unanswered { error, answered }) => {
                     if let Some(session) = session.take() {
                         session.close(asker).await;
                     }
-                    return Err(carry_calls(asker, error, parts, &outputs, start));
+                    // The runs of a split call answered before one failed
+                    // are carried as the calls before it are.
+                    let mut rows = start;
+                    if let Some((partial, more)) = answered
+                        && let Ok(mut partial) = numbered_from(partial, start)
+                    {
+                        partial.columns = analysis.clone();
+                        parts.push(partial);
+                        rows += more;
+                    }
+                    return Err(carry_calls(asker, error, parts, &outputs, rows));
                 }
             }
         }
@@ -611,13 +622,14 @@ pub(crate) type Write<'a> = dyn Fn(&Value) -> Result<Value, CoreError> + Sync + 
 /// context, and that size is kept in `most` for the calls after it; a call
 /// of more rows than `most` is asked in calls of that many. A call of one
 /// row is not split: its refusal, the endpoint's own, stands, as does any
-/// other.
+/// other. Where a later run of a split call fails, the runs answered before
+/// it are kept, with how many rows they answer ([`Unanswered`]).
 pub(crate) async fn answered<T>(
     how: &Asking<'_, T>,
     payload: Value,
     bytes: Vec<u8>,
     most: &mut Option<usize>,
-) -> Result<T, CoreError> {
+) -> Result<T, Unanswered<T>> {
     let rows = predict_rows(&payload).unwrap_or(0);
     let size = match *most {
         Some(most) if rows > most => most,
@@ -634,17 +646,56 @@ pub(crate) async fn answered<T>(
                 *most = Some(half);
                 half
             }
-            answer => return answer,
+            answer => return answer.map_err(Unanswered::from),
         },
     };
     let mut answers = Vec::new();
     for start in (0..rows).step_by(size) {
         let range = start..(start + size).min(rows);
-        let call = sdm_request::batching::predict_slice(&payload, range)?;
-        let bytes = (how.write)(&call)?.to_bytes();
-        answers.push((start, Box::pin(answered(how, call, bytes, most)).await?));
+        let written = sdm_request::batching::predict_slice(&payload, range).and_then(|call| {
+            let bytes = (how.write)(&call)?.to_bytes();
+            Ok((call, bytes))
+        });
+        let outcome = match written {
+            Ok((call, bytes)) => Box::pin(answered(how, call, bytes, most)).await,
+            Err(error) => Err(Unanswered::from(error)),
+        };
+        match outcome {
+            Ok(answer) => answers.push((start, answer)),
+            Err(Unanswered { error, answered }) => {
+                // The runs before this one answered whole, and this one's own
+                // answered runs, a prefix of its rows.
+                let mut rows = start;
+                if let Some((partial, more)) = answered {
+                    answers.push((start, partial));
+                    rows += more;
+                }
+                let answered = match answers.is_empty() {
+                    true => None,
+                    false => (how.merge)(answers).ok().map(|merged| (merged, rows)),
+                };
+                return Err(Unanswered { error, answered });
+            }
+        }
     }
-    (how.merge)(answers)
+    (how.merge)(answers).map_err(Unanswered::from)
+}
+
+/// A call that failed, with what of it was answered before it did: the
+/// runs of its rows answered, merged, and how many rows they answer, a
+/// prefix of the call's.
+pub(crate) struct Unanswered<T> {
+    pub error: CoreError,
+    pub answered: Option<(T, usize)>,
+}
+
+impl<T> From<CoreError> for Unanswered<T> {
+    fn from(error: CoreError) -> Self {
+        Unanswered {
+            error,
+            answered: None,
+        }
+    }
 }
 
 /// Whether `error` is a refusal by one of the [`TOO_LARGE`] statuses.
@@ -666,8 +717,9 @@ fn numbered_parts(parts: Vec<(usize, Part)>) -> Result<Part, CoreError> {
 }
 
 /// The answers to runs of one call's rows as the one answer to it: the
-/// first's, with every answer's predictions in order, each numbered from
-/// the row its run starts at (`row_index`).
+/// first's own members (its `id`, `model` and `metadata`, which the runs
+/// share but for their ids), with every answer's predictions in order, each
+/// numbered from the row its run starts at (`row_index`).
 fn merged_answers(answers: Vec<(usize, Value)>) -> Result<Value, CoreError> {
     let mut answers = answers.into_iter();
     let (first, mut whole) = answers
@@ -721,7 +773,9 @@ pub(crate) async fn direct_answer(
         let rows = predict_rows(&call).unwrap_or(0);
         answers.push((
             start,
-            answered(&how, call, body.to_bytes(), &mut most).await?,
+            answered(&how, call, body.to_bytes(), &mut most)
+                .await
+                .map_err(|unanswered| unanswered.error)?,
         ));
         start += rows;
     }

@@ -285,9 +285,11 @@ class SDMClient:
             verify_ssl: Whether to verify the server's TLS certificate.
             timeout: Seconds to wait for each individual attempt, not for the
                 call as a whole.
-            max_retries: Transport-level retries of a transient failure (408, 429,
-                500, 502, 503, 504, or a dropped connection) with exponential
-                backoff, a ``Retry-After`` honoured. ``POST /v1/sessions`` is
+            max_retries: Transport-level retries of a transient failure (429,
+                500, 502, 503, or a connection that failed) with exponential
+                backoff, a ``Retry-After`` honoured. A 408, 413 or 504, or a
+                call slower than ``timeout``, is not tried again at its size:
+                its rows are asked in halves. ``POST /v1/sessions`` is
                 excluded:
                 a re-sent create would orphan a pinned context on the
                 endpoint.

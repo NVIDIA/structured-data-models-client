@@ -377,15 +377,16 @@ def test_a_detail_that_is_not_text_names_no_diagnosis():
 
 
 def test_a_request_is_sent_again_only_for_what_sending_it_again_can_fix():
-    """A connection error or a 5xx is retried with backoff, up to
-    ``max_retries``; overload is too. A 422 is the caller's, and sending the
-    same request again cannot fix it."""
+    """A connection error, a 500, a 502 or a 503 is retried with backoff, up
+    to ``max_retries``; overload is too. A 504 is not tried again at its
+    size, as the core asks its rows in halves; a 422 is the caller's, and
+    sending the same request again cannot fix it."""
     for status, sends in (
         (500, 4),
         (429, 4),
         (502, 4),
         (503, 4),
-        (504, 4),
+        (504, 1),
         (422, 1),
     ):
         with _serve(_Reply(status=status, body=_EMPTY_CONTEXT)) as (

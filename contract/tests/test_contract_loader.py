@@ -521,6 +521,8 @@ def test_entity_limit_factory_expands_exact_keys_and_preserves_source_digest(
     assert case['core']['materialize']['indices'] == [
         {'t': 'i64', 'v': str(i)} for i in range(count)
     ]
+    # The case states the reference's outcome, which refused 100,001; this
+    # client gathers it, a departure recorded in contract/expected.
     assert case['expect']['outcome'] == (
         'success' if count == 100_000 else 'refusal'
     )

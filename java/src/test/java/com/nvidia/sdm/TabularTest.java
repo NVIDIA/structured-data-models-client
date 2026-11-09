@@ -105,6 +105,26 @@ class TabularTest {
     @Override public void close() { server.stop(0); }
   }
 
+  @Test void aSingleTableRequestIsScoredInCallsOf10000RowsEachWithTheWholeContext() throws Exception {
+    long[] scoring = java.util.stream.LongStream.range(100, 10_101).toArray();
+    try (RootAllocator allocator = new RootAllocator();
+        Table context = table(allocator, true, 1, 2, 3);
+        Table predict = table(allocator, false, scoring);
+        Endpoint endpoint = new Endpoint();
+        SdmClient client = SdmClient.connect(endpoint.url())) {
+      Request request = new Request(context, predict, "y", "regression");
+      assertEquals(10_001, client.predict(request, SdmClient.KUMO_TABULAR).rows());
+      List<Integer> sizes = new ArrayList<>();
+      for (Map<String, Object> call : endpoint.calls) {
+        @SuppressWarnings("unchecked") Map<String, Object> half = (Map<String, Object>) call.get("predict");
+        @SuppressWarnings("unchecked") Map<String, Object> rows = (Map<String, Object>) half.get("instance_table");
+        sizes.add(((List<?>) rows.get("rows")).size());
+        assertEquals(endpoint.calls.get(0).get("context"), call.get("context"));
+      }
+      assertEquals(List.of(10_000, 1), sizes);
+    }
+  }
+
   @Test void directRequestSurvivesCallerClosureAndRestoresRowOrder() throws Exception {
     Request request;
     try (RootAllocator allocator = new RootAllocator();

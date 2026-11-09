@@ -24,12 +24,11 @@ remain unchanged:
   the reference's refusals of an unknown statistic or one on a
   classification;
 - exit "payload limits and num_context_samples' bound": the reference's
-  refusals at each limit (num_context_samples 0 and 10,001, 1,001 entities,
-  a 16-table graph) and its acceptance at the limit (10,000 context
-  samples, 1,000 entities, 15 tables); and PD-2: at the byte limit, the
-  longest payload the reference takes is taken and the bytes the core
-  produced are the count the reference made, and one byte-step past it is
-  refused as the reference refuses it;
+  refusals (num_context_samples 0, 1,001 entities the base does not hold),
+  and the cases this client departs on (``DEPARTED``): it sets no most on
+  the context, the tables or the bytes, so a payload the reference refused
+  past one of them is gathered; and PD-2: the bytes the core produced are
+  the count the reference made;
 - exit "empty and reserved-name refusals": the class and code;
 - exit "inference_config written into the call": the payload's inference
   section, and the call's model, output and inference as the endpoint

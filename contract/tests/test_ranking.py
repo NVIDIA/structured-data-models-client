@@ -51,8 +51,8 @@ CASES = {
     'holds one class left out, unscored, before any call',
     'rank.all-unscored': 'no candidate left to rank, refused before any call',
     'rank.entities-by-candidates.over': 'the entities gathered once '
-    'per candidate past the 100,000 one materialize holds (501 by 200), '
-    'refused before anything is read',
+    "per candidate past the reference's 100,000 (501 by 200), which it "
+    'refused; this client sets no such ceiling (DEPARTED)',
     'rank.entities-by-candidates.at': 'the same at exactly 100,000 '
     '(500 by 200), not refused by that ceiling',
     'forecast.top-k': "the forecast's top_k refusal in the core",
@@ -373,6 +373,12 @@ def test_the_vectors_are_the_reference_s_and_not_vacuous() -> None:
     }
 
 
+#: The cases this client departs from the reference on, on purpose: it sets
+#: no ceiling on the entities a ranking gathers across its candidates, so the
+#: reference's refusal past 100,000 is gathered, and refused only for the
+#: entities that name no user, as at the ceiling.
+DEPARTED = ('rank.entities-by-candidates.over',)
+
 #: What the reference's refusal of each case refused before any call says,
 #: so it is refused for the argument the case names.
 REFUSED_FOR = {
@@ -531,6 +537,8 @@ def test_python_core_answers_each_case_as_the_reference_does(
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
         return
+    if case_key.split('@')[0] in DEPARTED:
+        pytest.skip('a departure from the reference, checked on its own')
 
     def check() -> None:
         run = core_run(database)
@@ -658,3 +666,19 @@ def test_python_core_answers_each_vector_as_the_reference_does(
         held_to(recorder().observe(inputs), spec['expected'], name)
 
     check()
+
+
+@pytest.mark.parametrize('case_id', DEPARTED)
+def test_python_core_gathers_past_the_reference_s_entity_ceiling(
+    case_id: str,
+) -> None:
+    r"""Past the reference's 100,000, the ranking is gathered and refused
+    only for the entities 8 to 500, which name no user, as at the ceiling:
+    the caller's ``INVALID_REQUEST``, not the ceiling's
+    ``UNSUPPORTED_REQUEST``."""
+    line = core_run('duckdb').get(case_id)
+    assert line is not None, f'{case_id}: not observed'
+    assert (line['outcome']['result'], line['outcome']['code']) == (
+        'refusal',
+        'INVALID_REQUEST',
+    )

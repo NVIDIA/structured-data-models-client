@@ -573,6 +573,16 @@ def _response_body(reply: Any, endpoint: str) -> str:
     return body
 
 
+#: The statuses the SDK names only by an ``error_code``: a call too large, or
+#: a gateway's failure, which the core asks again in halves.
+_STATUS_OF_CODE = {
+    'REQUEST_ENTITY_TOO_LARGE': 413,
+    'PAYLOAD_TOO_LARGE': 413,
+    'CONTENT_TOO_LARGE': 413,
+    'BAD_GATEWAY': 502,
+    'GATEWAY_TIMEOUT': 504,
+}
+
 #: The SDK's and ``requests``' names for a deadline reached.
 _TIMEOUTS = frozenset(
     {'DeadlineExceeded', 'OperationTimeout', 'TimeoutError', 'Timeout'}
@@ -610,6 +620,13 @@ def _status_of(error: BaseException) -> int:
         return 504
     if 'BadRequest' in names:
         return 400
+    if 'InternalError' in names:
+        return 500
+    # The SDK has no class for a 413 or a 502; it names one by the HTTP
+    # reason phrase, as its ``error_code``, where the body is no JSON.
+    code = getattr(error, 'error_code', None)
+    if code in _STATUS_OF_CODE:
+        return _STATUS_OF_CODE[code]
     status = getattr(error, 'status_code', None)
     return status if isinstance(status, int) else 503
 

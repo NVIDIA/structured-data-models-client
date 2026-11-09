@@ -31,7 +31,7 @@ import java.util.concurrent.TimeoutException;
  * Transport} ({@code sdm_client/core/transport.py}): it posts the core's call to {@code
  * /v1/predictions} as the bytes the core wrote, never parsing or re-encoding them (design choice
  * 10, "Model calls"), and gives back the endpoint's answer as the bytes it sent, which the core
- * reads. A transient failure (a status of 429, 500, 502, 503 or 504, or a connection that failed) is
+ * reads. A transient failure (a status of 429, 500, 502 or 503, or a connection that failed) is
  * tried again with exponential backoff, a {@code Retry-After} the endpoint sends honoured up to a
  * minute; the timeout bounds each attempt whole, its answer's body included; a status of 400 or more is the endpoint's refusal ({@link ModelEndpointException}); an
  * endpoint that cannot be reached, or an answer past 64 MiB or that is not a JSON object, is a
@@ -42,7 +42,11 @@ public final class HttpTransport {
   public static final String PREDICTIONS = "/v1/predictions";
 
   /** The statuses tried again. */
-  static final Set<Integer> RETRY_STATUS = Set.of(408, 429, 500, 502, 503, 504);
+  /**
+   * Tried again at the same size: overload, and a server or gateway fault. A 408, 413 or 504, or a
+   * call that timed out, is not: the core asks its rows in smaller calls at once.
+   */
+  static final Set<Integer> RETRY_STATUS = Set.of(429, 500, 502, 503);
 
   /** The largest answer read. */
   static final int MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
@@ -61,9 +65,23 @@ public final class HttpTransport {
   /** The transport could not reach the endpoint or read its answer. */
   public static final class Failed extends Exception {
     private static final long serialVersionUID = 1L;
+    private final Integer status;
 
     Failed(String message) {
+      this(message, null);
+    }
+
+    Failed(String message, Integer status) {
       super(message);
+      this.status = status;
+    }
+
+    /**
+     * The status the core is told, so it asks the call's rows in smaller calls: 408 for an answer
+     * slower than the timeout, 413 for one past {@link #MAX_RESPONSE_BYTES}; none otherwise.
+     */
+    public Integer status() {
+      return status;
     }
   }
 
@@ -219,13 +237,8 @@ public final class HttpTransport {
         }
         throw new Failed("the request failed: " + e.getClass().getSimpleName());
       } catch (HttpTimeoutException e) {
-        if (attempt < retries) {
-          backoff(attempt, null);
-          continue;
-        }
-        // As the endpoint's 408, so the core asks the rows again in halves.
-        throw ModelEndpointException.of(408, ("the request timed out after " + timeout
-            + ", the timeout given").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        // Not tried again at its size: told as a 408, so the core asks the rows in halves.
+        throw new Failed("the request timed out after " + timeout + ", the timeout given", 408);
       } catch (IOException e) {
         if (attempt < retries) {
           backoff(attempt, null);
@@ -256,16 +269,15 @@ public final class HttpTransport {
    *
    * @throws HttpTimeoutException the attempt did not end within the timeout
    * @throws IOException the endpoint could not be reached or its answer read
-   * @throws ModelEndpointException the answer is past {@link #MAX_RESPONSE_BYTES}: told as the
-   *     endpoint's 413, the call too large, so the core asks its rows in smaller calls
-   * @throws Failed the call was interrupted
+   * @throws Failed the answer is past {@link #MAX_RESPONSE_BYTES} (its {@link Failed#status} a
+   *     413), or the call was interrupted
    */
   private HttpResponse<byte[]> attempt(HttpRequest built) throws IOException, Failed {
     try {
       return exchange(client, built, info -> new Capped(), timeout.toNanos());
     } catch (TooLarge e) {
-      throw ModelEndpointException.of(413, ("the response body exceeds the " + MAX_RESPONSE_BYTES
-          + " byte limit").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      // Told as a 413, the call too large, so the core asks its rows in smaller calls.
+      throw new Failed("the response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit", 413);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new Failed("the request was interrupted");

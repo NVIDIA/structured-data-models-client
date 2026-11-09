@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import threading
+import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -24,20 +25,21 @@ from sdm_client.errors import StructuredDataError
 
 
 class Scripted:
-    r"""An endpoint that fails the first call as ``failure`` says, then
-    answers every call with a prediction for each row it scores."""
+    r"""An endpoint that fails its calls in turn as ``failures`` say (``None``
+    answering), then answers every call with a prediction for each row it
+    scores."""
 
     url = 'http://localhost'
 
-    def __init__(self, failure: Exception) -> None:
-        self.failure: Exception | None = failure
+    def __init__(self, *failures: Exception | None) -> None:
+        self.failures = list(failures)
         self.calls: list[dict] = []
 
     def predict_body(self, body: bytes) -> bytes:
         payload = json.loads(body)
         self.calls.append(payload)
-        if self.failure is not None:
-            failure, self.failure = self.failure, None
+        failure = self.failures.pop(0) if self.failures else None
+        if failure is not None:
             raise failure
         table = payload['predict']['instance_table']
         key = table['columns'].index('instance_id')
@@ -213,3 +215,66 @@ def test_a_tabular_call_too_large_is_asked_again_in_halves(failure, caplog):
     ]
     assert list(result.to_pandas()['row_index']) == [0, 1, 2, 3]
     assert any('smaller calls' in r.getMessage() for r in caplog.records)
+
+
+def _sizes(endpoint: Scripted) -> list[int]:
+    return [len(c['predict']['instance_table']['rows']) for c in endpoint.calls]
+
+
+def _too_large():
+    return _to_nim_error(413, b'{"detail": "too large"}')
+
+
+def test_a_half_still_too_large_is_split_again():
+    request = gathered(context_rows=30, run_mode='fast', predict_rows=4)
+    endpoint = Scripted(_too_large(), _too_large())
+    result = client(endpoint).predict(request, model='kumo-relational')
+    # 4 refused, then 2, then each run of one; the size kept, the second
+    # half is asked one row at a time without trying two.
+    assert _sizes(endpoint) == [4, 2, 1, 1, 1, 1]
+    assert list(result.to_pandas()['row_index']) == [0, 1, 2, 3]
+
+
+def test_an_odd_count_is_split_into_the_larger_half_first():
+    request = gathered(context_rows=30, run_mode='fast', predict_rows=3)
+    endpoint = Scripted(_too_large())
+    result = client(endpoint).predict(request, model='kumo-relational')
+    assert _sizes(endpoint) == [3, 2, 1]
+    assert list(result.to_pandas()['row_index']) == [0, 1, 2]
+
+
+def test_the_size_that_worked_is_kept_for_the_later_calls():
+    import pandas as pd
+
+    from sdm_client import KumoRelational, PredictiveQuery, Schema
+
+    frame = pd.DataFrame({'uid': range(38), 'label': [*range(30), *[None] * 8]})
+    schema = Schema.from_data({'users': frame}, primary_keys={'users': 'uid'})
+    schema['users']['label'].stype = 'numerical'
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT users.label FOR EACH users.uid', schema
+        ).materialize(
+            indices=list(range(30, 38)),
+            model=KumoRelational(),
+            rows_per_call=4,
+        )
+    endpoint = Scripted(_too_large())
+    result = client(endpoint).predict(request, model='kumo-relational')
+    # The first batch's 4 refused and asked as 2 and 2; the second batch is
+    # asked as 2 and 2 at once. Rows are numbered across the whole request.
+    assert _sizes(endpoint) == [4, 2, 2, 2, 2]
+    assert list(result.to_pandas()['row_index']) == list(range(8))
+
+
+def test_the_halves_answered_before_one_fails_are_kept():
+    request = gathered(context_rows=30, run_mode='fast', predict_rows=4)
+    endpoint = Scripted(
+        _too_large(), None, _to_nim_error(422, b'{"detail": "N_test"}')
+    )
+    with pytest.raises(StructuredDataError) as refused:
+        client(endpoint).predict(request, model='kumo-relational')
+    assert _sizes(endpoint) == [4, 2, 2]
+    assert refused.value.details['rows_answered'] == 2
+    assert len(refused.value.details['answered']) == 2

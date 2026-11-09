@@ -76,6 +76,6 @@
     "error": "StructuredDataError",
     "code": "UNSUPPORTED_REQUEST"
   },
-  "why": "The entity ceiling over a ranking (main's MOST_ENTITIES, 100,000): the entities gathered once per candidate, 501 by 200, one past it by 200, refused before anything is read",
+  "why": "The reference's entity ceiling over a ranking (main's MOST_ENTITIES, 100,000): the entities gathered once per candidate, 501 by 200, one past it by 200, refused before anything is read; this client sets no such ceiling, and refuses the call only for the entities that name no user (contract/expected)",
   "source": "Correctness case rank.entities-by-candidates.over using the shop fixture."
 }

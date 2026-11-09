@@ -48,7 +48,7 @@ class AutomaticBatchSessionTest {
             scores++; scoredBodies.add(payload);
             if(mode.equals("transport") && scores>=2) { exchange.close();return; }
             if(mode.equals("expired") && scores==2) status=404;
-            else if(mode.equals("retry") && scores==1) status=408;
+            else if(mode.equals("retry") && scores==1) status=503;
             else if(mode.equals("fail") && scores==2) status=422;
             else if(mode.equals("malformed") && scores==2) answer=Map.of("predictions","invalid");
             else {

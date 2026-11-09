@@ -215,9 +215,14 @@ def check(
                 for entry in (item.get('public') or {}).get('payloads', [])
             ]
             paths = (('metadata', 'request_id'),)
-            if [_payload(value, paths) for value in calls] != [
-                _payload(value, paths) for value in received
-            ]:
+            # A body the transport sent again, a 500 tried once more, is the
+            # one call the core made.
+            sent = []
+            for value in received:
+                value = _payload(value, paths)
+                if not sent or sent[-1] != value:
+                    sent.append(value)
+            if [_payload(value, paths) for value in calls] != sent:
                 failures.append(
                     'endpoint payload differs from native prediction'
                 )

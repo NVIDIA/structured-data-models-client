@@ -49,8 +49,7 @@
 //! narrowed to the size asked, the hops the options ask bounded, the
 //! entity count, the reserved names, the statistic, the inference
 //! options, a static target's columns kept out of what is read and sent,
-//! the subgraph's 15 tables, the payload's layout and byte limit
-//! ([`sdm_request::payload`]), and the notices of what the request leaves
+//! the payload's layout ([`sdm_request::payload`]), and the notices of what the request leaves
 //! out, each a code and fields the host words; and it refuses with
 //! `UNSUPPORTED_REQUEST` naming the rule ([`sdm_engine::not_yet`]) every
 //! input whose request takes a rule it does not port yet (register entry

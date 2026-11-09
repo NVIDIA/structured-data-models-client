@@ -308,8 +308,10 @@ def test_a_call_the_sdk_retries_sends_the_same_bytes_again() -> None:
     ],
 )
 def test_endpoint_failure_is_sanitized_and_classified(reply: Reply) -> None:
-    error, received = _predict(_materialized(), reply)
     status, body, _ = reply
+    # A 500 is tried once more, so it is answered twice.
+    replies = (reply, reply) if status == 500 else (reply,)
+    error, received = _predict(_materialized(), *replies)
     if isinstance(body, dict):
         provider_code = body['error_code']
         code = {
@@ -330,7 +332,7 @@ def test_endpoint_failure_is_sanitized_and_classified(reply: Reply) -> None:
             403 if status == 403 else 503,
             'PERMISSION_DENIED' if status == 403 else None,
         )
-    assert len(received) == 1
+    assert len(received) == len(replies)
 
 
 @pytest.mark.parametrize(
@@ -450,7 +452,8 @@ def test_the_sdk_s_debug_log_carries_no_rows_on_the_core_route(
 ) -> None:
     request = _materialized()
     caplog.set_level(logging.DEBUG)
-    replies = () if reply is None else (reply,)
+    # A 500 is tried once more, so it is answered twice.
+    replies = () if reply is None else (reply, reply)
     outcome, received = _predict(request, *replies)
     assert received
     if reply is not None:

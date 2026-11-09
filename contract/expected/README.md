@@ -31,6 +31,10 @@ Their differences from DuckDB follow the fixture loader's explicit mappings in `
 
 `sample.num-hops.seven` and `sample.num-neighbors.seven-hops` now reach predict on every backend: the client sets no most on hops, since the model reads as many as a request carries, where the reference refused past six.
 The `multicall.body-30mib` cases now reach predict on every backend: the client holds a call to no size of its own, and a call the endpoint refuses as too large is asked again in halves.
+`multicall.entities.100001` and `multicall.calls.101` are now gathered: the client sets no most on the entities or the calls of one `materialize()`.
+`rank.entities-by-candidates.over` is now refused at materialize only for the entities that name no user, as `rank.entities-by-candidates.at` is, since the client sets no entity ceiling over a ranking.
+`multicall.fail-call-0`, `multicall.fail-call-2` and `multicall.forecast.fail-call-1` now succeed: their scripted endpoint fails one call with a `500`, which the client tries once more.
+These outcomes were recorded from the runner's observations (`run_python.py`, then `check_observations.py --expect`) on DuckDB and SQLite; the Postgres entries take the same outcomes, as no Postgres server was available.
 
 These expectations describe the declared fixture mappings; they do not claim that every backend supports identical physical types.
 `explain.two-entities` now succeeds on all three backends: The client supports explanations for multiple prediction rows.

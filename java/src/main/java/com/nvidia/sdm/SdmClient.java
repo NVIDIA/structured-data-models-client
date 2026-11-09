@@ -206,7 +206,10 @@ public final class SdmClient implements AutoCloseable {
         if (serving != null) throw new StructuredDataException("this transport does not support sessions",
             "SESSIONS_UNSUPPORTED", Map.of(), null);
         try { return transport.call(endpoint, body); }
-        catch (HttpTransport.Failed e) { throw new Host.TransportFailed(); }
+        catch (HttpTransport.Failed e) {
+          if (e.status() != null) throw smaller(e);
+          throw new Host.TransportFailed();
+        }
         catch (ModelEndpointException e) { throw new Host.Refused(e::with, e.status()); }
       }
     };
@@ -268,10 +271,23 @@ public final class SdmClient implements AutoCloseable {
     try {
       return transport.predict(body);
     } catch (HttpTransport.Failed failed) {
+      if (failed.status() != null) throw smaller(failed);
       throw new Host.TransportFailed();
     } catch (ModelEndpointException refused) {
       throw new Host.Refused(refused::with, refused.status());
     }
+  }
+
+  /**
+   * A failed transport a smaller call can fix (a timeout, an answer too large), told to the core by
+   * its status, so the core asks the rows in halves; still a transport error if no smaller call
+   * answers.
+   */
+  private static Host.Refused smaller(HttpTransport.Failed failed) {
+    return new Host.Refused(
+        answered -> new StructuredDataException(
+            failed.getMessage(), "TRANSPORT_ERROR", answered, "model_endpoint", false, null),
+        failed.status());
   }
 
   /** A call's id, as the adapter draws one: {@code sdm-} and twelve hexadecimal digits. */
