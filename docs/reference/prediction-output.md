@@ -289,8 +289,9 @@ user_5  events    1    None        1    probability_yes  kind_login   -0.02
 
 `result.explanations.columns` shows, for each column, how the outcome differs
 across groups of the labelled context rows. The client computes it from the
-labelled rows it sends; the endpoint is not asked for it. It is `None` when
-explanations were not asked for.
+labelled rows the request sends; rows the leak check removed are not in it.
+The endpoint is not asked for it. It is `None` when explanations were not
+asked for.
 
 When it is computed:
 
@@ -307,28 +308,26 @@ bins, categories into one cohort each (the tenth onward merged into
 `OTHER(*)`, missing values under `N/A`), timestamps into ranges of time before
 the anchor. Each cohort has its `share` of the entities and its `mean`
 outcome: the rate of each class for classification (classes by frequency, at
-most 30), the plain mean for regression. A column's `score` is how much its
-cohort means spread, weighted by share and averaged over classes; scores sum
-to 1 across columns.
+most 30), the plain mean for regression.
 
 | Model | Columns analysed |
 |---|---|
 | kumo-tabular | every column of the one table except the target, the primary key and timestamps (there is no anchor), reported under table `instance_table` |
-| kumo-relational | every column of each related table except keys, per hop the table is reached at, plus `COUNT(*)`, the number of that table's rows linked to the entity. The entity's own table is not analysed. |
+| kumo-relational | every column of each related table except keys, per hop the table is reached at, plus `COUNT(*)`, the number of that table's rows linked to the entity. The entity's own table is included, at hop 0; only the question rows themselves (the anchor and target) are not analysed. |
 
 On `kumo-relational` an entity's related rows at one hop are averaged first,
 then entities are grouped into cohorts.
 
 `result.explanations.columns.to_pandas()` gives one line per (table, hop,
-column, cohort, class), highest `score` first. Values are illustrative, and
+column, cohort, class), columns in context order. Values are illustrative, and
 the `no` lines are left out:
 
 ```
-table   hop  column    stype      cohort       class  share  mean  score
-orders  1    COUNT(*)  None       [0 - 0]      yes    0.30   0.12  0.41
-orders  1    COUNT(*)  None       (0 - 3]      yes    0.45   0.38  0.41
-orders  1    COUNT(*)  None       (3 - 18+]    yes    0.25   0.71  0.41
-orders  1    amount    numerical  [3 - 12]     yes    0.50   0.22  0.27
+table   hop  column    stype      cohort       class  share  mean
+orders  1    COUNT(*)  None       [0 - 0]      yes    0.30   0.12
+orders  1    COUNT(*)  None       (0 - 3]      yes    0.45   0.38
+orders  1    COUNT(*)  None       (3 - 18+]    yes    0.25   0.71
+orders  1    amount    numerical  [3 - 12]     yes    0.50   0.22
 ```
 
 `class` is `None` for regression. `stype` is `None` on a `COUNT(*)` line.
