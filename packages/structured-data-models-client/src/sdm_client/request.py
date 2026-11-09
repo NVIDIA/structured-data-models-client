@@ -1031,8 +1031,8 @@ class _Envelope(dict):  # type: ignore[type-arg]
         super().__setitem__(name, value)
 
     def __delitem__(self, name: str) -> None:
-        del self._envelope[name]
         super().__delitem__(name)
+        self._envelope.pop(name, None)
 
     def __ior__(self, other: Any) -> _Envelope:  # type: ignore[override,misc]
         self.update(other)
@@ -1055,6 +1055,8 @@ class _Envelope(dict):  # type: ignore[type-arg]
         return value
 
     def popitem(self) -> tuple[str, Any]:
+        if not self:
+            return super().popitem()
         name = next(reversed(self))
         return name, self.pop(name)
 

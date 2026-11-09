@@ -257,6 +257,12 @@ def test_public_payloads_hide_client_keys_and_write_through():
     shared = Request.__new__(Request)
     object.__setattr__(shared, '_payloads', (envelope,))
     assert shared.payloads[0] is payload
+    payload.clear()
+    with pytest.raises(KeyError):
+        payload.popitem()
+    with pytest.raises(KeyError):
+        del payload['client_generated_keys']
+    assert envelope == {'client_generated_keys': {'orders': '__node_id'}}
 
 
 def test_unavailable_statistics_warn_without_losing_predictions():
