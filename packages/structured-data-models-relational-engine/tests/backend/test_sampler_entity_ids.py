@@ -8,6 +8,7 @@ text.
 from __future__ import annotations
 
 import uuid
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -308,6 +309,37 @@ def test_snow_random_sample_still_binds_nothing(snow_sampler: Any) -> None:
     sql, parameters, _ = snow_sampler._connection.calls[-1]
     assert 'SAMPLE ROW (10 ROWS)' in sql
     assert parameters is None
+
+
+def test_snow_seeded_sample_orders_by_key_hash(snow_sampler: Any) -> None:
+    # Regression test: a seeded draw must not warn that the seed is ignored,
+    # and the SQL must pin the sample deterministically (a hash of the
+    # primary key and the seed) instead of the unseeded `SAMPLE ROW` clause.
+    snow_sampler._warned_random_seed = False
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        snow_sampler._sample_entity_table(
+            table_name='users',
+            columns=_COLUMNS,
+            num_rows=10,
+            random_seed=42,
+        )
+
+    sql, parameters, _ = snow_sampler._connection.calls[-1]
+    assert 'SAMPLE ROW' not in sql
+    assert 'ORDER BY HASH("user_id", 42)' in sql
+    assert 'LIMIT 10' in sql
+    assert parameters is None
+
+    # The seed is part of the ordering, so another seed reorders the draw:
+    snow_sampler._sample_entity_table(
+        table_name='users',
+        columns=_COLUMNS,
+        num_rows=10,
+        random_seed=7,
+    )
+    sql, _, _ = snow_sampler._connection.calls[-1]
+    assert 'ORDER BY HASH("user_id", 7)' in sql
 
 
 def test_snow_min_max_probe_keeps_table_names_out_of_the_sql(
