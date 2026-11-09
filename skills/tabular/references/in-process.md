@@ -11,12 +11,17 @@ pip install 'structured-data-models-client[in-process]'
 ```
 
 No published release carries `in_process()` yet, so until one does, that
-command installs a client without it. Install from a checkout instead:
+command installs a client without it. Install from a checkout instead. That
+build compiles the client's native extension, so it needs rustup and the
+toolchain `rust/rust-toolchain.toml` pins; pip runs the build from the
+client's own directory, where rustup does not read that pin, which is what
+the variable names:
 
 ```
 git clone https://github.com/NVIDIA/structured-data-models-client
 cd structured-data-models-client
-pip install -e './packages/structured-data-models-client[in-process]'
+RUSTUP_TOOLCHAIN=1.97.0 pip install -e \
+    './packages/structured-data-models-client[in-process]'
 ```
 
 A pip warning that the client `does not provide the extra 'in-process'`, or

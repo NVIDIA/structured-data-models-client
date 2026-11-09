@@ -2253,13 +2253,11 @@ def test_the_in_process_examples_print_what_the_skill_shows(name):
     and run the model here, which is what the reference claims they do.
 
     ``SDM_IN_PROCESS`` is the reader asking for exactly this, so a missing
-    extra is a broken setup and fails here rather than skipping quietly.
+    extra is a broken setup and fails here rather than skipping quietly. One
+    extra covers both references: gathering a relational request is the base
+    client's own work, so nothing else has to be installed to run them.
     """
     installed('sdm', 'structured-data-models-client[in-process]')
-    if name.startswith('relational'):
-        installed(
-            'sdm_relational_engine', 'structured-data-models-client[relational]'
-        )
     assert_every_example_prints_what_it_shows(SKILLS / name)
 
 
