@@ -836,49 +836,53 @@ def test_the_check_refuses_a_project_unfit_to_publish_to(
 
 
 @pytest.mark.parametrize(
-    ('tag', 'releases', 'published', 'latest'),
+    ('releases', 'published', 'latest'),
     [
-        ('v2.0.0', ['v2.0.0', 'v1.0.0'], {'2.0.0', '1.0.0'}, True),
-        ('v1.0.1', ['v2.0.0', 'v1.0.1'], {'2.0.0', '1.0.1'}, False),
-        ('v1.0.1', ['v2.0.0', 'v1.0.1'], {'1.0.1'}, True),
-        ('v2.0.10', ['v2.0.10', 'v2.0.9'], {'2.0.10', '2.0.9'}, True),
-        ('v2.0.0', ['v2.1.0rc1', 'v2.0.0'], {'2.1.0rc1', '2.0.0'}, True),
+        (['v2.0.0', 'v1.0.0'], {'2.0.0', '1.0.0'}, 'v2.0.0'),
+        (['v2.0.0', 'v1.0.1'], {'1.0.1'}, 'v1.0.1'),
+        (['v2.0.10', 'v2.0.9'], {'2.0.10', '2.0.9'}, 'v2.0.10'),
+        (['v2.1.0rc1', 'v2.0.0'], {'2.1.0rc1', '2.0.0'}, 'v2.0.0'),
+        (['v2.0.0'], set(), None),
     ],
 )
 def test_latest_goes_to_the_highest_release_on_pypi(
-    kitmaker, monkeypatch, tag, releases, published, latest
+    kitmaker, monkeypatch, releases, published, latest
 ):
-    """An older release finishing after a newer one must not take Latest back,
-    and a newer one that is only on GitHub, waiting on its approval or failed
-    in it, must not hold Latest back from one that published."""
+    """An older release must not take Latest from a newer one on PyPI, and a
+    newer one only on GitHub, waiting on its approval or failed in it, must not
+    hold Latest back from one that published."""
     monkeypatch.setattr(
         kitmaker,
         'on_pypi',
         lambda name, version: {} if version in published else None,
     )
-    assert kitmaker.stays_latest(tag, releases) is latest
+    assert kitmaker.latest_release(releases) == latest
 
 
 @pytest.mark.skipif(shutil.which('bash') is None, reason='the step is bash')
 @pytest.mark.parametrize(
-    ('tag', 'verdict', 'marked'),
+    ('tag', 'answers', 'edits'),
     [
-        ('v2.0.0', 'latest', True),
-        ('v1.0.1', 'v1.0.1 stays unmarked', False),
-        ('v2.1.0rc1', 'latest', False),
+        ('v2.0.0', ['v2.0.0', 'v2.0.0'], ['v2.0.0']),
+        # An older run marked itself, and by its second look a newer release
+        # had reached PyPI: it puts Latest back.
+        ('v1.0.1', ['v1.0.1', 'v2.0.0'], ['v1.0.1', 'v2.0.0']),
+        ('v1.0.1', ['', ''], []),
+        ('v2.1.0rc1', ['v2.0.0', 'v2.0.0'], []),
     ],
 )
-def test_the_latest_step_marks_only_what_the_script_says(
-    kitmaker_job, tmp_path, tag, verdict, marked
+def test_the_latest_step_marks_what_pypi_holds_and_looks_again(
+    kitmaker_job, tmp_path, tag, answers, edits
 ):
     step = next(
         s
         for s in kitmaker_job['steps']
-        if s.get('name') == 'Mark the release Latest, now that it is published'
+        if s.get('name') == 'Mark the highest published release Latest'
     )
+    (tmp_path / 'answers.txt').write_text('\n'.join(answers) + '\n')
     for name, body in {
-        'gh': 'if [ "$2" = edit ]; then echo "$@" >> edited.txt; fi\n',
-        'python3': 'echo "$VERDICT"\n',
+        'gh': 'if [ "$2" = edit ]; then echo "$3" >> edited.txt; fi\n',
+        'python3': 'head -n 1 answers.txt; sed -i.bak 1d answers.txt\n',
     }.items():
         (tmp_path / name).write_text(f'#!/bin/sh\n{body}')
         (tmp_path / name).chmod(0o755)
@@ -890,10 +894,7 @@ def test_the_latest_step_marks_only_what_the_script_says(
             'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
             'GITHUB_REF_NAME': tag,
             'GITHUB_REPOSITORY': 'NVIDIA/structured-data-models-client',
-            'VERDICT': verdict,
         },
     )
     edited = tmp_path / 'edited.txt'
-    assert edited.exists() is marked
-    if marked:
-        assert '--latest' in edited.read_text()
+    assert (edited.read_text().split() if edited.exists() else []) == edits

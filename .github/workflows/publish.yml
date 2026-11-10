@@ -476,10 +476,13 @@ jobs:
           python3 .github/workflows/kitmaker_release.py
 
       # Only now, because until this point a failure could have left a
-      # release marked Latest for a version that never reached PyPI. And not
-      # when a higher final release is on PyPI; `kitmaker_release.py latest`
-      # says why only PyPI decides that.
-      - name: Mark the release Latest, now that it is published
+      # release marked Latest for a version that never reached PyPI. Latest
+      # goes to the highest final release on PyPI, which need not be this one;
+      # `kitmaker_release.py latest` says why PyPI decides. Two runs can
+      # overlap, and an older one can mark what it found just after a newer
+      # one marked itself, so it asks again after its edit: whichever run
+      # edits last leaves Latest on the right release.
+      - name: Mark the highest published release Latest
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -489,15 +492,19 @@ jobs:
             echo "a pre-release stays unmarked"
             exit 0
           fi
-          gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
-            --exclude-pre-releases --limit 1000 --json tagName \
-            --jq '.[].tagName' > releases.txt
-          verdict=$(python3 .github/workflows/kitmaker_release.py latest "$GITHUB_REF_NAME" < releases.txt)
-          if [ "$verdict" = latest ]; then
-            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --latest
-          else
-            echo "$verdict"
-          fi
+          marked=
+          for _ in 1 2; do
+            gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
+              --exclude-pre-releases --limit 1000 --json tagName \
+              --jq '.[].tagName' > releases.txt
+            target=$(python3 .github/workflows/kitmaker_release.py latest < releases.txt)
+            if [ -z "$target" ] || [ "$target" = "$marked" ]; then
+              break
+            fi
+            gh release edit "$target" --repo "$GITHUB_REPOSITORY" --latest
+            echo "marked $target Latest"
+            marked=$target
+          done
 
       # Into the job log, so a failed release says where it got to without
       # anyone opening an artifact. The GitHub Release body is the changelog
