@@ -8,25 +8,25 @@
 //! 4.8.0, database and schema recorded as `{catalog}` and `{schema}`).
 //!
 //! - Goldens: each request kind the `snowflake` dialect renders without a
-//! key set is planned under the source's database and schema, and each
-//! statement is the one the old client sent for the same step, text and
-//! parameters exactly (the catalog reads, the preview, the key counts, the
-//! time bounds, the entity sample, the column ranges, the row count's
-//! listing, a semantic view's YAML read).
+//!   key set is planned under the source's database and schema, and each
+//!   statement is the one the old client sent for the same step, text and
+//!   parameters exactly (the catalog reads, the preview, the key counts, the
+//!   time bounds, the entity sample, the column ranges, the row count's
+//!   listing, a semantic view's YAML read).
 //! - The catalog reader: each recorded `DESCRIBE TABLE`, `SHOW IMPORTED
 //! KEYS`, table listing and session read, rebuilt in the Python row
-//! adapter's text form (every column nullable text, in the result's
-//! order, each non-null cell its `str`), read into the contract's catalog
-//! answer as the old client reads the rows (`SNOW/table.py:160-189`,
-//! `RE/graph.py:1024-1051`), the type map included (`:330-383`).
+//!   adapter's text form (every column nullable text, in the result's
+//!   order, each non-null cell its `str`), read into the contract's catalog
+//!   answer as the old client reads the rows (`SNOW/table.py:160-189`,
+//!   `RE/graph.py:1024-1051`), the type map included (`:330-383`).
 //! - `conform` over the connector's own Arrow as recorded: narrow integers
-//! and a `NUMBER(38,0)` that fits read as `int64`, one past it left a
-//! decimal, a `NUMBER(p,s)` with a fraction read as a double, a zoned time
-//! at its UTC instant with no zone (`RE/base/table.py:1093-1186`).
+//!   and a `NUMBER(38,0)` that fits read as `int64`, one past it left a
+//!   decimal, a `NUMBER(p,s)` with a fraction read as a double, a zoned time
+//!   at its UTC instant with no zone (`RE/base/table.py:1093-1186`).
 //! - The data layer's answers for Snowflake: a failure with errno 2003 is
-//! "not found", nothing else is; a name's spellings are as given, then
-//! all three parts upper-cased, once; the session's parts fill only those
-//! the source leaves out; the capabilities.
+//!   "not found", nothing else is; a name's spellings are as given, then
+//!   all three parts upper-cased, once; the session's parts fill only those
+//!   the source leaves out; the capabilities.
 
 use std::fs::File;
 use std::io::BufReader;

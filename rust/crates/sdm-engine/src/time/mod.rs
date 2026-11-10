@@ -7,24 +7,24 @@
 //! of times a source stores as text.
 //!
 //! - [`Instant`] is nanoseconds since 1970-01-01T00:00Z and [`Span`] a
-//! fixed duration in nanoseconds, both `i128`, so every count an int64
-//! of any unit holds converts in and out exactly; a conversion to a
-//! named unit is checked and refuses with `VALUE_OUT_OF_RANGE`.
+//!   fixed duration in nanoseconds, both `i128`, so every count an int64
+//!   of any unit holds converts in and out exactly; a conversion to a
+//!   named unit is checked and refuses with `VALUE_OUT_OF_RANGE`.
 //! - [`Civil`] is a proleptic Gregorian date and time of day for any year
-//! such a count reaches, by civil arithmetic, not `jiff`'s calendar,
-//! whose timestamps stop at 9999-12-30T22:00Z.
+//!   such a count reaches, by civil arithmetic, not `jiff`'s calendar,
+//!   whose timestamps stop at 9999-12-30T22:00Z.
 //! - A zone's offset comes from `jiff` inside its range; outside it the
-//! instant is moved by whole 400-year Gregorian cycles into a window
-//! `jiff` holds on the same side of the zone's history and the offset
-//! read there ([`Instant::to_local`], [`localize`]): before a zone's
-//! first transition its offset is the one it starts with, after its last
-//! the rule its database ends with repeats every cycle.
+//!   instant is moved by whole 400-year Gregorian cycles into a window
+//!   `jiff` holds on the same side of the zone's history and the offset
+//!   read there ([`Instant::to_local`], [`localize`]): before a zone's
+//!   first transition its offset is the one it starts with, after its last
+//!   the rule its database ends with repeats every cycle.
 //! - [`text_shapes`] is the client's two shapes `date-rules.md` names a
-//! date in text by, and [`text`] reads text by the core's fixed list of
-//! formats within them (`date-rules.md`, "The core's text formats";
-//! ), refusing by name any other text it is asked to read.
+//!   date in text by, and [`text`] reads text by the core's fixed list of
+//!   formats within them (`date-rules.md`, "The core's text formats";
+//!   ), refusing by name any other text it is asked to read.
 //! - [`offset`] is a query window's `pd.DateOffset`, months by `jiff`'s
-//! calendar arithmetic, clamped to the month's end.
+//!   calendar arithmetic, clamped to the month's end.
 
 pub mod offset;
 pub mod text;

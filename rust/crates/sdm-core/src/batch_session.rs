@@ -91,6 +91,9 @@ impl Session {
     }
 
     /// None requests ordinary stateless fallback, never another retry layer.
+    /// A session that expired is recreated once; one missing again (an
+    /// endpoint whose replicas do not share sessions) ends reuse, and this
+    /// and every later call is sent stateless.
     pub(crate) async fn score(
         &mut self,
         asker: &Asker,
@@ -111,18 +114,25 @@ impl Session {
                 if !self.open(asker).await? {
                     return Ok(None);
                 }
-                crate::frame_session::call(
-                    asker,
-                    Endpoint::SessionPredict {
-                        session_id: self.current.clone().unwrap(),
-                    },
-                    scoring,
-                )
-                .await
-                .map(Some)
+                let endpoint = Endpoint::SessionPredict {
+                    session_id: self.current.clone().unwrap(),
+                };
+                match crate::frame_session::call(asker, endpoint, scoring).await {
+                    Ok(answer) => Ok(Some(answer)),
+                    Err(error) if has_status(&error, 404) => Ok(self.stateless()),
+                    Err(error) => Err(error),
+                }
             }
+            Err(error) if has_status(&error, 404) => Ok(self.stateless()),
             Err(error) => Err(error),
         }
+    }
+
+    /// Ends reuse: every call from here is sent stateless.
+    fn stateless(&mut self) -> Option<Value> {
+        self.disabled = true;
+        self.current = None;
+        None
     }
 
     pub(crate) async fn close(self, asker: &Asker) {

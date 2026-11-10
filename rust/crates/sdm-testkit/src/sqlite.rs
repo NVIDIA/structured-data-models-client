@@ -436,11 +436,7 @@ fn number_text(connection: &rusqlite::Connection, value: &Stored) -> Result<Stri
 /// Every row of `sql`'s result, typed as ADBC types it.
 fn read(connection: &rusqlite::Connection, sql: &str) -> Result<Fetched> {
     let mut statement = connection.prepare(sql)?;
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|n| (*n).to_owned())
-        .collect();
+    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let width = names.len();
     let mut rows: Vec<Vec<Stored>> = Vec::new();
     let mut queried = statement.query([])?;

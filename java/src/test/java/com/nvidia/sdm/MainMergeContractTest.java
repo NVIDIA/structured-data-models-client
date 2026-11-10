@@ -142,7 +142,8 @@ class MainMergeContractTest {
     var saved = new java.io.ByteArrayOutputStream();
     request.writeTo(saved);
     Request restored = Request.readFrom(new java.io.ByteArrayInputStream(saved.toByteArray()));
-    assertTrue(RelationalTest.payload(restored, 0).containsKey("client_generated_keys"));
+    assertTrue(RelationalTest.map(Json.read(restored.payloadBytes().get(0))).containsKey("client_generated_keys"));
+    assertFalse(RelationalTest.payload(restored, 0).containsKey("client_generated_keys"));
     try (RelationalTest.Endpoint endpoint = new RelationalTest.Endpoint();
         SdmClient client = endpoint.client(); Operations operations = new Operations()) {
       endpoint.gradients = true;

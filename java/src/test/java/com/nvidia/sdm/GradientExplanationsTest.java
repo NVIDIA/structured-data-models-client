@@ -64,7 +64,6 @@ class GradientExplanationsTest {
           for(ColumnExplanations.Row row:columns.rows()) {
             assertTrue(Double.isFinite(row.mean()));
             assertTrue(row.share()>=0 && row.share()<=1);
-            assertTrue(row.score()>=0 && row.score()<=1);
             if(target.equals("value")) {
               assertNull(row.classLabel());
               assertTrue(row.mean()>=0 && row.mean()<=23.75);

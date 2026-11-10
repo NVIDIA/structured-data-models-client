@@ -7,34 +7,34 @@
 //! compared exactly.
 //!
 //! - A column is read as the executor reads it (`execute_column`): a float
-//! at float32, an integer at int64, a decimal exactly; a null, and a
-//! float's NaN, is no value.
+//!   at float32, an integer at int64, a decimal exactly; a null, and a
+//!   float's NaN, is no value.
 //! - A windowed aggregation ([`aggregate`], `execute_aggregation`) takes, of
-//! each example, the rows whose value is present and whose time is after
-//! its window's start, when it has one, and not after its end, in row
-//! order: `SUM` of a float at float32 with Kahan's compensation (register
-//! PK-2), of an integer in int64, of a decimal exactly at any size;
-//! `COUNT` the rows; `AVG` a float's
-//! Kahan sum at float32 over the count, an integer's at float64, a
-//! decimal's exact sum over the count, at any size; `MIN` and `MAX`
-//! exactly; then each read at float32, a decimal's exact value rounded
-//! once to the nearest float32.
-//! An example with no row is 0 for `SUM` and `COUNT` and has no label
-//! for the others.
+//!   each example, the rows whose value is present and whose time is after
+//!   its window's start, when it has one, and not after its end, in row
+//!   order: `SUM` of a float at float32 with Kahan's compensation (register
+//!   PK-2), of an integer in int64, of a decimal exactly at any size;
+//!   `COUNT` the rows; `AVG` a float's
+//!   Kahan sum at float32 over the count, an integer's at float64, a
+//!   decimal's exact sum over the count, at any size; `MIN` and `MAX`
+//!   exactly; then each read at float32, a decimal's exact value rounded
+//!   once to the nearest float32.
+//!   An example with no row is 0 for `SUM` and `COUNT` and has no label
+//!   for the others.
 //! - A condition (`column_compare`, `execute_rel_op`) compares the values its
-//! target has with a constant read at the target's type: at float32 for a
-//! float32 target, at float64 for an integer target and a float constant,
-//! at int64 for an integer target and an integer constant; a decimal
-//! target exactly, at no scale but their own; a boolean,
-//! text or time with its own kind. `IN` (`execute_member_op`) reads its
-//! list at the target's type the same way, then tests membership.
+//!   target has with a constant read at the target's type: at float32 for a
+//!   float32 target, at float64 for an integer target and a float constant,
+//!   at int64 for an integer target and an integer constant; a decimal
+//!   target exactly, at no scale but their own; a boolean,
+//!   text or time with its own kind. `IN` (`execute_member_op`) reads its
+//!   list at the target's type the same way, then tests membership.
 //! - `NOT`, `AND` and `OR` ([`truth`], `execute_logical_operation`) join
-//! their conditions' answers row by row, and label only the rows every
-//! condition has a value for; a target's filter (`execute_filter`) keeps
-//! the rows its condition holds for, which [`aggregate_kept`] aggregates.
+//!   their conditions' answers row by row, and label only the rows every
+//!   condition has a value for; a target's filter (`execute_filter`) keeps
+//!   the rows its condition holds for, which [`aggregate_kept`] aggregates.
 //!
 //! - [`label`] puts them together as `execute` does: the examples whose
-//! target has a value keep their label, in order; the rest have none.
+//!   target has a value keep their label, in order; the rest have none.
 //!
 //! What the executor does by a path this does not port is refused by name
 //! ([`crate::not_yet`], B-3).
@@ -695,11 +695,11 @@ impl Column {
 /// A decimal column as a target. At scale 0, where every value fits, an
 /// int64, as the reference reads it since `main`'s eb6c68eb. Otherwise:
 /// - a regression's labels are numbers, each value rounded once to the
-/// nearest float32 (round 1: a regression has no classes to keep apart);
+///   nearest float32 (round 1: a regression has no classes to keep apart);
 /// - a classification's are spelled as the reference spells its classes
-/// (float64, then float32, as [`decimal_to_f64`] reads it), and where two
-/// distinct values meet at one float32, each value's own digits instead,
-/// so no two values become one class.
+///   (float64, then float32, as [`decimal_to_f64`] reads it), and where two
+///   distinct values meet at one float32, each value's own digits instead,
+///   so no two values become one class.
 fn decimal_target(values: &[Option<i128>], scale: i8, classes: bool) -> (Vec<bool>, Labels) {
     let mask: Vec<bool> = values.iter().map(Option::is_some).collect();
     let present: Vec<i128> = values.iter().flatten().copied().collect();

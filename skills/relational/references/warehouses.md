@@ -24,9 +24,8 @@ connection its own driver makes, and says so if given another.
 | `DuckDBSource` | `duckdb.connect()` | — | `duckdb` |
 | `SQLiteSource` | `adbc_driver_sqlite.dbapi.connect()` | — | `sqlite` |
 
-Install the connector **and** the engine, since `Schema.from_source` needs it:
-`pip install 'structured-data-models-client[relational,databricks]'`. With the connector alone the
-first call raises `MissingExtraError`.
+Install the connector's extra, for instance
+`pip install 'structured-data-models-client[databricks]'`.
 
 `Source(connection)` picks the right one for you when you would rather not
 name it. Lakebase is `PostgresSource`, with the `lakebase` extra and

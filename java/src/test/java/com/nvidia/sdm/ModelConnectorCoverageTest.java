@@ -108,25 +108,13 @@ class ModelConnectorCoverageTest {
   }
 
   @ParameterizedTest @ValueSource(strings = {"duckdb", "sqlite"})
-  void jdbcTemporalLinksPredictAndReuseSessionsAfterConnectionCloses(String provider) throws Exception {
-    Request request;
+  void jdbcTemporalLinksAreRefusedBeforeMaterializing(String provider) throws Exception {
     try (Connection connection = WarehouseSessionTest.open(provider)) {
-      request = PredictiveQuery.parse(LINK).materialize(linkSchema(provider, connection),
-          WarehouseSessionTest.asked(1L, 2L).build());
-    }
-    Map<String, Object> body = payload(request, 0);
-    assertEquals("temporal_link_prediction", map(body.get("task")).get("kind"));
-    assertEquals(List.of("users", "items"), map(body.get("task")).get("entity_table_names"));
-    try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client()) {
-      PredictionResult direct = client.predict(request, SdmClient.KUMO_RELATIONAL);
-      assertEquals(2, direct.rows()); assertTrue(direct.outputs().contains("rankings"));
-      try (FittedModel fitted = client.fit(request, SdmClient.KUMO_RELATIONAL)) {
-        assertEquals(2, fitted.predict(request).rows());
-        assertEquals(2, fitted.predict(request).rows());
-        assertEquals(1, endpoint.created.size()); assertEquals(2, endpoint.scored.size());
-        assertTrue(endpoint.scored.stream().noneMatch(value -> value.containsKey("context")));
-      }
-      assertEquals(1, endpoint.deletes.get());
+      Schema schema = linkSchema(provider, connection);
+      StructuredDataException refused = assertThrows(StructuredDataException.class,
+          () -> PredictiveQuery.parse(LINK).materialize(schema, WarehouseSessionTest.asked(1L, 2L).build()));
+      assertEquals("UNSUPPORTED_REQUEST", refused.code());
+      assertEquals("temporal_link_prediction", refused.details().get("rule"));
     }
   }
 

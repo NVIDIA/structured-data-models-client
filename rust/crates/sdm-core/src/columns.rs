@@ -18,21 +18,24 @@ pub(crate) fn run(
         return Err(internal("column analysis payload is not bytes"));
     };
     let payload = crate::predict::payload(&bytes)?;
-    let result = sdm_request::columns::analyze(&sdm_request::columns::restored(&payload)?)?;
+    let result = sdm_request::columns::analyze(&payload)?;
     crate::direct::value(asker, &result)
 }
 
 pub(crate) fn compute(payloads: &[sdm_wire::json::Value]) -> Result<String, CoreError> {
-    let restored = payloads
-        .iter()
-        .map(sdm_request::columns::restored)
-        .collect::<Result<Vec<_>, _>>()?;
-    let payload = if restored.len() == 1 {
-        restored[0].clone()
+    let payload = if payloads.len() == 1 {
+        payloads[0].clone()
     } else {
-        sdm_request::columns::forecast(&restored)?
+        sdm_request::columns::forecast(payloads)?
     };
-    serde_json::to_string(&sdm_request::columns::analyze(&payload)?)
+    encode(&payload)
+}
+/// The analysis of the labelled rows a request's calls send, each once.
+pub(crate) fn compute_sent(payloads: &[sdm_wire::json::Value]) -> Result<String, CoreError> {
+    encode(&sdm_request::columns::sent(payloads)?)
+}
+fn encode(payload: &sdm_wire::json::Value) -> Result<String, CoreError> {
+    serde_json::to_string(&sdm_request::columns::analyze(payload)?)
         .map_err(|_| internal("analysis result cannot be encoded"))
 }
 pub(crate) fn requested(outputs: &[String]) -> bool {

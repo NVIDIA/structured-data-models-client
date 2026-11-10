@@ -222,10 +222,10 @@ pub(crate) async fn run(
             let mut asked_question = question.clone();
             normalize_question(&mut pinned_question);
             normalize_question(&mut asked_question);
-            if keys::check_question(pinned_question.as_ref(), asked_question.as_ref()).is_some() {
-                return Err(invalid(
-                    "this session pinned a different question; fit again to ask something else",
-                ));
+            if let Some(difference) =
+                keys::check_question(pinned_question.as_ref(), asked_question.as_ref())
+            {
+                return Err(invalid(&keys::question_refusal(&difference)));
             }
             if payloads.is_empty() || payloads.len() != request_ids.len() {
                 return Err(invalid("session scoring needs one request id per payload"));

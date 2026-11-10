@@ -19,7 +19,7 @@ The shape depends on the **task**, not the model.
 | classification | one per entity |
 | multiclass classification | one per entity, with a probability per class **as columns** |
 | regression | one per entity |
-| ranking / temporal link prediction | one per entity, the `k` candidates **in a list** |
+| ranking | one per entity, the `k` candidates **in a list** |
 | forecasting | one per entity per step |
 
 Ranking is the exception to the row-per-answer rule: expanding the candidates
@@ -206,7 +206,10 @@ When explanation output is requested, `result.explanations.columns` describes ho
 These are associations, not causal effects or model gradients.
 Use `.to_pandas()` in Python, or `result.explanations().columns().toArrow(allocator)` in Java.
 Java callers close the Arrow root before its allocator.
-The table contains table, hop, column, semantic type, cohort, class, share, mean and normalized score.
+The table contains table, hop, column, semantic type, cohort, class, share and mean, one line per cohort and class, columns in context order.
+It describes the labelled rows the request sends; rows the leak check removed are not in it, and a request sent as several calls counts each row once.
+A numeric cohort's edges print with as many decimals, from two to six, as keep adjacent edges apart.
+A categorical column with more than ten cohorts merges the rarest into `OTHER(*)` and keeps missing values as `N/A`.
 An empty labelled context produces an empty table; unsupported tasks or unavailable statistics produce no column analysis and a warning, while prediction remains usable.
 Fitted models analyze the context after holdout and reuse it, including when EXPLAIN is requested only on a later prediction.
 Merging results with different analyses requires an explicit `columns=` override (the corresponding Java overload), so an unrelated request's analysis is never silently chosen.

@@ -10,11 +10,11 @@
 
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
+use arrow_array::{ArrayRef, Int64Array, NullArray, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::Detail;
 use sdm_contract::catalog::CatalogColumn;
 use sdm_contract::ops::Dtype;
+use sdm_contract::{Detail, Scalar, Sentence};
 use sdm_schema::infer::{self, TextShare, TextTimes, TextUnread};
 
 struct NoTimes;
@@ -39,21 +39,28 @@ impl TextTimes for NoTimes {
 }
 
 fn previewed(declared: Option<Dtype>) -> Result<infer::Previewed, sdm_contract::CoreError> {
+    previewed_as(declared, Arc::new(StringArray::from(vec!["a", "b"])))
+}
+
+fn previewed_as(
+    declared: Option<Dtype>,
+    profile: ArrayRef,
+) -> Result<infer::Previewed, sdm_contract::CoreError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("user_id", DataType::Int64, true),
-        Field::new("profile", DataType::Utf8, true),
+        Field::new("profile", profile.data_type().clone(), true),
     ]));
     let batch = RecordBatch::try_new(
         Arc::clone(&schema),
-        vec![
-            Arc::new(Int64Array::from(vec![1, 2])) as ArrayRef,
-            Arc::new(StringArray::from(vec!["a", "b"])),
-        ],
+        vec![Arc::new(Int64Array::from(vec![1, 2])) as ArrayRef, profile],
     )
     .unwrap();
     let column = |name: &str, dtype: Option<Dtype>| CatalogColumn {
         name: name.to_owned(),
-        declared_type: String::new(),
+        declared_type: match dtype {
+            Some(Dtype::Unsupported) => "VARIANT".to_owned(),
+            _ => String::new(),
+        },
         not_null: false,
         primary_key: false,
         key_nullable: false,
@@ -78,4 +85,20 @@ fn a_declared_unsupported_type_is_refused_by_name_whatever_the_values() {
     assert_eq!(refused.fields["rule"], Detail::text("column_type"));
     assert!(previewed(Some(Dtype::String)).is_ok());
     assert!(previewed(None).is_ok());
+}
+
+#[test]
+fn a_refused_column_type_names_the_column_its_table_and_its_type() {
+    let declared = previewed(Some(Dtype::Unsupported)).unwrap_err();
+    let read = previewed_as(None, Arc::new(NullArray::new(2))).unwrap_err();
+    for (refused, column_type) in [(declared, "VARIANT"), (read, "Null")] {
+        assert_eq!(refused.sentence, Sentence::ColumnTypeUnsupported);
+        assert_eq!(refused.fields["rule"], Detail::text("column_type"));
+        assert_eq!(refused.fields["column"], Detail::text("profile"));
+        assert_eq!(
+            refused.fields["source"],
+            Detail::List(vec![Scalar::Utf8("users".into())])
+        );
+        assert_eq!(refused.fields["column_type"], Detail::text(column_type));
+    }
 }

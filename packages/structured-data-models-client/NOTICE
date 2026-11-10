@@ -3,8 +3,16 @@ Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
-This distribution is first-party NVIDIA source: the client, the schema and
-the model handles. It vendors no third-party source.
+This distribution includes third-party code:
 
-Everything it depends on is resolved by the package manager at install time and
-licensed by its own authors.
+- The native module, sdm_client._native, statically links Rust crates. Their
+  licenses and notices are in THIRD-PARTY-NOTICES-RUST.txt, beside this file
+  in the wheel's .dist-info/licenses directory.
+- The offline schema visualization bundles Mermaid 11.15.0 and its
+  dependencies, MIT licensed, as sdm_client/assets/mermaid.min.js. Its license
+  is in sdm_client/assets/MERMAID_LICENSE, its source in
+  sdm_client/assets/VENDORED.md, and the full attribution of what it bundles in
+  sdm_client/assets/THIRD-PARTY-NOTICES-MERMAID.txt.
+
+The Python packages it depends on are resolved by the package manager at
+install time and licensed by their own authors.

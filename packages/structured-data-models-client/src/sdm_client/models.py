@@ -19,7 +19,7 @@ rather than what any design document says they should.
 
 **A runtime contract describes a deployment, and one model id may have more
 than one.** The relational declaration below is the broader of those in
-service: six task kinds and all seven output fields. A narrower build of the
+service: five task kinds and all seven output fields. A narrower build of the
 same id serves only classification and regression, and produces only
 ``prediction``, ``probabilities`` and ``quantiles``. Asking that one for a
 forecast passes the checks here and is refused by the endpoint.
@@ -28,6 +28,11 @@ Reading this from the endpoint instead would settle it, but the Universal TFM
 contract has no capabilities route and ``/v1/models`` returns an id and nothing
 else. So this is the broader of the two on purpose: refusing locally what one
 deployment can answer would be worse than letting the other say no.
+
+Candidate-free temporal link prediction is the exception: no released
+deployment serves it, so it is not declared, and the client refuses it before
+anything is read or sent. A ranking with candidates is asked as one
+classification per candidate, which every deployment serves.
 """
 
 from __future__ import annotations
@@ -56,7 +61,6 @@ RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'context_rows_max': 10_000,
     'predict_rows_max': 10_000,
-    'predict_rows_temporal_link_prediction': 200,
     'hops_max': 6,
     'tables_max': 15,
     'classes_max': 10,
@@ -107,7 +111,6 @@ KUMO_RELATIONAL = ModelSpec(
                 'multiclass_classification',
                 'regression',
                 'forecasting',
-                'temporal_link_prediction',
             }
         ),
         outputs=frozenset(
@@ -187,11 +190,13 @@ class KumoTabular(Model):
 class KumoRelational(Model):
     r"""Several related tables, joined as a graph.
 
-    Takes every task kind the contract carries except ``ranking``, and produces
-    all seven output fields including ``explanation``.
+    Takes every task kind the contract carries except ``ranking`` and
+    ``temporal_link_prediction``, and produces all seven output fields
+    including ``explanation``. A ranking is asked as one classification per
+    candidate; a temporal link prediction asked without candidates is refused
+    before anything is read, since no released model serves it.
 
-    Needs ``pip install structured-data-models-client[relational]``: building the graph and
-    sampling it is heavy client-side work that lives in a native package.
+    Building the graph and sampling it run in the client's Rust core.
     """
 
     _spec = KUMO_RELATIONAL

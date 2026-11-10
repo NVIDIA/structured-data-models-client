@@ -78,6 +78,10 @@ pub enum MergeCandidate {
     Bytes {
         value: Vec<u8>,
     },
+    /// A finite decimal in fixed point, equal to every number of its value.
+    Decimal {
+        value: String,
+    },
     Date {
         ordinal: i32,
     },

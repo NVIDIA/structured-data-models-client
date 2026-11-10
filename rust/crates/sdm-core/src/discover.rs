@@ -100,6 +100,34 @@ pub(crate) fn facts_read(
     .collect()
 }
 
+/// The catalog's columns of `source`, a relation the caller named that
+/// projects nothing, read and refused as [`table`] reads and refuses them
+/// first, and nothing else of the table.
+pub(crate) async fn catalog(
+    asker: &Asker,
+    source: &Relation,
+) -> Result<Vec<CatalogColumn>, CoreError> {
+    let columns = DataRequest::Describe {
+        tables: vec![source.clone()],
+        part: DescribePart::Columns,
+    };
+    let [columns] = match spelled(asker, source, [columns]).await {
+        Ok(answers) => answers,
+        Err(failed) if failed.code == ErrorCode::ProviderError => {
+            return Err(match holds(asker, source).await {
+                Ok(false) => not_held(asker, source).await,
+                Ok(true) | Err(_) => failed,
+            });
+        }
+        Err(failed) => return Err(failed),
+    };
+    let declared = declared_columns(columns)?;
+    if declared.is_empty() {
+        return Err(not_held(asker, source).await);
+    }
+    Ok(declared)
+}
+
 /// One table read as `describe_source` reads it, under the name and source
 /// `table` gives: its catalog's columns and keys over the columns it keeps
 /// (`table.columns`; every column when none), and the preview of those

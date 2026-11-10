@@ -821,6 +821,7 @@ fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
                             nullable: c.nullable,
                             unique: c.unique,
                             declared_type: c.declared_type.clone(),
+                            catalog: None,
                             exact_number: c.exact_number,
                         }),
                     })

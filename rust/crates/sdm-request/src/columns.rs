@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Associations between labelled context and its target, independent of model inference.
-//! The engine owns eligibility, graph interpretation, cohorts and scores; hosts render rows.
+//! The engine owns eligibility, graph interpretation and cohorts; hosts render rows.
 use sdm_contract::{
     CoreError, Sentence,
     columns::{ColumnAnalysis, ColumnRow},
@@ -16,6 +16,7 @@ const CATEGORIES: usize = 500;
 const CLASSES: usize = 30;
 const OTHER: &str = "OTHER(*)";
 const NA: &str = "N/A";
+const ENTITY_REF: &str = "__kumo_entity_ref";
 fn invalid(reason: &str) -> CoreError {
     CoreError::new(
         Sentence::InvalidMessage,
@@ -160,34 +161,24 @@ struct Cohorts {
     labels: Vec<String>,
     counts: Vec<f64>,
     means: Vec<Vec<f64>>,
-    score: f64,
 }
-fn score(means: &[Vec<f64>], counts: &[f64]) -> f64 {
-    let total: f64 = counts.iter().sum();
-    if total <= 1.0 || means.is_empty() {
-        return 0.0;
+fn short(v: f64, places: usize) -> String {
+    let s = format!("{v:.places$}");
+    match s.split_once('.') {
+        Some((whole, fraction)) if fraction.bytes().all(|b| b == b'0') => whole.to_owned(),
+        _ => s,
     }
-    let width = means[0].len();
-    if width == 0 {
-        return 0.0;
-    }
-    (0..width)
-        .map(|j| {
-            let center = means.iter().zip(counts).map(|(m, c)| m[j] * c).sum::<f64>() / total;
-            (means
-                .iter()
-                .zip(counts)
-                .map(|(m, c)| c * (m[j] - center).powi(2))
-                .sum::<f64>()
-                / (total - 1.0))
-                .sqrt()
+}
+/// The fewest decimals, from 2 to 6, at which adjacent distinct edges print
+/// apart.
+fn places(edges: &[f64]) -> usize {
+    (2..=6)
+        .find(|&places| {
+            edges
+                .windows(2)
+                .all(|w| w[0] == w[1] || short(w[0], places) != short(w[1], places))
         })
-        .sum::<f64>()
-        / width as f64
-}
-fn short(v: f64) -> String {
-    let s = format!("{v:.2}");
-    s.strip_suffix(".00").unwrap_or(&s).to_owned()
+        .unwrap_or(6)
 }
 fn ranges(values: &[Option<f64>], count: bool, outcome: &[Vec<f64>]) -> Option<Cohorts> {
     let mut sorted = values.iter().flatten().copied().collect::<Vec<_>>();
@@ -227,6 +218,7 @@ fn ranges(values: &[Option<f64>], count: bool, outcome: &[Vec<f64>]) -> Option<C
         }
     }
     let mut result = Cohorts::default();
+    let places = places(&bins);
     let mut start = bins[0];
     for (i, (&n, sum)) in counts.iter().zip(sums).enumerate() {
         if n == 0.0 {
@@ -236,8 +228,8 @@ fn ranges(values: &[Option<f64>], count: bool, outcome: &[Vec<f64>]) -> Option<C
         result.labels.push(format!(
             "{}{} - {}]",
             if result.labels.is_empty() { "[" } else { "(" },
-            short(start),
-            short(end)
+            short(start, places),
+            short(end, places)
         ));
         result.counts.push(n);
         result.means.push(sum.into_iter().map(|s| s / n).collect());
@@ -247,18 +239,10 @@ fn ranges(values: &[Option<f64>], count: bool, outcome: &[Vec<f64>]) -> Option<C
         label.pop();
         label.push_str("+]");
     }
-    result.score = score(&result.means, &result.counts);
     Some(result)
 }
-fn categories(
-    shares: &[Vec<f64>],
-    labels: &[String],
-    other: Option<usize>,
-    outcome: &[Vec<f64>],
-) -> Option<Cohorts> {
+fn categories(shares: &[Vec<f64>], labels: &[String], outcome: &[Vec<f64>]) -> Option<Cohorts> {
     let mut result = Cohorts::default();
-    let mut scoring = Vec::new();
-    let mut scoring_counts = Vec::new();
     for (i, label) in labels.iter().enumerate() {
         let count = shares.iter().map(|r| r[i]).sum::<f64>();
         if count == 0.0 {
@@ -274,10 +258,6 @@ fn categories(
                     / count
             })
             .collect::<Vec<_>>();
-        if other != Some(i) {
-            scoring.push(mean.clone());
-            scoring_counts.push(count);
-        }
         result.labels.push(label.clone());
         result.counts.push(count);
         result.means.push(mean);
@@ -285,26 +265,25 @@ fn categories(
     if result.labels.is_empty() {
         return None;
     }
-    result.score = score(&scoring, &scoring_counts);
     if result.labels.len() > COHORTS {
-        let split = COHORTS - 1;
-        let total = result.counts[split..].iter().sum::<f64>();
+        // Missing values keep a cohort of their own, outside the merge.
+        let na = usize::from(result.labels.last().is_some_and(|l| l == NA));
+        let split = COHORTS - 1 - na;
+        let end = result.labels.len() - na;
+        let total = result.counts[split..end].iter().sum::<f64>();
         let means = (0..outcome[0].len())
             .map(|j| {
-                result.counts[split..]
+                result.counts[split..end]
                     .iter()
-                    .zip(&result.means[split..])
+                    .zip(&result.means[split..end])
                     .map(|(c, m)| c * m[j])
                     .sum::<f64>()
                     / total
             })
             .collect();
-        result.labels.truncate(split);
-        result.labels.push(OTHER.into());
-        result.counts.truncate(split);
-        result.counts.push(total);
-        result.means.truncate(split);
-        result.means.push(means);
+        result.labels.splice(split..end, [OTHER.to_owned()]);
+        result.counts.splice(split..end, [total]);
+        result.means.splice(split..end, [means]);
     }
     Some(result)
 }
@@ -337,24 +316,15 @@ impl Analysis {
             ));
         }
     }
-    fn finish(mut self) -> ColumnAnalysis {
+    fn finish(self) -> ColumnAnalysis {
         if self.columns.iter().any(|c| {
-            !c.4.score.is_finite()
-                || c.4.counts.iter().any(|v| !v.is_finite())
+            c.4.counts.iter().any(|v| !v.is_finite())
                 || c.4.means.iter().flatten().any(|v| !v.is_finite())
         }) {
             return ColumnAnalysis::Failed {
                 reason: "nonfinite_statistics".into(),
             };
         }
-        let scale = self.columns.iter().map(|c| c.4.score).fold(0.0, f64::max);
-        if scale > 0.0 {
-            let total = self.columns.iter().map(|c| c.4.score / scale).sum::<f64>();
-            for c in &mut self.columns {
-                c.4.score = (c.4.score / scale) / total;
-            }
-        }
-        self.columns.sort_by(|a, b| b.4.score.total_cmp(&a.4.score));
         let mut rows = Vec::new();
         for (table, hop, column, stype, c) in self.columns {
             let total = c.counts.iter().sum::<f64>();
@@ -369,7 +339,6 @@ impl Analysis {
                         class_json: encoded(class),
                         share: c.counts[i] / total,
                         mean: c.means[i][j],
-                        score: c.score,
                     });
                 }
             }
@@ -593,7 +562,7 @@ impl Analysis {
             hop,
             column,
             Some(stype),
-            categories(&shares, &labels, other, &self.outcome),
+            categories(&shares, &labels, &self.outcome),
         );
         Ok(())
     }
@@ -654,7 +623,7 @@ impl Analysis {
             hop,
             column,
             Some("timestamp"),
-            categories(&shares, &labels, None, &self.outcome),
+            categories(&shares, &labels, &self.outcome),
         );
         Ok(())
     }
@@ -856,10 +825,45 @@ mod tests {
         assert_eq!(rows[0].mean, 1.0);
         assert_eq!(rows[1].mean, 9.0);
         assert_eq!(rows[0].share, 0.5);
-        assert_eq!(rows[0].score, 1.0);
-        assert!(
-            (score(&[vec![1.0], vec![9.0]], &[2.0, 2.0]) - (64.0_f64 / 3.0).sqrt()).abs() < 1e-12
-        );
+    }
+    #[test]
+    fn adjacent_numeric_edges_get_distinct_labels() {
+        for (values, first, last) in [
+            (
+                (1..=11).map(|i| f64::from(i) / 1000.0).collect::<Vec<_>>(),
+                "[0.001 - 0.002]",
+                "(0.010 - 0.011]",
+            ),
+            (
+                (1..=11).map(|i| 10000.0 + f64::from(i) / 1000.0).collect(),
+                "[10000.001 - 10000.002]",
+                "(10000.010 - 10000.011]",
+            ),
+        ] {
+            let values = values.into_iter().map(Some).collect::<Vec<_>>();
+            let outcome = vec![vec![1.0]; values.len()];
+            let labels = ranges(&values, false, &outcome).unwrap().labels;
+            assert_eq!(labels.first().unwrap(), first);
+            assert_eq!(labels.last().unwrap(), last);
+            assert_eq!(labels.iter().collect::<BTreeSet<_>>().len(), labels.len());
+        }
+    }
+    #[test]
+    fn missing_values_keep_their_own_cohort_beside_the_merged_tail() {
+        let rows = (0..12)
+            .map(|i| format!(r#"["{}",{i}]"#, char::from(b'a' + i)))
+            .chain([r#"[null,20]"#.to_owned()])
+            .collect::<Vec<_>>()
+            .join(",");
+        let ColumnAnalysis::Ready { rows } =
+            analyze(&payload(&format!("[{rows}]"), "regression")).unwrap()
+        else {
+            panic!()
+        };
+        let cohorts = rows.iter().map(|r| r.cohort.as_str()).collect::<Vec<_>>();
+        assert_eq!(cohorts.len(), COHORTS);
+        assert_eq!(cohorts[COHORTS - 2..], [OTHER, NA]);
+        assert_eq!(rows[COHORTS - 1].mean, 20.0);
     }
     #[test]
     fn empty_classification_is_ready_empty() {
@@ -887,15 +891,6 @@ mod tests {
         );
     }
     #[test]
-    fn constant_score_is_zero() {
-        let ColumnAnalysis::Ready { rows } =
-            analyze(&payload(r#"[["a",2],["b",2]]"#, "regression")).unwrap()
-        else {
-            panic!()
-        };
-        assert!(rows.iter().all(|r| r.score == 0.0));
-    }
-    #[test]
     fn exact_wide_negative_frequency_ties() {
         let a = Value::Number("-10000000000000000000000000000000000000001".into());
         let b = Value::Number("-10000000000000000000000000000000000000002".into());
@@ -912,7 +907,11 @@ mod tests {
     }
     #[test]
     fn finite_extreme_targets_never_emit_nonfinite_statistics() {
-        let result = analyze(&payload(r#"[["a",1e308],["b",-1e308]]"#, "regression")).unwrap();
+        let result = analyze(&payload(
+            r#"[["a",1e308],["a",1e308],["b",-1e308],["b",-1e308]]"#,
+            "regression",
+        ))
+        .unwrap();
         let raw = serde_json::to_string(&result).unwrap();
         validate(&raw).unwrap();
         assert!(matches!(result, ColumnAnalysis::Failed { .. }));
@@ -936,7 +935,7 @@ mod tests {
     #[test]
     fn malformed_analysis_is_not_absence() {
         assert!(validate(r#"{"status":"mystery"}"#).is_err());
-        assert!(validate(r#"{"status":"ready","rows":[{"table":"t","hop":0,"column":"x","stype":null,"cohort":"a","class_json":"[]","share":0.5,"mean":1,"score":1}]}"#).is_err());
+        assert!(validate(r#"{"status":"ready","rows":[{"table":"t","hop":0,"column":"x","stype":null,"cohort":"a","class_json":"[]","share":0.5,"mean":1}]}"#).is_err());
     }
 }
 
@@ -952,8 +951,6 @@ pub fn validate(raw: &str) -> Result<ColumnAnalysis, CoreError> {
                 || !row.share.is_finite()
                 || !(0.0..=1.0).contains(&row.share)
                 || !row.mean.is_finite()
-                || !row.score.is_finite()
-                || !(0.0..=1.0).contains(&row.score)
             {
                 return Err(invalid("invalid cohort statistics"));
             }
@@ -962,113 +959,213 @@ pub fn validate(raw: &str) -> Result<ColumnAnalysis, CoreError> {
     Ok(analysis)
 }
 
-/// Restore only excluded rows, validating the delta before any analysis or model call.
-pub fn restored(payload: &Value) -> Result<Value, CoreError> {
-    let Some(delta) = payload.get("client_analysis_delta") else {
-        return Ok(payload.clone());
+/// The labelled rows several calls of one request send, as one context:
+/// each instance, keyed by its entity and anchor, is read once, from the
+/// first call that sends it, under an id of its own, since calls gathered
+/// apart can use one instance id for different entities.
+pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
+    let Some(first) = payloads.first() else {
+        return Err(invalid("empty analysis request"));
     };
-    if delta.get("version") != Some(&Value::int(1)) {
-        return Err(CoreError::protocol(
-            Sentence::StateUnread,
-            "unsupported column context delta",
-        ));
-    }
-    if text(field(delta, "schema_json")?)? != encoded(field(payload, "schema")?) {
-        return Err(CoreError::protocol(
-            Sentence::StateUnread,
-            "column context delta schema differs",
-        ));
-    }
-    fn restore(table: &Value, delta: &Value) -> Result<Value, CoreError> {
-        let removed = field(delta, "removed")?;
-        if field(table, "columns")? != field(removed, "columns")? {
-            return Err(CoreError::protocol(
-                Sentence::StateUnread,
-                "column context delta columns differ",
-            ));
-        }
-        let total = match field(delta, "original_rows")? {
-            Value::Number(n) => n.parse::<usize>().map_err(|_| invalid("delta row count"))?,
-            _ => return Err(invalid("delta row count")),
-        };
-        let positions = array(field(delta, "positions")?)?
-            .iter()
-            .map(|v| match v {
-                Value::Number(n) => n.parse::<usize>().map_err(|_| invalid("delta position")),
-                _ => Err(invalid("delta position")),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let before = Table::read(table)?;
-        let dropped = Table::read(removed)?;
-        if positions.len() != dropped.rows.len()
-            || before.rows.len().checked_add(positions.len()) != Some(total)
-            || positions.windows(2).any(|p| p[0] >= p[1])
-            || positions.last().is_some_and(|p| *p >= total)
-        {
-            return Err(CoreError::protocol(
-                Sentence::StateUnread,
-                "invalid column context delta positions",
-            ));
-        }
-        let mut kept = before.rows.into_iter();
-        let mut dropped = dropped.rows.into_iter();
-        let mut at = positions.into_iter().peekable();
-        let mut rows = Vec::with_capacity(total);
-        for i in 0..total {
-            let row = if at.peek() == Some(&i) {
-                at.next();
-                dropped.next()
-            } else {
-                kept.next()
-            }
-            .ok_or_else(|| invalid("delta rows exhausted"))?;
-            rows.push(Value::Array(row.to_vec()));
-        }
-        let mut result = table.clone();
-        result.set("rows", Value::Array(rows));
-        Ok(result)
-    }
-    let context = field(payload, "context")?;
-    let mut combined = context.clone();
-    combined.set(
-        "instance_table",
-        restore(
-            field(context, "instance_table")?,
-            field(delta, "instance_table")?,
-        )?,
-    );
-    let original = members(field(context, "related_tables")?)?;
-    let deltas = members(field(delta, "related_tables")?)?;
-    if original.len() != deltas.len() || original.iter().zip(deltas).any(|((a, _), (b, _))| a != b)
+    let entity_of = |table: &Table<'_>| table.names.iter().position(|c| c.starts_with(ENTITY_REF));
+    let first_context = field(first, "context")?;
+    if payloads.len() == 1
+        || entity_of(&Table::read(field(first_context, "instance_table")?)?).is_none()
     {
-        return Err(CoreError::protocol(
-            Sentence::StateUnread,
-            "column context delta tables differ",
-        ));
+        return Ok(first.clone());
     }
-    combined.set(
-        "related_tables",
-        Value::Object(
-            original
-                .iter()
-                .zip(deltas)
-                .map(|((name, t), (_, d))| Ok((name.clone(), restore(t, d)?)))
-                .collect::<Result<_, CoreError>>()?,
-        ),
-    );
-    let mut result = payload.clone();
-    result.set("context", combined);
-    result.remove("client_analysis_delta");
-    Ok(result)
+    let mut seen = BTreeSet::new();
+    let mut next_id = 0i64;
+    let mut instances = Vec::new();
+    let mut related = Vec::new();
+    let mut schema = field(first, "schema")?.clone();
+    for payload in payloads {
+        let context = field(payload, "context")?;
+        let table = Table::read(field(context, "instance_table")?)?;
+        let id = table.at("instance_id")?;
+        let entity = entity_of(&table).ok_or_else(|| invalid("a call names no entity"))?;
+        let anchor = field(payload, "task")?
+            .get("anchor_time_column")
+            .and_then(Value::as_text)
+            .and_then(|name| table.at(name).ok());
+        let mut keys = Vec::new();
+        let mut kept = BTreeMap::new();
+        for row in &table.rows {
+            let at = (
+                key(&row[entity])?,
+                anchor.map(|a| key(&row[a])).transpose()?,
+            );
+            if !seen.contains(&at) {
+                kept.insert(key(&row[id])?, next_id);
+                let mut row = row.to_vec();
+                row[id] = Value::int(next_id);
+                instances.push(Value::Array(row));
+                next_id = next_id
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("analysis too large"))?;
+            }
+            keys.push(at);
+        }
+        seen.extend(keys);
+        if let Some(tables) = context.get("related_tables") {
+            for (name, rows) in members(tables)? {
+                let read = Table::read(rows)?;
+                let at = read.at("instance_id")?;
+                let mut renamed = Vec::new();
+                for row in &read.rows {
+                    if let Some(&new) = kept.get(&key(&row[at])?) {
+                        let mut row = row.to_vec();
+                        row[at] = Value::int(new);
+                        renamed.push(row);
+                    }
+                }
+                gather(&mut related, name, rows, renamed)?;
+            }
+        }
+        let step = field(payload, "schema")?;
+        if let Some(value) = step.get("related_tables") {
+            let mut combined = schema
+                .get("related_tables")
+                .cloned()
+                .unwrap_or(Value::Object(vec![]));
+            for (name, described) in members(value)? {
+                match combined.get(name).cloned() {
+                    None => combined.set(name, described.clone()),
+                    Some(mut held) => {
+                        let mut columns = field(&held, "columns")?.clone();
+                        for (column, spec) in members(field(described, "columns")?)? {
+                            if columns.get(column).is_none() {
+                                columns.set(column, spec.clone());
+                            }
+                        }
+                        held.set("columns", columns);
+                        combined.set(name, held);
+                    }
+                }
+            }
+            schema.set("related_tables", combined);
+        }
+        if let Some(value) = step.get("relationships") {
+            let mut links = schema
+                .get("relationships")
+                .map(array)
+                .transpose()?
+                .unwrap_or(&[])
+                .to_vec();
+            for link in array(value)? {
+                if !links.contains(link) {
+                    links.push(link.clone());
+                }
+            }
+            schema.set("relationships", Value::Array(links));
+        }
+    }
+    let mut instance_table = field(first_context, "instance_table")?.clone();
+    instance_table.set("rows", Value::Array(instances));
+    let mut context = Value::Object(vec![]);
+    context.set("instance_table", instance_table);
+    if payloads.iter().any(|p| {
+        p.get("context")
+            .is_some_and(|c| c.get("related_tables").is_some())
+    }) {
+        context.set("related_tables", gathered(related));
+    }
+    let mut out = first.clone();
+    out.set("schema", schema);
+    out.set("context", context);
+    Ok(out)
 }
 
-/// Union forecast evidence before cohort selection. Steps namespace instance identity.
+/// A related table's rows as several calls or forecast steps send them.
+/// One may send a column another did not, such as a key to a table only it
+/// reached: rows take every column, a cell their call did not send left
+/// null.
+struct Held {
+    name: String,
+    table: Value,
+    columns: Vec<Value>,
+    rows: Vec<Vec<Value>>,
+}
+
+/// Adds the rows a call sent of `table`, under its own columns. Held rows
+/// are widened only when the call adds a column; otherwise its rows are
+/// appended.
+fn gather(
+    held: &mut Vec<Held>,
+    name: &str,
+    table: &Value,
+    rows: Vec<Vec<Value>>,
+) -> Result<(), CoreError> {
+    let from = array(field(table, "columns")?)?;
+    let at = match held.iter().position(|h| h.name == name) {
+        Some(at) => at,
+        None => {
+            let mut empty = table.clone();
+            empty.set("rows", Value::Array(vec![]));
+            held.push(Held {
+                name: name.into(),
+                table: empty,
+                columns: from.to_vec(),
+                rows: vec![],
+            });
+            held.len() - 1
+        }
+    };
+    let held = &mut held[at];
+    let width = held.columns.len();
+    for column in from {
+        if !held.columns.contains(column) {
+            held.columns.push(column.clone());
+        }
+    }
+    if held.columns.len() > width {
+        for row in &mut held.rows {
+            row.resize(held.columns.len(), Value::Null);
+        }
+    }
+    let cells = held
+        .columns
+        .iter()
+        .map(|c| from.iter().position(|f| f == c))
+        .collect::<Vec<_>>();
+    held.rows.extend(rows.into_iter().map(|mut row| {
+        cells
+            .iter()
+            .map(|i| i.map_or(Value::Null, |i| std::mem::replace(&mut row[i], Value::Null)))
+            .collect()
+    }));
+    Ok(())
+}
+
+/// The related tables held, in the order first sent, each under every
+/// column sent.
+fn gathered(held: Vec<Held>) -> Value {
+    Value::Object(
+        held.into_iter()
+            .map(|mut h| {
+                h.table.set("columns", Value::Array(h.columns));
+                h.table.set(
+                    "rows",
+                    Value::Array(h.rows.into_iter().map(Value::Array).collect()),
+                );
+                (h.name, h.table)
+            })
+            .collect(),
+    )
+}
+
+/// Union forecast evidence before cohort selection. Steps namespace instance
+/// identity, and a related table takes every column any step sent, as the
+/// calls of one request do in [`sent`]: a step may reach a table another
+/// did not, and so send a key to it.
 pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
     let Some(first) = payloads.first() else {
         return Err(invalid("empty analysis request"));
     };
     let mut out = first.clone();
-    let mut contexts = Vec::new();
+    let mut context = field(first, "context")?.clone();
+    let mut instances = Vec::new();
+    let mut related = Vec::new();
     let mut next_id = 0i64;
     let mut schema = field(first, "schema")?.clone();
     for payload in payloads {
@@ -1077,10 +1174,16 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
         {
             return Err(invalid("forecast tasks differ"));
         }
-        let mut context = field(payload, "context")?.clone();
-        let instance = Table::read(field(&context, "instance_table")?)?;
+        let step = field(payload, "context")?;
+        if field(field(step, "instance_table")?, "columns")?
+            != field(field(&context, "instance_table")?, "columns")?
+        {
+            return Err(invalid("forecast columns differ"));
+        }
+        let instance = Table::read(field(step, "instance_table")?)?;
+        let mut ids = None;
         if let Ok(id) = instance.at("instance_id") {
-            let mut ids = BTreeMap::new();
+            let ids = ids.insert(BTreeMap::new());
             for row in &instance.rows {
                 let k = key(&row[id])?;
                 if ids.insert(k, next_id).is_some() {
@@ -1090,37 +1193,29 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
                     .checked_add(1)
                     .ok_or_else(|| invalid("forecast too large"))?;
             }
-            fn rename(table: &mut Value, ids: &BTreeMap<String, i64>) -> Result<(), CoreError> {
-                let read = Table::read(table)?;
-                let id = read.at("instance_id")?;
-                let rows = read
-                    .rows
-                    .iter()
-                    .map(|r| {
-                        let mut row = r.to_vec();
-                        row[id] = Value::int(
-                            *ids.get(&key(&r[id])?)
-                                .ok_or_else(|| invalid("unknown forecast instance"))?,
-                        );
-                        Ok(Value::Array(row))
-                    })
-                    .collect::<Result<Vec<_>, CoreError>>()?;
-                table.set("rows", Value::Array(rows));
-                Ok(())
-            }
-            let mut table = field(&context, "instance_table")?.clone();
-            rename(&mut table, &ids)?;
-            context.set("instance_table", table);
-            if let Some(related) = context.get("related_tables") {
-                let tables = members(related)?
-                    .iter()
-                    .map(|(name, t)| {
-                        let mut t = t.clone();
-                        rename(&mut t, &ids)?;
-                        Ok((name.clone(), t))
-                    })
-                    .collect::<Result<_, CoreError>>()?;
-                context.set("related_tables", Value::Object(tables));
+        }
+        let rename = |table: &Table<'_>| -> Result<Vec<Vec<Value>>, CoreError> {
+            let Some(ids) = &ids else {
+                return Ok(table.rows.iter().map(|r| r.to_vec()).collect());
+            };
+            let id = table.at("instance_id")?;
+            table
+                .rows
+                .iter()
+                .map(|r| {
+                    let mut row = r.to_vec();
+                    row[id] = Value::int(
+                        *ids.get(&key(&r[id])?)
+                            .ok_or_else(|| invalid("unknown forecast instance"))?,
+                    );
+                    Ok(row)
+                })
+                .collect()
+        };
+        instances.extend(rename(&instance)?);
+        if let Some(tables) = step.get("related_tables") {
+            for (name, table) in members(tables)? {
+                gather(&mut related, name, table, rename(&Table::read(table)?)?)?;
             }
         }
         let step_schema = field(payload, "schema")?;
@@ -1130,20 +1225,39 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
         {
             return Err(invalid("forecast instance schema or anchor differs"));
         }
-        for name in ["related_tables"] {
-            if let Some(value) = step_schema.get(name) {
-                let mut combined = schema.get(name).cloned().unwrap_or(Value::Object(vec![]));
-                for (table, desc) in members(value)? {
-                    if let Some(existing) = combined.get(table) {
-                        if existing != desc {
+        if let Some(value) = step_schema.get("related_tables") {
+            let mut combined = schema
+                .get("related_tables")
+                .cloned()
+                .unwrap_or(Value::Object(vec![]));
+            fn rest(described: &Value) -> Result<Vec<&(String, Value)>, CoreError> {
+                Ok(members(described)?
+                    .iter()
+                    .filter(|(name, _)| name != "columns")
+                    .collect())
+            }
+            for (table, desc) in members(value)? {
+                let Some(mut held) = combined.get(table).cloned() else {
+                    combined.set(table, desc.clone());
+                    continue;
+                };
+                if rest(&held)? != rest(desc)? {
+                    return Err(invalid("forecast table schemas differ"));
+                }
+                let mut columns = field(&held, "columns")?.clone();
+                for (column, spec) in members(field(desc, "columns")?)? {
+                    match columns.get(column) {
+                        None => columns.set(column, spec.clone()),
+                        Some(other) if other != spec => {
                             return Err(invalid("forecast table schemas differ"));
                         }
-                    } else {
-                        combined.set(table, desc.clone());
+                        Some(_) => {}
                     }
                 }
-                schema.set(name, combined);
+                held.set("columns", columns);
+                combined.set(table, held);
             }
+            schema.set("related_tables", combined);
         }
         if let Some(value) = step_schema.get("relationships") {
             let mut links = schema
@@ -1159,40 +1273,20 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
             }
             schema.set("relationships", Value::Array(links));
         }
-        contexts.push(context);
     }
-    fn append(target: &mut Value, source: &Value) -> Result<(), CoreError> {
-        if field(target, "columns")? != field(source, "columns")? {
-            return Err(invalid("forecast columns differ"));
-        }
-        let mut rows = array(field(target, "rows")?)?.to_vec();
-        rows.extend_from_slice(array(field(source, "rows")?)?);
-        target.set("rows", Value::Array(rows));
-        Ok(())
+    let mut instance_table = field(&context, "instance_table")?.clone();
+    instance_table.set(
+        "rows",
+        Value::Array(instances.into_iter().map(Value::Array).collect()),
+    );
+    context.set("instance_table", instance_table);
+    if payloads.iter().any(|p| {
+        p.get("context")
+            .is_some_and(|c| c.get("related_tables").is_some())
+    }) {
+        context.set("related_tables", gathered(related));
     }
-    let mut combined = contexts.remove(0);
-    for context in contexts {
-        let mut table = field(&combined, "instance_table")?.clone();
-        append(&mut table, field(&context, "instance_table")?)?;
-        combined.set("instance_table", table);
-        if let Some(related) = context.get("related_tables") {
-            let mut tables = combined
-                .get("related_tables")
-                .cloned()
-                .unwrap_or(Value::Object(vec![]));
-            for (name, table) in members(related)? {
-                let mut target = tables.get(name).cloned().unwrap_or_else(|| {
-                    let mut t = table.clone();
-                    t.set("rows", Value::Array(vec![]));
-                    t
-                });
-                append(&mut target, table)?;
-                tables.set(name, target);
-            }
-            combined.set("related_tables", tables);
-        }
-    }
-    out.set("context", combined);
+    out.set("context", context);
     out.set("schema", schema);
     Ok(out)
 }
@@ -1205,31 +1299,175 @@ mod lifecycle_tests {
         sdm_wire::json::read(text.as_bytes()).unwrap()
     }
 
+    fn step(labels: [f64; 3], table: &str, column: &str, values: [f64; 3]) -> Value {
+        let instances = (0..3)
+            .map(|i| format!("[{i},{},{}]", i + 1, labels[i]))
+            .collect::<Vec<_>>()
+            .join(",");
+        let related = (0..3)
+            .map(|i| format!("[{i},{},{}]", i + 1, values[i]))
+            .collect::<Vec<_>>()
+            .join(",");
+        parse(&format!(
+            r#"{{"task":{{"kind":"regression","target":{{"column_name":"y"}}}},
+            "schema":{{"instance_table":{{"columns":{{"instance_id":{{"stype":"ID"}},"ref":{{"stype":"ID"}},"y":{{"stype":"numerical"}}}}}},
+            "related_tables":{{"{table}":{{"primary_key":["instance_id","id"],"columns":{{"instance_id":{{"stype":"ID"}},"id":{{"stype":"ID"}},"{column}":{{"stype":"numerical"}}}}}}}},
+            "relationships":[{{"source_columns":["ref"],"target_table":"{table}","target_columns":["id"]}}]}},
+            "context":{{"instance_table":{{"columns":["instance_id","ref","y"],"rows":[{instances}]}},
+            "related_tables":{{"{table}":{{"columns":["instance_id","id","{column}"],"rows":[{related}]}}}}}}}}"#
+        ))
+    }
+
     #[test]
-    fn delta_restores_exact_positions_with_duplicate_values_and_unicode_schema() {
-        let mut p = parse(
-            r#"{"schema":{"instance_table":{"columns":{"é\n":{"stype":"categorical"}}}},"context":{"instance_table":{"columns":["é\n"],"rows":[["kept"],["kept"]]},"related_tables":{}}}"#,
-        );
-        let mut delta = parse(
-            r#"{"version":1,"instance_table":{"original_rows":5,"positions":[0,2,4],"removed":{"columns":["é\n"],"rows":[["first"],["middle"],["last"]]}},"related_tables":{}}"#,
-        );
-        delta.set(
-            "schema_json",
-            Value::Text(encoded(p.get("schema").unwrap())),
-        );
-        p.set("client_analysis_delta", delta);
-        let restored = restored(&p).unwrap();
+    fn forecast_analysis_covers_every_step_and_tables_only_a_later_step_reached() {
+        let combined = forecast(&[
+            step([0.0, 10.0, 0.0], "orders", "amount", [1.0, 2.0, 3.0]),
+            step(
+                [100.0, 200.0, 300.0],
+                "events",
+                "seconds",
+                [10.0, 20.0, 30.0],
+            ),
+        ])
+        .unwrap();
+        let ColumnAnalysis::Ready { rows } = analyze(&combined).unwrap() else {
+            panic!()
+        };
+        let cohorts = |column: &str| {
+            rows.iter()
+                .filter(|r| r.column == column)
+                .map(|r| (r.cohort.as_str(), r.mean))
+                .collect::<Vec<_>>()
+        };
+        let counted = rows
+            .iter()
+            .filter(|r| r.table == "orders" && r.column == "COUNT(*)")
+            .map(|r| (r.cohort.as_str(), r.mean))
+            .collect::<Vec<_>>();
+        assert_eq!(counted, [("[0 - 0]", 200.0), ("(0 - 1+]", 10.0 / 3.0)]);
         assert_eq!(
-            restored
-                .get("context")
-                .unwrap()
-                .get("instance_table")
-                .unwrap()
-                .get("rows")
-                .unwrap(),
-            &parse(r#"[["first"],["kept"],["middle"],["kept"],["last"]]"#)
+            cohorts("amount"),
+            [("[1 - 1.20]", 0.0), ("(1.20 - 2]", 10.0), ("(2 - 3]", 0.0)]
         );
-        assert!(restored.get("client_analysis_delta").is_none());
+        assert_eq!(
+            cohorts("seconds"),
+            [
+                ("[10 - 12]", 100.0),
+                ("(12 - 20]", 200.0),
+                ("(20 - 30]", 300.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn calls_of_one_request_are_analysed_over_each_sent_instance_once() {
+        let call = |rows: &str| {
+            parse(&format!(
+                r#"{{"task":{{"kind":"regression","target":{{"column_name":"y"}}}},
+                "schema":{{"instance_table":{{"columns":{{"instance_id":{{"stype":"ID"}},"__kumo_entity_ref_0":{{"stype":"ID"}},"x":{{"stype":"categorical"}},"y":{{"stype":"numerical"}}}}}}}},
+                "context":{{"instance_table":{{"columns":["instance_id","__kumo_entity_ref_0","x","y"],"rows":[{rows}]}}}}}}"#
+            ))
+        };
+        let first = call(r#"[0,1,"p",0],[2,7,"p",0],[3,2,"q",1],[4,3,"q",0]"#);
+        let second = call(r#"[0,1,"p",0],[1,5,"p",1],[3,2,"q",1],[4,3,"q",0]"#);
+        let ColumnAnalysis::Ready { rows } = analyze(&sent(&[first, second]).unwrap()).unwrap()
+        else {
+            panic!()
+        };
+        let cohorts = rows
+            .iter()
+            .filter(|r| r.column == "x")
+            .map(|r| (r.cohort.as_str(), r.share, r.mean))
+            .collect::<Vec<_>>();
+        assert_eq!(cohorts, [("p", 0.6, 1.0 / 3.0), ("q", 0.4, 0.5)]);
+    }
+
+    #[test]
+    fn calls_gathered_apart_keep_each_instance_and_its_rows() {
+        let call = |instances: &str, users: &str| {
+            parse(&format!(
+                r#"{{"task":{{"kind":"regression","target":{{"column_name":"y"}}}},
+                "schema":{{"instance_table":{{"columns":{{"instance_id":{{"stype":"ID"}},"__kumo_entity_ref_0":{{"stype":"ID"}},"y":{{"stype":"numerical"}}}}}},
+                "related_tables":{{"users":{{"primary_key":["instance_id","uid"],"columns":{{"instance_id":{{"stype":"ID"}},"uid":{{"stype":"ID"}},"age":{{"stype":"numerical"}}}}}}}},
+                "relationships":[{{"source_columns":["__kumo_entity_ref_0"],"target_table":"users","target_columns":["uid"]}}]}},
+                "context":{{"instance_table":{{"columns":["instance_id","__kumo_entity_ref_0","y"],"rows":[{instances}]}},
+                "related_tables":{{"users":{{"columns":["instance_id","uid","age"],"rows":[{users}]}}}}}}}}"#
+            ))
+        };
+        let first = call("[0,1,0],[1,2,1]", "[0,1,30],[1,2,40]");
+        let second = call("[0,3,1],[1,4,1]", "[0,3,50],[1,4,60]");
+        let combined = sent(&[first, second]).unwrap();
+        let context = field(&combined, "context").unwrap();
+        let instances = Table::read(field(context, "instance_table").unwrap()).unwrap();
+        let entity = instances
+            .rows
+            .iter()
+            .map(|r| (key(&r[0]).unwrap(), key(&r[1]).unwrap()))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(entity.len(), 4);
+        let users = field(field(context, "related_tables").unwrap(), "users").unwrap();
+        for row in &Table::read(users).unwrap().rows {
+            assert_eq!(entity[&key(&row[0]).unwrap()], key(&row[1]).unwrap());
+        }
+        assert!(matches!(
+            analyze(&combined).unwrap(),
+            ColumnAnalysis::Ready { .. }
+        ));
+    }
+
+    #[test]
+    fn calls_or_forecast_steps_that_reached_different_tables_are_analysed_together() {
+        let users = r#""users":{"primary_key":["instance_id","uid"],"columns":{"instance_id":{"stype":"ID"},"uid":{"stype":"ID"},"age":{"stype":"numerical"}}}"#;
+        let orders = |key: &str| {
+            format!(
+                r#""orders":{{"primary_key":["instance_id","oid"],"columns":{{"instance_id":{{"stype":"ID"}},"oid":{{"stype":"ID"}},"uid":{{"stype":"ID"}}{key}}}}}"#
+            )
+        };
+        let link = |table: &str, column: &str, target: &str| {
+            format!(
+                r#"{{"source_table":"{table}","source_columns":["{column}"],"target_table":"{target}","target_columns":["{column}"]}}"#
+            )
+        };
+        let call = |instances: &str, extra: &str, product: bool| {
+            let entity = r#"{"source_columns":["__kumo_entity_ref_0"],"target_table":"users","target_columns":["uid"]}"#;
+            let (key, products, product_link, columns, rows) = if product {
+                (
+                    r#","pid":{"stype":"ID"}"#,
+                    r#","products":{"primary_key":["instance_id","pid"],"columns":{"instance_id":{"stype":"ID"},"pid":{"stype":"ID"},"price":{"stype":"numerical"}}}"#,
+                    format!(",{}", link("orders", "pid", "products")),
+                    r#"["instance_id","oid","uid","pid"]"#,
+                    r#","products":{"columns":["instance_id","pid","price"],"rows":[[1,9,5.0]]}"#,
+                )
+            } else {
+                ("", "", String::new(), r#"["instance_id","oid","uid"]"#, "")
+            };
+            let order_rows = if product { "[[1,8,2,9]]" } else { "[[0,7,1]]" };
+            parse(&format!(
+                r#"{{"task":{{"kind":"regression","target":{{"column_name":"y"}}}},
+                "schema":{{"instance_table":{{"columns":{{"instance_id":{{"stype":"ID"}},"__kumo_entity_ref_0":{{"stype":"ID"}},"y":{{"stype":"numerical"}}}}}},
+                "related_tables":{{{users},{}{products}}},
+                "relationships":[{entity},{}{product_link}]}},
+                "context":{{"instance_table":{{"columns":["instance_id","__kumo_entity_ref_0","y"],"rows":[{instances}]}},
+                "related_tables":{{"users":{{"columns":["instance_id","uid","age"],"rows":[{extra}]}},
+                "orders":{{"columns":{columns},"rows":{order_rows}}}{rows}}}}}}}"#,
+                orders(key),
+                link("orders", "uid", "users"),
+            ))
+        };
+        let first = call("[0,1,0],[1,2,1]", "[0,1,30],[1,2,40]", false);
+        let second = call("[0,1,0],[1,2,1]", "[0,1,30],[1,2,40]", true);
+        for combine in [sent, forecast] {
+            let combined = combine(&[first.clone(), second.clone()]).unwrap();
+            let context = field(&combined, "context").unwrap();
+            let orders = field(field(context, "related_tables").unwrap(), "orders").unwrap();
+            let orders = Table::read(orders).unwrap();
+            assert_eq!(orders.names, ["instance_id", "oid", "uid", "pid"]);
+            assert_eq!(orders.rows[0][3], Value::Null);
+            assert!(matches!(
+                analyze(&combined).unwrap(),
+                ColumnAnalysis::Ready { .. }
+            ));
+        }
     }
 
     #[test]

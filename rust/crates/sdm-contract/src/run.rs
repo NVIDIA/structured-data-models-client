@@ -16,21 +16,21 @@
 //! The sender of a message numbers the attachments it sends.
 //!
 //! - Core to host: a run numbers its attachments from 1 in the order it
-//! makes them (key sets, model bodies, result payloads), unique within
-//! that run and never reused. An id stays valid until the host takes the
-//! attachment, the run is cancelled, or the run is dropped; a run that
-//! would pass `u32::MAX` ends with `INTERNAL_ERROR`.
+//!   makes them (key sets, model bodies, result payloads), unique within
+//!   that run and never reused. An id stays valid until the host takes the
+//!   attachment, the run is cancelled, or the run is dropped; a run that
+//!   would pass `u32::MAX` ends with `INTERNAL_ERROR`.
 //! - Host to core: the host names the attachments of each message it sends
-//! (`start`, `fetch_reply`, `model_reply`) with ids of its choosing,
-//! scoped to that one message; the core takes them when it reads the
-//! message, and the ids mean nothing afterwards.
+//!   (`start`, `fetch_reply`, `model_reply`) with ids of its choosing,
+//!   scoped to that one message; the core takes them when it reads the
+//!   message, and the ids mean nothing afterwards.
 //! - A message the core writes whose encoding would pass the control cap
-//! travels whole as an attachment, named by an `attached` message; its id
-//! comes from the run's numbering, and it travels with that message.
+//!   travels whole as an attachment, named by an `attached` message; its id
+//!   comes from the run's numbering, and it travels with that message.
 //! - Across runs: no id carries over. State that outlives a run, such as
-//! `RequestState.payload` from `materialize`, leaves as bytes the host
-//! takes when that run finishes, and comes back attached to the `start`
-//! of the `predict` run under an id the host picks for that message.
+//!   `RequestState.payload` from `materialize`, leaves as bytes the host
+//!   takes when that run finishes, and comes back attached to the `start`
+//!   of the `predict` run under an id the host picks for that message.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

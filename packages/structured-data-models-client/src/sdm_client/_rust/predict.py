@@ -190,7 +190,7 @@ def _state(request: Request) -> results.CoreRequest | None:
         return None
     calls = 1 + len(state.batches or ())
     steps = request.parts if request.parts is not None else (request,)
-    if any(len(step.payloads or ()) != calls for step in steps):
+    if any(len(step._envelopes or ()) != calls for step in steps):
         return None
     return state
 
@@ -217,7 +217,7 @@ def _from_state(
 
     steps = request.parts if request.parts is not None else (request,)
     [(payload, query), *later] = [
-        ((step.payloads or ())[0], step.query) for step in steps
+        ((step._envelopes or ())[0], step.query) for step in steps
     ]
     named: dict[str, Any] = {'version': state.version, 'payload': 1, 'query': 2}
     attachments = {1: _payload(payload), 2: codec.attachment(query)}
@@ -227,7 +227,7 @@ def _from_state(
         # call order.
         named['batches'] = []
         for at, (more, rows) in enumerate(
-            zip((request.payloads or ())[1:], state.batches, strict=True),
+            zip((request._envelopes or ())[1:], state.batches, strict=True),
             start=3,
         ):
             attachments[at] = _payload(more)
@@ -294,7 +294,7 @@ def _held(request: Request) -> tuple[dict[str, Any], dict[int, Any]]:
 
     rewritten = request._decomposition
     if request.parts is None or rewritten is None:
-        first, *calls = request.payloads or ()
+        first, *calls = request._envelopes or ()
         named: dict[str, Any] = {'payload': 1, 'query': 2}
         attachments = {1: _payload(first), 2: codec.attachment(request.query)}
         if calls:
@@ -308,7 +308,7 @@ def _held(request: Request) -> tuple[dict[str, Any], dict[int, Any]]:
                 )
         return named, attachments
     [(payload, query), *later] = [
-        ((part.payloads or ())[0], part.query) for part in request.parts
+        ((part._envelopes or ())[0], part.query) for part in request.parts
     ]
     named = {'payload': 1, 'query': 2}
     attachments = {1: _payload(payload), 2: codec.attachment(query)}
@@ -605,7 +605,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
         # the run (``run``'s ``_carried``).
         failure: StructuredDataError | None = None
         unexpected: Exception | None = None
-        transport_failed = False
+        transport_failed: StructuredDataError | None = None
         refused: NimRequestError | None = None
         try:
             # The core's call, its bytes as written (register PD-2),
@@ -620,7 +620,7 @@ def sender(client: SDMClient, model_id: str) -> Any:
             refused = refusal
         except StructuredDataError as failed:
             if failed.code == 'TRANSPORT_ERROR':
-                transport_failed = True
+                transport_failed = failed
             else:
                 from sdm_client.in_process.backend import InProcessBackend
 
@@ -639,8 +639,8 @@ def sender(client: SDMClient, model_id: str) -> Any:
             # reference's client does. An interrupt is no
             # Exception, and cancels the run as before.
             unexpected = other
-        if transport_failed:
-            raise TransportFailed
+        if transport_failed is not None:
+            raise TransportFailed(transport_failed)
         raised: StructuredDataError | None = failure
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is

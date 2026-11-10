@@ -239,7 +239,7 @@ names what to change.
 
 | Refusal | Cause |
 |---|---|
-| a task the model does not serve | `forecasting`, `temporal_link_prediction` and the rest are relational |
+| a task the model does not serve | `forecasting` and the rest are relational; no released model serves `temporal_link_prediction` |
 | an output it does not produce | `rankings`, `embeddings`, `scores` |
 | a context above the cap | more than 10,000 labelled rows in a direct `Request` |
 | relationships | this model reads one table; use `kumo-relational` |

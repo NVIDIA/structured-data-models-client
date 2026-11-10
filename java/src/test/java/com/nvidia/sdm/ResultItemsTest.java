@@ -63,6 +63,9 @@ class ResultItemsTest {
       PredictionResult b = client.predict(second, SdmClient.KUMO_RELATIONAL);
       assertEquals(List.of(1L, 2L), a.items().get(0).prediction());
       assertEquals(Map.of("candidate", 1L, "score", .9), a.items().get(0).rankings().get(0));
+      assertThrows(
+          UnsupportedOperationException.class,
+          () -> a.items().get(0).rankings().get(0).put("score", 0));
       assertEquals(List.of(999L), a.unscoredCandidates());
       PredictionResult joined = PredictionResult.merge(List.of(a, b));
       assertEquals(List.of(1L, 2L), joined.items().get(0).prediction());
@@ -89,16 +92,13 @@ class ResultItemsTest {
     Schema schema = RelationalTest.fixture(true, true);
     try (RelationalTest.Endpoint endpoint = new RelationalTest.Endpoint();
         SdmClient client = endpoint.client()) {
-      Request link =
-          PredictiveQuery.parse(RelationalTest.LINK)
-              .materialize(schema, RelationalTest.options(1L, 2L).build());
-      List<PredictionItem> linked = client.predict(link, SdmClient.KUMO_RELATIONAL).items();
-      assertEquals(2, linked.size());
-      assertNotNull(linked.get(0).rankings());
-      assertTrue(linked.get(0).rankings().get(0).containsKey("score"));
-      assertThrows(
-          UnsupportedOperationException.class,
-          () -> linked.get(0).rankings().get(0).put("score", 0));
+      StructuredDataException refused =
+          assertThrows(
+              StructuredDataException.class,
+              () ->
+                  PredictiveQuery.parse(RelationalTest.LINK)
+                      .materialize(schema, RelationalTest.options(1L, 2L).build()));
+      assertEquals("UNSUPPORTED_REQUEST", refused.code());
       Request forecast =
           PredictiveQuery.parse(RelationalTest.FORECAST)
               .materialize(schema, RelationalTest.options(1L, 2L).build());

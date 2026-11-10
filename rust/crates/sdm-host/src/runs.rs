@@ -11,15 +11,15 @@
 //! threads. Every call:
 //!
 //! - is contained: a panic anywhere below it poisons the run and comes back
-//! as `INTERNAL_ERROR` with `fields.panic = true` and the panic's
-//! location, never its message, and never as an unwind through the
-//! binding; [`contain`] reports the panic out of band, so no error a host
-//! hands in can poison a run;
+//!   as `INTERNAL_ERROR` with `fields.panic = true` and the panic's
+//!   location, never its message, and never as an unwind through the
+//!   binding; [`contain`] reports the panic out of band, so no error a host
+//!   hands in can poison a run;
 //! - is refused with `RUN_BUSY` (kind `protocol`) while another call is in
-//! the run, rather than waiting;
+//!   the run, rather than waiting;
 //! - reads control messages through the codecs, under the control cap, and
-//! writes them whole: one whose encoding would pass the cap travels as an
-//! attachment numbered in the run's sequence.
+//!   writes them whole: one whose encoding would pass the cap travels as an
+//!   attachment numbered in the run's sequence.
 //!
 //! Attachments follow. The core numbers its own from 1 in each
 //! run, and the host takes them by id ([`HostRun::take_attachment`]); an

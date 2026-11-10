@@ -279,8 +279,9 @@ class PredictionResult:
         last answer would silently drop every earlier batch, so the parts are
         concatenated here.
 
-        The native route keeps a stable union of unscored candidates, removing
-        duplicates within and across parts. NaNs remain distinct under IEEE
+        The native route keeps a stable union of unscored candidates: a value
+        an earlier part already reported is dropped, and a repeat within one
+        part is kept. NaNs remain distinct under IEEE
         equality. Aware datetimes compare by UTC instant, distinguishing DST
         folds; dates and naive datetimes remain separate. Result items, metadata
         values and explanation owners are retained.

@@ -764,20 +764,10 @@ def warn_from_core(
                 + words['between'].join(said(w) for w in together)
                 + words['closing']
             )
-        # Native direct advice is presented without a diagnostic code
-        # in the public constructor. Keep this local to its direct sentences;
-        # warehouse and other core warnings retain their existing presentation.
-        native_direct = first['sentence'] in {
-            'direct_native_missing_key',
-            'direct_dates_as_text',
-            'direct_outputs_absent',
-            'direct_key_repeated',
-            'direct_key_composite',
-            'direct_key_no_composite',
-            'direct_categorical_population',
-        }
         warnings.warn(
-            text if native_direct else f'[{first["code"]}] {text}',
+            text
+            if first['sentence'] in _NATIVE_DIRECT
+            else f'[{first["code"]}] {text}',
             category=WARNINGS.get(first['code'], SDMWarning),
             stacklevel=caller_stacklevel(),
         )
@@ -793,13 +783,37 @@ def _opening(template: str, fields: dict[str, Any]) -> str:
         return DEFECT.format(sentence=template)
 
 
+#: Native direct advice is presented without a diagnostic code in the public
+#: constructor, as the old client wrote it. Kept to its direct sentences;
+#: warehouse and other core warnings retain their existing presentation.
+_NATIVE_DIRECT = frozenset(
+    {
+        'direct_native_missing_key',
+        'direct_dates_as_text',
+        'direct_outputs_absent',
+        'direct_key_repeated',
+        'direct_key_composite',
+        'direct_key_no_composite',
+        'direct_categorical_population',
+        'direct_constant_class',
+        'direct_constant_regression',
+        'direct_native_constant_class',
+        'direct_native_constant_regression',
+        'direct_overlap',
+    }
+)
+
+
 def warn_held(held: list[dict[str, Any]]) -> None:
     r"""Shows warnings:func:`warn_from_core` held back, in order, each as it
     would have been shown (none of them of a group)."""
     for warning in held:
         assert table().sentences[warning['sentence']]['group'] is None
+        text = said(warning)
         warnings.warn(
-            f'[{warning["code"]}] {said(warning)}',
+            text
+            if warning['sentence'] in _NATIVE_DIRECT
+            else f'[{warning["code"]}] {text}',
             category=WARNINGS.get(warning['code'], SDMWarning),
             stacklevel=caller_stacklevel(),
         )

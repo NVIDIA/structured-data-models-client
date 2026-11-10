@@ -193,3 +193,53 @@ def test_workflows_check_after_the_final_dependency_install():
         'check_wheel_provenance.py --write-version dist/VERSION dist/*.whl'
         in build
     )
+
+
+@pytest.mark.parametrize(
+    ('tag', 'accepted'),
+    [
+        ('v2.0.0', True),
+        ('v2.0.0rc1', True),
+        ('v2.0.0a1', True),
+        ('v2.0.0b12', True),
+        ('v2.0.0-rc.1', False),
+        ('v2.0.0rc', False),
+        ('vv2.0.0', False),
+    ],
+)
+def test_the_release_accepts_final_and_pre_release_tags(
+    tmp_path, monkeypatch, tag, accepted
+):
+    import re
+
+    import yaml
+
+    publish = yaml.safe_load(
+        (ROOT / '.github/workflows/publish.yml').read_text()
+    )
+    filters = publish[True]['push']['tags']
+    pushed = any(re.fullmatch(f.replace('.', r'\.'), tag) for f in filters)
+    step = next(
+        step
+        for step in publish['jobs']['assemble']['steps']
+        if step.get('name')
+        == 'The tag must match what the distributions declare'
+    )
+    code = step['run'].split("python - <<'EOF'\n", 1)[1].rsplit('\nEOF', 1)[0]
+    version = tag.removeprefix('v')
+    for package in PACKAGES:
+        (tmp_path / 'packages' / package).mkdir(parents=True)
+        (tmp_path / 'packages' / package / 'pyproject.toml').touch()
+    (tmp_path / 'dist').mkdir()
+    for package in PACKAGES:
+        name = package.replace('-', '_')
+        (tmp_path / 'dist' / f'{name}-{version}-py3-none-any.whl').touch()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('GITHUB_REF_NAME', tag)
+    try:
+        exec(compile(code, '<release tag check>', 'exec'), {})
+    except SystemExit:
+        checked = False
+    else:
+        checked = True
+    assert (pushed, checked) == (accepted, accepted)

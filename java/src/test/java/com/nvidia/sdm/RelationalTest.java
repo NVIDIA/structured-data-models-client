@@ -248,10 +248,9 @@ class RelationalTest {
       Request temporal = PredictiveQuery.parse(TEMPORAL).materialize(owner, options(1L, 2L).anchorTime(LocalDate.of(2024, 6, 1)).build());
       assertTrue(temporal.targetMovesWithTime());
       assertEquals(2, client.predict(temporal, SdmClient.KUMO_RELATIONAL).rows());
-      Request link = PredictiveQuery.parse(LINK).materialize(owner, options(1L, 2L).build());
-      assertEquals("temporal_link_prediction", map(payload(link, 0).get("task")).get("kind"));
-      PredictionResult linked = client.predict(link, SdmClient.KUMO_RELATIONAL);
-      assertEquals(2, linked.rows()); assertTrue(linked.outputs().contains("rankings"));
+      StructuredDataException link = assertThrows(StructuredDataException.class,
+          () -> PredictiveQuery.parse(LINK).materialize(owner, options(1L, 2L).build()));
+      assertEquals("UNSUPPORTED_REQUEST", link.code());
       assertThrows(StructuredDataException.class,
           () -> PredictiveQuery.parse(RANK).materialize(owner, options(1L, 2L).build()));
       Request ranked = PredictiveQuery.parse(RANK).materialize(owner,

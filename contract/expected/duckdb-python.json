@@ -279,7 +279,7 @@
     "shape.star.stores": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "shape.two-paths.keyed": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "shape.two-paths.keyless": {"code": null, "error": null, "result": "success", "stage": "predict"},
-    "target.aggregation.list-distinct": {"code": null, "error": "NimRequestError", "result": "refusal", "stage": "predict"},
+    "target.aggregation.list-distinct": {"code": "UNSUPPORTED_REQUEST", "error": "UnsupportedRequestError", "result": "refusal", "stage": "materialize"},
     "target.condition.in": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "target.condition.text": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "target.filter.and": {"code": null, "error": null, "result": "success", "stage": "predict"},

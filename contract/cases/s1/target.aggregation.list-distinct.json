@@ -5,8 +5,7 @@
   "slice": "S1",
   "paths": [
     "schema.from-source/all-tables/duckdb",
-    "query.materialize/indices-link-prediction/duckdb",
-    "client.predict/link-prediction/duckdb"
+    "query.materialize/indices-link-prediction/duckdb"
   ],
   "routes": [
     "schema.from-source/all-tables/duckdb",
@@ -44,7 +43,7 @@
       "anchor_time": "2023-03-01"
     }
   },
-  "until": "predict",
+  "until": "materialize",
   "core": {
     "describe_source": {
       "provider": {
@@ -80,18 +79,14 @@
         "zone": null
       },
       "seed": null
-    },
-    "predict": {
-      "model": "kumo-relational"
     }
   },
   "expect": {
     "outcome": "refusal",
-    "stage": "predict",
-    "error": "NimRequestError",
-    "code": null,
-    "message": "[400] {\"error\": \"no_classes\"}"
+    "stage": "materialize",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
   },
-  "why": "An aggregation other than SUM, COUNT, AVG, MIN and MAX: LIST_DISTINCT of buys.item_id, a foreign key, for each user, a temporal link prediction whose context rows are each labelled with the distinct items bought in its window (the core's rule aggregation)",
+  "why": "LIST_DISTINCT of buys.item_id, a foreign key, for each user, with no RANK TOP k: a candidate-free temporal link prediction, which no released Kumo Relational model serves, refused by materialize before the source is read (rule temporal_link_prediction)",
   "source": "Correctness case target.aggregation.list-distinct using the shop fixture."
 }

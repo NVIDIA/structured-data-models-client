@@ -108,12 +108,16 @@ class CustomExamplesTest {
     for(Map<String,Object> test:cases(fixture)) {
       String name=test.get("id").toString();
       Schema schema=memory(fixture,"timeless".equals(test.get("schema_variant")));
+      if(name.equals("temporal_link_prediction")) {
+        StructuredDataException refused=assertThrows(StructuredDataException.class,()->prepare(schema,test,object(test.get("predict"))));
+        assertEquals("UNSUPPORTED_REQUEST",refused.code(),name);
+        continue;
+      }
       Request request=prepare(schema,test,object(test.get("predict")));
       // Inputs and their allocator are already closed: the prepared request owns its data.
       Map<String,Object> payload=payload(request,0),expected=object(test.get("expected"));
       List<Object> labels=column(instance(payload,"context"),"TARGET");
       List<?> wanted=(List<?>)expected.get("context_targets");
-      if(name.equals("temporal_link_prediction")) wanted=wanted.stream().map(v->((List<?>)v).stream().map(Object::toString).toList()).toList();
       assertEquals(normalized(wanted),normalized(labels),name);
       assertEquals(rows(object(test.get("context"))).size(),rows(instance(payload,"context")).size(),name+" overlaps retained");
       assertEquals(expected.get("use_prediction_time"),object(payload.get("inference")).get("use_prediction_time"));

@@ -340,7 +340,7 @@ def _text_schema() -> Schema:
                 ).materialize(indices=[0, 1]),
                 model=KumoRelational(),
             ),
-            'UNSUPPORTED_TASK',
+            'UNSUPPORTED_REQUEST',
         ),
         (
             'kumo-tabular',

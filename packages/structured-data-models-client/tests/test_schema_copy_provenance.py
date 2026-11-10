@@ -126,12 +126,11 @@ def _copies() -> dict[str, Callable[[Schema], Schema]]:
     }
 
 
-@pytest.mark.parametrize('made', sorted(_copies()))
-def test_copies_refresh_the_same_source_metadata(made, monkeypatch):
+def _watched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    r"""The kind of each request a source is asked from now on."""
     from sdm_client._rust import providers
 
-    source = _shop()
-    asked = []
+    asked: list[str] = []
     real = providers.for_source
 
     def watched(given):
@@ -144,6 +143,13 @@ def test_copies_refresh_the_same_source_metadata(made, monkeypatch):
         return choice, answering
 
     monkeypatch.setattr(providers, 'for_source', watched)
+    return asked
+
+
+@pytest.mark.parametrize('made', sorted(_copies()))
+def test_copies_refresh_the_same_source_metadata(made, monkeypatch):
+    source = _shop()
+    asked = _watched(monkeypatch)
     described = _described(source)
     asked.clear()
     copied = _copies()[made](described)
@@ -155,7 +161,32 @@ def test_copies_refresh_the_same_source_metadata(made, monkeypatch):
     assert isinstance(once, list)
     assert again == once
     assert asked == first
-    assert 'describe' in asked and 'preview' in asked
+    assert 'describe' in asked and 'preview' not in asked
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        'ALTER TABLE users ALTER age SET NOT NULL',
+        'ALTER TABLE users ALTER age TYPE DOUBLE',
+    ],
+)
+def test_a_column_declared_otherwise_since_is_read_again_in_full(
+    change, monkeypatch
+):
+    r"""A run reads a table's catalog alone while it declares every column
+    as describe read it, and the table in full once one is declared
+    otherwise, its nullability as much as its type."""
+    source = _shop()
+    asked = _watched(monkeypatch)
+    schema = _described(source)
+    asked.clear()
+    _payload(schema)
+    assert 'describe' in asked and 'preview' not in asked
+    source.connection.execute(change)
+    asked.clear()
+    _payload(schema)
+    assert 'preview' in asked
 
 
 def test_source_facts_are_immutable_and_excluded_from_column_equality():

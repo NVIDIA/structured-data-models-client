@@ -103,6 +103,12 @@ def _list(value: Any, where: str) -> list[Any]:
     return value
 
 
+def _object(value: Any, where: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise CodecError(f'{where} is not an object')
+    return value
+
+
 # --- What the source said of a column ------------------------------------------
 
 
@@ -115,8 +121,9 @@ class SourceFacts:
     since), the data type the source's catalog and values give it, the type
     the provider handed over (the contract's ``ColumnType``, as JSON),
     whether it may hold no value, whether a key of it alone keeps it
-    unique, a big integer's or temporal column's declared type, and whether
-    it is a column of exact numbers."""
+    unique, a big integer's or temporal column's declared type, how its
+    catalog declares it (the contract's ``CatalogDeclaration``, as JSON),
+    and whether it is a column of exact numbers."""
 
     relation: Any
     dtype: str
@@ -124,6 +131,7 @@ class SourceFacts:
     nullable: bool
     unique: bool
     declared_type: str | None = None
+    catalog: Any = None
     exact_number: str | None = None
 
     @classmethod
@@ -133,7 +141,7 @@ class SourceFacts:
             value,
             "a column's source facts",
             ('relation', 'dtype', 'received', 'nullable', 'unique'),
-            ('declared_type', 'exact_number'),
+            ('declared_type', 'catalog', 'exact_number'),
         )
         return cls(
             relation=read['relation'],
@@ -142,6 +150,7 @@ class SourceFacts:
             nullable=_flag(read['nullable'], 'nullable'),
             unique=_flag(read['unique'], 'unique'),
             declared_type=_maybe(read['declared_type'], _text, 'declared_type'),
+            catalog=_maybe(read['catalog'], _object, 'catalog'),
             exact_number=_maybe(read['exact_number'], _text, 'exact_number'),
         )
 
@@ -162,6 +171,7 @@ class SourceFacts:
                         'nullable',
                         'unique',
                         'declared_type',
+                        'catalog',
                         'exact_number',
                     )
                     if key in column
@@ -181,6 +191,8 @@ class SourceFacts:
         }
         if self.declared_type is not None:
             written['declared_type'] = self.declared_type
+        if self.catalog is not None:
+            written['catalog'] = self.catalog
         if self.exact_number is not None:
             written['exact_number'] = self.exact_number
         return written

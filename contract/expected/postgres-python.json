@@ -277,7 +277,7 @@
     "shape.star.stores@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "shape.two-paths.keyed@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "shape.two-paths.keyless@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
-    "target.aggregation.list-distinct@postgres": {"code": null, "error": "NimRequestError", "result": "refusal", "stage": "predict"},
+    "target.aggregation.list-distinct@postgres": {"code": "UNSUPPORTED_REQUEST", "error": "UnsupportedRequestError", "result": "refusal", "stage": "materialize"},
     "target.condition.in@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "target.condition.text@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "target.filter.and@postgres": {"code": null, "error": null, "result": "success", "stage": "predict"},

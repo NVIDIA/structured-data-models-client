@@ -6,22 +6,22 @@
 //! independent test author before the implementation).
 //!
 //! - The staging rule's markers: the data layer renders Postgres
-//! (`sdm_host::providers`, which the binding reports as `PROVIDERS`),
-//! and rust-host has a Postgres provider (`sdm_testkit::PROVIDERS`, the
-//! replay of recorded fetch results), so the core legs run on
-//! Postgres.
+//!   (`sdm_host::providers`, which the binding reports as `PROVIDERS`),
+//!   and rust-host has a Postgres provider (`sdm_testkit::PROVIDERS`, the
+//!   replay of recorded fetch results), so the core legs run on
+//!   Postgres.
 //! - Every request kind the core asks, on every base of
-//! `contract/request-kinds.json`, is planned for Postgres through the
-//! root's data access (so each optional request is one the dialect
-//! declares) as SQL statements of the Postgres dialect; a keyed request
-//! binds its key set as a parameter of a statement (`SqlParam::KeySet`,
-//! `P1 d:131`: the binding is the dialect's).
+//!   `contract/request-kinds.json`, is planned for Postgres through the
+//!   root's data access (so each optional request is one the dialect
+//!   declares) as SQL statements of the Postgres dialect; a keyed request
+//!   binds its key set as a parameter of a statement (`SqlParam::KeySet`,
+//!   `P1 d:131`: the binding is the dialect's).
 //! - Choice 12's relation forms on Postgres: one part or two (schema and
-//! table) plan, each part quoted alone (a dotted name one identifier, a
-//! double quote doubled); none, or three, is refused by name (rule
-//! `relation`), as DuckDB refuses none or four. The same forms are
-//! executed on a real Postgres by the client's
-//! `tests_test_ops/test_the_postgres_provider.py`.
+//!   table) plan, each part quoted alone (a dotted name one identifier, a
+//!   double quote doubled); none, or three, is refused by name (rule
+//!   `relation`), as DuckDB refuses none or four. The same forms are
+//!   executed on a real Postgres by the client's
+//!   `tests_test_ops/test_the_postgres_provider.py`.
 
 use std::path::PathBuf;
 

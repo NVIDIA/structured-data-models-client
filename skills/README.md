@@ -11,9 +11,9 @@ Start at one of these two. Each is enough on its own to ask a first question.
 | [`relational/SKILL.md`](relational/SKILL.md) | `kumo-relational` | The question is about an entity and what it is linked to |
 
 An agent answering a question about a single table does not need the
-relational material, and the four task kinds that make the relational model
-what it is — the two shapes of classification, forecasting and link prediction
-— are not on the tabular one at all.
+relational material. What makes the relational model what it is, the two
+shapes of classification, forecasting and ranking an entity's candidate links,
+is not on the tabular one at all.
 
 Each skill names the references it needs. They stand on their own, so one can
 be loaded without the skill it belongs to:
@@ -70,7 +70,6 @@ code is right and the skill is stale: say so rather than working around it.
 ## What is not here
 
 - Training, fine-tuning, checkpoints, model registries. The models do not train.
-- `predictive_query`, the parser package behind `PredictiveQuery`. It is
-  internal, as [`docs/reference/stability.md`](../docs/reference/stability.md)
-  says. Write the query as a string.
+- The parser behind `PredictiveQuery`. It is part of the client's Rust core
+  and has no Python API of its own. Write the query as a string.
 - Deployment, authentication and endpoint operation. A skill assumes a URL.

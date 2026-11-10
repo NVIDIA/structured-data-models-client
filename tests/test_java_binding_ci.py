@@ -6,14 +6,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import itertools
-import json
 import re
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -216,56 +213,6 @@ def test_windows_java_builds_are_packaged_and_loaded():
         step.get('run', '') for step in jobs['java-load']['steps']
     )
     assert "separator=';'" in commands
-
-
-@pytest.mark.parametrize(
-    'corruption', [None, 'commit', 'digest', 'missing', 'version']
-)
-def test_java_release_rejects_mismatched_artifacts(
-    tmp_path, monkeypatch, corruption
-):
-    document = yaml.safe_load(
-        (ROOT / '.github/workflows/publish.yml').read_text()
-    )
-    step = next(
-        step
-        for step in document['jobs']['build']['steps']
-        if step.get('name') == 'Verify and assemble the tested Java artifacts'
-    )
-    code = step['run'].split("python - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv('GITHUB_SHA', 'candidate')
-    monkeypatch.setenv('GITHUB_REF_NAME', 'v2.3.4')
-    root = tmp_path / 'java-release'
-    root.mkdir()
-    (tmp_path / 'dist').mkdir()
-    stem = 'structured-data-models-client-2.3.4'
-    jar = root / (stem + '.jar')
-    jar.write_bytes(b'tested artifact fixture')
-    pom = root / (stem + '.pom')
-    version = '2.3.5' if corruption == 'version' else '2.3.4'
-    pom.write_text(
-        f'<project xmlns="http://maven.apache.org/POM/4.0.0"><version>{version}</version></project>'
-    )
-    files = {
-        p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [jar, pom]
-    }
-    if corruption == 'digest':
-        jar.write_bytes(b'changed after testing')
-    if corruption == 'missing':
-        del files[pom.name]
-    record = {
-        'commit': 'other' if corruption == 'commit' else 'candidate',
-        'files': files,
-    }
-    (root / 'java-artifacts.json').write_text(json.dumps(record))
-    if corruption:
-        with pytest.raises(AssertionError):
-            exec(compile(code, '<release artifact check>', 'exec'), {})
-    else:
-        exec(compile(code, '<release artifact check>', 'exec'), {})
-        assert (tmp_path / 'dist' / jar.name).read_bytes() == jar.read_bytes()
-        assert (tmp_path / 'dist' / pom.name).read_bytes() == pom.read_bytes()
 
 
 def test_java_release_paths_follow_the_pom_version():

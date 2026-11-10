@@ -47,12 +47,15 @@ def response(**record) -> dict:
     }
 
 
-def answered(request, gradient_explanation, *, keyed=True, outputs=None):
+def answered(
+    request, gradient_explanation, *, keyed=True, outputs=None, unkeyed=()
+):
     """Send ``request`` through the adapter and read back a mocked answer.
 
     Each scored row ``i`` comes back as a NIM answers it: under ``'[<key>]'``
-    when the request has a key, with probabilities, and with its own
-    explanation, whose gradients are ``-(i + 1)`` and ``i + 1`` per class.
+    when the request has a key, except the rows in ``unkeyed``, with
+    probabilities, and with its own explanation, whose gradients are
+    ``-(i + 1)`` and ``i + 1`` per class.
     """
     import json
 
@@ -76,7 +79,7 @@ def answered(request, gradient_explanation, *, keyed=True, outputs=None):
                         gradients=[[-(index + 1.0)], [index + 1.0]],
                     ),
                 }
-                if keyed:
+                if keyed and index not in unkeyed:
                     record['id'] = f'[{row[table["columns"].index("row_id")]}]'
                 records.append(record)
             return json.dumps(
@@ -169,6 +172,39 @@ def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
     )
 
     result = answered(request, gradient_explanation)
+
+    assert sorted(result.explanations.gradients) == [0, 1]
+    assert result.explanations.gradients[1]['instance']['gradients'] == [
+        [-2.0],
+        [2.0],
+    ]
+    assert (
+        list(result.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
+
+
+def test_a_missing_id_keys_all_rows_by_row_index(
+    tabular_request, gradient_explanation
+):
+    """If any explained row lacks an id, every explanation is under its
+    row_index, as with repeated ids, so the keying is all-or-nothing.
+
+    Assumptions:
+    - The request's first row has no ``row_id`` and the second 91, so the
+      NIM answers the first with no id.
+    """
+    built = tabular_request(rows=2)
+    request = Request(
+        context=built.context.instance_table,
+        predict=built.predict.instance_table.assign(
+            row_id=pd.array([None, 91], dtype='Int64')
+        ),
+        target='churn',
+        task='classification',
+    )
+
+    result = answered(request, gradient_explanation, unkeyed={0})
 
     assert sorted(result.explanations.gradients) == [0, 1]
     assert result.explanations.gradients[1]['instance']['gradients'] == [

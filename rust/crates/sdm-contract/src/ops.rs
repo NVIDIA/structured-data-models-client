@@ -863,6 +863,12 @@ pub struct DescribedColumn {
     /// Other columns keep none. Absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
+    /// How the source's catalog declared the column when it was read, for
+    /// every column a catalog lists. A later `materialize` compares it with
+    /// the catalog then, and reads the table's keys and preview again only
+    /// where they differ. Absent where no catalog was read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog: Option<CatalogDeclaration>,
     /// Set for a column of numbers the host provider handed over as their
     /// exact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):
     /// whether its catalog declares it a key. The schema reads such a column
@@ -1040,6 +1046,33 @@ pub struct HeldColumn {
     pub source: Option<SourceFacts>,
 }
 
+/// One column as its source's catalog declared it
+/// ([`crate::catalog::CatalogColumn`], less its name).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogDeclaration {
+    pub declared_type: String,
+    pub not_null: bool,
+    pub primary_key: bool,
+    pub key_nullable: bool,
+    pub unique: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dtype: Option<Dtype>,
+}
+
+impl From<&crate::catalog::CatalogColumn> for CatalogDeclaration {
+    fn from(column: &crate::catalog::CatalogColumn) -> Self {
+        Self {
+            declared_type: column.declared_type.clone(),
+            not_null: column.not_null,
+            primary_key: column.primary_key,
+            key_nullable: column.key_nullable,
+            unique: column.unique,
+            dtype: column.dtype,
+        }
+    }
+}
+
 /// What the source said of one column ([`DescribedColumn`]'s facts), which
 /// a host keeps on the column and hands back whole (contract v28).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1067,6 +1100,9 @@ pub struct SourceFacts {
     /// [`DescribedColumn::declared_type`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
+    /// [`DescribedColumn::catalog`]; absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog: Option<CatalogDeclaration>,
     /// [`DescribedColumn::exact_number`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exact_number: Option<ExactNumber>,
@@ -1184,28 +1220,28 @@ impl<T> Given<T> {
 /// ), each in one of these forms:
 ///
 /// - `{"value": <scalar>}`: the host's value as the contract's scalar of
-/// its own type, a missing value `null`.
+///   its own type, a missing value `null`.
 /// - `{"integer": "<digits>"}`: an integer wider than an integer scalar
-/// holds, by its digits (`-` before a negative one).
+///   holds, by its digits (`-` before a negative one).
 /// - `{"decimal": "<digits>"}`: an exact decimal of any precision, by its
-/// fixed-point digits (`-12.50`), its scale the digits after the point.
+///   fixed-point digits (`-12.50`), its scale the digits after the point.
 /// - `{"spelled": "<text>"}`: a value of a type no scalar holds, by the
-/// text the reference writes into its question (in Python, `str` of it);
-/// it is no text candidate, and the core holds it equal to no other.
+///   text the reference writes into its question (in Python, `str` of it);
+///   it is no text candidate, and the core holds it equal to no other.
 /// - `{"typed": {"text": "<text>", "type": "<name>"}}`: a value of a type
-/// no scalar holds, written into its question by its text as `spelled`
-/// is, with the name of the kind of value it is (`date`, `datetime` for a
-/// timestamp with no zone, `datetime_zoned` for one with one, `time`).
-/// Two of one kind and one text are one candidate; a host whose language
-/// holds others equal (two zones of one instant) says so with `repeat`
-///.
+///   no scalar holds, written into its question by its text as `spelled`
+///   is, with the name of the kind of value it is (`date`, `datetime` for a
+///   timestamp with no zone, `datetime_zoned` for one with one, `time`).
+///   Two of one kind and one text are one candidate; a host whose language
+///   holds others equal (two zones of one instant) says so with `repeat`
+///   .
 /// - `repeat`: a value the host's own language holds equal to one given
-/// before it, left out as the reference's `dict.fromkeys` leaves it out.
-/// A host whose candidates are all scalars sends none, the core keeping
-/// each distinct value once by its own equality.
+///   before it, left out as the reference's `dict.fromkeys` leaves it out.
+///   A host whose candidates are all scalars sends none, the core keeping
+///   each distinct value once by its own equality.
 /// - `unreadable`: a value the host cannot look up by value (in Python,
-/// one it cannot hash), which names no row and which the core refuses by
-/// name, as the reference fails on it.
+///   one it cannot hash), which names no row and which the core refuses by
+///   name, as the reference fails on it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum GivenCandidate {

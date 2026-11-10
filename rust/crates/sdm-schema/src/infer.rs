@@ -300,6 +300,26 @@ impl InferredTable {
     }
 }
 
+/// The refusal of column `column` of `source`, whose type `column_type`
+/// no described column takes (`column_type`), naming the column, its table
+/// and the type, as the reference names the column and its table
+/// (`_to_dtype`).
+pub fn column_type(source: &Relation, column: &str, column_type: &str) -> CoreError {
+    CoreError::new(
+        Sentence::ColumnTypeUnsupported,
+        format!(
+            "column {column:?} has the type {column_type}, which a described table does not take"
+        ),
+    )
+    .with_field("operation", Detail::text("describe_source"))
+    .with_field(
+        "source",
+        Detail::List(source.source.iter().cloned().map(Scalar::Utf8).collect()),
+    )
+    .with_field("column", Detail::text(column))
+    .with_field("column_type", Detail::text(column_type))
+}
+
 /// The owner's switch of P1B-11 (2026-10-13): an empty table is refused as
 /// an invalid request, which the reference's unnamed error says it is, not
 /// as a rule the core lacks; the operation and rule stay named, and the
@@ -610,10 +630,19 @@ impl Keyed {
         let dtype = match declared.dtype {
             // A declaration the reference reads as unsupported (Databricks'
             // struct, map or interval, `_to_dtype`) is refused by name, as
-            // a struct or map the values give is (B-10).
-            Some(Dtype::Unsupported) => return Err(not_yet("column_type")),
+            // a struct or map the values give is (B-10), and by the type it
+            // declares: a Snowflake VARIANT arrives as text.
+            Some(Dtype::Unsupported) => {
+                let named = match declared.declared_type.trim() {
+                    "" => field.data_type().to_string(),
+                    spelled => spelled.to_owned(),
+                };
+                return Err(column_type(relation, &declared.name, &named));
+            }
             Some(declared) => declared,
-            None => dtype_of(field.data_type())?,
+            None => dtype_of(field.data_type()).ok_or_else(|| {
+                column_type(relation, &declared.name, &field.data_type().to_string())
+            })?,
         };
         let is_primary = declared.primary_key || self.primary.contains(&declared.name);
         Ok(SourceFacts {
@@ -623,6 +652,7 @@ impl Keyed {
             nullable: !declared.not_null && (!is_primary || declared.key_nullable),
             unique: self.unique.contains(&declared.name),
             declared_type: None,
+            catalog: Some(declared.into()),
             exact_number: exact_number(field, constraints),
         })
     }
@@ -794,7 +824,9 @@ fn preview_with(
             });
             continue;
         }
-        let sample = values::column(batches, index, floats)?;
+        // Its one refusal is of a type it does not read: named here.
+        let sample = values::column(batches, index, floats)
+            .map_err(|_| column_type(source, &declared.name, &field.data_type().to_string()))?;
         if dtype == Dtype::Time {
             // The engine reads a time of day's values as times, which none
             // is, and says how many it dropped.
@@ -937,15 +969,16 @@ fn preview_with(
 /// reference's reading of the catalog's types gives it for the plain types,
 /// binary and the lists of them; a duration is `timedelta`, which the
 /// reference's `_WIRE_DTYPE` has no wire dtype for, so it is left out (no
-/// DuckDB type hands one over). Any other is refused by name (`column_type`).
+/// DuckDB type hands one over). Any other is none, which the caller refuses
+/// by name ([`column_type`]).
 /// A list is read as the reference reads a catalog type ending `[]`: of
 /// integers, floats or text (binary is text to it, so a list of binary is
 /// a list of text), refused otherwise where the reference fails unnamed
 /// (P1B-51). Admission hands every list over as a `list`, so a fixed-size
 /// list (P1B-9) and a list view (P1B-50) are read as lists too. A struct
 /// and a map are refused (P1B-10).
-fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
-    Ok(match data_type {
+fn dtype_of(data_type: &DataType) -> Option<Dtype> {
+    Some(match data_type {
         DataType::Boolean => Dtype::Bool,
         DataType::Int8
         | DataType::Int16
@@ -964,13 +997,13 @@ fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
         DataType::Duration(_) => Dtype::Timedelta,
         DataType::List(element) | DataType::LargeList(element) => {
             match dtype_of(element.data_type()) {
-                Ok(Dtype::Int) => Dtype::Intlist,
-                Ok(Dtype::Float) => Dtype::Floatlist,
-                Ok(Dtype::String | Dtype::Binary) => Dtype::Stringlist,
-                _ => return Err(not_yet("column_type")),
+                Some(Dtype::Int) => Dtype::Intlist,
+                Some(Dtype::Float) => Dtype::Floatlist,
+                Some(Dtype::String | Dtype::Binary) => Dtype::Stringlist,
+                _ => return None,
             }
         }
-        _ => return Err(not_yet("column_type")),
+        _ => return None,
     })
 }
 

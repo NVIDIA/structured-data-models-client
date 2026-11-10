@@ -25,20 +25,20 @@
 //! number of hops (two: a user, its orders, and the orders' user again).
 //!
 //! - `spelling.same`: each order's link written `<digits>.0`, as its user's
-//! key is: answered (the control);
+//!   key is: answered (the control);
 //! - `spelling.equal`: each link written `<digits>.00`: one number, so one
-//! key: answered, and the call the core wrote is `spelling.same`'s (the
-//! `payload` rule: but its request id). When written, the non-SQL
-//! provider, which looks keys up by the core's key identity, found no
-//! order for any user (the text `<digits>.0` is not `<digits>.00`), and
-//! the call carried no order; on Postgres, whose SQL joins the two by
-//! value, the second hop took `<digits>.00`'s user for another node and
-//! failed (`INTERNAL_ERROR`, "a row looked up was already reached"), which
-//! `test_postgres_source_contracts.py` holds;
+//!   key: answered, and the call the core wrote is `spelling.same`'s (the
+//!   `payload` rule: but its request id). When written, the non-SQL
+//!   provider, which looks keys up by the core's key identity, found no
+//!   order for any user (the text `<digits>.0` is not `<digits>.00`), and
+//!   the call carried no order; on Postgres, whose SQL joins the two by
+//!   value, the second hop took `<digits>.00`'s user for another node and
+//!   failed (`INTERNAL_ERROR`, "a row looked up was already reached"), which
+//!   `test_postgres_source_contracts.py` holds;
 //! - `spelling.different`: each link written `<digits>.01`, another number,
-//! which no user's key is, though a double rounds every one of them to a
-//! user's (ids past 2**53 are a double's every other integer): answered,
-//! with no order linked to any user, so the call is not `spelling.same`'s.
+//!   which no user's key is, though a double rounds every one of them to a
+//!   user's (ids past 2**53 are a double's every other integer): answered,
+//!   with no order linked to any user, so the call is not `spelling.same`'s.
 //!
 
 use std::collections::BTreeSet;

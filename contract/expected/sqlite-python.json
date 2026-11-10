@@ -261,7 +261,7 @@
     "shape.star.stores@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "shape.two-paths.keyed@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "shape.two-paths.keyless@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
-    "target.aggregation.list-distinct@sqlite": {"code": null, "error": "NimRequestError", "result": "refusal", "stage": "predict"},
+    "target.aggregation.list-distinct@sqlite": {"code": "UNSUPPORTED_REQUEST", "error": "UnsupportedRequestError", "result": "refusal", "stage": "materialize"},
     "target.condition.in@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "target.condition.text@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},
     "target.filter.and@sqlite": {"code": null, "error": null, "result": "success", "stage": "predict"},

@@ -18,6 +18,7 @@ from sdm_client import (
     KumoRelational,
     PredictionResult,
     PredictiveQuery,
+    Request,
     Schema,
     SDMClient,
 )
@@ -47,7 +48,6 @@ def test_public_constructor_has_independent_cohort_oracle():
     assert list(frame['cohort']) == ['a', 'b']
     assert list(frame['mean']) == [1.0, 9.0]
     assert list(frame['share']) == [0.5, 0.5]
-    assert list(frame['score']) == [1.0, 1.0]
     frame.loc[0, 'mean'] = -1
     assert result.to_pandas().loc[0, 'mean'] == 1
 
@@ -66,7 +66,6 @@ def test_empty_labels_and_exact_mixed_classes():
         'class',
         'share',
         'mean',
-        'score',
     ]
     labels = [2**80 + 1, 0.5, '1']
     frame = ColumnExplanations(
@@ -212,13 +211,12 @@ def gathered():
     )
 
 
-def test_materialize_pickle_predict_restores_pretrim_context_without_sending_delta():
+def test_materialize_pickle_predict_analyses_the_rows_it_sends():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = gathered()
-        assert request.payloads[0]['client_analysis_delta']['version'] == 1
         restored = pickle.loads(pickle.dumps(request))
-        assert restored.payloads == request.payloads
+        assert restored._envelopes == request._envelopes
         endpoint = Endpoint()
         client = SDMClient.__new__(SDMClient)
         client._start(endpoint)
@@ -229,19 +227,77 @@ def test_materialize_pickle_predict_restores_pretrim_context_without_sending_del
         )
     frame = result.explanations.columns.to_pandas()
     counts = frame[frame['column'] == 'COUNT(*)']
-    assert list(counts['mean']) == [11.5]
     assert len(endpoint.sent) == 1
-    assert len(endpoint.sent[0]['context']['instance_table']['rows']) == 22
+    sent = endpoint.sent[0]['context']['instance_table']
+    assert len(sent['rows']) == 22
+    at = sent['columns'].index('TARGET')
+    labels = [row[at] for row in sent['rows']]
+    assert list(counts['mean']) == pytest.approx([sum(labels) / len(labels)])
 
 
-def test_delta_corruption_is_not_silently_an_omitted_analysis():
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        request = gathered()
-    p = copy.deepcopy(request.payloads[0])
-    p['client_analysis_delta']['instance_table']['positions'] = [99999]
-    with pytest.raises(StructuredDataError):
-        ColumnExplanations(p)
+def test_public_payloads_hide_client_keys_and_write_through():
+    import json
+
+    envelope = {
+        'model': 'kumo-relational',
+        'metadata': {},
+        'client_generated_keys': {'orders': '__node_id'},
+    }
+    request = Request.__new__(Request)
+    object.__setattr__(request, '_payloads', (envelope,))
+    [payload] = request.payloads
+    assert payload == {'model': 'kumo-relational', 'metadata': {}}
+    json.dumps(payload)
+    payload['metadata'] = {'note': 'edited'}
+    assert envelope['metadata'] == {'note': 'edited'}
+    request.payloads[0]['metadata'] = {'note': 'again'}
+    payload['metadata']['seen'] = True
+    assert envelope['metadata'] == {'note': 'again', 'seen': True}
+    assert 'client_generated_keys' in envelope
+    shared = Request.__new__(Request)
+    object.__setattr__(shared, '_payloads', (envelope,))
+    assert shared.payloads[0] is payload
+    payload.clear()
+    with pytest.raises(KeyError):
+        payload.popitem()
+    with pytest.raises(KeyError):
+        del payload['client_generated_keys']
+    assert envelope == {'client_generated_keys': {'orders': '__node_id'}}
+
+
+def test_reading_payloads_never_empties_a_view_another_thread_holds():
+    import sys
+    import threading
+
+    envelope = {
+        'model': 'kumo-relational',
+        'metadata': {},
+        'task': {'kind': 'regression'},
+        'client_generated_keys': {},
+    }
+    request = Request.__new__(Request)
+    object.__setattr__(request, '_payloads', (envelope,))
+    [held] = request.payloads
+    partial = []
+    stop = threading.Event()
+
+    def watch():
+        while not stop.is_set():
+            if len(held) != 3:
+                partial.append(len(held))
+
+    previous = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    watcher = threading.Thread(target=watch)
+    try:
+        watcher.start()
+        for _ in range(5000):
+            assert request.payloads is not None
+    finally:
+        stop.set()
+        watcher.join()
+        sys.setswitchinterval(previous)
+    assert partial == []
 
 
 def test_unavailable_statistics_warn_without_losing_predictions():
@@ -266,6 +322,107 @@ def test_unavailable_statistics_warn_without_losing_predictions():
     assert len(result) == 2
     assert result.explanations.columns is None
     assert any('column analysis' in str(w.message).lower() for w in caught)
+
+
+class _SessionEndpoint:
+    url = 'http://localhost'
+    serves_sessions = True
+
+    def predict(self, payload):
+        rows = payload['predict']['instance_table']['rows']
+        return {
+            'id': 'r',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [
+                {'row_index': at, 'prediction': 0.5} for at in range(len(rows))
+            ],
+        }
+
+    def create_session(self, payload):
+        return {'session_id': 's1'}
+
+    def session_predict(self, session_id, payload):
+        return self.predict(payload)
+
+    def delete_session(self, session_id):
+        return None
+
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize(
+    ('outputs', 'rows', 'warned'),
+    [
+        (None, 2, False),
+        (['prediction', 'explanation'], 2, True),
+        (['prediction', 'explanation'], 0, True),
+    ],
+    ids=['not explained', 'explained', 'explained, no rows'],
+)
+def test_a_failed_analysis_does_not_block_a_session(outputs, rows, warned):
+    from test_tabular_direct_core import client
+
+    from sdm_client import KumoTabular, Request
+
+    def request(rows):
+        return Request(
+            pd.DataFrame(
+                {'x': ['a', 'a', 'b', 'b'], 'y': [1e308, 1e308, -1e308, -1e308]}
+            ),
+            pd.DataFrame({'x': ['a', 'b'][:rows]}, index=[90, 91][:rows]),
+            target='y',
+            task='regression',
+        )
+
+    def analysis_warnings(caught):
+        return [w for w in caught if 'column analysis' in str(w.message)]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        fitted = client(_SessionEndpoint()).fit(
+            request(2), model=KumoTabular(), outputs=outputs
+        )
+    assert bool(analysis_warnings(caught)) is warned
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = fitted.predict(request(rows))
+    assert bool(analysis_warnings(caught)) is warned
+    assert fitted.session_id == 's1'
+    assert len(result) == rows
+    assert result.explanations.columns is None
+
+
+@pytest.mark.parametrize(
+    ('values', 'labels'),
+    [
+        (
+            [float(at) for at in range(11)],
+            ['[0 - 1]', *(f'({at} - {at + 1}]' for at in range(1, 10))],
+        ),
+        ([0.0, 1660 / 7], ['[0 - 23.71]', '(23.71 - 237.14]']),
+        (
+            [10000.0 + at for at in range(10)],
+            [
+                '[10000 - 10000.90]',
+                *(
+                    f'({10000 + 0.9 * at:.2f} - {10000 + 0.9 * (at + 1):.2f}]'
+                    for at in range(1, 9)
+                ),
+                '(10008.10 - 10009]',
+            ],
+        ),
+    ],
+    ids=['whole numbers', 'fractions', 'large and close'],
+)
+def test_numeric_cohort_labels(values, labels):
+    p = payload([[value, at] for at, value in enumerate(values)])
+    p['schema']['instance_table']['columns']['x']['stype'] = 'numerical'
+
+    frame = ColumnExplanations(p).to_pandas()
+
+    assert list(frame[frame['column'] == 'x']['cohort']) == labels
 
 
 def test_public_policy_constants_remain_available():
@@ -323,7 +480,7 @@ def test_sqlite_materialize_explain_uses_sampled_context_without_new_queries():
     finally:
         connection.close()
     # A closed in-memory database makes any new SQL fail: analysis must use
-    # the materialized evidence, including the pre-trim row delta.
+    # the materialized evidence, the rows sent once 1 and 2 are scored.
     endpoint = Endpoint()
     client = SDMClient.__new__(SDMClient)
     client._start(endpoint)
@@ -332,9 +489,10 @@ def test_sqlite_materialize_explain_uses_sampled_context_without_new_queries():
     )
     frame = result.explanations.columns.to_pandas()
     groups = frame[frame['column'] == 'cohort'].set_index('cohort')
-    assert groups.loc['a', 'mean'] == 5.5
-    assert groups.loc['b', 'mean'] == 17.5
-    assert groups.loc['a', 'share'] == groups.loc['b', 'share'] == 0.5
+    assert groups.loc['a', 'mean'] == pytest.approx(6.3)
+    assert groups.loc['b', 'mean'] == pytest.approx(17.5)
+    assert groups.loc['a', 'share'] == pytest.approx(10 / 22)
+    assert groups.loc['b', 'share'] == pytest.approx(12 / 22)
     assert len(endpoint.sent) == 1
 
 

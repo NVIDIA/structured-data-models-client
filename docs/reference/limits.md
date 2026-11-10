@@ -22,7 +22,7 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 |---|---|---|---|
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
-| rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
+| rows scored per call | relational | 10,000 | more are gathered as several calls at `materialize()` |
 | entities one question gathers | relational | 100,000, in at most 100 calls | at `materialize()`, and this client's own: the endpoint is never asked for more than one call's worth |
 | calls a question asked in parts makes | relational | 200, one per candidate or step | at `materialize()`, as `sdm_client.decompose.MOST_PARTS` |
 | request body | relational | 30 MiB per call | at `materialize()` |
@@ -80,8 +80,7 @@ sent, each with its own context, so the whole population is held in memory at
 once, and 100,000 entities is about a gigabyte of it. One `materialize()`
 gathers at most that many, in at most 100 calls, and the refusal names
 whichever of the two it met. The second is what a small `rows_per_call`
-reaches, and what a temporal link prediction reaches at 20,001 entities, since
-it scores 200 a call.
+reaches.
 
 Both govern the batches of one question, and neither counts the parts of a
 question asked in several. A ranking is one call per candidate and a forecast

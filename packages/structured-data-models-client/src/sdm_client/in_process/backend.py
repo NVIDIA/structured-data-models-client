@@ -223,10 +223,14 @@ class InProcessBackend:
             self._sessions.pop(session_id, None)
 
     def _preflight(self, payload: Mapping[str, Any]) -> None:
-        """Reject unsupported local-runtime outputs before downloading weights."""
+        """Reject unsupported local-runtime outputs and inference options
+        before downloading weights."""
         served = _SERVED.get(payload['model'])
         if served is not None:
             _fields(served, None, payload['task']['kind'], payload)
+            served.check_inference(
+                payload.get('inference') or {}, payload['task']
+            )
 
     def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.

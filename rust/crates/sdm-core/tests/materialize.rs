@@ -31,8 +31,8 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
-    CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HeldState, HostFacts, Scalar, Step,
-    Unit,
+    CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HeldState, HostFacts, Scalar,
+    Sentence, Step, Unit,
 };
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, Run, UnknownZone, Zones,
@@ -80,6 +80,7 @@ fn column(
         nullable: !unique,
         unique,
         declared_type: None,
+        catalog: None,
         exact_number: None,
     }
 }
@@ -745,6 +746,56 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     let err = run.next().unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     assert_eq!(err.fields["field"], Detail::text("relationships"));
+}
+
+/// A link target asked without candidates is refused before anything is
+/// read, since no released model serves the request it would build; the
+/// same schema's scalar question reaches its first read.
+#[test]
+fn a_link_target_without_candidates_is_refused_before_anything_is_read() {
+    let mut linked = shop();
+    linked.tables[0].columns.push(column(
+        "item_id",
+        ColumnType::Int64,
+        Dtype::Int,
+        Stype::Id,
+        false,
+    ));
+    linked.tables.push(DescribedTable {
+        calculated_columns: vec![],
+        name: "items".into(),
+        source: "items".into(),
+        columns: vec![column(
+            "item_id",
+            ColumnType::Int64,
+            Dtype::Int,
+            Stype::Id,
+            true,
+        )],
+        primary_key: vec!["item_id".into()],
+        time_column: None,
+        end_time_column: None,
+        time_column_inferred: None,
+        duplicate_keys: None,
+    });
+    linked.links.push(vec![
+        ColumnRef {
+            table: "orders".into(),
+            column: "item_id".into(),
+        },
+        ColumnRef {
+            table: "items".into(),
+            column: "item_id".into(),
+        },
+    ]);
+    let query = "PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id";
+    let mut run = materialize(host(), &linked, query, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.sentence, Sentence::TemporalLinkUnserved, "{err:?}");
+    assert_eq!(err.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(err.fields["rule"], Detail::text("temporal_link_prediction"));
+    let mut run = materialize(host(), &linked, QUERY, None).unwrap();
+    assert!(matches!(run.next(), Ok(Step::Fetch { .. })));
 }
 
 /// The schema `materialize` is handed is held as the reference holds a

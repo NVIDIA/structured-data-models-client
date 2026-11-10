@@ -11,7 +11,7 @@ import pyarrow as pa
 import pytest
 
 from sdm_client import RelationalTask, Relationship, Schema
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 
 FIXTURE = json.loads(
     (
@@ -63,13 +63,18 @@ def test_shared_examples_labels_order_ownership_and_persistence(case):
     task = RelationalTask(**case['task'])
     for field in ('link_target_table', 'num_forecasts', 'step_size_ns'):
         assert getattr(task, field) == case['task'].get(field)
+    if task.kind == 'temporal_link_prediction':
+        with pytest.raises(UnsupportedRequestError) as refused:
+            schema.materialize_examples(
+                task, context, predict, num_neighbors=[10, 10]
+            )
+        assert refused.value.details['rule'] == 'temporal_link_prediction'
+        return
     request = schema.materialize_examples(
         task, context, predict, num_neighbors=[10, 10]
     )
     payload = request.payloads[0]
     expected = case['expected']['context_targets']
-    if case['task']['kind'] == 'temporal_link_prediction':
-        expected = [[str(v) for v in row] for row in expected]
     assert column(payload['context']['instance_table'], 'TARGET') == expected
     assert len(payload['context']['instance_table']['rows']) == len(context)
     assert payload['inference']['use_prediction_time'] is False
@@ -79,33 +84,6 @@ def test_shared_examples_labels_order_ownership_and_persistence(case):
     assert json.dumps(request.payloads, sort_keys=True) == before
     restored = pickle.loads(pickle.dumps(request))
     assert restored.payloads == request.payloads
-
-
-@pytest.mark.parametrize('large', [False, True])
-def test_sliced_link_targets_ignore_hidden_backing_values(large):
-    case = next(
-        c for c in FIXTURE['cases'] if c['id'] == 'temporal_link_prediction'
-    )
-    context = pa.Table.from_pandas(frame(case['context']), preserve_index=False)
-    dtype = pa.large_list(pa.int64()) if large else pa.list_(pa.int64())
-    targets = pa.array(
-        [[999]] + context['TARGET'].to_pylist() + [[999]], type=dtype
-    )
-    padded = pa.concat_tables(
-        [context.slice(0, 1), context, context.slice(0, 1)]
-    )
-    padded = padded.set_column(
-        padded.schema.get_field_index('TARGET'), 'TARGET', targets
-    )
-    request = schema_for(case).materialize_examples(
-        RelationalTask(**case['task']),
-        padded.slice(1, len(context)),
-        frame(case['predict']),
-        num_neighbors=[10, 10],
-    )
-    assert column(
-        request.payloads[0]['context']['instance_table'], 'TARGET'
-    ) == [[str(x) for x in row] for row in case['expected']['context_targets']]
 
 
 @pytest.mark.parametrize('bad', [float('nan'), float('inf')])
@@ -230,6 +208,54 @@ def test_sql_supplied_labels_and_repeated_entities(provider):
         connection.close()
 
 
+def test_supplied_link_examples_are_refused_before_any_read(source_reads):
+    import duckdb
+    from sdm_connectors import DuckDBSource
+
+    connection = duckdb.connect()
+    try:
+        connection.execute(
+            'CREATE TABLE accounts(id INTEGER PRIMARY KEY, feature DOUBLE)'
+        )
+        connection.execute(
+            'INSERT INTO accounts SELECT i, i FROM range(6) t(i)'
+        )
+        schema = Schema.from_source(
+            DuckDBSource(connection),
+            {'accounts': 'accounts'},
+            primary_keys={'accounts': 'id'},
+            relationships=[],
+        )
+        source_reads.clear()
+        anchor = pd.Timestamp('2024-01-01')
+        with pytest.raises(UnsupportedRequestError) as refused:
+            schema.materialize_examples(
+                RelationalTask(
+                    'temporal_link_prediction',
+                    'accounts',
+                    link_target_table='accounts',
+                ),
+                pd.DataFrame(
+                    {
+                        'ENTITY': [0, 1],
+                        'ANCHOR_TIMESTAMP': [anchor, anchor],
+                        'TARGET': [[2], [3]],
+                    }
+                ),
+                pd.DataFrame({'ENTITY': [4], 'ANCHOR_TIMESTAMP': [anchor]}),
+            )
+        assert refused.value.details['rule'] == 'temporal_link_prediction'
+        assert source_reads == []
+        schema.materialize_examples(
+            RelationalTask('regression', 'accounts'),
+            pd.DataFrame({'ENTITY': [0, 1], 'TARGET': [2.5, 3.5]}),
+            pd.DataFrame({'ENTITY': [4]}),
+        )
+        assert source_reads
+    finally:
+        connection.close()
+
+
 @pytest.mark.live_nim
 @pytest.mark.parametrize(
     'kind,horizon',
@@ -237,7 +263,6 @@ def test_sql_supplied_labels_and_repeated_entities(provider):
         ('regression', None),
         ('binary_classification', None),
         ('multiclass_classification', None),
-        ('temporal_link_prediction', None),
         ('forecasting', 3),
         ('forecasting', 1),
     ],
@@ -264,10 +289,6 @@ def test_live_supplied_examples(kind, horizon):
     endpoint = (
         config['endpoints_by_case']['relational.forecast']['relational']
         if horizon is not None
-        else config['endpoints_by_case']['relational.temporal-link'][
-            'relational'
-        ]
-        if kind == 'temporal_link_prediction'
         else config['endpoints']['relational']
     )
     client = (
@@ -370,21 +391,3 @@ def test_live_warehouse_supplied_examples(provider):
             assert len(client.predict(request, model=KumoRelational())) == 2
         finally:
             client.close()
-
-
-def test_supplied_link_batches_obey_model_limit():
-    case = next(
-        c for c in FIXTURE['cases'] if c['id'] == 'temporal_link_prediction'
-    )
-    predicted = pd.concat(
-        [frame(case['predict']).iloc[:1]] * 201, ignore_index=True
-    )
-    request = schema_for(case).materialize_examples(
-        RelationalTask(**case['task']),
-        frame(case['context']),
-        predicted,
-        rows_per_call=500,
-    )
-    assert [
-        len(p['predict']['instance_table']['rows']) for p in request.payloads
-    ] == [200, 1]

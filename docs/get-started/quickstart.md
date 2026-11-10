@@ -215,9 +215,8 @@ when the model is on a GPU, until it or the client is closed, so open it in a
 `with` block, as above, or call its `close()`.
 
 This needs `pip install 'structured-data-models-client[in-process]'`, which
-brings PyTorch, on Python 3.11 or later. A relational request is still
-gathered by the relational engine, so for `KumoRelational` install both:
-`pip install 'structured-data-models-client[relational,in-process]'`.
+brings PyTorch, on Python 3.11 or later. It covers both `KumoTabular` and
+`KumoRelational`.
 
 ## Which rows get scored
 

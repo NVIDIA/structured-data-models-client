@@ -82,6 +82,20 @@ pub(crate) fn candidate_key(value: &C) -> Result<Option<String>, CoreError> {
             }
         }
         C::Bytes { value } => framed("b", value.iter().map(|v| v.to_string())),
+        C::Decimal { value } => {
+            let digits = value.strip_prefix('-').unwrap_or(value);
+            let (whole, fraction) = digits.split_once('.').unwrap_or((digits, ""));
+            if whole.is_empty()
+                || !whole
+                    .bytes()
+                    .chain(fraction.bytes())
+                    .all(|v| v.is_ascii_digit())
+                || (digits.contains('.') && fraction.is_empty())
+            {
+                return Err(invalid("invalid decimal candidate"));
+            }
+            key::exact(value)
+        }
         C::Date { ordinal } => format!("d{ordinal}"),
         C::DateTime { ticks, unit, aware } => {
             // Decimal placement is exact and never casts through nanoseconds.
@@ -231,6 +245,7 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
     }
     let mut seen = BTreeSet::new();
     let mut offset = 0u32;
+    let mut keys = Vec::new();
     for (part_index, part) in parts.iter().enumerate() {
         if plan.explanation_part.is_none() && part.has_explanation {
             plan.explanation_part = Some(part_index);
@@ -238,13 +253,16 @@ pub fn plan(parts: &[MergeDescriptor]) -> Result<ResultMergePlan, CoreError> {
         plan.names_rows &= part.names_rows;
         plan.names_step |= part.names_step;
         for candidate in &part.candidates {
-            if candidate_key(candidate)?.is_none_or(|key| seen.insert(key)) {
+            let key = candidate_key(candidate)?;
+            if key.as_ref().is_none_or(|key| !seen.contains(key)) {
                 plan.candidate_positions.push(offset);
             }
+            keys.extend(key);
             offset = offset
                 .checked_add(1)
                 .ok_or_else(|| invalid("too many result candidates"))?;
         }
+        seen.extend(keys.drain(..));
     }
     Ok(plan)
 }
@@ -282,10 +300,29 @@ mod tests {
             descriptor(vec![json("1"), json("NaN"), json("NaN")]),
         ])
         .unwrap();
-        assert_eq!(plan.candidate_positions, [0, 3, 4, 6, 7]);
+        assert_eq!(plan.candidate_positions, [0, 1, 2, 3, 4, 6, 7]);
         let a = json("{\"a\":[1,null],\"b\":2}");
         let b = json("{\"b\":2.0,\"a\":[true,null]}");
         assert_eq!(candidate_key(&a).unwrap(), candidate_key(&b).unwrap());
+    }
+    #[test]
+    fn decimals_key_by_exact_value() {
+        let decimal = |v: &str| C::Decimal { value: v.into() };
+        assert_eq!(
+            candidate_key(&decimal("-1.50")).unwrap(),
+            candidate_key(&json("-1.5")).unwrap()
+        );
+        assert_eq!(
+            candidate_key(&decimal("1.000")).unwrap(),
+            candidate_key(&json("true")).unwrap()
+        );
+        assert_ne!(
+            candidate_key(&decimal("0.1")).unwrap(),
+            candidate_key(&json("0.1")).unwrap()
+        );
+        for invalid in ["", "-", "1.", ".5", "1e3", "1.2.3"] {
+            assert!(candidate_key(&decimal(invalid)).is_err(), "{invalid}");
+        }
     }
     #[test]
     fn mixed_resolution_times_do_not_overflow_or_conflate_dates() {

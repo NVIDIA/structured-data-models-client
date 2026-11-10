@@ -1,7 +1,7 @@
 {
  "format": "sdm-type-set-vectors/1",
  "about": "Arrow type admission, reachability and schema-inference expectations.",
- "arrow_schema": "58.4.0",
+ "arrow_schema": "58.4.1",
  "derived_from": [
   "rust/crates/sdm-host/src/admission.rs:9-22 (the admission table) and :101-149 (convert_type)",
   "rust/crates/sdm-contract/src/types.rs:291-379 (ColumnType::from_arrow_unchecked, the closed set) and :250-256 (a decimal's precision and scale)",

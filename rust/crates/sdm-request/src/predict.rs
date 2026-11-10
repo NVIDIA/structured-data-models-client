@@ -8,32 +8,32 @@
 //! design's "Host-held semantics" rows it moved):
 //!
 //! - [`prepare`] is `SDMClient._prepare`: the model the request is sent to
-//! (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
-//! asked for (the task's default ones when the caller named none, an
-//! empty list refused `INVALID_REQUEST`) and `check_request_against_model`
-//! (the request's shape, its task's kind, each output and the context's
-//! size against what the model serves);
+//!   (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
+//!   asked for (the task's default ones when the caller named none, an
+//!   empty list refused `INVALID_REQUEST`) and `check_request_against_model`
+//!   (the request's shape, its task's kind, each output and the context's
+//!   size against what the model serves);
 //! - [`nothing_to_score`] is `Request.nothing_to_score`: a request with no
-//! row to score is answered without a call (`_empty_answer`, [`empty`]);
+//!   row to score is answered without a call (`_empty_answer`, [`empty`]);
 //! - [`preflight`] is the relational adapter's `_preflight`: an empty
-//! context, more classes than the model takes and a classification whose
-//! context has one answer refused, a regression's constant context given
-//! as a notice, and an explanation's row count and run mode;
+//!   context, more classes than the model takes and a classification whose
+//!   context has one answer refused, a regression's constant context given
+//!   as a notice, and an explanation's row count and run mode;
 //! - [`body`] is `prediction_plan`'s call of one payload: the payload with
-//! the model named, the outputs asked for (a regression's with its
-//! statistic), the request's id in its metadata, and only the inference
-//! options the model reads (`_inference`);
+//!   the model named, the outputs asked for (a regression's with its
+//!   statistic), the request's id in its metadata, and only the inference
+//!   options the model reads (`_inference`);
 //! - [`layout`] is `normalize` and `_named_entities`, with the answer's
-//! classes given back as the target's own type (`as_declared_target`):
-//! each answer checked against the row it claims and given back under the
-//! entity it is about, read back as the key's dtype (`as_declared`), or,
-//! where the payload names no entity, given back as written, as a
-//! [`Part`];
+//!   classes given back as the target's own type (`as_declared_target`):
+//!   each answer checked against the row it claims and given back under the
+//!   entity it is about, read back as the key's dtype (`as_declared`), or,
+//!   where the payload names no entity, given back as written, as a
+//!   [`Part`];
 //! - [`merge`] is `PredictionResult.merge`, the parts of one request put
-//! together, and [`absent`] is `_report_absent`'s finding, the outputs the
-//! caller named that no answer carries;
+//!   together, and [`absent`] is `_report_absent`'s finding, the outputs the
+//!   caller named that no answer carries;
 //! - [`table`] lays a part out as the result: one row per answer, ordered
-//! by `row_index` as `PredictionResult.to_pandas` orders them.
+//!   by `row_index` as `PredictionResult.to_pandas` orders them.
 //!
 //! What the result does not carry yet is refused by name, never dropped
 //! (`UNSUPPORTED_REQUEST`, B-4): the tabular model on this relational
@@ -173,8 +173,10 @@ pub fn capabilities() -> Vec<Capabilities> {
         .collect()
 }
 
-/// `KUMO_RELATIONAL`: every shape (the relational profile), its six task
-/// kinds and seven outputs, each list sorted.
+/// `KUMO_RELATIONAL`: every shape (the relational profile), its five task
+/// kinds and seven outputs, each list sorted. Candidate-free temporal link
+/// prediction is left out: no released model serves it
+/// ([`temporal_link_unserved`]).
 const KUMO_RELATIONAL: Spec = Spec {
     id: RELATIONAL,
     shapes: &SHAPES,
@@ -184,7 +186,6 @@ const KUMO_RELATIONAL: Spec = Spec {
         "forecasting",
         "multiclass_classification",
         "regression",
-        "temporal_link_prediction",
     ],
     outputs: &[
         "embeddings",
@@ -218,6 +219,22 @@ pub fn not_yet(rule: &'static str) -> CoreError {
     )
     .with_field("operation", Detail::text("predict"))
     .with_field("rule", Detail::text(rule))
+}
+
+/// The task kind of a candidate-free temporal link prediction.
+pub const TEMPORAL_LINK_PREDICTION: &str = "temporal_link_prediction";
+
+/// The refusal of a candidate-free temporal link prediction, which no
+/// released Kumo Relational model serves: given before anything is read or
+/// sent, by `materialize`, by `materialize_examples` and at prediction
+/// admission, naming the ranking with candidates that is served instead.
+pub fn temporal_link_unserved() -> CoreError {
+    CoreError::new(
+        Sentence::TemporalLinkUnserved,
+        "no released model serves candidate-free temporal link prediction",
+    )
+    .with_field("model", Detail::text(RELATIONAL))
+    .with_field("task", Detail::text(TEMPORAL_LINK_PREDICTION))
 }
 
 /// The model cannot answer the request, as the client refuses it before
@@ -399,11 +416,14 @@ pub fn prepare(
         RELATIONAL => &KUMO_RELATIONAL,
         TABULAR => &KUMO_TABULAR,
         _ => {
+            let mut known: Vec<_> = MODELS.iter().map(|spec| spec.id).collect();
+            known.sort_unstable();
             return Err(CoreError::new(
-                Sentence::UnknownModel,
+                Sentence::DirectUnknownModel,
                 "the model named is not one the contract carries",
             )
-            .with_field("field", Detail::text("model")));
+            .with_field("model", Detail::text(model))
+            .with_field("known_models", texts(known)));
         }
     };
     let kind = kind_of(payload)?;
@@ -2299,6 +2319,9 @@ fn check_task_outputs(
     outputs: &[String],
     deduplicate: bool,
 ) -> Result<(), CoreError> {
+    if kind == TEMPORAL_LINK_PREDICTION {
+        return Err(temporal_link_unserved());
+    }
     if !spec.tasks.contains(&kind) {
         return Err(unsupported(
             Sentence::ModelLacksTask,
@@ -2440,6 +2463,29 @@ mod tests {
     use sdm_contract::ErrorCode;
 
     #[test]
+    fn a_temporal_link_prediction_is_refused_before_it_is_sent() {
+        let payload =
+            sdm_wire::json::read(br#"{"task":{"kind":"temporal_link_prediction"}}"#).unwrap();
+        let prepared = prepare(&[payload], RELATIONAL, &[], true).unwrap_err();
+        let bound = bind_direct(sdm_contract::direct::DirectCallFacts {
+            query: None,
+            model: RELATIONAL.to_owned(),
+            outputs: None,
+            kind: TEMPORAL_LINK_PREDICTION.to_owned(),
+            anchored: true,
+            relationships: true,
+            tables: 2,
+            context_rows: 1,
+        })
+        .unwrap_err();
+        for error in [prepared, bound] {
+            assert_eq!(error.sentence, Sentence::TemporalLinkUnserved);
+            assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+            assert_eq!(error.fields["rule"], Detail::text(TEMPORAL_LINK_PREDICTION));
+        }
+    }
+
+    #[test]
     fn every_model_is_described_as_the_client_describes_it() {
         let all = capabilities();
         let models: Vec<_> = all.iter().map(|c| c.model).collect();
@@ -2453,7 +2499,6 @@ mod tests {
                 "forecasting",
                 "multiclass_classification",
                 "regression",
-                "temporal_link_prediction",
             ]
         );
         assert!(relational.single_table && relational.multiple_tables && relational.relationships);

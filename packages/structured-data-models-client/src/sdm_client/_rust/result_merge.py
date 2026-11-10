@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -37,6 +38,12 @@ def _candidate(
         return {'kind': 'json', 'value': json.dumps(value)}
     if owner is bytes:
         return {'kind': 'bytes', 'value': list(value)}
+    if owner is Decimal:
+        if value.is_nan():
+            return {'kind': 'json', 'value': 'NaN'}
+        if value.is_infinite():
+            return _candidate(float(value))
+        return {'kind': 'decimal', 'value': format(value, 'f')}
     if isinstance(value, (np.bool_, np.integer, np.floating, np.str_)):
         if isinstance(value, np.floating) and value.dtype.itemsize > 8:
             return {'kind': 'unsupported', 'type_name': owner.__name__}

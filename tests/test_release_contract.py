@@ -996,6 +996,20 @@ class TestTheNoticesAreComplete:
         assert path in (REPO / 'LICENSE').read_text()
         assert (REPO / path).is_file()
 
+    @pytest.mark.parametrize('name', ['NOTICE', 'LICENSE'])
+    def test_the_client_wheel_points_to_what_it_bundles(self, name):
+        client = PACKAGES / 'structured-data-models-client'
+        text = (client / name).read_text()
+        for path in (
+            'THIRD-PARTY-NOTICES-RUST.txt',
+            'sdm_client/assets/THIRD-PARTY-NOTICES-MERMAID.txt',
+        ):
+            assert path in text
+        assert (client / 'THIRD-PARTY-NOTICES-RUST.txt').is_file()
+        assert (
+            client / 'src/sdm_client/assets/THIRD-PARTY-NOTICES-MERMAID.txt'
+        ).is_file()
+
     def test_the_readme_links_every_package_license(self):
         """A reader looking for the terms of one package should not have to
         guess that each directory holds its own copy.
@@ -1140,6 +1154,16 @@ class TestDistributionCoherence:
         client = _pyproject('structured-data-models-client')
         assert client['build-system']['build-backend'] == 'maturin'
         assert client['project']['dynamic'] == ['version']
+
+    def test_the_java_library_is_versioned_with_the_five(self):
+        import xml.etree.ElementTree as ET
+
+        pom = ET.parse(REPO / 'java/pom.xml').getroot()
+        version = pom.findtext('{http://maven.apache.org/POM/4.0.0}version')
+        assert version == self._declared_version(), (
+            f'java/pom.xml is at {version}, the five at '
+            f'{self._declared_version()}'
+        )
 
     def test_every_floor_on_frames_and_arrow_is_the_supported_one(self):
         """pandas, NumPy and pyarrow carry one floor wherever they are named.

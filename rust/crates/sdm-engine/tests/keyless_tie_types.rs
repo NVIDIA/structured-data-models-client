@@ -18,6 +18,7 @@ fn keyless_ties_preserve_types_without_reinterpreting_keyed_tables() {
         nullable: true,
         unique: false,
         declared_type: None,
+        catalog: None,
         exact_number: None,
     };
     let mut table = Table {

@@ -34,6 +34,7 @@ import math
 import re
 import sys
 import warnings
+import weakref
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -214,7 +215,7 @@ def warn_of_rows_scored_from_their_own_answers(request: Request) -> None:
     and warning about a context that never travels made a correct call fail
     under warnings-as-errors.
     """
-    if request.payloads:
+    if request._envelopes:
         return
     schema, entity_table = request.schema, request.entity_table
     target = request.task.target.column_name
@@ -538,7 +539,7 @@ class Request:
         read from the envelopes again and the edit is not there. Assigning the
         half is what changes the request, and does so on both.
         """
-        payloads = self.payloads
+        payloads = self._envelopes
         if payloads:
             from sdm_client._rust.splits import read
 
@@ -560,7 +561,7 @@ class Request:
         Gathered is read the same way here as everywhere else on this object,
         so that the route a request is on is one answer rather than four.
         """
-        if not self.payloads:
+        if not self._envelopes:
             return
         raise StructuredDataError(
             f'{half} cannot be replaced on a request gathered by a predictive '
@@ -612,6 +613,22 @@ class Request:
         came from its frames while the adapters refused it for carrying
         envelopes.
         """
+        envelopes = self._envelopes
+        if envelopes is None:
+            return None
+        shown = []
+        for envelope in envelopes:
+            view = _VIEWS.get(id(envelope))
+            if view is None or view._envelope is not envelope:
+                view = _VIEWS[id(envelope)] = _Envelope(envelope)
+            else:
+                view._sync()
+            shown.append(view)
+        return tuple(shown)
+
+    @property
+    def _envelopes(self) -> tuple[dict[str, Any], ...] | None:
+        r"""The gathered envelopes with the client's own keys beside them."""
         mine = getattr(self, '_payloads', None) or None
         parts = self.parts
         if parts is None:
@@ -621,7 +638,7 @@ class Request:
         # be sent. Reporting one part's would undercount by as many parts as
         # there are, which for a ranking is one per candidate.
         gathered = tuple(
-            envelope for part in parts for envelope in part.payloads or ()
+            envelope for part in parts for envelope in part._envelopes or ()
         )
         return gathered or mine
 
@@ -662,9 +679,10 @@ class Request:
         return self._rows('predict')
 
     def _rows(self, half: str) -> int:
-        if self.payloads:
+        if self._envelopes:
             return sum(
-                _envelope_rows(payload, half) or 0 for payload in self.payloads
+                _envelope_rows(payload, half) or 0
+                for payload in self._envelopes
             )
         return len(getattr(self, half).instance_table)
 
@@ -675,10 +693,10 @@ class Request:
         several calls sends a context with each, so ``context_rows``, their
         sum, is not what any call carries.
         """
-        if self.payloads:
+        if self._envelopes:
             return max(
                 _envelope_rows(payload, 'context') or 0
-                for payload in self.payloads
+                for payload in self._envelopes
             )
         return len(self.context.instance_table)
 
@@ -694,9 +712,10 @@ class Request:
         empty answer.
 
         """
-        if self.payloads:
+        if self._envelopes:
             counts = [
-                _envelope_rows(payload, 'predict') for payload in self.payloads
+                _envelope_rows(payload, 'predict')
+                for payload in self._envelopes
             ]
             return all(count is not None for count in counts) and not any(
                 counts
@@ -712,7 +731,7 @@ class Request:
         is the widest one call's, since that is what the cap is held to.
         """
         shape = 'relational' if self.is_relational else 'single-table'
-        calls = len(self.payloads or ())
+        calls = len(self._envelopes or ())
         context = (
             f'up to {self._context_rows_per_call()} context rows per call '
             f'across {calls} calls'
@@ -981,6 +1000,78 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         instance_table=joined(instances),
         related_tables={name: joined(f) for name, f in related.items()},
     )
+
+
+#: The view of each envelope while one is held, by the envelope's identity,
+#: so every request sharing an envelope shows the one view of it.
+_VIEWS: weakref.WeakValueDictionary[int, _Envelope] = (
+    weakref.WeakValueDictionary()
+)
+
+
+class _Envelope(dict):  # type: ignore[type-arg]
+    r"""An envelope as it is sent, without the keys the client keeps beside
+    it for itself; a change to it is a change to the envelope."""
+
+    def __init__(self, envelope: dict[str, Any]) -> None:
+        super().__init__()
+        self._envelope = envelope
+        self._sync()
+
+    def _sync(self) -> None:
+        # Only what changed is written, so another thread reading a view
+        # it holds never sees it emptied by a read of `payloads`.
+        shown = {
+            name: value
+            for name, value in self._envelope.items()
+            if not name.startswith('client_')
+        }
+        for name in [name for name in self if name not in shown]:
+            super().__delitem__(name)
+        for name, value in shown.items():
+            if name not in self or dict.__getitem__(self, name) is not value:
+                super().__setitem__(name, value)
+
+    def __setitem__(self, name: str, value: Any) -> None:
+        self._envelope[name] = value
+        super().__setitem__(name, value)
+
+    def __delitem__(self, name: str) -> None:
+        super().__delitem__(name)
+        self._envelope.pop(name, None)
+
+    def __ior__(self, other: Any) -> _Envelope:  # type: ignore[override,misc]
+        self.update(other)
+        return self
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        for name, value in dict(*args, **kwargs).items():
+            self[name] = value
+
+    def setdefault(self, name: str, default: Any = None) -> Any:
+        if name not in self:
+            self[name] = default
+        return self[name]
+
+    def pop(self, name: str, *default: Any) -> Any:
+        if name not in self:
+            return super().pop(name, *default)
+        value = self[name]
+        del self[name]
+        return value
+
+    def popitem(self) -> tuple[str, Any]:
+        if not self:
+            return super().popitem()
+        name = next(reversed(self))
+        return name, self.pop(name)
+
+    def clear(self) -> None:
+        for name in list(self):
+            del self[name]
+
+    def __reduce__(self) -> Any:
+        return dict, (dict(self),)
 
 
 def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:

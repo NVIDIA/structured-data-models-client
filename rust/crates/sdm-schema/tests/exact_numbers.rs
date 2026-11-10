@@ -37,6 +37,7 @@ fn plain(name: &str, dtype: Dtype, received: ColumnType, stype: Stype) -> Descri
         nullable: true,
         unique: false,
         declared_type: None,
+        catalog: None,
         exact_number: None,
     }
 }

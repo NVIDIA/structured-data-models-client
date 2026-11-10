@@ -859,6 +859,7 @@ sentences! {
     DataRequestRefused = "data_request_refused", E::InvalidRequest;
     UnsupportedType = "unsupported_type", E::UnsupportedType;
     NotYetDescribe = "not_yet_describe", E::UnsupportedRequest;
+    ColumnTypeUnsupported = "column_type_unsupported", E::UnsupportedRequest, rule "column_type";
     EmptyTable = "empty_table", E::InvalidRequest;
     TableNameEmpty = "table_name_empty", E::InvalidRequest;
     TableNameCharacters = "table_name_characters", E::InvalidRequest;
@@ -993,6 +994,7 @@ sentences! {
     MetadataNotAMapping = "metadata_not_a_mapping", E::InvalidResponse;
     ModelLacksShape = "model_lacks_shape", E::UnsupportedRequest;
     ModelLacksTask = "model_lacks_task", E::UnsupportedRequest;
+    TemporalLinkUnserved = "temporal_link_unserved", E::UnsupportedRequest, rule "temporal_link_prediction";
     ModelLacksOutputs = "model_lacks_outputs", E::UnsupportedRequest;
     ContextPastModel = "context_past_model", E::UnsupportedRequest;
     NoContextRows = "no_context_rows", E::UnsupportedRequest;

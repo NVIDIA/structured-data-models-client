@@ -732,7 +732,15 @@ fn unsupported_models_are_refused_and_float_keys_keep_their_identity() {
         (error.kind, error.code),
         (ErrorKind::NotFound, ErrorCode::UnknownModel)
     );
-    assert!(!written(&error).contains(CANARY));
+    // Named, with the models there are, as the old client named it.
+    assert_eq!(error.fields["model"], text(CANARY));
+    assert_eq!(
+        error.fields["known_models"],
+        Detail::List(vec![
+            Scalar::Utf8("kumo-relational".into()),
+            Scalar::Utf8("kumo-tabular".into())
+        ])
+    );
     // An entity of a float key is read as the reference's `as_declared`
     // reads it, a double, and given as the JSON text of that value (
     // fix 8; until then refused by rule id_type).

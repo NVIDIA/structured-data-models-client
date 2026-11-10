@@ -15,6 +15,10 @@ class RelationalTask:
     Forecast steps are fixed nanoseconds. Link targets name another schema
     table. Context columns are ENTITY, ANCHOR_TIMESTAMP and TARGET; prediction
     columns omit TARGET. Static tasks may omit ANCHOR_TIMESTAMP.
+
+    ``temporal_link_prediction`` is refused by ``materialize_examples`` before
+    any work, with ``UnsupportedRequestError``, since no released Kumo
+    Relational model serves it.
     """
 
     kind: Literal[

@@ -38,7 +38,7 @@ class ColumnExplanationsTest {
     row.put("table", "instance_table"); row.put("hop", 0L); row.put("column", "x");
     row.put("stype", "categorical"); row.put("cohort", "a");
     row.put("class_json", new String(Json.write(label), StandardCharsets.UTF_8));
-    row.put("share", 0.5); row.put("mean", 1.0); row.put("score", 1.0);
+    row.put("share", 0.5); row.put("mean", 1.0);
     return row;
   }
   private static ColumnExplanations columns(Object... labels) throws Exception {
@@ -59,7 +59,7 @@ class ColumnExplanationsTest {
   @Test void publicConstructorUsesEngineAndMatchesIndependentMeans() {
     ColumnExplanations columns = new ColumnExplanations(payload());
     assertEquals(2, columns.rows().size());
-    assertEquals(new ColumnExplanations.Row("instance_table", 0, "x", "categorical", "a", null, 0.5, 1, 1), columns.rows().get(0));
+    assertEquals(new ColumnExplanations.Row("instance_table", 0, "x", "categorical", "a", null, 0.5, 1), columns.rows().get(0));
     assertEquals(9.0, columns.rows().get(1).mean());
     assertEquals("b", columns.rows().get(1).cohort());
     assertThrows(UnsupportedOperationException.class, () -> columns.rows().clear());
@@ -83,7 +83,7 @@ class ColumnExplanationsTest {
     assertEquals(1.0, columns.rows().get(0).mean());
     try (RootAllocator allocator = new RootAllocator()) {
       try (VectorSchemaRoot view = columns.toArrow(allocator)) {
-        assertEquals(List.of("table", "hop", "column", "stype", "cohort", "class", "share", "mean", "score"),
+        assertEquals(List.of("table", "hop", "column", "stype", "cohort", "class", "share", "mean"),
             view.getSchema().getFields().stream().map(org.apache.arrow.vector.types.pojo.Field::getName).toList());
         assertEquals(1, view.getRowCount());
       }
@@ -135,7 +135,7 @@ class ColumnExplanationsTest {
     assertNotNull(empty); assertTrue(empty.rows().isEmpty());
     try (RootAllocator allocator = new RootAllocator(); VectorSchemaRoot view = empty.toArrow(allocator);
         VectorSchemaRoot regression = columns((Object) null).toArrow(allocator)) {
-      assertEquals(0, view.getRowCount()); assertEquals(9, view.getFieldVectors().size());
+      assertEquals(0, view.getRowCount()); assertEquals(8, view.getFieldVectors().size());
       assertNull(regression.getVector("class").getObject(0));
     }
   }
@@ -152,7 +152,7 @@ class ColumnExplanationsTest {
       assertEquals("INTERNAL_ERROR", assertThrows(StructuredDataException.class,
           () -> ColumnExplanations.fromCore(analysis)).code());
     }
-    for (String field : List.of("table", "column", "cohort", "mean", "share", "score", "hop")) {
+    for (String field : List.of("table", "column", "cohort", "mean", "share", "hop")) {
       Map<String, Object> row = row("yes"); row.remove(field);
       assertEquals("INTERNAL_ERROR", assertThrows(StructuredDataException.class,
           () -> ColumnExplanations.fromCore(Map.of("status", "ready", "rows", List.of(row)))).code());

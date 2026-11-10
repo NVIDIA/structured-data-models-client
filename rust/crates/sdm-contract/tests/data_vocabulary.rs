@@ -17,22 +17,22 @@
 //! holds:
 //!
 //! - outside the exact reviewed seams, no property is named as SQL or an
-//! expression (`DENIED`), anywhere,
-//! the typed values included, matched against the whole name and against
-//! each of its `_`-separated parts, so `predicate_expr` is refused;
+//!   expression (`DENIED`), anywhere,
+//!   the typed values included, matched against the whole name and against
+//!   each of its `_`-separated parts, so `predicate_expr` is refused;
 //! - a property typed as a reviewed typed value is refused also when its
-//! name, or a part of it, is `filter` or `order` (`DENIED_FOR_VALUES`):
-//! a scalar or a field there would be a condition or an ordering in
-//! disguise, where the vocabulary has typed structures for both;
+//!   name, or a part of it, is `filter` or `order` (`DENIED_FOR_VALUES`):
+//!   a scalar or a field there would be a condition or an ordering in
+//!   disguise, where the vocabulary has typed structures for both;
 //! - text (a string, at any depth of lists, maps, options or newtypes) is
-//! held only by a property named as an identifier the request refers to
-//! (`IDENTIFIERS`), the nearest property naming it, or by the exact
-//! checked numeric-token value or scoped opaque-expression seam below;
+//!   held only by a property named as an identifier the request refers to
+//!   (`IDENTIFIERS`), the nearest property naming it, or by the exact
+//!   checked numeric-token value or scoped opaque-expression seam below;
 //! - an any-typed schema (`true` or `{}`, as `serde_json::Value` gives, or a
-//! map of anything) is refused, since it can hold text of any shape;
+//!   map of anything) is refused, since it can hold text of any shape;
 //! - the typed values (`TYPED_VALUES`: a scalar, an Arrow field and its
-//! type) are reviewed: a reference to one of them is accepted at that
-//! reference, and only the name check goes inside.
+//!   type) are reviewed: a reference to one of them is accepted at that
+//!   reference, and only the name check goes inside.
 //!
 //! A new text field fails until it is added to `IDENTIFIERS` in review, so
 //! it is a name the request refers to, never text a provider interprets.

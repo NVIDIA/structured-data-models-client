@@ -45,7 +45,7 @@ The internal protocol lets Rust request host I/O without embedding Python or Jav
 | `Schema.from_source` / Java `Schema.fromSource` | Describe selected tables in a connected source |
 | `PredictiveQuery.materialize` | Validate a question and gather context plus rows to score for the selected model |
 | Direct `Request` | Supply context and prediction data directly for Tabular |
-| `client.predict` | Send a stateless request and return interpreted predictions |
+| `client.predict` | Send a request and return interpreted predictions; batches that share one context reuse a temporary session, and are sent stateless where the endpoint does not keep it |
 | `client.fit` | Pin context in a model endpoint session; this does not train model weights |
 | Fitted handle `predict` / `close` | Score against pinned context, then release the session |
 

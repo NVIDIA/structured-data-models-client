@@ -409,7 +409,7 @@ pub(crate) async fn one(
         inputs.default_outputs,
     )?;
     let computed = if provided_analysis.is_none() && crate::columns::requested(&outputs) {
-        Some(crate::columns::compute(&payloads[..1])?)
+        Some(crate::columns::compute_sent(&payloads)?)
     } else {
         None
     };

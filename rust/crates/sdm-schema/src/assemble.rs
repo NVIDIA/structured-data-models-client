@@ -384,6 +384,7 @@ fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> Describe
                 nullable: c.nullable,
                 unique: c.unique,
                 declared_type: None,
+                catalog: None,
                 exact_number: c.exact_number,
             })
             .collect(),

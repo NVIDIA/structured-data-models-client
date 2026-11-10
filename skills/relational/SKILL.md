@@ -1,6 +1,6 @@
 ---
 name: sdm-relational
-description: "Ask kumo-relational a question about an entity and the records linked to it: write the question as a predictive query over a schema of related tables, covering classification, regression, forecasting and link prediction. Triggers: kumo-relational, KumoRelational, PREDICT, FOR EACH, predictive query, PQL, Schema.from_data, Schema.from_source, Relationship, ranking, forecast, link prediction, explanation, Snowflake, Databricks, warehouse, metric view, semantic view, SQL, catalog."
+description: "Ask kumo-relational a question about an entity and the records linked to it: write the question as a predictive query over a schema of related tables, covering classification, regression, forecasting and ranking the candidates an entity may link to. Triggers: kumo-relational, KumoRelational, PREDICT, FOR EACH, predictive query, PQL, Schema.from_data, Schema.from_source, Relationship, ranking, forecast, link prediction, explanation, Snowflake, Databricks, warehouse, metric view, semantic view, SQL, catalog."
 ---
 
 # Asking kumo-relational
@@ -32,7 +32,7 @@ client is willing to ask. What the client will send:
 
 | | `kumo-relational` |
 |---|---|
-| Tasks | `binary_classification`, `classification`, `multiclass_classification`, `regression`, `forecasting`, `temporal_link_prediction` |
+| Tasks | `binary_classification`, `classification`, `multiclass_classification`, `regression`, `forecasting` |
 | Outputs | `prediction`, `probabilities`, `quantiles`, `rankings`, `scores`, `embeddings`, `explanation` |
 | Several tables | yes |
 | Relationships | yes |
@@ -62,13 +62,11 @@ The task is not an argument. It follows from the query: see
 
 ## The whole interface
 
-`KumoRelational` needs the engine, which is an extra:
+`KumoRelational` needs nothing beyond the client:
 
 ```
-pip install 'structured-data-models-client[relational]'
+pip install structured-data-models-client
 ```
-
-Without it the first call raises `MissingExtraError` naming that command.
 
 ```python
 import pandas as pd
@@ -161,7 +159,6 @@ would break rather than letting the endpoint return a 500.
 | context rows, by default | `1,000` |
 | context rows, with `num_context_samples` | `10,000` |
 | rows scored at once | `10,000` |
-| rows scored for a link prediction | `200` |
 | tables in the gathered graph | `15` |
 | hops gathered | `6` |
 | classes | `10` |
@@ -307,3 +304,4 @@ change. The ones worth knowing:
 | an output this question cannot give | `rankings` on a regression, `explanation` on a client-assembled ranking |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |
+| a link prediction with no candidates | no released model serves `temporal_link_prediction`, so `materialize()` refuses it before reading anything; rank with `RANK TOP k` and `candidates=` |

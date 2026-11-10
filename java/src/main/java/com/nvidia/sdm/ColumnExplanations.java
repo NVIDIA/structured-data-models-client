@@ -23,7 +23,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
  * Descriptive context-column associations computed by Rust, not causal effects.
- * Formatting preserves engine order and never recomputes cohorts or scores.
+ * Formatting preserves engine order and never recomputes cohorts.
  */
 public final class ColumnExplanations {
   /** Informational engine cohort count; not a tuning parameter. */
@@ -43,7 +43,18 @@ public final class ColumnExplanations {
 
   /** One column/cohort/class row; classLabel is null for regression and otherwise an exact scalar. */
   public record Row(String table, long hop, String column, String stype, String cohort,
-      Object classLabel, double share, double mean, double score) {}
+      Object classLabel, double share, double mean) {
+    /** Kept for source compatibility; the analysis no longer scores a column. */
+    @Deprecated
+    public Row(String table, long hop, String column, String stype, String cohort,
+        Object classLabel, double share, double mean, double score) {
+      this(table, hop, column, stype, cohort, classLabel, share, mean);
+    }
+
+    /** Kept for source compatibility; the analysis no longer scores a column, so this is NaN. */
+    @Deprecated
+    public double score() { return Double.NaN; }
+  }
 
   private final List<Row> rows;
   private final String encodedAnalysis;
@@ -81,7 +92,7 @@ public final class ColumnExplanations {
         if (hop < 0 || hop > 0xffff_ffffL) throw new IllegalArgumentException("invalid hop");
         values.add(new Row(requiredText(row, "table"), hop, requiredText(row, "column"),
             (String) row.get("stype"), requiredText(row, "cohort"), label,
-            finite(row, "share"), finite(row, "mean"), finite(row, "score")));
+            finite(row, "share"), finite(row, "mean")));
       }
       rows = List.copyOf(values);
       encodedAnalysis = new String(Json.write(analysis), StandardCharsets.UTF_8);
@@ -117,11 +128,11 @@ public final class ColumnExplanations {
 
   String encoded() { return encodedAnalysis; }
 
-  /** Detached immutable rows in engine score/cohort/class order. */
+  /** Detached immutable rows in context column, cohort and class order. */
   public List<Row> rows() { return rows; }
 
   /**
-   * Render the same nine columns as Python's dataframe view.
+   * Render the same eight columns as Python's dataframe view.
    * The caller closes the returned root before its allocator; this method never closes the allocator.
    * Mixed, decimal or wide class labels use lossless JSON text with metadata sdm.class_encoding=json.
    */
@@ -136,9 +147,8 @@ public final class ColumnExplanations {
     FieldVector classes = classVector(labels, allocator);
     Float8Vector share = new Float8Vector("share", allocator);
     Float8Vector mean = new Float8Vector("mean", allocator);
-    Float8Vector score = new Float8Vector("score", allocator);
     boolean json = encodedLabels(labels);
-    List<FieldVector> vectors = List.of(table, hop, column, stype, cohort, classes, share, mean, score);
+    List<FieldVector> vectors = List.of(table, hop, column, stype, cohort, classes, share, mean);
     VectorSchemaRoot root = new VectorSchemaRoot(new Schema(
         vectors.stream().map(FieldVector::getField).toList(),
         json ? Map.of("sdm.class_encoding", "json") : Map.of()), vectors, 0);
@@ -149,7 +159,7 @@ public final class ColumnExplanations {
         putText(table, i, row.table()); hop.setSafe(i, row.hop());
         putText(column, i, row.column()); putText(stype, i, row.stype());
         putText(cohort, i, row.cohort()); putClass(classes, i, row.classLabel(), json);
-        share.setSafe(i, row.share()); mean.setSafe(i, row.mean()); score.setSafe(i, row.score());
+        share.setSafe(i, row.share()); mean.setSafe(i, row.mean());
       }
       root.setRowCount(rows.size());
       return root;

@@ -159,6 +159,7 @@ async fn run(
         nullable: column.nullable,
         unique: false,
         declared_type: None,
+        catalog: None,
         exact_number: column.exact_number,
     });
     // The source identity stays logical; only the declarations are durable.

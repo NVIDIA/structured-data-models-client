@@ -20,15 +20,15 @@
 //! the old client's sampling SQL; Scope item 1, key sets bound as the old
 //! client binds them):
 //! - each golden request renders exactly its statements ([`goldens::render`]),
-//! and every request kind has one;
+//!   and every request kind has one;
 //! - the catalog statements are the old client's, text and parameters, after
-//! whitespace is normalised, so the stand-in replays C-1's catalog answers
-//! and the catalog reader reads the warehouse's real rows;
+//!   whitespace is normalised, so the stand-in replays C-1's catalog answers
+//!   and the catalog reader reads the warehouse's real rows;
 //! - every entity draw the old client writes (the percentage as Python's
-//! `str(float)`, `REPEATABLE (seed)`, `LIMIT n`) is a golden's statement;
+//!   `str(float)`, `REPEATABLE (seed)`, `LIMIT n`) is a golden's statement;
 //! - every key set is bound through `posexplode(from_json(?, 'array<...>'))`;
 //! - each part of a relation is quoted alone with backticks, a backtick in a
-//! name doubled, and a relation of more than three parts refused.
+//!   name doubled, and a relation of more than three parts refused.
 //!
 //! The other statements' text is the dialect's, pinned here and reviewed
 //! against the old client's: a golden seeded with the old client's text may
