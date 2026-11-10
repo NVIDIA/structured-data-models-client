@@ -180,6 +180,9 @@ The public API snapshot records this version update; publication remains pending
 - On Databricks, through Spark or a SQL warehouse, a `DECIMAL` value with a
   fraction is sent exactly, such as `997.67`. 1.0.0 sent it through a float, such as
   `997.6700000000001`.
+- On PostgreSQL, a whole-number `NUMERIC` key above `2**63 - 1` is kept
+  exactly and sent as a string. 1.0.0 raised `OverflowError` in
+  `Schema.from_source`.
 
 ### Removed
 
