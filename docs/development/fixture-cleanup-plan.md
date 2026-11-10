@@ -597,3 +597,7 @@ Wire-output snapshot replacement keeps all nine current transport journeys and c
 Independent NumPy permutations preserve seeded row order; pinned-schema and malformed-request tests now consume current captures, with ten intentional-corruption controls for assertion quality.
 The 194,865-byte generated output recording is removed with its writer path; public API inventory remains pending, and broad tooling consolidation stays in step 3.
 Post-deletion validation passed all 36 affected tests against the available pinned model schema; transport responses remain locally scripted, not live model results.
+
+The public API inventory, case/observation schemas, source SQL bases and active four-fact connector outcome maps remain after consumer audit.
+Two inactive native-runner baseline JSONL outputs (178,161 bytes) are deleted; the explicitly protected old-client baseline is unchanged.
+This was a source/CI consumer audit, not another product-test run.
