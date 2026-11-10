@@ -81,7 +81,7 @@ Ruff and Clippy were run for affected code; detailed logs and review paths are r
 Some earlier PostgreSQL variants were skipped and remain unverified by those runs.
 Later PostgreSQL runs cover their named batches only.
 Scripted HTTP tests exercise real client transport but are not live model validation.
-No claim is made here of exhaustive live warehouse/model coverage or a fresh integrated run.
+These focused runs do not claim exhaustive live warehouse/model coverage; integrated CI evidence is recorded below.
 
 ## Remaining steps
 
@@ -90,7 +90,7 @@ No claim is made here of exhaustive live warehouse/model coverage or a fresh int
 | 1. Map and prioritize | Complete: inventory, consumer mapping and independent audit. |
 | 2. Replace and delete | Complete: replacements, focused validation, reconciled tracking and final independent review. |
 | 3. Simplify plumbing | Complete: dead compression/recording code removed; active correctness/API/protocol checks and developer guidance reconciled. |
-| 4. Review and validate | In progress via PR #96 CI. Run integrated Rust/Python/Java suites, connector checks, lint/type checks and schema/capability gates. Run live checks where changed behavior or maintained requirements require them. |
+| 4. Review and validate | Integrated results are recorded below; the latest-head checks and readiness status are tracked in [PR #96](https://github.com/NVIDIA/structured-data-models-client/pull/96). All required checks must pass before it is marked ready. |
 
 Step 2 completion requires actual file totals, no unresolved deleted-input consumers, independent review of coverage decisions and honest affected-test evidence.
 It does not mean every recorded artifact should be deleted or that steps 3/4 have already passed.
@@ -155,3 +155,27 @@ Python CI also found that the fixture identity helper assumed every factory gene
 The helper now restores the query placeholder for the query factory while still comparing every other field; all 403 case-validation tests pass locally.
 The Python 3.10, 3.12 and 3.14 jobs each passed 6,579 tests and failed only this helper and the corrected checksum.
 GitHub confirms the PR is mergeable against `release-2-0-gaps`; final CI is still required.
+
+### Integrated validation results
+
+[CI run 42860422995](https://github.com/NVIDIA/structured-data-models-client/actions/runs/42860422995), at `20b58f9f1`, passed 77 jobs.
+The Rust workspace tests also passed; their job failed afterward because the enforcement ledger still named `every_expected_refusal_is_named` instead of its replacement, `every_actual_refusal_is_named`.
+The ledger now names the test that verifies actual runtime refusals; no test or enforcement requirement was removed.
+The subsequent PR checks are authoritative for the final head.
+
+| Coverage | Evidence from that integrated run |
+| --- | --- |
+| Python | All five Python 3.10–3.14 jobs passed; Python 3.12 reported 6,581 passed and 141 skipped. |
+| Local databases | All nine Python DuckDB/SQLite/PostgreSQL cells passed, as did the Java database cells. |
+| Java | Java 17/21 suites, native loading and platform packaging passed. |
+| Rust | Workspace tests passed; the final required-test-name check exposed the corrected ledger reference. |
+| Distribution/runtime | Native wheels, installed-wheel tests, runtime-install cells and packaging checks passed. |
+| Enforcement | Lint, types, architecture, API compatibility, repository hygiene and schema checks passed. |
+
+This cleanup does not change production behavior, and this validation does not claim fresh live Snowflake, Databricks or remote-model execution.
+Their SQL semantics are covered by retained five-dialect assertions; local database execution and scripted/in-process model tests cover the maintained CI paths.
+All three protected unresolved inputs remain byte-for-byte identical to the target branch.
+The target branch through `39e79068e` is included, all cleanup commits are signed off, and the final diff has no whitespace errors.
+
+After the correction, the exact Rust enforcement command passed locally: 19 fallback, 30 materialization, 5 type-admission and 20 schema-edit tests.
+The compatibility ledger and its 41 focused tests also passed.

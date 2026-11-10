@@ -8292,7 +8292,7 @@
     {
       "base_commit": "39e79068e556a0c40a1097262954f3f0b2879308",
       "record": "type_contracts/arrow-admission-and-inference",
-      "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum."
+      "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum and reference the renamed test that checks actual runtime refusals instead of recorded expectations."
     }
   ],
   "capabilities": [
@@ -9831,7 +9831,7 @@
           "rust/crates/sdm-host/tests/type_set.rs::every_variant_of_data_type_has_a_vector_and_no_type_has_two",
           "rust/crates/sdm-host/tests/type_set.rs::each_parameterized_family_has_each_parameter",
           "rust/crates/sdm-host/tests/type_set.rs::each_type_is_admitted_and_inferred_as_its_vector_says",
-          "rust/crates/sdm-host/tests/type_set.rs::every_expected_refusal_is_named"
+          "rust/crates/sdm-host/tests/type_set.rs::every_actual_refusal_is_named"
         ]
       },
       "evidence_level": "local-boundary",
