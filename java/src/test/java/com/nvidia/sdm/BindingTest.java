@@ -196,38 +196,77 @@ class BindingTest {
         } finally { Names.close(run); }
     }
 
-    /** Authored code/kind/sentence inputs cover each supported native error mapping. */
+    private static Map<String, Object> text(String value) {
+        return Map.of("t", "utf8", "v", value);
+    }
+
+    /** Each native error code reaches Java with its code and its sentence's exact words. */
     @TestFactory
     Stream<DynamicTest> everyErrorCodeReachesJavaWithItsCode() {
         String[][] errors = {
-            new String[]{"ENDPOINT_REFUSED", "model_endpoint", "serving_refused"},
-            new String[]{"INTERNAL_ERROR", "internal", "result_merge_empty"},
-            new String[]{"INVALID_CONFIGURATION", "invalid_request", "invalid_configuration"},
-            new String[]{"INVALID_MESSAGE", "protocol", "invalid_message"},
-            new String[]{"INVALID_REQUEST", "invalid_request", "direct_empty"},
-            new String[]{"INVALID_RESPONSE", "model_endpoint", "tabular_missing_row_index"},
-            new String[]{"INVALID_SCHEMA", "invalid_request", "wire_reserved_one"},
-            new String[]{"MISSING_EXTRA", "unsupported", "missing_extra"},
-            new String[]{"PROVIDER_ERROR", "not_found", "provider_failed"},
-            new String[]{"PROVIDER_SCHEMA_MISMATCH", "data_source", "provider_schema_mismatch"},
-            new String[]{"REPLY_MISSING", "protocol", "reply_missing"},
-            new String[]{"RUN_BUSY", "protocol", "run_busy"},
-            new String[]{"RUN_CANCELLED", "cancelled", "run_cancelled"},
-            new String[]{"RUN_FINISHED", "protocol", "run_finished"},
-            new String[]{"RUN_POISONED", "protocol", "run_poisoned"},
-            new String[]{"SESSIONS_UNSUPPORTED", "unsupported", "sessions_unsupported"},
-            new String[]{"TRANSPORT_ERROR", "model_endpoint", "transport_failed"},
-            new String[]{"UNKNOWN_MODEL", "not_found", "unknown_model"},
-            new String[]{"UNKNOWN_REPLY", "protocol", "unknown_reply"},
-            new String[]{"UNSUPPORTED_REQUEST", "unsupported", "direct_relational_frames"},
-            new String[]{"UNSUPPORTED_TYPE", "unsupported", "unsupported_type"},
-            new String[]{"VALUE_OUT_OF_RANGE", "unsupported", "lag_past_times"},
-            new String[]{"WRONG_REPLY", "protocol", "wrong_reply"}
+            new String[]{"ENDPOINT_REFUSED", "model_endpoint", "serving_refused",
+                "serving endpoint \"fraud-scorer\" refused the request (UNSUPPORTED_TASK)"},
+            new String[]{"INTERNAL_ERROR", "internal", "result_merge_empty", "no parts to merge"},
+            new String[]{"INVALID_CONFIGURATION", "invalid_request", "invalid_configuration",
+                "the configuration of this call is not one the core accepts"},
+            new String[]{"INVALID_MESSAGE", "protocol", "invalid_message",
+                "the host sent a message the core cannot read"},
+            new String[]{"INVALID_REQUEST", "invalid_request", "direct_empty",
+                "context has no rows, so there is nothing for the model to learn the answer from"},
+            new String[]{"INVALID_RESPONSE", "model_endpoint", "tabular_missing_row_index",
+                "kumo-tabular returned a response that does not match the contract: "
+                    + "PredictionItem response is missing required field 'row_index'"},
+            new String[]{"INVALID_SCHEMA", "invalid_request", "wire_reserved_one",
+                "orders.instance_id uses a name this client needs for the request it builds, so it cannot "
+                    + "also be a column of the data. Rename it, for instance to \"instance_id_from_the_data\"."},
+            new String[]{"MISSING_EXTRA", "unsupported", "missing_extra",
+                "an optional dependency this call needs is not installed"},
+            new String[]{"PROVIDER_ERROR", "not_found", "provider_failed", "the data source failed"},
+            new String[]{"PROVIDER_SCHEMA_MISMATCH", "data_source", "provider_schema_mismatch",
+                "the data source answered with columns other than the ones asked for"},
+            new String[]{"REPLY_MISSING", "protocol", "reply_missing",
+                "the host went on before answering every request"},
+            new String[]{"RUN_BUSY", "protocol", "run_busy",
+                "the run was already in a call; a run takes one call at a time"},
+            new String[]{"RUN_CANCELLED", "cancelled", "run_cancelled", "the run was cancelled"},
+            new String[]{"RUN_FINISHED", "protocol", "run_finished", "the run had already finished"},
+            new String[]{"RUN_POISONED", "protocol", "run_poisoned",
+                "the run failed earlier and can no longer be used"},
+            new String[]{"SESSIONS_UNSUPPORTED", "unsupported", "sessions_unsupported",
+                "the model endpoint does not support sessions"},
+            new String[]{"TRANSPORT_ERROR", "model_endpoint", "transport_failed",
+                "the transport to the model endpoint failed: the endpoint could not be reached, "
+                    + "or its answer could not be read"},
+            new String[]{"UNKNOWN_MODEL", "not_found", "unknown_model", "the model named does not exist"},
+            new String[]{"UNKNOWN_REPLY", "protocol", "unknown_reply",
+                "the host answered a request the core did not make"},
+            new String[]{"UNSUPPORTED_REQUEST", "unsupported", "direct_relational_frames",
+                "a relational request has to be gathered first, and this one was not. Build it with "
+                    + "PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of "
+                    + "one table is gathered for the tabular model unless the relational one is named, rather "
+                    + "than with Request(context=..., predict=...), which is the single-table form"},
+            new String[]{"UNSUPPORTED_TYPE", "unsupported", "unsupported_type",
+                "column \"tags\" has the Arrow type Float16, which the core does not take"},
+            new String[]{"VALUE_OUT_OF_RANGE", "unsupported", "lag_past_times",
+                "lag_timesteps reaches further back than a time can be held (before 1677); ask for fewer steps"},
+            new String[]{"WRONG_REPLY", "protocol", "wrong_reply",
+                "the host answered a request with the wrong kind of reply"}
         };
+        Map<String, Map<String, Object>> fields = Map.of(
+            "ENDPOINT_REFUSED", Map.of(
+                "endpoint", text("fraud-scorer"), "endpoint_code", text("UNSUPPORTED_TASK")),
+            "INVALID_SCHEMA", Map.of(
+                "reserved", List.of(text("orders.instance_id")),
+                "renamed", List.of(text("instance_id_from_the_data"))),
+            "UNSUPPORTED_TYPE", Map.of("column", text("tags"), "arrow_type", text("Float16")));
         return Stream.of(errors).map(error -> DynamicTest.dynamicTest(error[0], () -> {
-            byte[] input = com.nvidia.sdm.internal.Json.write(Map.of(
+            Map<String, Object> given = new LinkedHashMap<>(Map.of(
                     "kind", error[1], "code", error[0], "sentence", error[2],
                     "message", "native-free-text-sentinel", "retryable", false));
+            if (fields.containsKey(error[0])) {
+                given.put("fields", fields.get(error[0]));
+            }
+            byte[] input = com.nvidia.sdm.internal.Json.write(given);
             Object run = Names.startRun(
                     "{\"op\":\"test\",\"test\":\"fail\",\"error\":1}", Map.of(1, input));
             try {
@@ -236,14 +275,7 @@ class BindingTest {
             } catch (Exception raised) {
                 assertTrue(Names.isStructuredDataException(raised));
                 assertEquals(error[0], Names.code(raised));
-                assertTrue(raised.getMessage() != null && !raised.getMessage().isBlank());
-                assertTrue(!raised.getMessage().contains("native-free-text-sentinel"));
-                if (error[0].equals("INVALID_REQUEST")) {
-                    assertEquals("context has no rows, so there is nothing for the model to learn the answer from", raised.getMessage());
-                }
-                if (error[0].equals("RUN_BUSY")) {
-                    assertEquals("the run was already in a call; a run takes one call at a time", raised.getMessage());
-                }
+                assertEquals(error[3], raised.getMessage(), error[0]);
             } finally {
                 Names.close(run);
             }
