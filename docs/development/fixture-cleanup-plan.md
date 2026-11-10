@@ -612,3 +612,11 @@ This classification used source/CI evidence and does not claim a fresh warehouse
 
 The 9,291-byte SQL golden is removed after review: tests execute plain/dotted/decoy sources and independently check labels, complete histories, newest-first order, keys and prediction order.
 The current SQL rename/catalog check remains; the obsolete recording writer is removed.
+
+Twelve small Arrow/type/protocol/provider tables remain after independent oracle/consumer audit: they specify interoperability and authored acceptance cases, rather than replaying old-client output.
+The provider conformance kit computes its answers independently from source rows, not product SQL.
+The exact-key client-output recording remains replacement work; retention is not based merely on file size.
+
+Response-encoding recording (13,068 bytes) removed after independent review: all 38 scenarios retain direct typed-result, request-ID, metadata, malformed-byte and surrogate-replacement assertions.
+The independent byte-form checks and Rust-native encoding cases remain; the affected Python suite passed 39 tests.
+The retained provider kit also passed its independent source-row evaluator.

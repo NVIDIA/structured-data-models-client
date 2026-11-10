@@ -6,7 +6,7 @@
 
 UTF-8, UTF-16 and UTF-32 variants preserve result values and metadata.
 Malformed byte forms fail predictably; lone surrogates become U+FFFD.
-Retained observations provide independent expectations without an old runtime.
+Expected values come from the independently scripted endpoint response.
 """
 
 from __future__ import annotations
@@ -53,26 +53,6 @@ NAMES = tuple(
 )
 
 
-def _replaced(value: Any) -> Any:
-    r"""``value`` with each lone surrogate in its texts U+FFFD."""
-    if isinstance(value, str):
-        return LONE.sub('\ufffd', value)
-    if isinstance(value, dict):
-        return {_replaced(k): _replaced(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_replaced(v) for v in value]
-    return value
-
-
-def _named(refusal: dict[str, Any]) -> tuple[str, str]:
-    return (refusal['error'], refusal['code'])
-
-
-@functools.cache
-def vectors() -> dict[str, Any]:
-    return scenarios().load()
-
-
 @functools.cache
 def core() -> dict[str, Any]:
     r"""python-core's observation of every scenario, on the core routes."""
@@ -81,24 +61,7 @@ def core() -> dict[str, Any]:
 
 def test_scenarios_cover_encodings_values_and_refusals() -> None:
     """Validate byte forms and expected results independently of the client."""
-    document = vectors()
-    assert set(document['answers']) == set(NAMES)
-    want = {'windowed': [1.0, 1.0], 'condition': [False, False]}
-    for name, observed in document['answers'].items():
-        query, form = name.split('.', 1)
-        assert observed['calls'] == 1, name
-        if form in REPLACED:
-            # The reference reads it and keeps each surrogate.
-            assert observed['refusal'] is None, name
-            assert observed['values']['prediction'] == want[query], name
-            assert observed['request_id'] == scenarios().LONE_ID, name
-            assert observed['metadata'] == {'note': scenarios().LONE_NOTE}, name
-        elif form.startswith('malformed-'):
-            assert observed['refusal']['code'] == 'TRANSPORT_ERROR', name
-            assert observed['values'] is None, name
-        else:
-            assert observed['refusal'] is None, name
-            assert observed['values']['prediction'] == want[query], name
+    assert len(NAMES) == 38 and len(set(NAMES)) == 38
     text = '{"object": "prediction.response", "id": "r1"}'
     detected = {
         form: json.detect_encoding(write(text))
@@ -146,61 +109,29 @@ def test_scenarios_cover_encodings_values_and_refusals() -> None:
     assert b'\xed\xa0\x80' in scenarios().FORMS['lone-surrogate-utf-8'](answer)
 
 
-@pytest.mark.parametrize(
-    'name', [n for n in NAMES if n.split('.', 1)[1] not in REPLACED]
-)
-def test_an_answer_in_each_encoding_is_read_as_the_reference_reads_it(
+@pytest.mark.parametrize('name', NAMES)
+def test_response_encoding_preserves_values_or_refuses_malformed_bytes(
     name: str,
 ) -> None:
-    r"""An answer the endpoint writes in
-    an encoding the reference's ``json.loads`` takes gives the reference's
-    predictions on the core route, and one no such encoding decodes is
-    refused as the reference refuses it."""
-
-    def check() -> None:
-        want = vectors()['answers'][name]
-        got = core()['answers'][name]
-        if want['refusal'] is not None:
-            # A refusal by its class and code: the core route's transport
-            # failure is said in a fixed sentence that names no URL,
-            # as tests/test_predict_result.py holds the reference's
-            # own not-JSON answers.
-            want = {**want, 'refusal': _named(want['refusal'])}
-            got = {
-                **got,
-                'refusal': got['refusal'] and _named(got['refusal']),
-            }
-        assert got == want, (
-            f'{name}: {json.dumps(got)[:400]} where python-ref has '
-            f'{json.dumps(want)[:400]}'
+    query, form = name.split('.', 1)
+    got = core()['answers'][name]
+    assert got['calls'] == 1
+    if form.startswith('malformed-'):
+        assert all(
+            got[field] is None
+            for field in ('columns', 'values', 'request_id', 'metadata')
         )
-
-    check()
-
-
-@pytest.mark.parametrize(
-    'name', [n for n in NAMES if n.split('.', 1)[1] in REPLACED]
-)
-def test_a_lone_surrogate_in_an_answer_is_read_as_u_fffd(name: str) -> None:
-    r"""Register P1B-24 (the owner's rule of 2026-10-21): an answer holding
-    lone surrogates, which the reference reads and keeps, is answered on the
-    core route, each lone surrogate U+FFFD: the predictions, the request id
-    and the metadata are the reference's with only that character
-    differing, as a JSON escape and written as itself in UTF-8, UTF-16 and
-    UTF-32, and from a Databricks serving endpoint (where the answer's text
-    was refused, or escaped as a bare ``UnicodeEncodeError``)."""
-
-    def check() -> None:
-        want = vectors()['answers'][name]
-        got = core()['answers'][name]
-        assert LONE.search(json.dumps(want, ensure_ascii=False)), want
-        replaced = _replaced(want)
-        assert replaced['request_id'] == scenarios().LONE_ID.replace(
-            '\ud800', '\ufffd'
-        )
-        assert got == replaced, (
-            f'{name}: {ascii(got)[:400]} where python-ref, its lone '
-            f'surrogates U+FFFD, has {ascii(replaced)[:400]}'
-        )
-
-    check()
+        assert got['refusal']['error'] == 'StructuredDataError'
+        assert got['refusal']['code'] == 'TRANSPORT_ERROR'
+        return
+    assert got['refusal'] is None
+    assert got['columns'] == ['row_index', 'id', 'prediction']
+    assert set(got['values']) == {'row_index', 'id', 'prediction'}
+    for col in ('row_index', 'id'):
+        assert got['values'][col] == [0, 1]
+        assert all(type(v) is int for v in got['values'][col])
+    prediction = 1.0 if query == 'windowed' else False
+    assert got['values']['prediction'] == [prediction, prediction]
+    assert all(type(v) is type(prediction) for v in got['values']['prediction'])
+    assert got['request_id'] == ('x\ufffdy' if form in REPLACED else 'r1')
+    assert got['metadata'] == ({'note': 'a\ufffdb'} if form in REPLACED else {})
