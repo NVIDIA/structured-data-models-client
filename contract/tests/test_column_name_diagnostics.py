@@ -37,6 +37,27 @@ R = _module(
     ROOT / 'contract/support/column_name_scenarios.py',
 )
 
+MESSAGES = {
+    'task': (
+        "[INVALID_REQUEST] task='regression' settles what a single-table "
+        'question is asking, which is the only route that has to decide. A '
+        'relational query resolves to its own kind, so state it in the '
+        'query rather than beside it'
+    ),
+    'typo': (
+        "[INVALID_REQUEST] '<pql>' is not a query a relational model can "
+        "answer: row 1, column 12: Column 'pricee' does not exist in table "
+        "'orders'. Please be mindful of case sensitivity and ensure that the "
+        'name is spelled correctly.'
+    ),
+    'parts': (
+        '[INVALID_REQUEST] 2 forecast steps means 2 calls, one for each, '
+        'because the model has no task that answers them together. That is '
+        'past the 1 this will do without being told to; ask about fewer, or '
+        'raise sdm_client.decompose.MOST_PARTS if the wait is what you want.'
+    ),
+}
+
 
 def reachable(database: str) -> bool:
     if database != 'postgres' or os.environ.get('SDM_POSTGRES_TEST_DSN'):
@@ -59,25 +80,6 @@ def test_column_names_preserve_actionable_diagnostics(vector) -> None:
         'StructuredDataError',
         'INVALID_REQUEST',
     )
-    fragments = {
-        'task': [
-            "task='regression'",
-            'single-table',
-            'relational query',
-            'state it in the query',
-        ],
-        'typo': [
-            vector['pql'],
-            "Column 'pricee' does not exist in table 'orders'",
-            'case sensitivity',
-            'spelled correctly',
-        ],
-        'parts': [
-            '2 forecast steps means 2 calls',
-            'past the 1 this will do',
-            'ask about fewer',
-            'raise sdm_client.decompose.MOST_PARTS',
-        ],
-    }
-    for fragment in fragments[vector['kind']]:
-        assert fragment in got['message']
+    assert got['message'] == MESSAGES[vector['kind']].replace(
+        '<pql>', vector['pql']
+    )
