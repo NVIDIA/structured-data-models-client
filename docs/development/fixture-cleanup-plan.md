@@ -620,3 +620,9 @@ The exact-key client-output recording remains replacement work; retention is not
 Response-encoding recording (13,068 bytes) removed after independent review: all 38 scenarios retain direct typed-result, request-ID, metadata, malformed-byte and surrogate-replacement assertions.
 The independent byte-form checks and Rust-native encoding cases remain; the affected Python suite passed 39 tests.
 The retained provider kit also passed its independent source-row evaluator.
+
+Three Rust case/request/fault inputs remain after independent consumer audit; historical neighbors.json sampler outputs remain replacement work.
+Exact-key validation uses temporary local PostgreSQL17 container `sdm-fixture-cleanup-pg` on localhost port32769; remove it after the remaining PostgreSQL fixture checks.
+
+Exact-key output recording (12,223 bytes) removed after independent review and nine passing tests against temporary local PostgreSQL17.
+Authored inputs stay in exact_key_scenarios.py; direct assertions cover complete key/anchor sets, source-derived labels and histories, schema/wire types, relationship ownership and catalog-versus-supplied/edited equivalence.
