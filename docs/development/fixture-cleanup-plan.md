@@ -637,3 +637,14 @@ Independent review, both Rust tests and Clippy passed before final pruning verif
 
 Temporal candidate output recording (12,666 bytes) removed after review and seventeen tests with local PostgreSQL.
 Direct assertions retain candidate identity/scoring, useful refusals/warnings and escaped JSON source values, owning rows, prediction order and wire contracts.
+
+### Historical pickle and request-kind follow-up
+
+The five historical request/schema pickle inputs remain compatibility inputs.
+Their output recording is being replaced by direct task, decomposition, frame, schema, wire-continuity and scripted-answer assertions; all 10 affected tests pass before deletion, with independent review pending.
+The last request-kind recording contains useful shared request inputs but captured product output rows and schemas, confirmed by its creation history.
+Keep its 45 request definitions and replace only the output expectations in the three execution consumers; preserve the two request-only consumers unchanged.
+
+The historical request-pickle output recording is now removed (17,093 bytes, 620 lines), after independent review closed the child-metadata gap and all 10 focused tests passed.
+The five historical pickle inputs remain unchanged; exact saved-data transport continuity and authored forecast/ranking results replace opaque hashes.
+Only the request-kind recorded outputs remain pending replacement; final tracker reconciliation and coverage review still follow.
