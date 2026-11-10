@@ -1398,20 +1398,3 @@ fn a_batch_is_halved_at_most_three_times() {
     assert_eq!(error.fields["halvings"], Detail::Scalar(Scalar::UInt32(3)));
     assert_eq!(error.fields["status"], Detail::Scalar(Scalar::UInt16(413)));
 }
-
-/// A call whose context is half its bytes or more is not split: fewer rows
-/// cannot make it small enough.
-#[test]
-fn a_call_whose_context_dominates_is_not_split() {
-    let mut run = predict_run(
-        REQUEST_STATE_VERSION,
-        sized_payload(2, 400),
-        "kumo-relational",
-    )
-    .unwrap();
-    let (id, _) = call(&mut run);
-    run.submit_model(id, refused_with(413)).unwrap();
-    let error = run.next().unwrap_err();
-    assert_eq!(error.sentence, Sentence::ContextTooLargeForEndpoint);
-    assert!(error.fields.contains_key("context_bytes"));
-}

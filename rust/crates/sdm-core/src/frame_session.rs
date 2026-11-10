@@ -329,7 +329,6 @@ pub(crate) async fn run(
                 write: &write,
                 send: &send,
                 merge: crate::predict::numbered_parts,
-                context: false,
             };
             for (body, layout) in plans {
                 let answered: Result<_, CoreError> = async {

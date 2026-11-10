@@ -611,21 +611,6 @@ class DatabricksServingTest {
   }
 
   @Test
-  void aCallWhoseContextDominatesIsNotSplit() throws Exception {
-    try (Connection connection = Shop.open("duckdb");
-        Workspace workspace = new Workspace(body -> Answer.of(413, ""));
-        SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
-      Request request = asked(connection);
-      StructuredDataException error =
-          assertThrows(
-              StructuredDataException.class,
-              () -> client.predict(request, SdmClient.KUMO_RELATIONAL));
-      assertTrue(error.getMessage().contains("the context is too large"), error.getMessage());
-      assertEquals(1, workspace.bodies.size());
-    }
-  }
-
-  @Test
   void anEndpointThatCannotBeReachedIsAFailureAtItsDeadline() throws Exception {
     int port;
     try (ServerSocket free = new ServerSocket(0)) {

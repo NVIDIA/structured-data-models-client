@@ -307,15 +307,6 @@ def test_a_batch_is_halved_at_most_three_times():
     assert refused.value.details['halvings'] == 3
 
 
-def test_a_call_whose_context_dominates_is_not_split():
-    request = gathered(context_rows=400, run_mode='best', predict_rows=2)
-    endpoint = Scripted(_too_large())
-    with pytest.raises(StructuredDataError) as refused:
-        client(endpoint).predict(request, model='kumo-relational')
-    assert _sizes(endpoint) == [2]
-    assert 'the context is too large for this endpoint' in str(refused.value)
-
-
 def test_a_timeout_counts_toward_the_three_halvings():
     request = gathered(context_rows=5, run_mode='fast', predict_rows=16)
     endpoint = Scripted(_timed_out(), *[_too_large() for _ in range(20)])

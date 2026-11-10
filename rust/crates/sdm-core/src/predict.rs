@@ -521,11 +521,9 @@ pub(crate) async fn one(
                                 write: &write,
                                 send: &send,
                                 merge: numbered_parts,
-                                context: false,
                             };
                             let sent = body.to_bytes().len();
-                            let (size, halvings) =
-                                split(&how, payload, &error, sent, &mut most, 0)?;
+                            let (size, halvings) = split(payload, &error, sent, &mut most, 0)?;
                             return in_runs(&how, payload.clone(), size, &mut most, halvings).await;
                         }
                         Err(error) => return Err(Unanswered::from(error)),
@@ -548,7 +546,6 @@ pub(crate) async fn one(
                     write: &write,
                     send: &send,
                     merge: numbered_parts,
-                    context: true,
                 };
                 answered(&how, payload.clone(), bytes, &mut most, 0).await
             }
@@ -657,9 +654,6 @@ pub(crate) struct Asking<'a, T> {
     pub write: &'a Write<'a>,
     pub send: &'a Sender<'a, T>,
     pub merge: Merge<T>,
-    /// Whether the calls carry a context, which a call too large is weighed
-    /// against before it is split: none on a session's scoring calls.
-    pub context: bool,
 }
 
 /// The answers to runs of a call's rows, each with the row it starts at,
@@ -694,7 +688,7 @@ pub(crate) async fn answered<T>(
             let sent = bytes.len();
             match (how.send)(payload.clone(), bytes).await {
                 Err(error) if rows > 1 && too_large(&error) => {
-                    split(how, &payload, &error, sent, most, halvings)?
+                    split(&payload, &error, sent, most, halvings)?
                 }
                 answer => return answer.map_err(Unanswered::from),
             }
@@ -705,10 +699,8 @@ pub(crate) async fn answered<T>(
 
 /// The size a call refused as too large (`error`, `sent` bytes) is asked
 /// again in, and the halvings that make: half its rows, at most
-/// [`MOST_HALVINGS`] times a batch; refused where its context is half its
-/// bytes or more ([`Asking::context`]), which fewer rows cannot help.
+/// [`MOST_HALVINGS`] times a batch.
 pub(crate) fn split<T>(
-    how: &Asking<'_, T>,
     payload: &Value,
     error: &CoreError,
     sent: usize,
@@ -716,14 +708,6 @@ pub(crate) fn split<T>(
     halvings: u32,
 ) -> Result<(usize, u32), Unanswered<T>> {
     let rows = predict_rows(payload).unwrap_or(0);
-    if how.context {
-        // A context that is half the call or more is sent whole with every
-        // smaller call: fewer rows cannot help.
-        let context = payload.get("context").map_or(0, |c| c.to_bytes().len());
-        if context * 2 >= sent {
-            return Err(Unanswered::from(context_too_large(error, context, sent)));
-        }
-    }
     if halvings >= MOST_HALVINGS {
         return Err(Unanswered::from(still_too_large(
             error, rows, sent, halvings,
@@ -816,14 +800,13 @@ fn still_too_large(error: &CoreError, rows: usize, bytes: usize, halvings: u32) 
     .with_field("after_split", Detail::Scalar(Scalar::Bool(true)))
 }
 
-/// The refusal of a call too large whose context is half its bytes or more,
-/// which no call of fewer rows makes smaller.
-fn context_too_large(error: &CoreError, context: usize, bytes: usize) -> CoreError {
+/// The refusal of a session's create call, which carries only the context,
+/// refused as too large or too slow: `bytes` cannot be split.
+fn context_too_large(error: &CoreError, bytes: usize) -> CoreError {
     CoreError::new(
         Sentence::ContextTooLargeForEndpoint,
-        "the context alone is half a call too large or more",
+        "a call that sends only the context was refused as too large",
     )
-    .with_field("context_bytes", count(context))
     .with_field("bytes", count(bytes))
     .with_field("status", refused_status(error))
     .with_field("after_split", Detail::Scalar(Scalar::Bool(true)))
@@ -852,7 +835,6 @@ pub(crate) async fn session_answer<'a>(
         write: &write,
         send: &sender,
         merge: merged_answers,
-        context: false,
     };
     answered(&how, payload.clone(), payload.to_bytes(), &mut None, 0)
         .await
@@ -866,9 +848,7 @@ pub(crate) fn created(error: CoreError, body: &Value) -> CoreError {
     if !too_large(&error) {
         return error;
     }
-    let bytes = body.to_bytes().len();
-    let context = body.get("context").map_or(bytes, |c| c.to_bytes().len());
-    context_too_large(&error, context, bytes)
+    context_too_large(&error, body.to_bytes().len())
 }
 
 /// Whether `error` is a refusal by one of the [`TOO_LARGE`] statuses.
@@ -938,7 +918,6 @@ pub(crate) async fn direct_answer(
         write: &write,
         send: &send,
         merge: merged_answers,
-        context: true,
     };
     let mut most = usize::try_from(sdm_request::options::PREDICT_ROWS).ok();
     let mut answers = Vec::new();

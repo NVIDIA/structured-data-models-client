@@ -1517,7 +1517,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"the endpoint refused a call of {rows:,} rows to score, {bytes:,} bytes, with status {status}, after it was halved {halvings} times; ask in calls of fewer rows (rows_per_call), or send fewer context rows or columns"#,
         ),
         S::ContextTooLargeForEndpoint => said(
-            r#"the context is too large for this endpoint: it is {context_bytes:,} of the call's {bytes:,} bytes, refused with status {status}, so a call of fewer rows cannot help; send fewer context rows or columns"#,
+            r#"the context is too large for this endpoint: the call that sends it, {bytes:,} bytes, was refused with status {status}; send fewer context rows or columns"#,
         ),
         S::ServingPastLimit => said(
             r#"this request is {bytes:,} bytes once wrapped for serving endpoint {endpoint!r}, above the {limit:,} byte limit it accepts. Send fewer rows per call: a smaller num_context_samples, or fewer entities to score"#,
