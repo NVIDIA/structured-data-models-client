@@ -71,8 +71,14 @@ class Endpoint:
                     if outer.mode == 'transport' and outer.scored == 2:
                         self.close_connection = True
                         return
+                    if (
+                        outer.mode == 'lost_then_dropped'
+                        and self.path == '/v1/predictions'
+                    ):
+                        self.close_connection = True
+                        return
                     if (outer.mode == 'expired' and outer.scored == 2) or (
-                        outer.mode == 'expired_twice'
+                        outer.mode in ('expired_twice', 'lost_then_dropped')
                         and outer.scored >= 2
                         and self.path.startswith('/v1/sessions/')
                     ):
@@ -106,6 +112,9 @@ class Endpoint:
 
             def do_DELETE(self):
                 outer.calls.append((self.command, self.path, None))
+                if outer.mode == 'lost_then_dropped':
+                    self.close_connection = True
+                    return
                 self.send_response(
                     400 if outer.mode in ('malformed', 'transport') else 204
                 )
@@ -214,6 +223,25 @@ def test_transport_failure_keeps_primary_error_when_cleanup_fails():
                 client.predict(request(), model=KumoRelational())
         assert caught.value.code == 'TRANSPORT_ERROR'
         assert caught.value.details['answered'] is not None
+        assert endpoint.calls[-1][0] == 'DELETE'
+    finally:
+        endpoint.close()
+
+
+def test_a_failed_cleanup_does_not_hide_the_call_that_failed():
+    """Sessions lost twice send the remaining calls stateless; when one of
+    those and the leftover sessions' cleanup both fail in transport, the
+    error names the call that failed, and the cleanup is a warning."""
+    from sdm_client import SDMWarning
+
+    endpoint = Endpoint('lost_then_dropped')
+    try:
+        with SDMClient(url=endpoint.url, max_retries=0) as client:
+            with pytest.warns(SDMWarning, match='SESSION_CLEANUP'):
+                with pytest.raises(StructuredDataError) as caught:
+                    client.predict(request(), model=KumoRelational())
+        assert caught.value.code == 'TRANSPORT_ERROR'
+        assert caught.value.details['url'].endswith('/v1/predictions')
         assert endpoint.calls[-1][0] == 'DELETE'
     finally:
         endpoint.close()

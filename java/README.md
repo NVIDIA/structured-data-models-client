@@ -28,7 +28,7 @@ The semantic view is decoded only when requested and is not cached alongside a s
   These describe correlations in the context, not causal effects.
 
 `ColumnExplanations.rows()` provides immutable typed rows in engine order.
-`toArrow(allocator)` exposes `table, hop, column, stype, cohort, class, share, mean, score`; close the returned root before the caller-owned allocator.
+`toArrow(allocator)` exposes `table, hop, column, stype, cohort, class, share, mean`; close the returned root before the caller-owned allocator.
 Mixed, decimal and wide class labels are lossless JSON strings identified by schema metadata `sdm.class_encoding=json`; ordinary strings, integers and booleans use their native Arrow types.
 Rust computes the statistics once; these Java views do not regroup or recompute them.
 The explicit `ColumnExplanations(payload)` constructor also runs that Rust analysis on a model request's labelled context.

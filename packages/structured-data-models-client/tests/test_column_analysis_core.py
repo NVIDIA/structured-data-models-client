@@ -265,6 +265,41 @@ def test_public_payloads_hide_client_keys_and_write_through():
     assert envelope == {'client_generated_keys': {'orders': '__node_id'}}
 
 
+def test_reading_payloads_never_empties_a_view_another_thread_holds():
+    import sys
+    import threading
+
+    envelope = {
+        'model': 'kumo-relational',
+        'metadata': {},
+        'task': {'kind': 'regression'},
+        'client_generated_keys': {},
+    }
+    request = Request.__new__(Request)
+    object.__setattr__(request, '_payloads', (envelope,))
+    [held] = request.payloads
+    partial = []
+    stop = threading.Event()
+
+    def watch():
+        while not stop.is_set():
+            if len(held) != 3:
+                partial.append(len(held))
+
+    previous = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    watcher = threading.Thread(target=watch)
+    try:
+        watcher.start()
+        for _ in range(5000):
+            assert request.payloads is not None
+    finally:
+        stop.set()
+        watcher.join()
+        sys.setswitchinterval(previous)
+    assert partial == []
+
+
 def test_unavailable_statistics_warn_without_losing_predictions():
     from test_tabular_direct_core import Endpoint as TabularEndpoint
     from test_tabular_direct_core import client

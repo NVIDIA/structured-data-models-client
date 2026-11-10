@@ -466,6 +466,36 @@ def test_an_explanation_is_answered_in_this_process(request, model):
     assert len(result.explanations.gradients) == len(result) > 0
 
 
+def test_an_inference_option_the_model_refuses_is_refused_before_it_loads(
+    sdm, monkeypatch
+):
+    """An inference option this process does not act on is refused before
+    the model's weights are loaded, as an output it does not produce is.
+
+    Assumptions:
+    - The client was opened with no model, so it loads one on first use.
+    - Constructing ``sdm.models.KumoTabular`` is replaced by a stub that
+      records the call; any call means the weights were loaded.
+    - Kumo Tabular takes ``use_prediction_time`` only as ``False``.
+    """
+    loads = []
+    monkeypatch.setattr(
+        sdm.models, 'KumoTabular', lambda **kwargs: loads.append(kwargs)
+    )
+    frame = people()[['person_id', 'age', 'visits', 'churn']]
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+        inference={'use_prediction_time': True},
+    )
+    with SDMClient.in_process() as client:
+        error = refused(lambda: client.predict(request, model=KumoTabular()))
+    assert error.code == 'INVALID_REQUEST'
+    assert loads == []
+
+
 def test_an_output_the_model_does_not_produce_is_refused_before_it_loads(
     sdm, monkeypatch
 ):

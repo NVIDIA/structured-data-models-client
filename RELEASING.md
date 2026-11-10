@@ -214,7 +214,8 @@ Check the three projects on pypi.org and confirm each shows NVIDIA organization
 ownership. Portal reporting that a release completed is not the same as the
 package being installable, so install it the way a user would.
 
-Then mark the GitHub Release Latest. The workflow leaves it unmarked on
+For a final release, then mark the GitHub Release Latest; leave an alpha, beta
+or release candidate unmarked. The workflow leaves every release unmarked on
 purpose, because until the publish has worked it would advertise a version the
 index does not have. One exception is worth knowing: when there is no earlier
 release to hold the position, GitHub reports the newest non-draft release as

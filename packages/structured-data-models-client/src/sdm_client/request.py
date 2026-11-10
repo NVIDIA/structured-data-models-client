@@ -1019,12 +1019,18 @@ class _Envelope(dict):  # type: ignore[type-arg]
         self._sync()
 
     def _sync(self) -> None:
-        super().clear()
-        super().update(
-            (name, value)
+        # Only what changed is written, so another thread reading a view
+        # it holds never sees it emptied by a read of `payloads`.
+        shown = {
+            name: value
             for name, value in self._envelope.items()
             if not name.startswith('client_')
-        )
+        }
+        for name in [name for name in self if name not in shown]:
+            super().__delitem__(name)
+        for name, value in shown.items():
+            if name not in self or dict.__getitem__(self, name) is not value:
+                super().__setitem__(name, value)
 
     def __setitem__(self, name: str, value: Any) -> None:
         self._envelope[name] = value

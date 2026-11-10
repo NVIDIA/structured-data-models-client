@@ -313,7 +313,11 @@ def _steps(
                     refused.status is not None
                     and error.details.get('status') == refused.status
                 )
-                or (refused.status is None and error.code == 'TRANSPORT_ERROR')
+                or (
+                    refused.status is None
+                    and error.code == 'TRANSPORT_ERROR'
+                    and transport is None
+                )
             ):
                 # The call's own failure, as the caller sees it, carrying
                 # what the core carried on its end of the run.
@@ -336,15 +340,18 @@ def _steps(
         if step['step'] == 'call_model' and (
             model is not None or model_endpoints is not None
         ):
-            try:
-                latest = _call(core, handle, step, model, model_endpoints)
-            except TransportFailed as failed:
-                transport, latest = failed.account, None
-            # Cleanup must not replace the primary prediction refusal.
+            # Cleanup must not replace the primary prediction failure, a
+            # refusal or the transport's.
             deleting = (
                 isinstance(step['endpoint'], dict)
                 and 'delete_session' in step['endpoint']
             )
+            try:
+                latest = _call(core, handle, step, model, model_endpoints)
+            except TransportFailed as failed:
+                latest = None
+                if transport is None or not deleting:
+                    transport = failed.account
             if refused is None or not deleting:
                 refused = latest
                 cleanup_refusal = deleting

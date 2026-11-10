@@ -109,6 +109,9 @@ The public API snapshot records this version update; publication remains pending
   table with no times, as 1.0.0 read it.
 - An HTTP 408 from `POST /v1/predictions` is retried, as 429, 502, 503 and
   504 are.
+- A foreign key holding integers and nulls is sent as exact integers beside
+  nulls. 1.0.0 sent such a column as `float64`, so its keys arrived as floats
+  and any past 2**53 was rounded.
 - A relational request reached over three or more hops fills a foreign key
   from every path that reaches the row, where 1.0.0 took the first path and
   left the rest null. The model sees more links, so predictions can differ.
