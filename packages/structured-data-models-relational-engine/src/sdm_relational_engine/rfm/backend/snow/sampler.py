@@ -87,11 +87,13 @@ class SnowSampler(SQLSampler):
         """Sample rows of an entity table from Snowflake.
 
         With ``entity_ids``, exactly those entities are fetched. With a
-        ``random_seed`` (and no ``entity_ids``), the draw is deterministic:
-        rows are ordered by a hash of the primary key and the seed, with
-        ties broken by the time column (when the table has one) and then
-        by the key itself, and the first ``num_rows`` rows are taken.
-        Without a seed, the draw uses Snowflake's unseeded ``SAMPLE ROW``.
+        ``random_seed`` (and no ``entity_ids``), the draw is deterministic
+        and spends its limit on distinct entities: rows are first reduced
+        to one representative row per primary key (the earliest-time row,
+        chosen deterministically and independently of the seed), then
+        ordered by a hash of the key and the seed, and the first
+        ``num_rows`` are taken. Without a seed, the draw uses Snowflake's
+        unseeded ``SAMPLE ROW``.
         """
         # NOTE Snowflake supports `SEED` only as part of `SYSTEM` sampling,
         # which samples blocks rather than a fixed number of rows. A seeded
@@ -146,15 +148,29 @@ class SnowSampler(SQLSampler):
             sql += f'\nWHERE{" AND".join(filters)}'
         if seeded:
             key_ref = self.table_column_ref_dict[table_name][key]
-            # Break hash ties deterministically (duplicate keys share a
-            # hash): by the time column when the table has one, then by
-            # the key itself, so a given seed always selects the same rows.
-            ordering = [f'HASH({key_ref}, {random_seed})']
+            # The caller drops duplicate keys, keeping the first row per
+            # key, so the limit must count distinct keys rather than
+            # rows: first reduce to one representative row per key. The
+            # representative is the row the caller would have kept —
+            # earliest time first under the hash ordering — with the
+            # remaining columns as tie-breakers, so the choice is
+            # deterministic and does not depend on the seed.
+            window_order: list[str] = []
             if column is not None:
-                ordering.append(self.table_column_ref_dict[table_name][column])
-            ordering.append(key_ref)
-            order_by = ', '.join(ordering)
-            sql += f'\nORDER BY {order_by}'
+                window_order.append(
+                    self.table_column_ref_dict[table_name][column]
+                )
+            window_order.extend(
+                self.table_column_ref_dict[table_name][name]
+                for name in self._ordered_columns(table_name, columns)
+                if name != key and name != column
+            )
+            partition_order = ', '.join(window_order) or key_ref
+            sql += (
+                f'\nQUALIFY ROW_NUMBER() OVER ('
+                f'PARTITION BY {key_ref} ORDER BY {partition_order}) = 1'
+            )
+            sql += f'\nORDER BY HASH({key_ref}, {random_seed})'
             sql += f'\nLIMIT {num_rows}'
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:

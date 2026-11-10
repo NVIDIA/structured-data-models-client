@@ -327,7 +327,7 @@ def test_snow_seeded_sample_orders_by_key_hash(snow_sampler: Any) -> None:
 
     sql, parameters, _ = snow_sampler._connection.calls[-1]
     assert 'SAMPLE ROW' not in sql
-    assert 'ORDER BY HASH("user_id", 42), "ts", "user_id"' in sql
+    assert 'ORDER BY HASH("user_id", 42)' in sql
     assert 'LIMIT 10' in sql
     assert parameters is None
 
@@ -339,7 +339,86 @@ def test_snow_seeded_sample_orders_by_key_hash(snow_sampler: Any) -> None:
         random_seed=7,
     )
     sql, _, _ = snow_sampler._connection.calls[-1]
-    assert 'ORDER BY HASH("user_id", 7), "ts", "user_id"' in sql
+    assert 'ORDER BY HASH("user_id", 7)' in sql
+
+
+def test_snow_seeded_sample_limits_distinct_keys(snow_sampler: Any) -> None:
+    # The caller drops duplicate keys after sampling (keeping the first
+    # row per key), so a seeded draw must spend its LIMIT on distinct
+    # keys: one representative row per key is picked before the limit.
+    # The representative is the earliest-time row — the one the caller's
+    # drop_duplicates would keep — and the choice does not involve the
+    # seed, so it is stable across calls and across seeds.
+    snow_sampler._sample_entity_table(
+        table_name='users',
+        columns=_COLUMNS,
+        num_rows=5,
+        random_seed=42,
+    )
+    sql, parameters, _ = snow_sampler._connection.calls[-1]
+    qualify = (
+        'QUALIFY ROW_NUMBER() OVER (PARTITION BY "user_id" ORDER BY "ts") = 1'
+    )
+    assert qualify in sql
+    # Deduplication happens before ordering and limiting:
+    assert (
+        sql.index('QUALIFY') < sql.index('ORDER BY HASH') < sql.index('LIMIT 5')
+    )
+    assert parameters is None
+
+    # Same seed-independence for another seed: identical QUALIFY clause,
+    # only the hash term changes:
+    snow_sampler._sample_entity_table(
+        table_name='users',
+        columns=_COLUMNS,
+        num_rows=5,
+        random_seed=7,
+    )
+    sql, _, _ = snow_sampler._connection.calls[-1]
+    assert qualify in sql
+    assert 'ORDER BY HASH("user_id", 7)' in sql
+
+
+def test_snow_seeded_sample_tiebreaks_on_remaining_columns(
+    snow_sampler: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # With a third column in the sample, the window ordering is the time
+    # column followed by the remaining columns in schema order, so rows
+    # sharing a key and a time still get a deterministic representative.
+    # The key and the time column appear exactly once each.
+    from sdm_relational_engine.rfm.base import SourceColumn
+
+    snow_sampler._source_table_dict['users']['city'] = SourceColumn(
+        name='city',
+        dtype=Dtype.string,
+        is_primary_key=False,
+        is_unique_key=False,
+        is_nullable=False,
+    )
+    snow_sampler._table_dtype_dict['users']['city'] = Dtype.string
+    snow_sampler._table_column_ref_dict['users']['city'] = '"city"'
+
+    def fetch_with_city(self: Any, force_return_table: bool = True) -> pa.Table:
+        return pa.table(
+            {
+                'user_id': pa.array([], type=pa.string()),
+                'ts': pa.array([], type=pa.string()),
+                'city': pa.array([], type=pa.string()),
+            }
+        )
+
+    monkeypatch.setattr(_SnowCursor, 'fetch_arrow_all', fetch_with_city)
+    snow_sampler._sample_entity_table(
+        table_name='users',
+        columns={'user_id', 'ts', 'city'},
+        num_rows=5,
+        random_seed=42,
+    )
+    sql, _, _ = snow_sampler._connection.calls[-1]
+    assert (
+        'QUALIFY ROW_NUMBER() OVER (PARTITION BY "user_id" '
+        'ORDER BY "ts", "city") = 1'
+    ) in sql
 
 
 def test_snow_min_max_probe_keeps_table_names_out_of_the_sql(
