@@ -8290,7 +8290,7 @@
       "reason": "Candidate-free temporal link prediction is refused before any source read, so its 200-row batches are never built; the note describes the refusal the linked batching tests now cover."
     },
     {
-      "base_commit": "39e79068e556a0c40a1097262954f3f0b2879308",
+      "base_commit": "a441e59a7dfb507185a11e3d157cd762529c9e40",
       "record": "type_contracts/arrow-admission-and-inference",
       "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum and reference the renamed test that checks actual runtime refusals instead of recorded expectations."
     }
