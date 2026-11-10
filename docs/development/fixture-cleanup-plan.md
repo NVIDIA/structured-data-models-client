@@ -592,3 +592,8 @@ Independent review approved removing the 4,265-byte output JSON; all six affecte
 
 Numeric-text recording removed after independent review: all 41 inputs remain covered by direct values, IEEE special-value rules and syntax refusals, with negative-zero coverage added.
 Four Rust tests and Clippy passed; the independent NumPy temporal-sort and MT19937 coefficient oracles remain because their exact ordering and seeded values protect interoperability.
+
+Wire-output snapshot replacement keeps all nine current transport journeys and checks task/output rules, typed source values, context exclusion, full relational histories/COUNT labels and schema links.
+Independent NumPy permutations preserve seeded row order; pinned-schema and malformed-request tests now consume current captures, with ten intentional-corruption controls for assertion quality.
+The 194,865-byte generated output recording is removed with its writer path; public API inventory remains pending, and broad tooling consolidation stays in step 3.
+Post-deletion validation passed all 36 affected tests against the available pinned model schema; transport responses remain locally scripted, not live model results.

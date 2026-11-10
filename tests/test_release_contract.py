@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
+import functools
 import importlib
 import importlib.util
 import inspect
@@ -752,12 +754,10 @@ class TestPublicSurface:
         assert not missed, f'not reported: {missed}\nreported:\n{found}'
         assert '_leak_probe.fine' not in found, found
 
-    def test_the_wire_payloads_match_the_recorded_snapshot(self):
+    def test_canonical_wire_journeys_preserve_behavior(self):
         result = _run('snapshot_wire_payloads.py')
         assert result.returncode == 0, (
-            'A canonical request now serializes differently. If that was '
-            'intended, re-record with `python scripts/snapshot_wire_payloads.py '
-            f'--write`.\n{result.stdout}{result.stderr}'
+            f'A canonical wire behavior failed.\n{result.stdout}{result.stderr}'
         )
 
 
@@ -806,8 +806,65 @@ def _loaded(script: str):
     return module
 
 
+@functools.lru_cache(maxsize=1)
+def _captured_wire_payloads():
+    return _loaded('snapshot_wire_payloads').collect()
+
+
+def _current_wire_payloads():
+    # Mutation tests must never contaminate subsequent cases.
+    return copy.deepcopy(_captured_wire_payloads())
+
+
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'task',
+        'probabilities',
+        'context_exclusion',
+        'feature_value',
+        'typed_id',
+        'label',
+        'context_order',
+        'history',
+        'relationship',
+        'schema_type',
+    ],
+)
+def test_wire_assertions_reject_behavior_changes(damage):
+    cases = _current_wire_payloads()
+    direct = cases['tabular/direct-classification'][0]
+    relational = cases['relational/pql-count-aggregation'][0]
+    if damage == 'task':
+        direct['task']['kind'] = 'regression'
+    elif damage == 'probabilities':
+        cases['tabular/direct-classification#default-outputs'][0]['output'][
+            'fields'
+        ] = ['prediction']
+    elif damage == 'context_exclusion':
+        cases['tabular/pql-predict-frame'][0]['context'] = direct['context']
+    elif damage == 'feature_value':
+        direct['predict']['instance_table']['rows'][0][1] += 1
+    elif damage == 'typed_id':
+        direct['predict']['instance_table']['rows'][0][0] = False
+    elif damage == 'label':
+        relational['context']['instance_table']['rows'][0][-1] += 1
+    elif damage == 'context_order':
+        relational['context']['instance_table']['rows'].reverse()
+    elif damage == 'history':
+        relational['predict']['related_tables']['orders']['rows'].pop()
+    elif damage == 'relationship':
+        relational['schema']['relationships'].pop()
+    elif damage == 'schema_type':
+        relational['schema']['related_tables']['orders']['columns']['price'][
+            'dtype'
+        ] = 'int64'
+    with pytest.raises(AssertionError):
+        _loaded('snapshot_wire_payloads').assert_behavior(cases)
+
+
 def _doctored(tmp_path: pathlib.Path, mutate) -> pathlib.Path:
-    recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+    recorded = _current_wire_payloads()
     entry = recorded['relational/pql-count-aggregation']
     mutate(entry[0] if isinstance(entry, list) else entry)
     written = tmp_path / 'wire_payloads.json'
@@ -882,7 +939,7 @@ class TestTheRequestBodiesAreContractual:
         """
         schema_for = _loaded('check_wire_payloads').schema_for
 
-        recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+        recorded = _current_wire_payloads()
         entry = recorded['relational/pql-count-aggregation']
         whole = entry[0] if isinstance(entry, list) else entry
         body = {key: whole[key] for key in sections if key in whole}

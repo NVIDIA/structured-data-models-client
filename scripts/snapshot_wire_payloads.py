@@ -3,29 +3,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Record what each canonical request puts on the wire.
-
-``metadata.request_id`` is generated per call and normalized; nothing else is.
-``--write`` re-records after an intended change.
-"""
+"""Exercise canonical requests and validate their wire behavior without snapshots."""
 
 from __future__ import annotations
 
-import argparse
 import json
-import pathlib
-import sys
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from sdm_client import PredictiveQuery, Request, Schema, SDMClient
-
-SNAPSHOT = (
-    pathlib.Path(__file__).resolve().parent.parent
-    / 'tests'
-    / 'golden'
-    / 'wire_payloads.json'
-)
 
 _FIXED_REQUEST_ID = '<request-id>'
 
@@ -56,6 +43,9 @@ def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
     recorded = json.loads(json.dumps(payload, default=str))
     metadata = recorded.get('metadata')
     if isinstance(metadata, dict) and 'request_id' in metadata:
+        assert (
+            isinstance(metadata['request_id'], str) and metadata['request_id']
+        )
         metadata['request_id'] = _FIXED_REQUEST_ID
     return recorded
 
@@ -180,51 +170,265 @@ def collect() -> dict[str, Any]:
     return recorded
 
 
+def _rows(table, columns):
+    assert table['format'] == 'arrays'
+    assert table['columns'] == columns
+    assert all(len(row) == len(columns) for row in table['rows'])
+    types = {
+        'age': float,
+        'price': float,
+        'TARGET': float,
+        'segment': str,
+        '__kumo_anchor_time': str,
+        'ordered_at': str,
+    }
+    for row in table['rows']:
+        assert all(
+            type(value) is types.get(col, int)
+            for col, value in zip(columns, row, strict=True)
+        )
+    return table['rows']
+
+
+def assert_behavior(cases):
+    """Expected source values and task rules, independent of captured outputs."""
+    targets = {
+        'direct-classification': ('churn', 'classification', 'int64'),
+        'direct-regression': ('age', 'regression', 'float64'),
+        'pql-predict-frame': ('churn', 'classification', 'int64'),
+        'pql-derived-regression': ('age', 'regression', 'float64'),
+        'pql-derived-classification': ('segment', 'classification', 'string'),
+    }
+    names = {'relational/pql-count-aggregation'}
+    for name, (_, kind, _) in targets.items():
+        names.add('tabular/' + name)
+        if kind == 'classification':
+            names.add('tabular/' + name + '#default-outputs')
+    assert set(cases) == names
+    columns = ['user_id', 'age', 'segment', 'churn']
+    people = [
+        [i, 20.0 + i, 'north' if i % 3 else 'south', i % 2] for i in range(12)
+    ]
+    for name, calls in cases.items():
+        assert len(calls) == 1, name
+        body = calls[0]
+        assert body['metadata']['request_id'] == _FIXED_REQUEST_ID
+        if name.startswith('relational/'):
+            _assert_relational(body, people)
+            continue
+        target, kind, dtype = targets[
+            name.removeprefix('tabular/').split('#')[0]
+        ]
+        assert body['model'] == 'kumo-tabular'
+        assert body['task'] == {
+            'kind': kind,
+            'target': {'column_name': target, 'dtype': dtype},
+        }
+        assert body['output']['fields'] == (
+            ['prediction', 'probabilities']
+            if '#default-outputs' in name
+            else ['prediction']
+        )
+        start = 3 if '/pql-' in name else 0
+        assert (
+            _rows(body['context']['instance_table'], columns) == people[start:]
+        )
+        keep = [i for i, col in enumerate(columns) if col != target]
+        assert _rows(
+            body['predict']['instance_table'], [columns[i] for i in keep]
+        ) == [[row[i] for i in keep] for row in people[:3]]
+        assert set(body['schema']) == {'instance_table'}
+        assert (
+            set(body['context']) == set(body['predict']) == {'instance_table'}
+        )
+        schema = body['schema']['instance_table']
+        assert set(schema) == {'primary_key', 'columns'}
+        assert schema['primary_key'] == ['user_id']
+        assert set(schema['columns']) == set(columns)
+        for col, typ in zip(
+            columns, ['int64', 'float64', 'string', 'int64'], strict=True
+        ):
+            stype = (
+                'ID'
+                if col == 'user_id'
+                else 'categorical'
+                if col == 'segment' or (col == 'churn' and target == 'churn')
+                else 'numerical'
+            )
+            assert schema['columns'][col] == {'dtype': typ, 'stype': stype}
+
+
+def _assert_relational(body, people):
+    assert body['model'] == 'kumo-relational'
+    assert body['task'] == {
+        'kind': 'regression',
+        'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+        'anchor_time_column': '__kumo_anchor_time',
+        'entity_table_names': ['people'],
+    }
+    assert body['output'] == {
+        'fields': ['prediction'],
+        'prediction_statistic': 'median',
+    }
+    assert body['inference'] == {
+        'run_mode': 'fast',
+        'use_prediction_time': False,
+    }
+    assert body['metadata']['num_context_examples'] == 84
+    assert body['metadata']['num_prediction_examples'] == 3
+    assert (
+        body['metadata']['source_query']
+        == 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH people.user_id'
+    )
+    start = pd.Timestamp('2026-01-01', tz='UTC')
+    seen = set()
+    for half in ('context', 'predict'):
+        cols = ['instance_id', '__kumo_entity_ref_0', '__kumo_anchor_time']
+        if half == 'context':
+            cols += ['TARGET']
+        rows = _rows(body[half]['instance_table'], cols)
+        assert len(rows) == (84 if half == 'context' else 3)
+        assert (
+            [r[0] for r in rows] == list(range(84))
+            if half == 'context'
+            else [r[0] for r in rows] == [84, 85, 86]
+        )
+        expected_people, expected_orders = [], []
+        for row in rows:
+            instance, user, stamp = row[:3]
+            day = (pd.Timestamp(stamp) - start).days
+            assert stamp == (start + pd.Timedelta(days=day)).strftime(
+                '%Y-%m-%dT%H:%M:%S.000000Z'
+            )
+            assert 0 <= user < 12
+            if half == 'context':
+                assert (user, day) not in seen
+                seen.add((user, day))
+                assert row[3] == sum(
+                    1
+                    for order in range(240)
+                    if order % 12 == user and day < order <= day + 30
+                )
+            else:
+                assert user == instance - 84 and day == 239
+            expected_people.append([instance, *people[user]])
+            expected_orders.extend(
+                [
+                    instance,
+                    order,
+                    user,
+                    10.0 + order,
+                    (start + pd.Timedelta(days=order)).strftime(
+                        '%Y-%m-%dT%H:%M:%S.000000Z'
+                    ),
+                ]
+                for order in range(240)
+                if order % 12 == user and order <= day
+            )
+        related = body[half]['related_tables']
+        assert set(related) == {'people', 'orders'}
+        assert (
+            _rows(
+                related['people'],
+                ['instance_id', 'user_id', 'age', 'segment', 'churn'],
+            )
+            == expected_people
+        )
+        assert (
+            _rows(
+                related['orders'],
+                ['instance_id', 'order_id', 'user_id', 'price', 'ordered_at'],
+            )
+            == expected_orders
+        )
+    assert seen == {
+        (user, day) for user in range(12) for day in range(29, 210, 30)
+    }
+    context = body['context']['instance_table']['rows']
+    # Independent NumPy PCG64 oracle for seeded context ordering.
+    rng = np.random.default_rng(42)
+    assert [r[1] for r in context] == [
+        int(user) for _ in range(7) for user in rng.permutation(12)
+    ]
+    assert [r[2] for r in context] == sorted(
+        [r[2] for r in context], reverse=True
+    )
+    schema = body['schema']
+    assert schema['instance_table']['primary_key'] == 'instance_id'
+    assert set(schema['related_tables']) == {'people', 'orders'}
+    for name, key in [('people', 'user_id'), ('orders', 'order_id')]:
+        assert schema['related_tables'][name]['primary_key'] == [
+            'instance_id',
+            key,
+        ]
+    layouts = {
+        'instance_table': [
+            'instance_id',
+            '__kumo_entity_ref_0',
+            '__kumo_anchor_time',
+            'TARGET',
+        ],
+        'people': ['instance_id', 'user_id', 'age', 'segment', 'churn'],
+        'orders': ['instance_id', 'order_id', 'user_id', 'price', 'ordered_at'],
+    }
+    for name, columns in layouts.items():
+        table = (
+            schema['instance_table']
+            if name == 'instance_table'
+            else schema['related_tables'][name]
+        )
+        assert set(table['columns']) == set(columns)
+        for col in columns:
+            dtype = (
+                'timestamp[us]'
+                if col in ('__kumo_anchor_time', 'ordered_at')
+                else 'string'
+                if col == 'segment'
+                else 'float32'
+                if col == 'TARGET'
+                else 'float64'
+                if col in ('age', 'price')
+                else 'int64'
+            )
+            expected = {'dtype': dtype}
+            if col in ('instance_id', '__kumo_anchor_time') or (name, col) in [
+                ('people', 'user_id'),
+                ('orders', 'order_id'),
+            ]:
+                expected['nullable'] = False
+            if (name, col) not in [
+                ('people', 'user_id'),
+                ('orders', 'order_id'),
+            ]:
+                expected['stype'] = (
+                    'ID'
+                    if col in ('instance_id', '__kumo_entity_ref_0', 'user_id')
+                    else 'timestamp'
+                    if dtype == 'timestamp[us]'
+                    else 'categorical'
+                    if col == 'segment'
+                    else 'numerical'
+                )
+            assert table['columns'][col] == expected, (name, col)
+    assert schema['relationships'] == [
+        {
+            'source_columns': ['__kumo_entity_ref_0'],
+            'target_columns': ['user_id'],
+            'target_table': 'people',
+        },
+        {
+            'source_columns': ['user_id'],
+            'source_table': 'orders',
+            'target_columns': ['user_id'],
+            'target_table': 'people',
+        },
+    ]
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--write', action='store_true')
-    args = parser.parse_args()
-
-    current = collect()
-    if args.write:
-        SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
-        SNAPSHOT.write_text(
-            json.dumps(current, indent=2, sort_keys=True) + '\n'
-        )
-        print(f'wrote {SNAPSHOT} ({len(current)} cases)')
-        return 0
-
-    if not SNAPSHOT.exists():
-        print(f'no snapshot at {SNAPSHOT}; run with --write', file=sys.stderr)
-        return 1
-
-    recorded = json.loads(SNAPSHOT.read_text())
-
-    expected = set(recorded)
-
-    if set(current) != expected:
-        for name in sorted(expected - set(current)):
-            print(f'case no longer produced: {name}', file=sys.stderr)
-        for name in sorted(set(current) - expected):
-            print(f'case not in the snapshot: {name}', file=sys.stderr)
-        print(
-            'the set of canonical requests changed; re-record with --write if '
-            'that was intended',
-            file=sys.stderr,
-        )
-        return 1
-
-    differing = [name for name in current if recorded[name] != current[name]]
-    if not differing:
-        print(
-            f'wire payloads match the recorded snapshot ({len(current)} cases)'
-        )
-        return 0
-
-    for name in differing:
-        print(f'payload changed: {name}', file=sys.stderr)
-    print('wire payloads differ from the recorded snapshot', file=sys.stderr)
-    return 1
+    assert_behavior(collect())
+    print('Canonical wire journeys satisfy source-value and task assertions')
+    return 0
 
 
 if __name__ == '__main__':

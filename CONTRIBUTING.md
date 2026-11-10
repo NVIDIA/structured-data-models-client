@@ -91,13 +91,12 @@ Two more gates run in CI and are quick to run first:
 .venv/bin/python scripts/rust_core/rust_notices.py --check
 ```
 
-Changing anything a caller can observe, such as an exported name, signature,
-or wire request shape, requires recording a new snapshot in the same commit.
-This makes the change visible in review:
+Changing an exported name or signature requires updating the public API inventory in the same commit.
+Changes to wire behavior require updating the independent behavioral assertions and checking the pinned model schema.
 
 ```bash
 .venv/bin/python scripts/snapshot_public_api.py --write
-.venv/bin/python scripts/snapshot_wire_payloads.py --write
+.venv/bin/python scripts/snapshot_wire_payloads.py
 ```
 
 ## Native memory checks
