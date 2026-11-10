@@ -11,7 +11,9 @@ compiles the client's native extension, so it needs rustup and the toolchain
 `rust/rust-toolchain.toml` pins; pip runs the build from the client's own
 directory, where rustup does not read that pin, which is what the variable
 names. The client pins the API package to a version that is not published
-either, so install that from the checkout too:
+either, so install that from the checkout too, and the connectors package
+beside it: gathering reaches the client's data providers, and they are read
+even when the tables are already frames in memory.
 
 ```
 git clone -b v2-candidate \
@@ -19,6 +21,7 @@ git clone -b v2-candidate \
 cd structured-data-models-client
 RUSTUP_TOOLCHAIN=1.97.0 pip install \
     -e './packages/structured-data-models-api' \
+    -e './packages/structured-data-models-connectors' \
     -e './packages/structured-data-models-client[in-process]'
 ```
 
@@ -34,8 +37,9 @@ an `AttributeError` saying `SDMClient` has no attribute `in_process`, is an
 installed client older than the feature, whichever command installed it.
 
 The extra brings structured-data-models and PyTorch, and needs Python 3.11
-or later. Gathering the request needs nothing beyond it: the client carries
-that itself. Without it, `SDMClient.in_process()` raises `MissingExtraError`
+or later. Gathering the request happens in this client, with no model and no
+engine behind it, but it imports the connectors package the install above
+names. Without it, `SDMClient.in_process()` raises `MissingExtraError`
 naming that command; on Python 3.10 the error names the Python it needs
 instead. The first prediction fetches the published weights,
 `nvidia/Kumo-Relational` on Hugging Face, into the Hugging Face cache, and

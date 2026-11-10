@@ -367,7 +367,6 @@ def check_repository_url() -> int:
     return 0
 
 
-
 IN_PROCESS_REFERENCES = (
     'skills/tabular/references/in-process.md',
     'skills/relational/references/in-process.md',
@@ -379,7 +378,9 @@ IN_PROCESS_REFERENCES = (
 # opposites, so each one is asserted rather than only the one in force.
 CHECKOUT_INSTALL = 'git clone -b v2-candidate'
 PRERELEASE_VERSION = re.compile(r'(?:a|b|rc|\.dev)\d+$')
-IN_PROCESS_FLOOR = re.compile(r'structured-data-models-client\[in-process\]>=\d')
+IN_PROCESS_FLOOR = re.compile(
+    r'structured-data-models-client\[in-process\]>=\d'
+)
 CLIENT_VERSION_FILE = (
     'packages/structured-data-models-client/src/sdm_client/_version.py'
 )
@@ -429,6 +430,7 @@ def check_in_process_install() -> int:
         return 1
     print(f'the in-process references install the way {version} allows')
     return 0
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
