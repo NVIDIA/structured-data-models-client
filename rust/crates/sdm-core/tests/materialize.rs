@@ -229,8 +229,6 @@ fn materialize_start(
         values: None,
         options: vec![],
         most_parts: None,
-        most_entities: None,
-        most_calls: None,
         candidates: None,
         sampler_state: None,
     });
@@ -1161,11 +1159,6 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     for (asked, code) in [
         ("0", ErrorCode::InvalidRequest),
         ("-3", ErrorCode::InvalidRequest),
-        ("10001", ErrorCode::UnsupportedRequest),
-        (
-            "1267650600228229401496703205376",
-            ErrorCode::UnsupportedRequest,
-        ),
         ("2.5", ErrorCode::InvalidRequest),
     ] {
         let err = valued(
@@ -1187,13 +1180,13 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         assert_eq!(err.code, ErrorCode::InvalidRequest, "{values}");
         assert_eq!(err.fields["field"], Detail::text(field), "{values}");
     }
-    let past = valued(r#"{"num_hops": 7}"#, &[]).unwrap_err();
-    assert_eq!(past.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(past.fields["field"], Detail::text("num_hops"));
-    assert!(!past.fields.contains_key("rule"), "the bound, not the rule");
-    // The sampling options taken reach the first read.
+    // The sampling options taken reach the first read, with as many hops as
+    // are asked.
     for values in [
         r#"{"num_hops": 3}"#,
+        r#"{"num_hops": 7}"#,
+        r#"{"num_hops": 1000000}"#,
+        r#"{"num_neighbors": [8, 8, 4, 4, 2, 2, 1, 1]}"#,
         r#"{"num_neighbors": [4, 0]}"#,
         r#"{"random_seed": null}"#,
         r#"{"max_pq_iterations": 2, "use_prediction_time": true}"#,

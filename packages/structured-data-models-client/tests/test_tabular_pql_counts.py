@@ -67,9 +67,8 @@ def test_public_count_task_journey(monkeypatch, route, name):
             ['endpoint', expected_count],
             ['predicted'],
         ]
-        if name == 'count_owner':
-            assert events[:-3] == [['count_gt', actual['cap']]]
-        elif name.startswith('task_') or name in (
+        # The count is the core's to weigh: the host compares it with no cap.
+        if name.startswith('task_') or name in (
             'over_default',
             'warning_record',
         ):

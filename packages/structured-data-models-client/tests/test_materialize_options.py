@@ -372,21 +372,8 @@ def _refusal_of(**options: Any) -> StructuredDataError:
 def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20() -> (
     None
 ):
-    for options in ({'num_context_samples': 10001}, {'num_hops': 7}):
-        core = _refusal_of(**options)
-        assert core.code == 'UNSUPPORTED_REQUEST', options
-        assert type(core).__name__ == 'UnsupportedRequestError', options
-        assert 'rule' not in core.details, options
-    for options, rule in (
-        ({'indices': list(range(100001))}, 'most_entities'),
-        ({'indices': list(range(101)), 'rows_per_call': 1}, 'most_calls'),
-    ):
-        core = _refusal_of(**options)
-        assert (type(core), core.code) == (
-            StructuredDataError,
-            'UNSUPPORTED_REQUEST',
-        ), options
-        assert core.details.get('rule') == rule, options
+    # The client sets no most on the entities, the calls or the context:
+    # entities the source does not hold are refused for that alone.
     core = _refusal_of(indices=list(range(1001)))
     assert (type(core), core.code) == (StructuredDataError, 'INVALID_REQUEST')
 

@@ -19,7 +19,7 @@ from test_limits_and_absent_outputs import sent
 
 from sdm_client import Schema, UnsupportedRequestError
 from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
+from sdm_client.models import KUMO_RELATIONAL
 
 
 def payload(*, predict_rows: int, context_rows: int) -> dict:
@@ -52,20 +52,6 @@ def _Gathered(*payloads):
         indices=None,
         entity_table='users',
     )
-
-
-def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
-    """A pin, not a probe.
-
-    These numbers were read from the relational NIM. This asserts they have
-    not drifted in the client, which is all it can do offline. The live suites
-    check that the endpoint still agrees.
-    """
-    assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
-    assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['hops_max'] == 6
-    assert RELATIONAL_LIMITS['tables_max'] == 15
 
 
 @pytest.mark.parametrize('bad', ['2', True])
@@ -246,20 +232,10 @@ def gathered_in_calls(*, calls: int, context_rows: int):
     )
 
 
-@pytest.mark.parametrize('over', [False, True], ids=['under', 'over'])
-def test_the_context_cap_is_held_to_each_call_and_not_their_sum(over):
-    """Both sides of the cap, because only the allowed one was covered: a
-    per-call count that always read nought would have passed that alone."""
-
-    cap = RELATIONAL_LIMITS['context_rows_max']
-    each = cap + 1 if over else cap // 2 + 1
-    request = gathered_in_calls(calls=2, context_rows=each)
-    if not over:
-        sent(request)
-        return
-    with pytest.raises(StructuredDataError) as refused:
-        sent(request)
-    assert f'{each:,} context rows' in str(refused.value)
+def test_each_call_s_context_is_sent_at_any_size():
+    """The client holds a context to no size of its own, in each call or
+    across them."""
+    sent(gathered_in_calls(calls=2, context_rows=10_001))
 
 
 def test_a_batched_request_reports_the_context_one_call_carries():

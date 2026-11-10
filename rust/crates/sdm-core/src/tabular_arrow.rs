@@ -873,7 +873,7 @@ fn materialize(
     let decision = sdm_engine::tabular::context_decision(
         candidates.len(),
         input.num_context_samples,
-        sdm_request::predict::CONTEXT_ROWS_MAX,
+        sdm_request::predict::CONTEXT_ROWS_DEFAULT,
     )
     .map_err(|_| invalid("context sample count is invalid"))?;
     let context_rows = if decision.reduced {

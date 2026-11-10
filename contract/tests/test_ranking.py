@@ -50,14 +50,19 @@ CASES = {
     'holds one class left out, unscored, before any call',
     'rank.all-unscored': 'no candidate left to rank, refused before any call',
     'rank.entities-by-candidates.over': 'the entities gathered once '
-    'per candidate past the 100,000 one materialize holds (501 by 200), '
-    'refused before anything is read',
+    "per candidate past the reference's 100,000 (501 by 200), which it "
+    'refused; this client sets no such ceiling (DEPARTED)',
     'rank.entities-by-candidates.at': 'the same at exactly 100,000 '
     '(500 by 200), not refused by that ceiling',
     'forecast.top-k': "the forecast's top_k refusal in the core",
     'forecast.most-parts': "the forecast's MOST_PARTS refusal in the core",
 }
 CASE_IDS = tuple(CASES)
+#: The cases this client departs from the reference on, on purpose: it sets
+#: no ceiling on the entities a ranking gathers across its candidates, so the
+#: reference's refusal past 100,000 is gathered, and refused only for the
+#: entities that name no user, as at the ceiling.
+DEPARTED = ('rank.entities-by-candidates.over',)
 #: The sentence the reference adds to a part's refusal.
 PART = 'This is the question asked for candidate '
 
@@ -217,12 +222,9 @@ REFUSED_FOR = {
     'rank.candidates-not-a-ranking': 'does not rank anything',
     'rank.most-parts': '201 candidates means 201 calls',
     'rank.batched': 'A part is not batched',
-    'rank.entities-by-candidates.over': (
-        '501 entities gathered 200 times over, 100,200 in all, is past the '
-        '100,000'
-    ),
-    # At the ceiling the call is gathered, and refused only for the
-    # entities 8 to 499, which name no user.
+    # Gathered with no entity ceiling, and refused only for the entities
+    # from 8, which name no user.
+    'rank.entities-by-candidates.over': 'The primary keys [8, 9,',
     'rank.entities-by-candidates.at': 'The primary keys [8, 9,',
     'forecast.top-k': 'a forecast ranks nothing',
     'forecast.most-parts': '201 forecast steps means 201 calls',
@@ -247,15 +249,14 @@ def test_each_case_is_refused_for_the_argument_it_names() -> None:
     for case_id, each in recorded.items():
         case, _ = cases()[case_id]
         refused = each['refused']
-        assert (refused['outcome'], refused['code']) == (
-            'refused',
-            case['expect']['code'],
-        ), case_id
+        code = (
+            'INVALID_REQUEST' if case_id in DEPARTED else case['expect']['code']
+        )
+        assert (refused['outcome'], refused['code']) == ('refused', code), (
+            case_id
+        )
         assert REFUSED_FOR[case_id] in refused['message'], refused['message']
         assert each['change'] == recorder().CONTROLS[case_id]
-        if case_id == 'rank.entities-by-candidates.at':
-            # Not vacuous: at 100,000 the ceiling does not refuse.
-            assert 'in all, is past the' not in refused['message']
         assert each['control']['outcome'] == 'result', (case_id, each)
 
 
@@ -335,6 +336,8 @@ def test_current_client_decomposes_rankings_and_refuses_invalid_arguments(
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
         pytest.skip('Postgres test DSN is not configured')
+    if case_key.split('@')[0] in DEPARTED:
+        pytest.skip('a departure from the reference, checked on its own')
 
     def check() -> None:
         run = core_run(database)
@@ -684,3 +687,18 @@ def test_float_instance_identity_is_accepted() -> None:
     assert result['outcome'] == 'result'
     assert len(result['calls']) == 1
     assert len(result['items']) == 2
+
+
+@pytest.mark.parametrize('case_id', DEPARTED)
+def test_python_core_gathers_past_the_reference_s_entity_ceiling(
+    case_id: str,
+) -> None:
+    r"""Past the reference's 100,000, the ranking is gathered and refused
+    only for the entities that name no user, as at the ceiling: the
+    caller's ``INVALID_REQUEST``, not the ceiling's ``UNSUPPORTED_REQUEST``."""
+    line = core_run('duckdb').get(case_id)
+    assert line is not None, f'{case_id}: not observed'
+    assert (line['outcome']['result'], line['outcome']['code']) == (
+        'refusal',
+        'INVALID_REQUEST',
+    )

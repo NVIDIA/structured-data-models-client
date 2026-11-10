@@ -171,8 +171,9 @@ fn multiclass_labels_and_leakage_match_source_entities() {
 }
 
 #[test]
-fn more_entities_than_one_materialize_holds_are_refused_by_its_limit() {
-    // Missing IDs and the public materialization limit are distinct refusals.
+fn no_entity_count_is_refused_by_a_limit() {
+    // The core holds a materialize to no entity count. Ids the base does
+    // not hold are refused for that reason, at 1,001 and at 100,001 alike.
     let with = |n: u64| {
         let (mut case, bases) = the_case("base.regression");
         let materialize = case
@@ -185,26 +186,12 @@ fn more_entities_than_one_materialize_holds_are_refused_by_its_limit() {
             .collect();
         host::run(&case, &bases).unwrap()
     };
-    let observed = with(1001);
-    let Answer::Error { code, fields, .. } = &observed.answer else {
-        panic!("not refused: {:?}", observed.answer);
-    };
-    assert_eq!(code, "INVALID_REQUEST");
-    assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
-    // Past 100,000 the core's own limit refuses them before anything is
-    // read, naming it (`most_entities`), not a rule it does not hold yet.
-    let observed = with(100_001);
-    assert!(
-        observed.materialized.is_none(),
-        "100,001 entities were taken"
-    );
-    let Answer::Error { code, fields, .. } = &observed.answer else {
-        panic!("not refused: {:?}", observed.answer);
-    };
-    assert_eq!(code, "UNSUPPORTED_REQUEST");
-    assert_eq!(
-        fields.get("rule").map(String::as_str),
-        Some("most_entities")
-    );
-    assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
+    for n in [1001, 100_001] {
+        let observed = with(n);
+        let Answer::Error { code, fields, .. } = &observed.answer else {
+            panic!("not refused: {:?}", observed.answer);
+        };
+        assert_eq!(code, "INVALID_REQUEST", "{n}");
+        assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
+    }
 }

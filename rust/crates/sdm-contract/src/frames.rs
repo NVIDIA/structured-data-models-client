@@ -83,8 +83,6 @@ pub struct FrameCall {
     #[serde(default)]
     pub options: Vec<String>,
     pub most_parts: Option<u32>,
-    pub most_entities: Option<u64>,
-    pub most_calls: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -156,10 +156,6 @@ async fn run(
     } else {
         None
     };
-    if context.num_rows() > TABLE_ROWS {
-        return Err(refuse("context exceeds the model row limit"));
-    }
-    refuse_entities(predict.num_rows() as u64, 1, None)?;
     let seed = call
         .random_seed
         .to_u128()
@@ -425,9 +421,6 @@ async fn run(
             Some(seed),
         )
         .await?;
-        if walked.tables.len() > SUBGRAPH_TABLES {
-            return Err(refuse("sampled graph exceeds the model table limit"));
-        }
         if let Some(destination) = destination
             && !walked.tables.iter().any(|t| t.name == destination.name)
         {
@@ -452,7 +445,6 @@ async fn run(
             options: options.clone(),
             statistic: None,
             top_k: None,
-            rows_per_call: per_call,
             lags: vec![],
             float_text: crate::pql::float_text,
         };

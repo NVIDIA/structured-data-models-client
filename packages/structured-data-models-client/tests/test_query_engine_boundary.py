@@ -277,59 +277,41 @@ def test_a_rows_per_call_that_is_not_a_size_is_refused(given, text):
     assert 'a call scores a whole number of rows' in str(refused.value)
 
 
-def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
-    monkeypatch,
-):
-    """A context is gathered per call, so a small enough batch holds one per
-    entity however few entities there are."""
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 3)
+def test_a_batch_size_of_one_gathers_a_call_per_entity():
+    """A context is gathered per call, and the client sets no most on the
+    calls: a batch of one is a call for each entity."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            query().materialize(
-                indices=[5, 6, 7, 8, 9],
-                num_context_samples=20,
-                rows_per_call=1,
-            )
-    assert refused.value.details['calls'] == 5
-    assert '3 calls' in str(refused.value)
+        request = query().materialize(
+            indices=[5, 6, 7, 8, 9],
+            num_context_samples=20,
+            rows_per_call=1,
+        )
+    assert len(request.payloads) == 5
 
 
-def test_a_population_past_the_ceiling_is_refused_before_the_engine_is_reached(
-    monkeypatch,
-):
-    """Reaching the engine means building the graph and labelling every index,
-    which for a population far past the ceiling is minutes of work and the
-    memory with it before anything says no."""
-    from sdm_client.materializers import relational as materializer
+def test_more_than_100_000_entities_are_gathered():
+    """The client sets no most on the entities one materialize gathers."""
+    from sdm_client import KumoRelational
 
-    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
-    with pytest.raises(StructuredDataError) as refused:
-        query().materialize(indices=list(range(5)), num_context_samples=20)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['entities'] == 5
-
-
-def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
-    monkeypatch,
-):
-    """The calls a population comes to is known only once the engine has said
-    how many entities it really holds, so this one is checked there, and still
-    before the batches themselves are built.
-    """
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
+    count = 100_001
+    frame = pd.DataFrame(
+        {'uid': range(count + 10), 'label': [*range(count), *[None] * 10]}
+    )
+    users = Schema.from_data({'users': frame}, primary_keys={'users': 'uid'})
+    users['users']['label'].stype = 'numerical'
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            query().materialize(
-                indices=[5, 6, 7, 8, 9], num_context_samples=20, rows_per_call=2
-            )
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['calls'] == 3
+        request = PredictiveQuery(
+            'PREDICT users.label FOR EACH users.uid', users
+        ).materialize(
+            indices=list(range(count)),
+            model=KumoRelational(),
+            rows_per_call=50_001,
+        )
+    assert [
+        len(p['predict']['instance_table']['rows']) for p in request.payloads
+    ] == [50_001, 50_000]
 
 
 def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
@@ -708,22 +690,18 @@ def gathered_from(built: Schema) -> set[str]:
     return set(request.payloads[0]['schema']['related_tables'])
 
 
-def test_a_schema_wider_than_the_cap_is_gathered_when_its_subgraph_is_not():
-    """21 declared tables, 6 gathered, and the endpoint reads 15."""
-    from sdm_client.models import RELATIONAL_LIMITS
-
+def test_a_schema_wider_than_fifteen_tables_is_gathered_as_its_subgraph():
+    """21 declared tables, 6 gathered: what is sent is what the query reaches."""
     built = star(satellites=20, joining=5)
-    assert len(built) > RELATIONAL_LIMITS['tables_max']
+    assert len(built) > 15
 
     assert len(gathered_from(built)) == 6
 
 
-def test_a_subgraph_wider_than_the_cap_is_still_refused():
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    with pytest.raises(StructuredDataError) as error:
-        gathered_from(star(satellites=20, joining=20))
-    assert str(RELATIONAL_LIMITS['tables_max']) in str(error.value)
+def test_a_subgraph_wider_than_fifteen_tables_is_gathered_whole():
+    """The client sets no most on the tables a request carries: a subgraph
+    of 21 is gathered whole."""
+    assert len(gathered_from(star(satellites=20, joining=20))) == 21
 
 
 # --- a table the request leaves out is said to be left out ------------------
@@ -1072,8 +1050,8 @@ def test_a_lone_table_is_not_told_which_was_taken():
     ids=['an empty num_neighbors', 'num_hops of zero'],
 )
 def test_both_spellings_of_no_hop_are_refused_alike(option, names):
-    """They are one request written two ways, and the endpoint reads between 1
-    and 6 hops, so one slipping through to be taken literally was the defect."""
+    """They are one request written two ways, and a request samples at least
+    one hop, so one slipping through to be taken literally was the defect."""
     built = catalogue_schema()
 
     with pytest.raises(StructuredDataError, match='no hop at all') as raised:

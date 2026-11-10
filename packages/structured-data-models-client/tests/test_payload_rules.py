@@ -82,17 +82,11 @@ def _size_case(length: int) -> dict[str, Any]:
     }
 
 
-@pytest.mark.parametrize('length, accepted', [(275689, True), (275690, False)])
-def test_public_materialization_enforces_model_payload_byte_limit(
-    length: int, accepted: bool, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize('length', [275689, 275690])
+def test_public_materialization_holds_the_body_to_no_byte_limit(
+    length: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     got, attachments = _on_the_core(_size_case(length), monkeypatch)
-    if not accepted:
-        assert got['outcome'] == 'refused', got
-        assert got['code'] == 'INVALID_REQUEST', got
-        assert '30MB' in got['message'], got
-        assert not attachments
-        return
     assert got['outcome'] == 'payload', got
     assert len(attachments) == 1
     state = json.loads(attachments[0])
@@ -105,37 +99,13 @@ def test_public_materialization_enforces_model_payload_byte_limit(
     prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
     assert attachments[0].startswith(prefix)
     assert model_bytes == b'{' + attachments[0][len(prefix) :]
-    assert len(model_bytes) <= 30 * 1024 * 1024
-
-
-@pytest.mark.parametrize('padding, accepted', [(5, True), (8, False)])
-def test_client_only_provenance_does_not_consume_model_payload_limit(
-    padding, accepted, monkeypatch
-):
-    spec = _size_case(275689)
-    spec['setup'].append(
-        f"UPDATE users SET note=note||'{'a' * padding}' WHERE user_id=0"
-    )
-    got, attachments = _on_the_core(spec, monkeypatch)
-    if accepted:
-        assert got['outcome'] == 'payload', got
-        state = bytes(attachments[0])
-        prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
-        assert state.startswith(prefix)
-        model_bytes = b'{' + state[len(prefix) :]
-        assert len(model_bytes) <= R.PAYLOAD_LIMIT < len(state)
-    else:
-        assert got['outcome'] == 'refused'
-        assert '30MB' in got['message']
 
 
 REFUSAL_CODES = {
     'base.regression.statistic-unknown': 'INVALID_REQUEST',
     'base.binary.statistic': 'INVALID_REQUEST',
     'base.regression.num-context-0': 'INVALID_REQUEST',
-    'base.regression.num-context-10001': 'UNSUPPORTED_REQUEST',
     'base.regression.entities-1001': 'INVALID_REQUEST',
-    'star.tables-16': 'INVALID_REQUEST',
     'empty.indices': 'INVALID_REQUEST',
     'reserved.instance-id': 'INVALID_SCHEMA',
     'reserved.anchor-time': 'INVALID_SCHEMA',

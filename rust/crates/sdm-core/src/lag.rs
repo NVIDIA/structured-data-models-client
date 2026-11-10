@@ -34,22 +34,14 @@
 //! than their own; the core puts each on its own row ( fix 1, a
 //! registered difference decided under ).
 
-use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+use sdm_contract::{CoreError, Sentence};
 use sdm_engine::labels::{self, Labels, Target};
 use sdm_engine::sample::out_of_range;
 use sdm_engine::time::offset::Offset;
-use sdm_request::payload::{LagColumn, LagValues, PAYLOAD_BYTES};
+use sdm_request::payload::{LagColumn, LagValues};
 
 /// The field a lag's refusal names.
 const FIELD: &str = "lag_timesteps";
-
-/// The fewest bytes a lagged column adds to a payload: its declaration in
-/// the instance table's schema (`"__kumo_arl0__": {"dtype": "bool"}`).
-const COLUMN_BYTES: usize = 30;
-
-/// The fewest bytes one lagged cell adds: the shortest value (`0.0`, `true`
-/// or `null`) and its separator.
-const CELL_BYTES: usize = 4;
 
 /// `offset` taken `times` times, as pandas multiplies a `DateOffset`: a
 /// count of its unit `times` as large; past what the count holds, refused
@@ -143,33 +135,6 @@ pub(crate) struct Lag {
 }
 
 impl Lag {
-    /// Refuses lags that would make a payload of `rows` instance rows
-    /// larger than the endpoint takes, before any column is computed, as
-    /// the payload's limit refuses it.
-    pub fn fits(&self, rows: usize) -> Result<(), CoreError> {
-        let least = usize::try_from(self.steps)
-            .ok()
-            .and_then(|steps| {
-                rows.checked_mul(CELL_BYTES)?
-                    .checked_add(COLUMN_BYTES)?
-                    .checked_mul(steps)
-            })
-            .unwrap_or(usize::MAX);
-        if least > PAYLOAD_BYTES {
-            return Err(CoreError::new(
-                Sentence::LagPastPayload,
-                "the request is larger than the endpoint takes",
-            )
-            .with_field("field", Detail::text("payload"))
-            .with_field("lag_timesteps", Detail::Scalar(Scalar::UInt64(self.steps)))
-            .with_field(
-                "limit",
-                Detail::Scalar(Scalar::UInt64(PAYLOAD_BYTES as u64)),
-            ));
-        }
-        Ok(())
-    }
-
     /// The lagged columns of the examples at `kept` (positions among the
     /// examples the lags were read for: the whole request's, the gathered
     /// context before narrowing and every entity predicted for),
@@ -239,6 +204,7 @@ impl Lag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::Detail;
     use sdm_contract::ErrorCode;
     use sdm_contract::pql::TimeUnit;
     use sdm_engine::labels::{Aggregation, Constant, RelOp};
@@ -520,8 +486,7 @@ mod tests {
     }
 
     /// Steps that reach outside what nanoseconds hold, or past what a count
-    /// holds, are refused naming `lag_timesteps`; a payload they would make
-    /// larger than the endpoint takes, before anything is computed.
+    /// holds, are refused naming `lag_timesteps`.
     #[test]
     fn too_many_steps_are_refused_by_name() {
         for steps in [100_000, u64::MAX] {
@@ -529,21 +494,5 @@ mod tests {
             assert_eq!(e.code, ErrorCode::ValueOutOfRange);
             assert_eq!(e.fields["field"], Detail::text(FIELD));
         }
-        let lag = single(
-            10_000_000,
-            Aggregation::Count,
-            Offset::of(0, TimeUnit::Seconds),
-            Offset::of(1, TimeUnit::Seconds),
-            None,
-            vec![0, 0],
-            Rows {
-                batches: vec![],
-                values: labels::Values::Ones(0),
-                times: vec![],
-            },
-        );
-        let e = lag.fits(2).err().unwrap();
-        assert_eq!(e.code, ErrorCode::InvalidRequest);
-        assert_eq!(e.fields["field"], Detail::text("payload"));
     }
 }

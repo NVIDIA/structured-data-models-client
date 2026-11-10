@@ -65,25 +65,9 @@ CALLS = {
 #: reference gives (the ceilings' counts, the 30 MiB body's mark).
 REFUSED = {
     **{case: ('INVALID_REQUEST', {}) for case in INVALID},
-    'multicall.entities.100001': (
-        'UNSUPPORTED_REQUEST',
-        {'entities': 100_001, 'gathered_times': 1, 'total': 100_001},
-    ),
-    'multicall.calls.101': (
-        'UNSUPPORTED_REQUEST',
-        {'entities': 101, 'calls': 101, 'rows_per_call': 1},
-    ),
     'multicall.forecast.batched': (
         'UNSUPPORTED_REQUEST',
         {'entities': 8, 'rows_per_call': 3},
-    ),
-    'multicall.body-30mib.one-row': (
-        'INVALID_REQUEST',
-        {'batch_too_large_to_send': True},
-    ),
-    'multicall.body-30mib.several-rows': (
-        'INVALID_REQUEST',
-        {'batch_too_large_to_send': True},
     ),
 }
 #: The failed calls, by case: the call failed, and what the error carries
@@ -102,6 +86,14 @@ BODY = {
         'the call: materialize(rows_per_call=N) below the 3 this one holds'
     ),
 }
+#: The cases this client departs from the reference on, on purpose: it holds a
+#: request to no size of its own (no entity, call or body ceiling), so each is
+#: gathered where the reference refused it at materialize.
+DEPARTED = (
+    'multicall.entities.100001',
+    'multicall.calls.101',
+    *BODY,
+)
 CASE_IDS = (
     'multicall.rows-per-call-3',
     'multicall.fail-call-2',
@@ -404,6 +396,8 @@ def test_current_client_batches_without_label_or_entity_leakage(
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
         pytest.skip('Postgres test DSN is not configured')
+    if case_key.split('@')[0] in DEPARTED:
+        pytest.skip('a departure from the reference, checked on its own')
 
     def check() -> None:
         run = core_run(database)
@@ -511,6 +505,8 @@ def test_batching_preserves_rows_limits_and_partial_answers(
     case_id, _, database = case_key.partition('@')
     if database == 'postgres' and not _server():
         pytest.skip('Postgres test DSN is not configured')
+    if case_id in DEPARTED:
+        pytest.skip('a departure from the reference, checked on its own')
     case, _ = cases()[case_id]
     got = core_carried(case_key)
     assert same_outcome(_expected(case), _outcome(got))
@@ -584,3 +580,13 @@ def test_transport_errors_keep_completed_answers(case_key: str) -> None:
     steps = [1] if 'parts_answered' in RAISED[case_id] else None
     assert_scored_rows(got['answered'], indices, steps)
     assert got['result'] is None
+
+
+@pytest.mark.parametrize('case_id', DEPARTED)
+def test_python_core_gathers_and_predicts_what_the_reference_refused(
+    case_id: str,
+) -> None:
+    r"""The client sets no most on the entities, the calls or the body: each
+    case is answered."""
+    got = core_carried(case_id)
+    assert got['outcome']['result'] == 'success', got['outcome']

@@ -30,7 +30,6 @@ pub(crate) fn filter(input: FilterTabularRows) -> Result<FilteredTabularRows, Co
 fn count_error(error: tabular::CountError) -> TabularCountError {
     match error {
         tabular::CountError::Zero => TabularCountError::Zero,
-        tabular::CountError::AboveLimit => TabularCountError::AboveLimit,
         tabular::CountError::AbovePopulation => TabularCountError::AbovePopulation,
     }
 }
@@ -39,7 +38,7 @@ pub(crate) fn decide(input: DecideTabularContext) -> TabularContextDecision {
     match tabular::context_decision(
         input.population,
         input.requested,
-        sdm_request::predict::CONTEXT_ROWS_MAX,
+        sdm_request::predict::CONTEXT_ROWS_DEFAULT,
     ) {
         Ok(value) => TabularContextDecision::Selected {
             wanted: value.wanted,
