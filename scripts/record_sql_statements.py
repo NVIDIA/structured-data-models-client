@@ -2,31 +2,15 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Records ``statements.json``: every SQL statement the core hands the
-Python host's DuckDB provider on the public route, in order, for
-``Schema.from_source`` and ``PredictiveQuery.materialize`` over the ``shop``
-base, once as it is and once with ``orders`` held in a table named ``a.b``
-beside a schema ``a`` holding a table ``b``.
-
-Recorded at contract version 25, before the table source became a
-``Relation``: v26 renders a one-part relation as v25 rendered the name, so
-``tests/test_native_protocol.py`` holds every later core to these texts
-(the design's "SQL goldens unchanged"; "a dotted source name still reads as
-one table, a golden shows it"). Regenerated, never edited, and only when a
-rendering changes on purpose:
-
-    python scripts/record_sql_statements.py
-"""
+"""Execute source-name scenarios and expose current payloads and SQL to tests."""
 
 from __future__ import annotations
 
-import json
 import warnings
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / 'tests/golden/statements.json'
 
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 ANCHOR = '2024-03-01'
@@ -97,36 +81,3 @@ def run(orders: str, setup: tuple[str, ...]) -> tuple[Any, list[list[str]]]:
     finally:
         DuckDBProvider.__call__ = answer  # type: ignore[method-assign]
     return request._payloads[0], seen
-
-
-def main() -> None:
-    from sdm_client import _native
-
-    document = {
-        'about': (
-            "Every SQL statement the core hands the Python host's DuckDB "
-            'provider, per fetch in order, for Schema.from_source and '
-            'PredictiveQuery.materialize over the shop base, as it is '
-            '("plain") and with orders held in a table named "a.b" beside a '
-            'schema a holding a table b ("dotted"). Recorded by '
-            'scripts/record_sql_statements.py at the contract version named; '
-            'regenerated, never edited.'
-        ),
-        'contract': _native.CONTRACT_VERSION,
-        'query': QUERY,
-        'anchor_time': ANCHOR,
-        'indices': INDICES,
-        'dotted_setup': list(DOTTED),
-        'statements': {
-            name: run(orders, setup)[1]
-            for name, (orders, setup) in RUNS.items()
-        },
-    }
-    GOLDEN.write_text(
-        json.dumps(document, indent=1, ensure_ascii=False) + '\n',
-        encoding='utf-8',
-    )
-
-
-if __name__ == '__main__':
-    main()

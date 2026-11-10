@@ -601,3 +601,14 @@ Post-deletion validation passed all 36 affected tests against the available pinn
 The public API inventory, case/observation schemas, source SQL bases and active four-fact connector outcome maps remain after consumer audit.
 Two inactive native-runner baseline JSONL outputs (178,161 bytes) are deleted; the explicitly protected old-client baseline is unchanged.
 This was a source/CI consumer audit, not another product-test run.
+
+Request-state output recording (7,866 bytes) replaced by explicit entity/window/decomposition facts, failed-part attribution and typed first-candidate/ranking assertions.
+Scores come from the independently written endpoint rule; review tightened these to exact float equality.
+Shared input helpers remain for temporal and encoding tests; only the obsolete recording loader is removed.
+Request-state post-deletion validation: 27 passed, one existing skip, with independent review closed.
+
+Seven small source/grammar/registry inputs remain after dynamic-consumer audit; the unused 20,711-byte Databricks statement recording is removed.
+This classification used source/CI evidence and does not claim a fresh warehouse run.
+
+The 9,291-byte SQL golden is removed after review: tests execute plain/dotted/decoy sources and independently check labels, complete histories, newest-first order, keys and prediction order.
+The current SQL rename/catalog check remains; the obsolete recording writer is removed.

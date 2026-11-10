@@ -24,7 +24,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_DIR = ROOT / 'rust/crates/sdm-contract/schema'
 LOCK = SCHEMA_DIR / 'contract.lock'
 VECTORS = ROOT / 'rust/crates/sdm-contract/tests/contract-26-vectors.json'
-GOLDEN = ROOT / 'tests/golden/statements.json'
 
 SOURCE_TABLES = ('NamedTable', 'DescribedTable', 'HeldTable')
 
@@ -279,12 +278,11 @@ def test_a_dotted_source_name_still_reads_as_one_table() -> None:
 
 
 def test_the_dotted_statements_are_the_plain_ones_on_another_name() -> None:
-    # A golden shows it (choice 12): fetch for fetch, the dotted run's
-    # statements are the plain run's with `orders` renamed `a.b`, as an
-    # identifier and as text, save the column read, which reads a name
-    # holding a dot from `duckdb_columns()` (register entry P1B-5).
-    golden = json.loads(GOLDEN.read_text(encoding='utf-8'))['statements']
-    plain, dotted = golden['plain'], golden['dotted']
+    # Compare executed plans after a physical table rename, including the
+    # catalog lookup needed when a single identifier contains a dot.
+    record = _recorder()
+    _, plain = record.run('orders', ())
+    _, dotted = record.run('a.b', record.DOTTED)
     assert len(plain) == len(dotted)
     renamed = 0
     for one, other in zip(plain, dotted, strict=True):
@@ -300,14 +298,94 @@ def test_the_dotted_statements_are_the_plain_ones_on_another_name() -> None:
     assert renamed >= 5
 
 
-def test_the_core_renders_the_recorded_sql_statements() -> None:
-    # Preserve the SQL contract; intentional rendering changes regenerate
-    # the fixture with scripts/record_sql_statements.py.
-    golden = json.loads(GOLDEN.read_text(encoding='utf-8'))
+def test_executed_sql_preserves_labels_history_and_prediction_order() -> None:
+    import pandas as pd
+
     record = _recorder()
-    for name, (orders, setup) in record.RUNS.items():
-        _, statements = record.run(orders, setup)
-        assert statements == golden['statements'][name], name
+    payload, _ = record.run('orders', ())
+    origin = pd.Timestamp('2023-01-01', tz='UTC')
+    anchor = pd.Timestamp(record.ANCHOR, tz='UTC')
+    expected_days = {
+        (anchor - pd.Timedelta(days=30 * step) - origin).days
+        for step in range(1, 15)
+    }
+    seen = set()
+    for half in ('context', 'predict'):
+        rows = payload[half]['instance_table']['rows']
+        assert len(rows) == (112 if half == 'context' else 2)
+        instances = {}
+        for instance, user, stamp, *label in rows:
+            day = (pd.Timestamp(stamp) - origin).days
+            assert instance not in instances
+            instances[instance] = (user, day)
+            if half == 'context':
+                assert (user, day) not in seen
+                seen.add((user, day))
+                expected = sum(
+                    10 + order * 1.5
+                    for order in range(80)
+                    if order % 8 == user and day < order * 7 <= day + 30
+                )
+                assert label == [float(expected)]
+                assert type(label[0]) is float
+            else:
+                assert not label
+                assert day == (anchor - origin).days
+        related = payload[half]['related_tables']
+        people = related['users']
+        assert people['columns'] == ['instance_id', 'user_id', 'age', 'country']
+        assert people['rows'] == [
+            [instance, user, 20 + user, ['US', 'DE', 'IN'][user % 3]]
+            for instance, (user, _) in instances.items()
+        ]
+        history = related['orders']
+        assert history['columns'] == [
+            'instance_id',
+            '__node_id',
+            'price',
+            'ts',
+            'user_id',
+        ]
+        expected_history = sorted(
+            (
+                instance,
+                10 + order * 1.5,
+                (origin + pd.Timedelta(days=order * 7)).isoformat(),
+                user,
+            )
+            for instance, (user, day) in instances.items()
+            for order in range(80)
+            if order % 8 == user and order * 7 <= day
+        )
+        actual = sorted(
+            (instance, price, pd.Timestamp(stamp).isoformat(), user)
+            for instance, _, price, stamp, user in history['rows']
+        )
+        assert actual == expected_history
+        for instance, (user, day) in instances.items():
+            actual_orders = [
+                (price - 10) / 1.5
+                for row_instance, _, price, _, _ in history['rows']
+                if row_instance == instance
+            ]
+            expected_orders = [
+                order
+                for order in reversed(range(80))
+                if order % 8 == user and order * 7 <= day
+            ]
+            assert actual_orders == expected_orders
+        assert len({(r[0], r[1]) for r in history['rows']}) == len(
+            history['rows']
+        )
+    assert seen == {(user, day) for user in range(8) for day in expected_days}
+    context = payload['context']['instance_table']['rows']
+    assert [r[2] for r in context] == sorted(
+        (r[2] for r in context), reverse=True
+    )
+    assert [r[1] for r in payload['predict']['instance_table']['rows']] == [
+        0,
+        1,
+    ]
 
 
 def _describe(connection: Any, parts: list[str]) -> Any:

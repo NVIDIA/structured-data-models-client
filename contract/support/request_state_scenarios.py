@@ -16,8 +16,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/request-state-vectors.json'
-FORMAT = 'sdm-t214b-host-vectors/1'
 
 SETUP = (
     'CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER '
@@ -259,8 +257,3 @@ def observe() -> dict[str, Any]:
         }
     finally:
         connection.close()
-
-
-def load() -> dict[str, Any]:
-    r"""The vector file, as committed."""
-    return json.loads(OUT.read_text(encoding='utf-8'))
