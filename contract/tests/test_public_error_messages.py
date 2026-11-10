@@ -294,13 +294,13 @@ def test_public_refusal_names_the_invalid_input(case_key: str) -> None:
             'INVALID_REQUEST',
         )
         required_words = ['users.d', 'type string', 'constant', 'quotes']
-    elif case_key == 'key.uint64-above-int64-max@sqlite':
-        # The maintained SQLite path now handles this input successfully.
+    elif case_key in {
+        'key.uint64-above-int64-max@sqlite',
+        'key.uint64-above-int64-max@postgres',
+    }:
+        # SQLite and PostgreSQL read these keys as exact text and succeed.
         assert _outcome(got['outcome']) == ('success', 'predict', None, None)
         return
-    elif case_key == 'key.uint64-above-int64-max@postgres':
-        expected = ('refusal', 'from_source', 'OverflowError', None)
-        required_words = ['int']
     assert same_outcome(expected, _outcome(got['outcome'])), case_key
     said = _words(got['message'])
     assert not said.startswith(GENERIC), (
