@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Three checks this repository has to pass before it can be published.
+"""The checks this repository has to pass before it can be published.
 
 ``spdx`` asserts every first-party source file carries a licence header. A file
 added without one is otherwise invisible until a release audit finds it.
@@ -12,6 +12,12 @@ added without one is otherwise invisible until a release audit finds it.
 dropped. An example naming one is worse than no example, and a sweep that
 chooses its own roots will miss a tree, so this enumerates from
 ``git ls-files``.
+
+``in-process`` asserts the skills' in-process references install the way the
+client's own version allows. They build from a checkout because no release
+carries ``in_process()`` yet, and the release that first does makes that
+instruction wrong. Nothing else would catch it: the references are prose, and
+the example harness runs them against this tree rather than against the index.
 
 ``internal`` asserts no internal-only reference reaches a *shipped* file. The
 distinction matters: an internal URL in a provenance record is correct and
@@ -361,11 +367,81 @@ def check_repository_url() -> int:
     return 0
 
 
+
+IN_PROCESS_REFERENCES = (
+    'skills/tabular/references/in-process.md',
+    'skills/relational/references/in-process.md',
+)
+
+# While the client's version is a prerelease, no index carries `in_process()`
+# and the references have to build from a checkout. Once it is a release they
+# must not, and the extra needs a floor instead. The two states are exact
+# opposites, so each one is asserted rather than only the one in force.
+CHECKOUT_INSTALL = 'git clone -b v2-candidate'
+PRERELEASE_VERSION = re.compile(r'(?:a|b|rc|\.dev)\d+$')
+IN_PROCESS_FLOOR = re.compile(r'structured-data-models-client\[in-process\]>=\d')
+CLIENT_VERSION_FILE = (
+    'packages/structured-data-models-client/src/sdm_client/_version.py'
+)
+
+
+def check_in_process_install() -> int:
+    """The in-process references must install the way this version allows."""
+    version_file = REPO_ROOT / CLIENT_VERSION_FILE
+    found = re.search(
+        r"__version__ = '([^']+)'", version_file.read_text(encoding='utf-8')
+    )
+    if found is None:
+        print(f'no __version__ in {CLIENT_VERSION_FILE}', file=sys.stderr)
+        return 1
+    version = found.group(1)
+    prerelease = PRERELEASE_VERSION.search(version) is not None
+
+    findings = []
+    for relative in IN_PROCESS_REFERENCES:
+        body = (REPO_ROOT / relative).read_text(encoding='utf-8')
+        checkout = CHECKOUT_INSTALL in body
+        if prerelease and not checkout:
+            findings.append(
+                f'{relative}: installs from the index, but {version} is not '
+                'a release and carries no in_process()'
+            )
+        if not prerelease and checkout:
+            findings.append(
+                f'{relative}: still builds from a checkout, but {version} '
+                'is a release'
+            )
+        if not prerelease and not IN_PROCESS_FLOOR.search(body):
+            findings.append(
+                f'{relative}: the extra names no version floor, so an older '
+                'client satisfies it'
+            )
+
+    for finding in findings:
+        print(f'in-process install: {finding}', file=sys.stderr)
+    if findings:
+        print(
+            '\nA reader runs the first install that fits their client. When '
+            'a release carries in_process(), drop the checkout block from '
+            'both references and pin the extra to that version.',
+            file=sys.stderr,
+        )
+        return 1
+    print(f'the in-process references install the way {version} allows')
+    return 0
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         'check',
-        choices=('spdx', 'internal', 'retired', 'repo-url', 'all'),
+        choices=(
+            'spdx',
+            'internal',
+            'retired',
+            'repo-url',
+            'in-process',
+            'all',
+        ),
     )
     args = parser.parse_args()
     if args.check == 'spdx':
@@ -376,11 +452,14 @@ def main() -> int:
         return check_retired()
     if args.check == 'repo-url':
         return check_repository_url()
+    if args.check == 'in-process':
+        return check_in_process_install()
     return (
         check_spdx()
         | check_internal()
         | check_retired()
         | check_repository_url()
+        | check_in_process_install()
     )
 
 
