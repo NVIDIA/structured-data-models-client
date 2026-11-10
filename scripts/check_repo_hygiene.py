@@ -377,22 +377,90 @@ IN_PROCESS_REFERENCES = (
 # and the extra needs a floor no older than this. It is the feature's release
 # rather than "any prerelease", so that 2.1.0rc1 does not read as a client
 # without the feature and ask for the checkout back.
-FIRST_IN_PROCESS_RELEASE = (2, 0, 0)
+FIRST_IN_PROCESS = '2.0.0'
 CHECKOUT_INSTALL = 'git clone -b v2-candidate'
-PRERELEASE_SUFFIX = re.compile(r'(?:a|b|rc|\.post|\.dev)\d+$')
+# A version, as PEP 440's grammar spells one. That grammar orders the
+# suffixes as well as naming them: a development release precedes whatever it
+# hangs off, a pre-release precedes the release it names, and a post-release
+# follows it. A local label orders after nothing that matters here, so it is
+# read and dropped.
+PEP_440 = re.compile(
+    r"""
+    v?
+    (?:(?P<epoch>\d+)!)?
+    (?P<release>\d+(?:\.\d+)*)
+    (?:[-_.]?(?P<pre_name>alpha|beta|preview|pre|rc|a|b|c)
+       [-_.]?(?P<pre>\d+)?)?
+    (?:-(?P<implicit_post>\d+)
+       |[-_.]?(?P<post_name>post|rev|r)[-_.]?(?P<post>\d+)?)?
+    (?:[-_.]?(?P<dev_name>dev)[-_.]?(?P<dev>\d+)?)?
+    (?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+PRE_RELEASE_NAMES = {
+    'alpha': 'a',
+    'a': 'a',
+    'beta': 'b',
+    'b': 'b',
+    'c': 'rc',
+    'pre': 'rc',
+    'preview': 'rc',
+    'rc': 'rc',
+}
+BEFORE_ANY = (-1,)
+AFTER_ANY = (1,)
+
 IN_PROCESS_FLOOR = re.compile(
-    r'structured-data-models-client\[in-process\]>=(\d+(?:\.\d+)*)'
+    r'structured-data-models-client\[in-process\]>=([^\'"\s,\]]+)'
 )
 CLIENT_VERSION_FILE = (
     'packages/structured-data-models-client/src/sdm_client/_version.py'
 )
 
 
-def _release(version: str) -> tuple[tuple[int, ...], bool]:
-    """The version's release numbers, and whether a prerelease follows them."""
-    prerelease = PRERELEASE_SUFFIX.search(version)
-    base = version[: prerelease.start()] if prerelease else version
-    return tuple(int(part) for part in base.split('.')), prerelease is not None
+def _version(version: str) -> tuple[object, ...]:
+    """What the version sorts as, by PEP 440's rules.
+
+    Trailing zeros go, so 2.0 is the 2.0.0 it names. A release with nothing
+    after it sorts above every pre-release of itself and below every
+    post-release of itself, and a development release with neither of those in
+    front of it sorts below the lot.
+    """
+    found = PEP_440.fullmatch(version.strip())
+    if found is None:
+        raise ValueError(f'not a version this check can read: {version!r}')
+
+    release = [int(part) for part in found['release'].split('.')]
+    while len(release) > 1 and release[-1] == 0:
+        release.pop()
+
+    posted = (
+        found['post_name'] is not None or found['implicit_post'] is not None
+    )
+    if found['pre_name'] is not None:
+        pre: tuple[object, ...] = (
+            0,
+            PRE_RELEASE_NAMES[found['pre_name'].lower()],
+            int(found['pre'] or 0),
+        )
+    elif found['dev_name'] is not None and not posted:
+        pre = BEFORE_ANY
+    else:
+        pre = AFTER_ANY
+
+    post = (
+        (0, int(found['implicit_post'] or found['post'] or 0))
+        if posted
+        else BEFORE_ANY
+    )
+    dev = (
+        (0, int(found['dev'] or 0))
+        if found['dev_name'] is not None
+        else AFTER_ANY
+    )
+
+    return (int(found['epoch'] or 0), tuple(release), pre, post, dev)
 
 
 def check_in_process_install() -> int:
@@ -405,11 +473,8 @@ def check_in_process_install() -> int:
         print(f'no __version__ in {CLIENT_VERSION_FILE}', file=sys.stderr)
         return 1
     version = found.group(1)
-    release, prerelease = _release(version)
-    unpublished = release < FIRST_IN_PROCESS_RELEASE or (
-        release == FIRST_IN_PROCESS_RELEASE and prerelease
-    )
-    first = '.'.join(str(part) for part in FIRST_IN_PROCESS_RELEASE)
+    first = _version(FIRST_IN_PROCESS)
+    unpublished = _version(version) < first
 
     findings = []
     for relative in IN_PROCESS_REFERENCES:
@@ -418,12 +483,12 @@ def check_in_process_install() -> int:
         if unpublished and not checkout:
             findings.append(
                 f'{relative}: installs from the index, but {version} is '
-                f'before {first}, the release that first carries in_process()'
+                f'before {FIRST_IN_PROCESS}, the release that first carries in_process()'
             )
         if not unpublished and checkout:
             findings.append(
                 f'{relative}: still builds from a checkout, but {version} is '
-                f'{first} or later'
+                f'{FIRST_IN_PROCESS} or later'
             )
         if not unpublished:
             floor = IN_PROCESS_FLOOR.search(body)
@@ -432,12 +497,22 @@ def check_in_process_install() -> int:
                     f'{relative}: the extra names no version floor, so an '
                     'older client satisfies it'
                 )
-            elif _release(floor.group(1))[0] < FIRST_IN_PROCESS_RELEASE:
-                findings.append(
-                    f'{relative}: the extra floors at {floor.group(1)}, which '
-                    f'a client without in_process() satisfies; {first} is the '
-                    'first that carries it'
-                )
+            else:
+                try:
+                    floored = _version(floor.group(1))
+                except ValueError:
+                    findings.append(
+                        f'{relative}: the extra floors at {floor.group(1)}, '
+                        'which is not a version pip can read'
+                    )
+                else:
+                    if floored < first:
+                        findings.append(
+                            f'{relative}: the extra floors at '
+                            f'{floor.group(1)}, which a client without '
+                            f'in_process() satisfies; {FIRST_IN_PROCESS} is '
+                            'the first that carries it'
+                        )
 
     for finding in findings:
         print(f'in-process install: {finding}', file=sys.stderr)
