@@ -630,3 +630,7 @@ Authored inputs stay in exact_key_scenarios.py; direct assertions cover complete
 The remaining 6,648-byte PostgreSQL result-conversion recording is removed after independent review and fourteen tests against local PostgreSQL17.
 Direct assertions preserve authored driver values, admitted JSON/numeric/interval behavior, nulls and exact seed-time bindings.
 This closes the partially converted fixture; shared source helpers remain.
+
+Neighbor sampler outputs are replaced by independent source filtering/order assertions; all fourteen inputs and 73 expected rows are preserved.
+Recorded rows/environment and the obsolete old-client writer are removed; authored SQL, zones and seeds stay.
+Independent review, both Rust tests and Clippy passed before final pruning verification.
