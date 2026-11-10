@@ -26,7 +26,8 @@ passes through it untouched.
 
 Run from the workflow with ``assets.tsv`` already written and ``dist/``
 downloaded. ``check`` instead asks Portal for each project and publishes
-nothing. Exits non-zero on any failure; the workflow has no other way to know
+nothing, and ``latest TAG`` reads the release tags on stdin and says whether
+TAG should be marked Latest. Exits non-zero on any failure; the workflow has no other way to know
 this went wrong.
 """
 
@@ -415,6 +416,34 @@ def write_summary(
     print(text, end='')
 
 
+def final_version(tag: str) -> tuple[int, ...] | None:
+    r"""``v1.2.3`` as ``(1, 2, 3)``, or ``None`` for anything that is not a
+    final release tag."""
+    match = re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)', tag)
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def stays_latest(tag: str, releases: list[str]) -> bool:
+    r"""Whether this published final release should be marked Latest.
+
+    Not when a higher final release is on PyPI: an older one finishing after a
+    newer, on a late approval or a re-run, would send the Releases page and
+    releases/latest back to it. A higher release that is only on GitHub does
+    not count, because a release is created before it is published, and one
+    waiting on its approval or failed in it would otherwise hold Latest back
+    from every release that did publish.
+    """
+    mine = final_version(tag)
+    if mine is None:
+        return False
+    client = PROJECTS[6898]
+    return not any(
+        on_pypi(client, other.removeprefix('v')) is not None
+        for other in releases
+        if (version := final_version(other)) is not None and version > mine
+    )
+
+
 def check() -> None:
     r"""Reach every project through Charon and publish nothing.
 
@@ -572,4 +601,14 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    sys.exit(check() if sys.argv[1:] == ['check'] else main())
+    if sys.argv[1:] == ['check']:
+        sys.exit(check())
+    if sys.argv[1:2] == ['latest']:
+        tag = sys.argv[2]
+        print(
+            'latest'
+            if stays_latest(tag, sys.stdin.read().split())
+            else f'{tag} stays unmarked: a higher final release is on PyPI'
+        )
+        sys.exit(0)
+    sys.exit(main())

@@ -476,10 +476,9 @@ jobs:
           python3 .github/workflows/kitmaker_release.py
 
       # Only now, because until this point a failure could have left a
-      # release marked Latest for a version that never reached PyPI. And only
-      # the highest final release: an older one finishing after a newer, on a
-      # late approval or a re-run, would otherwise send the Releases page and
-      # releases/latest back to it.
+      # release marked Latest for a version that never reached PyPI. And not
+      # when a higher final release is on PyPI; `kitmaker_release.py latest`
+      # says why only PyPI decides that.
       - name: Mark the release Latest, now that it is published
         if: github.ref_type == 'tag'
         env:
@@ -492,12 +491,12 @@ jobs:
           fi
           gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
             --exclude-pre-releases --limit 1000 --json tagName \
-            --jq '.[].tagName' > finals.txt
-          highest=$(grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' finals.txt | sort -V | tail -n 1)
-          if [ "$GITHUB_REF_NAME" != "$highest" ]; then
-            echo "$highest is a later final release, so it stays Latest"
-          else
+            --jq '.[].tagName' > releases.txt
+          verdict=$(python3 .github/workflows/kitmaker_release.py latest "$GITHUB_REF_NAME" < releases.txt)
+          if [ "$verdict" = latest ]; then
             gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --latest
+          else
+            echo "$verdict"
           fi
 
       # Into the job log, so a failed release says where it got to without

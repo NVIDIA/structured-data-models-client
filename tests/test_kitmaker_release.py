@@ -835,32 +835,53 @@ def test_the_check_refuses_a_project_unfit_to_publish_to(
             kitmaker.check()
 
 
-@pytest.mark.skipif(shutil.which('bash') is None, reason='the step is bash')
 @pytest.mark.parametrize(
-    ('tag', 'finals', 'marked'),
+    ('tag', 'releases', 'published', 'latest'),
     [
-        ('v2.0.0', ['v1.0.0', 'v2.0.0'], True),
-        ('v1.0.1', ['v2.0.0', 'v1.0.1', 'v1.0.0'], False),
-        ('v2.0.10', ['v2.0.9', 'v2.0.10'], True),
-        ('v2.1.0rc1', ['v2.0.0'], False),
+        ('v2.0.0', ['v2.0.0', 'v1.0.0'], {'2.0.0', '1.0.0'}, True),
+        ('v1.0.1', ['v2.0.0', 'v1.0.1'], {'2.0.0', '1.0.1'}, False),
+        ('v1.0.1', ['v2.0.0', 'v1.0.1'], {'1.0.1'}, True),
+        ('v2.0.10', ['v2.0.10', 'v2.0.9'], {'2.0.10', '2.0.9'}, True),
+        ('v2.0.0', ['v2.1.0rc1', 'v2.0.0'], {'2.1.0rc1', '2.0.0'}, True),
     ],
 )
-def test_only_the_highest_final_release_is_marked_latest(
-    kitmaker_job, tmp_path, tag, finals, marked
+def test_latest_goes_to_the_highest_release_on_pypi(
+    kitmaker, monkeypatch, tag, releases, published, latest
 ):
-    """An older release finishing after a newer one, on a late approval or a
-    re-run, must not take Latest back from it."""
+    """An older release finishing after a newer one must not take Latest back,
+    and a newer one that is only on GitHub, waiting on its approval or failed
+    in it, must not hold Latest back from one that published."""
+    monkeypatch.setattr(
+        kitmaker,
+        'on_pypi',
+        lambda name, version: {} if version in published else None,
+    )
+    assert kitmaker.stays_latest(tag, releases) is latest
+
+
+@pytest.mark.skipif(shutil.which('bash') is None, reason='the step is bash')
+@pytest.mark.parametrize(
+    ('tag', 'verdict', 'marked'),
+    [
+        ('v2.0.0', 'latest', True),
+        ('v1.0.1', 'v1.0.1 stays unmarked', False),
+        ('v2.1.0rc1', 'latest', False),
+    ],
+)
+def test_the_latest_step_marks_only_what_the_script_says(
+    kitmaker_job, tmp_path, tag, verdict, marked
+):
     step = next(
         s
         for s in kitmaker_job['steps']
         if s.get('name') == 'Mark the release Latest, now that it is published'
     )
-    (tmp_path / 'gh').write_text(
-        '#!/bin/sh\n'
-        'if [ "$2" = list ]; then printf "%s\\n" $FINALS; '
-        'else echo "$@" >> edited.txt; fi\n'
-    )
-    (tmp_path / 'gh').chmod(0o755)
+    for name, body in {
+        'gh': 'if [ "$2" = edit ]; then echo "$@" >> edited.txt; fi\n',
+        'python3': 'echo "$VERDICT"\n',
+    }.items():
+        (tmp_path / name).write_text(f'#!/bin/sh\n{body}')
+        (tmp_path / name).chmod(0o755)
     subprocess.run(
         ['bash', '-c', step['run']],
         cwd=tmp_path,
@@ -869,10 +890,10 @@ def test_only_the_highest_final_release_is_marked_latest(
             'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
             'GITHUB_REF_NAME': tag,
             'GITHUB_REPOSITORY': 'NVIDIA/structured-data-models-client',
-            'FINALS': ' '.join(finals),
+            'VERDICT': verdict,
         },
     )
-    edited = (tmp_path / 'edited.txt').exists()
-    assert edited is marked
+    edited = tmp_path / 'edited.txt'
+    assert edited.exists() is marked
     if marked:
-        assert '--latest' in (tmp_path / 'edited.txt').read_text()
+        assert '--latest' in edited.read_text()
