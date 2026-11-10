@@ -444,6 +444,101 @@ fn diagnostic_rules_return_their_named_errors() {
     }
 }
 
+#[test]
+fn selected_errors_point_at_what_they_name() {
+    use sdm_contract::ops::Span;
+    let at = |start_col, end_col| {
+        Some(Span {
+            start_row: 1,
+            start_col,
+            end_row: 1,
+            end_col,
+        })
+    };
+    type Errors = Vec<(&'static str, Option<Span>)>;
+    let cases: Vec<(&str, &str, &str, Errors)> = vec![
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT users.nope FOR EACH users.user_id",
+            vec![("PQL_SCHEMA_UNKNOWN_COLUMN", at(8, 8))],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT COUNT(order.*, 0, 30, days) FOR EACH users.user_id",
+            vec![("PQL_SCHEMA_UNKNOWN_TABLE", at(14, 14))],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.id",
+            vec![("PQL_SCHEMA_UNKNOWN_COLUMN", at(46, 46))],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT SUM(orders.status, 0, 30, days) FOR EACH users.user_id",
+            vec![("PQL_TYPE_AGGREGATION_NEEDS_NUMERIC", at(8, 38))],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT SUM(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+            vec![("PQL_TYPE_AGGREGATION_ON_KEY_COLUMN", at(8, 42))],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT COUNT(orders.* WHERE orders.amount > 'ten', 0, 30, days) FOR EACH users.user_id",
+            vec![("PQL_TYPE_CONSTANT_MISMATCH", at(29, 45))],
+        ),
+        (
+            "schema-1",
+            "FINE_TUNING",
+            "PREDICT COUNT(orders.* WHERE orders.quantity > true, 0, 30, days) FOR EACH users.user_id",
+            vec![
+                ("PQL_TYPE_CONSTANT_MISMATCH", at(29, 47)),
+                ("PQL_TYPE_BOOL_COMPARISON", at(29, 47)),
+            ],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT SUM(orders.quantity, 0, 30, days) FORECAST 0 TIMEFRAMES FOR EACH users.user_id",
+            vec![("PQL_TASK_FORECAST_NOT_POSITIVE", None)],
+        ),
+        (
+            "schema-1",
+            "RELATIONAL",
+            "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 0 FOR EACH users.user_id",
+            vec![("PQL_TASK_TOP_K_NOT_POSITIVE", None)],
+        ),
+        (
+            "schema-1",
+            "FINE_TUNING",
+            "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK FOR EACH users.user_id",
+            vec![("PQL_TASK_RANK_REQUIRES_TOP_K", at(68, 68))],
+        ),
+        (
+            "schema-1",
+            "FINE_TUNING",
+            "PREDICT products.tags FOR EACH products.product_id",
+            vec![("PQL_TASK_PROBLEM_TYPE_REQUIRED", at(31, 31))],
+        ),
+    ];
+    for (which, model, text, expected) in cases {
+        let got = resolve(text, &schema(which), &profile(model), &facts(), &NoZones).unwrap();
+        let errors: Vec<_> = got
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .map(|d| (d.code.as_str(), d.span))
+            .collect();
+        assert_eq!(errors, expected, "{text}");
+    }
+}
+
 fn nodes(node: &sdm_contract::pql::PqlNode) -> Vec<&sdm_contract::pql::NodeKind> {
     use sdm_contract::pql::NodeKind::*;
     let mut out = vec![&node.kind];
